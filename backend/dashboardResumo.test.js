@@ -207,7 +207,7 @@ test('aprovação em outra data que a emissão vale a aprovação, e início no 
   assert.equal(producao.porIdade[0].quantidade, 1, 'o de início no futuro entra na faixa 0-15');
 });
 
-test('os mais antigos vêm primeiro, no máximo cinco, com o nome do cliente', () => {
+test('os mais antigos vêm primeiro, todos eles, com o nome do cliente', () => {
   const pedidos = [3, 90, 45, 12, 70, 20, 8].map((d, i) => ({
     id: i + 1,
     numero: `PED${i + 1}`,
@@ -226,13 +226,33 @@ test('os mais antigos vêm primeiro, no máximo cinco, com o nome do cliente', (
     ]
   }, { agora: AGORA });
 
-  assert.equal(producao.quantidade, 8, 'a lista corta em cinco; o total, não');
+  assert.equal(producao.quantidade, 8);
   assert.equal(producao.valor, 7005);
-  assert.deepEqual(producao.maisAntigos.map(p => p.dias), [200, 90, 70, 45, 20]);
+  // A lista vem inteira: a tela mostra cinco e expande o resto no próprio cartão.
+  assert.deepEqual(producao.maisAntigos.map(p => p.dias), [200, 90, 70, 45, 20, 12, 8, 3]);
   // Cliente fora do cadastro vira travessão; sem nome fantasia, a razão social.
   assert.equal(producao.maisAntigos[0].cliente, '—');
-  assert.deepEqual(producao.maisAntigos[1], { id: 2, numero: 'PED2', cliente: 'Casa Bela Decorações ME', dias: 90, valor: 1000 });
+  // Sem previsão de embarque (pedido de antes da coluna): "sem_previsao", nunca um atraso.
+  assert.deepEqual(producao.maisAntigos[1], {
+    id: 2, numero: 'PED2', cliente: 'Casa Bela Decorações ME', dias: 90, valor: 1000,
+    embarque: null, diasParaEmbarque: null, prazo: 'sem_previsao'
+  });
   assert.equal(producao.maisAntigos[2].cliente, 'Móveis Aurora');
+});
+
+test('a lista de produção só corta no teto de segurança, e o total continua inteiro', () => {
+  const teto = r.LIMITE_LISTA.maisAntigos;
+  const pedidos = Array.from({ length: teto + 5 }, (_, i) => ({
+    id: i + 1, numero: `PED${i + 1}`, situacao: 'Produção', data_aprovacao: dia(-(i + 1)), valor_final: 1
+  }));
+  const producao = r.resumirProducao({ pedidos }, { agora: AGORA });
+
+  assert.equal(teto, 100);
+  assert.equal(producao.quantidade, teto + 5, 'a lista corta no teto; o total, não');
+  assert.equal(producao.maisAntigos.length, teto);
+  // Os que ficam de fora são os MAIS NOVOS: o mais antigo nunca some da lista.
+  assert.equal(producao.maisAntigos[0].dias, teto + 5);
+  assert.equal(producao.maisAntigos.at(-1).dias, 6);
 });
 
 test('pedidos por situação trazem as cinco chaves em ordem, só dos últimos 12 meses', () => {
@@ -248,14 +268,116 @@ test('pedidos por situação trazem as cinco chaves em ordem, só dos últimos 1
   }, { agora: AGORA });
 
   // Situação desconhecida vai para "Outros": sumir com ela deixaria o donut
-  // menor que o número de pedidos.
+  // menor que o número de pedidos. Sem as datas de embarque (linhas de antes
+  // da previsão), o prazo é "sem previsão"; Cancelado e Outros não têm prazo.
   assert.deepEqual(producao.porSituacao12m, [
-    { situacao: 'Produção', quantidade: 1, valor: 100 },
-    { situacao: 'Enviado', quantidade: 0, valor: 0 },
-    { situacao: 'Entregue', quantidade: 1, valor: 200 },
-    { situacao: 'Cancelado', quantidade: 1, valor: 50 },
-    { situacao: 'Outros', quantidade: 1, valor: 300 }
+    { situacao: 'Produção', quantidade: 1, valor: 100, emDia: 0, atrasados: 0, semPrevisao: 1 },
+    { situacao: 'Enviado', quantidade: 0, valor: 0, emDia: 0, atrasados: 0, semPrevisao: 0 },
+    { situacao: 'Entregue', quantidade: 1, valor: 200, emDia: 0, atrasados: 0, semPrevisao: 1 },
+    { situacao: 'Cancelado', quantidade: 1, valor: 50, emDia: 0, atrasados: 0, semPrevisao: 0 },
+    { situacao: 'Outros', quantidade: 1, valor: 300, emDia: 0, atrasados: 0, semPrevisao: 0 }
   ]);
+});
+
+// -------------------------------------------------------- prazo de embarque
+
+test('prazo de embarque nas bordas: ontem atrasa, hoje e daqui a 6 dias pedem atenção, daqui a 7 está em dia', () => {
+  const previsoes = { 1: dia(-1), 2: HOJE, 3: dia(6), 4: dia(7), 5: null, 6: '2026-02-30' };
+  const producao = r.resumirProducao({
+    pedidos: Object.entries(previsoes).map(([id, previsao]) => ({
+      id: Number(id), numero: `PED${id}`, situacao: 'Produção', data_aprovacao: dia(-10),
+      valor_final: 100 * Number(id), embarcar_previsao: previsao
+    }))
+  }, { agora: AGORA });
+
+  const porNumero = Object.fromEntries(producao.maisAntigos.map(p => [p.numero, [p.embarque, p.diasParaEmbarque, p.prazo]]));
+  assert.deepEqual(porNumero, {
+    PED1: [dia(-1), -1, 'atrasado'],
+    PED2: [HOJE, 0, 'atencao'],
+    PED3: [dia(6), 6, 'atencao'],
+    PED4: [dia(7), 7, 'em_dia'],
+    PED5: [null, null, 'sem_previsao'],
+    // Passa no corte de texto, mas não é dia nenhum: sem previsão, e não um atraso inventado.
+    PED6: [null, null, 'sem_previsao']
+  });
+  // `emDia` é "ainda não atrasou": inclui a atenção, e `atencao` é o recorte dela.
+  assert.deepEqual(producao.prazo, {
+    emDia: { quantidade: 3, valor: 900 },
+    atencao: { quantidade: 2, valor: 500 },
+    atrasados: { quantidade: 1, valor: 100 },
+    semPrevisao: { quantidade: 2, valor: 1100 }
+  });
+  const { emDia, atrasados, semPrevisao } = producao.prazo;
+  assert.equal(emDia.quantidade + atrasados.quantidade + semPrevisao.quantidade, producao.quantidade);
+  assert.equal(r.DIAS_DE_ATENCAO_EMBARQUE, 7);
+});
+
+test('previsão DATE à meia-noite UTC embarca no próprio dia, e "hoje" é o de São Paulo', () => {
+  // Pelo new Date() em São Paulo, '2026-09-13T00:00:00.000Z' seria o dia 12 —
+  // e o pedido que embarca hoje apareceria atrasado.
+  const pedidos = [
+    { id: 1, numero: 'PED1', situacao: 'Produção', data_aprovacao: dia(-3), embarcar_previsao: '2026-09-13T00:00:00.000Z' },
+    { id: 2, numero: 'PED2', situacao: 'Produção', data_aprovacao: dia(-3), embarcar_previsao: '2026-09-12T00:00:00.000Z' }
+  ];
+  const aoMeioDia = r.resumirProducao({ pedidos }, { agora: AGORA });
+  assert.deepEqual(aoMeioDia.maisAntigos.map(p => [p.numero, p.embarque, p.diasParaEmbarque, p.prazo]), [
+    ['PED1', '2026-09-13', 0, 'atencao'],
+    ['PED2', '2026-09-12', -1, 'atrasado']
+  ]);
+  // 23h30 do dia 13 em São Paulo já é dia 14 em UTC: ainda "embarca hoje".
+  const aNoite = r.resumirProducao({ pedidos }, { agora: new Date('2026-09-14T02:30:00.000Z') });
+  assert.deepEqual(aNoite.maisAntigos.map(p => [p.diasParaEmbarque, p.prazo]), [[0, 'atencao'], [-1, 'atrasado']]);
+  // 00h30 do dia 14 em São Paulo: agora sim, atrasado.
+  const deMadrugada = r.resumirProducao({ pedidos }, { agora: new Date('2026-09-14T03:30:00.000Z') });
+  assert.deepEqual(deMadrugada.maisAntigos.map(p => [p.diasParaEmbarque, p.prazo]), [[-1, 'atrasado'], [-2, 'atrasado']]);
+});
+
+test('Enviado e Entregue: em dia se embarcou até a previsão, atrasado se depois; sem uma das datas, sem previsão', () => {
+  const emissao = meioDia('2026-09-01');
+  const producao = r.resumirProducao({
+    pedidos: [
+      // Embarcou no dia previsto, as duas DATE como o upstream serializa: em dia.
+      { id: 1, situacao: 'Enviado', data_emissao: emissao, embarcar_previsao: '2026-09-10T00:00:00.000Z', embarcar_real: '2026-09-10T00:00:00.000Z' },
+      // Adiantado: em dia.
+      { id: 2, situacao: 'Entregue', data_emissao: emissao, embarcar_previsao: '2026-09-10', embarcar_real: '2026-09-08' },
+      // Um dia depois do previsto: atrasado.
+      { id: 3, situacao: 'Entregue', data_emissao: emissao, embarcar_previsao: '2026-09-10', embarcar_real: '2026-09-11' },
+      // Legado sem previsão, e o que foi de Produção direto para Entregue (sem embarque registrado).
+      { id: 4, situacao: 'Enviado', data_emissao: emissao, embarcar_previsao: null, embarcar_real: '2026-09-05' },
+      { id: 5, situacao: 'Entregue', data_emissao: emissao, embarcar_previsao: '2026-09-10', embarcar_real: null },
+      // Produção: um atrasado e um em atenção — este conta EM DIA.
+      { id: 6, situacao: 'Produção', data_emissao: emissao, embarcar_previsao: dia(-2) },
+      { id: 7, situacao: 'Produção', data_emissao: emissao, embarcar_previsao: dia(3) },
+      // Cancelado e situação desconhecida ficam fora do prazo, por mais atrasados que pareçam.
+      { id: 8, situacao: 'Cancelado', data_emissao: emissao, embarcar_previsao: '2026-09-01', embarcar_real: '2026-09-12' },
+      { id: 9, situacao: 'Aguardando', data_emissao: emissao, embarcar_previsao: dia(-30) }
+    ]
+  }, { agora: AGORA });
+
+  const prazos = Object.fromEntries(producao.porSituacao12m.map(s =>
+    [s.situacao, [s.quantidade, s.emDia, s.atrasados, s.semPrevisao]]));
+  assert.deepEqual(prazos, {
+    'Produção': [2, 1, 1, 0],
+    'Enviado': [2, 1, 0, 1],
+    'Entregue': [3, 1, 1, 1],
+    'Cancelado': [1, 0, 0, 0],
+    'Outros': [1, 0, 0, 0]
+  });
+});
+
+test('o prazo do KPI é de todos os pedidos em produção; o donut fica na janela de 12 meses', () => {
+  const producao = r.resumirProducao({
+    pedidos: [
+      // Emitido há 13 meses e ainda na fábrica: entra no prazo (e no KPI), não no donut.
+      { id: 1, situacao: 'Produção', data_emissao: meioDia('2025-08-10'), embarcar_previsao: dia(-40), valor_final: 700 },
+      { id: 2, situacao: 'Produção', data_emissao: meioDia('2026-09-01'), embarcar_previsao: dia(20), valor_final: '300,00' }
+    ]
+  }, { agora: AGORA });
+
+  assert.deepEqual(producao.prazo.atrasados, { quantidade: 1, valor: 700 });
+  assert.deepEqual(producao.prazo.emDia, { quantidade: 1, valor: 300 });
+  const noDonut = producao.porSituacao12m.find(s => s.situacao === 'Produção');
+  assert.deepEqual([noDonut.quantidade, noDonut.emDia, noDonut.atrasados], [1, 1, 0]);
 });
 
 // --------------------------------------------------------------- orçamentos
@@ -601,6 +723,8 @@ test('sem a coluna de valor os R$ viram nulo e as contagens continuam', () => {
   assert.equal(producao.valor, null);
   assert.equal(producao.maisAntigos[0].valor, null);
   assert.ok(producao.porSituacao12m.every(s => s.valor === null));
+  assert.ok(Object.values(producao.prazo).every(s => s.valor === null), 'nem no prazo de embarque');
+  assert.equal(producao.prazo.semPrevisao.quantidade, 1, 'a contagem do prazo continua');
 
   const orcamentos = r.resumirOrcamentos({
     orcamentos: [{ id: 1, situacao: 'Pendente', validade: dia(1), valor_final: 50 }]

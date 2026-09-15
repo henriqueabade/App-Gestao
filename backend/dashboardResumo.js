@@ -7,6 +7,7 @@
  *   - FUSO. O pedido convertido às 23h30 do dia 31 é gravado como 02h30Z do
  *     dia 1: sem converter para São Paulo, a venda muda de mês.
  *   - DATA SEM HORA. `orcamentos.validade`, `pedidos.data_aprovacao`,
+ *     `pedidos.embarcar_previsao`, `pedidos.embarcar_real`,
  *     `prospeccoes.proximo_passo_data` e `pedido_parcelas.data_vencimento`
  *     são DATE; o upstream pode entregá-las
  *     como '2026-09-13T00:00:00.000Z', e passar isso por `new Date()` em São
@@ -50,9 +51,10 @@ const ETAPAS_ABERTAS = ETAPAS.filter(e => !ETAPAS_TERMINAIS.has(normalizarTexto(
 const SITUACOES_PEDIDO = ['Produção', 'Enviado', 'Entregue', 'Cancelado', 'Outros'];
 
 /**
- * Faixas de IDADE do pedido em produção — não de atraso: o banco não tem prazo
- * de entrega, então "60+" quer dizer "está na fábrica há mais de 60 dias", e
- * não "atrasado 60 dias".
+ * Faixas de IDADE do pedido em produção: há quanto tempo ele está na fábrica.
+ * "60+" quer dizer "em produção há mais de 60 dias", e não "atrasado 60 dias".
+ * Atraso é outra conta, feita sobre a previsão de embarque
+ * (`pedidos.embarcar_previsao`) — ver `embarqueEmProducao`.
  */
 const FAIXAS_IDADE = [
   { faixa: '0-15', ate: 15 },
@@ -68,9 +70,18 @@ const FAIXAS_IDADE = [
  */
 const LIMITE_CRITICO = 10;
 
+/**
+ * Menos de 7 dias para o embarque previsto (hoje incluso) é ATENÇÃO: o pedido
+ * ainda está em dia, mas a tela o marca em vermelho. De 7 em diante, em dia.
+ */
+const DIAS_DE_ATENCAO_EMBARQUE = 7;
+
 /** Quantos itens cada lista leva. O total real vai sempre junto. */
 const LIMITE_LISTA = {
-  maisAntigos: 5,
+  // Produção vem INTEIRA: o cartão mostra cinco e expande o resto no próprio
+  // lugar. 100 é só um teto de segurança contra uma resposta gigante; o que
+  // passar dele entra no "+N não listados" da tela, que conta pelo total.
+  maisAntigos: 100,
   vencendo7d: 8,
   aprovadosSemPedido: 5,
   followups: 6,
@@ -241,6 +252,17 @@ function diaDeColunaDate(valor) {
   return achado ? achado[1] : null;
 }
 
+/**
+ * Dia de uma coluna DATE que EXISTE no calendário. '2026-02-30' passa no corte
+ * de texto, mas não é dia nenhum: comparado como texto ele viraria um prazo ou
+ * um mês inventado. Aqui ele é `null` — "sem data".
+ */
+function diaDeCalendario(valor) {
+  const dia = diaDeColunaDate(valor);
+  if (!dia) return null;
+  return new Date(utcDoDia(dia)).toISOString().slice(0, 10) === dia ? dia : null;
+}
+
 function utcDoDia(dia) {
   const [a, m, d] = dia.split('-').map(Number);
   return Date.UTC(a, m - 1, d);
@@ -297,6 +319,45 @@ function situacaoDoPedido(situacao) {
 
 function indiceDaFaixa(dias) {
   return FAIXAS_IDADE.findIndex(f => dias <= f.ate);
+}
+
+/**
+ * Prazo de embarque de um pedido EM PRODUÇÃO: a previsão, quantos dias faltam
+ * (previsão − hoje; negativo = dias de atraso) e a classificação da tela.
+ * "Hoje" é o dia de São Paulo do contexto; a previsão é DATE, cortada como
+ * texto (diaDeCalendario) — pelo `new Date()` o '...T00:00:00.000Z' do dia 13
+ * seria o dia 12, e o pedido que embarca hoje apareceria atrasado.
+ */
+function embarqueEmProducao(pedido, hoje) {
+  const previsao = diaDeCalendario(pedido?.embarcar_previsao);
+  if (!previsao) return { embarque: null, diasParaEmbarque: null, prazo: 'sem_previsao' };
+  const dias = diferencaEmDias(previsao, hoje);
+  let prazo = 'em_dia';
+  if (dias < 0) prazo = 'atrasado';
+  else if (dias < DIAS_DE_ATENCAO_EMBARQUE) prazo = 'atencao';
+  return { embarque: previsao, diasParaEmbarque: dias, prazo };
+}
+
+/** Classificação de `embarqueEmProducao` -> contador de `prazo` e de `porSituacao12m`. */
+const CONTADOR_DO_PRAZO = { em_dia: 'emDia', atencao: 'emDia', atrasado: 'atrasados', sem_previsao: 'semPrevisao' };
+
+/**
+ * Em que contador de prazo do donut o pedido cai, ou `null` fora da conta.
+ *
+ * Produção pela previsão contra hoje (atenção ainda é "em dia"). Enviado e
+ * Entregue pelo embarque de VERDADE: em dia se `embarcar_real` <= previsão —
+ * no dia ou adiantado —, atrasado se depois. Sem uma das duas datas não há o
+ * que comparar: `semPrevisao` (pedido de antes da previsão, ou que a API deixou
+ * ir de Produção direto para Entregue, sem embarque registrado). Cancelado e
+ * Outros não têm prazo a cumprir.
+ */
+function contadorDePrazo(situacao, pedido, embarque) {
+  if (situacao === 'Produção') return CONTADOR_DO_PRAZO[embarque.prazo];
+  if (situacao !== 'Enviado' && situacao !== 'Entregue') return null;
+  const previsao = diaDeCalendario(pedido?.embarcar_previsao);
+  const real = diaDeCalendario(pedido?.embarcar_real);
+  if (!previsao || !real) return 'semPrevisao';
+  return real > previsao ? 'atrasados' : 'emDia';
 }
 
 /**
@@ -417,7 +478,7 @@ function resumirVendas({ pedidos } = {}, { agora = new Date(), comValores = true
 // ---------------------------------------------------------------------------
 
 /**
- * Pedidos em produção e há quanto tempo estão lá.
+ * Pedidos em produção, há quanto tempo estão lá e se vão embarcar no prazo.
  *
  * A idade conta do dia em São Paulo da CONVERSÃO. `data_aprovacao` do pedido é
  * gravada por buildPedidoPayload (orcamentosController) como o dia UTC do
@@ -437,10 +498,34 @@ function resumirVendas({ pedidos } = {}, { agora = new Date(), comValores = true
  * Data de início no futuro (digitada errada, relógio adiantado) conta como 0
  * dia: "há -2 dias" não diz nada a ninguém.
  *
- * `cliente` só sai com a coluna Cliente de Pedidos (COLUNAS_DE_TEXTO).
+ * `cliente` só sai com a coluna Cliente de Pedidos (COLUNAS_DE_TEXTO). A
+ * previsão de embarque, os dias e o prazo saem sempre: datas e contagens não
+ * identificam ninguém.
+ *
+ * PRAZO DE EMBARQUE (`embarqueEmProducao`). Cada item de `maisAntigos` leva
+ * `embarque` (a previsão, 'YYYY-MM-DD' ou null), `diasParaEmbarque` (previsão
+ * − hoje, negativo no atraso; null sem previsão) e `prazo`:
+ *   - 'atrasado'     passou da previsão e continua na fábrica;
+ *   - 'atencao'      embarca em menos de DIAS_DE_ATENCAO_EMBARQUE dias, hoje
+ *                    incluso — ainda está em dia;
+ *   - 'em_dia'       faltam 7 dias ou mais;
+ *   - 'sem_previsao' pedido de antes da previsão existir (ou data impossível).
+ *
+ * `prazo` (o bloco) resume os pedidos EM PRODUÇÃO — o mesmo universo de
+ * `quantidade`, sem a janela de 12 meses. `emDia` é "ainda não atrasou": ele
+ * INCLUI os de atenção, e `atencao` é só o recorte dele que embarca em menos
+ * de 7 dias. Assim emDia + atrasados + semPrevisao = quantidade, e o `emDia`
+ * daqui quer dizer o mesmo que o de `porSituacao12m`.
+ *
+ * `maisAntigos` traz TODOS os pedidos listáveis (a tela mostra cinco e expande
+ * o resto), até o teto de LIMITE_LISTA.
  *
  * `porSituacao12m` usa a mesma janela de `serie12m` (mês local da emissão) e
  * traz sempre as cinco chaves, para o donut não mudar de cor entre recargas.
+ * Cada uma leva `emDia`, `atrasados` e `semPrevisao` (ver `contadorDePrazo`),
+ * que somam a `quantidade` dela — zeros em Cancelado e Outros. A janela é
+ * outra que a do bloco `prazo`: um pedido emitido há mais de 12 meses e ainda
+ * na fábrica conta no KPI e não no donut.
  */
 function resumirProducao(
   { pedidos, clientes } = {},
@@ -452,19 +537,28 @@ function resumirProducao(
   const nomes = verCliente ? mapaDeNomes(clientes) : new Map();
 
   const total = acumulador();
+  const prazo = { emDia: acumulador(), atencao: acumulador(), atrasados: acumulador(), semPrevisao: acumulador() };
   const idades = FAIXAS_IDADE.map(f => ({ faixa: f.faixa, quantidade: 0 }));
   const comIdade = [];
-  const porSituacao = new Map(SITUACOES_PEDIDO.map(s => [s, acumulador()]));
+  const porSituacao = new Map(SITUACOES_PEDIDO.map(s => [s, { ...acumulador(), emDia: 0, atrasados: 0, semPrevisao: 0 }]));
 
   for (const p of lista(pedidos)) {
     const situacao = situacaoDoPedido(p?.situacao);
     const valor = dinheiro(p?.valor_final);
     const diaEmissao = diaLocal(p?.data_emissao);
+    const embarque = situacao === 'Produção' ? embarqueEmProducao(p, hoje) : null;
 
-    if (diaEmissao && janela.has(diaEmissao.slice(0, 7))) somar(porSituacao.get(situacao), valor);
+    if (diaEmissao && janela.has(diaEmissao.slice(0, 7))) {
+      const daSituacao = porSituacao.get(situacao);
+      somar(daSituacao, valor);
+      const contador = contadorDePrazo(situacao, p, embarque);
+      if (contador) daSituacao[contador] += 1;
+    }
     if (situacao !== 'Produção') continue;
 
     somar(total, valor);
+    somar(prazo[CONTADOR_DO_PRAZO[embarque.prazo]], valor);
+    if (embarque.prazo === 'atencao') somar(prazo.atencao, valor);
     const aprovacao = diaDeColunaDate(p?.data_aprovacao);
     // O corte de TEXTO da emissão é exatamente o que o gravador pôs na
     // aprovação. Aqui ele não é a data do pedido (isso é `diaEmissao`, em São
@@ -474,30 +568,47 @@ function resumirProducao(
     if (!inicio) continue;
     const dias = Math.max(0, diferencaEmDias(hoje, inicio));
     idades[indiceDaFaixa(dias)].quantidade += 1;
-    comIdade.push({ p, dias, valor });
+    comIdade.push({ p, dias, valor, embarque });
   }
 
   const maisAntigos = [...comIdade]
     .sort((a, b) => b.dias - a.dias || compararIds(a.p.id, b.p.id))
     .slice(0, LIMITE_LISTA.maisAntigos)
-    .map(({ p, dias, valor }) => ({
+    .map(({ p, dias, valor, embarque }) => ({
       id: p.id ?? null,
       numero: texto(p.numero),
       cliente: verCliente ? ((temValor(p.cliente_id) && nomes.get(String(p.cliente_id))) || SEM_NOME) : null,
       dias,
-      valor: saidaDeValor(valor, comValores)
+      valor: saidaDeValor(valor, comValores),
+      embarque: embarque.embarque,
+      diasParaEmbarque: embarque.diasParaEmbarque,
+      prazo: embarque.prazo
     }));
+
+  const soma = acc => ({ quantidade: acc.quantidade, valor: saidaDeValor(acc.valor, comValores) });
 
   return {
     quantidade: total.quantidade,
     valor: saidaDeValor(total.valor, comValores),
+    prazo: {
+      emDia: soma(prazo.emDia),
+      atencao: soma(prazo.atencao),
+      atrasados: soma(prazo.atrasados),
+      semPrevisao: soma(prazo.semPrevisao)
+    },
     porIdade: idades,
     maisAntigos,
-    porSituacao12m: SITUACOES_PEDIDO.map(situacao => ({
-      situacao,
-      quantidade: porSituacao.get(situacao).quantidade,
-      valor: saidaDeValor(porSituacao.get(situacao).valor, comValores)
-    }))
+    porSituacao12m: SITUACOES_PEDIDO.map(situacao => {
+      const daSituacao = porSituacao.get(situacao);
+      return {
+        situacao,
+        quantidade: daSituacao.quantidade,
+        valor: saidaDeValor(daSituacao.valor, comValores),
+        emDia: daSituacao.emDia,
+        atrasados: daSituacao.atrasados,
+        semPrevisao: daSituacao.semPrevisao
+      };
+    })
   };
 }
 
@@ -826,9 +937,7 @@ function resumirIa({ ia_extracoes: extracoes } = {}) {
  * é "sem data" e aparece em `semData`, em vez de virar um mês inventado.
  */
 function diaDeVencimento(valor) {
-  const dia = diaDeColunaDate(valor);
-  if (!dia) return null;
-  return new Date(utcDoDia(dia)).toISOString().slice(0, 10) === dia ? dia : null;
+  return diaDeCalendario(valor);
 }
 
 /** Os meses de `inicio` a `fim`, inclusive e sem buraco ('YYYY-MM' ordena como texto). */
@@ -1052,6 +1161,7 @@ module.exports = {
   normalizarTexto,
   ETAPAS,
   FAIXAS_IDADE,
+  DIAS_DE_ATENCAO_EMBARQUE,
   LIMITE_CRITICO,
   LIMITE_LISTA,
   HORIZONTE_PREVISAO_MESES

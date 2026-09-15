@@ -192,12 +192,15 @@ function cenario() {
       { id: 51, nome_fantasia: '', razao_social: 'Casa Bela Decorações ME', status_cliente: 'ativo' },
       { id: 52, nome_fantasia: 'Decorações Silvia', razao_social: 'Silvia ME', status_cliente: 'Inativo' }
     ],
+    // Prazo de embarque: o 101 é de antes da previsão (sem), o 102 passou dela
+    // há 5 dias (DATE como o upstream serializa), o 103 embarcou 2 dias depois
+    // do previsto e o 105 antes. O 104, cancelado, não tem prazo a cumprir.
     pedidos: [
       { id: 101, numero: 'PED101', orcamento_id: 101, cliente_id: 50, situacao: 'Produção', data_emissao: meioDia(0), data_aprovacao: dia(0), valor_final: '8.200,00' },
-      { id: 102, numero: 'PED102', orcamento_id: 102, cliente_id: 51, situacao: 'Produção', data_emissao: meioDia(-74), data_aprovacao: dia(-74), valor_final: 5000 },
-      { id: 103, numero: 'PED103', orcamento_id: 103, cliente_id: 50, situacao: 'Entregue', data_emissao: meioDia(-40), data_aprovacao: dia(-40), valor_final: 12000 },
-      { id: 104, numero: 'PED104', orcamento_id: 104, cliente_id: 52, situacao: 'Cancelado', data_emissao: meioDia(-20), data_aprovacao: dia(-20), data_cancelamento: meioDia(0), valor_final: 3200 },
-      { id: 105, numero: 'PED105', orcamento_id: 105, cliente_id: 51, situacao: 'Enviado', data_emissao: meioDia(0), data_aprovacao: dia(0), valor_final: '1234.50' }
+      { id: 102, numero: 'PED102', orcamento_id: 102, cliente_id: 51, situacao: 'Produção', data_emissao: meioDia(-74), data_aprovacao: dia(-74), valor_final: 5000, embarcar_previsao: `${dia(-5)}T00:00:00.000Z` },
+      { id: 103, numero: 'PED103', orcamento_id: 103, cliente_id: 50, situacao: 'Entregue', data_emissao: meioDia(-40), data_aprovacao: dia(-40), valor_final: 12000, embarcar_previsao: dia(-12), embarcar_real: dia(-10) },
+      { id: 104, numero: 'PED104', orcamento_id: 104, cliente_id: 52, situacao: 'Cancelado', data_emissao: meioDia(-20), data_aprovacao: dia(-20), data_cancelamento: meioDia(0), valor_final: 3200, embarcar_previsao: dia(-10) },
+      { id: 105, numero: 'PED105', orcamento_id: 105, cliente_id: 51, situacao: 'Enviado', data_emissao: meioDia(0), data_aprovacao: dia(0), valor_final: '1234.50', embarcar_previsao: dia(2), embarcar_real: dia(0) }
     ],
     // O 101 em 2x, a 2ª daqui a 400 dias — sempre além do horizonte de 12
     // meses; o 103 em 3x, uma delas no formato em que o upstream serializa um
@@ -317,6 +320,10 @@ test('o painel completo sai no formato do contrato, com cada tabela lida uma vez
  *   dinheiro  número com até 2 casas, ou null quando falta a coluna de valor
  *   contagem  inteiro >= 0;   numero  número finito (dias de atraso, saldo)
  *   texto     string não vazia — nome ausente chega como "—", nunca vazio
+ *   dia|null  'YYYY-MM-DD' ou null (previsão de embarque que não existe)
+ *   inteiro|null  inteiro de qualquer sinal ou null (dias para o embarque:
+ *             negativo é atraso, null é "sem previsão")
+ *   prazo     'em_dia' | 'atencao' | 'atrasado' | 'sem_previsao'
  */
 /**
  * Lista que pode vir vazia em PARTE dos elementos: os meses sem parcela da
@@ -354,9 +361,17 @@ const FORMA_DO_CONTRATO = {
   producao: {
     quantidade: 'contagem',
     valor: 'dinheiro',
+    // `emDia` inclui `atencao` (ver resumirProducao): emDia + atrasados + semPrevisao = quantidade.
+    prazo: { emDia: FORMA_SOMA, atencao: FORMA_SOMA, atrasados: FORMA_SOMA, semPrevisao: FORMA_SOMA },
     porIdade: [{ faixa: 'texto', quantidade: 'contagem' }],
-    maisAntigos: [{ id: 'id', numero: 'texto|null', cliente: 'texto', dias: 'contagem', valor: 'dinheiro' }],
-    porSituacao12m: [{ situacao: 'texto', quantidade: 'contagem', valor: 'dinheiro' }]
+    maisAntigos: [{
+      id: 'id', numero: 'texto|null', cliente: 'texto', dias: 'contagem', valor: 'dinheiro',
+      embarque: 'dia|null', diasParaEmbarque: 'inteiro|null', prazo: 'prazo'
+    }],
+    porSituacao12m: [{
+      situacao: 'texto', quantidade: 'contagem', valor: 'dinheiro',
+      emDia: 'contagem', atrasados: 'contagem', semPrevisao: 'contagem'
+    }]
   },
   orcamentos: {
     pendentesVigentes: FORMA_SOMA,
@@ -417,6 +432,9 @@ const FOLHA_VALIDA = {
   mes: v => typeof v === 'string' && /^\d{4}-\d{2}$/.test(v),
   'fracao|null': v => v === null || (typeof v === 'number' && v >= 0 && v <= 1),
   'mes|null': v => v === null || (typeof v === 'string' && /^\d{4}-\d{2}$/.test(v)),
+  'dia|null': v => v === null || (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)),
+  'inteiro|null': v => v === null || Number.isInteger(v),
+  prazo: v => ['em_dia', 'atencao', 'atrasado', 'sem_previsao'].includes(v),
   booleano: v => typeof v === 'boolean'
 };
 
@@ -479,6 +497,35 @@ test('cada seção sai com exatamente os campos do contrato, e o R$ é número o
     } finally {
       await ctx.encerrar();
     }
+  }
+});
+
+test('produção traz o prazo de embarque: por pedido, no resumo e por situação', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const { corpo } = await ctx.chamar();
+    const { producao } = corpo.secoes;
+    // A previsão DATE chega cortada no dia dela, e não no anterior.
+    assert.deepEqual(producao.maisAntigos.map(p => [p.numero, p.embarque, p.diasParaEmbarque, p.prazo]), [
+      ['PED102', somarDias(corpo.hoje, -5), -5, 'atrasado'],
+      ['PED101', null, null, 'sem_previsao']
+    ]);
+    assert.deepEqual(producao.prazo, {
+      emDia: { quantidade: 0, valor: 0 },
+      atencao: { quantidade: 0, valor: 0 },
+      atrasados: { quantidade: 1, valor: 5000 },
+      semPrevisao: { quantidade: 1, valor: 8200 }
+    });
+    // Enviado adiantado está em dia; o Entregue embarcou depois do previsto.
+    assert.deepEqual(producao.porSituacao12m.map(s => [s.situacao, s.emDia, s.atrasados, s.semPrevisao]), [
+      ['Produção', 0, 1, 1],
+      ['Enviado', 1, 0, 0],
+      ['Entregue', 0, 1, 0],
+      ['Cancelado', 0, 0, 0],
+      ['Outros', 0, 0, 0]
+    ]);
+  } finally {
+    await ctx.encerrar();
   }
 });
 

@@ -9,7 +9,7 @@ function setupDb() {
     CREATE TABLE pedidos (
       id integer primary key,
       situacao text,
-      data_envio timestamp,
+      embarcar_real timestamp,
       data_entrega timestamp,
       data_aprovacao timestamp,
       data_cancelamento timestamp
@@ -48,10 +48,10 @@ test('PUT /api/pedidos/:id/status atualiza datas de envio e entrega', async () =
     body: JSON.stringify({ status: 'Enviado' })
   });
   assert.strictEqual(res.status, 200);
-  const { rows: afterSend } = await pool.query('SELECT data_envio, data_entrega FROM pedidos WHERE id=1');
-  assert(afterSend[0].data_envio);
+  const { rows: afterSend } = await pool.query('SELECT embarcar_real, data_entrega FROM pedidos WHERE id=1');
+  assert(afterSend[0].embarcar_real);
   assert.strictEqual(afterSend[0].data_entrega, null);
-  const envioDate = afterSend[0].data_envio;
+  const envioDate = afterSend[0].embarcar_real;
 
   res = await fetch(`http://localhost:${port}/api/pedidos/1/status`, {
     method: 'PUT',
@@ -59,9 +59,9 @@ test('PUT /api/pedidos/:id/status atualiza datas de envio e entrega', async () =
     body: JSON.stringify({ status: 'Entregue' })
   });
   assert.strictEqual(res.status, 200);
-  const { rows: afterDeliver } = await pool.query('SELECT data_envio, data_entrega FROM pedidos WHERE id=1');
+  const { rows: afterDeliver } = await pool.query('SELECT embarcar_real, data_entrega FROM pedidos WHERE id=1');
   assert(afterDeliver[0].data_entrega);
-  assert.strictEqual(afterDeliver[0].data_envio.toISOString(), envioDate.toISOString());
+  assert.strictEqual(afterDeliver[0].embarcar_real.toISOString(), envioDate.toISOString());
 
   server.close();
 });

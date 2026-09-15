@@ -5,6 +5,12 @@ const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { aplicarConversaoNoEstoque } = require('./conversaoAplicar');
 const { excluirOrcamentoEmCascata } = require('./exclusaoEmCascata');
 const { registrarHistorico, converterProspeccaoEmCliente } = require('./prospeccoesController');
+const {
+  hojeEmSaoPaulo,
+  resolverDatas,
+  calcularVencimentos,
+  prazosDoTexto
+} = require('./faturamentoPedido');
 
 const router = express.Router();
 
@@ -372,12 +378,30 @@ function isDuplicatePedidoNumeroError(err) {
   return partes.includes('pedidos_numero_key') || partes.includes('duplicate key');
 }
 
+/**
+ * As datas do pedido escolhidas no modal da conversão (`conversao.datas`).
+ *
+ * `null` quando não vieram — cliente antigo, rota sem o passo das datas —, e
+ * a conversão segue como sempre foi: copia os vencimentos do orçamento.
+ * Vieram e não fecham: `{ ok:false, erro }`, que as rotas devolvem como 400
+ * ANTES de aprovar o orçamento. Sem transação, descobrir isso depois deixaria
+ * o orçamento Aprovado e sem pedido.
+ *
+ * "Ao converter" é o dia de `agora` EM SÃO PAULO — não o corte UTC que vai
+ * para `data_aprovacao`, que às 22h já é amanhã.
+ */
+function datasDaConversao(conversao, agora = new Date()) {
+  const datas = conversao && typeof conversao === 'object' ? conversao.datas : undefined;
+  if (datas === undefined || datas === null) return null;
+  return resolverDatas(datas, { dataConversao: hojeEmSaoPaulo(agora) });
+}
+
 // Monta o payload do pedido espelhando os campos do orçamento. Só são incluídos
 // campos que sabidamente existem na tabela "pedidos" (lidos na visualização/PDF
 // do pedido), evitando erro de INSERT por coluna inexistente.
-function buildPedidoPayload(orc = {}, { numero, conversao } = {}) {
-  const agora = new Date().toISOString();
-  const hoje = agora.slice(0, 10); // colunas do tipo "date"
+function buildPedidoPayload(orc = {}, { numero, conversao, agora = new Date(), datas = null } = {}) {
+  const instante = agora.toISOString();
+  const hoje = instante.slice(0, 10); // colunas do tipo "date"
   const note = conversao && typeof conversao.decisaoNote === 'string' ? conversao.decisaoNote.trim() : '';
   const decisaoBy = conversao && Number.isFinite(Number(conversao.decisaoBy)) ? Number(conversao.decisaoBy) : null;
   return {
@@ -388,7 +412,7 @@ function buildPedidoPayload(orc = {}, { numero, conversao } = {}) {
     orcamento_id: orc.id,
     cliente_id: orc.cliente_id,
     contato_id: orc.contato_id,
-    data_emissao: agora,
+    data_emissao: instante,
     data_aprovacao: hoje,
     situacao: 'Produção',
     parcelas: orc.parcelas,
@@ -407,7 +431,15 @@ function buildPedidoPayload(orc = {}, { numero, conversao } = {}) {
     // (decisao_estoque_note), e não em "observacoes".
     pode_saldo_negativo: !!(conversao && conversao.podeSaldoNegativo),
     decisao_estoque_note: note || null,
-    decisao_estoque_by: decisaoBy
+    decisao_estoque_by: decisaoBy,
+    // Faturamento: só quando a conversão trouxe as datas. Sem elas o pedido
+    // nasce como os anteriores — sem regra, com os vencimentos copiados do
+    // orçamento e contados da emissão.
+    ...(datas ? {
+      embarcar_previsao: datas.embarcar_previsao,
+      inicio_faturamento: datas.inicio_faturamento,
+      faturamento_regra: datas.faturamento_regra
+    } : {})
   };
 }
 
@@ -452,9 +484,11 @@ function buildPedidoItemPayload(item = {}, pedidoId, decisao = {}) {
 }
 
 // Cria o pedido a partir do orçamento. Idempotente: se já houver pedido para
-// o orçamento, retorna o existente em vez de duplicar. `conversao` carrega a
-// decisão de estoque (nota e quantidades por produto) vinda do modal.
-async function converterOrcamentoEmPedido(api, id, conversao = null) {
+// o orçamento, retorna o existente em vez de duplicar (e as datas enviadas
+// agora são ignoradas). `conversao` carrega a decisão de estoque (nota e
+// quantidades por produto) e, quando vierem, as datas do pedido. `agora` é o
+// relógio da conversão inteira — "ao converter" é o dia dele.
+async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = new Date() } = {}) {
   const existentes = await api
     .get('/api/pedidos', { query: { orcamento_id: id } })
     .catch(() => []);
@@ -465,6 +499,17 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
     : null;
   if (jaExiste) {
     return { pedido: jaExiste, jaExistia: true };
+  }
+
+  // As rotas já recusaram datas inválidas antes de aprovar o orçamento; esta
+  // conferência é para quem chamar a função por outro caminho. Vem antes da
+  // promoção da prospecção, que é a primeira escrita daqui.
+  const datas = datasDaConversao(conversao, agora);
+  if (datas && !datas.ok) {
+    const error = new Error(datas.erro);
+    error.status = 400;
+    error.code = 'DATAS_INVALIDAS';
+    throw error;
   }
 
   const orcamento = await api.get(`/api/orcamentos/${id}`);
@@ -508,7 +553,7 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
   for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
     numero = `PED${sequencia}`;
     try {
-      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero, conversao }));
+      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero, conversao, agora, datas }));
       break;
     } catch (err) {
       if (isDuplicatePedidoNumeroError(err) && tentativa < maxTentativas - 1) {
@@ -551,14 +596,33 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
     proximoItemId = usado + 1;
   }
 
-  const listaParcelas = Array.isArray(parcelas) ? parcelas : [];
+  // O upstream ignora `order`: a ordem de `numero_parcela` é feita aqui, e é
+  // ela que casa cada parcela com o seu prazo.
+  const listaParcelas = (Array.isArray(parcelas) ? parcelas : [])
+    .slice()
+    .sort((a, b) => (Number(a?.numero_parcela) || 0) - (Number(b?.numero_parcela) || 0));
+
+  // Com as datas do modal, o vencimento de cada parcela é refeito: início do
+  // faturamento + prazo daquela parcela. O prazo é o do orçamento lido acima —
+  // o PUT que disparou esta conversão já gravou o da tela. A data copiada do
+  // orçamento foi contada da emissão DO ORÇAMENTO, que nada tem a ver com o
+  // faturamento.
+  const vencimentos = datas
+    ? calcularVencimentos(datas.inicio_faturamento, prazosDoTexto(orcamento.prazo, listaParcelas.length))
+    : null;
+
   let proximoParcelaId = (await getMaxId(api, 'pedido_parcelas')) + 1;
   for (let i = 0; i < listaParcelas.length; i++) {
     const { id: _pId, orcamento_id: _pOid, ...rest } = listaParcelas[i] || {};
     const usado = await inserirLinhaComId(
       api,
       'pedido_parcelas',
-      { ...rest, pedido_id: pedidoId, numero_parcela: rest.numero_parcela || i + 1 },
+      {
+        ...rest,
+        ...(vencimentos ? { data_vencimento: vencimentos[i] } : {}),
+        pedido_id: pedidoId,
+        numero_parcela: rest.numero_parcela || i + 1
+      },
       proximoParcelaId
     );
     proximoParcelaId = usado + 1;
@@ -745,11 +809,24 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
   const itens = Array.isArray(body.itens) ? body.itens : [];
   const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
 
+  // Um relógio para a requisição inteira: aprovação, emissão do pedido e o
+  // dia "ao converter" saem do mesmo instante.
+  const agora = new Date();
+
+  // As datas do pedido são conferidas ANTES de qualquer escrita: sem
+  // transação, recusá-las depois deixaria o orçamento Aprovado e sem pedido.
+  if (body.situacao === 'Aprovado') {
+    const datas = datasDaConversao(body.conversao, agora);
+    if (datas && !datas.ok) {
+      return res.status(400).json({ error: datas.erro, code: 'DATAS_INVALIDAS' });
+    }
+  }
+
   try {
     const api = createApiClient(req);
     const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
     const dataAprovacaoValor = situacoesComData.includes(body.situacao)
-      ? new Date().toISOString()
+      ? agora.toISOString()
       : null;
 
     const atual = await api.get(`/api/orcamentos/${id}`).catch(() => null);
@@ -825,7 +902,7 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
         const resultado = await converterOrcamentoEmPedido(api, id, {
           ...(body.conversao || {}),
           decisaoBy: idDoUsuarioDaRequisicao(req)
-        });
+        }, { agora });
         pedido = resultado.pedido;
         estoqueResumo = resultado.estoque || null;
         convertido = true;
@@ -851,12 +928,23 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
 router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
+
+  // Mesmo relógio e mesma conferência do PUT: datas inválidas voltam 400
+  // antes de o orçamento ser aprovado.
+  const agora = new Date();
+  if (situacao === 'Aprovado') {
+    const datas = datasDaConversao(req.body?.conversao, agora);
+    if (datas && !datas.ok) {
+      return res.status(400).json({ error: datas.erro, code: 'DATAS_INVALIDAS' });
+    }
+  }
+
   try {
     const api = createApiClient(req);
     const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
     const payload = {
       situacao,
-      data_aprovacao: situacoesComData.includes(situacao) ? new Date().toISOString() : null
+      data_aprovacao: situacoesComData.includes(situacao) ? agora.toISOString() : null
     };
     const antes = await api.get(`/api/orcamentos/${id}`).catch(() => null);
     await api.put(`/api/orcamentos/${id}`, payload);
@@ -884,7 +972,7 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
         const resultado = await converterOrcamentoEmPedido(api, id, {
           ...(req.body?.conversao || {}),
           decisaoBy: idDoUsuarioDaRequisicao(req)
-        });
+        }, { agora });
         pedido = resultado.pedido;
         estoqueResumo = resultado.estoque || null;
         convertido = true;
@@ -1008,3 +1096,6 @@ module.exports = router;
 // concorrente.
 module.exports.criarOrcamentoComNumero = criarOrcamentoComNumero;
 module.exports.buildOrcamentoPayload = buildOrcamentoPayload;
+// Exposto para teste: "ao converter" é o dia de São Paulo, e o caso das 22h30
+// só se prova com o relógio na mão.
+module.exports.datasDaConversao = datasDaConversao;

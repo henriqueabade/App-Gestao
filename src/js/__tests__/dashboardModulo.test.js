@@ -844,7 +844,7 @@ test('o CSS só usa as cores do tema, que trocam entre claro e escuro', () => {
         '--menu-surface-soft', '--menu-surface-strong', '--menu-surface-highlight',
         '--menu-surface-border', '--menu-surface-border-soft', '--menu-surface-border-strong',
         '--color-primary', '--color-primary-light', '--color-primary-dark', '--color-bordeaux', '--color-bg-deep',
-        '--color-green', '--color-red', '--color-blue', '--color-violet', '--neutral-100', '--neutral-500'
+        '--color-green', '--color-red', '--color-blue', '--color-violet', '--color-purple', '--neutral-100', '--neutral-500'
     ]);
     const usadas = [...regras.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(m => m[1]);
     const fora = [...new Set(usadas.filter(nome => !permitidas.has(nome) && !nome.startsWith('--dash-')))];
@@ -1622,4 +1622,351 @@ test('sem o window.Popover as barras continuam com o aria-label e nada quebra', 
     });
     assert.match(verde.getAttribute('aria-label'), /^Previsão de faturamento em outubro de 2025: Nenhuma parcela neste mês$/);
     assert.deepStrictEqual(painel.erros, []);
+});
+
+// ---------------------------------------------- prazo de embarque (produção)
+
+/**
+ * A seção `producao` com o prazo de embarque (contrato novo), hoje = 13/09/2026:
+ * sete pedidos na lista — dois atrasados, dois em atenção (embarca hoje e
+ * amanhã), dois em dia e um sem previsão. `emDia` inclui a atenção.
+ */
+function producaoComPrazo() {
+    const pedido = (n, dias, embarque, diasParaEmbarque, prazo) => ({
+        id: n, numero: `PED${n}`, cliente: `Cliente ${n}`, dias, valor: n * 1000, embarque, diasParaEmbarque, prazo
+    });
+    return {
+        quantidade: 7,
+        valor: 52000,
+        prazo: {
+            emDia: { quantidade: 4, valor: 32000 },
+            atencao: { quantidade: 2, valor: 12000 },
+            atrasados: { quantidade: 2, valor: 20000 },
+            semPrevisao: { quantidade: 1, valor: 0 }
+        },
+        porIdade: [
+            { faixa: '0-15', quantidade: 3 }, { faixa: '16-30', quantidade: 2 },
+            { faixa: '31-60', quantidade: 1 }, { faixa: '60+', quantidade: 1 }
+        ],
+        maisAntigos: [
+            pedido(1, 74, '2026-09-10', -3, 'atrasado'),
+            // DATE como o upstream serializa: 12/09, não 11/09.
+            pedido(2, 40, '2026-09-12T00:00:00.000Z', -1, 'atrasado'),
+            pedido(3, 30, '2026-09-13', 0, 'atencao'),
+            pedido(4, 20, '2026-09-14', 1, 'atencao'),
+            pedido(5, 12, '2026-09-25', 12, 'em_dia'),
+            pedido(6, 5, null, null, 'sem_previsao'),
+            pedido(7, 2, '2026-09-20', 7, 'em_dia')
+        ],
+        porSituacao12m: [
+            { situacao: 'Produção', quantidade: 7, valor: 52000, emDia: 4, atrasados: 2, semPrevisao: 1 },
+            { situacao: 'Enviado', quantidade: 3, valor: 21000, emDia: 2, atrasados: 1, semPrevisao: 0 },
+            { situacao: 'Entregue', quantidade: 20, valor: 150000, emDia: 15, atrasados: 3, semPrevisao: 2 },
+            { situacao: 'Cancelado', quantidade: 1, valor: 3200, emDia: 0, atrasados: 0, semPrevisao: 0 },
+            { situacao: 'Outros', quantidade: 0, valor: 0, emDia: 0, atrasados: 0, semPrevisao: 0 }
+        ]
+    };
+}
+
+/** Painel desenhado com a produção de `producaoComPrazo`; `mudar` ajusta (ou troca) a resposta antes. */
+function painelComPrazo(mudar = () => {}) {
+    const painel = montarPainelFalso();
+    const inicial = amostraDoContrato();
+    inicial.secoes.producao = producaoComPrazo();
+    const dados = mudar(inicial) || inicial;
+    const redesenhar = () => painel.avaliar('renderizarDashboard')(painel.modulo, dados);
+    redesenhar();
+    return { painel, dados, redesenhar };
+}
+
+test('prazo de embarque: "faltam X dias", "falta 1 dia", "embarca hoje", "em atraso" e a data prevista em dd/mm/aa', () => {
+    const texto = avaliar('textoEmbarque');
+    assert.strictEqual(texto(12), 'faltam 12 dias');
+    assert.strictEqual(texto(7), 'faltam 7 dias');
+    assert.strictEqual(texto(2), 'faltam 2 dias');
+    assert.strictEqual(texto(1), 'falta 1 dia');
+    assert.strictEqual(texto(0), 'embarca hoje');
+    assert.strictEqual(texto(-1), 'em atraso');
+    assert.strictEqual(texto(-30), 'em atraso');
+    assert.strictEqual(texto(null), 'sem previsão');
+
+    const data = avaliar('formatarDataComAno');
+    // Meia-noite UTC do dia 13 é noite do dia 12 em São Paulo: não pode virar 12.
+    assert.strictEqual(data('2026-09-13T00:00:00.000Z'), '13/09/26');
+    assert.strictEqual(data('2027-01-05'), '05/01/27');
+    assert.strictEqual(data(null), '');
+    assert.strictEqual(data('a combinar'), '');
+
+    const etiqueta = avaliar('etiquetaDeEmbarque');
+    const partes = e => (e ? [e.texto, e.tom, e.dica, e.alerta ? e.alerta.tom : null] : null);
+    assert.deepStrictEqual(partes(etiqueta({ prazo: 'em_dia', diasParaEmbarque: 12, embarque: '2026-09-25' })),
+        ['faltam 12 dias', 'ouro', 'Data prevista: 25/09/26', null]);
+    assert.deepStrictEqual(partes(etiqueta({ prazo: 'atencao', diasParaEmbarque: 0, embarque: '2026-09-13T00:00:00.000Z' })),
+        ['embarca hoje', 'vermelho', 'Data prevista: 13/09/26', 'vermelho']);
+    assert.deepStrictEqual(partes(etiqueta({ prazo: 'atrasado', diasParaEmbarque: -3, embarque: '2026-09-10' })),
+        ['em atraso', 'roxo', 'Data prevista: 10/09/26\natrasado há 3 dias', 'roxo']);
+    assert.deepStrictEqual(partes(etiqueta({ prazo: 'sem_previsao', diasParaEmbarque: null, embarque: null })),
+        ['sem previsão', 'neutro', 'Sem previsão de embarque — defina no pagamento do pedido', null]);
+    // Servidor anterior à previsão (sem `prazo`): nada de "sem previsão" inventado.
+    assert.strictEqual(etiqueta({ dias: 12 }), null);
+
+    // A data do title é cortada como texto, nunca por `new Date`.
+    const fonte = ['formatarDataComAno', 'textoEmbarque', 'etiquetaDeEmbarque'].map(nome => avaliar(nome).toString()).join('\n');
+    assert.doesNotMatch(fonte, /new Date/);
+});
+
+test('produção por idade: etiqueta de prazo à direita da de idade, na cor do prazo, com a data prevista no title', () => {
+    const { painel } = painelComPrazo();
+    assert.deepStrictEqual(painel.erros, []);
+    const cartao = painel.cartoes.idade;
+    assert.strictEqual(cartao.dataset.estado, 'ok');
+    const itens = cartao.querySelectorAll('.dash-lista__item');
+    assert.strictEqual(itens.length, 7, 'o BFF manda a lista inteira');
+
+    const linhas = itens.map(item => {
+        const [grupo] = item.querySelectorAll('.dash-lista__etiquetas');
+        const [idade, prazo] = grupo.querySelectorAll('.dash-chip');
+        const [alerta] = item.querySelectorAll('.dash-lista__alerta');
+        return [idade.textContent, idade.dataset.tom, prazo.textContent, prazo.dataset.tom, prazo.title, alerta ? alerta.dataset.tom : null];
+    });
+    assert.deepStrictEqual(linhas, [
+        ['há 74 dias', 'vinho', 'em atraso', 'roxo', 'Data prevista: 10/09/26\natrasado há 3 dias', 'roxo'],
+        ['há 40 dias', 'neutro', 'em atraso', 'roxo', 'Data prevista: 12/09/26\natrasado há 1 dia', 'roxo'],
+        ['há 30 dias', 'neutro', 'embarca hoje', 'vermelho', 'Data prevista: 13/09/26', 'vermelho'],
+        ['há 20 dias', 'neutro', 'falta 1 dia', 'vermelho', 'Data prevista: 14/09/26', 'vermelho'],
+        ['há 12 dias', 'neutro', 'faltam 12 dias', 'ouro', 'Data prevista: 25/09/26', null],
+        ['há 5 dias', 'neutro', 'sem previsão', 'neutro', 'Sem previsão de embarque — defina no pagamento do pedido', null],
+        ['há 2 dias', 'neutro', 'faltam 7 dias', 'ouro', 'Data prevista: 20/09/26', null]
+    ]);
+
+    // O símbolo vai junto do número, sem mexer no texto nem no title dele.
+    const [primeiro] = itens;
+    const [titulo] = primeiro.querySelectorAll('.dash-lista__titulo');
+    assert.strictEqual(titulo.textContent, 'PED1');
+    assert.strictEqual(titulo.title, 'PED1');
+    const [alerta] = titulo.querySelectorAll('.dash-lista__alerta');
+    assert.ok(alerta.classList.contains('fa-triangle-exclamation'));
+    assert.strictEqual(alerta.getAttribute('aria-hidden'), 'true');
+    // Idade e prazo na mesma linha (o grupo); o valor continua embaixo.
+    const [lado] = primeiro.querySelectorAll('.dash-lista__lado');
+    assert.deepStrictEqual(lado.childNodes.map(no => no.className), ['dash-lista__etiquetas', 'dash-lista__valor']);
+    assert.match(painel.texto('idade'), /Idade contada desde a aprovação; o prazo é a previsão de embarque\./);
+    assert.doesNotMatch(painel.texto('idade'), /não é atraso/);
+});
+
+test('"+N não listados" vira botão que abre a lista inteira e recolhe, e o estado sobrevive ao Atualizar', () => {
+    const { painel, redesenhar } = painelComPrazo();
+    const cartao = painel.cartoes.idade;
+    const visiveis = () => cartao.querySelectorAll('.dash-lista__item').filter(item => !item.hidden).length;
+    const botaoAtual = () => cartao.querySelectorAll('.dash-mais__botao')[0];
+
+    const botao = botaoAtual();
+    assert.ok(botao, 'lista com mais de cinco ganha o botão');
+    assert.strictEqual(botao.tagName, 'BUTTON');
+    assert.strictEqual(botao.type, 'button');
+    assert.strictEqual(botao.dataset.semGuarda, 'true', 'só mostra e esconde: a trava de duplo clique engoliria o 2º clique');
+    assert.strictEqual(botao.getAttribute('aria-controls'), 'dash-idade-lista');
+    assert.strictEqual(cartao.querySelectorAll('.dash-lista')[0].id, 'dash-idade-lista');
+    assert.strictEqual(visiveis(), 5);
+    assert.strictEqual(botao.getAttribute('aria-expanded'), 'false');
+    assert.strictEqual(botao.textContent, '+2 não listados');
+    assert.strictEqual(botao.querySelectorAll('.fa-chevron-down').length, 1);
+    // Escondidos pelo ATRIBUTO hidden — a classe `hidden` do Tailwind offline pode não existir.
+    const ocultos = cartao.querySelectorAll('.dash-lista__item').filter(item => item.hidden);
+    assert.deepStrictEqual(ocultos.map(item => item.querySelectorAll('.dash-lista__titulo')[0].textContent), ['PED6', 'PED7']);
+    assert.ok(ocultos.every(item => !item.classList.contains('hidden')));
+
+    disparar(botao, 'click');
+    assert.strictEqual(visiveis(), 7, 'aberto: a lista inteira');
+    assert.strictEqual(botao.getAttribute('aria-expanded'), 'true');
+    assert.strictEqual(botao.textContent, 'mostrar menos');
+    assert.strictEqual(botao.querySelectorAll('.fa-chevron-up').length, 1);
+
+    // "Atualizar" recria o corpo inteiro: quem abriu continua vendo tudo.
+    redesenhar();
+    const novo = botaoAtual();
+    assert.notStrictEqual(novo, botao, 'o botão é outro, recriado');
+    assert.strictEqual(visiveis(), 7);
+    assert.strictEqual(novo.getAttribute('aria-expanded'), 'true');
+    assert.strictEqual(novo.textContent, 'mostrar menos');
+
+    disparar(novo, 'click');
+    assert.strictEqual(visiveis(), 5, '"mostrar menos" recolhe');
+    assert.strictEqual(novo.getAttribute('aria-expanded'), 'false');
+    assert.strictEqual(novo.textContent, '+2 não listados');
+    redesenhar();
+    assert.strictEqual(visiveis(), 5, 'e recolhido também sobrevive ao Atualizar');
+    // O ouvinte é do próprio botão (o do module-change continua o único global).
+    assert.deepStrictEqual(botaoAtual().ouvintes.map(ouvinte => ouvinte.tipo), ['click']);
+    assert.deepStrictEqual(painel.erros, []);
+});
+
+test('pedido que nem vem na lista continua no "+N": fechado conta todos, aberto fica ao lado do "mostrar menos"', () => {
+    // Nove em produção e sete na lista: dois sem data de início, que o BFF não lista.
+    const { painel } = painelComPrazo(dados => { dados.secoes.producao.quantidade = 9; });
+    const cartao = painel.cartoes.idade;
+    const [botao] = cartao.querySelectorAll('.dash-mais__botao');
+    const [resto] = cartao.querySelectorAll('.dash-mais__resto');
+    assert.strictEqual(botao.textContent, '+4 não listados', '2 escondidos + 2 fora da lista');
+    assert.strictEqual(resto.hidden, true);
+    disparar(botao, 'click');
+    assert.strictEqual(resto.hidden, false);
+    assert.strictEqual(resto.textContent, '+2 não listados');
+    assert.strictEqual(botao.textContent, 'mostrar menos');
+    assert.strictEqual(cartao.querySelectorAll('.dash-mais')[0].textContent, '+2 não listadosmostrar menos');
+
+    // Lista de até cinco: sem botão, o "+N não listados" de sempre.
+    const curta = painelComPrazo(dados => { dados.secoes.producao.maisAntigos = dados.secoes.producao.maisAntigos.slice(0, 5); });
+    assert.strictEqual(curta.painel.cartoes.idade.querySelectorAll('.dash-mais__botao').length, 0);
+    assert.match(curta.painel.texto('idade'), /\+2 não listados/);
+});
+
+test('KPI "Em produção": em dia × em atraso nos chips, com o valor compacto, e "sem previsão" só quando há', () => {
+    const chipsDe = painel => painel.cartoes['kpi-producao'].querySelectorAll('.dash-chip')
+        .map(chip => [semEspacoFixo(chip.textContent), chip.dataset.tom]);
+
+    const { painel } = painelComPrazo();
+    assert.deepStrictEqual(chipsDe(painel), [
+        ['4 em dia · R$ 32 mil', 'verde'],
+        ['2 em atraso · R$ 20 mil', 'roxo'],
+        ['1 sem previsão', 'neutro'],
+        ['1 há mais de 60 dias', 'ouro']
+    ]);
+    const [emDia] = painel.cartoes['kpi-producao'].querySelectorAll('.dash-chip');
+    assert.strictEqual(emDia.title, 'Inclui 2 que embarcam em menos de 7 dias', 'a atenção está dentro do "em dia"');
+
+    // Sem a coluna de valor: só as contagens.
+    const semValor = painelComPrazo(dados => anularDinheiro(dados));
+    assert.deepStrictEqual(chipsDe(semValor.painel).slice(0, 2), [['4 em dia', 'verde'], ['2 em atraso', 'roxo']]);
+
+    // Nada atrasado nem sem previsão: "0 em atraso" neutro, e o "sem previsão" some.
+    const emOrdem = painelComPrazo(dados => {
+        Object.assign(dados.secoes.producao.prazo, {
+            emDia: { quantidade: 7, valor: 52000 },
+            atrasados: { quantidade: 0, valor: 0 },
+            semPrevisao: { quantidade: 0, valor: 0 }
+        });
+    });
+    assert.deepStrictEqual(chipsDe(emOrdem.painel), [
+        ['7 em dia · R$ 52 mil', 'verde'], ['0 em atraso', 'neutro'], ['1 há mais de 60 dias', 'ouro']
+    ]);
+
+    // Servidor anterior à previsão (a amostra antiga): só o chip dos 60 dias, nenhum "0 em atraso" inventado.
+    const antigo = montarPainelFalso();
+    antigo.avaliar('renderizarDashboard')(antigo.modulo, amostraDoContrato());
+    assert.deepStrictEqual(chipsDe(antigo), [['1 há mais de 60 dias', 'ouro']]);
+});
+
+test('donut: anel fino de prazo por fora das situações, sem anel no Cancelado, e "em dia · em atraso" na legenda', () => {
+    const { painel } = painelComPrazo();
+    assert.deepStrictEqual(painel.erros, []);
+    const cartao = painel.cartoes['grafico-situacao'];
+    assert.strictEqual(cartao.querySelectorAll('.dash-donut__fatia').length, 4, 'o anel de prazo não conta como fatia');
+    assert.match(painel.texto('grafico-situacao'), /31pedidos/);
+
+    const tituloDe = no => no.filhos.find(filho => filho.tagName === 'TITLE').textContent;
+    const arcos = cartao.querySelectorAll('.dash-donut__prazo');
+    assert.deepStrictEqual(arcos.map(arco => [tituloDe(arco), arco.dataset.tom]), [
+        ['Produção · em dia: 4 pedidos', 'verde'],
+        ['Produção · em atraso: 2 pedidos', 'roxo'],
+        ['Produção · sem previsão: 1 pedido', 'neutro'],
+        ['Enviado · embarque no prazo: 2 pedidos', 'verde'],
+        ['Enviado · embarque atrasado: 1 pedido', 'roxo'],
+        ['Entregue · embarque no prazo: 15 pedidos', 'verde'],
+        ['Entregue · embarque atrasado: 3 pedidos', 'roxo'],
+        ['Entregue · sem previsão ou sem data de embarque: 2 pedidos', 'neutro']
+    ]);
+    assert.ok(arcos.every(arco => arco.getAttribute('r') === '19.9'), 'por fora do anel principal');
+    // A fatia leva o resumo do prazo numa 2ª linha do <title>.
+    const [fatiaProducao] = cartao.querySelectorAll('.dash-donut__fatia');
+    assert.strictEqual(tituloDe(fatiaProducao), 'Produção: 7 pedidos (22,6%)\n4 em dia · 2 em atraso · 1 sem previsão');
+
+    const legenda = cartao.querySelectorAll('.dash-legenda__item').map(item => {
+        const [prazo] = item.querySelectorAll('.dash-legenda__prazo');
+        return [item.querySelectorAll('.dash-legenda__nome')[0].textContent, prazo ? prazo.textContent : null];
+    });
+    assert.deepStrictEqual(legenda, [
+        ['Produção', '4 em dia · 2 em atraso · 1 sem previsão'],
+        ['Enviado', '2 em dia · 1 em atraso'],
+        ['Entregue', '15 em dia · 3 em atraso · 2 sem previsão'],
+        ['Cancelado', null]
+    ]);
+    const tons = cartao.querySelectorAll('.dash-legenda__prazo-parte').slice(0, 3).map(parte => parte.dataset.tom);
+    assert.deepStrictEqual(tons, ['verde', 'roxo', 'neutro'], 'cada parte na cor do anel');
+
+    // Sem os campos novos (servidor anterior): o donut de antes, sem anel e sem linha.
+    const antigo = montarPainelFalso();
+    antigo.avaliar('renderizarDashboard')(antigo.modulo, amostraDoContrato());
+    assert.strictEqual(antigo.cartoes['grafico-situacao'].querySelectorAll('.dash-donut__prazo').length, 0);
+    assert.strictEqual(antigo.cartoes['grafico-situacao'].querySelectorAll('.dash-legenda__prazo').length, 0);
+});
+
+test('anel de prazo: cada situação dividida na proporção, começando onde a fatia começa e cabendo nela', () => {
+    const geo = avaliar('geometriaDonut')(producaoComPrazo().porSituacao12m);
+    const arcos = avaliar('arcosDePrazo')(geo.segmentos);
+    const escala = (2 * Math.PI * avaliar('DASH_RAIO_PRAZO')) / 100;
+    for (const segmento of geo.segmentos) {
+        const daFatia = arcos.filter(arco => arco.situacao === segmento.situacao);
+        if (segmento.situacao === 'Cancelado') {
+            assert.strictEqual(daFatia.length, 0, 'Cancelado não tem prazo');
+            continue;
+        }
+        const comprimentos = daFatia.map(arco => Number(arco.dasharray.split(' ')[0]) / escala);
+        const ocupado = comprimentos.reduce((soma, c) => soma + c, 0) + 0.35 * (daFatia.length - 1);
+        assert.ok(Math.abs(ocupado - segmento.comprimento) < 0.01, `${segmento.situacao}: o anel sai da fatia`);
+        assert.ok(Math.abs(Number(daFatia[0].dashoffset) / escala - (25 - segmento.inicio)) < 0.01,
+            `${segmento.situacao}: o anel não começa com a fatia`);
+        daFatia.forEach(arco => {
+            const [traco, vao] = arco.dasharray.split(' ').map(Number);
+            assert.ok(Math.abs(traco + vao - 100 * escala) < 0.01, 'o padrão do traço é a circunferência do anel de fora');
+        });
+        // 4 em dia contra 2 em atraso na Produção: o dobro do comprimento.
+        if (segmento.situacao === 'Produção') assert.ok(Math.abs(comprimentos[0] / comprimentos[1] - 2) < 0.01);
+    }
+    const semCampos = avaliar('geometriaDonut')(amostraDoContrato().secoes.producao.porSituacao12m);
+    assert.strictEqual(avaliar('arcosDePrazo')(semCampos.segmentos).length, 0, 'sem os campos novos, nenhum anel');
+});
+
+const FONTE_MENU_CSS = fs.readFileSync(path.join(SRC, 'css', 'menu.css'), 'utf8');
+
+/** [r, g, b] de uma cor hexadecimal de um tema de menu.css. */
+function corDoTema(tema, variavel) {
+    const bloco = new RegExp(`\\[data-menu-theme="${tema}"\\]\\s*\\{([^}]*)\\}`).exec(FONTE_MENU_CSS)[1];
+    const hex = new RegExp(`${variavel}:\\s*#([0-9a-f]{6})\\b`, 'i').exec(bloco)[1];
+    return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
+}
+
+/** Matiz (0–360°) e saturação (0–1, HSL) de [r, g, b]. */
+function matizESaturacao([r, g, b]) {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    if (!d) return { matiz: 0, saturacao: 0 };
+    let h;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    const luz = (max + min) / 2 / 255;
+    return { matiz: (h * 60 + 360) % 360, saturacao: d / 255 / (1 - Math.abs(2 * luz - 1)) };
+}
+
+test('o roxo do "em atraso" é roxo de verdade nos dois temas, e o --color-violet do tema não serviria', () => {
+    assert.match(REGRAS_CSS, /\.dashboard-module \[data-tom="roxo"\]\s*\{[^}]*--dash-tom:\s*var\(--dash-roxo\)/);
+    assert.match(declaracoesDo('.dashboard-module'), /--dash-roxo:\s*var\(--color-purple\)/);
+    for (const tema of ['dark', 'light']) {
+        const { matiz, saturacao } = matizESaturacao(corDoTema(tema, '--color-purple'));
+        assert.ok(matiz >= 265 && matiz <= 300, `${tema}: matiz ${matiz.toFixed(0)}° não é roxo`);
+        // Roxo forte, como o #7300ba do app — o color-mix de antes dava um lilás acinzentado.
+        assert.ok(saturacao >= 0.6, `${tema}: saturação ${saturacao.toFixed(2)} é apagada demais`);
+    }
+    // O porquê de não usar o --color-violet: no escuro ele é cinza.
+    assert.ok(matizESaturacao(corDoTema('dark', '--color-violet')).saturacao < 0.1);
+});
+
+test('CSS do prazo: etiquetas lado a lado, símbolo e anel na cor do tom, botão de expandir com foco visível', () => {
+    assert.match(declaracoesDo('.dash-lista__etiquetas'), /display:\s*flex/);
+    assert.doesNotMatch(declaracoesDo('.dash-lista__etiquetas'), /flex-direction:\s*column/, 'lado a lado, não empilhadas');
+    assert.match(declaracoesDo('.dash-lista__alerta'), /color:\s*var\(--dash-tom\)/);
+    assert.match(declaracoesDo('.dash-donut__prazo'), /stroke:\s*var\(--dash-tom\)/);
+    assert.match(declaracoesDo('.dash-mais__botao:focus-visible'), /outline:\s*2px solid/);
 });

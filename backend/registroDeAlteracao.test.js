@@ -219,10 +219,44 @@ test('cancelar grava data_cancelamento', () => {
   );
 });
 
-test('enviar e entregar continuam gravando as suas datas', () => {
+test('enviar grava o DIA do embarque em São Paulo; entregar, o instante', () => {
   const agora = new Date('2026-07-31T20:00:00Z');
-  assert.equal(payloadDeStatus('Enviado', agora).data_envio, agora.toISOString());
+  // `embarcar_real` é DATE: é comparada com a previsão de embarque.
+  assert.equal(payloadDeStatus('Enviado', agora).embarcar_real, '2026-07-31');
   assert.equal(payloadDeStatus('Entregue', agora).data_entrega, agora.toISOString());
+
+  // 22h30 em São Paulo já é dia 1º em UTC. O corte do ISO registraria o
+  // embarque no dia seguinte — e o pedido pareceria atrasado um dia.
+  const noite = new Date('2026-08-01T01:30:00Z');
+  assert.equal(payloadDeStatus('Enviado', noite).embarcar_real, '2026-07-31');
+});
+
+test('embarque atrasado de um pedido "ao embarcar" leva o novo início no mesmo payload', () => {
+  const pedido = {
+    faturamento_regra: 'ao_embarcar',
+    embarcar_previsao: '2026-08-10',
+    inicio_faturamento: '2026-08-10'
+  };
+
+  // Um PUT só: sem transação, é a única forma de a situação e o início não
+  // ficarem pela metade.
+  assert.deepEqual(payloadDeStatus('Enviado', new Date('2026-08-12T15:00:00Z'), pedido), {
+    situacao: 'Enviado',
+    embarcar_real: '2026-08-12',
+    inicio_faturamento: '2026-08-12'
+  });
+
+  // No dia, adiantado, em outra regra ou sem o pedido, o início não se mexe.
+  for (const [agora, doPedido] of [
+    [new Date('2026-08-10T15:00:00Z'), pedido],
+    [new Date('2026-08-05T15:00:00Z'), pedido],
+    [new Date('2026-08-12T15:00:00Z'), { ...pedido, faturamento_regra: 'data' }],
+    [new Date('2026-08-12T15:00:00Z'), { ...pedido, faturamento_regra: 'ao_converter' }],
+    [new Date('2026-08-12T15:00:00Z'), null]
+  ]) {
+    const payload = payloadDeStatus('Enviado', agora, doPedido);
+    assert.ok(!('inicio_faturamento' in payload), JSON.stringify({ agora, doPedido }));
+  }
 });
 
 test('um status sem data própria não inventa coluna', () => {
@@ -232,6 +266,7 @@ test('um status sem data própria não inventa coluna', () => {
 
 test('cada status mexe apenas na sua data', () => {
   const payload = payloadDeStatus('Cancelado', new Date());
-  assert.ok(!('data_envio' in payload));
+  assert.ok(!('embarcar_real' in payload));
+  assert.ok(!('inicio_faturamento' in payload));
   assert.ok(!('data_entrega' in payload));
 });

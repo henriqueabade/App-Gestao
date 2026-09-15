@@ -50,6 +50,62 @@ function formatarDataLocal(isoDate) {
     return data.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
+/**
+ * Coluna DATE ('YYYY-MM-DD'): corte do texto, nunca `new Date()`.
+ *
+ * O upstream pode servir a data como '2026-09-13T00:00:00.000Z', e qualquer
+ * conversão de fuso no caminho mostraria o dia 12 — justo na data de embarque,
+ * que é o que decide se o faturamento atrasou.
+ */
+function formatarDiaDate(valor) {
+    const achado = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? '').trim());
+    return achado ? `${achado[3]}/${achado[2]}/${achado[1]}` : '';
+}
+
+/**
+ * O que dizer depois de pedir a troca de status.
+ *
+ * A resposta era descartada: um 403, um 409 (pedido já enviado por outra aba)
+ * ou um aviso do backend não chegavam a ninguém, e a lista só recarregava
+ * calada. Pura — recebe o que veio e devolve as mensagens — para ser testada
+ * sem tela.
+ *
+ * @returns {Array<{ texto: string, tipo: 'error'|'info' }>}
+ */
+function mensagensDaTrocaDeStatus(ok, httpStatus, corpo) {
+    if (!ok) {
+        return [{
+            texto: corpo?.error || `Não foi possível alterar o status do pedido (HTTP ${httpStatus}).`,
+            tipo: 'error'
+        }];
+    }
+    const mensagens = [];
+    // Embarque depois da previsão num pedido "ao embarcar": o backend moveu o
+    // início do faturamento para o dia real e refez os vencimentos.
+    const faturamento = corpo?.faturamento;
+    if (faturamento?.reprogramado) {
+        const inicio = formatarDiaDate(faturamento.inicio_faturamento);
+        mensagens.push({
+            texto: inicio
+                ? `Embarque atrasado: vencimentos reprogramados a partir de ${inicio}`
+                : 'Embarque atrasado: vencimentos reprogramados.',
+            tipo: 'info'
+        });
+    }
+    const avisos = Array.isArray(corpo?.avisos) ? corpo.avisos.filter(Boolean) : [];
+    if (avisos.length === 1) {
+        const aviso = avisos[0];
+        const texto = typeof aviso === 'string' ? aviso : (aviso?.mensagem || aviso?.message || aviso?.error || '');
+        mensagens.push({
+            texto: texto ? `Status alterado, com aviso: ${texto}` : 'Status alterado com 1 aviso. Veja o console.',
+            tipo: 'info'
+        });
+    } else if (avisos.length > 1) {
+        mensagens.push({ texto: `Status alterado com ${avisos.length} avisos. Veja o console.`, tipo: 'info' });
+    }
+    return mensagens;
+}
+
 
 function updateEmptyStatePedidos(hasData) {
     const wrapper = document.getElementById('pedidosTableWrapper');
@@ -185,7 +241,8 @@ function showStatusTooltip(e) {
     const badge = e.currentTarget;
     const items = [
         { label: 'Data Início Produção', value: badge.dataset.aprovacao },
-        { label: 'Data de Envio', value: badge.dataset.envio },
+        { label: 'Previsão de Embarque', value: badge.dataset.previsaoEmbarque },
+        { label: 'Data de Embarque', value: badge.dataset.embarque },
         { label: 'Data de Entrega', value: badge.dataset.entrega },
         { label: 'Data de Cancelamento', value: badge.dataset.cancelamento }
     ].filter(i => i.value);
@@ -292,7 +349,9 @@ async function carregarPedidos() {
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             const dataFormatada = formatarDataLocal(p.data_emissao);
             const dataFormatada2 = formatarDataLocal(p.data_aprovacao);
-            const dataFormatada3 = formatarDataLocal(p.data_envio);
+            // Colunas DATE: cortadas como texto (ver formatarDiaDate).
+            const dataPrevisaoEmbarque = formatarDiaDate(p.embarcar_previsao);
+            const dataEmbarque = formatarDiaDate(p.embarcar_real);
             const dataFormatada4 = formatarDataLocal(p.data_entrega);
             const dataFormatada5 = formatarDataLocal(p.data_cancelamento);
             // Repactuar pagamento só cabe enquanto o pedido está em produção:
@@ -313,7 +372,7 @@ async function carregarPedidos() {
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td data-perm-col="col_ped_condicao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-envio="${dataFormatada3}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
+                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
                         <i data-perm="ped.payment.edit" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-pagamento ${pagamentoClass}" style="color: var(--color-primary)" title="${pagamentoTitle}"></i>
@@ -335,14 +394,22 @@ async function carregarPedidos() {
                     showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
                         if (!ok) return;
                         try {
-                            await fetchApi(`/api/pedidos/${p.id}/status`, {
+                            const resp = await fetchApi(`/api/pedidos/${p.id}/status`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ status: nextStatus })
                             });
-                            carregarPedidos();
+                            const corpo = await resp.json().catch(() => null);
+                            if (!resp.ok) console.error('Troca de status recusada', resp.status, corpo);
+                            else if (corpo?.avisos?.length) console.warn('Troca de status com avisos:', corpo.avisos);
+                            // Recarrega também na recusa: um 409 "já enviado"
+                            // quer dizer que a linha na tela estava velha.
+                            await carregarPedidos();
+                            mensagensDaTrocaDeStatus(resp.ok, resp.status, corpo)
+                                .forEach(m => window.showToast?.(m.texto, m.tipo));
                         } catch (err) {
                             console.error('Erro ao atualizar status', err);
+                            window.showToast?.('Não foi possível alterar o status do pedido.', 'error');
                         }
                     });
                 });

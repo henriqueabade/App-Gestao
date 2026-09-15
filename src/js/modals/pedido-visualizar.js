@@ -14,6 +14,68 @@
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&#39;');
 
+  // ------------------------------------------------------------------
+  // Datas
+  //
+  // Colunas DATE ('YYYY-MM-DD') são cortadas como texto, nunca passam por
+  // `new Date()`: servidas como '2026-09-13T00:00:00.000Z' e convertidas para
+  // o fuso local, virariam o dia 12. As demais (emissão, entrega...) são
+  // instantes e seguem o fuso de quem olha.
+  // ------------------------------------------------------------------
+  const COLUNAS_DATE = new Set(['data_aprovacao', 'embarcar_real', 'embarcar_previsao', 'inicio_faturamento']);
+
+  function diaDeColunaDate(valor) {
+    if (valor === null || valor === undefined) return null;
+    const achado = /^(\d{4}-\d{2}-\d{2})/.exec(String(valor).trim());
+    return achado ? achado[1] : null;
+  }
+
+  function formatarDia(dia) {
+    const [ano, mes, d] = String(dia).split('-');
+    return `${d}/${mes}/${ano}`;
+  }
+
+  /** Dia (em São Paulo) de um instante; texto que já é só data volta como está. */
+  function diaEmSaoPaulo(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const texto = String(valor).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+    const instante = new Date(texto);
+    if (Number.isNaN(instante.getTime())) return null;
+    const partes = {};
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(instante).forEach(p => { partes[p.type] = p.value; });
+    return partes.year && partes.month && partes.day ? `${partes.year}-${partes.month}-${partes.day}` : null;
+  }
+
+  /** a − b em dias de calendário, em UTC — sem hora local nem horário de verão. */
+  function diferencaEmDias(a, b) {
+    const utc = dia => {
+      const [ano, mes, d] = dia.split('-').map(Number);
+      return Date.UTC(ano, mes - 1, d);
+    };
+    return Math.round((utc(a) - utc(b)) / 86400000);
+  }
+
+  /**
+   * De onde os vencimentos contam: o início do faturamento; nos pedidos
+   * antigos, que não o têm, o dia (em São Paulo) da emissão — a mesma regra
+   * do backend.
+   */
+  function baseDoFaturamento(pedido) {
+    return diaDeColunaDate(pedido?.inicio_faturamento) || diaEmSaoPaulo(pedido?.data_emissao);
+  }
+
+  function formatarDataDaColuna(coluna, valor) {
+    if (COLUNAS_DATE.has(coluna)) {
+      const dia = diaDeColunaDate(valor);
+      return dia ? formatarDia(dia) : '';
+    }
+    const instante = new Date(valor);
+    return Number.isNaN(instante.getTime()) ? '' : instante.toLocaleDateString('pt-BR');
+  }
+
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
@@ -156,7 +218,7 @@
       'Em Producao': { badge: 'badge-warning', dateKey: 'data_aprovacao' },
       Producao: { badge: 'badge-warning', dateKey: 'data_aprovacao' },
       Pendente: { badge: 'badge-warning', dateKey: 'data_emissao' },
-      Enviado: { badge: 'badge-info', dateKey: 'data_envio' },
+      Enviado: { badge: 'badge-info', dateKey: 'embarcar_real' },
       Entregue: { badge: 'badge-success', dateKey: 'data_entrega' },
       Cancelado: { badge: 'badge-danger', dateKey: 'data_cancelamento' },
       Rascunho: { badge: 'badge-neutral', dateKey: 'data_emissao' }
@@ -170,9 +232,9 @@
     }
     if (dateTag) {
       const dateValue = statusInfo.dateKey ? data[statusInfo.dateKey] : null;
-      if (dateValue) {
-        const dt = new Date(dateValue);
-        dateTag.textContent = `Atualizado em ${dt.toLocaleDateString('pt-BR')}`;
+      const dataFormatada = dateValue ? formatarDataDaColuna(statusInfo.dateKey, dateValue) : '';
+      if (dataFormatada) {
+        dateTag.textContent = `Atualizado em ${dataFormatada}`;
         dateTag.classList.remove('hidden');
       } else {
         dateTag.textContent = '';
@@ -234,21 +296,37 @@
       pagamentoBox.classList.add('hidden');
       pagamentoBox.innerHTML = '';
       if (data.parcelas_detalhes && data.parcelas_detalhes.length) {
-        const dataEmissao = data.data_emissao ? new Date(data.data_emissao) : null;
+        // O prazo de cada parcela é o dia na posição dela em `prazo`. O upstream
+        // ignora o `order` do GET, então a ordem vem de `numero_parcela`.
+        const detalhes = data.parcelas_detalhes.slice()
+          .sort((a, b) => (Number(a?.numero_parcela) || 0) - (Number(b?.numero_parcela) || 0));
+        const baseFaturamento = baseDoFaturamento(data);
         const prazos = (data.prazo || '').split('/').map(p => p.trim()).filter(Boolean);
-        const rows = data.parcelas_detalhes.map((p, index) => {
+        const rows = detalhes.map((p, index) => {
           let prazoDias = '';
+          const vencimento = diaDeColunaDate(p.data_vencimento);
           if (prazos[index] !== undefined) {
             prazoDias = `${prazos[index]} dias`;
-          } else if (dataEmissao && p.data_vencimento) {
-            const diff = Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
-            prazoDias = `${diff} dias`;
+          } else if (baseFaturamento && vencimento) {
+            // Sem o texto do prazo, deduz pela distância entre o vencimento e
+            // o início do faturamento — não mais a emissão, que deixou de ser a
+            // base quando o faturamento ganhou início próprio.
+            prazoDias = `${diferencaEmDias(vencimento, baseFaturamento)} dias`;
           }
           const numeroParcela = p.numero_parcela ? `${p.numero_parcela}ª` : '';
           return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${numeroParcela}</td><td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazoDias}</td></tr>`;
         }).join('');
+        const previsaoEmbarque = formatarDataDaColuna('embarcar_previsao', data.embarcar_previsao);
+        const inicioFaturamento = formatarDataDaColuna('inicio_faturamento', data.inicio_faturamento);
+        const datasDoFaturamento = [
+          previsaoEmbarque ? `<span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Previsão de embarque: ${previsaoEmbarque}</span>` : '',
+          inicioFaturamento ? `<span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Início do faturamento: ${inicioFaturamento}</span>` : ''
+        ].filter(Boolean).join('');
         pagamentoBox.innerHTML = `
-          <h4 class="text-white font-medium mb-4">Parcelas</h4>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h4 class="text-white font-medium">Parcelas</h4>
+            ${datasDoFaturamento ? `<div class="flex flex-wrap gap-2">${datasDoFaturamento}</div>` : ''}
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead class="bg-gray-50 sticky top-0">

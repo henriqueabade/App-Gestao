@@ -51,7 +51,8 @@ const COLUNAS = {
     'id', 'numero', 'orcamento_id', 'cliente_id', 'contato_id', 'data_emissao', 'data_aprovacao',
     'situacao', 'parcelas', 'tipo_parcela', 'forma_pagamento', 'transportadora',
     'desconto_pagamento', 'desconto_especial', 'desconto_total', 'valor_final',
-    'observacoes', 'validade', 'prazo', 'dono', 'decisao_estoque_by', 'decisao_estoque_note'
+    'observacoes', 'validade', 'prazo', 'dono', 'decisao_estoque_by', 'decisao_estoque_note',
+    'embarcar_previsao', 'inicio_faturamento', 'faturamento_regra'
   ],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
   modelos_permissoes: ['id', 'nome']
@@ -964,6 +965,219 @@ test('orçamento de cliente NÃO é renumerado ao ser aprovado', async () => {
       method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' })
     });
     assert.strictEqual(ctx.tabelas.orcamentos[0].numero, 'ORC5');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Datas do pedido na conversão
+//
+// O modal da conversão pede a previsão de embarque e quando o faturamento
+// começa. Com elas, o vencimento de cada parcela do pedido é refeito: início +
+// prazo daquela parcela. Sem elas (cliente antigo), a conversão copia os
+// vencimentos do orçamento, como sempre fez.
+// ---------------------------------------------------------------------------
+
+const { hojeEmSaoPaulo, somarDias } = require('./faturamentoPedido');
+
+const parcelasDoPedido = ctx => [...ctx.tabelas.pedido_parcelas]
+  .sort((a, b) => a.numero_parcela - b.numero_parcela)
+  .map(p => [p.numero_parcela, p.valor, p.data_vencimento]);
+
+const escritas = ctx => ctx.chamadas.filter(c => c.metodo !== 'GET');
+
+test('converter com datas grava previsão, regra e início no pedido', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', valor_final: 100, prazo: '30' }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        situacao: 'Aprovado',
+        valor_final: 100,
+        parcelas: 2,
+        tipo_parcela: 'diferente',
+        // O prazo da TELA, gravado por este mesmo PUT antes da conversão.
+        prazo: '15/45',
+        itens: [],
+        // Fora de ordem de propósito, e com datas que o pedido não pode herdar.
+        parcelas_detalhes: [
+          { valor: 60, data_vencimento: '2000-01-01', numero_parcela: 2 },
+          { valor: 40, data_vencimento: '2000-01-01', numero_parcela: 1 }
+        ],
+        conversao: {
+          datas: { embarcar_previsao: '2026-10-01', faturamento_regra: 'data', inicio_faturamento: '2026-10-10' }
+        }
+      })
+    });
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.convertido, true, corpo.convertErro || '');
+
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.embarcar_previsao, '2026-10-01');
+    assert.strictEqual(pedido.faturamento_regra, 'data');
+    assert.strictEqual(pedido.inicio_faturamento, '2026-10-10');
+    assert.strictEqual(pedido.prazo, '15/45');
+
+    // Cada parcela casa com o seu prazo pelo numero_parcela: 10/10 + 15 e + 45.
+    assert.deepStrictEqual(parcelasDoPedido(ctx), [
+      [1, 40, '2026-10-25'],
+      [2, 60, '2026-11-24']
+    ]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('"ao converter" começa no dia da conversão em São Paulo', async () => {
+  const dados = baseDados([
+    { id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', valor_final: 100, prazo: '0/30' }
+  ]);
+  dados.orcamento_parcelas = [
+    { id: 1, orcamento_id: 1, numero_parcela: 1, valor: 50, data_vencimento: '2000-01-01' },
+    { id: 2, orcamento_id: 1, numero_parcela: 2, valor: 50, data_vencimento: '2000-01-31' }
+  ];
+  const ctx = await montar(dados);
+  try {
+    const antes = hojeEmSaoPaulo();
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        situacao: 'Aprovado',
+        conversao: {
+          datas: { embarcar_previsao: '2099-12-01', faturamento_regra: 'ao_converter', inicio_faturamento: '2099-12-25' }
+        }
+      })
+    });
+    const depois = hojeEmSaoPaulo();
+    assert.strictEqual((await resp.json()).convertido, true);
+
+    const pedido = ctx.tabelas.pedidos[0];
+    const hoje = pedido.inicio_faturamento;
+    assert.ok([antes, depois].includes(hoje), `início em ${hoje}; esperado o dia de São Paulo`);
+    assert.strictEqual(pedido.faturamento_regra, 'ao_converter');
+    assert.deepStrictEqual(parcelasDoPedido(ctx), [
+      [1, 50, hoje],
+      [2, 50, somarDias(hoje, 30)]
+    ]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o dia "ao converter" é o de São Paulo mesmo às 22h30', () => {
+  delete require.cache[require.resolve('./orcamentosController')];
+  try {
+    const { datasDaConversao } = require('./orcamentosController');
+    // 22h30 do dia 13 em São Paulo = 01h30 do dia 14 em UTC. O corte do ISO (o
+    // que vai para data_aprovacao) daria 14, e todos os vencimentos andariam
+    // um dia.
+    const datas = datasDaConversao(
+      { datas: { embarcar_previsao: '2026-10-01', faturamento_regra: 'ao_converter' } },
+      new Date('2026-09-14T01:30:00.000Z')
+    );
+    assert.deepStrictEqual(datas, {
+      ok: true, embarcar_previsao: '2026-10-01', faturamento_regra: 'ao_converter', inicio_faturamento: '2026-09-13'
+    });
+    assert.strictEqual(datasDaConversao({}, new Date()), null, 'sem datas, a conversão antiga');
+    assert.strictEqual(datasDaConversao(null, new Date()), null);
+  } finally {
+    for (const m of MODULOS) delete require.cache[require.resolve(m)];
+  }
+});
+
+test('"ao embarcar" começa na previsão', async () => {
+  const dados = baseDados([{ id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', prazo: '30' }]);
+  dados.orcamento_parcelas = [
+    { id: 1, orcamento_id: 1, numero_parcela: 1, valor: 100, data_vencimento: '2000-01-01' }
+  ];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        situacao: 'Aprovado',
+        conversao: { datas: { embarcar_previsao: '2026-10-01', faturamento_regra: 'ao_embarcar' } }
+      })
+    });
+    assert.strictEqual((await resp.json()).convertido, true);
+    assert.strictEqual(ctx.tabelas.pedidos[0].inicio_faturamento, '2026-10-01');
+    assert.deepStrictEqual(parcelasDoPedido(ctx), [[1, 100, '2026-10-31']]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('datas inválidas são recusadas antes de aprovar o orçamento', async () => {
+  const invalidas = { embarcar_previsao: '2026-02-30', faturamento_regra: 'data', inicio_faturamento: '2026-10-10' };
+  for (const [caminho, method, extra] of [
+    ['/api/orcamentos/1', 'PUT', { itens: [ITEM], parcelas_detalhes: [] }],
+    ['/api/orcamentos/1/status', 'PATCH', {}]
+  ]) {
+    const ctx = await montar(baseDados([
+      { id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', prazo: '30' }
+    ]));
+    try {
+      const resp = await chamar(ctx.porta, caminho, {
+        method,
+        body: JSON.stringify({ situacao: 'Aprovado', ...extra, conversao: { datas: invalidas } })
+      });
+      assert.strictEqual(resp.status, 400, `${method} ${caminho}`);
+      const corpo = await resp.json();
+      assert.strictEqual(corpo.code, 'DATAS_INVALIDAS');
+      assert.match(corpo.error, /previsão de embarque/i);
+
+      // Sem transação, a recusa só vale se vier antes de tudo.
+      assert.deepStrictEqual(escritas(ctx), [], 'nada pode ter sido escrito');
+      assert.strictEqual(ctx.tabelas.orcamentos[0].situacao, 'Enviado');
+      assert.strictEqual(ctx.tabelas.pedidos.length, 0);
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+});
+
+test('sem datas a conversão copia os vencimentos do orçamento, como antes', async () => {
+  const dados = baseDados([{ id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', prazo: '30/60' }]);
+  dados.orcamento_parcelas = [
+    { id: 1, orcamento_id: 1, numero_parcela: 1, valor: 50, data_vencimento: '2026-05-05' },
+    { id: 2, orcamento_id: 1, numero_parcela: 2, valor: 50, data_vencimento: '2026-06-04' }
+  ];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' })
+    });
+    assert.strictEqual((await resp.json()).convertido, true);
+
+    const pedido = ctx.tabelas.pedidos[0];
+    for (const coluna of ['embarcar_previsao', 'inicio_faturamento', 'faturamento_regra']) {
+      assert.strictEqual(pedido[coluna], undefined, `${coluna} não pode ser inventada`);
+    }
+    assert.deepStrictEqual(parcelasDoPedido(ctx), [[1, 50, '2026-05-05'], [2, 50, '2026-06-04']]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o pedido que já existe ignora as datas', async () => {
+  const dados = baseDados([{ id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', prazo: '30' }]);
+  dados.pedidos = [{ id: 1, numero: 'PED1', orcamento_id: 1, situacao: 'Produção' }];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        situacao: 'Aprovado',
+        conversao: { datas: { embarcar_previsao: '2026-10-01', faturamento_regra: 'ao_embarcar' } }
+      })
+    });
+    assert.strictEqual((await resp.json()).convertido, true);
+    assert.strictEqual(ctx.tabelas.pedidos.length, 1);
+    assert.strictEqual(ctx.tabelas.pedidos[0].embarcar_previsao, undefined);
+    assert.ok(!ctx.chamadas.some(c => c.tabela === 'pedidos' && c.metodo !== 'GET'));
   } finally {
     await ctx.encerrar();
   }

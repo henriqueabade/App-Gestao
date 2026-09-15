@@ -16,6 +16,11 @@
  * refaz esta mesma conta a partir dos itens gravados. O cálculo aqui existe
  * para o usuário ver o total antes de confirmar, não para ser a fonte da
  * verdade.
+ *
+ * Os vencimentos contam do início do faturamento do pedido, e não mais da
+ * emissão (ver "Datas do faturamento" abaixo). A previsão de embarque e esse
+ * início se alteram pelo botão "Embarque e faturamento", que abre o modal de
+ * datas (`pedido-datas.js`) e tem permissão própria, `ped.dates.edit`.
  */
 (async () => {
   const overlayId = 'pagamentoPedido';
@@ -28,7 +33,7 @@
   }
 
   const close = () => {
-    document.removeEventListener('keydown', onEsc);
+    desligarOuvintesGlobais();
     Modal.close(overlayId);
   };
   const onEsc = e => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
@@ -36,12 +41,29 @@
   overlay.querySelector('#voltarPagamentoPedido')?.addEventListener('click', close);
   overlay.querySelector('#cancelarPagamentoPedido')?.addEventListener('click', close);
 
+  // O modal de datas responde por evento no window. O ouvinte é deste modal e
+  // sai com ele — inclusive quando ele é fechado por fora (`Modal.closeAll`
+  // na troca de módulo), que não passa pelo `close` acima.
+  window.addEventListener('pedido:datas-definidas', aoDefinirDatas);
+  window.addEventListener('modalFechado', aoFecharModal);
+
+  function desligarOuvintesGlobais() {
+    document.removeEventListener('keydown', onEsc);
+    window.removeEventListener('pedido:datas-definidas', aoDefinirDatas);
+    window.removeEventListener('modalFechado', aoFecharModal);
+  }
+
+  function aoFecharModal(evento) {
+    if (evento?.detail === overlayId) desligarOuvintesGlobais();
+  }
+
   const el = id => overlay.querySelector(`#${id}`);
   const condicaoSel = el('pagamentoPedidoCondicao');
   const formaSel = el('pagamentoPedidoForma');
   const box = el('pagamentoPedidoBox');
   const vencimentosBox = el('pagamentoPedidoVencimentos');
   const vencimentosLista = el('pagamentoPedidoVencimentosLista');
+  const resumoDatasEl = el('pagamentoPedidoDatasResumo');
   const mensagemEl = el('pagamentoPedidoMensagem');
   const salvarBtn = el('salvarPagamentoPedido');
 
@@ -141,14 +163,94 @@
     pintarVencimentos();
   }
 
-  /** Data de emissão como base dos vencimentos — igual ao orçamento. */
-  function dataBase() {
-    return new Date(pedido?.data_emissao || Date.now());
+  // ==================================================================
+  // Datas do faturamento — funções puras.
+  //
+  // Os vencimentos contam do INÍCIO DO FATURAMENTO (pedidos.inicio_faturamento),
+  // definido na conversão ou em "Embarque e faturamento". No pedido antigo,
+  // sem início gravado, contam do dia da emissão em São Paulo. É a MESMA conta
+  // que o backend faz ao gravar — ele recalcula as datas e ignora as que
+  // chegam daqui —; a tela só a mostra antes.
+  //
+  // Colunas DATE chegam como '2026-08-10' ou '2026-08-10T00:00:00.000Z' e são
+  // CORTADAS, nunca passadas por new Date(): em São Paulo, a segunda é 9 de
+  // agosto às 21h. A soma de dias é de calendário, em UTC. Somar
+  // milissegundos ao instante da emissão, como se fazia, dava o dia UTC.
+  //
+  // Sem DOM e sem `window`: src/js/__tests__/pagamentoDatasPedido.test.js
+  // recorta este trecho e o executa isolado.
+  // ==================================================================
+  const FUSO_PEDIDO = 'America/Sao_Paulo';
+
+  /** 'YYYY-MM-DD' de uma coluna DATE, cortado do texto. */
+  function diaDeColunaDate(valor) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? '').trim());
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
   }
 
+  /**
+   * O dia, em São Paulo, de um instante (`data_emissao` é timestamp). Texto
+   * só com a data volta como está.
+   */
+  function diaEmSaoPaulo(instante) {
+    if (instante === null || instante === undefined || instante === '') return null;
+    const texto = String(instante).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+    const quando = typeof instante?.getTime === 'function' ? instante : new Date(texto);
+    if (Number.isNaN(quando.getTime())) return null;
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      timeZone: FUSO_PEDIDO, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(quando);
+    const parte = tipo => partes.find(p => p.type === tipo)?.value;
+    return `${parte('year')}-${parte('month')}-${parte('day')}`;
+  }
+
+  /** Soma de calendário: '2026-08-10' + 15 → '2026-08-25'. */
+  function somarDias(dia, dias) {
+    const d = diaDeColunaDate(dia);
+    const n = Number(dias);
+    if (!d || !Number.isFinite(n)) return null;
+    const [ano, mes, diaDoMes] = d.split('-').map(Number);
+    return new Date(Date.UTC(ano, mes - 1, diaDoMes + Math.trunc(n))).toISOString().slice(0, 10);
+  }
+
+  /** Base dos vencimentos: o início do faturamento; no legado, o dia (SP) da emissão. */
+  function baseDosVencimentos(dadosDoPedido, agora) {
+    return diaDeColunaDate(dadosDoPedido?.inicio_faturamento)
+      || diaEmSaoPaulo(dadosDoPedido?.data_emissao)
+      || diaEmSaoPaulo(agora || new Date());
+  }
+
+  /** 'YYYY-MM-DD' → 'dd/mm/aaaa'; '—' quando não há data. */
+  function formatarDia(dia) {
+    const d = diaDeColunaDate(dia);
+    return d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—';
+  }
+
+  const textoDias = n => `${n} ${Number(n) === 1 ? 'dia' : 'dias'}`;
+
+  const ROTULO_REGRA = { ao_embarcar: 'ao embarcar', ao_converter: 'na conversão', data: 'data específica' };
+
+  /** A linha acima dos vencimentos: de onde eles partem. */
+  function textoResumoDatas(dadosDoPedido, agora) {
+    const previsao = diaDeColunaDate(dadosDoPedido?.embarcar_previsao);
+    if (!previsao) return 'Sem previsão de embarque — defina em Embarque e faturamento';
+    const regra = ROTULO_REGRA[dadosDoPedido?.faturamento_regra];
+    return `Embarque previsto: ${formatarDia(previsao)} · Faturamento a partir de `
+      + `${formatarDia(baseDosVencimentos(dadosDoPedido, agora))}${regra ? ` (${regra})` : ''}`;
+  }
+
+  /** Parcelas na ordem de `numero_parcela`: o upstream ignora o `order` do GET. */
+  function ordenarPorNumeroParcela(lista) {
+    return (Array.isArray(lista) ? lista.slice() : [])
+      .sort((a, b) => (Number(a?.numero_parcela) || 0) - (Number(b?.numero_parcela) || 0));
+  }
+  // ==================================================================
+  // fim das datas do faturamento
+  // ==================================================================
+
   function vencimentoEm(dias) {
-    const d = new Date(dataBase().getTime() + (Number(dias) || 0) * 86400000);
-    return d.toISOString().split('T')[0];
+    return somarDias(baseDosVencimentos(pedido), Number(dias) || 0);
   }
 
   function diasEscolhidos() {
@@ -169,23 +271,89 @@
     }
     vencimentosBox.classList.remove('hidden');
     vencimentosLista.innerHTML = dias.map((d, i) => {
-      const data = new Date(`${vencimentoEm(d)}T00:00:00`).toLocaleDateString('pt-BR');
       const rotulo = dias.length > 1 ? `${i + 1}ª — ` : '';
-      return `<span class="badge-info px-3 py-1 rounded-full text-xs font-medium">${rotulo}${data} (${d} dias)</span>`;
+      return `<span class="badge-info px-3 py-1 rounded-full text-xs font-medium">${rotulo}${formatarDia(vencimentoEm(d))} (${textoDias(d)})</span>`;
     }).join('');
+  }
+
+  function pintarResumoDatas() {
+    if (resumoDatasEl) resumoDatasEl.textContent = pedido ? textoResumoDatas(pedido) : '';
+  }
+
+  // ------------------------------------------------ botão "Embarque e faturamento"
+  // Recortado por src/js/__tests__/pagamentoDatasPedido.test.js.
+  //
+  // O botão fica À DIREITA da escolha do tipo de parcela, na altura de
+  // "Diferentes". Quem desenha essa linha é o `parcelamento.js`, que também
+  // serve aos orçamentos: pôr o botão no markup dele o levaria para lá. Então
+  // é este modal que o insere, depois de cada `Parcelamento.init` — a linha é
+  // refeita a cada troca de condição, e o botão volta para ela.
+
+  /** Criado uma vez só: o mesmo elemento é reposto a cada nova linha. */
+  function criarBotaoDatas(doc) {
+    const botao = doc.createElement('button');
+    botao.type = 'button';
+    botao.id = 'pagamentoPedidoDatasBtn';
+    botao.setAttribute('data-perm', 'ped.dates.edit');
+    botao.className = 'btn-neutral border border-white/10 px-4 py-2 rounded-lg text-white text-sm font-medium inline-flex items-center gap-2 flex-shrink-0';
+    // A margem automática empurra o botão para a ponta direita da linha.
+    botao.style.marginLeft = 'auto';
+    botao.innerHTML = '<i class="fas fa-calendar-alt" aria-hidden="true"></i><span>Embarque e faturamento</span>';
+    return botao;
+  }
+
+  /**
+   * A linha onde o botão mora:
+   *  - a prazo: a dos rádios de Modo. O rádio "Diferentes" fica dentro de um
+   *    <label>, e a linha é o pai desse label (o label também é `.flex`, então
+   *    um `closest('.flex')` pararia nele);
+   *  - à vista, sem a linha de Modo: a do campo "Prazo (dias)".
+   * Devolve a linha, ou null enquanto não há onde pôr.
+   */
+  function posicionarBotaoDatas(caixa, botao) {
+    if (!caixa || !botao) return null;
+    const diferentes = caixa.querySelector('input[value="custom"]');
+    const prazoVista = caixa.querySelector('#pagamentoPedidoPrazoVista');
+    const linha = diferentes?.closest('label')?.parentElement
+      || prazoVista?.closest('[data-linha-prazo-vista]')
+      || null;
+    if (!linha) return null;
+    // Numa tela estreita a linha quebra, em vez de espremer os rádios.
+    linha.classList.add('flex-wrap');
+    if (botao.parentElement !== linha) linha.appendChild(botao);
+    return linha;
+  }
+  // ------------------------------------------------ fim do botão de datas
+
+  let botaoDatas = null;
+  const pedidoEmProducao = () => String(pedido?.situacao || '').trim() === 'Produção';
+
+  function garantirBotaoDatas() {
+    if (!botaoDatas) {
+      botaoDatas = criarBotaoDatas(document);
+      // A mesma trava do Salvar: as datas só mudam com o pedido em produção.
+      if (!pedidoEmProducao()) {
+        botaoDatas.disabled = true;
+        botaoDatas.title = 'As datas só podem ser alteradas com o pedido em produção.';
+      }
+    }
+    posicionarBotaoDatas(box, botaoDatas);
   }
 
   // ------------------------------------------------------------- condição
   function montarCampoCondicao(prefill) {
     if (condicaoSel.value === 'vista') {
       box.innerHTML = `
-        <div class="relative w-48">
-          <input id="pagamentoPedidoPrazoVista" type="number" min="0" step="1" placeholder=" "
-                 class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-          <label for="pagamentoPedidoPrazoVista" class="absolute left-4 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Prazo (dias)</label>
+        <div class="flex flex-wrap items-center gap-4" data-linha-prazo-vista>
+          <div class="relative w-48">
+            <input id="pagamentoPedidoPrazoVista" type="number" min="0" step="1" placeholder=" "
+                   class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label for="pagamentoPedidoPrazoVista" class="absolute left-4 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Prazo (dias)</label>
+          </div>
         </div>`;
       const input = el('pagamentoPedidoPrazoVista');
       if (prefill?.items?.[0]?.dueInDays != null) input.value = prefill.items[0].dueInDays;
+      garantirBotaoDatas();
       pintarVencimentos();
       return Promise.resolve();
     }
@@ -196,6 +364,7 @@
         getTotal: totalEmCentavos,
         prefill
       });
+      garantirBotaoDatas();
       pintarVencimentos();
     });
   }
@@ -206,12 +375,81 @@
   // conteúdo, eles se acumulariam a cada ida e volta entre à vista e a prazo.
   box.addEventListener('input', pintarVencimentos);
   box.addEventListener('change', pintarVencimentos);
+  // O parcelamento só grava o prazo digitado no `blur` do campo, e no
+  // Chromium o `change` vem ANTES do blur: repintando só em input/change, a
+  // lista ficava uma edição atrasada. O `focusout` borbulha e chega depois do
+  // blur, com o estado já atualizado.
+  box.addEventListener('focusout', pintarVencimentos);
+  // Mesmo motivo para o clique do botão de datas: ele é reposto a cada nova
+  // linha, e o ouvinte no box vale para qualquer uma delas.
+  box.addEventListener('click', evento => {
+    const botao = evento.target?.closest?.('#pagamentoPedidoDatasBtn');
+    if (!botao || botao.disabled) return;
+    abrirDatasDoPedido();
+  });
 
   condicaoSel.addEventListener('change', async () => {
     limparMensagem();
     await montarCampoCondicao();
     pintarTotais();
   });
+
+  // ------------------------------------------------------ datas do pedido
+  let abrindoDatas = false;
+
+  async function abrirDatasDoPedido() {
+    if (abrindoDatas || !pedido) return;
+    limparMensagem();
+    if (!pedidoEmProducao()) {
+      exibirMensagem('erro', 'Este pedido não está mais em produção; as datas não podem ser alteradas.');
+      return;
+    }
+    abrindoDatas = true;
+    try {
+      const cliente = nomeDoCliente(pedido);
+      window.datasPedidoContext = {
+        modo: 'pedido',
+        pedidoId,
+        numero: pedido.numero || '',
+        cliente: cliente === '—' ? '' : cliente,
+        // Os dias do FORMULÁRIO, mesmo ainda não salvos: é o que a pessoa
+        // está vendo, e a prévia do modal de datas tem de bater com esta tela.
+        prazos: diasEscolhidos(),
+        embarcar_previsao: diaDeColunaDate(pedido.embarcar_previsao),
+        inicio_faturamento: diaDeColunaDate(pedido.inicio_faturamento),
+        faturamento_regra: pedido.faturamento_regra || null,
+        dataConversao: diaEmSaoPaulo(pedido.data_emissao)
+      };
+      await Modal.open('modals/pedidos/datas.html', '../js/modals/pedido-datas.js', 'datasPedido', true);
+    } catch (err) {
+      console.error('Erro ao abrir as datas do pedido:', err);
+      exibirMensagem('erro', 'Não foi possível abrir as datas do pedido.');
+    } finally {
+      abrindoDatas = false;
+    }
+  }
+
+  /** O modal de datas gravou: atualiza o pedido em memória e repinta. */
+  function aoDefinirDatas(evento) {
+    if (!overlay.isConnected) { desligarOuvintesGlobais(); return; }
+    const detalhe = evento?.detail;
+    if (!detalhe || detalhe.source !== 'pedido-datas' || detalhe.modo !== 'pedido' || !pedido) return;
+    const resposta = detalhe.resposta || {};
+    const datas = detalhe.datas || {};
+    for (const campo of ['embarcar_previsao', 'inicio_faturamento', 'faturamento_regra']) {
+      const valor = resposta[campo] ?? datas[campo];
+      if (valor !== undefined) pedido[campo] = valor;
+    }
+    pintarResumoDatas();
+    pintarVencimentos();
+    window.showToast?.('Datas do pedido atualizadas.', 'success');
+    const avisos = (Array.isArray(resposta.avisos) ? resposta.avisos : [])
+      .map(a => (typeof a === 'string' ? a : a?.mensagem || a?.message || ''))
+      .filter(Boolean);
+    if (avisos.length) window.showToast?.(avisos.join(' '), 'info');
+    // A lista de pedidos mostra embarque e atraso: relê para não ficar velha.
+    window.carregarPedidos?.();
+  }
 
   // ------------------------------------------------------------ carga
   try {
@@ -231,9 +469,9 @@
     condicaoSel.value = condicaoOriginal;
 
     el('pagamentoPedidoNumero').textContent = pedido.numero ? `Pedido ${pedido.numero}` : '';
-    el('pagamentoPedidoEmissao').textContent = pedido.data_emissao
-      ? new Date(pedido.data_emissao).toLocaleDateString('pt-BR')
-      : '—';
+    // O dia da emissão em São Paulo: é o mesmo que serve de base aos
+    // vencimentos do pedido antigo.
+    el('pagamentoPedidoEmissao').textContent = formatarDia(diaEmSaoPaulo(pedido.data_emissao));
 
     // Quantidade de PEÇAS, não de linhas: um pedido de uma linha com 12
     // unidades são 12 peças. Contar linhas dizia "1 peça" para um pedido de
@@ -254,8 +492,10 @@
     });
 
     // Os dias vêm de `prazo` ("30" ou "30/60/90"); os valores, das parcelas.
+    // A posição i do prazo é a parcela de número i+1, então as parcelas são
+    // ordenadas pelo número antes de casar uma coisa com a outra.
     const prazos = String(pedido.prazo || '').split('/').map(p => parseInt(p, 10)).filter(n => !Number.isNaN(n));
-    const detalhes = Array.isArray(pedido.parcelas_detalhes) ? pedido.parcelas_detalhes : [];
+    const detalhes = ordenarPorNumeroParcela(pedido.parcelas_detalhes);
     const prefill = {
       count: Math.max(detalhes.length, 1),
       mode: String(pedido.tipo_parcela) === 'diferente' ? 'custom' : 'equal',
@@ -270,6 +510,7 @@
 
     await montarCampoCondicao(prefill);
     pintarTotais();
+    pintarResumoDatas();
   } catch (err) {
     console.error('Erro ao carregar o pedido para pagamento:', err);
     exibirMensagem('erro', err?.message || 'Não foi possível carregar o pedido.');
@@ -288,7 +529,12 @@
     salvarBtn.setAttribute('aria-busy', travado ? 'true' : 'false');
   }
 
-  /** Parcelas no formato de `pedido_parcelas`, ou null com o motivo. */
+  /**
+   * Parcelas no formato de `pedido_parcelas`, ou null com o motivo.
+   *
+   * `data_vencimento` segue no corpo só por compatibilidade: o backend
+   * recalcula cada uma a partir do início do faturamento e ignora a daqui.
+   */
   function montarParcelas() {
     const totais = calcularTotais(condicaoSel.value);
 

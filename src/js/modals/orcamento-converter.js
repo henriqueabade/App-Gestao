@@ -43,6 +43,9 @@
   document.addEventListener('keydown', function esc(e){
     if (e.key === 'Escape') {
       if (isSubstituirPecaOpen()) return;
+      // O Esc dado nas datas do pedido é delas: desistir das datas devolve à
+      // revisão, que precisa continuar aberta com tudo o que já foi decidido.
+      if (isDatasPedidoOpen()) return;
       close();
       document.removeEventListener('keydown', esc);
     }
@@ -384,6 +387,132 @@
     } catch (err) {
       console.error('Erro ao abrir modal de substituição', err);
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Datas do pedido (previsão de embarque e início do faturamento)
+  //
+  // Perguntadas no fim da revisão, já validada e ANTES de qualquer limpeza:
+  // desistir das datas é só voltar à revisão, que continua aberta com tudo o
+  // que foi decidido peça a peça. O modal mora em outro arquivo e responde por
+  // evento — callback em `window` não sobrevive à restauração de trabalho.
+  // ------------------------------------------------------------------
+  const datasPedidoOverlayId = 'datasPedido';
+  const datasPedidoEvento = 'pedido:datas-definidas';
+  // Enquanto a pergunta está aberta. A rede do BotaoAcao solta o "Confirmar"
+  // assim que o HTML do modal chega; sem esta trava, um segundo clique abriria
+  // um segundo modal por cima do primeiro.
+  let pedindoDatas = false;
+  // A última resposta, para reabrir preenchido se a conversão não seguir.
+  let ultimasDatas = null;
+
+  // Presença no DOM, e não o `hidden`: enquanto carrega o modal fica
+  // escondido, e para o Esc ele já está aberto.
+  function isDatasPedidoOpen() {
+    return pedindoDatas || !!document.getElementById(`${datasPedidoOverlayId}Overlay`);
+  }
+
+  /** Hoje em São Paulo ('YYYY-MM-DD'): o "dia da conversão". */
+  function hojeEmSaoPaulo() {
+    try {
+      const hoje = window.dateUtils?.getTodayKey?.();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(hoje || ''))) return hoje;
+    } catch (err) { console.error(err); }
+    // Sem o utilitário (carregado pelo menu.html), a mesma conta aqui: o dia do
+    // relógio do computador erraria depois das 21h numa máquina em UTC.
+    try {
+      const partes = {};
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(new Date()).forEach(p => { partes[p.type] = p.value; });
+      if (partes.year && partes.month && partes.day) return `${partes.year}-${partes.month}-${partes.day}`;
+    } catch (err) { console.error(err); }
+    const agora = new Date();
+    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+  }
+
+  /**
+   * Abre o modal de datas e espera a resposta.
+   *
+   * @returns {Promise<{ embarcar_previsao: string, faturamento_regra: string,
+   *   inicio_faturamento: string|null }|null>} `null` quando a pessoa desiste
+   *   (Cancelar, Voltar, Esc) ou o modal não chega a abrir.
+   */
+  function pedirDatasDoPedido() {
+    window.datasPedidoContext = {
+      ...(ultimasDatas || {}),
+      modo: 'conversao',
+      numero: ctx.numero || '',
+      cliente: ctx.cliente || '',
+      // Dias de cada parcela, lidos do formulário do orçamento: só para a prévia.
+      prazos: Array.isArray(ctx.prazos) ? ctx.prazos.slice() : [],
+      dataConversao: hojeEmSaoPaulo()
+    };
+
+    return new Promise(resolve => {
+      const overlayDasDatas = () => document.getElementById(`${datasPedidoOverlayId}Overlay`);
+      let terminou = false;
+      let desistencia = null;
+
+      const terminar = valor => {
+        if (terminou) return;
+        terminou = true;
+        clearTimeout(desistencia);
+        window.removeEventListener(datasPedidoEvento, aoDefinir);
+        window.removeEventListener('modalFechado', aoFechar);
+        window.removeEventListener('pedidoModalLoaded', aoCarregar);
+        window.removeEventListener('modal-ready', aoCarregar);
+        window.datasPedidoContext = null;
+        resolve(valor);
+      };
+
+      const aoDefinir = evento => {
+        const detail = evento?.detail;
+        if (!detail || detail.source !== 'pedido-datas' || detail.modo !== 'conversao') return;
+        terminar(detail.datas || null);
+      };
+
+      // Fechar sem confirmar é desistir. O adiamento de um ciclo deixa valer a
+      // confirmação que chegue logo depois do fechamento.
+      const aoFechar = evento => {
+        if (evento?.detail !== datasPedidoOverlayId) return;
+        clearTimeout(desistencia);
+        desistencia = setTimeout(() => terminar(null), 0);
+      };
+
+      // Quem se revela é o próprio modal; isto é só a rede para ele não ficar
+      // aberto e invisível, com a revisão parecendo travada por baixo.
+      const aoCarregar = evento => {
+        if (evento?.detail !== datasPedidoOverlayId) return;
+        const el = overlayDasDatas();
+        if (!el?.classList?.contains('hidden')) return;
+        el.classList.remove('hidden');
+        el.removeAttribute('aria-hidden');
+      };
+
+      window.addEventListener(datasPedidoEvento, aoDefinir);
+      window.addEventListener('modalFechado', aoFechar);
+      window.addEventListener('pedidoModalLoaded', aoCarregar);
+      window.addEventListener('modal-ready', aoCarregar);
+
+      let abertura;
+      try {
+        abertura = Modal.open('modals/pedidos/datas.html', '../js/modals/pedido-datas.js', datasPedidoOverlayId, true);
+      } catch (err) {
+        abertura = Promise.reject(err);
+      }
+      Promise.resolve(abertura)
+        .then(() => {
+          // `Modal.open` desiste calado quando outra abertura passa na frente.
+          // Sem o overlay no DOM nenhum evento viria, e a pergunta não acabaria.
+          if (!overlayDasDatas()) terminar(null);
+        })
+        .catch(err => {
+          console.error('Erro ao abrir as datas do pedido', err);
+          if (typeof showToast === 'function') showToast('Não foi possível abrir as datas do pedido.', 'error');
+          terminar(null);
+        });
+    });
   }
 
   function recomputeStocks() {
@@ -890,7 +1019,8 @@
   }
 
   btnCancelar.addEventListener('click', handleCancelConversion);
-  btnConfirmar.addEventListener('click', () => {
+  btnConfirmar.addEventListener('click', async () => {
+    if (pedindoDatas) return;
     // Revalida antes de confirmar: se algo impede a conversão (peças sem
     // confirmação, dados inválidos ou saldo negativo sem justificativa), o
     // modal NÃO fecha — apenas mostra o motivo e destaca o que falta.
@@ -948,6 +1078,28 @@
         forcarProduzirDoZero: !!r.forceProduceAll
       }))
     };
+
+    // As datas do pedido vêm por último, depois de tudo validado e ANTES da
+    // limpeza: `cleanupReplaceModalIntegration` desliga o "Substituir", e quem
+    // desistisse das datas depois dela voltaria a uma revisão sem esse botão.
+    // A marca no overlay é para o editar (hospedeiro) não fechar com o Esc
+    // dado nas datas.
+    pedindoDatas = true;
+    overlay.dataset.pedindoDatas = 'true';
+    let datas = null;
+    try {
+      datas = await pedirDatasDoPedido();
+    } finally {
+      pedindoDatas = false;
+      delete overlay.dataset.pedindoDatas;
+    }
+    if (!datas) return;
+    // A revisão pode ter saído por baixo enquanto a pergunta estava aberta
+    // (troca de módulo, por exemplo): não sobrou nada a confirmar.
+    if (!overlay.isConnected) return;
+    ultimasDatas = datas;
+    conversao.datas = datas;
+
     try {
       cleanupReplaceModalIntegration();
       window.confirmQuoteConversion?.({ deletions, replacements, conversao });

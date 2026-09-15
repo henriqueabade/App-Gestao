@@ -3,6 +3,18 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
+const {
+  hojeEmSaoPaulo,
+  diaEmSaoPaulo,
+  diaValido,
+  baseDoFaturamento,
+  calcularVencimentos,
+  prazosDoTexto,
+  validarDatas,
+  resolverDatas,
+  inicioAposEmbarque,
+  reprogramarParcelas
+} = require('./faturamentoPedido');
 const { montarAgrupamento } = require('./agrupamentoPedidos');
 
 /** Teto de pedidos por relatório agrupado — cada um custa 3 requisições. */
@@ -105,12 +117,22 @@ function permissaoDeStatus(req) {
  * virava "Cancelado" e `data_cancelamento` continuava nula, então o balão que
  * aparece ao passar o mouse sobre o status só sabia dizer quando a produção
  * tinha começado — nunca quando o pedido foi cancelado.
+ *
+ * O envio grava um DIA, não um instante: `embarcar_real` é DATE e é comparada
+ * com a previsão de embarque. O dia é o de São Paulo — o corte do ISO daria o
+ * dia seguinte a quem marcasse "Enviado" depois das 21h.
+ *
+ * Pedido "ao embarcar" que embarca DEPOIS do combinado leva o novo início do
+ * faturamento no MESMO payload da situação: sem transação, um PUT só é a única
+ * atomicidade que existe. Os vencimentos são refeitos em seguida, na rota.
  */
-function payloadDeStatus(status, agora = new Date()) {
+function payloadDeStatus(status, agora = new Date(), pedido = null) {
   const payload = { situacao: status };
   const quando = agora.toISOString();
   if (status === 'Enviado') {
-    payload.data_envio = quando;
+    payload.embarcar_real = hojeEmSaoPaulo(agora);
+    const novoInicio = inicioAposEmbarque(pedido, payload.embarcar_real);
+    if (novoInicio) payload.inicio_faturamento = novoInicio;
   } else if (status === 'Entregue') {
     payload.data_entrega = quando;
   } else if (status === 'Cancelado') {
@@ -125,22 +147,44 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
   try {
     const api = createApiClient(req);
 
+    // O pedido é lido antes das duas travas abaixo. No envio ele também traz o
+    // que a regra do faturamento precisa: regra, previsão, início e prazo.
+    const atual = status === 'Cancelado' || status === 'Enviado'
+      ? await api.get(`/api/pedidos/${id}`).catch(() => null)
+      : null;
+    const situacaoAtual = String(atual?.situacao || '').trim().toLowerCase();
+
     // Cancelar um pedido JÁ cancelado devolveria o estoque uma segunda vez:
     // as peças entrariam nos lotes de novo e os insumos voltariam em dobro,
     // criando material que não existe. A trava é aqui, no backend, porque
     // esconder o botão não impede uma segunda aba nem um duplo envio.
-    if (status === 'Cancelado') {
-      const atual = await api.get(`/api/pedidos/${id}`).catch(() => null);
-      if (String(atual?.situacao || '').trim().toLowerCase() === 'cancelado') {
-        return res.status(409).json({
-          error: 'Este pedido já está cancelado.',
-          code: 'JA_CANCELADO'
-        });
-      }
+    if (status === 'Cancelado' && situacaoAtual === 'cancelado') {
+      return res.status(409).json({
+        error: 'Este pedido já está cancelado.',
+        code: 'JA_CANCELADO'
+      });
+    }
+
+    // Enviar DE NOVO moveria o embarque real para hoje — e, num pedido "ao
+    // embarcar", o início do faturamento e os vencimentos de um pedido que já
+    // tinha embarcado —, além de fechar as reservas e registrar o abatimento
+    // outra vez. Mesma trava, mesmo motivo.
+    if (status === 'Enviado' && situacaoAtual === 'enviado') {
+      return res.status(409).json({
+        error: 'O pedido já foi enviado.',
+        code: 'JA_ENVIADO'
+      });
     }
 
     const avisos = [];
     let estorno = null;
+
+    // Sem a leitura, a regra do faturamento não tem com o que comparar. O
+    // pedido é enviado do mesmo jeito (o dia do embarque é gravado), mas o
+    // início não foi conferido — e isso precisa aparecer.
+    if (status === 'Enviado' && !atual) {
+      avisos.push('Não foi possível ler o pedido antes do envio: o início do faturamento não foi conferido.');
+    }
 
     // ------------------------------------------------------------------
     // O ESTORNO VEM ANTES DE MARCAR O PEDIDO COMO CANCELADO.
@@ -209,8 +253,23 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       }
     }
 
-    const payload = payloadDeStatus(status);
+    const payload = payloadDeStatus(status, new Date(), atual);
     await api.put(`/api/pedidos/${id}`, payload);
+
+    // ------------------------------------------------------------------
+    // Embarque atrasado num pedido "ao embarcar": o início novo já foi gravado
+    // no PUT acima, junto da situação. Os vencimentos vêm agora, no lugar, e
+    // cada falha vira aviso — a política do estorno: sem transação não há
+    // como desfazer o envio, então o que não deu certo é dito, nunca
+    // escondido. Reprogramar de novo depois é seguro: tudo sai de início +
+    // prazo.
+    // ------------------------------------------------------------------
+    let parcelasReprogramadas = null;
+    if (payload.inicio_faturamento) {
+      parcelasReprogramadas = await reprogramarParcelas(
+        api, id, payload.inicio_faturamento, atual?.prazo, avisos
+      );
+    }
 
     // ------------------------------------------------------------------
     // Razão: o status do pedido move as reservas de produção.
@@ -264,7 +323,16 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       }, avisos);
     }
 
-    res.json({ success: true, avisos, estorno });
+    res.json({
+      success: true,
+      avisos,
+      estorno,
+      faturamento: {
+        reprogramado: Boolean(payload.inicio_faturamento),
+        inicio_faturamento: payload.inicio_faturamento || diaValido(atual?.inicio_faturamento) || null,
+        ...(parcelasReprogramadas ? { parcelas: parcelasReprogramadas } : {})
+      }
+    });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do pedido' });
@@ -367,6 +435,20 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
       });
     }
 
+    // Os vencimentos são calculados AQUI: início do faturamento + prazo de
+    // cada parcela, na ordem de `numero_parcela`. A tela mandava a data que
+    // ela contava da emissão, e isso desfazia, calado, o início escolhido na
+    // conversão — o que vier dela em `data_vencimento` é ignorado. Pedido
+    // legado, sem início, conta do dia da emissão (a conta da tela); sem nem
+    // isso, de hoje, que era o que a tela usava na falta da emissão.
+    const baseVencimento = baseDoFaturamento(pedido) || hojeEmSaoPaulo();
+    const numeros = parcelasDetalhes.map((p, i) => Number(p?.numero_parcela) || i + 1);
+    const emOrdem = numeros.map((_, i) => i).sort((a, b) => numeros[a] - numeros[b] || a - b);
+    const prazosEmOrdem = prazosDoTexto(prazo, parcelasDetalhes.length);
+    const vencimentoEmOrdem = calcularVencimentos(baseVencimento, prazosEmOrdem);
+    const vencimentos = [];
+    emOrdem.forEach((indice, posicao) => { vencimentos[indice] = vencimentoEmOrdem[posicao]; });
+
     await api.put(`/api/pedidos/${id}`, {
       parcelas: condicao === 'prazo' ? parcelasDetalhes.length : 1,
       tipo_parcela: condicao === 'prazo' ? (body.tipo_parcela || 'igual') : 'a vista',
@@ -400,7 +482,12 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
       const usado = await inserirLinhaComId(
         api,
         'pedido_parcelas',
-        { ...resto, pedido_id: Number(id), numero_parcela: resto.numero_parcela || i + 1 },
+        {
+          ...resto,
+          data_vencimento: vencimentos[i],
+          pedido_id: Number(id),
+          numero_parcela: resto.numero_parcela || i + 1
+        },
         proximoId
       );
       proximoId = usado + 1;
@@ -415,6 +502,75 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
   } catch (err) {
     console.error('Erro ao alterar pagamento do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao alterar o pagamento do pedido' });
+  }
+});
+
+/**
+ * PUT /pedidos/:id/datas — previsão de embarque e início do faturamento.
+ *
+ * O botão fica no modal de pagamento, mas a rota é outra de propósito: a do
+ * pagamento reescreve itens e descontos e pode recusar pela soma — mudar uma
+ * data não pode depender disso. Aqui só se gravam as datas e a regra, e as
+ * parcelas são REPROGRAMADAS NO LUGAR (um PUT por parcela, só nas que mudam),
+ * com os prazos que o pedido já tem.
+ *
+ * Só em Produção, pelo mesmo motivo do pagamento: depois de enviado, o início
+ * "ao embarcar" é decidido pelo embarque real, e o combinado virou fato.
+ *
+ * "Ao converter", aqui, é o dia (em São Paulo) da emissão do pedido — que é o
+ * dia em que o orçamento foi convertido.
+ */
+router.put('/:id/datas', exigirPermissao('ped.dates.edit'), async (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+
+  // O formato é recusado antes de ler o banco. A regra "ao converter" só se
+  // resolve com o pedido em mãos, mais abaixo.
+  const formato = validarDatas(body);
+  if (!formato.ok) {
+    return res.status(400).json({ error: formato.erro, code: 'DATAS_INVALIDAS' });
+  }
+
+  try {
+    const api = createApiClient(req);
+
+    const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+    if (!pedido || pedido.error === 'Not found') {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+
+    if (String(pedido.situacao || '').trim() !== 'Produção') {
+      return res.status(409).json({
+        error: 'Só é possível alterar as datas de pedidos em produção.',
+        code: 'SITUACAO_NAO_PERMITE'
+      });
+    }
+
+    const datas = resolverDatas(body, { dataConversao: diaEmSaoPaulo(pedido.data_emissao) });
+    if (!datas.ok) {
+      return res.status(400).json({ error: datas.erro, code: 'DATAS_INVALIDAS' });
+    }
+
+    await api.put(`/api/pedidos/${id}`, {
+      embarcar_previsao: datas.embarcar_previsao,
+      inicio_faturamento: datas.inicio_faturamento,
+      faturamento_regra: datas.faturamento_regra
+    });
+
+    const avisos = [];
+    const parcelas = await reprogramarParcelas(api, id, datas.inicio_faturamento, pedido.prazo, avisos);
+
+    res.json({
+      ok: true,
+      embarcar_previsao: datas.embarcar_previsao,
+      inicio_faturamento: datas.inicio_faturamento,
+      faturamento_regra: datas.faturamento_regra,
+      parcelas,
+      avisos
+    });
+  } catch (err) {
+    console.error('Erro ao alterar as datas do pedido:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao alterar as datas do pedido' });
   }
 });
 

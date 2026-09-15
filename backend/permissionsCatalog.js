@@ -780,6 +780,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Ícone de calendário — repactua condição, forma, prazos e recalcula o total (só em Produção)"
       },
       {
+        "key": "ped.dates.edit",
+        "column": "acao_dates_edit",
+        "label": "Alterar datas de embarque e faturamento",
+        "desc": "Botão no pagamento do pedido — previsão de embarque e início do faturamento; reprograma os vencimentos (só em Produção)"
+      },
+      {
         "key": "ped.stock.restore_on_cancel",
         "column": "acao_stock_restore_on_cancel",
         "label": "Realocar estoque ao cancelar",

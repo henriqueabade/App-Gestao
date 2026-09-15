@@ -50,13 +50,55 @@ const DASH_TONS_SITUACAO = {
     'Outros': 'neutro'
 };
 
-/** Rótulos das faixas de IDADE (não é atraso: não existe prazo de entrega no banco). */
+/**
+ * Rótulos das faixas de IDADE — há quanto tempo o pedido está na fábrica. Não
+ * é atraso: o atraso é a previsão de embarque, na etiqueta de prazo ao lado.
+ */
 const DASH_FAIXAS_IDADE = {
     '0-15': 'Até 15 dias',
     '16-30': '16 a 30 dias',
     '31-60': '31 a 60 dias',
     '60+': 'Mais de 60 dias'
 };
+
+/**
+ * Prazo de EMBARQUE de cada pedido em produção, pela classificação que o BFF
+ * manda em `prazo` (embarqueEmProducao, em backend/dashboardResumo.js): a cor
+ * da etiqueta e, nos dois que pedem ação, o símbolo de atenção junto do número.
+ * Ouro é "em dia" (7 dias ou mais); vermelho, menos de 7 dias (hoje incluso);
+ * roxo, passou da previsão. Roxo, e não vinho, para o atraso: o vinho já é a
+ * idade acima de 60 dias, na etiqueta vizinha.
+ */
+const DASH_PRAZOS_EMBARQUE = {
+    em_dia: { tom: 'ouro' },
+    atencao: { tom: 'vermelho', alerta: 'Embarca em menos de 7 dias' },
+    atrasado: { tom: 'roxo', alerta: 'Passou da previsão de embarque' },
+    sem_previsao: { tom: 'neutro' }
+};
+
+const DASH_DICA_SEM_PREVISAO = 'Sem previsão de embarque — defina no pagamento do pedido';
+
+/** Quantos pedidos o cartão de idade mostra antes do botão que abre a lista inteira. */
+const DASH_IDADE_VISIVEIS = 5;
+/** id da lista de idade: o botão de expandir aponta para ela (aria-controls). */
+const DASH_IDADE_LISTA_ID = 'dash-idade-lista';
+
+/**
+ * As três partes do prazo no anel de fora do donut e na legenda, na ordem do
+ * anel. Em Produção "em dia" é "ainda não passou da previsão"; em Enviado e
+ * Entregue é "embarcou até a previsão" — daí os dois rótulos do <title>.
+ */
+const DASH_PARTES_PRAZO = [
+    { chave: 'emDia', tom: 'verde', rotulo: 'em dia', rotuloEmbarcado: 'embarque no prazo' },
+    { chave: 'atrasados', tom: 'roxo', rotulo: 'em atraso', rotuloEmbarcado: 'embarque atrasado' },
+    { chave: 'semPrevisao', tom: 'neutro', rotulo: 'sem previsão', rotuloEmbarcado: 'sem previsão ou sem data de embarque' }
+];
+
+/**
+ * Raio do anel de prazo: por fora do anel principal (15,915 ± 2,5 de traço,
+ * 3,2 no hover) e dentro do viewBox de 42 — o SVG corta o que passa de 21.
+ */
+const DASH_RAIO_PRAZO = 19.9;
 
 const dashFormatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 // `minimumFractionDigits` explícito: sem ele algumas versões do V8 lançam
@@ -290,6 +332,54 @@ function textoIdade(dias) {
     return n === 1 ? 'há 1 dia' : `há ${n} dias`;
 }
 
+/** Coluna DATE → 'dd/mm/aa', cortada como texto pelo mesmo motivo de formatarDataCurta. */
+function formatarDataComAno(valor) {
+    const casamento = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? ''));
+    return casamento ? `${casamento[3]}/${casamento[2]}/${casamento[1].slice(2)}` : '';
+}
+
+/** Quanto falta para o embarque previsto. `dias` negativo é atraso — vem pronto do BFF. */
+function textoEmbarque(dias) {
+    const n = numeroOuNulo(dias);
+    if (n === null) return 'sem previsão';
+    if (n < 0) return 'em atraso';
+    if (n === 0) return 'embarca hoje';
+    return n === 1 ? 'falta 1 dia' : `faltam ${n} dias`;
+}
+
+/**
+ * Etiqueta de prazo de um pedido em produção: { texto, tom, dica, alerta }.
+ * O texto vem de `diasParaEmbarque` e a cor de `prazo` — a classificação é do
+ * BFF, a tela não recalcula. Sem `prazo` conhecido (servidor anterior à
+ * previsão de embarque) não há etiqueta: dizer "sem previsão" ali seria
+ * afirmar o que a tela não sabe. A data do title é cortada como texto.
+ */
+function etiquetaDeEmbarque(pedido) {
+    const definicao = DASH_PRAZOS_EMBARQUE[pedido?.prazo];
+    if (!definicao) return null;
+    const dias = numeroOuNulo(pedido?.diasParaEmbarque);
+    const data = formatarDataComAno(pedido?.embarque);
+    const dica = [pedido.prazo === 'sem_previsao' || !data ? DASH_DICA_SEM_PREVISAO : `Data prevista: ${data}`];
+    // "em atraso" não diz quanto: a conta vai numa 2ª linha do title.
+    if (pedido.prazo === 'atrasado' && dias !== null && dias < 0) {
+        dica.push(Math.abs(dias) === 1 ? 'atrasado há 1 dia' : `atrasado há ${Math.abs(dias)} dias`);
+    }
+    return {
+        texto: pedido.prazo === 'sem_previsao' ? 'sem previsão' : textoEmbarque(dias),
+        tom: definicao.tom,
+        dica: dica.join('\n'),
+        alerta: definicao.alerta ? { tom: definicao.tom, titulo: definicao.alerta } : null
+    };
+}
+
+/** "2 em atraso · R$ 20 mil"; sem a coluna de valor (null) ou com zero, só a contagem. */
+function textoContagemComValor(quantidade, rotulo, valor) {
+    const n = quantidadeDe(quantidade);
+    const texto = `${formatarNumero(n)} ${rotulo}`;
+    const v = numeroOuNulo(valor);
+    return v !== null && n > 0 ? `${texto} · ${formatarMoedaCompacta(v)}` : texto;
+}
+
 /**
  * "+N" quando a lista veio cortada. O backend manda o total real junto de
  * cada lista justamente para nada sumir em silêncio.
@@ -478,6 +568,10 @@ function geometriaDonut(fatias, opcoes = {}) {
         const segmento = {
             ...fatia,
             percentual,
+            // Onde a fatia começa e quanto do anel ela ocupa (sem a fresta), na
+            // circunferência 100: o anel de prazo (arcosDePrazo) segue os dois.
+            inicio: acumulado,
+            comprimento,
             dasharray: `${comprimento.toFixed(3)} ${(100 - comprimento).toFixed(3)}`,
             dashoffset: (25 - acumulado).toFixed(3)
         };
@@ -485,6 +579,65 @@ function geometriaDonut(fatias, opcoes = {}) {
         return segmento;
     });
     return { total, segmentos };
+}
+
+/**
+ * Em dia × em atraso × sem previsão de uma situação do donut (campos do BFF em
+ * porSituacao12m), ou null sem nada a mostrar: Cancelado e Outros vêm
+ * zerados, e o servidor anterior à previsão de embarque nem manda os campos.
+ */
+function prazoDaSituacao(item) {
+    const partes = DASH_PARTES_PRAZO.map(parte => ({
+        ...parte,
+        quantidade: Math.max(0, numeroOuNulo(item?.[parte.chave]) ?? 0)
+    }));
+    const total = partes.reduce((soma, parte) => soma + parte.quantidade, 0);
+    return total > 0 ? { total, partes } : null;
+}
+
+/** O que a legenda lista: em dia e em atraso sempre; sem previsão só quando há. */
+function partesDaLegendaDePrazo(prazo) {
+    return prazo ? prazo.partes.filter(parte => parte.chave !== 'semPrevisao' || parte.quantidade > 0) : [];
+}
+
+/** "5 em dia · 2 em atraso" (e "· 1 sem previsão" quando há). */
+function textoPrazoDaSituacao(prazo) {
+    return partesDaLegendaDePrazo(prazo)
+        .map(parte => `${formatarNumero(parte.quantidade)} ${parte.rotulo}`)
+        .join(' · ');
+}
+
+/**
+ * O anel fino de fora do donut: o arco de cada situação dividido em em dia,
+ * em atraso e sem previsão, na proporção dos pedidos dela — começando onde a
+ * fatia começa e terminando onde ela termina (`inicio` e `comprimento` de
+ * geometriaDonut, na circunferência 100). O raio é outro, então tudo é
+ * multiplicado pela razão das circunferências; entre as partes fica uma
+ * fresta menor que a das fatias.
+ */
+function arcosDePrazo(segmentos, { raio = DASH_RAIO_PRAZO, fresta = 0.35 } = {}) {
+    const escala = (2 * Math.PI * raio) / 100;
+    const arcos = [];
+    listaDe(segmentos).forEach(segmento => {
+        const prazo = prazoDaSituacao(segmento);
+        const inicio = numeroOuNulo(segmento?.inicio);
+        const comprimentoDaFatia = numeroOuNulo(segmento?.comprimento);
+        if (!prazo || inicio === null || comprimentoDaFatia === null) return;
+        const partes = prazo.partes.filter(parte => parte.quantidade > 0);
+        const util = Math.max(comprimentoDaFatia - fresta * (partes.length - 1), 0.01);
+        let posicao = inicio;
+        partes.forEach(parte => {
+            const comprimento = Math.max((util * parte.quantidade) / prazo.total, 0.01);
+            arcos.push({
+                ...parte,
+                situacao: segmento.situacao,
+                dasharray: `${(comprimento * escala).toFixed(3)} ${((100 - comprimento) * escala).toFixed(3)}`,
+                dashoffset: ((25 - posicao) * escala).toFixed(3)
+            });
+            posicao += comprimento + fresta;
+        });
+    });
+    return arcos;
 }
 
 /**
@@ -819,7 +972,7 @@ function montarErroDoCartao(mensagem) {
     return caixa;
 }
 
-function montarItemLista({ titulo, detalhe, etiqueta, valor, dica }) {
+function montarItemLista({ titulo, detalhe, etiqueta, etiquetas, alerta, valor, dica }) {
     const item = criarEl('li', 'dash-lista__item');
     if (dica) item.title = dica;
     // Título e detalhe são cortados com reticências na largura do cartão
@@ -829,6 +982,13 @@ function montarItemLista({ titulo, detalhe, etiqueta, valor, dica }) {
     const comDica = texto => (dica ? `${texto}\n${dica}` : texto);
     const tituloEl = criarEl('span', 'dash-lista__titulo', titulo || '—');
     tituloEl.title = comDica(tituloEl.textContent);
+    // Símbolo de atenção DEPOIS do número, na cor do prazo: o ícone não tem
+    // texto, então o textContent (e o title acima) continuam só o número.
+    if (alerta) {
+        const icone = comTom(criarIcone('fas fa-triangle-exclamation dash-lista__alerta'), alerta.tom);
+        if (alerta.titulo) icone.title = alerta.titulo;
+        tituloEl.append(icone);
+    }
     item.append(tituloEl);
     if (detalhe) {
         const detalheEl = criarEl('span', 'dash-lista__detalhe', detalhe);
@@ -836,7 +996,20 @@ function montarItemLista({ titulo, detalhe, etiqueta, valor, dica }) {
         item.append(detalheEl);
     }
     const lado = criarEl('span', 'dash-lista__lado');
-    if (etiqueta?.texto) lado.append(montarChip(etiqueta.texto, etiqueta.tom));
+    const chips = [etiqueta, ...listaDe(etiquetas)].filter(e => e?.texto).map(e => {
+        const chip = montarChip(e.texto, e.tom);
+        if (e.dica) chip.title = e.dica;
+        return chip;
+    });
+    // Duas etiquetas (idade e prazo de embarque): lado a lado, na mesma linha,
+    // e o valor embaixo — o .dash-lista__lado continua em coluna.
+    if (chips.length > 1) {
+        const grupo = criarEl('span', 'dash-lista__etiquetas');
+        grupo.append(...chips);
+        lado.append(grupo);
+    } else if (chips.length) {
+        lado.append(chips[0]);
+    }
     if (valor) lado.append(criarEl('span', 'dash-lista__valor', valor));
     if (lado.childNodes.length) item.append(lado);
     return item;
@@ -905,7 +1078,11 @@ function preencherKpi(corpo, { id, valor, tipo = 'numero', exato, sub, variacao,
     const notasValidas = notas.filter(Boolean);
     if (notasValidas.length) {
         const rodape = criarEl('div', 'dash-kpi__notas');
-        notasValidas.forEach(nota => rodape.append(montarChip(nota.texto, nota.tom, nota.icone)));
+        notasValidas.forEach(nota => {
+            const chip = montarChip(nota.texto, nota.tom, nota.icone);
+            if (nota.dica) chip.title = nota.dica;
+            rodape.append(chip);
+        });
         filhos.push(rodape);
     }
     corpo.replaceChildren(...filhos);
@@ -1021,6 +1198,16 @@ function desenharKpiProducao(corpo, s) {
     const valor = numeroOuNulo(s?.valor);
     const faixaAntiga = listaDe(s?.porIdade).find(faixa => faixa?.faixa === '60+');
     const antigos = quantidadeDe(faixaAntiga?.quantidade);
+    // Em dia × em atraso pela previsão de embarque. O `emDia` do BFF já inclui
+    // quem embarca em menos de 7 dias (ainda no prazo). Sem o bloco (servidor
+    // anterior à previsão) os chips não saem: "0 em atraso" seria afirmação
+    // sem base.
+    const prazo = quantidade > 0 && s?.prazo && typeof s.prazo === 'object' ? s.prazo : null;
+    const contar = chave => quantidadeDe(prazo?.[chave]?.quantidade);
+    const emDia = contar('emDia');
+    const atencao = contar('atencao');
+    const atrasados = contar('atrasados');
+    const semPrevisao = contar('semPrevisao');
     preencherKpi(corpo, {
         id: 'kpi-producao',
         valor: quantidade,
@@ -1028,11 +1215,33 @@ function desenharKpiProducao(corpo, s) {
         sub: valor !== null
             ? `${quantidade === 1 ? 'pedido' : 'pedidos'} · ${formatarMoedaCompacta(valor)} em produção`
             : (quantidade === 1 ? 'pedido em produção' : 'pedidos em produção'),
-        notas: [antigos > 0 && {
-            tom: 'ouro',
-            icone: 'fa-hourglass-end',
-            texto: `${formatarNumero(antigos)} há mais de 60 dias`
-        }]
+        notas: [
+            prazo && {
+                tom: emDia > 0 ? 'verde' : 'neutro',
+                icone: 'fa-circle-check',
+                texto: textoContagemComValor(emDia, 'em dia', prazo.emDia?.valor),
+                dica: atencao > 0
+                    ? `Inclui ${formatarNumero(atencao)} ${atencao === 1 ? 'que embarca' : 'que embarcam'} em menos de 7 dias`
+                    : ''
+            },
+            prazo && {
+                tom: atrasados > 0 ? 'roxo' : 'neutro',
+                icone: 'fa-triangle-exclamation',
+                texto: textoContagemComValor(atrasados, 'em atraso', prazo.atrasados?.valor),
+                dica: 'Passaram da previsão de embarque e continuam em produção'
+            },
+            semPrevisao > 0 && {
+                tom: 'neutro',
+                icone: 'fa-calendar',
+                texto: `${formatarNumero(semPrevisao)} sem previsão`,
+                dica: DASH_DICA_SEM_PREVISAO
+            },
+            antigos > 0 && {
+                tom: 'ouro',
+                icone: 'fa-hourglass-end',
+                texto: `${formatarNumero(antigos)} há mais de 60 dias`
+            }
+        ]
     });
 }
 
@@ -1325,6 +1534,19 @@ function montarSvgBarras({ colunas, chave, mesAtual }, largura, corpo) {
     return svg;
 }
 
+/** "5 em dia · 2 em atraso" sob a situação na legenda do donut, cada parte na cor do anel. */
+function montarPrazoDaLegenda(prazo) {
+    const partes = partesDaLegendaDePrazo(prazo);
+    if (!partes.length) return null;
+    const linha = criarEl('span', 'dash-legenda__prazo');
+    partes.forEach((parte, indice) => {
+        if (indice > 0) linha.append(document.createTextNode(' · '));
+        linha.append(comTom(criarEl('span', 'dash-legenda__prazo-parte',
+            `${formatarNumero(parte.quantidade)} ${parte.rotulo}`), parte.tom));
+    });
+    return linha;
+}
+
 function desenharGraficoSituacao(corpo, s) {
     const geo = geometriaDonut(listaDe(s?.porSituacao12m), { chave: 'quantidade' });
     if (!geo.total) {
@@ -1333,8 +1555,17 @@ function desenharGraficoSituacao(corpo, s) {
         }));
         return;
     }
+    // Anel fino por fora: o prazo de embarque de cada situação. Sem os campos
+    // (servidor anterior à previsão) ele não sai e o donut é o de antes.
+    const arcos = arcosDePrazo(geo.segmentos);
     const figura = criarEl('div', 'dash-donut');
-    const svg = criarSvg('svg', { viewBox: '0 0 42 42', role: 'img', 'aria-label': 'Pedidos dos últimos 12 meses por situação' });
+    const svg = criarSvg('svg', {
+        viewBox: '0 0 42 42',
+        role: 'img',
+        'aria-label': arcos.length
+            ? 'Pedidos dos últimos 12 meses por situação, com o prazo de embarque no anel de fora'
+            : 'Pedidos dos últimos 12 meses por situação'
+    });
     svg.append(criarSvg('circle', { class: 'dash-donut__trilha', cx: 21, cy: 21, r: 15.915 }));
     geo.segmentos.forEach(segmento => {
         const circulo = criarSvg('circle', {
@@ -1347,8 +1578,27 @@ function desenharGraficoSituacao(corpo, s) {
             'data-tom': DASH_TONS_SITUACAO[segmento.situacao] || 'neutro'
         });
         const dica = criarSvg('title');
+        const prazo = textoPrazoDaSituacao(prazoDaSituacao(segmento));
         dica.textContent = `${segmento.situacao}: ${pluralizar(segmento.medida, 'pedido', 'pedidos')}`
-            + ` (${formatarPercentual(segmento.percentual / 100)})`;
+            + ` (${formatarPercentual(segmento.percentual / 100)})` + (prazo ? `\n${prazo}` : '');
+        circulo.append(dica);
+        svg.append(circulo);
+    });
+    arcos.forEach(arco => {
+        const circulo = criarSvg('circle', {
+            class: 'dash-donut__prazo',
+            cx: 21,
+            cy: 21,
+            r: DASH_RAIO_PRAZO,
+            'stroke-dasharray': arco.dasharray,
+            'stroke-dashoffset': arco.dashoffset,
+            'data-tom': arco.tom
+        });
+        // Em Produção "em dia" é "ainda não passou da previsão"; em Enviado e
+        // Entregue, se o embarque de verdade saiu até ela.
+        const rotulo = arco.situacao === 'Produção' ? arco.rotulo : arco.rotuloEmbarcado;
+        const dica = criarSvg('title');
+        dica.textContent = `${arco.situacao} · ${rotulo}: ${pluralizar(arco.quantidade, 'pedido', 'pedidos')}`;
         circulo.append(dica);
         svg.append(circulo);
     });
@@ -1366,6 +1616,8 @@ function desenharGraficoSituacao(corpo, s) {
         texto.append(criarEl('span', 'dash-legenda__nome', segmento.situacao || 'Outros'));
         const valor = numeroOuNulo(segmento.valor);
         if (valor !== null) texto.append(criarEl('span', 'dash-legenda__valor', formatarMoedaCompacta(valor)));
+        const prazo = montarPrazoDaLegenda(prazoDaSituacao(segmento));
+        if (prazo) texto.append(prazo);
         const numeros = criarEl('span', 'dash-legenda__numeros', formatarNumero(segmento.medida));
         numeros.append(criarEl('small', '', formatarPercentual(segmento.percentual / 100)));
         item.append(criarEl('span', 'dash-legenda__cor'), texto, numeros);
@@ -1429,6 +1681,78 @@ function desenharFunil(corpo, s) {
     corpo.replaceChildren(...conteudo);
 }
 
+/**
+ * Um pedido da lista de idade: o número (com o símbolo de atenção quando o
+ * embarque pede ação), o cliente, a etiqueta de idade e, à direita dela, a de
+ * prazo de embarque.
+ */
+function descreverPedidoEmProducao(pedido) {
+    const prazo = etiquetaDeEmbarque(pedido);
+    return {
+        titulo: pedido?.numero ? String(pedido.numero) : 'Pedido',
+        // Cliente null = perfil sem a coluna Cliente de Pedidos; "—" = cadastro
+        // sem nome. Nos dois a linha fica só com o número: um "—" solto no
+        // lugar do nome não diz nada a ninguém. O prazo NÃO vai no detalhe —
+        // sem cliente, a linha continua sem detalhe nenhum.
+        detalhe: textoInformado(pedido?.cliente),
+        etiquetas: [
+            { texto: textoIdade(pedido?.dias), tom: quantidadeDe(pedido?.dias) > 60 ? 'vinho' : 'neutro' },
+            prazo
+        ],
+        alerta: prazo?.alerta || null,
+        valor: numeroOuNulo(pedido?.valor) !== null ? formatarMoeda(pedido.valor) : ''
+    };
+}
+
+/**
+ * "+N não listados" que abre a lista INTEIRA no próprio cartão (ele cresce) e
+ * vira "mostrar menos" para recolher.
+ *  - Os itens além dos cinco primeiros já estão no DOM, com o atributo
+ *    `hidden` (a regra `.dashboard-module [hidden]` do CSS vence o Tailwind).
+ *  - O estado mora no CORPO do cartão, que persiste entre leituras: o
+ *    "Atualizar" recria a lista, e quem abriu continua vendo tudo.
+ *  - O ouvinte é do próprio botão, que morre com o redesenho — nada vai para
+ *    document/window. `data-sem-guarda`: o botão só mostra e esconde, e a
+ *    trava de duplo clique do BotaoAcao engoliria o segundo clique rápido.
+ *  - O "+N" conta pelo total em produção: quem nem vem na lista (sem data de
+ *    início, ou além do teto do BFF) continua contado e, com a lista aberta,
+ *    fica num "+N não listados" ao lado do "mostrar menos".
+ */
+function montarExpansorDaLista(corpo, { lista, extras, listados, total }) {
+    const visiveis = listados - extras.length;
+    const foraDaLista = Math.max(0, quantidadeDe(total) - listados);
+    const linha = criarEl('p', 'dash-mais');
+    const resto = criarEl('span', 'dash-mais__resto');
+    resto.title = 'Contam no total, mas não vêm na lista: pedido sem data de aprovação nem de emissão, ou além do limite da lista.';
+    const botao = criarEl('button', 'dash-mais__botao');
+    botao.type = 'button';
+    botao.dataset.semGuarda = 'true';
+    botao.setAttribute('aria-controls', lista.id);
+    const aplicar = aberta => {
+        corpo.__dashIdadeAberta = aberta;
+        extras.forEach(item => { item.hidden = !aberta; });
+        botao.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+        if (aberta) {
+            botao.replaceChildren(document.createTextNode('mostrar menos'), criarIcone('fas fa-chevron-up'));
+        } else {
+            botao.replaceChildren(
+                criarEl('strong', '', `+${formatarNumero(Math.max(0, quantidadeDe(total) - visiveis))}`),
+                document.createTextNode(' não listados'),
+                criarIcone('fas fa-chevron-down')
+            );
+        }
+        resto.hidden = !(aberta && foraDaLista > 0);
+        if (resto.hidden) resto.replaceChildren();
+        else resto.replaceChildren(criarEl('strong', '', `+${formatarNumero(foraDaLista)}`), document.createTextNode(' não listados'));
+    };
+    // O botão fica no lugar (só o conteúdo dele muda): quem o acionou pelo
+    // teclado não perde o foco.
+    botao.addEventListener('click', () => aplicar(corpo.__dashIdadeAberta !== true));
+    linha.append(resto, botao);
+    aplicar(corpo.__dashIdadeAberta === true);
+    return linha;
+}
+
 function desenharIdade(corpo, s) {
     const quantidade = quantidadeDe(s?.quantidade);
     if (quantidade === 0) {
@@ -1454,19 +1778,20 @@ function desenharIdade(corpo, s) {
     const antigos = listaDe(s?.maisAntigos);
     if (antigos.length) {
         conteudo.push(criarEl('p', 'dash-subtitulo-lista', 'Há mais tempo em produção'));
-        conteudo.push(montarLista(antigos, pedido => ({
-            titulo: pedido?.numero ? String(pedido.numero) : 'Pedido',
-            // Cliente null = perfil sem a coluna Cliente de Pedidos; "—" = cadastro
-            // sem nome. Nos dois a linha fica só com o número: um "—" solto no
-            // lugar do nome não diz nada a ninguém.
-            detalhe: textoInformado(pedido?.cliente),
-            etiqueta: { texto: textoIdade(pedido?.dias), tom: quantidadeDe(pedido?.dias) > 60 ? 'vinho' : 'neutro' },
-            valor: numeroOuNulo(pedido?.valor) !== null ? formatarMoeda(pedido.valor) : ''
-        })));
-        const mais = montarMais(quantidade, antigos.length);
+        // O BFF manda a lista INTEIRA: cinco à vista, o resto escondido atrás
+        // do botão que expande o cartão.
+        const lista = criarEl('ul', 'dash-lista');
+        lista.id = DASH_IDADE_LISTA_ID;
+        const itens = antigos.map(pedido => montarItemLista(descreverPedidoEmProducao(pedido)));
+        lista.append(...itens);
+        conteudo.push(lista);
+        const extras = itens.slice(DASH_IDADE_VISIVEIS);
+        const mais = extras.length
+            ? montarExpansorDaLista(corpo, { lista, extras, listados: itens.length, total: quantidade })
+            : montarMais(quantidade, itens.length);
         if (mais) conteudo.push(mais);
     }
-    conteudo.push(montarRodape('Idade contada desde a aprovação; não é atraso — o cadastro não tem prazo de entrega.', 'fa-circle-info'));
+    conteudo.push(montarRodape('Idade contada desde a aprovação; o prazo é a previsão de embarque.', 'fa-circle-info'));
     corpo.replaceChildren(...conteudo);
 }
 

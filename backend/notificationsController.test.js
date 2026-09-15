@@ -45,7 +45,7 @@ function setup() {
     situacao text,
     data_emissao timestamp,
     data_aprovacao timestamp,
-    data_envio timestamp,
+    embarcar_real timestamp,
     data_entrega timestamp,
     orcamento_id integer
   );`);
@@ -185,7 +185,7 @@ test('GET /api/notifications expõe alertas das regras configuradas', async () =
      VALUES (101, 'P-001', 'Em Produção', NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days') RETURNING id`
   );
   const pedidoEnvio = await pool.query(
-    `INSERT INTO pedidos (id, numero, situacao, data_emissao, data_aprovacao, data_envio)
+    `INSERT INTO pedidos (id, numero, situacao, data_emissao, data_aprovacao, embarcar_real)
      VALUES (102, 'P-002', 'Enviado', NOW() - INTERVAL '8 days', NOW() - INTERVAL '8 days', NOW() - INTERVAL '4 days') RETURNING id`
   );
   await pool.query(
@@ -193,7 +193,7 @@ test('GET /api/notifications expõe alertas das regras configuradas', async () =
      VALUES (103, 'P-003', 'Em Produção', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`
   );
   await pool.query(
-    `INSERT INTO pedidos (id, numero, situacao, data_emissao, data_envio, data_entrega)
+    `INSERT INTO pedidos (id, numero, situacao, data_emissao, embarcar_real, data_entrega)
      VALUES (104, 'P-004', 'Enviado', NOW() - INTERVAL '4 days', NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day')`
   );
 

@@ -13,7 +13,15 @@
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
-  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
+  // O Esc dado nas datas do pedido (abertas por cima da revisão de conversão) é
+  // delas: fechar este modal levaria junto o hospedeiro da conversão em curso.
+  // A revisão marca no próprio overlay que está perguntando, porque o modal de
+  // datas pode já ter saído do DOM quando este ouvinte roda.
+  const perguntandoDatasDoPedido = () => Boolean(
+    document.getElementById('datasPedidoOverlay')
+    || document.getElementById('converterOrcamentoOverlay')?.dataset?.pedindoDatas === 'true'
+  );
+  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ if (perguntandoDatasDoPedido()) return; close(); document.removeEventListener('keydown', esc); } });
   const form = document.getElementById('editarOrcamentoForm');
 
   // carga de dados
@@ -1065,7 +1073,15 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      if (!resp.ok) throw new Error('Erro');
+      if (!resp.ok) {
+        // O motivo vem do backend. A conversão recusa datas do pedido
+        // inválidas (400) antes de gravar qualquer coisa, e "Erro ao atualizar"
+        // sozinho não diria o que corrigir.
+        const corpo = await resp.json().catch(() => null);
+        const erro = new Error(corpo?.error || `HTTP ${resp.status}`);
+        erro.motivo = corpo?.error || '';
+        throw erro;
+      }
       let result = {};
       try { result = await resp.json(); } catch (_) {}
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
@@ -1086,7 +1102,16 @@
       if (closeAfter) close();
     } catch (err) {
       console.error(err);
-      showToast('Erro ao atualizar orçamento', 'error');
+      showToast(err?.motivo ? `Erro ao atualizar orçamento: ${err.motivo}` : 'Erro ao atualizar orçamento', 'error');
+      // Na conversão automática (tabela de Orçamentos e lote de Pedidos) este
+      // modal foi escondido antes de gravar. Falhando, ele volta à tela para
+      // corrigir ou desistir: escondido, o lote esperaria para sempre por uma
+      // revisão que ninguém vê.
+      if (currentStatus === 'Aprovado') {
+        const overlayEdicao = document.getElementById('editarOrcamentoOverlay');
+        overlayEdicao?.classList.remove('hidden');
+        overlayEdicao?.removeAttribute('aria-hidden');
+      }
     } finally {
       // No `finally`: com erro a máscara também precisa sair, senão a tela fica
       // presa em "convertendo" para sempre.
@@ -1114,6 +1139,31 @@
     return { fechar: () => { if (overlay.isConnected) overlay.remove(); } };
   }
 
+  /**
+   * Os dias de cada parcela, lidos do FORMULÁRIO e não de `data.prazo`.
+   *
+   * É a condição do formulário que o PUT grava (ver `saveChanges`), e ela pode
+   * ter mudado antes de converter. Serve só à prévia de vencimentos do modal
+   * de datas do pedido: quem calcula de verdade é o backend.
+   */
+  function prazosDoFormulario() {
+    const paraDias = valor => {
+      const dias = parseInt(valor, 10);
+      return Number.isFinite(dias) && dias >= 0 ? dias : null;
+    };
+    if (editarCondicao.value === 'vista') {
+      const dias = paraDias(document.getElementById('editarPrazoVista')?.value);
+      return dias === null ? [] : [dias];
+    }
+    if (editarCondicao.value === 'prazo') {
+      const pdata = window.Parcelamento?.getData?.('editarParcelamento');
+      const itens = Array.isArray(pdata?.items) ? pdata.items : [];
+      // Mesma leitura do `saveChanges`: dia vazio conta como zero.
+      return itens.map(it => paraDias(it?.dueInDays) ?? 0);
+    }
+    return [];
+  }
+
   // Abre o modal de conversão mantendo este modal de edição no fundo
   async function openConverterModal(onConfirm) {
     const linhas = Array.from(itensTbody?.children || []).map(tr => ({
@@ -1127,7 +1177,9 @@
       numero: data.numero,
       cliente: clienteNome,
       data_emissao: data.data_emissao,
-      items: linhas
+      items: linhas,
+      // Para a prévia de vencimentos no modal de datas do pedido.
+      prazos: prazosDoFormulario()
     };
 
     window.confirmQuoteConversion = (changes) => {
@@ -1159,7 +1211,10 @@
             podeSaldoNegativo: !!changes.conversao.hasNegative,
             // Os itens seguem inteiros — inclusive `parciais`, que é o que diz
             // ao backend quais lotes pela metade abater do estoque.
-            itens: Array.isArray(changes.conversao.items) ? changes.conversao.items : []
+            itens: Array.isArray(changes.conversao.items) ? changes.conversao.items : [],
+            // Previsão de embarque e início do faturamento, do modal de datas.
+            // Campo que não é copiado aqui some sem aviso antes do PUT.
+            datas: changes.conversao.datas || null
           };
         }
         recalcTotals();

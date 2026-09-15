@@ -11,11 +11,17 @@
  * 2. O desconto ESPECIAL sobrevive à troca de condição; o de PAGAMENTO é
  *    recalculado. Quem negociou 3% continua com eles depois de trocar "à
  *    vista" por "a prazo", perdendo só os 5% que existiam por ser à vista.
+ *
+ * 3. Os vencimentos são do BACKEND: início do faturamento + prazo de cada
+ *    parcela. A data que a tela manda é ignorada — ela contava da emissão e
+ *    desfazia, calada, a regra escolhida na conversão. Mudar as datas e
+ *    enviar o pedido reprogramam as parcelas NO LUGAR.
  */
 const test = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 const express = require('express');
+const { hojeEmSaoPaulo, somarDias } = require('./faturamentoPedido');
 
 const tokenDe = id => `x.${Buffer.from(JSON.stringify({ id })).toString('base64')}.y`;
 
@@ -23,7 +29,8 @@ const COLUNAS = {
   pedidos: [
     'id', 'numero', 'situacao', 'cliente_id', 'data_emissao', 'parcelas', 'tipo_parcela',
     'forma_pagamento', 'prazo', 'desconto_pagamento', 'desconto_especial',
-    'desconto_total', 'valor_final'
+    'desconto_total', 'valor_final',
+    'embarcar_previsao', 'embarcar_real', 'inicio_faturamento', 'faturamento_regra'
   ],
   pedidos_itens: [
     'id', 'pedido_id', 'produto_id', 'nome', 'quantidade', 'valor_unitario',
@@ -114,15 +121,18 @@ async function montar(dados, { permitir = true } = {}) {
 
   // A guarda de permissão é substituída para que estes testes falem sobre a
   // regra de negócio. Um teste específico inverte `permitir` para provar que
-  // a guarda continua no caminho.
+  // a guarda continua no caminho; outro passa a LISTA de chaves liberadas,
+  // para provar que a rota pede a chave dela e não a de uma vizinha.
   const caminhoPerm = require.resolve('./permissionsController');
   require.cache[caminhoPerm] = {
     id: caminhoPerm,
     filename: caminhoPerm,
     loaded: true,
     exports: {
-      exigirPermissao: () => (req, res, next) =>
-        permitir ? next() : res.status(403).json({ error: 'Sem permissão' }),
+      exigirPermissao: chave => (req, res, next) => {
+        const liberado = Array.isArray(permitir) ? permitir.includes(chave) : permitir;
+        return liberado ? next() : res.status(403).json({ error: 'Sem permissão' });
+      },
       exigirSupAdmin: (req, res, next) => next(),
       limparCachePermissoes: () => {}
     }
@@ -160,14 +170,18 @@ function alterarPagamento(porta, id, body) {
  *   item 10 — 2 un × R$ 100, 5% de pagamento (por ser >1 peça) + 3% especial
  *   item 11 — 1 un × R$ 200, sem desconto nenhum
  */
-function cenario({ situacao = 'Produção' } = {}) {
+function cenario({ situacao = 'Produção', ...doPedido } = {}) {
   return {
     pedidos: [{
       id: 1, numero: 'PED-1', situacao, cliente_id: 50,
       data_emissao: '2026-01-10T00:00:00.000Z',
       parcelas: 2, tipo_parcela: 'igual', forma_pagamento: 'boleto', prazo: '30/60',
-      desconto_pagamento: 10, desconto_especial: 6, desconto_total: 16, valor_final: 384
+      desconto_pagamento: 10, desconto_especial: 6, desconto_total: 16, valor_final: 384,
+      ...doPedido
     }],
+    // Lidas e escritas pela troca de status (reservas e histórico do pedido).
+    reservas_estoque: [],
+    pedido_historico_eventos: [],
     pedidos_itens: [
       {
         id: 10, pedido_id: 1, produto_id: 900, nome: 'Peça A', quantidade: 2,
@@ -423,5 +437,326 @@ test('campos obrigatórios são exigidos antes de tocar no banco', async () => {
     } finally {
       await ctx.encerrar();
     }
+  }
+});
+
+// ------------------------------------------------------------ vencimentos
+
+function chamarPut(porta, caminho, body) {
+  return fetch(`http://127.0.0.1:${porta}${caminho}`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${tokenDe(1)}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+const alterarDatas = (porta, id, body) => chamarPut(porta, `/api/pedidos/${id}/datas`, body);
+const mudarStatus = (porta, id, status) => chamarPut(porta, `/api/pedidos/${id}/status`, { status });
+const parcelaDe = (ctx, numero) => ctx.tabelas.pedido_parcelas.find(p => p.numero_parcela === numero);
+const recriouParcela = ctx => ctx.chamadas.some(
+  c => c.tabela === 'pedido_parcelas' && (c.metodo === 'DELETE' || c.metodo === 'POST')
+);
+
+test('os vencimentos contam do início do faturamento, não da data da tela', async () => {
+  const ctx = await montar(cenario({
+    faturamento_regra: 'data', embarcar_previsao: '2026-08-01', inicio_faturamento: '2026-08-10'
+  }));
+  try {
+    const resposta = await alterarPagamento(ctx.porta, 1, {
+      condicao: 'vista',
+      forma_pagamento: 'pix',
+      prazo: '15',
+      // A tela contava da emissão; o que ela manda é ignorado.
+      parcelas_detalhes: [{ valor: 364, data_vencimento: '1999-01-01', numero_parcela: 1 }]
+    });
+    assert.strictEqual(resposta.status, 200);
+    // O exemplo da regra: início 10/08, prazo 15 → 25/08.
+    assert.deepStrictEqual(ctx.tabelas.pedido_parcelas.map(p => p.data_vencimento), ['2026-08-25']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('pedido legado conta do dia da emissão em São Paulo', async () => {
+  // Emitido às 22h30 do dia 9 em São Paulo — 01h30 do dia 10 em UTC.
+  const ctx = await montar(cenario({ data_emissao: '2026-01-10T01:30:00.000Z' }));
+  try {
+    const resposta = await alterarPagamento(ctx.porta, 1, {
+      condicao: 'prazo',
+      forma_pagamento: 'boleto',
+      prazo: '30/60/90',
+      tipo_parcela: 'igual',
+      parcelas_detalhes: [
+        { valor: 128, data_vencimento: '2026-02-09', numero_parcela: 1 },
+        { valor: 128, data_vencimento: '2026-03-11', numero_parcela: 2 },
+        { valor: 128, data_vencimento: '2026-04-10', numero_parcela: 3 }
+      ]
+    });
+    assert.strictEqual(resposta.status, 200);
+    assert.deepStrictEqual(
+      [1, 2, 3].map(n => parcelaDe(ctx, n).data_vencimento),
+      ['2026-02-08', '2026-03-10', '2026-04-09']
+    );
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o prazo casa com a parcela pelo numero_parcela, não pela posição', async () => {
+  const ctx = await montar(cenario({ faturamento_regra: 'data', inicio_faturamento: '2026-08-10' }));
+  try {
+    const resposta = await alterarPagamento(ctx.porta, 1, {
+      condicao: 'prazo',
+      forma_pagamento: 'boleto',
+      prazo: '30/60',
+      tipo_parcela: 'diferente',
+      parcelas_detalhes: [
+        { valor: 184, numero_parcela: 2 },
+        { valor: 200, numero_parcela: 1 }
+      ]
+    });
+    assert.strictEqual(resposta.status, 200);
+    assert.strictEqual(parcelaDe(ctx, 1).valor, 200);
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, '2026-09-09');
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, '2026-10-09');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ------------------------------------------------------------------ datas
+
+const DATAS_OK = { embarcar_previsao: '2026-10-01', faturamento_regra: 'data', inicio_faturamento: '2026-10-10' };
+
+test('datas: formato inválido é recusado antes de ler o pedido', async () => {
+  const casos = [
+    [{}, /previsão de embarque/i],
+    [{ embarcar_previsao: '2026-02-30', faturamento_regra: 'ao_embarcar' }, /previsão de embarque/i],
+    [{ embarcar_previsao: '2026-10-01' }, /faturamento/i],
+    [{ embarcar_previsao: '2026-10-01', faturamento_regra: 'quando_der' }, /desconhecida/i],
+    [{ embarcar_previsao: '2026-10-01', faturamento_regra: 'data' }, /início do faturamento/i]
+  ];
+  for (const [body, esperado] of casos) {
+    const ctx = await montar(cenario());
+    try {
+      const resposta = await alterarDatas(ctx.porta, 1, body);
+      assert.strictEqual(resposta.status, 400, JSON.stringify(body));
+      const corpo = await resposta.json();
+      assert.strictEqual(corpo.code, 'DATAS_INVALIDAS');
+      assert.match(corpo.error, esperado);
+      assert.strictEqual(ctx.chamadas.length, 0, 'nem o pedido pode ter sido lido');
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+});
+
+test('datas: a permissão é própria — ped.payment.edit não basta', async () => {
+  const ctx = await montar(cenario(), { permitir: ['ped.payment.edit'] });
+  try {
+    const resposta = await alterarDatas(ctx.porta, 1, DATAS_OK);
+    assert.strictEqual(resposta.status, 403);
+    assert.ok(!ctx.chamadas.some(c => c.metodo === 'PUT'), 'nada pode ter sido escrito');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('datas: pedido inexistente devolve 404', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const resposta = await alterarDatas(ctx.porta, 999, DATAS_OK);
+    assert.strictEqual(resposta.status, 404);
+    assert.ok(!ctx.chamadas.some(c => c.metodo === 'PUT'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+for (const situacao of ['Enviado', 'Entregue', 'Cancelado']) {
+  test(`datas: pedido em "${situacao}" não tem as datas alteradas`, async () => {
+    const ctx = await montar(cenario({ situacao }));
+    try {
+      const resposta = await alterarDatas(ctx.porta, 1, DATAS_OK);
+      assert.strictEqual(resposta.status, 409);
+      assert.strictEqual((await resposta.json()).code, 'SITUACAO_NAO_PERMITE');
+      assert.ok(!ctx.chamadas.some(c => c.metodo === 'PUT'), 'nada pode ter mudado');
+    } finally {
+      await ctx.encerrar();
+    }
+  });
+}
+
+test('datas: grava previsão, regra e início e reprograma as parcelas no lugar', async () => {
+  const dados = cenario();
+  // Gravadas fora de ordem: o upstream devolve na ordem de inserção.
+  dados.pedido_parcelas.reverse();
+  const ctx = await montar(dados);
+  try {
+    const resposta = await alterarDatas(ctx.porta, 1, DATAS_OK);
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.embarcar_previsao, '2026-10-01');
+    assert.strictEqual(pedido.faturamento_regra, 'data');
+    assert.strictEqual(pedido.inicio_faturamento, '2026-10-10');
+    // O resto do pedido não é assunto desta rota.
+    assert.strictEqual(pedido.valor_final, 384);
+    assert.strictEqual(pedido.prazo, '30/60');
+
+    // Prazo 30/60 contado de 10/10.
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, '2026-11-09');
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, '2026-12-09');
+
+    // No lugar: mesmos ids, nada apagado nem recriado, e os itens intactos.
+    assert.deepStrictEqual(ctx.tabelas.pedido_parcelas.map(p => p.id).sort(), [5, 6]);
+    assert.ok(!recriouParcela(ctx), 'as parcelas não podem ser apagadas nem recriadas');
+    assert.ok(!ctx.chamadas.some(c => c.tabela === 'pedidos_itens' && c.metodo !== 'GET'));
+
+    assert.deepStrictEqual(corpo, {
+      ok: true,
+      embarcar_previsao: '2026-10-01',
+      inicio_faturamento: '2026-10-10',
+      faturamento_regra: 'data',
+      parcelas: [
+        { id: 5, numero_parcela: 1, valor: 192, data_vencimento: '2026-11-09' },
+        { id: 6, numero_parcela: 2, valor: 192, data_vencimento: '2026-12-09' }
+      ],
+      avisos: []
+    });
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('datas: "ao converter" é o dia da emissão em São Paulo', async () => {
+  // Convertido às 22h30 do dia 9 em São Paulo — 01h30 do dia 10 em UTC.
+  const ctx = await montar(cenario({ data_emissao: '2026-01-10T01:30:00.000Z' }));
+  try {
+    const resposta = await alterarDatas(ctx.porta, 1, {
+      embarcar_previsao: '2026-03-01', faturamento_regra: 'ao_converter'
+    });
+    assert.strictEqual(resposta.status, 200);
+    assert.strictEqual((await resposta.json()).inicio_faturamento, '2026-01-09');
+    assert.strictEqual(ctx.tabelas.pedidos[0].inicio_faturamento, '2026-01-09');
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, '2026-02-08');
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, '2026-03-10');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('datas: "ao embarcar" começa na previsão, e o início enviado é ignorado', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const resposta = await alterarDatas(ctx.porta, 1, {
+      embarcar_previsao: '2026-10-01', faturamento_regra: 'ao_embarcar', inicio_faturamento: '2026-12-25'
+    });
+    assert.strictEqual(resposta.status, 200);
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.inicio_faturamento, '2026-10-01');
+    assert.strictEqual(pedido.faturamento_regra, 'ao_embarcar');
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, '2026-10-31');
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, '2026-11-30');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ------------------------------------------------------------------ envio
+
+test('enviar grava o embarque real no dia de São Paulo, num PUT só', async () => {
+  // Regra "data": o embarque atrasado NÃO mexe no início.
+  const ctx = await montar(cenario({
+    faturamento_regra: 'data', embarcar_previsao: '2026-01-05', inicio_faturamento: '2026-01-20'
+  }));
+  try {
+    const antes = hojeEmSaoPaulo();
+    const resposta = await mudarStatus(ctx.porta, 1, 'Enviado');
+    const depois = hojeEmSaoPaulo();
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.situacao, 'Enviado');
+    assert.ok([antes, depois].includes(pedido.embarcar_real), `embarque em ${pedido.embarcar_real}`);
+    assert.strictEqual(pedido.inicio_faturamento, '2026-01-20', 'a regra "data" não reage ao embarque');
+
+    const puts = ctx.chamadas.filter(c => c.metodo === 'PUT' && c.tabela === 'pedidos');
+    assert.strictEqual(puts.length, 1);
+    assert.deepStrictEqual(Object.keys(puts[0].body).sort(), ['embarcar_real', 'situacao']);
+    assert.ok(!ctx.chamadas.some(c => c.tabela === 'pedido_parcelas' && c.metodo !== 'GET'));
+
+    assert.deepStrictEqual(corpo.faturamento, { reprogramado: false, inicio_faturamento: '2026-01-20' });
+    assert.deepStrictEqual(corpo.avisos, []);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('embarque atrasado num pedido "ao embarcar" move o início e reprograma as parcelas', async () => {
+  const ctx = await montar(cenario({
+    faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-01-05', inicio_faturamento: '2026-01-05'
+  }));
+  try {
+    const antes = hojeEmSaoPaulo();
+    const resposta = await mudarStatus(ctx.porta, 1, 'Enviado');
+    const depois = hojeEmSaoPaulo();
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+
+    const pedido = ctx.tabelas.pedidos[0];
+    const hoje = pedido.embarcar_real;
+    assert.ok([antes, depois].includes(hoje), `embarque em ${hoje}`);
+    assert.strictEqual(pedido.inicio_faturamento, hoje, 'o faturamento passa a contar do embarque real');
+
+    // Situação, embarque e início no MESMO PUT: é a única atomicidade que há.
+    const puts = ctx.chamadas.filter(c => c.metodo === 'PUT' && c.tabela === 'pedidos');
+    assert.strictEqual(puts.length, 1);
+    assert.deepStrictEqual(puts[0].body, { situacao: 'Enviado', embarcar_real: hoje, inicio_faturamento: hoje });
+
+    // Prazo 30/60 contado do embarque, no lugar.
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, somarDias(hoje, 30));
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, somarDias(hoje, 60));
+    assert.deepStrictEqual(ctx.tabelas.pedido_parcelas.map(p => p.id).sort(), [5, 6]);
+    assert.ok(!recriouParcela(ctx), 'as parcelas não podem ser apagadas nem recriadas');
+
+    assert.strictEqual(corpo.faturamento.reprogramado, true);
+    assert.strictEqual(corpo.faturamento.inicio_faturamento, hoje);
+    assert.deepStrictEqual(corpo.faturamento.parcelas.map(p => [p.id, p.data_vencimento]), [
+      [5, somarDias(hoje, 30)],
+      [6, somarDias(hoje, 60)]
+    ]);
+    assert.deepStrictEqual(corpo.avisos, []);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('embarque adiantado num pedido "ao embarcar" não mexe no início', async () => {
+  const ctx = await montar(cenario({
+    faturamento_regra: 'ao_embarcar', embarcar_previsao: '2099-12-31', inicio_faturamento: '2099-12-31'
+  }));
+  try {
+    const resposta = await mudarStatus(ctx.porta, 1, 'Enviado');
+    assert.strictEqual(resposta.status, 200);
+    assert.strictEqual(ctx.tabelas.pedidos[0].inicio_faturamento, '2099-12-31');
+    assert.ok(!ctx.chamadas.some(c => c.tabela === 'pedido_parcelas' && c.metodo === 'PUT'));
+    assert.strictEqual((await resposta.json()).faturamento.reprogramado, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('enviar de novo é recusado sem escrever nada', async () => {
+  const ctx = await montar(cenario({ situacao: 'Enviado', embarcar_real: '2026-09-01' }));
+  try {
+    const resposta = await mudarStatus(ctx.porta, 1, 'Enviado');
+    assert.strictEqual(resposta.status, 409);
+    assert.strictEqual((await resposta.json()).code, 'JA_ENVIADO');
+    assert.ok(!ctx.chamadas.some(c => c.metodo !== 'GET'), 'nada pode ter sido escrito');
+    assert.strictEqual(ctx.tabelas.pedidos[0].embarcar_real, '2026-09-01');
+  } finally {
+    await ctx.encerrar();
   }
 });

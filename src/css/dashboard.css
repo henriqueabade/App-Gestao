@@ -19,6 +19,11 @@
     --dash-sombra: 0 22px 44px -30px color-mix(in srgb, var(--neutral-500) 45%, transparent);
     /* Vinho legível: o --color-bordeaux puro some sobre o fundo vinho do tema escuro. */
     --dash-vinho: color-mix(in srgb, var(--color-bordeaux) 55%, var(--color-red));
+    /* Roxo do "em atraso" (prazo de embarque). O --color-violet não serve: no
+       escuro ele é um cinza (#cecbcf) e no claro um lilás claro demais para
+       texto. O --color-purple do tema é roxo saturado nos dois (#b36bff no
+       escuro, #7300ba no claro); o teste de CSS confere matiz e saturação. */
+    --dash-roxo: var(--color-purple);
     /* Texto de apoio (subtítulo, detalhe, eixo, legenda, rótulo). Era o
        --menu-text-muted/tertiary, que no tema claro dá 1,7-2,7:1 sobre o
        cartão. No escuro é o --menu-text-secondary (mais claro que antes). */
@@ -71,6 +76,7 @@
 .dashboard-module [data-tom="vermelho"] { --dash-tom: var(--color-red); }
 .dashboard-module [data-tom="vinho"] { --dash-tom: var(--dash-vinho); }
 .dashboard-module [data-tom="violeta"] { --dash-tom: var(--color-violet); }
+.dashboard-module [data-tom="roxo"] { --dash-tom: var(--dash-roxo); }
 .dashboard-module [data-tom="neutro"] { --dash-tom: var(--neutral-500); }
 .dashboard-module [data-tom] {
     --dash-tom-texto: color-mix(in srgb, var(--dash-tom) 72%, var(--menu-text-strong));
@@ -145,7 +151,8 @@
 /* Dourado puro no anel de foco dá 2,1-2,5:1 sobre a página clara (menos que os
    3:1 de um indicador de foco). Misturado à cor forte do tema: 4,4-6,1:1. */
 .dash-botao-atualizar:focus-visible,
-.dash-botao-leve:focus-visible {
+.dash-botao-leve:focus-visible,
+.dash-mais__botao:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--color-primary) 60%, var(--menu-text-strong));
     outline-offset: 2px;
 }
@@ -759,6 +766,25 @@
     stroke-width: 6.4;
 }
 
+/* Anel fino por fora do donut: o prazo de embarque de cada situação — em dia
+   (verde), em atraso (roxo) e sem previsão (apagado). Classe própria: não é
+   fatia, e nem o hover nem a contagem das fatias o alcançam. */
+.dash-donut__prazo {
+    fill: none;
+    stroke: var(--dash-tom);
+    stroke-width: 1.3;
+    transition: stroke-width 160ms ease;
+}
+
+.dash-donut__prazo[data-tom="neutro"] {
+    stroke: color-mix(in srgb, var(--neutral-500) 45%, transparent);
+}
+
+/* 19,9 + 0,95 de meio traço: ainda dentro do viewBox (o SVG corta além de 21). */
+.dash-donut .dash-donut__prazo:hover {
+    stroke-width: 1.9;
+}
+
 .dash-donut__centro {
     position: absolute;
     inset: 0;
@@ -835,6 +861,22 @@
     font-size: 0.75rem;
     color: var(--dash-texto-apoio);
     font-variant-numeric: tabular-nums;
+}
+
+/* Prazo de embarque da situação, sob o nome: "5 em dia · 2 em atraso", cada
+   parte na cor do anel de fora. */
+.dash-legenda__prazo {
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--dash-texto-apoio);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-legenda__prazo-parte {
+    font-weight: 600;
+    color: var(--dash-tom-texto);
+    /* "1 em atraso" não se parte: a linha só quebra entre as partes. */
+    white-space: nowrap;
 }
 
 .dash-legenda__numeros,
@@ -951,7 +993,8 @@
 .dash-hbarras--funil .dash-hbarra[data-nivel="3"] { --dash-tom: color-mix(in srgb, var(--color-primary) 35%, var(--dash-vinho)); }
 .dash-hbarras--funil .dash-hbarra[data-nivel="4"] { --dash-tom: var(--dash-vinho); }
 
-/* Idade: tons da marca, sem o vermelho de alerta — idade não é atraso. */
+/* Idade: tons da marca, sem o vermelho de alerta — idade não é atraso (o
+   atraso é o prazo de embarque, na etiqueta ao lado de cada pedido). */
 .dash-hbarras--idade .dash-hbarra[data-nivel="0"] { --dash-tom: var(--color-primary-light); }
 .dash-hbarras--idade .dash-hbarra[data-nivel="1"] { --dash-tom: var(--color-primary); }
 .dash-hbarras--idade .dash-hbarra[data-nivel="2"] { --dash-tom: var(--color-primary-dark); }
@@ -1034,6 +1077,25 @@
     color: var(--menu-text-primary);
 }
 
+/* Idade e prazo de embarque lado a lado, na mesma linha; o valor fica embaixo
+   (o .dash-lista__lado continua em coluna). Só quebram se o cartão não tiver
+   largura nem para as duas. */
+.dash-lista__etiquetas {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* Símbolo de atenção junto do número do pedido, na cor da etiqueta de prazo:
+   vermelho (embarca em menos de 7 dias) ou roxo (atrasado). */
+.dash-lista__alerta {
+    margin-left: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--dash-tom);
+}
+
 .dash-mais {
     margin: 0;
     font-size: 0.78rem;
@@ -1048,6 +1110,36 @@
     color: var(--menu-text-strong);
     background: var(--menu-surface-strong);
     font-variant-numeric: tabular-nums;
+}
+
+/* "+N não listados" que abre a lista inteira: o mesmo texto de antes, agora
+   botão, com a setinha dizendo que abre (e "mostrar menos" para recolher). */
+.dash-mais__resto {
+    margin-right: 0.75rem;
+}
+
+.dash-mais__botao {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0 0 0 -0.3rem;
+    padding: 0.15rem 0.45rem 0.15rem 0.3rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.dash-mais__botao:hover {
+    color: var(--menu-text-strong);
+    background: var(--menu-surface-soft);
+}
+
+.dash-mais__botao i {
+    font-size: 0.68rem;
 }
 
 .dash-rodape {
@@ -1483,6 +1575,8 @@
     .dash-hbarra__preenchimento,
     .dash-empilhada__parte,
     .dash-donut__fatia,
+    .dash-donut__prazo,
+    .dash-mais__botao,
     .dash-barras__barra,
     .dash-barras__alvo {
         transition: none;
