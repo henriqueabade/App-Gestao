@@ -640,6 +640,99 @@ body {
     color: var(--fin-texto-2);
 }
 
+/* ------------------------------------------------------------------ modais */
+/* Os modais ficam fora do .financeiro-module (o Modal os põe no <body>), e
+   só abrem a partir deste módulo — por isso o estilo deles vive aqui. */
+
+.fin-obrigatorio { color: var(--color-red); }
+
+.fin-somente-leitura { opacity: 0.7; cursor: default; }
+
+.fin-arquivo::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.35rem 0.85rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--menu-text-strong, #fff);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+/* Aviso de atenção: bordô da identidade, discreto. */
+.fin-aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(106, 21, 44, 0.28);
+    border: 1px solid rgba(106, 21, 44, 0.75);
+    color: #e08aa6;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.fin-aviso > i { margin-top: 0.15rem; flex-shrink: 0; }
+
+/* Opção selecionável (rádio) com cara de cartão. */
+.fin-opcao {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.fin-opcao:hover { border-color: rgba(182, 160, 62, 0.6); }
+.fin-opcao:has(input:checked) { border-color: var(--color-primary); background: rgba(182, 160, 62, 0.1); }
+.fin-opcao input { flex-shrink: 0; }
+
+.fin-opcao__icone {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(182, 160, 62, 0.18);
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+
+.fin-lista-opcoes { display: flex; flex-direction: column; gap: 0.6rem; }
+
+/* Formato do relatório: seleção segmentada, uma cor só. */
+.fin-segmento {
+    display: inline-flex;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.fin-segmento label { position: relative; cursor: pointer; }
+.fin-segmento input { position: absolute; opacity: 0; pointer-events: none; }
+
+.fin-segmento span {
+    display: flex;
+    align-items: center;
+    padding: 0.65rem 1.1rem;
+    font-size: 0.875rem;
+    color: #d1d5db;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.fin-segmento label:last-child span { border-right: 0; }
+.fin-segmento input:checked + span { background: var(--color-primary); color: var(--menu-contrast-text, #fff); }
+.fin-segmento input:focus-visible + span { outline: 2px solid var(--color-primary-light); outline-offset: -2px; }
+
 /* ------------------------------------------------------------ responsivo */
 
 @media (max-width: 1279px) {

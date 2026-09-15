@@ -1,0 +1,104 @@
+<!--
+  Fechar competência (comissões ou produção). Modal médio, ação sensível.
+  Enquanto a confirmação estiver sendo processada o modal não fecha por Esc
+  nem por Voltar/Cancelar. Etapa visual: "Confirmar fechamento" ainda avisa
+  que está em implementação. Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finFecharCompetenciaOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finFechamentoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 id="finFechamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência</h2>
+      <span></span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <!-- Seleção exclusiva do tipo, no padrão de rádio da casa -->
+        <div role="radiogroup" aria-labelledby="finFechamentoTipoTitulo">
+          <p id="finFechamentoTipoTitulo" class="block text-sm font-medium text-gray-300 mb-3">Tipo de fechamento</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label class="fin-opcao">
+              <input type="radio" name="finFechamentoTipo" value="comissoes" checked style="accent-color: var(--color-primary)" />
+              <span class="fin-opcao__icone"><i class="fas fa-hand-holding-usd" aria-hidden="true"></i></span>
+              <span class="min-w-0">
+                <span class="block text-white font-medium">Comissões</span>
+                <span class="block text-xs text-gray-400">Parcelas liquidadas na competência</span>
+              </span>
+            </label>
+            <label class="fin-opcao">
+              <input type="radio" name="finFechamentoTipo" value="producao" style="accent-color: var(--color-primary)" />
+              <span class="fin-opcao__icone"><i class="fas fa-industry" aria-hidden="true"></i></span>
+              <span class="min-w-0">
+                <span class="block text-white font-medium">Produção</span>
+                <span class="block text-xs text-gray-400">Peças finalizadas na competência</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label for="finFechamentoCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+          <select id="finFechamentoCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+        </div>
+
+        <!-- Resumo de comissões -->
+        <div id="finFechamentoResumoComissoes" class="glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Parcelas liquidadas</span>
+            <span class="text-sm text-white" data-fin-valor="comissoes.parcelas">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Base líquida</span>
+            <span class="text-sm text-white" data-fin-valor="comissoes.base">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Comissão</span>
+            <span class="text-sm text-white" data-fin-valor="comissoes.comissao">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Ajustes anteriores</span>
+            <span class="text-sm text-white" data-fin-valor="comissoes.ajustes">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-4">
+            <span class="text-base font-medium text-white">Total a pagar</span>
+            <span class="text-xl font-bold" style="color: var(--color-green)" data-fin-valor="comissoes.total">—</span>
+          </div>
+        </div>
+
+        <!-- Resumo de produção -->
+        <div id="finFechamentoResumoProducao" class="hidden glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Peças finalizadas</span>
+            <span class="text-sm text-white" data-fin-valor="producao.pecas">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Pintura</span>
+            <span class="text-sm text-white" data-fin-valor="producao.pintura">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Marcenaria</span>
+            <span class="text-sm text-white" data-fin-valor="producao.marcenaria">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-4">
+            <span class="text-base font-medium text-white">Total a pagar</span>
+            <span class="text-xl font-bold" style="color: var(--color-green)" data-fin-valor="producao.total">—</span>
+          </div>
+        </div>
+
+        <div class="fin-aviso" role="note">
+          <i class="fas fa-lock" aria-hidden="true"></i>
+          <span>Após o fechamento, os registros desta competência ficarão bloqueados para edição direta. Alterações posteriores deverão ser registradas como ajustes.</span>
+        </div>
+
+        <div id="finFechamentoMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button type="button" data-fin-principal="Confirmar fechamento" data-fin-sensivel="true" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Confirmar fechamento</button>
+    </footer>
+  </div>
+</div>

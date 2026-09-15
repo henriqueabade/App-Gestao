@@ -56,15 +56,42 @@ const FIN_ACOES = {
     'comissoes-atrasadas': { rotulo: 'Comissões atrasadas' },
     'producao-competencia': { rotulo: 'Produção da competência' },
     'pendencias-todas': { rotulo: 'Todas as pendências' },
-    'registrar-nf': { rotulo: 'Registrar NF' },
-    'registrar-recebimento': { rotulo: 'Registrar recebimento' },
-    'registrar-ajuste': { rotulo: 'Registrar ajuste' },
-    'registrar-producao': { rotulo: 'Registrar produção' },
-    'fechar-competencia': { rotulo: 'Fechar competência' },
-    'relatorios': { rotulo: 'Relatórios' },
+    'registrar-nf': { rotulo: 'Registrar NF', abrir: m => finAbrirModal('registrar-nf', m) },
+    'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
+    'registrar-ajuste': { rotulo: 'Registrar ajuste', abrir: m => finAbrirModal('registrar-ajuste', m) },
+    'registrar-producao': { rotulo: 'Registrar produção', abrir: m => finAbrirModal('registrar-producao', m) },
+    'fechar-competencia': { rotulo: 'Fechar competência', abrir: m => finAbrirModal('fechar-competencia', m) },
+    'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões' },
     'atividade-todas': { rotulo: 'Atividade recente' }
 };
+
+/* Modais do módulo (src/html/modals/financeiro). Todos usam o mesmo script,
+   que descobre qual modal montar por `window.financeiroModalContexto`. */
+const FIN_MODAIS = {
+    'registrar-nf': { html: 'modals/financeiro/registrar-nf.html', overlay: 'finRegistrarNf' },
+    'registrar-recebimento': { html: 'modals/financeiro/registrar-recebimento.html', overlay: 'finRegistrarRecebimento' },
+    'registrar-ajuste': { html: 'modals/financeiro/registrar-ajuste.html', overlay: 'finRegistrarAjuste' },
+    'registrar-producao': { html: 'modals/financeiro/registrar-producao.html', overlay: 'finRegistrarProducao' },
+    'fechar-competencia': { html: 'modals/financeiro/fechar-competencia.html', overlay: 'finFecharCompetencia' },
+    'relatorios': { html: 'modals/financeiro/relatorios.html', overlay: 'finRelatorios' }
+};
+const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
+
+function finAbrirModal(chave, moduleEl) {
+    const modal = FIN_MODAIS[chave];
+    if (!modal || typeof window.Modal?.open !== 'function') {
+        finAvisarEmImplementacao(chave);
+        return;
+    }
+    window.financeiroModalContexto = {
+        overlayId: modal.overlay,
+        acao: chave,
+        rotulo: FIN_ACOES[chave]?.rotulo || '',
+        competencia: moduleEl?.querySelector('#finCompetencia')?.value || null
+    };
+    window.Modal.open(modal.html, FIN_SCRIPT_MODAIS, modal.overlay);
+}
 
 const finFormatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
