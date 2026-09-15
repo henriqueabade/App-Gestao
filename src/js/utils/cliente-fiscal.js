@@ -54,6 +54,25 @@
     };
   }
 
+  /**
+   * O que o tipo de pessoa e o indicador de IE tornam obrigatório: PF tem CPF
+   * (11 dígitos), PJ tem CNPJ, contribuinte tem inscrição estadual. Devolve a
+   * primeira falta como { field, name } (o mesmo formato do cadastro) ou null.
+   */
+  function validar(raiz) {
+    const dados = coletar(raiz);
+    const valor = id => (el(raiz, id)?.value || '').trim();
+    if (dados.tipo_pessoa === 'PF') {
+      if (dados.cpf.length !== 11) return { field: 'empresaCpf', name: 'CPF (11 dígitos)' };
+    } else if (!valor('empresaCnpj')) {
+      return { field: 'empresaCnpj', name: 'CNPJ' };
+    }
+    if (String(dados.indicador_ie) === '1' && !valor('empresaInscricaoEstadual')) {
+      return { field: 'empresaInscricaoEstadual', name: 'Inscrição Estadual (cliente contribuinte do ICMS)' };
+    }
+    return null;
+  }
+
   function codigoMunicipio(raiz, prefixo) {
     return (el(raiz, `${prefixo}CodigoMunicipio`)?.value || '').replace(/\D/g, '');
   }
@@ -108,5 +127,5 @@
     alternarTipo(raiz);
   }
 
-  window.ClienteFiscal = { CAMPOS, ligar, preencher, coletar, alternarTipo, buscarIbge, codigoMunicipio };
+  window.ClienteFiscal = { CAMPOS, ligar, preencher, coletar, validar, alternarTipo, buscarIbge, codigoMunicipio };
 })();

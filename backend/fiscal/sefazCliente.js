@@ -193,6 +193,128 @@ async function statusServico({ uf, ambiente, transporte }) {
   return { ...lido, tempoMs, url };
 }
 
+// ------------------------------------------------------------ autorização
+
+/** Lote com uma NF-e assinada, processamento síncrono (indSinc=1). */
+function xmlEnviNFe({ idLote, xmlNfe }) {
+  const lote = String(idLote || '1').replace(/\D/g, '').slice(0, 15) || '1';
+  if (!/^<NFe[\s>]/.test(String(xmlNfe || ''))) throw erro('O lote precisa de um <NFe> assinado.');
+  return `<enviNFe xmlns="${NS_NFE}" versao="${VERSAO}"><idLote>${lote}</idLote><indSinc>1</indSinc>${xmlNfe}</enviNFe>`;
+}
+
+function xmlConsultaRecibo(ambiente, recibo) {
+  const nRec = String(recibo || '').replace(/\D/g, '');
+  if (!nRec) throw erro('Recibo ausente.');
+  return `<consReciNFe xmlns="${NS_NFE}" versao="${VERSAO}"><tpAmb>${tpAmb(ambiente)}</tpAmb><nRec>${nRec}</nRec></consReciNFe>`;
+}
+
+function xmlConsultaNfe(ambiente, chave) {
+  const chNFe = String(chave || '').replace(/\D/g, '');
+  if (chNFe.length !== 44) throw erro('Chave de acesso inválida.');
+  return `<consSitNFe xmlns="${NS_NFE}" versao="${VERSAO}"><tpAmb>${tpAmb(ambiente)}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chNFe}</chNFe></consSitNFe>`;
+}
+
+/** Situação da nota pelo cStat do protocolo (ou da consulta). */
+function situacaoDoProtocolo(cStat) {
+  const c = String(cStat || '');
+  if (c === '100' || c === '150') return 'autorizada';
+  if (c === '101' || c === '151' || c === '155') return 'cancelada';
+  if (['110', '301', '302', '303'].includes(c)) return 'denegada';
+  return 'rejeitada';
+}
+
+/** `protNFe/infProt` da resposta (autorização, recibo ou consulta), ou null. */
+function lerProtocolo(xml) {
+  const prot = bloco(xml, 'protNFe');
+  if (!prot) return null;
+  const inf = bloco(prot, 'infProt') || prot;
+  const cStat = campo(inf, 'cStat');
+  return {
+    cStat,
+    xMotivo: campo(inf, 'xMotivo'),
+    nProt: campo(inf, 'nProt'),
+    dhRecbto: campo(inf, 'dhRecbto'),
+    chNFe: campo(inf, 'chNFe'),
+    digVal: campo(inf, 'digVal'),
+    situacao: situacaoDoProtocolo(cStat),
+    xml: prot
+  };
+}
+
+/** Lê o `retEnviNFe`: 104 = lote processado (protocolo dentro), 103/105 = recibo para consultar depois. */
+function lerRetornoEnvio(xml) {
+  const ret = bloco(xml, 'retEnviNFe') || xml;
+  const cStat = campo(ret, 'cStat');
+  const recibo = bloco(ret, 'infRec');
+  return {
+    cStat,
+    xMotivo: campo(ret, 'xMotivo'),
+    dhRecbto: campo(ret, 'dhRecbto'),
+    recibo: recibo ? campo(recibo, 'nRec') : null,
+    tempoMedioSegundos: recibo ? Number(campo(recibo, 'tMed')) || null : null,
+    protocolo: lerProtocolo(ret),
+    ambiente: campo(ret, 'tpAmb') === '1' ? 'producao' : 'homologacao'
+  };
+}
+
+/** Lê o `retConsReciNFe`: 104 processado (protocolo), 105 ainda em processamento. */
+function lerRetornoRecibo(xml) {
+  const ret = bloco(xml, 'retConsReciNFe') || xml;
+  const cStat = campo(ret, 'cStat');
+  return { cStat, xMotivo: campo(ret, 'xMotivo'), emProcessamento: cStat === '105', protocolo: lerProtocolo(ret) };
+}
+
+/** Lê o `retConsSitNFe`: 100 autorizada, 101 cancelada, 110 denegada, 217 não consta. */
+function lerRetornoConsulta(xml) {
+  const ret = bloco(xml, 'retConsSitNFe') || xml;
+  const cStat = campo(ret, 'cStat');
+  const protocolo = lerProtocolo(ret);
+  return {
+    cStat,
+    xMotivo: campo(ret, 'xMotivo'),
+    chNFe: campo(ret, 'chNFe'),
+    naoConsta: cStat === '217',
+    situacao: cStat === '217' ? null : situacaoDoProtocolo(cStat),
+    protocolo,
+    eventos: bloco(ret, 'procEventoNFe') ? [bloco(ret, 'procEventoNFe')] : []
+  };
+}
+
+/** NF-e autorizada para guardar/distribuir: `nfeProc` = NFe assinada + protocolo. */
+function montarNfeProc(xmlNfeAssinada, protNFeXml) {
+  if (!/<Signature[\s>]/.test(String(xmlNfeAssinada || ''))) throw erro('A NF-e precisa estar assinada.');
+  if (!/^<protNFe[\s>]/.test(String(protNFeXml || '').trim())) throw erro('Protocolo ausente.');
+  return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="${NS_NFE}" versao="${VERSAO}">${xmlNfeAssinada}${String(protNFeXml).trim()}</nfeProc>`;
+}
+
+/** Envia a NF-e assinada (lote de uma, síncrono). */
+async function autorizar({ uf, ambiente, transporte, xmlNfe, idLote }) {
+  const { xml, tempoMs, url } = await chamar({
+    uf, ambiente, servico: 'autorizacao', xmlDados: xmlEnviNFe({ idLote, xmlNfe }), transporte
+  });
+  const lido = lerRetornoEnvio(xml);
+  if (!lido.cStat) throw erro('A SEFAZ respondeu ao envio sem cStat.', 502);
+  return { ...lido, xmlResposta: xml, tempoMs, url };
+}
+
+async function consultarRecibo({ uf, ambiente, transporte, recibo }) {
+  const { xml, tempoMs } = await chamar({
+    uf, ambiente, servico: 'retAutorizacao', xmlDados: xmlConsultaRecibo(ambiente, recibo), transporte
+  });
+  const lido = lerRetornoRecibo(xml);
+  if (!lido.cStat) throw erro('A SEFAZ respondeu à consulta do recibo sem cStat.', 502);
+  return { ...lido, xmlResposta: xml, tempoMs };
+}
+
+async function consultarNfe({ uf, ambiente, transporte, chave }) {
+  const { xml, tempoMs } = await chamar({
+    uf, ambiente, servico: 'consultaProtocolo', xmlDados: xmlConsultaNfe(ambiente, chave), transporte
+  });
+  const lido = lerRetornoConsulta(xml);
+  if (!lido.cStat) throw erro('A SEFAZ respondeu à consulta da NF-e sem cStat.', 502);
+  return { ...lido, xmlResposta: xml, tempoMs };
+}
+
 function erro(mensagem, status = 400) {
   const e = new Error(mensagem);
   e.status = status;
@@ -202,5 +324,8 @@ function erro(mensagem, status = 400) {
 module.exports = {
   NS_NFE, VERSAO, UFS, SERVICOS, ENDERECOS,
   urlDoServico, montarEnvelope, xmlConsultaStatus, campo, bloco, faltaSoap,
-  transporteHttps, traduzirErroDeRede, chamar, lerStatusServico, statusServico
+  transporteHttps, traduzirErroDeRede, chamar, lerStatusServico, statusServico,
+  xmlEnviNFe, xmlConsultaRecibo, xmlConsultaNfe, situacaoDoProtocolo, lerProtocolo,
+  lerRetornoEnvio, lerRetornoRecibo, lerRetornoConsulta, montarNfeProc,
+  autorizar, consultarRecibo, consultarNfe
 };

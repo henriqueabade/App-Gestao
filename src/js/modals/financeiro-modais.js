@@ -1259,6 +1259,8 @@
     if (!resposta.ok) {
       const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);
       e.status = resposta.status;
+      // O que veio além da mensagem (pendências, a nota, o cStat da SEFAZ).
+      e.corpo = corpo;
       throw e;
     }
     return corpo;
@@ -1428,6 +1430,63 @@
       }
     }
 
+    /**
+     * Emissão de teste: acha o pedido pelo número (ou pelo id), emite em
+     * homologação e mostra o que a SEFAZ respondeu — ou as pendências.
+     */
+    async function emitirTeste() {
+      const numeroPedido = (el('finCfgTestePedido')?.value || '').trim();
+      const caixa = el('finCfgTesteResultado');
+      // Linhas de texto (e uma lista de pendências) montadas por nós: nada do servidor vira HTML.
+      const mostrar = (linhas, cor, pendencias = []) => {
+        caixa.replaceChildren();
+        for (const linha of [].concat(linhas).filter(Boolean)) {
+          const div = document.createElement('div');
+          div.textContent = linha;
+          caixa.appendChild(div);
+        }
+        if (pendencias.length) {
+          const ul = document.createElement('ul');
+          ul.className = 'mt-2 ml-5 list-disc space-y-1';
+          for (const p of pendencias) {
+            const li = document.createElement('li');
+            li.textContent = p?.mensagem || String(p);
+            ul.appendChild(li);
+          }
+          caixa.appendChild(ul);
+        }
+        caixa.style.color = cor || '';
+        caixa.classList.remove('hidden');
+      };
+      if (!numeroPedido) { mostrar('Informe o número do pedido.', 'var(--color-red)'); return; }
+      mostrar('Montando, assinando e enviando à SEFAZ de homologação…');
+      try {
+        const porNumero = await fetchApi(`/api/pedidos?numero=${encodeURIComponent(numeroPedido)}`).catch(() => []);
+        let pedido = (Array.isArray(porNumero) ? porNumero : []).find(p => String(p?.numero) === numeroPedido) || null;
+        if (!pedido && /^\d+$/.test(numeroPedido)) {
+          const porId = await fetchApi(`/api/pedidos?id=${numeroPedido}`).catch(() => []);
+          pedido = (Array.isArray(porId) ? porId : []).find(p => String(p?.id) === numeroPedido) || null;
+        }
+        if (!pedido) throw new Error(`Pedido ${numeroPedido} não encontrado.`);
+
+        const r = await fetchApi(`/api/fiscal/pedidos/${pedido.id}/emitir`, { method: 'POST', body: JSON.stringify({ ambiente: 'homologacao' }) });
+        const n = r.nota || {};
+        const situacao = r.autorizada ? 'Autorizada em homologação' : (r.processando ? 'Em processamento na SEFAZ' : 'Enviada');
+        mostrar([
+          `${situacao} — SEFAZ ${r.sefaz?.cStat ?? '?'}: ${r.sefaz?.xMotivo ?? ''}`,
+          `NF-e série ${n.serie ?? '?'} nº ${n.numero ?? '?'} · chave ${n.chave_acesso ?? '—'}`,
+          r.sefaz?.protocolo ? `Protocolo ${r.sefaz.protocolo}` : (r.sefaz?.recibo ? `Recibo ${r.sefaz.recibo} (consulte depois)` : ''),
+          ...(r.avisos || []).map(a => `Aviso: ${a}`)
+        ], r.autorizada ? 'var(--color-green)' : 'var(--color-primary-light)');
+        window.showToast?.(r.autorizada ? `NF-e de teste nº ${n.numero} autorizada.` : 'NF-e enviada; aguardando a SEFAZ.', r.autorizada ? 'success' : 'info');
+      } catch (e) {
+        const corpo = e.corpo || {};
+        const pendencias = Array.isArray(corpo.pendencias) ? corpo.pendencias : [];
+        const nota = corpo.nota ? `Nota série ${corpo.nota.serie} nº ${corpo.nota.numero} ficou como "${corpo.nota.status_fiscal}".` : '';
+        mostrar([e.message, nota], 'var(--color-red)', pendencias);
+      }
+    }
+
     const ligar = (id, fn) => {
       const botao = el(id);
       if (!botao) return;
@@ -1439,6 +1498,7 @@
     ligar('finCfgCertGuardar', guardarCertificado);
     ligar('finCfgCertRemover', removerCertificado);
     ligar('finCfgTestarSefaz', testarSefaz);
+    ligar('finCfgTesteEmitir', emitirTeste);
     el('finCfg_ambiente')?.addEventListener('change', alternarConfirmacao);
 
     carregar();

@@ -55,7 +55,7 @@
                   <input id="finCfg_serie_producao" data-fin-cfg="serie_producao" type="number" min="1" max="999" class="w-24 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                   <input id="finCfg_proximo_numero_producao" data-fin-cfg="proximo_numero_producao" type="number" min="1" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
-                <p class="mt-2 text-xs text-gray-400">Série nova (2) para não colidir com a série 1 do emissor do Sebrae.</p>
+                <p class="mt-2 text-xs text-gray-400">Continue a numeração do emissor anterior: a última NF autorizada lá + 1 (ex.: última 361 → próximo 362).</p>
               </div>
             </div>
             <div id="finCfgConfirmacaoProducao" class="hidden mt-4 fin-aviso">
@@ -120,6 +120,20 @@
               <div class="fin-dl__linha"><dt>Versão da SEFAZ</dt><dd id="finCfgSefazVersao">—</dd></div>
               <div class="fin-dl__linha"><dt>Tempo</dt><dd id="finCfgSefazTempo">—</dd></div>
             </dl>
+
+            <!-- Emissão de teste em homologação -->
+            <div class="mt-6 pt-5 border-t border-inputBorder">
+              <h4 class="text-sm font-semibold text-white mb-1"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emissão de teste (homologação)</h4>
+              <p class="text-xs text-gray-400 mb-4">Monta, assina e envia a NF-e de um pedido real para a SEFAZ de <strong>testes</strong> — sem valor fiscal. Serve para conferir cadastro, certificado e numeração antes de ligar a produção. A nota fica registrada no pedido como homologação.</p>
+              <div class="flex flex-wrap items-end gap-3">
+                <div>
+                  <label for="finCfgTestePedido" class="block text-sm font-medium text-gray-300 mb-2">Nº do pedido</label>
+                  <input id="finCfgTestePedido" type="text" inputmode="numeric" placeholder="ex.: 2548" autocomplete="off" class="w-40 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <button id="finCfgTesteEmitir" type="button" data-perm="financeiro.nfe.emit" class="btn-primary text-white px-5 py-3 rounded-lg font-medium"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e de teste</button>
+              </div>
+              <div id="finCfgTesteResultado" class="hidden mt-4 text-sm" role="status"></div>
+            </div>
           </div>
 
           <!-- Emitente -->

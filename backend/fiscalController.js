@@ -20,8 +20,8 @@ const segredoLocal = require('./fiscal/segredoLocal');
 const sefaz = require('./fiscal/sefazCliente');
 const municipios = require('./fiscal/municipios');
 const prontidao = require('./fiscal/prontidao');
-
-const lista = r => (Array.isArray(r) ? r : (r && typeof r === 'object' ? [r] : []));
+const emissao = require('./fiscal/emissao');
+const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -45,7 +45,8 @@ function erro(mensagem, status = 400) {
 function responder(res, err, contexto) {
   const status = err?.status || 500;
   if (status >= 500) console.error(`Erro em ${contexto}:`, err);
-  res.status(status).json({ error: err?.message || 'Erro interno no módulo fiscal' });
+  // `extra` leva o que a tela precisa além da mensagem (pendências, a nota, o cStat).
+  res.status(status).json({ error: err?.message || 'Erro interno no módulo fiscal', ...(err?.extra || {}) });
 }
 
 /**
@@ -94,6 +95,16 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     } catch (e) {
       return { configurado: false, erro: e.message };
     }
+  }
+
+  /** Rede com o certificado deste computador (e a cadeia ICP-Brasil do .env, se houver). */
+  function transporteDoCertificado(dados) {
+    return transporteFabrica({
+      chavePrivadaPem: dados.chavePrivadaPem,
+      certificadoPem: dados.certificadoPem,
+      cadeiaPem: dados.cadeiaPem,
+      ...(env.NFE_CA_PATH ? { ca: fs.readFileSync(env.NFE_CA_PATH) } : {})
+    });
   }
 
   async function montarEstado(req, api) {
@@ -195,12 +206,7 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
         : configuracao.HOMOLOGACAO;
 
       const dados = carregarCertificado();
-      const transporte = transporteFabrica({
-        chavePrivadaPem: dados.chavePrivadaPem,
-        certificadoPem: dados.certificadoPem,
-        cadeiaPem: dados.cadeiaPem,
-        ...(env.NFE_CA_PATH ? { ca: fs.readFileSync(env.NFE_CA_PATH) } : {})
-      });
+      const transporte = transporteDoCertificado(dados);
       const resultado = await sefaz.statusServico({ uf: cfg?.uf || 'MG', ambiente, transporte });
       res.json({ ...resultado, certificado: certificado.resumo(dados) });
     } catch (err) {
@@ -228,33 +234,70 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   /** O que falta para faturar o pedido — lê tudo e avalia com prontidao.js. */
   router.get('/pedidos/:id/prontidao', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
       const api = createApiClient(req);
-      const [pedidos, itens, parcelas, notas, cfg] = await Promise.all([
-        api.get('/api/pedidos', { query: { id } }).then(lista),
-        api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista).catch(() => []),
-        api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
-        // Sem a tabela (SQL não rodou) a avaliação segue: as outras pendências já dizem o que falta.
-        api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),
-        configuracao.carregar(api)
-      ]);
-      const pedido = pedidos.find(p => Number(p?.id) === id) || null;
-      if (!pedido) throw erro('Pedido não encontrado.', 404);
-
-      const cliente = pedido.cliente_id
-        ? await api.get('/api/clientes', { query: { id: pedido.cliente_id } }).then(r => lista(r)[0] || null).catch(() => null)
-        : null;
-      const idsProdutos = [...new Set(itens.map(i => i?.produto_id).filter(v => v !== null && v !== undefined))];
-      const produtos = await Promise.all(idsProdutos.map(pid =>
-        api.get('/api/produtos', { query: { id: pid } }).then(r => lista(r)[0] || null).catch(() => null)));
-
-      res.json(prontidao.avaliar({
-        pedido, itens, parcelas, cliente, produtos, configuracao: cfg, notas,
-        certificado: resumoDoCertificado(cfg)
-      }));
+      const dados = await emissao.lerPedidoFiscal(api, req.params.id);
+      res.json(prontidao.avaliar({ ...dados, certificado: resumoDoCertificado(dados.configuracao) }));
     } catch (err) {
       responder(res, err, 'GET /api/fiscal/pedidos/:id/prontidao');
+    }
+  });
+
+  /**
+   * Emite a NF-e do pedido (monta, assina, envia e grava). Produção só quando
+   * ela é o ambiente efetivo; pedir "homologacao" é sempre permitido (teste).
+   * Rejeição da SEFAZ volta como 422 com o cStat e o motivo.
+   */
+  router.post('/pedidos/:id/emitir', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      const dados = carregarCertificado();
+      const resultado = await emissao.emitir({
+        api,
+        pedidoId: req.params.id,
+        entrada: req.body || {},
+        certificado: dados,
+        resumoCertificado: resumoDoCertificado(cfg),
+        transporte: transporteDoCertificado(dados),
+        env,
+        usuarioId: usuarioDaRequisicao(req),
+        opcoesMunicipios: municipiosRede ? { buscarNaRede: municipiosRede } : undefined,
+        // verProc tem 20 caracteres no leiaute.
+        verProc: `Santissimo ${VERSAO_APP}`
+      });
+      res.json(resultado);
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/emitir');
+    }
+  });
+
+  /** Notas de um pedido (ou todas), sem os XMLs. */
+  router.get('/notas', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await emissao.listarNotas(createApiClient(req), { pedido_id: req.query?.pedido_id }));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas');
+    }
+  });
+
+  /** Uma nota completa, com os XMLs (para DANFE, download e conferência). */
+  router.get('/notas/:id', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await emissao.lerNota(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id');
+    }
+  });
+
+  /** Pergunta à SEFAZ a situação da nota (recibo ou chave) e atualiza o banco. */
+  router.post('/notas/:id/sincronizar', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const dados = carregarCertificado();
+      res.json(await emissao.sincronizar({
+        api: createApiClient(req), notaId: req.params.id, transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/notas/:id/sincronizar');
     }
   });
 

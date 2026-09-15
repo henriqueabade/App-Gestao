@@ -107,6 +107,35 @@ test('preencher e coletar: PF com CPF só dígitos, indicador de IE, e-mail, con
   assert.strictEqual(dom.empresaCnpjBloco.classList.contains('hidden'), false);
 });
 
+test('validar: PF exige CPF de 11 dígitos, PJ exige CNPJ, contribuinte (indicador 1) exige IE', () => {
+  const { dom, document, fiscal } = montar();
+  dom.empresaCnpj = elemento('empresaCnpj');
+  dom.empresaInscricaoEstadual = elemento('empresaInscricaoEstadual');
+  const plano = v => (v === null ? null : JSON.parse(JSON.stringify(v)));
+
+  dom.empresaTipoPessoa.value = 'PJ';
+  dom.empresaIndicadorIe.value = '9';
+  assert.deepStrictEqual(plano(fiscal.validar(document)), { field: 'empresaCnpj', name: 'CNPJ' });
+  dom.empresaCnpj.value = '11.222.333/0001-81';
+  assert.strictEqual(fiscal.validar(document), null, 'não contribuinte não precisa de IE');
+
+  dom.empresaIndicadorIe.value = '1';
+  assert.deepStrictEqual(plano(fiscal.validar(document)), { field: 'empresaInscricaoEstadual', name: 'Inscrição Estadual (cliente contribuinte do ICMS)' });
+  dom.empresaInscricaoEstadual.value = '123456789';
+  assert.strictEqual(fiscal.validar(document), null);
+  dom.empresaIndicadorIe.value = '2';
+  dom.empresaInscricaoEstadual.value = '';
+  assert.strictEqual(fiscal.validar(document), null, 'isento não precisa de IE');
+
+  dom.empresaTipoPessoa.value = 'PF';
+  dom.empresaCnpj.value = '';
+  assert.deepStrictEqual(plano(fiscal.validar(document)), { field: 'empresaCpf', name: 'CPF (11 dígitos)' });
+  dom.empresaCpf.value = '123.456.789-0';
+  assert.strictEqual(fiscal.validar(document).field, 'empresaCpf', 'CPF incompleto não passa');
+  dom.empresaCpf.value = '123.456.789-09';
+  assert.strictEqual(fiscal.validar(document), null, 'PF não precisa de CNPJ');
+});
+
 test('buscarIbge: consulta a rota com cidade e estado, preenche o exato ou o único parecido e avisa o resto', async () => {
   const rotas = {
     '/api/fiscal/municipios?uf=Minas%20Gerais&nome=Uberl%C3%A2ndia': { corpo: { uf: 'MG', exato: { codigo: '3170206', nome: 'Uberlândia' }, candidatos: [] } },
@@ -196,5 +225,6 @@ test('o menu carrega o utilitário e os modais de cliente o usam; CNPJ só é ob
   const editar = ler('js', 'modals', 'cliente-editar.js');
   assert.ok(editar.includes('window.ClienteFiscal?.preencher(document, cli)') && editar.includes('window.ClienteFiscal?.ligar(document)') && editar.includes('window.ClienteFiscal?.coletar(document)'));
   assert.ok(editar.includes('codigo_municipio: getVal(prefix+\'CodigoMunicipio\')'));
+  assert.ok(editar.includes('window.ClienteFiscal?.validar(document)') && editar.includes('if(!dados) return;'), 'a edição barra cliente fiscalmente incoerente antes do PUT');
   assert.ok(ler('js', 'modals', 'cliente-detalhes.js').includes('window.ClienteFiscal?.preencher(document, cli)'));
 });

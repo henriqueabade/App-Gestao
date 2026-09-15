@@ -540,6 +540,24 @@
 
   function coletarDados(){
     const getVal = id => document.getElementById(id)?.value?.trim() || '';
+
+    // A edição nunca exigiu campo nenhum; a NF-e exige coerência fiscal (PF com
+    // CPF, PJ com CNPJ, contribuinte com IE), senão a SEFAZ rejeita a nota.
+    const falta = window.ClienteFiscal?.validar(document);
+    if(falta){
+      const tabEl = document.getElementById('tab-dados-empresa');
+      if(tabEl) activateTab(tabEl);
+      const el = document.getElementById(falta.field);
+      if(el){
+        el.classList.add('border-red-500');
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        el.focus();
+        setTimeout(()=>el.classList.remove('border-red-500'),2000);
+      }
+      showToast('Preencha '+ falta.name, 'error');
+      return null;
+    }
+
     const endereco = prefix => ({
       rua: getVal(prefix+'Rua'),
       numero: getVal(prefix+'Numero'),
@@ -594,6 +612,7 @@
   if(salvarBtn && cliente){
     salvarBtn.addEventListener('click', async () => {
       const dados = coletarDados();
+      if(!dados) return;
       try{
         const res = await fetchApi(`/api/clientes/${cliente.id}`, {
           method: 'PUT',
