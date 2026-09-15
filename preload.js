@@ -254,6 +254,8 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   getRuntimeConfig: () => getRuntimeConfigCached(),
   // 'DEV' ou 'PROD' — só para o selo do cabeçalho.
   getModoBanco: () => ipcRenderer.invoke('get-modo-banco'),
+  // Abre o seletor de arquivo do certificado fiscal; devolve só o caminho.
+  selecionarCertificadoFiscal: () => ipcRenderer.invoke('fiscal:selecionar-certificado'),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
   obterPerfil: () => ipcRenderer.invoke('perfil:obter'),
   enviarImagemPerfil: (file) => ipcRenderer.invoke('perfil:enviar-imagem', file),

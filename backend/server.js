@@ -77,6 +77,9 @@ app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/prospeccoes', prospeccoesRouter);
 app.use('/api/ia', iaRouter);
+// Fiscal (NF-e): configuração do emitente, certificado e SEFAZ. Antes do
+// proxy genérico, que não confere permissão.
+app.use('/api/fiscal', require('./fiscalController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.

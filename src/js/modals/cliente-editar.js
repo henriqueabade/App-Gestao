@@ -158,6 +158,9 @@
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    // Dados fiscais (tipo de pessoa, CPF, indicador de IE, e-mail da NF-e).
+    window.ClienteFiscal?.preencher(document, cli);
+    window.ClienteFiscal?.ligar(document);
     const donoSel = document.getElementById('empresaDono');
     if(donoSel){
       try{
@@ -229,6 +232,8 @@
         const el = document.getElementById(`${prefix}${key.charAt(0).toUpperCase()+key.slice(1)}`);
         if(el) el.value = data[key] || '';
       }
+      const codigo = document.getElementById(`${prefix}CodigoMunicipio`);
+      if(codigo) codigo.value = data.codigo_municipio || '';
     }
   }
 
@@ -543,7 +548,9 @@
       cidade: getVal(prefix+'Cidade'),
       pais: getVal(prefix+'Pais'),
       estado: getVal(prefix+'Estado'),
-      cep: getVal(prefix+'Cep')
+      cep: getVal(prefix+'Cep'),
+      // Código IBGE (NF-e); só registro e entrega têm o campo.
+      codigo_municipio: getVal(prefix+'CodigoMunicipio').replace(/\D/g, '')
     });
     const reg = endereco('reg');
     const cob = document.getElementById('cobrancaIgual')?.checked ? reg : endereco('cob');
@@ -551,6 +558,7 @@
     const contatosNovos = contatos.filter(c => c.status === 'new').map(({status, id, ...rest}) => rest);
     const contatosAtualizados = contatos.filter(c => c.status === 'updated').map(({status, ...rest}) => rest);
     return {
+      ...(window.ClienteFiscal?.coletar(document) || {}),
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
       cnpj: getVal('empresaCnpj'),

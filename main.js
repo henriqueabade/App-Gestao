@@ -160,6 +160,20 @@ ipcMain.handle('get-runtime-config', () => {
 // banco atravessa para o renderer. É o modo em que o app ESTÁ rodando —
 // decidido na inicialização —, não o que o .env diz agora.
 ipcMain.handle('get-modo-banco', () => (useLocalDatabase ? 'DEV' : 'PROD'));
+
+// Escolha do .pfx do certificado fiscal. Só o CAMINHO volta ao renderer: quem
+// lê o arquivo, valida a senha e o guarda cifrado é o backend
+// (backend/fiscalController.js). A chave privada nunca passa pela tela.
+ipcMain.handle('fiscal:selecionar-certificado', async () => {
+  const janela = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+  const escolha = await dialog.showOpenDialog(janela, {
+    title: 'Escolher o certificado digital A1 (.pfx)',
+    properties: ['openFile'],
+    filters: [{ name: 'Certificado A1', extensions: ['pfx', 'p12'] }]
+  });
+  if (escolha.canceled || !escolha.filePaths?.length) return null;
+  return escolha.filePaths[0];
+});
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();

@@ -175,3 +175,5 @@ sql/prospeccoes_seed.sql
 sql/prospeccoes.sql
 sql/tabelafixa.sql
 .claude/launch.json
+.env.example
+.env.example

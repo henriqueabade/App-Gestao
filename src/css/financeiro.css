@@ -660,6 +660,11 @@ body {
 /* Os modais ficam fora do .financeiro-module (o Modal os põe no <body>), e
    só abrem a partir deste módulo — por isso o estilo deles vive aqui. */
 
+/* As classes fin-* que definem display (aviso, opção, lista, indicadores)
+   vencem o `.hidden` do Tailwind por virem depois na cascata: os avisos
+   "escondidos" apareciam como faixas vermelhas vazias no topo do modal. */
+[class*="fin-"].hidden { display: none !important; }
+
 .fin-obrigatorio { color: var(--color-red); }
 
 .fin-somente-leitura { opacity: 0.7; cursor: default; }
@@ -748,6 +753,30 @@ body {
 .fin-segmento label:last-child span { border-right: 0; }
 .fin-segmento input:checked + span { background: var(--color-primary); color: var(--menu-contrast-text, #fff); }
 .fin-segmento input:focus-visible + span { outline: 2px solid var(--color-primary-light); outline-offset: -2px; }
+
+/* Configuração fiscal: seções com título e fio. */
+.fin-cfg-secao {
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fin-cfg-secao:first-child { padding-top: 0; border-top: 0; }
+
+.fin-cfg-secao__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--menu-text-strong, #fff);
+    margin: 0 0 0.5rem;
+}
+
+.fin-cfg-secao__titulo i { color: var(--color-primary-light); }
+
+.fin-cfg-secao input:disabled,
+.fin-cfg-secao select:disabled,
+.fin-cfg-secao textarea:disabled { opacity: 0.7; cursor: default; }
 
 /* Tabelas dos modais: o cabeçalho claro e fixo vem de tabelas-modais.css. */
 .fin-tabela { overflow: auto; max-height: 55vh; }

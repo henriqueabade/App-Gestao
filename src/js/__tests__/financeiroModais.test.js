@@ -31,7 +31,8 @@ const MODAIS = {
     'confirmar-pagamento': 'finConfirmarPagamento',
     'visualizar-relatorio': 'finVisualizarRelatorio',
     'comissoes-atrasadas': 'finComissoesAtrasadas',
-    'producao-competencia': 'finProducaoCompetencia'
+    'producao-competencia': 'finProducaoCompetencia',
+    'configuracao-fiscal': 'finConfiguracaoFiscal'
 };
 /* Os seis de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
 const DE_ACAO = ['registrar-nf', 'registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
@@ -199,6 +200,28 @@ test('todo relatório da central tem folha: colunas, linhas e totais fecham com 
     assert.strictEqual(plano(f.montarRelatorio('producao-competencia')).totais.total, 9870);
     assert.strictEqual(plano(f.montarRelatorio('producao-por-pedido')).totais.pecas, 327);
     assert.strictEqual(f.montarRelatorio('inexistente'), null);
+});
+
+test('configuração fiscal é o modal REAL: lê e grava em /api/fiscal, só o Sup Admin edita, a senha do certificado é limpa após guardar', () => {
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'configuracao-fiscal.html'), 'utf8');
+    for (const chave of ['ambiente', 'serie_homologacao', 'proximo_numero_homologacao', 'serie_producao', 'proximo_numero_producao',
+        'cnpj', 'razao_social', 'inscricao_estadual', 'crt', 'logradouro', 'numero', 'bairro', 'codigo_municipio', 'municipio', 'uf', 'cep',
+        'natureza_operacao', 'cfop_dentro_uf', 'cfop_fora_uf', 'csosn', 'pcred_sn', 'pis_cst', 'cofins_cst', 'unidade_padrao', 'modalidade_frete_padrao']) {
+        assert.ok(html.includes(`data-fin-cfg="${chave}"`), `campo ${chave} sem data-fin-cfg`);
+    }
+    assert.match(html, /id="finCfgCertSenha" type="password"/);
+    assert.match(html, /id="finCfgConfirmacao"/, 'palavra de confirmação para ligar a produção');
+    assert.ok(!/data-fin-principal/.test(html), 'nada aqui é "em implementação"');
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/configuracao'\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/configuracao', \{ method: 'PUT'/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/certificado', \{ method: 'POST'/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/sefaz\/status', \{ method: 'POST'/);
+    assert.match(SCRIPT, /el\('finCfgCertSenha'\)\.value = '';/);
+    assert.match(SCRIPT, /campo\.disabled = !podeEditar;/);
+    assert.match(SCRIPT, /window\.electronAPI\?\.selecionarCertificadoFiscal/);
+    assert.match(MODULO, /'configuracao-fiscal': \{ rotulo: 'Configuração fiscal', abrir: m => finAbrirModal\('configuracao-fiscal', m\) \}/);
+    const tela = fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8');
+    assert.match(tela, /data-perm="financeiro\.config\.view" data-fin-acao="configuracao-fiscal"/);
 });
 
 test('o script dos modais não monta dado por innerHTML e solta os ouvintes globais ao fechar', () => {

@@ -33,8 +33,19 @@
                 <input id="empresaNomeFantasia" data-perm-col="col_cli_nome_fantasia" type="text" placeholder="Silva & Cia" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Tipo de pessoa</label>
+                <select id="empresaTipoPessoa" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="PJ">Pessoa jurídica (CNPJ)</option>
+                  <option value="PF">Pessoa física (CPF)</option>
+                </select>
+              </div>
+              <div id="empresaCnpjBloco">
                 <label class="block text-sm font-medium text-gray-300 mb-2">CNPJ</label>
                 <input id="empresaCnpj" data-perm-col="col_cli_cnpj" type="text" placeholder="00.000.000/0001-00" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div id="empresaCpfBloco" class="hidden">
+                <label class="block text-sm font-medium text-gray-300 mb-2">CPF</label>
+                <input id="empresaCpf" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="14" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Dono</label>
@@ -45,6 +56,24 @@
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Inscrição Estadual</label>
                 <input id="empresaInscricaoEstadual" data-perm-col="col_cli_insc_estadual" type="text" placeholder="000.000.000.000" maxlength="15" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Indicador de IE (NF-e)</label>
+                <select id="empresaIndicadorIe" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="1">1 — Contribuinte do ICMS (tem IE)</option>
+                  <option value="2">2 — Contribuinte isento de IE</option>
+                  <option value="9">9 — Não contribuinte</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">E-mail para a NF-e</label>
+                <input id="empresaEmailNfe" type="email" placeholder="fiscal@cliente.com.br" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="flex items-end pb-3">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input id="empresaConsumidorFinal" type="checkbox" class="w-4 h-4" style="accent-color: var(--color-primary)" />
+                  <span class="text-sm text-gray-300">Consumidor final (não revende)</span>
+                </label>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
@@ -134,6 +163,13 @@
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
               <input id="regCep" data-perm-col="col_end_cep" type="text" placeholder="00000-000" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Código IBGE (NF-e)</label>
+              <div class="flex gap-2">
+                <input id="regCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="regBuscarIbge" type="button" class="btn-neutral px-4 py-3 rounded-lg text-white font-medium whitespace-nowrap" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
+              </div>
             </div>
           </div>
         </div>
@@ -230,6 +266,13 @@
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
               <input id="entCep" data-perm-col="col_end_cep" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Código IBGE (NF-e)</label>
+              <div class="flex gap-2">
+                <input id="entCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="entBuscarIbge" type="button" class="btn-neutral px-4 py-3 rounded-lg text-white font-medium whitespace-nowrap" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
+              </div>
             </div>
           </div>
         </div>

@@ -32,6 +32,12 @@ function mapClienteCompleto(row = {}) {
     razao_social: row.razao_social,
     cnpj: row.cnpj,
     inscricao_estadual: row.inscricao_estadual,
+    // Dados fiscais do destinatário da NF-e (sql/notas_fiscais_base.sql).
+    tipo_pessoa: row.tipo_pessoa || 'PJ',
+    cpf: row.cpf,
+    indicador_ie: row.indicador_ie ?? null,
+    email_nfe: row.email_nfe,
+    consumidor_final: Boolean(row.consumidor_final),
     site: row.site,
     comprador_nome: row.comprador_nome,
     telefone_fixo: row.telefone_fixo,
@@ -46,7 +52,8 @@ function mapClienteCompleto(row = {}) {
       cidade: row.reg_cidade,
       pais: row.reg_pais,
       estado: row.reg_uf,
-      cep: row.reg_cep
+      cep: row.reg_cep,
+      codigo_municipio: row.reg_codigo_municipio
     },
     endereco_cobranca: {
       rua: row.cob_logradouro,
@@ -66,7 +73,8 @@ function mapClienteCompleto(row = {}) {
       cidade: row.ent_cidade,
       pais: row.ent_pais,
       estado: row.ent_uf,
-      cep: row.ent_cep
+      cep: row.ent_cep,
+      codigo_municipio: row.ent_codigo_municipio
     },
     status_cliente: row.status_cliente,
     dono_cliente: row.dono_cliente,
@@ -75,8 +83,29 @@ function mapClienteCompleto(row = {}) {
   };
 }
 
+/** Campos fiscais do cliente, limpos. Ausente fica ausente (não apaga). */
+function camposFiscaisDoCliente(cli = {}) {
+  const saida = {};
+  if (cli.tipo_pessoa !== undefined) saida.tipo_pessoa = String(cli.tipo_pessoa).toUpperCase() === 'PF' ? 'PF' : 'PJ';
+  if (cli.cpf !== undefined) saida.cpf = String(cli.cpf ?? '').replace(/\D/g, '') || null;
+  if (cli.indicador_ie !== undefined && cli.indicador_ie !== null && cli.indicador_ie !== '') {
+    const n = Number(cli.indicador_ie);
+    saida.indicador_ie = [1, 2, 9].includes(n) ? n : 9;
+  }
+  if (cli.email_nfe !== undefined) saida.email_nfe = String(cli.email_nfe ?? '').trim() || null;
+  if (cli.consumidor_final !== undefined) saida.consumidor_final = Boolean(cli.consumidor_final);
+  if (cli.endereco_registro && 'codigo_municipio' in cli.endereco_registro) {
+    saida.reg_codigo_municipio = String(cli.endereco_registro.codigo_municipio ?? '').replace(/\D/g, '') || null;
+  }
+  if (cli.endereco_entrega && 'codigo_municipio' in cli.endereco_entrega) {
+    saida.ent_codigo_municipio = String(cli.endereco_entrega.codigo_municipio ?? '').replace(/\D/g, '') || null;
+  }
+  return saida;
+}
+
 function buildPayload(cli = {}) {
   return {
+    ...camposFiscaisDoCliente(cli),
     razao_social: cli.razao_social,
     nome_fantasia: cli.nome_fantasia,
     cnpj: cli.cnpj,
@@ -427,3 +456,5 @@ module.exports = router;
 // Reaproveitado pelo módulo de IA: o mapeamento de endereço para as colunas
 // reg_*/cob_*/ent_* mora aqui e não pode existir em dois lugares.
 module.exports.buildPayload = buildPayload;
+module.exports.mapClienteCompleto = mapClienteCompleto;
+module.exports.camposFiscaisDoCliente = camposFiscaisDoCliente;

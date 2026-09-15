@@ -57,6 +57,7 @@ const FIN_ACOES = {
     'producao-competencia': { rotulo: 'Produção da competência', abrir: m => finAbrirModal('producao-competencia', m) },
     'confirmar-pagamento-comissao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'comissao' }) },
     'confirmar-pagamento-producao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'producao' }) },
+    'configuracao-fiscal': { rotulo: 'Configuração fiscal', abrir: m => finAbrirModal('configuracao-fiscal', m) },
     'pendencias-todas': { rotulo: 'Todas as pendências' },
     'registrar-nf': { rotulo: 'Registrar NF', abrir: m => finAbrirModal('registrar-nf', m) },
     'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
@@ -82,7 +83,8 @@ const FIN_MODAIS = {
     'confirmar-pagamento': { html: 'modals/financeiro/confirmar-pagamento.html', overlay: 'finConfirmarPagamento' },
     'visualizar-relatorio': { html: 'modals/financeiro/visualizar-relatorio.html', overlay: 'finVisualizarRelatorio' },
     'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
-    'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' }
+    'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' },
+    'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' }
 };
 const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
 

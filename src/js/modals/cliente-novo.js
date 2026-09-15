@@ -268,17 +268,24 @@
     }
   });
 
+  // Tipo de pessoa (CNPJ/CPF) e busca do código IBGE — ver utils/cliente-fiscal.js.
+  window.ClienteFiscal?.ligar(document);
+
   function coletarDados(){
     const getVal = id => (document.getElementById(id)?.value || '').trim();
     const missing = [];
 
+    // Dados fiscais decidem o que é obrigatório: pessoa física tem CPF, não
+    // CNPJ; a inscrição estadual só é exigida de quem é contribuinte (NF-e).
+    const fiscal = window.ClienteFiscal?.coletar(document) || { tipo_pessoa: 'PJ', indicador_ie: '9' };
+    const pessoaFisica = fiscal.tipo_pessoa === 'PF';
     const requiredEmpresa = {
       empresaRazaoSocial: 'Razão Social',
       empresaNomeFantasia: 'Nome Fantasia',
-      empresaCnpj: 'CNPJ',
+      ...(pessoaFisica ? { empresaCpf: 'CPF' } : { empresaCnpj: 'CNPJ' }),
       empresaDono: 'Dono',
       empresaStatus: 'Status',
-      empresaInscricaoEstadual: 'Inscrição Estadual'
+      ...(String(fiscal.indicador_ie) === '1' ? { empresaInscricaoEstadual: 'Inscrição Estadual' } : {})
     };
     for(const id in requiredEmpresa){
       if(!getVal(id)) missing.push({tab:'tab-dados-empresa', field:id, name: requiredEmpresa[id]});
@@ -292,7 +299,9 @@
       cidade: getVal(prefix+'Cidade'),
       pais: getVal(prefix+'Pais'),
       estado: getVal(prefix+'Estado'),
-      cep: getVal(prefix+'Cep')
+      cep: getVal(prefix+'Cep'),
+      // Código IBGE (NF-e): opcional no cadastro; a emissão busca pelo nome.
+      codigo_municipio: getVal(prefix+'CodigoMunicipio').replace(/\D/g, '')
     });
 
     const checkEndereco = (prefix, label, useRegIfEqual) => {
@@ -301,6 +310,7 @@
       }
       const addr = endereco(prefix);
       for(const k in addr){
+        if(k === 'codigo_municipio') continue;
         if(!addr[k]) missing.push({tab:'tab-enderecos', field: prefix + k.charAt(0).toUpperCase()+k.slice(1), name: label+' '+k});
       }
       return addr;
@@ -328,6 +338,7 @@
     }
 
     return {
+      ...fiscal,
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
       cnpj: getVal('empresaCnpj'),

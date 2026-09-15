@@ -102,6 +102,22 @@
     const codigoInput = document.getElementById('codigoInput');
     const ncmInput = document.getElementById('ncmInput');
     const colecaoSelect = document.getElementById('colecaoSelect');
+    // Dados fiscais da peça (NF-e). Não passam pelo "Editar Dados de Registro":
+    // são configuração, não identidade. Vazio = padrão da configuração fiscal.
+    const CAMPOS_FISCAIS = {
+      origem_mercadoria: 'origemMercadoriaInput', unidade_comercial: 'unidadeComercialInput', cest: 'cestInput',
+      gtin: 'gtinInput', cfop_dentro_uf: 'cfopDentroInput', cfop_fora_uf: 'cfopForaInput', csosn: 'csosnInput'
+    };
+    const camposFiscais = () => Object.fromEntries(Object.entries(CAMPOS_FISCAIS)
+      .map(([chave, id]) => [chave, (document.getElementById(id)?.value ?? '').trim()]));
+    const preencherCamposFiscais = dados => {
+      for (const [chave, id] of Object.entries(CAMPOS_FISCAIS)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const valor = dados?.[chave];
+        el.value = valor === null || valor === undefined ? (chave === 'origem_mercadoria' ? '0' : '') : String(valor);
+      }
+    };
     const addColecaoBtn = document.getElementById('addColecaoEditar');
     const delColecaoBtn = document.getElementById('delColecaoEditar');
     const colecaoLoadingIndicator = document.getElementById('colecaoLoadingIndicatorEditar');
@@ -1171,7 +1187,8 @@
             ncm: ncmInput?.value?.slice(0, 8) || '',
             preco_venda: totals.valorVenda || 0,
             pct_markup: parseFloat(markupInput?.value) || 0,
-            status: 'Em linha'
+            status: 'Em linha',
+            ...camposFiscais()
           });
 
           const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();
@@ -1273,6 +1290,7 @@
           status: produtoSelecionado.status,
           data: new Date().toISOString(),
           categoria: colecaoSelect.value.trim(),
+          ...camposFiscais(),
           // Decisão explícita do usuário. Sem ela marcada, mexer nos insumos
           // muda o custo apurado da peça e mais nada — o preço que o cliente
           // já viu nos orçamentos em aberto fica de pé.
@@ -1407,6 +1425,7 @@
           if(dados.nome && nomeInput) nomeInput.value = dados.nome;
           if(dados.codigo && codigoInput) codigoInput.value = dados.codigo;
           if(dados.ncm != null && ncmInput) ncmInput.value = String(dados.ncm);
+          preencherCamposFiscais(dados);
           if(dados.preco_venda != null && precoVendaEl){
             const pv = dados.preco_venda;
             const frac = Number.isInteger(pv) ? 0 : 2;

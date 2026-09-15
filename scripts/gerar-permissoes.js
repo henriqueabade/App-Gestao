@@ -21,7 +21,8 @@ const MODULE_LABELS = {
   rel: ['Relatórios', 'relatorios'],
   tarefas: ['Tarefas', 'tarefas'],
   cfg: ['Configurações', 'configuracoes'],
-  usuarios: ['Usuários', 'usuarios']
+  usuarios: ['Usuários', 'usuarios'],
+  financeiro: ['Financeiro', 'financeiro']
 };
 
 // Módulos existentes no menu que ainda NÃO têm ações/colunas configuradas.
@@ -32,8 +33,7 @@ const PENDING_MODULES = [
   ['lam_clientes', 'Laminação · Clientes', 'laminacao-clientes'],
   ['lam_servicos', 'Laminação · Serviços', 'laminacao-servicos'],
   ['lam_precificacao', 'Laminação · Precificação', 'laminacao-precificacao'],
-  ['lam_relatorios', 'Laminação · Relatórios', 'laminacao-relatorios'],
-  ['financeiro', 'Financeiro', 'financeiro']
+  ['lam_relatorios', 'Laminação · Relatórios', 'laminacao-relatorios']
 ];
 
 // ---- parse do HTML -------------------------------------------------------

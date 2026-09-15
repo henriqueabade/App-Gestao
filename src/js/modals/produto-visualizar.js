@@ -101,6 +101,15 @@
       fields.nome.value = data.nome || '';
       fields.codigo.value = data.codigo || '';
       fields.ncm.value = data.ncm == null ? '' : data.ncm;
+      // Dados fiscais da peça (NF-e): vazio quer dizer "padrão da configuração".
+      const fiscal = {
+        origemMercadoriaInput: data.origem_mercadoria, unidadeComercialInput: data.unidade_comercial, cestInput: data.cest,
+        gtinInput: data.gtin, cfopDentroInput: data.cfop_dentro_uf, cfopForaInput: data.cfop_fora_uf, csosnInput: data.csosn
+      };
+      for (const [id, valor] of Object.entries(fiscal)) {
+        const el = byId(id);
+        if (el) el.value = valor === null || valor === undefined || valor === '' ? (id === 'origemMercadoriaInput' ? '0 — Nacional' : 'padrão') : String(valor);
+      }
       fields.categoria.value = data.categoria || '';
       fields.status.textContent = data.status || '—';
       const percentages = { fabricacao: 'pct_fabricacao', acabamento: 'pct_acabamento', montagem: 'pct_montagem', embalagem: 'pct_embalagem', markup: 'pct_markup', comissao: 'pct_comissao', imposto: 'pct_imposto' };

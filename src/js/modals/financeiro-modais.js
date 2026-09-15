@@ -1243,7 +1243,209 @@
     desenhar();
   }
 
+  // ------------------------------------------------ configuração fiscal
+  //
+  // O único modal desta etapa que fala com o backend de verdade:
+  // GET/PUT /api/fiscal/configuracao, o certificado e o teste da SEFAZ.
+
+  async function fetchApi(caminho, opcoes) {
+    const base = await window.apiConfig.getApiBaseUrl();
+    const resposta = await fetch(`${base}${caminho}`, {
+      ...opcoes,
+      headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) }
+    });
+    let corpo = null;
+    try { corpo = await resposta.json(); } catch (_) { corpo = null; }
+    if (!resposta.ok) {
+      const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);
+      e.status = resposta.status;
+      throw e;
+    }
+    return corpo;
+  }
+
+  function montarConfiguracaoFiscal() {
+    const campos = overlay.querySelectorAll('[data-fin-cfg]');
+    let podeEditar = false;
+    let ambienteNoBanco = 'homologacao';
+
+    const texto = (id, valor) => { const e = el(id); if (e) e.textContent = valor ?? '—'; };
+    const marcarTag = (id, classe, rotulo) => {
+      const e = el(id);
+      if (!e) return;
+      e.className = `${classe} px-3 py-1 rounded-full text-xs font-medium ${id === 'finCfgAmbienteTag' ? 'justify-self-end' : ''}`;
+      e.textContent = rotulo;
+    };
+    const mensagem = (txt, tipo = 'erro') => mostrarMensagem('finCfgMensagem', txt, tipo);
+
+    function pintarCertificado(c) {
+      const editar = el('finCfgCertEditar');
+      if (!c || !c.configurado) {
+        marcarTag('finCfgCertTag', 'badge-danger', 'Não configurado');
+        ['finCfgCertTitular', 'finCfgCertCnpj', 'finCfgCertEmissor', 'finCfgCertValidade', 'finCfgCertConfere'].forEach(id => texto(id, '—'));
+        const m = el('finCfgCertMensagem');
+        m.textContent = c?.erro || 'Escolha o arquivo .pfx e informe a senha para guardar o certificado neste computador.';
+        m.style.color = c?.erro ? 'var(--color-red)' : '';
+        m.classList.remove('hidden');
+        return;
+      }
+      marcarTag('finCfgCertTag', c.vencido ? 'badge-danger' : (c.venceEmBreve ? 'badge-warning' : 'badge-success'),
+        c.vencido ? 'Vencido' : (c.venceEmBreve ? `Vence em ${c.diasRestantes} dias` : 'Válido'));
+      texto('finCfgCertTitular', c.titular);
+      texto('finCfgCertCnpj', c.cnpj ? c.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : '—');
+      texto('finCfgCertEmissor', c.emissor);
+      texto('finCfgCertValidade', `${formatarData(String(c.validoAte).slice(0, 10))} (${c.diasRestantes} dias)`);
+      texto('finCfgCertConfere', c.confereComEmitente === null ? '—' : (c.confereComEmitente ? 'Sim' : 'NÃO — o CNPJ do certificado é outro'));
+      const m = el('finCfgCertMensagem');
+      const origem = c.origem === 'env' ? 'Lido das variáveis de ambiente (DEV).' : (c.guardadoEm ? `Guardado neste computador em ${formatarData(String(c.guardadoEm).slice(0, 10))}.` : '');
+      m.textContent = origem;
+      m.style.color = '';
+      m.classList.toggle('hidden', !origem);
+      if (c.confereComEmitente === false) { m.textContent = 'Este certificado não é do CNPJ do emitente: a SEFAZ vai rejeitar a nota.'; m.style.color = 'var(--color-red)'; m.classList.remove('hidden'); }
+      if (editar) editar.classList.toggle('hidden', !podeEditar);
+    }
+
+    function pintar(estado) {
+      podeEditar = Boolean(estado?.pode_editar);
+      ambienteNoBanco = estado?.ambiente_no_banco || 'homologacao';
+      const cfg = estado?.configuracao || {};
+      for (const campo of campos) {
+        const valor = cfg[campo.dataset.finCfg];
+        campo.value = valor === null || valor === undefined ? '' : String(valor);
+        campo.disabled = !podeEditar;
+      }
+      el('finCfgSalvar')?.classList.toggle('hidden', !podeEditar);
+      el('finCfgRodapeAviso').textContent = podeEditar
+        ? 'Alterações valem para todos os usuários.'
+        : 'Só o Sup Admin altera a configuração. Você vê o que está valendo.';
+
+      const producao = estado?.ambiente === 'producao';
+      marcarTag('finCfgAmbienteTag', producao ? 'badge-danger' : 'badge-warning', producao ? 'PRODUÇÃO' : 'Homologação');
+      el('finCfgTravaMaquina')?.classList.toggle('hidden', !estado?.travado_em_homologacao_nesta_maquina);
+
+      const pend = el('finCfgPendencias');
+      const lista = Array.isArray(estado?.pendencias) ? estado.pendencias : [];
+      pend.classList.toggle('hidden', !lista.length);
+      pend.querySelector('span').textContent = lista.join(' • ');
+
+      pintarCertificado(estado?.certificado);
+      alternarConfirmacao();
+    }
+
+    function alternarConfirmacao() {
+      const escolhido = el('finCfg_ambiente')?.value;
+      el('finCfgConfirmacaoProducao')?.classList.toggle('hidden', !(escolhido === 'producao' && ambienteNoBanco !== 'producao'));
+    }
+
+    async function carregar() {
+      try {
+        const estado = await fetchApi('/api/fiscal/configuracao');
+        pintar(estado);
+        el('finCfgConteudo').classList.remove('hidden');
+      } catch (e) {
+        const erroEl = el('finCfgErroGeral');
+        erroEl.querySelector('span').textContent = e.message;
+        erroEl.classList.remove('hidden');
+      } finally {
+        el('finCfgCarregando').classList.add('hidden');
+      }
+    }
+
+    async function salvar() {
+      mensagem('');
+      const corpo = {};
+      for (const campo of campos) corpo[campo.dataset.finCfg] = campo.value;
+      const confirmacao = el('finCfgConfirmacao')?.value || '';
+      if (confirmacao) corpo.confirmacao = confirmacao;
+      try {
+        const estado = await fetchApi('/api/fiscal/configuracao', { method: 'PUT', body: JSON.stringify(corpo) });
+        pintar(estado);
+        if (el('finCfgConfirmacao')) el('finCfgConfirmacao').value = '';
+        window.showToast?.('Configuração fiscal salva.', 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function escolherCertificado() {
+      if (typeof window.electronAPI?.selecionarCertificadoFiscal !== 'function') {
+        mensagem('A escolha do arquivo só funciona dentro do aplicativo.');
+        return;
+      }
+      const caminho = await window.electronAPI.selecionarCertificadoFiscal();
+      if (caminho) el('finCfgCertCaminho').value = caminho;
+    }
+
+    async function guardarCertificado() {
+      mensagem('');
+      const caminho = el('finCfgCertCaminho').value;
+      const senha = el('finCfgCertSenha').value;
+      if (!caminho) { mensagem('Escolha o arquivo .pfx do certificado.'); return; }
+      if (!senha) { mensagem('Informe a senha do certificado.'); return; }
+      try {
+        const r = await fetchApi('/api/fiscal/certificado', { method: 'POST', body: JSON.stringify({ caminho, senha }) });
+        el('finCfgCertSenha').value = '';
+        pintarCertificado(r);
+        window.showToast?.('Certificado guardado neste computador.', 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function removerCertificado() {
+      const ok = await (window.DialogPadrao?.confirm?.({
+        title: 'Remover certificado',
+        message: 'O certificado e a senha serão apagados deste computador. A emissão de NF-e aqui deixa de funcionar até cadastrar de novo.',
+        confirmText: 'Remover'
+      }) ?? Promise.resolve(true));
+      if (!ok) return;
+      try {
+        await fetchApi('/api/fiscal/certificado', { method: 'DELETE' });
+        pintarCertificado({ configurado: false });
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function testarSefaz() {
+      const resultado = el('finCfgSefazResultado');
+      const detalhe = el('finCfgSefazDetalhe');
+      resultado.textContent = 'Consultando a SEFAZ…';
+      resultado.style.color = '';
+      detalhe.classList.add('hidden');
+      try {
+        const r = await fetchApi('/api/fiscal/sefaz/status', { method: 'POST', body: JSON.stringify({}) });
+        resultado.textContent = r.emOperacao ? 'Conectado: serviço em operação.' : `A SEFAZ respondeu ${r.cStat}: ${r.xMotivo}`;
+        resultado.style.color = r.emOperacao ? 'var(--color-green)' : 'var(--color-primary-light)';
+        texto('finCfgSefazAmbiente', r.ambiente === 'producao' ? 'Produção' : 'Homologação');
+        texto('finCfgSefazStatus', `${r.cStat} — ${r.xMotivo}`);
+        texto('finCfgSefazVersao', r.versaoAplicacao);
+        texto('finCfgSefazTempo', `${r.tempoMs} ms`);
+        detalhe.classList.remove('hidden');
+      } catch (e) {
+        resultado.textContent = e.message;
+        resultado.style.color = 'var(--color-red)';
+      }
+    }
+
+    const ligar = (id, fn) => {
+      const botao = el(id);
+      if (!botao) return;
+      botao.dataset.acaoGerida = 'true';
+      botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+    };
+    ligar('finCfgSalvar', salvar);
+    ligar('finCfgCertEscolher', escolherCertificado);
+    ligar('finCfgCertGuardar', guardarCertificado);
+    ligar('finCfgCertRemover', removerCertificado);
+    ligar('finCfgTestarSefaz', testarSefaz);
+    el('finCfg_ambiente')?.addEventListener('change', alternarConfirmacao);
+
+    carregar();
+  }
+
   const montadores = {
+    finConfiguracaoFiscal: montarConfiguracaoFiscal,
     finRegistrarNf: montarRegistrarNf,
     finRegistrarRecebimento: montarRecebimento,
     finRegistrarAjuste: montarAjuste,

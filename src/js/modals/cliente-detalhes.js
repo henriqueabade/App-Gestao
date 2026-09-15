@@ -177,6 +177,7 @@ async function carregarContatos(idCliente) {
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    window.ClienteFiscal?.preencher(document, cli);
     const avatar = document.getElementById('empresaAvatar');
     if(avatar){
       const name = cli.nome_fantasia || cli.razao_social || '';
@@ -192,6 +193,8 @@ async function carregarContatos(idCliente) {
         const el = document.getElementById(`${prefix}${key.charAt(0).toUpperCase()+key.slice(1)}`);
         if(el) el.value = data[key] || '';
       }
+      const codigo = document.getElementById(`${prefix}CodigoMunicipio`);
+      if(codigo) codigo.value = data.codigo_municipio || '';
       const paisSel = document.getElementById(prefix + 'Pais');
       const estadoSel = document.getElementById(prefix + 'Estado');
       if(paisSel && estadoSel){
