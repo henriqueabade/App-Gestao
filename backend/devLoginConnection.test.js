@@ -112,7 +112,7 @@ test('monitor DEV ignora configurações remotas e usa HTTP/IPv4 na porta atual'
     configuredApiPort: 3000, DEFAULT_API_PORT: 3000,
     process: { env: { API_PROTOCOL: 'https', API_HOST: 'api.example.invalid', CONNECTION_MONITOR_BASE_URL: 'https://example.invalid' } }
   });
-  vm.runInContext(functionSource('resolveBackendHealthBaseUrl'), context);
+  vm.runInContext(functionSource('getLocalApiBaseUrl') + '\n' + functionSource('resolveBackendHealthBaseUrl'), context);
   assert.equal(context.resolveBackendHealthBaseUrl(), 'http://127.0.0.1:4567');
 });
 

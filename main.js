@@ -152,8 +152,7 @@ let apiServerInstance = null;
 let currentApiPort = null;
 let connectionMonitorController = null;
 ipcMain.handle('get-runtime-config', () => {
-  const port = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
-  return { apiBaseUrl: `http://localhost:${port}` };
+  return { apiBaseUrl: getLocalApiBaseUrl() };
 });
 let closingDashboardWindow = false;
 let quittingApp = false;
@@ -164,6 +163,10 @@ const projectRoot = path.resolve(__dirname);
 const DEFAULT_API_PORT = 3000;
 const MAX_PORT = 65535;
 let configuredApiPort = DEFAULT_API_PORT;
+
+function getLocalApiBaseUrl() {
+  return `http://127.0.0.1:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+}
 
 const CONNECTION_MONITOR_INTERVAL_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_INTERVAL_MS || '10000', 10),
@@ -2218,62 +2221,10 @@ function normalizeMonitorBaseUrl(value) {
 }
 
 function resolveBackendHealthBaseUrl() {
-  // O servidor DEV escuta em IPv4/HTTP. Configurações da API PROD e a
-  // resolução de localhost para ::1 não podem desviar a sondagem local.
-  if (useLocalDatabase) return `http://127.0.0.1:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
-  // `/healthz` é rota do NOSSO backend local (backend/server.js) — a API remota
-  // (api.santissimodecor.com.br) não a expõe e respondia 404. Como 404 não é
-  // "offline", o monitor caía no ramo `waiting/local-host-blocked` e ficava
-  // preso ali: nunca chegava a `online`, então o indicador do cabeçalho nunca
-  // mostrava check nem X, e a checagem profunda (usuário desativado) nunca
-  // rodava. Por isso só honramos um override EXPLÍCITO; o padrão é o backend
-  // local, que já reporta a saúde dele e do banco.
-  const candidates = [
-    process.env.CONNECTION_MONITOR_BASE_URL
-  ];
-  for (const candidate of candidates) {
-    const normalized = normalizeMonitorBaseUrl(candidate);
-    if (normalized) {
-      try {
-        const url = new URL(normalized);
-        if (!isLocalHostname(url.hostname)) {
-          return url.origin;
-        }
-      } catch (_err) {
-        // ignora candidato inválido
-      }
-    }
-  }
-
-  const fallback = new URL('http://localhost');
-  const protocol = (process.env.API_PROTOCOL || 'http').replace(/:$/, '');
-  fallback.protocol = `${protocol}:`;
-  const currentPortValue = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
-  fallback.port = String(currentPortValue);
-
-  const hostCandidate = (process.env.API_HOST || process.env.API_SERVER_HOST || '').trim();
-  if (hostCandidate) {
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(hostCandidate)) {
-      try {
-        const parsed = new URL(hostCandidate);
-        if (parsed.protocol) fallback.protocol = parsed.protocol;
-        if (parsed.hostname) fallback.hostname = parsed.hostname;
-        fallback.port = parsed.port || fallback.port;
-      } catch (err) {
-        fallback.hostname = hostCandidate;
-      }
-    } else {
-      const sanitized = hostCandidate.replace(/^\/+/, '').replace(/\/+$/, '');
-      fallback.host = sanitized;
-      if (!fallback.port) {
-        fallback.port = String(currentPortValue);
-      }
-    }
-  } else {
-    fallback.hostname = 'localhost';
-  }
-
-  return fallback.origin;
+  // /healthz pertence ao Express embarcado nos DOIS modos. O adaptador dele
+  // verifica API em PROD ou PostgreSQL em DEV. localhost pode resolver para
+  // ::1 no Electron, mas esse servidor escuta exclusivamente em 127.0.0.1.
+  return getLocalApiBaseUrl();
 }
 
 function formatMonitorError(err) {
@@ -3825,7 +3776,7 @@ function limparTentativasLogin(email) {
  */
 async function enviarRedefinicaoPorBloqueio(email) {
   try {
-    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const base = getLocalApiBaseUrl();
     const resp = await fetch(`${base}/password-reset-request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4232,7 +4183,7 @@ ipcMain.handle('install-update', async () => {
 // ---------------------------------------------------------------------------
 async function verificarPermissaoIpc(chave) {
   try {
-    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const base = getLocalApiBaseUrl();
     const resp = await fetch(`${base}/api/permissoes/efetivas`);
     const dados = await resp.json();
     if (dados?.supAdmin) return true;                 // Sup Admin: tudo liberado
@@ -4741,7 +4692,7 @@ async function verificarAcessoUsuarioAutoLogin(user) {
   const id = user?.id;
   if (!id) return null;
   try {
-    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const base = getLocalApiBaseUrl();
     const resp = await fetch(`${base}/api/usuarios/${encodeURIComponent(id)}`);
     if (!resp.ok) return null;
     const atual = await resp.json();
@@ -5154,7 +5105,7 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     return { success: false, message: 'Documento inválido para geração de PDF.' };
   }
 
-  const apiBaseUrl = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+  const apiBaseUrl = getLocalApiBaseUrl();
 
   // Verificação de permissão no processo principal: esconder/desabilitar o
   // ícone na interface não impede a chamada IPC, então o bloqueio real é aqui.
