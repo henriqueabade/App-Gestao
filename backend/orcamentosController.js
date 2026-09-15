@@ -489,13 +489,16 @@ function buildPedidoItemPayload(item = {}, pedidoId, decisao = {}) {
 // quantidades por produto) e, quando vierem, as datas do pedido. `agora` é o
 // relógio da conversão inteira — "ao converter" é o dia dele.
 async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = new Date() } = {}) {
-  const existentes = await api
-    .get('/api/pedidos', { query: { orcamento_id: id } })
-    .catch(() => []);
-  // Confirma explicitamente o vínculo por orcamento_id — caso o filtro upstream
-  // seja ignorado, evita tratar erroneamente qualquer pedido como já existente.
+  // O schema local original vincula pedido e orçamento pelo mesmo id.
+  // A API aceita orcamento_id, mas isso não implica uma coluna física no DEV.
+  const colunasPedido = typeof api.getAvailableColumns === 'function'
+    ? await api.getAvailableColumns('pedidos') : null;
+  const colunaVinculo = colunasPedido && !colunasPedido.includes('orcamento_id') ? 'id' : 'orcamento_id';
+  const consultaExistentes = api.get('/api/pedidos', { query: { [colunaVinculo]: id } });
+  const existentes = colunasPedido ? await consultaExistentes : await consultaExistentes.catch(() => []);
+  // Confere também a resposta: a API pode ignorar o filtro recebido.
   const jaExiste = Array.isArray(existentes)
-    ? existentes.find(ped => String(ped?.orcamento_id) === String(id))
+    ? existentes.find(ped => String(ped?.[colunaVinculo]) === String(id))
     : null;
   if (jaExiste) {
     return { pedido: jaExiste, jaExistia: true };
@@ -553,7 +556,9 @@ async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = n
   for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
     numero = `PED${sequencia}`;
     try {
-      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero, conversao, agora, datas }));
+      const payload = buildPedidoPayload(orcamento, { numero, conversao, agora, datas });
+      if (colunaVinculo === 'id') delete payload.orcamento_id;
+      created = await api.post('/api/pedidos', payload);
       break;
     } catch (err) {
       if (isDuplicatePedidoNumeroError(err) && tentativa < maxTentativas - 1) {

@@ -269,13 +269,21 @@ router.get('/lista', async (req, res) => {
     // por causa de uma coluna só. Agora cada etapa desiste apenas do que a
     // anterior tinha a mais.
     // Um `select` explícito de quem chamou continua mandando, como antes.
-    const tentativas = req.query?.select
+    let tentativas = req.query?.select
       ? [req.query.select]
       : [
         `${camposBase},${camposAtividade},${camposAlteracao}`,
         `${camposBase},${camposAtividade}`,
         camposBase
       ];
+
+    if (!req.query?.select && typeof api.getAvailableColumns === 'function') {
+      const colunas = new Set(await api.getAvailableColumns('usuarios'));
+      // Mantém os campos obrigatórios para que um schema inválido ainda falhe.
+      // Apenas os opcionais ausentes saem da projeção; nunca recorrer a SELECT *.
+      const obrigatorios = new Set(['id', 'nome', 'email', 'perfil', 'status']);
+      tentativas = [tentativas[0].split(',').filter(campo => obrigatorios.has(campo) || colunas.has(campo)).join(',')];
+    }
 
     let usuarios = null;
     let ultimoErro = null;

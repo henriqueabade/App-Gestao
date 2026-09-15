@@ -551,7 +551,8 @@ async function listarDetalhesProduto(produtoId) {
     const { produto, itens: itensFormatados } = await montarProdutoComInsumos(produtoIdNumero);
 
     const lotesQuery = {
-      select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos',
+      // ultimo_item é montado abaixo a partir de materia_prima, não é coluna do lote.
+      select: 'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id,tempo_estimado_minutos',
       order: 'data_hora_completa.desc',
       produto_id: produtoIdNumero
     };

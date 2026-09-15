@@ -162,6 +162,11 @@ function createLocalDataClient(queryable = database, options = {}) {
     return normalizeRow(rows[0]) || null;
   }
   return {
+    // Capacidade interna dos controllers DEV; não é uma rota nem um IPC.
+    async getAvailableColumns(table) {
+      identifier(table);
+      return [...(await getColumnTypes(table)).keys()];
+    },
     async updateUserActivity(id, fields) {
       // A API aceita aliases de versões diferentes; o SQL precisa dos nomes
       // realmente presentes. Esta compatibilidade é exclusiva da atividade.
