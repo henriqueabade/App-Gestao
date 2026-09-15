@@ -211,6 +211,9 @@ async function concluirComProtocolo({ api, nota, protocolo, xmlAssinado, usuario
       motivo_sefaz: p.xMotivo, ...(nfeProc ? { xml_autorizado: nfeProc } : {})
     });
     await registrarEvento(api, nota.id, { tipo: 'autorizada', status_anterior: anterior, status_novo: 'autorizada', codigo_sefaz: p.cStat, mensagem: `${p.xMotivo} — protocolo ${p.nProt}`, detalhe: { avisos }, usuario_id: usuarioId });
+    // Um pedido marcado "enviado sem NF-e" que ganha a nota depois perde a marca.
+    // Sem a coluna (SQL não rodou) o PUT falha e é só isso.
+    await api.put(`/api/pedidos/${nota.pedido_id}`, { nfe_dispensada: false }).catch(() => {});
     return { nota: semXml(atual), sefaz: sefazInfo, autorizada: true, avisos };
   }
 

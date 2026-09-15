@@ -132,9 +132,65 @@ test('script: carrega a prontidão, emite antes de mudar a situação, solta os 
   assert.ok(FONTE.includes("document.removeEventListener('keydown', aoEsc)") && FONTE.includes("window.removeEventListener('modalFechado', aoFecharModal)"));
   assert.ok(!/innerHTML|insertAdjacentHTML/.test(FONTE), 'linhas e listas montadas por createElement/textContent');
   assert.ok(FONTE.includes('window.BotaoAcao.bind(confirmarBtn, principal)'), 'trava de clique duplo');
-  assert.ok(FONTE.includes('window.showStatusConfirmDialog') && FONTE.includes('SEM emitir a NF-e'), 'enviar sem nota pede confirmação');
+  assert.ok(FONTE.includes('window.DialogPadrao?.confirm?.({') && FONTE.includes("confirmText: 'Enviar sem NF-e'"), 'enviar sem nota confirma na caixa da casa');
+  assert.ok(!/window\.confirm\(|showStatusConfirmDialog/.test(FONTE), 'nunca o confirm() do navegador');
+  assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/dispensar-nfe') && FONTE.includes('if (!nota) await dispensarNfe();'), 'enviado sem nota fica sinalizado');
   assert.ok(FONTE.includes('window.carregarPedidos?.()'), 'a lista é relida depois do envio');
   assert.ok(!FONTE.includes("overlay.addEventListener('click'"), 'não fecha clicando fora');
+});
+
+function recortarFuncao(fonte, nome) {
+  const inicio = fonte.indexOf(`function ${nome}(`);
+  assert.notStrictEqual(inicio, -1, `função ${nome} não encontrada`);
+  let i = fonte.indexOf('{', inicio);
+  let nivel = 0;
+  for (; i < fonte.length; i += 1) {
+    if (fonte[i] === '{') nivel += 1;
+    else if (fonte[i] === '}') { nivel -= 1; if (nivel === 0) break; }
+  }
+  return fonte.slice(inicio, i + 1);
+}
+
+test('lista de pedidos: tag roxa "S/NF" ao lado do número quando o pedido foi enviado sem nota', () => {
+  const contexto = vm.createContext({});
+  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota')].join('\n'), contexto);
+  const { tagSemNota } = contexto;
+  assert.strictEqual(tagSemNota({ numero: 'PED1' }), '');
+  assert.strictEqual(tagSemNota({ nfe_dispensada: false }), '');
+  assert.strictEqual(tagSemNota(null), '');
+  const tag = tagSemNota({ nfe_dispensada: true, nfe_dispensada_em: '2026-09-15T18:00:00.000Z' });
+  assert.match(tag, /badge-neutral/, 'a cor roxa da casa (violet)');
+  assert.match(tag, />S\/NF<\/span>/);
+  assert.match(tag, /title="Sem nota fiscal — enviado sem NF-e em 15\/09\/2026"/);
+  assert.match(tagSemNota({ nfe_dispensada: 'true' }), /title="Sem nota fiscal — enviado sem NF-e"/);
+  assert.ok(PEDIDOS.includes('${p.numero}${tagSemNota(p)}</td>'), 'a tag fica na célula do número');
+});
+
+test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), frete, volumes e pesos', () => {
+  const VISUALIZAR = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-visualizar.js'), 'utf8');
+  const HTML_VIS = fs.readFileSync(path.join(RAIZ, 'html', 'modals', 'pedidos', 'visualizar.html'), 'utf8');
+  const total = HTML_VIS.indexOf('id="totalPedidoFooter"');
+  const tags = HTML_VIS.indexOf('id="visualizarPedidoTags"');
+  const botoes = HTML_VIS.indexOf('id="cancelarVisualizarPedido"');
+  assert.ok(total < tags && tags < botoes, 'entre o total e os botões, sem mexer no que já existia');
+  assert.match(HTML_VIS, /id="visualizarPedidoTags" class="flex flex-wrap items-center justify-center gap-2 flex-1/);
+
+  const contexto = vm.createContext({});
+  vm.runInContext(recortarFuncao(VISUALIZAR, 'tagsDoEmbarque'), contexto);
+  const f = contexto.tagsDoEmbarque;
+  assert.deepStrictEqual(plano(f({}, [])), []);
+  const pedido = { modalidade_frete: 4, volumes_quantidade: 2, volumes_especie: 'Caixa', peso_bruto: 10, peso_liquido: '9.5', transportadora: 'X' };
+  const notas = [{ id: 1, serie: 1, numero: 3, status_fiscal: 'rejeitada' }, { id: 2, serie: 1, numero: 3, status_fiscal: 'autorizada', valor_total: 4335.56, ambiente: 'homologacao' }];
+  const r = plano(f(pedido, notas));
+  assert.deepStrictEqual(r.map(t => t.classe), ['badge-success', 'badge-neutral', 'badge-info', 'badge-neutral']);
+  assert.strictEqual(r[0].texto.replace(/ /g, ' '), 'NF-e 1/3 · autorizada · R$ 4.335,56 · homologação');
+  assert.strictEqual(r[1].texto, 'Frete: próprio (destinatário)');
+  assert.strictEqual(r[2].texto, 'Volumes: 2 Caixa');
+  assert.strictEqual(r[3].texto, 'Peso: 10 kg bruto · 9,5 kg líq.');
+  assert.deepStrictEqual(plano(f({ nfe_dispensada: true }, [])), [{ classe: 'badge-neutral', texto: 'Sem nota fiscal' }]);
+  assert.strictEqual(plano(f({ nfe_dispensada: true }, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }]))[0].texto, 'NF-e 1/1 · autorizada', 'com nota autorizada a marca "sem nota" não aparece');
+  assert.strictEqual(plano(f({}, [{ id: 1, serie: 1, numero: 2, status_fiscal: 'processando' }]))[0].classe, 'badge-warning');
+  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas))'));
 });
 
 test('pedidos.js: o ✓ de Produção → Enviado abre o modal da NF-e; Enviado → Entregue continua na pergunta', () => {

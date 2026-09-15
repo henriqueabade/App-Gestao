@@ -113,6 +113,11 @@ function respostaSefaz(url, corpo, sefazAutoriza) {
     const chave = /<chNFe>(\d{44})</.exec(corpo)[1];
     return envelope(`<retConsSitNFe versao="4.00"><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo><cUF>31</cUF><chNFe>${chave}</chNFe>${PROTOCOLO_100(chave)}</retConsSitNFe>`);
   }
+  if (/NFeRecepcaoEvento4$/.test(url)) {
+    const chave = /<chNFe>(\d{44})</.exec(corpo)[1];
+    return envelope(`<retEnvEvento versao="1.00"><idLote>1</idLote><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>128</cStat><xMotivo>Lote de Evento Processado</xMotivo>`
+      + `<retEvento versao="1.00"><infEvento><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>135</cStat><xMotivo>Evento registrado e vinculado a NF-e</xMotivo><chNFe>${chave}</chNFe><tpEvento>110111</tpEvento><xEvento>Cancelamento</xEvento><nSeqEvento>1</nSeqEvento><dhRegEvento>2026-09-15T16:00:00-03:00</dhRegEvento><nProt>131260000222222</nProt></infEvento></retEvento></retEnvEvento>`);
+  }
   return RESPOSTA_107(tpAmb);
 }
 
@@ -495,6 +500,74 @@ test('emitir com pendência e com rejeição da SEFAZ devolve 422 com o detalhe 
     assert.equal(r.corpo.nota.status_fiscal, 'rejeitada');
   } finally {
     await t2.fechar();
+  }
+});
+
+test('DANFE, XML e cancelamento: rotas por nota, com as permissões de ver e de cancelar', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(emitida.status, 200);
+    const notaId = emitida.corpo.nota.id;
+
+    const d = await t.chamar('GET', `/api/fiscal/notas/${notaId}/danfe`);
+    assert.equal(d.status, 200);
+    assert.ok(d.corpo.html.startsWith('<!DOCTYPE html>') && d.corpo.html.includes('DANFE') && d.corpo.html.includes('SEM VALOR FISCAL'));
+    assert.equal(d.corpo.nome, 'DANFE-NFe-1-000000001');
+    assert.equal(d.corpo.nota.status_fiscal, 'autorizada');
+
+    const x = await t.chamar('GET', `/api/fiscal/notas/${notaId}/xml`);
+    assert.equal(x.status, 200);
+    assert.ok(x.corpo.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc'));
+    assert.equal(x.corpo.nome, `${tabelas.notas_fiscais[0].chave_acesso}-procNFe`);
+    assert.equal(x.corpo.xml_cancelamento, null);
+    assert.equal((await t.chamar('GET', '/api/fiscal/notas/999/danfe')).status, 404);
+
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Pedido cancelado pelo cliente antes do embarque' })).status, 403);
+    t.estado.chaves.add('financeiro.nfe.cancel');
+    const curta = await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'curta' });
+    assert.equal(curta.status, 400);
+    assert.match(curta.corpo.error, /entre 15 e 255/);
+    assert.equal(tabelas.notas_fiscais[0].status_fiscal, 'autorizada');
+
+    const c = await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Pedido cancelado pelo cliente antes do embarque' });
+    assert.equal(c.status, 200, JSON.stringify(c.corpo));
+    assert.equal(c.corpo.cancelada, true);
+    assert.equal(c.corpo.sefaz.cStat, '135');
+    assert.equal(c.corpo.nota.status_fiscal, 'cancelada');
+    assert.equal(tabelas.notas_fiscais[0].status_fiscal, 'cancelada');
+    assert.ok(tabelas.notas_fiscais[0].xml_cancelamento.includes('<procEventoNFe'));
+    assert.match(t.chamadasSefaz.at(-1).url, /NFeRecepcaoEvento4$/);
+
+    const x2 = await t.chamar('GET', `/api/fiscal/notas/${notaId}/xml`);
+    assert.ok(x2.corpo.xml_cancelamento.includes('<procEventoNFe'));
+    assert.equal(x2.corpo.nome_cancelamento, `${tabelas.notas_fiscais[0].chave_acesso}-procEventoNFe-cancelamento`);
+    const d2 = await t.chamar('GET', `/api/fiscal/notas/${notaId}/danfe`);
+    assert.ok(d2.corpo.html.includes('NF-e CANCELADA'));
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Tentativa repetida de cancelamento' })).status, 409);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('POST /pedidos/:id/dispensar-nfe exige ped.status.ship e marca o pedido como enviado sem nota', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/55/dispensar-nfe', {})).status, 403);
+    t.estado.chaves.add('ped.status.ship');
+    const { status, corpo } = await t.chamar('POST', '/api/fiscal/pedidos/55/dispensar-nfe', {});
+    assert.equal(status, 200);
+    assert.equal(corpo.ok, true);
+    assert.equal(tabelas.pedidos[0].nfe_dispensada, true);
+    assert.equal(tabelas.pedidos[0].nfe_dispensada_por, 1);
+    assert.match(tabelas.pedidos[0].nfe_dispensada_em, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/999/dispensar-nfe', {})).status, 404);
+  } finally {
+    await t.fechar();
   }
 });
 

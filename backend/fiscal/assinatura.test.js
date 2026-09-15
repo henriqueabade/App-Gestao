@@ -68,6 +68,20 @@ test('um byte alterado depois da assinatura é detectado; assinar duas vezes ou 
   assert.throws(() => assinatura.assinarNfe('<NFe xmlns="x"><infNFe versao="4.00"></infNFe></NFe>', CERT), /sem o atributo Id/);
 });
 
+test('assinarEvento: o Signature entra no evento e o resumo é do infEvento canônico', () => {
+  const evento = '<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="ID110111312609440392570001225500100000036211400030531"><cOrgao>31</cOrgao><tpAmb>2</tpAmb></infEvento></evento>';
+  const assinado = assinatura.assinarEvento(evento, CERT);
+  assert.ok(assinado.startsWith(evento.replace('</infEvento></evento>', '</infEvento><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo>')));
+  assert.ok(assinado.endsWith('</Signature></evento>'));
+  assert.match(assinado, /<Reference URI="#ID110111312609440392570001225500100000036211400030531">/);
+  const canonico = '<infEvento xmlns="http://www.portalfiscal.inf.br/nfe" Id="ID110111312609440392570001225500100000036211400030531"><cOrgao>31</cOrgao><tpAmb>2</tpAmb></infEvento>';
+  assert.equal(/<DigestValue>([^<]*)</.exec(assinado)[1], crypto.createHash('sha1').update(canonico, 'utf8').digest('base64'));
+  const signedInfo = /<SignedInfo>[\s\S]*?<\/SignedInfo>/.exec(assinado)[0].replace('<SignedInfo>', '<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">');
+  assert.equal(crypto.verify('RSA-SHA1', Buffer.from(signedInfo, 'utf8'), CERT.certificadoPem, Buffer.from(/<SignatureValue>([^<]*)</.exec(assinado)[1], 'base64')), true);
+  assert.throws(() => assinatura.assinarEvento(assinado, CERT), /já está assinado/);
+  assert.throws(() => assinatura.assinarEvento('<evento><infEvento></infEvento></evento>', CERT), /sem o atributo Id/);
+});
+
 test('expandirAutofechadas e canonicalInfNFe aceitam XML de terceiros (com tag autofechada e xmlns já no infNFe)', () => {
   assert.equal(assinatura.expandirAutofechadas('<a><b x="1"/><c/></a>'), '<a><b x="1"></b><c></c></a>');
   const comXmlns = '<NFe><infNFe xmlns="http://www.portalfiscal.inf.br/nfe" Id="NFe1" versao="4.00"><ide/></infNFe></NFe>';

@@ -315,6 +315,78 @@ async function consultarNfe({ uf, ambiente, transporte, chave }) {
   return { ...lido, xmlResposta: xml, tempoMs };
 }
 
+// ----------------------------------------------------------------- eventos
+
+const VERSAO_EVENTO = '1.00';
+const TIPO_EVENTO = { cancelamento: '110111', cartaCorrecao: '110110' };
+
+function escaparXml(texto) {
+  return String(texto ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r/g, '&#xD;');
+}
+
+/**
+ * Evento de cancelamento (110111), SEM assinatura (a assinatura.js assina o
+ * `infEvento`). `dhEvento` já formatado ("2026-09-15T15:10:01-03:00").
+ */
+function xmlEventoCancelamento({ uf, ambiente, cnpj, chave, protocolo, justificativa, dhEvento, nSeqEvento = 1 }) {
+  const cUF = UFS[String(uf || '').toUpperCase()];
+  if (!cUF) throw erro(`UF sem código IBGE conhecido: ${uf}.`);
+  const chNFe = String(chave || '').replace(/\D/g, '');
+  if (chNFe.length !== 44) throw erro('Chave de acesso inválida.');
+  const nProt = String(protocolo || '').replace(/\D/g, '');
+  if (!nProt) throw erro('A nota não tem protocolo de autorização.');
+  const xJust = String(justificativa || '').replace(/\s+/g, ' ').trim();
+  if (xJust.length < 15 || xJust.length > 255) throw erro('A justificativa precisa ter entre 15 e 255 caracteres.');
+  const seq = String(Number(nSeqEvento) || 1);
+  const id = `ID${TIPO_EVENTO.cancelamento}${chNFe}${seq.padStart(2, '0')}`;
+  return `<evento xmlns="${NS_NFE}" versao="${VERSAO_EVENTO}"><infEvento Id="${id}">`
+    + `<cOrgao>${cUF}</cOrgao><tpAmb>${tpAmb(ambiente)}</tpAmb><CNPJ>${String(cnpj).replace(/\D/g, '')}</CNPJ><chNFe>${chNFe}</chNFe>`
+    + `<dhEvento>${dhEvento}</dhEvento><tpEvento>${TIPO_EVENTO.cancelamento}</tpEvento><nSeqEvento>${seq}</nSeqEvento><verEvento>${VERSAO_EVENTO}</verEvento>`
+    + `<detEvento versao="${VERSAO_EVENTO}"><descEvento>Cancelamento</descEvento><nProt>${nProt}</nProt><xJust>${escaparXml(xJust)}</xJust></detEvento>`
+    + `</infEvento></evento>`;
+}
+
+/** Lote de um evento assinado. */
+function xmlEnvEvento({ idLote, xmlEvento }) {
+  const lote = String(idLote || '1').replace(/\D/g, '').slice(0, 15) || '1';
+  if (!/<evento[\s>]/.test(String(xmlEvento || '')) || !/<Signature[\s>]/.test(String(xmlEvento || ''))) throw erro('O lote precisa de um <evento> assinado.');
+  return `<envEvento xmlns="${NS_NFE}" versao="${VERSAO_EVENTO}"><idLote>${lote}</idLote>${xmlEvento}</envEvento>`;
+}
+
+/** Lê o `retEnvEvento`: 128 = lote processado; dentro, `retEvento/infEvento` com 135/155 = evento registrado. */
+function lerRetornoEvento(xml) {
+  const ret = bloco(xml, 'retEnvEvento') || xml;
+  const retEvento = bloco(ret, 'retEvento');
+  const inf = retEvento ? (bloco(retEvento, 'infEvento') || retEvento) : null;
+  const cStatEvento = inf ? campo(inf, 'cStat') : null;
+  return {
+    cStat: campo(ret, 'cStat'),
+    xMotivo: campo(ret, 'xMotivo'),
+    evento: inf ? {
+      cStat: cStatEvento, xMotivo: campo(inf, 'xMotivo'), nProt: campo(inf, 'nProt'), dhRegEvento: campo(inf, 'dhRegEvento'),
+      chNFe: campo(inf, 'chNFe'), tpEvento: campo(inf, 'tpEvento'),
+      registrado: cStatEvento === '135' || cStatEvento === '155' || cStatEvento === '136',
+      xml: retEvento
+    } : null
+  };
+}
+
+/** Evento registrado para guardar/distribuir: `procEventoNFe` = evento assinado + retorno. */
+function montarProcEvento(xmlEventoAssinado, retEventoXml) {
+  if (!/<Signature[\s>]/.test(String(xmlEventoAssinado || ''))) throw erro('O evento precisa estar assinado.');
+  if (!/^<retEvento[\s>]/.test(String(retEventoXml || '').trim())) throw erro('Retorno do evento ausente.');
+  return `<?xml version="1.0" encoding="UTF-8"?><procEventoNFe xmlns="${NS_NFE}" versao="${VERSAO_EVENTO}">${xmlEventoAssinado}${String(retEventoXml).trim()}</procEventoNFe>`;
+}
+
+async function enviarEvento({ uf, ambiente, transporte, xmlEvento, idLote }) {
+  const { xml, tempoMs } = await chamar({
+    uf, ambiente, servico: 'recepcaoEvento', xmlDados: xmlEnvEvento({ idLote, xmlEvento }), transporte
+  });
+  const lido = lerRetornoEvento(xml);
+  if (!lido.cStat) throw erro('A SEFAZ respondeu ao evento sem cStat.', 502);
+  return { ...lido, xmlResposta: xml, tempoMs };
+}
+
 function erro(mensagem, status = 400) {
   const e = new Error(mensagem);
   e.status = status;
@@ -322,6 +394,7 @@ function erro(mensagem, status = 400) {
 }
 
 module.exports = {
+  VERSAO_EVENTO, TIPO_EVENTO, escaparXml, xmlEventoCancelamento, xmlEnvEvento, lerRetornoEvento, montarProcEvento, enviarEvento,
   NS_NFE, VERSAO, UFS, SERVICOS, ENDERECOS,
   urlDoServico, montarEnvelope, xmlConsultaStatus, campo, bloco, faltaSoap,
   transporteHttps, traduzirErroDeRede, chamar, lerStatusServico, statusServico,

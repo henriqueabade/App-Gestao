@@ -99,6 +99,43 @@ test('consultarRecibo: 105 ainda processando, 104 traz o protocolo; consultarNfe
   assert.equal(cancelada.eventos.length, 1);
 });
 
+test('evento de cancelamento: mensagem, validações, lote assinado, leitura do retorno (128/135) e procEventoNFe', async () => {
+  const base = { uf: 'MG', ambiente: 'homologacao', cnpj: '44.039.257/0001-22', chave: CHAVE, protocolo: '131260000123456', justificativa: '  Pedido   cancelado pelo cliente  ', dhEvento: '2026-09-15T15:30:00-03:00' };
+  const evento = sefaz.xmlEventoCancelamento(base);
+  assert.equal(evento, `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="ID110111${CHAVE}01"><cOrgao>31</cOrgao><tpAmb>2</tpAmb><CNPJ>44039257000122</CNPJ><chNFe>${CHAVE}</chNFe><dhEvento>2026-09-15T15:30:00-03:00</dhEvento><tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>131260000123456</nProt><xJust>Pedido cancelado pelo cliente</xJust></detEvento></infEvento></evento>`);
+  assert.match(sefaz.xmlEventoCancelamento({ ...base, justificativa: 'Cliente & filhos desistiram do pedido' }), /<xJust>Cliente &amp; filhos desistiram do pedido<\/xJust>/);
+  assert.throws(() => sefaz.xmlEventoCancelamento({ ...base, justificativa: 'curta' }), /entre 15 e 255/);
+  assert.throws(() => sefaz.xmlEventoCancelamento({ ...base, protocolo: '' }), /protocolo/);
+  assert.throws(() => sefaz.xmlEventoCancelamento({ ...base, chave: '123' }), /Chave de acesso inválida/);
+  assert.throws(() => sefaz.xmlEnvEvento({ idLote: '1', xmlEvento: evento }), /assinado/);
+
+  const assinado = evento.replace('</infEvento></evento>', '</infEvento><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo></SignedInfo></Signature></evento>');
+  assert.ok(sefaz.xmlEnvEvento({ idLote: '7', xmlEvento: assinado }).startsWith('<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>7</idLote><evento'));
+
+  const retEvento = (cStat, xMotivo) => `<retEvento versao="1.00"><infEvento><tpAmb>2</tpAmb><cOrgao>31</cOrgao><cStat>${cStat}</cStat><xMotivo>${xMotivo}</xMotivo><chNFe>${CHAVE}</chNFe><tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento><dhRegEvento>2026-09-15T16:00:00-03:00</dhRegEvento><nProt>131260000222222</nProt></infEvento></retEvento>`;
+  const retorno = `<retEnvEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>7</idLote><tpAmb>2</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>128</cStat><xMotivo>Lote de Evento Processado</xMotivo>${retEvento('135', 'Evento registrado e vinculado a NF-e')}</retEnvEvento>`;
+  const lido = sefaz.lerRetornoEvento(retorno);
+  assert.equal(lido.cStat, '128');
+  assert.equal(lido.evento.cStat, '135');
+  assert.equal(lido.evento.registrado, true);
+  assert.equal(lido.evento.nProt, '131260000222222');
+  assert.equal(lido.evento.dhRegEvento, '2026-09-15T16:00:00-03:00');
+  assert.ok(lido.evento.xml.startsWith('<retEvento'));
+  assert.equal(sefaz.lerRetornoEvento(retorno.replace('135', '573')).evento.registrado, false);
+  assert.equal(sefaz.lerRetornoEvento('<retEnvEvento><cStat>225</cStat><xMotivo>Schema</xMotivo></retEnvEvento>').evento, null);
+
+  const registro = [];
+  const r = await sefaz.enviarEvento({ uf: 'MG', ambiente: 'homologacao', xmlEvento: assinado, idLote: '7', transporte: transporteCom(envelope('NFeRecepcaoEvento4', retorno), registro) });
+  assert.equal(r.evento.registrado, true);
+  assert.equal(registro[0].url, 'https://hnfe.fazenda.mg.gov.br/nfe2/services/NFeRecepcaoEvento4');
+  assert.match(registro[0].cabecalhos['Content-Type'], /NFeRecepcaoEvento4\/nfeRecepcaoEvento"/);
+
+  const proc = sefaz.montarProcEvento(assinado, lido.evento.xml);
+  assert.ok(proc.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><evento'));
+  assert.ok(proc.endsWith('</retEvento></procEventoNFe>'));
+  assert.throws(() => sefaz.montarProcEvento(evento, lido.evento.xml), /assinado/);
+});
+
 test('montarNfeProc junta a NF-e assinada e o protocolo no formato de distribuição', () => {
   const proc = sefaz.montarNfeProc(NFE_ASSINADA, protocolo('100', 'Autorizado o uso da NF-e'));
   assert.ok(proc.startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns='));

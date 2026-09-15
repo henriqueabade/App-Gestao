@@ -76,6 +76,113 @@
     return Number.isNaN(instante.getTime()) ? '' : instante.toLocaleDateString('pt-BR');
   }
 
+  // ------------------------------------------------------------------
+  // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
+  // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
+  // ------------------------------------------------------------------
+  function tagsDoEmbarque(pedido, notas) {
+    const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
+    const STATUS_NF = {
+      autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
+      cancelamento_pendente: ['badge-warning', 'cancelamento pendente'], rejeitada: ['badge-danger', 'rejeitada'], denegada: ['badge-danger', 'denegada'],
+      cancelada: ['badge-danger', 'cancelada'], erro_tecnico: ['badge-danger', 'erro técnico']
+    };
+    const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const kg = v => `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg`;
+    const p = pedido || {};
+    const tags = [];
+    const lista = (Array.isArray(notas) ? notas : []).filter(Boolean).sort((a, b) => Number(b.id) - Number(a.id));
+    const nota = lista.find(n => ['autorizada', 'processando', 'enviando', 'cancelamento_pendente'].includes(String(n.status_fiscal))) || lista[0] || null;
+    if (nota) {
+      const [classe, rotulo] = STATUS_NF[nota.status_fiscal] || ['badge-neutral', String(nota.status_fiscal || '')];
+      const valor = Number(nota.valor_total);
+      tags.push({
+        classe,
+        texto: `NF-e ${nota.serie}/${nota.numero} · ${rotulo}${Number.isFinite(valor) && valor > 0 ? ` · ${brl(valor)}` : ''}${nota.ambiente === 'homologacao' ? ' · homologação' : ''}`
+      });
+    } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
+      tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
+    }
+    const modalidade = p.modalidade_frete;
+    if (modalidade !== null && modalidade !== undefined && modalidade !== '' && ROTULO_FRETE[Number(modalidade)]) {
+      tags.push({ classe: 'badge-neutral', texto: `Frete: ${ROTULO_FRETE[Number(modalidade)]}` });
+    }
+    const volumes = Number(p.volumes_quantidade);
+    if (volumes > 0) tags.push({ classe: 'badge-info', texto: `Volumes: ${volumes}${p.volumes_especie ? ` ${p.volumes_especie}` : ''}` });
+    const pesos = [];
+    if (Number(p.peso_bruto) > 0) pesos.push(`${kg(p.peso_bruto)} bruto`);
+    if (Number(p.peso_liquido) > 0) pesos.push(`${kg(p.peso_liquido)} líq.`);
+    if (pesos.length) tags.push({ classe: 'badge-neutral', texto: `Peso: ${pesos.join(' · ')}` });
+    return tags;
+  }
+
+  function pintarTags(tags) {
+    const caixa = overlay.querySelector('#visualizarPedidoTagsLista') || overlay.querySelector('#visualizarPedidoTags');
+    if (!caixa) return;
+    caixa.replaceChildren();
+    for (const t of tags) {
+      const s = document.createElement('span');
+      s.className = `${t.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+      s.textContent = t.texto;
+      caixa.appendChild(s);
+    }
+  }
+
+  /** A nota que vale para DANFE/XML/cancelamento: autorizada (ou cancelada, que ainda tem DANFE e XML). */
+  function notaParaDocumentos(notas) {
+    return (Array.isArray(notas) ? notas : []).filter(n => n && ['autorizada', 'cancelada'].includes(String(n.status_fiscal)))
+      .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+  }
+
+  function ligarDocumentosDaNota(nota, pedido) {
+    const danfeBtn = overlay.querySelector('#visualizarPedidoDanfe');
+    const xmlBtn = overlay.querySelector('#visualizarPedidoXml');
+    const cancelarBtn = overlay.querySelector('#visualizarPedidoCancelarNfe');
+    if (!nota) return;
+    const aviso = (texto, tipo) => { if (typeof showToast === 'function') showToast(texto, tipo || 'info'); };
+
+    const gerarDanfe = async () => {
+      const resp = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(nota.id)}/danfe`);
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) { aviso(corpo?.error || 'Não foi possível montar o DANFE.', 'error'); return; }
+      const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true });
+      if (!r) aviso('Geração de PDF indisponível nesta janela.', 'error');
+      else if (r.success) aviso(r.opened ? 'DANFE salvo e aberto.' : (r.message || 'DANFE salvo.'), 'success');
+      else if (!r.canceled) aviso(r.message || 'Não foi possível gerar o DANFE.', 'error');
+    };
+
+    const salvarXml = async () => {
+      const resp = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(nota.id)}/xml`);
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) { aviso(corpo?.error || 'Não foi possível ler o XML.', 'error'); return; }
+      const salvar = (conteudo, nome, titulo) => window.electronAPI?.salvarTextoComoArquivo?.({ conteudo, nomeSugerido: nome, extensao: 'xml', titulo, descricao: 'XML da NF-e' });
+      const r = await salvar(corpo.xml, corpo.nome, 'Salvar XML da NF-e');
+      if (!r) { aviso('Salvar arquivo indisponível nesta janela.', 'error'); return; }
+      if (r.success) aviso('XML da NF-e salvo.', 'success');
+      else if (!r.canceled) { aviso(r.message || 'Não foi possível salvar o XML.', 'error'); return; }
+      if (r.success && corpo.xml_cancelamento) {
+        const rc = await salvar(corpo.xml_cancelamento, corpo.nome_cancelamento, 'Salvar XML do cancelamento');
+        if (rc?.success) aviso('XML do cancelamento salvo.', 'success');
+      }
+    };
+
+    const cancelarNfe = () => {
+      window.cancelarNfeContext = { notaId: nota.id, serie: nota.serie, numero: nota.numero, chave: nota.chave_acesso, pedidoId: id, pedidoNumero: pedido?.numero || '' };
+      close();
+      Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe');
+    };
+
+    const ligar = (botao, fn) => {
+      if (!botao) return;
+      botao.classList.remove('hidden');
+      if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, fn);
+      else botao.addEventListener('click', fn);
+    };
+    ligar(danfeBtn, gerarDanfe);
+    ligar(xmlBtn, salvarXml);
+    if (nota.status_fiscal === 'autorizada') ligar(cancelarBtn, cancelarNfe);
+  }
+
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
@@ -291,6 +398,16 @@
     overlay.querySelector('#totalPedido').textContent = fmtCurrency(total);
     const footerTotal = overlay.querySelector('#totalPedidoFooter');
     if (footerTotal) footerTotal.textContent = fmtCurrency(total);
+
+    // Tags do rodapé. As notas exigem financeiro.nfe.view; sem ela (ou sem a
+    // tabela) ficam só as do embarque.
+    let notas = [];
+    try {
+      const respNotas = await fetchApi(`/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}`);
+      if (respNotas.ok) notas = await respNotas.json();
+    } catch (_) { /* sem notas, sem tag */ }
+    pintarTags(tagsDoEmbarque(data, notas));
+    ligarDocumentosDaNota(notaParaDocumentos(notas), data);
 
     if (pagamentoBox) {
       pagamentoBox.classList.add('hidden');

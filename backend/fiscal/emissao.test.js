@@ -171,6 +171,7 @@ test('autorizada: nota completa no banco, itens e eventos gravados, numeração 
   assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 2);
   assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_producao, 362, 'produção não mexe');
   assert.equal(t.api.dados.clientes[0].reg_codigo_municipio, '3118601', 'o código IBGE achado pelo nome fica no cadastro');
+  assert.equal(t.api.dados.pedidos[0].nfe_dispensada, false, 'nota autorizada apaga a marca "enviado sem nota"');
   assert.equal(t.sefaz.chamadas.length, 1);
   assert.match(t.sefaz.chamadas[0].corpo, /<enviNFe [^>]*><idLote>\d+<\/idLote><indSinc>1<\/indSinc><NFe xmlns=/);
 });

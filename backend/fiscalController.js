@@ -21,6 +21,8 @@ const sefaz = require('./fiscal/sefazCliente');
 const municipios = require('./fiscal/municipios');
 const prontidao = require('./fiscal/prontidao');
 const emissao = require('./fiscal/emissao');
+const eventos = require('./fiscal/eventos');
+const danfe = require('./fiscal/danfe');
 const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -276,6 +278,25 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     }
   });
 
+  /**
+   * O pedido foi (ou vai ser) enviado sem NF-e: fica sinalizado, com quando e
+   * por quem. A permissão é a de despachar — é a mesma decisão.
+   */
+  router.post('/pedidos/:id/dispensar-nfe', exigirPermissao('ped.status.ship'), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
+      const api = createApiClient(req);
+      const pedido = await api.get('/api/pedidos', { query: { id } }).then(r => (Array.isArray(r) ? r : [r]).find(p => Number(p?.id) === id) || null);
+      if (!pedido) throw erro('Pedido não encontrado.', 404);
+      const marca = { nfe_dispensada: true, nfe_dispensada_em: new Date().toISOString(), nfe_dispensada_por: usuarioDaRequisicao(req) };
+      await api.put(`/api/pedidos/${id}`, marca);
+      res.json({ ok: true, pedido_id: id, ...marca });
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/dispensar-nfe');
+    }
+  });
+
   /** Notas de um pedido (ou todas), sem os XMLs. */
   router.get('/notas', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {
@@ -291,6 +312,52 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       res.json(await emissao.lerNota(createApiClient(req), req.params.id));
     } catch (err) {
       responder(res, err, 'GET /api/fiscal/notas/:id');
+    }
+  });
+
+  /** DANFE em HTML (o renderer manda para o PDF pelo Electron). Só nota autorizada ou cancelada. */
+  router.get('/notas/:id/danfe', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const nota = await emissao.lerNota(createApiClient(req), req.params.id);
+      if (!nota.xml_autorizado) throw erro('Esta nota não foi autorizada: não há DANFE.', 409);
+      res.json({
+        nome: `DANFE-NFe-${String(nota.serie)}-${String(nota.numero).padStart(9, '0')}`,
+        html: danfe.montarDanfeHtml(nota.xml_autorizado, { cancelada: nota.status_fiscal === 'cancelada' }),
+        nota: emissao.semXml(nota)
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id/danfe');
+    }
+  });
+
+  /** O XML de distribuição (nfeProc) e, se houver, o do cancelamento. */
+  router.get('/notas/:id/xml', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const nota = await emissao.lerNota(createApiClient(req), req.params.id);
+      const xml = nota.xml_autorizado || nota.xml_envio;
+      if (!xml) throw erro('Esta nota não tem XML guardado.', 409);
+      res.json({
+        nome: `${nota.chave_acesso || `NFe-${nota.serie}-${nota.numero}`}-procNFe`,
+        xml,
+        xml_cancelamento: nota.xml_cancelamento || null,
+        nome_cancelamento: nota.xml_cancelamento ? `${nota.chave_acesso}-procEventoNFe-cancelamento` : null,
+        autorizada: Boolean(nota.xml_autorizado)
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id/xml');
+    }
+  });
+
+  /** Cancela a NF-e na SEFAZ (evento 110111). Exige justificativa de 15 a 255 caracteres. */
+  router.post('/notas/:id/cancelar', exigirPermissao('financeiro.nfe.cancel'), async (req, res) => {
+    try {
+      const dados = carregarCertificado();
+      res.json(await eventos.cancelar({
+        api: createApiClient(req), notaId: req.params.id, justificativa: req.body?.justificativa,
+        certificado: dados, transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/notas/:id/cancelar');
     }
   });
 

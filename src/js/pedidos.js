@@ -63,6 +63,18 @@ function formatarDiaDate(valor) {
 }
 
 /**
+ * Tag roxa ao lado do número: o pedido foi enviado SEM nota fiscal (marcado
+ * assim no modal de embarque). Emitir a nota depois apaga a marca. Pura, para
+ * o teste; devolve '' quando não há o que mostrar.
+ */
+function tagSemNota(p) {
+    if (!p || p.nfe_dispensada !== true && p.nfe_dispensada !== 'true') return '';
+    const quando = formatarDiaDate(p.nfe_dispensada_em);
+    const titulo = quando ? `Sem nota fiscal — enviado sem NF-e em ${quando}` : 'Sem nota fiscal — enviado sem NF-e';
+    return ` <span class="badge-neutral ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">S/NF</span>`;
+}
+
+/**
  * O que dizer depois de pedir a troca de status.
  *
  * A resposta era descartada: um 403, um 409 (pedido já enviado por outra aba)
@@ -375,7 +387,7 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagSemNota(p)}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>

@@ -5051,7 +5051,7 @@ ipcMain.handle('get-saved-display', () => {
  * O HTML vai para um arquivo temporário em vez de `data:` URL porque data URLs
  * têm limite de tamanho e um relatório com muitos processos estoura.
  */
-ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titulo } = {}) => {
+ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titulo, retrato = false } = {}) => {
   if (!html || typeof html !== 'string') {
     return { success: false, message: 'Nada para gerar.' };
   }
@@ -5081,7 +5081,8 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
     const pdf = await janela.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      landscape: true,
+      // O DANFE da NF-e é em retrato; os relatórios continuam em paisagem.
+      landscape: !retrato,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
@@ -5110,6 +5111,41 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
   } finally {
     if (janela && !janela.isDestroyed()) janela.close();
     fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
+/**
+ * Salva um texto (o XML da NF-e, por exemplo) num arquivo escolhido pelo
+ * usuário. Mesmo caminho do PDF: diálogo de salvar na pasta Documentos.
+ */
+ipcMain.handle('salvar-texto-como-arquivo', async (_event, { conteudo, nomeSugerido, titulo, extensao = 'txt', descricao } = {}) => {
+  if (typeof conteudo !== 'string' || !conteudo) {
+    return { success: false, message: 'Nada para salvar.' };
+  }
+  const ext = String(extensao || 'txt').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'txt';
+  const nomeBase = String(nomeSugerido || 'arquivo')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'arquivo';
+  try {
+    const dono = getPrimaryMonitorWindow();
+    const opcoes = {
+      title: titulo || 'Salvar arquivo',
+      defaultPath: path.join(app.getPath('documents'), `${nomeBase}.${ext}`),
+      filters: [{ name: descricao || `Arquivos ${ext.toUpperCase()}`, extensions: [ext] }]
+    };
+    const { canceled, filePath } = dono
+      ? await dialog.showSaveDialog(dono, opcoes)
+      : await dialog.showSaveDialog(opcoes);
+    if (canceled || !filePath) return { success: false, canceled: true };
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, conteudo, 'utf8');
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Erro ao salvar arquivo de texto:', err);
+    return { success: false, message: err?.message || 'Erro ao salvar o arquivo.' };
   }
 });
 

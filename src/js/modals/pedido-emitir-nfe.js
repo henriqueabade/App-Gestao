@@ -337,6 +337,16 @@
   }
 
   // ----------------------------------------------------------- ações
+  /** Sinaliza o pedido como enviado sem nota (tag roxa na lista). Não trava o envio. */
+  async function dispensarNfe() {
+    try {
+      const resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/dispensar-nfe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!resp.ok) console.warn('Pedido enviado, mas a marca "sem nota" não foi gravada:', resp.status);
+    } catch (err) {
+      console.warn('Pedido enviado, mas a marca "sem nota" não foi gravada:', err);
+    }
+  }
+
   async function marcarEnviado(nota) {
     let resp;
     try {
@@ -353,8 +363,9 @@
       exibirMensagem('erro', `${mensagemDeErro(resp.status, corpo, 'enviar')}${nota ? ' A NF-e já está autorizada.' : ''}`);
       return false;
     }
+    if (!nota) await dispensarNfe();
     const mensagens = typeof window.mensagensDaTrocaDeStatus === 'function' ? window.mensagensDaTrocaDeStatus(true, resp.status, corpo) : [];
-    window.showToast?.(nota ? `NF-e nº ${nota.numero} autorizada e pedido ${ctx.numero} enviado.` : `Pedido ${ctx.numero} marcado como enviado.`, 'success');
+    window.showToast?.(nota ? `NF-e nº ${nota.numero} autorizada e pedido ${ctx.numero} enviado.` : `Pedido ${ctx.numero} marcado como enviado sem nota fiscal.`, 'success');
     mensagens.forEach(m => window.showToast?.(m.texto, m.tipo));
     window.dispatchEvent(new CustomEvent('pedido:enviado', { detail: { pedidoId, resposta: corpo, nota: nota || null } }));
     window.carregarPedidos?.();
@@ -436,17 +447,18 @@
     }
   }
 
-  function enviarSemNfe() {
+  async function enviarSemNfe() {
     if (emAndamento || fechado) return;
     limparMensagem();
-    const pergunta = `Marcar o pedido ${ctx.numero} como "Enviado" SEM emitir a NF-e?`;
-    const executar = async ok => {
-      if (!ok) return;
-      emAndamento = true;
-      try { await marcarEnviado(null); } finally { emAndamento = false; }
-    };
-    if (typeof window.showStatusConfirmDialog === 'function') window.showStatusConfirmDialog(pergunta, executar);
-    else executar(window.confirm(pergunta));
+    // A caixa de diálogo da casa (DialogPadrao), nunca o confirm() do navegador.
+    const ok = await window.DialogPadrao?.confirm?.({
+      title: 'Enviar sem NF-e?',
+      message: `O pedido ${ctx.numero} será marcado como "Enviado" SEM emitir a nota fiscal e fica sinalizado na lista como "sem nota". Use só quando a nota foi (ou será) emitida por fora.`,
+      confirmText: 'Enviar sem NF-e'
+    });
+    if (!ok) return;
+    emAndamento = true;
+    try { await marcarEnviado(null); } finally { emAndamento = false; }
   }
 
   if (typeof window.BotaoAcao?.bind === 'function') {

@@ -98,6 +98,15 @@
     </div>
     <footer class="flex items-center justify-between gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <span class="badge-success px-6 py-3 rounded-full text-lg font-semibold">Valor Total: <span id="totalPedidoFooter">R$ 0,00</span></span>
+      <!-- Tags do embarque e da NF-e (só aparecem quando há o que mostrar) e,
+           com nota autorizada, DANFE / XML / cancelar. As guardas ficam
+           escritas no HTML; o script só tira o `hidden`. -->
+      <div id="visualizarPedidoTags" class="flex flex-wrap items-center justify-center gap-2 flex-1 min-w-0">
+        <span id="visualizarPedidoTagsLista" class="contents"></span>
+        <button id="visualizarPedidoDanfe" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Gerar o DANFE em PDF"><i class="fas fa-file-pdf mr-1" aria-hidden="true"></i>DANFE</button>
+        <button id="visualizarPedidoXml" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Salvar o XML da NF-e"><i class="fas fa-code mr-1" aria-hidden="true"></i>XML</button>
+        <button id="visualizarPedidoCancelarNfe" type="button" data-perm="financeiro.nfe.cancel" class="hidden btn-danger px-3 py-1 rounded-lg text-white text-xs font-medium" title="Cancelar a NF-e na SEFAZ"><i class="fas fa-ban mr-1" aria-hidden="true"></i>Cancelar NF-e</button>
+      </div>
       <div class="flex gap-3">
         <button id="cancelarVisualizarPedido" data-sem-guarda data-perm="ped.cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
         <button id="voltarVisualizarPedidoFooter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Voltar</button>
