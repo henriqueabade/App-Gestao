@@ -1,0 +1,59 @@
+<!--
+  Detalhes da parcela: como o valor líquido e a comissão foram formados.
+  Modal grande, só leitura; abre por cima de Comissões atrasadas (Voltar
+  retorna para ela). Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finDetalhesParcelaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finParcelaTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finParcelaTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-invoice-dollar mr-2" aria-hidden="true"></i>Detalhes da parcela</h2>
+        <p id="finParcelaContexto" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="finParcelaStatus" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+      <div class="flex gap-8 overflow-x-auto scrollbar-hide">
+        <button type="button" role="tab" aria-selected="true" data-fin-aba="resumo" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Resumo</button>
+        <button type="button" role="tab" aria-selected="false" data-fin-aba="ajustes" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Ajustes</button>
+        <button type="button" role="tab" aria-selected="false" data-fin-aba="historico" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Histórico</button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6">
+        <div data-fin-painel="resumo" role="tabpanel">
+          <dl id="finParcelaResumo" class="fin-dl"></dl>
+        </div>
+
+        <div data-fin-painel="ajustes" role="tabpanel" class="hidden">
+          <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                  <th class="px-4 py-3 text-left text-xs">Motivo</th>
+                  <th class="px-4 py-3 text-right text-xs">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Usuário</th>
+                </tr>
+              </thead>
+              <tbody id="finParcelaAjustes" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div data-fin-painel="historico" role="tabpanel" class="hidden">
+          <ol id="finParcelaHistorico" class="fin-atividade"></ol>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>

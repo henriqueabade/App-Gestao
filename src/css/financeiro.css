@@ -558,6 +558,22 @@ body {
     flex-shrink: 0;
 }
 
+/* O rodapé "Próximo pagamento" abre a confirmação de pagamento. */
+.fin-proximo[role="button"] {
+    cursor: pointer;
+    border-radius: 0.75rem;
+    margin: 1rem -0.5rem 0;
+    padding: 1rem 0.5rem 0;
+    transition: background 150ms ease;
+}
+
+.fin-proximo[role="button"]:hover,
+.fin-proximo[role="button"]:focus-visible { background: var(--fin-hover); outline: none; }
+
+.fin-proximo > div { flex: 1; min-width: 0; }
+
+.fin-proximo__seta { font-size: 0.7rem; color: var(--fin-texto-3); }
+
 .fin-proximo__rotulo { display: block; font-size: 0.75rem; color: var(--fin-texto-2); }
 
 .fin-proximo__data {
@@ -732,6 +748,155 @@ body {
 .fin-segmento label:last-child span { border-right: 0; }
 .fin-segmento input:checked + span { background: var(--color-primary); color: var(--menu-contrast-text, #fff); }
 .fin-segmento input:focus-visible + span { outline: 2px solid var(--color-primary-light); outline-offset: -2px; }
+
+/* Tabelas dos modais: o cabeçalho claro e fixo vem de tabelas-modais.css. */
+.fin-tabela { overflow: auto; max-height: 55vh; }
+.fin-tabela--folha { max-height: none; border-radius: 0; border: 0; }
+.fin-tabela tbody td { color: #e5e7eb; white-space: nowrap; }
+.fin-tabela tbody tr[data-fin-abrir] { cursor: pointer; }
+.fin-tabela tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+.fin-tabela tbody tr[data-fin-abrir]:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+
+.fin-totais td {
+    font-weight: 600;
+    color: var(--menu-text-strong, #fff);
+    background: rgba(182, 160, 62, 0.12);
+    border-top: 1px solid rgba(182, 160, 62, 0.4);
+    white-space: nowrap;
+}
+
+/* Número do pedido dentro da célula: abre os detalhes do pedido. */
+.fin-link-celula {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary-light);
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+}
+
+.fin-link-celula:hover { color: var(--menu-text-strong, #fff); }
+
+/* Dias em atraso ganham peso conforme crescem. */
+.fin-dias--alto { font-weight: 600; color: var(--color-primary-light); }
+.fin-dias--critico { font-weight: 700; color: #e08aa6; }
+
+/* Folha de relatório: área de conferência com rolagem própria. */
+.fin-folha {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1rem;
+    background: rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+}
+
+.fin-folha__cabeca {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Lista de definição em duas colunas (Resumo da parcela / Comissões do pedido). */
+.fin-dl { margin: 0; display: flex; flex-direction: column; }
+
+.fin-dl__linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fin-dl__linha:last-child { border-bottom: 0; }
+.fin-dl__linha dt { font-size: 0.9rem; color: #9ca3af; }
+.fin-dl__linha dd { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--menu-text-strong, #fff); font-variant-numeric: tabular-nums; }
+.fin-dl__linha dd.fin-dl__destaque { font-size: 1.15rem; color: var(--color-green); }
+
+/* Indicadores no topo dos modais de lista. */
+.fin-indicadores {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.fin-indicadores--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+.fin-indicador {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    min-width: 0;
+}
+
+.fin-indicador__rotulo { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: #9ca3af; }
+
+.fin-indicador__valor {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--menu-text-strong, #fff);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fin-indicador--atencao { border-color: rgba(106, 21, 44, 0.75); background: rgba(106, 21, 44, 0.28); }
+.fin-indicador--atencao .fin-indicador__valor { color: #e08aa6; }
+.fin-indicador--destaque { border-color: rgba(182, 160, 62, 0.5); background: rgba(182, 160, 62, 0.12); }
+.fin-indicador--destaque .fin-indicador__valor { color: var(--color-primary-light); }
+
+.fin-filtros {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.fin-filtros--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Aging: faixa, barra proporcional e números. */
+.fin-aging { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.fin-aging__linha {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+}
+
+.fin-aging__faixa { font-size: 0.85rem; color: #e5e7eb; white-space: nowrap; }
+
+.fin-aging__barra { height: 0.6rem; border-radius: 9999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+
+.fin-aging__cheio {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, var(--color-primary-dark), var(--color-primary-light));
+}
+
+.fin-aging__cheio--critico { background: linear-gradient(90deg, var(--color-bordeaux), #e08aa6); }
+
+.fin-aging__numeros { font-size: 0.8rem; color: #9ca3af; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1023px) {
+    .fin-indicadores,
+    .fin-indicadores--5,
+    .fin-filtros,
+    .fin-filtros--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fin-aging__linha { grid-template-columns: 5rem minmax(0, 1fr); }
+    .fin-aging__numeros { grid-column: 2; }
+}
 
 /* ------------------------------------------------------------ responsivo */
 

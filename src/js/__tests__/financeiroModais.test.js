@@ -25,8 +25,16 @@ const MODAIS = {
     'registrar-ajuste': 'finRegistrarAjuste',
     'registrar-producao': 'finRegistrarProducao',
     'fechar-competencia': 'finFecharCompetencia',
-    'relatorios': 'finRelatorios'
+    'relatorios': 'finRelatorios',
+    'detalhes-parcela': 'finDetalhesParcela',
+    'detalhes-pedido': 'finDetalhesPedido',
+    'confirmar-pagamento': 'finConfirmarPagamento',
+    'visualizar-relatorio': 'finVisualizarRelatorio',
+    'comissoes-atrasadas': 'finComissoesAtrasadas',
+    'producao-competencia': 'finProducaoCompetencia'
 };
+/* Os seis de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
+const DE_ACAO = ['registrar-nf', 'registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
 
 /** Carrega o script sem overlay no DOM: só as funções puras ficam expostas. */
 function puro() {
@@ -105,15 +113,19 @@ test('status após registro de produção segue o saldo do item', () => {
     assert.strictEqual(f.statusAposRegistro(10, 6, 5).excede, true, 'passar do saldo é sinalizado, nunca escondido');
 });
 
-test('os seis HTML seguem a anatomia da casa: overlay escondido, Voltar/Cancelar, uma ação principal, obrigatórios marcados', () => {
+test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé no padrão, obrigatórios marcados', () => {
     for (const [arquivo, overlay] of Object.entries(MODAIS)) {
         const html = fs.readFileSync(path.join(PASTA_HTML, `${arquivo}.html`), 'utf8');
-        assert.match(html, new RegExp(`id="${overlay}Overlay" class="hidden fixed inset-0 z-\\[1200\\]`), `${arquivo}: overlay`);
+        assert.match(html, new RegExp(`id="${overlay}Overlay" data-fin-modal class="hidden fixed inset-0 z-\\[1200\\]`), `${arquivo}: overlay`);
         assert.match(html, /glass-surface backdrop-blur-xl rounded-3xl border border-white\/10/, `${arquivo}: diálogo`);
-        assert.strictEqual((html.match(/data-fin-fechar/g) || []).length, 2, `${arquivo}: Voltar e Cancelar`);
-        assert.strictEqual((html.match(/data-fin-principal=/g) || []).length, 1, `${arquivo}: uma ação principal`);
-        assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
-        assert.match(html, /data-fin-principal="[^"]+" (data-fin-sensivel="true" )?class="btn-success/, `${arquivo}: ação principal no padrão`);
+        assert.strictEqual((html.match(/data-fin-fechar/g) || []).length, 2, `${arquivo}: Voltar e Cancelar/Fechar`);
+        if (DE_ACAO.includes(arquivo)) {
+            assert.strictEqual((html.match(/data-fin-principal=/g) || []).length, 1, `${arquivo}: uma ação principal`);
+            assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
+            assert.match(html, /data-fin-principal="[^"]+" (data-fin-sensivel="true" )?class="btn-success/, `${arquivo}: ação principal no padrão`);
+        } else {
+            assert.match(html, /btn-neutral[^>]*>Fechar</, `${arquivo}: Fechar no padrão`);
+        }
         assert.doesNotMatch(html, /\*<\/label>/, `${arquivo}: asterisco solto fora do fin-obrigatorio`);
         assert.doesNotMatch(html, /role="[^"]*"[^>]*role="/, `${arquivo}: atributo role duplicado`);
     }
@@ -125,11 +137,68 @@ test('os seis HTML seguem a anatomia da casa: overlay escondido, Voltar/Cancelar
 test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o HTML existe', () => {
     for (const [chave, overlay] of Object.entries(MODAIS)) {
         assert.match(MODULO, new RegExp(`'${chave}': \\{ html: 'modals/financeiro/${chave}\\.html', overlay: '${overlay}' \\}`));
-        assert.match(MODULO, new RegExp(`'${chave}': \\{ rotulo: '[^']+', abrir: m => finAbrirModal\\('${chave}', m\\) \\}`));
         assert.ok(fs.existsSync(path.join(PASTA_HTML, `${chave}.html`)));
+        assert.match(SCRIPT, new RegExp(`\\b${overlay}: montar`), `${overlay} sem montador no script`);
     }
-    assert.match(MODULO, /window\.Modal\.open\(modal\.html, FIN_SCRIPT_MODAIS, modal\.overlay\)/);
-    assert.match(SCRIPT, /const montadores = \{[\s\S]*finRegistrarNf[\s\S]*finRelatorios[\s\S]*\}/);
+    for (const chave of ['registrar-nf', 'registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios']) {
+        assert.match(MODULO, new RegExp(`'${chave}': \\{ rotulo: '[^']+', abrir: m => finAbrirModal\\('${chave}', m\\) \\}`));
+    }
+    assert.match(MODULO, /window\.Modal\.open\(modal\.html, FIN_SCRIPT_MODAIS, modal\.overlay, extra\.empilhar === true\)/);
+    assert.match(MODULO, /window\.FinanceiroAbrirModal = finAbrirModal/);
+    // Os cartões e os rodapés "Próximo pagamento" abrem modais de consulta.
+    assert.match(MODULO, /'comissoes-atrasadas': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('comissoes-atrasadas', m\) \}/);
+    assert.match(MODULO, /'producao-competencia': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('producao-competencia', m\) \}/);
+    assert.match(MODULO, /'aguardando-nf': \{[^}]*relatorio: 'aguardando-nf'/);
+    assert.match(MODULO, /'confirmar-pagamento-producao': \{[^}]*tipo: 'producao'/);
+});
+
+test('modais empilhados: o Esc só fecha o de cima, e as linhas/botões abrem outro modal por cima', () => {
+    assert.match(SCRIPT, /ehOModalDeCima/);
+    assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| !ehOModalDeCima\(\)\) return;/);
+    assert.match(SCRIPT, /window\.FinanceiroAbrirModal\(chave, null, \{ \.\.\.extra, empilhar: true/);
+    assert.match(SCRIPT, /\{ abrir: 'detalhes-parcela' \}/, 'linha de comissão atrasada abre Detalhes da parcela');
+    assert.match(SCRIPT, /botao\.dataset\.finAbrir = 'detalhes-pedido'/, 'número do pedido abre Detalhes do pedido');
+    assert.match(SCRIPT, /abrirOutro\('visualizar-relatorio', \{ relatorio, competencia, periodo \}\)/, '"Gerar relatório" com Visualizar abre a folha');
+});
+
+test('comissões atrasadas: 11 parcelas, líquido 36.600 e comissão potencial 7.320; as 3 com mais de 30 dias dão 4.280', () => {
+    const f = puro();
+    const linhas = plano(f.calcularAtrasadas(f.EXEMPLO.atrasadas, '2026-09-15'));
+    const resumo = plano(f.resumoAtrasadas(linhas));
+    assert.deepStrictEqual(resumo, { quantidade: 11, liquido: 36600, comissao: 7320 });
+    const maisDe30 = linhas.filter(l => l.dias > 30);
+    assert.strictEqual(maisDe30.length, 3);
+    assert.strictEqual(plano(f.resumoAtrasadas(maisDe30)).comissao, 4280);
+    assert.strictEqual(linhas.find(l => l.pedido === '2455').dias, 77);
+    assert.deepStrictEqual(plano(f.agingDe(linhas)).map(a => `${a.faixa}:${a.parcelas}`), ['1–15:5', '16–30:3', '31–60:2', '61–90:1', '+90:0']);
+    assert.strictEqual(f.faixaDeAtraso(15), '1–15');
+    assert.strictEqual(f.faixaDeAtraso(16), '16–30');
+    assert.strictEqual(f.faixaDeAtraso(91), '+90');
+    assert.strictEqual(f.diferencaDias('2026-09-15', '2026-06-30'), 77);
+});
+
+test('produção da competência: 327 peças, 5 pedidos, pintura 4.230 + marcenaria 5.640 = 9.870', () => {
+    const f = puro();
+    assert.deepStrictEqual(plano(f.resumoProducao(f.EXEMPLO.producaoCompetencia)),
+        { pecas: 327, pedidos: 5, pintura: 4230, marcenaria: 5640, total: 9870 });
+});
+
+test('todo relatório da central tem folha: colunas, linhas e totais fecham com os indicadores da tela', () => {
+    const f = puro();
+    const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
+    assert.strictEqual(chavesDaCentral.length, 9);
+    for (const chave of chavesDaCentral) {
+        const r = plano(f.montarRelatorio(chave));
+        assert.ok(r && r.linhas.length > 0, `relatório "${chave}" sem folha ou sem linhas`);
+        assert.ok(r.colunas.length >= 4, `relatório "${chave}" com poucas colunas`);
+    }
+    assert.strictEqual(plano(f.montarRelatorio('comissoes-apuradas')).totais.comissao, 18450);
+    assert.strictEqual(plano(f.montarRelatorio('previsao-comissoes')).totais.comissao, 32500);
+    assert.strictEqual(plano(f.montarRelatorio('aguardando-nf')).totais.valor, 124680);
+    assert.strictEqual(plano(f.montarRelatorio('aguardando-nf')).linhas.length, 8);
+    assert.strictEqual(plano(f.montarRelatorio('producao-competencia')).totais.total, 9870);
+    assert.strictEqual(plano(f.montarRelatorio('producao-por-pedido')).totais.pecas, 327);
+    assert.strictEqual(f.montarRelatorio('inexistente'), null);
 });
 
 test('o script dos modais não monta dado por innerHTML e solta os ouvintes globais ao fechar', () => {

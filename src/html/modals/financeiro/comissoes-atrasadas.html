@@ -1,0 +1,102 @@
+<!--
+  Comissões atrasadas: parcelas vencidas e ainda não liquidadas. Modal extra
+  grande. Filtros funcionam sobre a lista; clicar numa linha abre Detalhes da
+  parcela por cima. Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finComissoesAtrasadasOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finAtrasadasTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finAtrasadasTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>Comissões atrasadas</h2>
+        <p class="text-xs text-gray-300 truncate">Parcelas vencidas e ainda não liquidadas</p>
+      </div>
+      <span></span>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="fin-indicadores">
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Parcelas vencidas</span>
+            <strong class="fin-indicador__valor" id="finAtrasadasQuantidade">—</strong>
+          </div>
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Valor líquido em aberto</span>
+            <strong class="fin-indicador__valor" id="finAtrasadasLiquido">—</strong>
+          </div>
+          <div class="fin-indicador fin-indicador--atencao">
+            <span class="fin-indicador__rotulo">Comissão potencial</span>
+            <strong class="fin-indicador__valor" id="finAtrasadasComissao">—</strong>
+          </div>
+        </div>
+
+        <div class="fin-filtros">
+          <div>
+            <label for="finAtrasadasCliente" class="block text-sm font-medium text-gray-300 mb-2">Cliente</label>
+            <select id="finAtrasadasCliente" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"><option value="">Todos</option></select>
+          </div>
+          <div>
+            <label for="finAtrasadasPedido" class="block text-sm font-medium text-gray-300 mb-2">Pedido</label>
+            <input id="finAtrasadasPedido" type="text" placeholder="Número" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="finAtrasadasFaixa" class="block text-sm font-medium text-gray-300 mb-2">Faixa de atraso</label>
+            <select id="finAtrasadasFaixa" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todas</option>
+              <option value="1–15">1–15 dias</option>
+              <option value="16–30">16–30 dias</option>
+              <option value="31–60">31–60 dias</option>
+              <option value="61–90">61–90 dias</option>
+              <option value="+90">+90 dias</option>
+            </select>
+          </div>
+          <div>
+            <label for="finAtrasadasInicio" class="block text-sm font-medium text-gray-300 mb-2">Vencimento de</label>
+            <input id="finAtrasadasInicio" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="finAtrasadasFim" class="block text-sm font-medium text-gray-300 mb-2">Até</label>
+            <input id="finAtrasadasFim" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Pedido</th>
+                <th class="px-4 py-3 text-left text-xs">Cliente</th>
+                <th class="px-4 py-3 text-left text-xs">NF</th>
+                <th class="px-4 py-3 text-left text-xs">Parcela</th>
+                <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                <th class="px-4 py-3 text-right text-xs">Dias em atraso</th>
+                <th class="px-4 py-3 text-right text-xs">Valor líquido</th>
+                <th class="px-4 py-3 text-right text-xs">CMS potencial</th>
+                <th class="px-4 py-3 text-right text-xs">Royalty</th>
+                <th class="px-4 py-3 text-right text-xs">Total comissão</th>
+              </tr>
+            </thead>
+            <tbody id="finAtrasadasCorpo" class="divide-y divide-white/10"></tbody>
+          </table>
+        </div>
+        <div id="finAtrasadasVazio" class="hidden py-8 text-center">
+          <p class="text-white font-medium">Nenhuma comissão atrasada nesta competência.</p>
+          <p class="text-sm text-gray-400 mt-1">Todas as parcelas vencidas foram liquidadas.</p>
+        </div>
+
+        <div class="glass-surface rounded-xl border border-white/10 px-5 py-4">
+          <p class="text-xs text-gray-400 uppercase tracking-wider mb-3">Aging das parcelas em aberto</p>
+          <div id="finAtrasadasAging" class="fin-aging"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button type="button" data-fin-abrir="visualizar-relatorio" data-fin-relatorio="comissoes-atrasadas" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Ver relatório</button>
+    </footer>
+  </div>
+</div>

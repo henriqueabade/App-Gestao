@@ -51,10 +51,12 @@ const FIN_DADOS_EXEMPLO = {
    ganhar modal/função real, basta preencher `abrir`. */
 const FIN_ACOES = {
     'atualizar': { rotulo: 'Atualizar' },
-    'aguardando-nf': { rotulo: 'Pedidos aguardando NF' },
-    'comissoes-competencia': { rotulo: 'Comissões da competência' },
-    'comissoes-atrasadas': { rotulo: 'Comissões atrasadas' },
-    'producao-competencia': { rotulo: 'Produção da competência' },
+    'aguardando-nf': { rotulo: 'Pedidos aguardando NF', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'aguardando-nf' }) },
+    'comissoes-competencia': { rotulo: 'Comissões da competência', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'comissoes-apuradas' }) },
+    'comissoes-atrasadas': { rotulo: 'Comissões atrasadas', abrir: m => finAbrirModal('comissoes-atrasadas', m) },
+    'producao-competencia': { rotulo: 'Produção da competência', abrir: m => finAbrirModal('producao-competencia', m) },
+    'confirmar-pagamento-comissao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'comissao' }) },
+    'confirmar-pagamento-producao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'producao' }) },
     'pendencias-todas': { rotulo: 'Todas as pendências' },
     'registrar-nf': { rotulo: 'Registrar NF', abrir: m => finAbrirModal('registrar-nf', m) },
     'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
@@ -62,7 +64,7 @@ const FIN_ACOES = {
     'registrar-producao': { rotulo: 'Registrar produção', abrir: m => finAbrirModal('registrar-producao', m) },
     'fechar-competencia': { rotulo: 'Fechar competência', abrir: m => finAbrirModal('fechar-competencia', m) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
-    'comissoes-detalhes': { rotulo: 'Detalhes das comissões' },
+    'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
     'atividade-todas': { rotulo: 'Atividade recente' }
 };
 
@@ -74,24 +76,39 @@ const FIN_MODAIS = {
     'registrar-ajuste': { html: 'modals/financeiro/registrar-ajuste.html', overlay: 'finRegistrarAjuste' },
     'registrar-producao': { html: 'modals/financeiro/registrar-producao.html', overlay: 'finRegistrarProducao' },
     'fechar-competencia': { html: 'modals/financeiro/fechar-competencia.html', overlay: 'finFecharCompetencia' },
-    'relatorios': { html: 'modals/financeiro/relatorios.html', overlay: 'finRelatorios' }
+    'relatorios': { html: 'modals/financeiro/relatorios.html', overlay: 'finRelatorios' },
+    'detalhes-parcela': { html: 'modals/financeiro/detalhes-parcela.html', overlay: 'finDetalhesParcela' },
+    'detalhes-pedido': { html: 'modals/financeiro/detalhes-pedido.html', overlay: 'finDetalhesPedido' },
+    'confirmar-pagamento': { html: 'modals/financeiro/confirmar-pagamento.html', overlay: 'finConfirmarPagamento' },
+    'visualizar-relatorio': { html: 'modals/financeiro/visualizar-relatorio.html', overlay: 'finVisualizarRelatorio' },
+    'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
+    'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' }
 };
 const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
 
-function finAbrirModal(chave, moduleEl) {
+/**
+ * Abre um modal do módulo. `extra` leva o que o modal precisa (relatório,
+ * tipo, pedido, parcela) e `extra.empilhar` abre POR CIMA do modal atual —
+ * é como um modal abre outro (detalhes, relatório, fechamento).
+ */
+function finAbrirModal(chave, moduleEl, extra = {}) {
     const modal = FIN_MODAIS[chave];
     if (!modal || typeof window.Modal?.open !== 'function') {
         finAvisarEmImplementacao(chave);
         return;
     }
+    const raiz = moduleEl || document.querySelector('.modulo-container.financeiro-module');
     window.financeiroModalContexto = {
+        ...extra,
         overlayId: modal.overlay,
         acao: chave,
         rotulo: FIN_ACOES[chave]?.rotulo || '',
-        competencia: moduleEl?.querySelector('#finCompetencia')?.value || null
+        competencia: extra.competencia || raiz?.querySelector('#finCompetencia')?.value || null
     };
-    window.Modal.open(modal.html, FIN_SCRIPT_MODAIS, modal.overlay);
+    window.Modal.open(modal.html, FIN_SCRIPT_MODAIS, modal.overlay, extra.empilhar === true);
 }
+// Os modais abrem uns aos outros por aqui (financeiro-modais.js não enxerga FIN_MODAIS).
+window.FinanceiroAbrirModal = finAbrirModal;
 
 const finFormatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 

@@ -1,0 +1,45 @@
+<!--
+  Visualizar relatório: conferência antes de exportar. Modal extra grande; a
+  folha tem rolagem própria. O relatório vem do contexto (`relatorio`), e a
+  tabela é montada pelo script. Exportar PDF/Excel ainda avisam "em
+  implementação". Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finVisualizarRelatorioOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finRelatorioTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finRelatorioTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Relatório</h2>
+        <p id="finRelatorioSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="finRelatorioGeradoEm" class="text-sm text-gray-300 justify-self-end truncate"></span>
+    </header>
+
+    <div class="flex-1 min-h-0 px-8 py-6 flex flex-col">
+      <div class="fin-folha flex-1 min-h-0 flex flex-col">
+        <div class="fin-folha__cabeca">
+          <div>
+            <p id="finRelatorioNome" class="text-base font-semibold text-white">—</p>
+            <p id="finRelatorioFiltro" class="text-xs text-gray-400"></p>
+          </div>
+          <p class="text-xs text-gray-400">Santíssimo Decor • Comissões e Produção</p>
+        </div>
+        <div class="fin-tabela fin-tabela--folha flex-1 min-h-0">
+          <table class="w-full text-sm">
+            <thead><tr id="finRelatorioCabecalho"></tr></thead>
+            <tbody id="finRelatorioCorpo" class="divide-y divide-white/10"></tbody>
+            <tfoot><tr id="finRelatorioTotais" class="fin-totais"></tr></tfoot>
+          </table>
+        </div>
+        <p id="finRelatorioVazio" class="hidden fin-vazio">Nenhum registro para este relatório.</p>
+      </div>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button type="button" data-fin-principal="Exportar Excel" class="btn-secondary px-6 py-2 rounded-lg text-white font-medium min-w-[140px]"><i class="fas fa-file-excel mr-2" aria-hidden="true"></i>Exportar Excel</button>
+      <button type="button" data-fin-principal="Exportar PDF" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]"><i class="fas fa-file-pdf mr-2" aria-hidden="true"></i>Exportar PDF</button>
+    </footer>
+  </div>
+</div>
