@@ -202,9 +202,16 @@ test('servidor DEV exige sessão e não publica segredos, tabelas privadas ou er
   assert.equal((await fetch(`${base}/.env`)).status, 404);
 });
 
-test('instalador exclui .env e dados privados; bridge não exporta configuração DB', () => {
+test('instalador inclui .env interno e exclui dados locais; bridge não exporta configuração DB', () => {
   const config = require('../electron-builder.config');
-  for (const pattern of ['!**/.env', '!**/.env.*', '!**/data/**']) assert.ok(config.files.includes(pattern));
+  const { FileMatcher } = require('app-builder-lib/out/fileMatcher');
+  const root = path.resolve(__dirname, '..');
+  const filter = new FileMatcher(root, root, value => value, config.files).createFilter();
+  const fileStat = { isDirectory: () => false };
+  assert.equal(filter(path.join(root, '.env'), fileStat), true);
+  for (const file of ['.env.local', '.env.example', 'data/authToken.json', 'backup.sql']) {
+    assert.equal(filter(path.join(root, file), fileStat), false, file);
+  }
   const main = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
   const handler = main.match(/ipcMain.handle\('get-runtime-config',[\s\S]*?\n\}\);/)[0];
   assert.match(handler, /return \{ apiBaseUrl:/);

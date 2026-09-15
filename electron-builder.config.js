@@ -11,7 +11,7 @@ module.exports = {
 
   files: [
     "**/*",
-    "!**/.env",
+    ".env", // Configuração interna incluída no app.asar durante esta fase.
     "!**/.env.*",
     "!**/data/**",
     "!**/*.sqlite",

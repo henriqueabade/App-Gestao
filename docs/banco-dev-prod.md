@@ -36,7 +36,7 @@ O banco DEV deve conter o schema e os dados do aplicativo. Esta implementação 
 - As sessões DEV são assinadas no backend e ficam somente na memória. Reiniciar exige login; o token salvo de PROD não é lido nem sobrescrito.
 - O servidor escuta em `127.0.0.1`. Em DEV, as rotas `/api` exigem sessão, exceto links públicos de confirmação/aprovação; tabelas privadas ficam fora do proxy genérico e respostas JSON são sanitizadas.
 - Fotos DEV vêm da coluna local `foto_usuario`, em TEXT ou BYTEA. O proxy de imagens remotas fica desativado em DEV.
-- O empacotamento exclui `.env`, `.env.*`, dados locais e arquivos SQL. O instalador sem configuração usa PROD.
+- Durante esta fase de uso interno, o empacotamento inclui o `.env` no `app.asar`, onde o backend já o carrega. O instalador utiliza o `BANCO` e as configurações presentes nesse arquivo no momento da geração. Variantes `.env.*`, dados locais e arquivos SQL continuam excluídos.
 - As janelas usam sandbox e um bloqueio de requisições `file://` para `.env` e arquivos de sessão, inclusive durante o desenvolvimento.
 
 ## Verificação
