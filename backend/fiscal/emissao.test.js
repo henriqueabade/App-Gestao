@@ -322,4 +322,17 @@ test('os dados de transporte e pagamento da entrada entram no XML; a mesma emiss
   const xml = t.api.dados.notas_fiscais[0].xml_envio;
   assert.match(xml, /<transp><modFrete>1<\/modFrete><transporta><xNome>Transp XYZ<\/xNome><\/transporta><vol><qVol>3<\/qVol><esp>Volumes<\/esp><\/vol><\/transp>/);
   assert.match(xml, /<tPag>17<\/tPag>/);
+  // O que foi informado no embarque fica no pedido, para o DANFE e a próxima nota.
+  const pedido = t.api.dados.pedidos[0];
+  assert.equal(pedido.modalidade_frete, 1);
+  assert.equal(pedido.volumes_quantidade, 3);
+  assert.equal(pedido.volumes_especie, 'Volumes');
+  assert.equal(pedido.transportadora, 'Transp XYZ');
+  assert.equal(pedido.forma_pagamento, 'Boleto', 'a forma do pedido não muda');
+});
+
+test('camposTransporteDoPedido: só o que veio, limpo; vazio zera volumes/pesos e nunca apaga a transportadora', () => {
+  assert.deepEqual(emissao.camposTransporteDoPedido(undefined), {});
+  assert.deepEqual(emissao.camposTransporteDoPedido({ modalidade_frete: '4', volumes_quantidade: '', peso_bruto: '12.5', transportadora_nome: '  ' }), { modalidade_frete: 4, volumes_quantidade: null, peso_bruto: 12.5 });
+  assert.deepEqual(emissao.camposTransporteDoPedido({ volumes_quantidade: 'x', volumes_especie: ' Caixa ', transportadora_nome: 'T' }), { volumes_especie: 'Caixa', transportadora: 'T' });
 });

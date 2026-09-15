@@ -292,6 +292,14 @@ function abrirPagamentoPedido(id) {
     openPedidoModal('modals/pedidos/pagamento.html', '../js/modals/pedido-pagamento.js', 'pagamentoPedido');
 }
 
+/** Conferência e emissão da NF-e ao marcar o pedido como "Enviado". */
+function abrirEmitirNfePedido(p) {
+    if (!p?.id) return;
+    window.selectedOrderId = p.id;
+    window.emitirNfeContext = { pedidoId: p.id, numero: p.numero, cliente: obterNomeCliente(p.cliente_id) };
+    openPedidoModal('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido');
+}
+
 function abrirRelatorioProducao(pedidoId, cliente) {
     if (!pedidoId) return;
     window.relatorioProducaoContext = { pedidoId, cliente };
@@ -391,6 +399,13 @@ async function carregarPedidos() {
             } else {
                 checkIcon.addEventListener('click', e => {
                     e.stopPropagation();
+                    // Marcar "Enviado" é o momento da NF-e: abre a conferência
+                    // da nota, que emite e só então muda a situação (ou envia
+                    // sem nota, com confirmação). Ver pedido-emitir-nfe.js.
+                    if (nextStatus === 'Enviado') {
+                        abrirEmitirNfePedido(p);
+                        return;
+                    }
                     showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
                         if (!ok) return;
                         try {

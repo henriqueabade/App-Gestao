@@ -362,6 +362,9 @@ test('GET /pedidos/:id/prontidao junta pedido, itens, parcelas, cliente, peças 
     assert.equal(corpo.pendencias[0].chave, 'reg_codigo_municipio');
     assert.equal(corpo.resumo.cliente, 'Cliente Bom LTDA');
     assert.equal(corpo.resumo.ufDestino, 'MG');
+    assert.equal(corpo.ambiente, 'homologacao', 'a tela de embarque mostra em que ambiente a nota sai');
+    assert.deepEqual(corpo.notas, [], 'e as notas que o pedido já tem (sem XML)');
+    assert.equal(corpo.resumo.tPagSugerido, '99', 'pedido sem forma de pagamento: "outros"');
     assert.deepEqual(corpo.resumo.itens.map(i => [i.codigo, i.cfop, i.unidade]), [['MESA-01', '5101', 'Peça']], 'só os itens deste pedido; CFOP e unidade herdados da configuração');
 
     assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/999/prontidao')).status, 404);
@@ -389,6 +392,9 @@ test('prontidão sem certificado nesta máquina e com cliente incompleto lista a
     assert.deepEqual([...origens].sort(), ['certificado', 'cliente', 'peca', 'pedido']);
     assert.match(corpo.pendencias.find(p => p.chave === 'nota_existente').mensagem, /nº 361 \(autorizada\)/);
     assert.match(corpo.pendencias.find(p => p.origem === 'certificado').mensagem, /Nenhum certificado/);
+    assert.equal(corpo.notas.length, 1);
+    assert.equal(corpo.notas[0].numero, 361);
+    assert.ok(!('xml_envio' in corpo.notas[0]));
   } finally {
     await t.fechar();
   }

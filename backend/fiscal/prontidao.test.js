@@ -56,6 +56,20 @@ test('pedido completo está pronto e o resumo traz UF, CFOP e valores resolvidos
   ]);
 });
 
+test('o resumo traz o que a tela de embarque preenche: documento e cidade do cliente, frete do pedido (ou o padrão) e tPag sugerido', () => {
+  const r = avaliar(completo({ pedido: { ...PEDIDO, forma_pagamento: 'Boleto', transportadora: 'Transp XYZ', volumes_quantidade: 2, volumes_especie: 'Caixa' }, configuracao: { ...CONFIG, modalidade_frete_padrao: 4 } }));
+  assert.equal(r.resumo.pedidoId, 55);
+  assert.equal(r.resumo.documentoCliente, '11222333000181');
+  assert.equal(r.resumo.cidadeCliente, 'Uberlândia');
+  assert.equal(r.resumo.formaPagamento, 'Boleto');
+  assert.equal(r.resumo.tPagSugerido, '15');
+  assert.deepEqual(r.resumo.frete, { modalidade: 4, transportadora: 'Transp XYZ', volumes_quantidade: 2, volumes_especie: 'Caixa', peso_bruto: null, peso_liquido: null });
+  const proprio = avaliar(completo({ pedido: { ...PEDIDO, modalidade_frete: 1 } }));
+  assert.equal(proprio.resumo.frete.modalidade, 1, 'o que o pedido já tem vence o padrão');
+  assert.equal(proprio.resumo.tPagSugerido, '99', 'sem forma de pagamento: outros');
+  assert.equal(avaliar(completo({ cliente: { ...CLIENTE, tipo_pessoa: 'PF', cpf: '12345678909', indicador_ie: 9, inscricao_estadual: '' } })).resumo.documentoCliente, '12345678909');
+});
+
 test('fora do estado usa o CFOP de fora (da peça ou da configuração)', () => {
   const r = avaliar(completo({ cliente: { ...CLIENTE, reg_uf: 'SP', reg_codigo_municipio: '3550308' } }));
   assert.equal(r.pronto, true);

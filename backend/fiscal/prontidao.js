@@ -11,6 +11,7 @@
  * IBGE pelo nome da cidade); o resto bloqueia até alguém corrigir o cadastro.
  */
 const { siglaDaUf } = require('./municipios');
+const { codigoPagamento } = require('./xmlNfe');
 
 const STATUS_QUE_BLOQUEIAM = new Set(['enviando', 'processando', 'autorizada', 'cancelamento_pendente']);
 const TOLERANCIA_PARCELAS = 0.02;
@@ -146,15 +147,29 @@ function avaliar({
 
   return fechar(pendencias, {
     pedido: pedido.numero || pedido.id,
+    pedidoId: pedido.id,
     situacao: pedido.situacao || null,
     cliente: nomeCliente,
+    documentoCliente: cliente ? (String(cliente.tipo_pessoa || 'PJ').toUpperCase() === 'PF' ? digitos(cliente.cpf) : digitos(cliente.cnpj)) || null : null,
+    cidadeCliente: cliente?.reg_cidade || null,
     ufEmitente,
     ufDestino,
     dentroDoEstado,
     valorFinal: Number.isFinite(valorFinal) ? valorFinal : null,
     somaParcelas: Math.round(somaParcelas * 100) / 100,
     parcelas: parcelas.length,
-    itens: itensAvaliados
+    itens: itensAvaliados,
+    // O que a tela de embarque preenche: começa com o que o pedido já tem.
+    formaPagamento: pedido.forma_pagamento || null,
+    tPagSugerido: codigoPagamento(pedido.forma_pagamento),
+    frete: {
+      modalidade: pedido.modalidade_frete ?? configuracao?.modalidade_frete_padrao ?? 9,
+      transportadora: pedido.transportadora || null,
+      volumes_quantidade: pedido.volumes_quantidade ?? null,
+      volumes_especie: pedido.volumes_especie ?? null,
+      peso_bruto: pedido.peso_bruto ?? null,
+      peso_liquido: pedido.peso_liquido ?? null
+    }
   });
 }
 

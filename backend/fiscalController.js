@@ -236,7 +236,12 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     try {
       const api = createApiClient(req);
       const dados = await emissao.lerPedidoFiscal(api, req.params.id);
-      res.json(prontidao.avaliar({ ...dados, certificado: resumoDoCertificado(dados.configuracao) }));
+      res.json({
+        ...prontidao.avaliar({ ...dados, certificado: resumoDoCertificado(dados.configuracao) }),
+        // A tela de embarque precisa saber em que ambiente a nota sairá e o que já existe.
+        ambiente: configuracao.ambienteEfetivo(dados.configuracao, env),
+        notas: dados.notas.map(emissao.semXml)
+      });
     } catch (err) {
       responder(res, err, 'GET /api/fiscal/pedidos/:id/prontidao');
     }

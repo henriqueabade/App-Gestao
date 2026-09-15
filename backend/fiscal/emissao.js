@@ -151,6 +151,37 @@ async function reservarNumero({ api, cfg, ambiente, base, usuarioId }) {
   throw erro(`Não foi possível reservar um número de NF-e (${TENTATIVAS_NUMERO} tentativas).`, 409);
 }
 
+const CAMPOS_TRANSPORTE_PEDIDO = {
+  modalidade_frete: v => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+  volumes_quantidade: v => (v === '' || v === null || v === undefined ? null : Number(v)),
+  volumes_especie: v => (v === null || v === undefined ? null : String(v).trim().slice(0, 60) || null),
+  peso_bruto: v => (v === '' || v === null || v === undefined ? null : Number(v)),
+  peso_liquido: v => (v === '' || v === null || v === undefined ? null : Number(v)),
+  transportadora_nome: v => (v === null || v === undefined ? undefined : String(v).trim().slice(0, 60) || undefined)
+};
+
+/** Só as chaves que vieram; `transportadora_nome` grava em `pedidos.transportadora`. */
+function camposTransporteDoPedido(transporte) {
+  const saida = {};
+  for (const [chave, limpar] of Object.entries(CAMPOS_TRANSPORTE_PEDIDO)) {
+    if (!(chave in (transporte || {}))) continue;
+    const valor = limpar(transporte[chave]);
+    if (valor === undefined || Number.isNaN(valor)) continue;
+    saida[chave === 'transportadora_nome' ? 'transportadora' : chave] = valor;
+  }
+  return saida;
+}
+
+async function gravarTransporteNoPedido(api, pedido, transporte) {
+  const campos = camposTransporteDoPedido(transporte);
+  if (!Object.keys(campos).length) return;
+  try {
+    await api.put(`/api/pedidos/${pedido.id}`, campos);
+  } catch (e) {
+    console.error(`Transporte não gravado no pedido ${pedido.id}:`, e.message);
+  }
+}
+
 /** Nota do pedido que não chegou a existir para a SEFAZ: rejeitada, rascunho ou erro técnico. */
 function notaReutilizavel(notas, ambiente, serie) {
   return (notas || [])
@@ -331,6 +362,10 @@ async function emitir({
     }
     const xmlAssinado = assinatura.assinarNfe(montada.xml, certificado);
 
+    // O que foi informado no embarque fica no pedido (o DANFE e a próxima nota
+    // partem dele). Não trava a emissão: a nota é o que importa aqui.
+    await gravarTransporteNoPedido(api, pedido, entrada.transporte);
+
     nota = await atualizarNota(api, nota, {
       status_fiscal: 'enviando', codigo_numerico: montada.cNF, chave_acesso: montada.chave,
       natureza_operacao: base.natureza_operacao, data_emissao: instante.toISOString(),
@@ -397,5 +432,5 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
 module.exports = {
   STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO,
   semXml, lerPedidoFiscal, lerNota, listarNotas, ehNumeroDuplicado, reservarNumero, notaReutilizavel,
-  emitir, sincronizar
+  camposTransporteDoPedido, emitir, sincronizar
 };
