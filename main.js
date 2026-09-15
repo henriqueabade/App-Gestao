@@ -1,6 +1,7 @@
 
 const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron');
 const path = require('path');
+const { isDev: useLocalDatabase } = require('./backend/dataConfig');
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const http = require('http');
@@ -100,6 +101,7 @@ if (!gotTheLock) {
 
 // Garante que qualquer janela criada permaneça em tela cheia
 app.on('browser-window-created', (_event, win) => {
+  require('./backend/privateFileGuard').protectSession(win.webContents.session);
   const webPreferences =
     typeof win.webContents.getWebPreferences === 'function'
       ? win.webContents.getWebPreferences()
@@ -1237,6 +1239,12 @@ async function requestAuthenticatedProfile(path, options = {}) {
     error.status = 401;
     throw error;
   }
+  if (useLocalDatabase) {
+    require('./backend/localAuth').verifyToken(token);
+    const user = require('./backend/sanitizarSaida').sanitizarSaida(await require('./backend/db').query(path, options));
+    if (user) setCurrentUserSession({ ...currentUserSession, ...user });
+    return user;
+  }
   const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
     ...options,
     headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` }
@@ -2063,7 +2071,7 @@ async function startApiServerOnPort(port) {
   await closeApiServer();
 
   return new Promise((resolve, reject) => {
-    const server = apiServer.listen(port);
+    const server = apiServer.listen(port, '127.0.0.1');
     try {
       if (typeof server.keepAliveTimeout === 'number') {
         server.keepAliveTimeout = Math.max(server.keepAliveTimeout, CONNECTION_SERVER_KEEP_ALIVE_MS);
@@ -3277,6 +3285,7 @@ function createLoginWindow(show = true, showOnLoad = true) {
 
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -3400,6 +3409,7 @@ function createDashboardWindow(show = true) {
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -3650,6 +3660,10 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
   const path = `/api/usuarios/${idSeguro}/avatar`;
   const avatar = `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
   const avatarVersion = Date.now();
+  if (useLocalDatabase) {
+    require('./backend/localAuth').verifyToken(token);
+    return require('./backend/sanitizarSaida').sanitizarSaida(await getAuthorizedApiClient().put(path, { foto_usuario: avatar }));
+  }
   const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
     method: 'PUT',
     headers: {

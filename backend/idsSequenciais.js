@@ -14,6 +14,7 @@
 
 /** Colisão de chave (pkey/unique), para retentar com outro id. */
 function isDuplicateKeyError(err) {
+  if (err?.code === '23505') return true;
   const partes = [
     err?.body?.detalhe,
     err?.body?.detail,

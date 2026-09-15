@@ -3,7 +3,7 @@
 // ✅ Não exige OWNER/REPO/SLUG do ambiente (usa valores padrão)
 // ✅ Injeta OWNER/REPO/RELEASE_TYPE no spawn para o electron-builder
 
-require('dotenv').config();
+require('./dataConfig');
 
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');

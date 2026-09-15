@@ -1,3 +1,7 @@
+# Ambientes DEV/PROD
+
+A arquitetura vigente está em [Configuração DEV/PROD](docs/banco-dev-prod.md). BANCO=PROD usa a API; BANCO=DEV usa PostgreSQL através do backend local. As restrições de protocolo HTTP abaixo se aplicam à API remota. O frontend nunca recebe credenciais DB nem executa SQL.
+
 Bem-vindo ao time de desenvolvimento do Santíssimo Decor Dashboard.
 Este documento explica, de forma objetiva e definitiva, como o sistema realmente funciona e como você deve programar para evitar falhas.
 
@@ -7,11 +11,10 @@ Ele é obrigatório para qualquer pessoa que vá escrever código para este proj
 
 O Santíssimo Decor Dashboard é um app desktop em Electron, usado para gerenciar processos internos da empresa.
 
-A arquitetura é 100% baseada em chamadas HTTP para uma API REST externa.
+Em PROD, o backend usa chamadas HTTP para a API REST externa. Em DEV, seleciona o adaptador PostgreSQL.
 
-👉 O Dashboard NÃO acessa banco local
-👉 NÃO executa SQL
-👉 NÃO possui backend Node próprio
+👉 A interface NÃO acessa banco local nem executa SQL.
+👉 O backend Node seleciona o acesso aos dados.
 
 O Electron funciona somente como:
 
@@ -41,8 +44,8 @@ leitor/interpretador de JSON
 └─────────────────────────────┘
 
 
-➡ O Electron NUNCA conversa diretamente com o PostgreSQL.
-➡ Somente a API externa faz isso.
+➡ Em PROD, a API externa acessa PostgreSQL.
+➡ Em DEV, apenas backend/localDatabase.js abre a conexão local.
 
 🔥 3. REGRAS ABSOLUTAS (OBRIGATÓRIAS)
 ✔ A API é REST simples — e mais simples do que parece
@@ -112,15 +115,9 @@ Todas as requisições:
 
 Authorization: Bearer TOKEN
 
-✔ Zero SQL local
+✔ Zero SQL no frontend.
 
-Nada de SELECT
-
-Nada de pg ou pg-pool
-
-Nada de migrations
-
-Nada de PostgreSQL no Electron
+O driver pg e as consultas SQL ficam no backend DEV. Não há migrações automáticas.
 
 ❌ 4. ANTI-PADRÕES PROIBIDOS (NÃO PODE COMETER)
 
@@ -320,18 +317,17 @@ Antes de fazer PR:
 ✔ Ordenação e paginação feitas no backend local
 ✔ Token JWT correto em todos os fetch
 ✔ Erros tratados e logados
-✔ Nenhum SQL, JOIN, SELECT, FROM
-✔ Nenhum acesso direto ao banco
-✔ Nenhum backend local recriado
-✔ JS limpo, sem lógica de banco
+✔ Nenhum SQL ou credencial no frontend
+✔ Acesso direto ao banco restrito ao adaptador DEV
+✔ Controllers compartilham as mesmas regras nos dois modos
 
 Se algum item falhar → a PR não deve ser aprovada.
 
 🧠 12. MANDAMENTOS DO DESENVOLVEDOR SANTÍSSIMO DECOR
 
-A API é minha única fonte de dados.
+A origem dos dados depende de BANCO; nunca há fallback entre ambientes.
 
-Não farei SQL local.
+Não farei SQL no frontend.
 
 Não usarei operadores PostgREST.
 

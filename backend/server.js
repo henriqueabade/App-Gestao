@@ -1,5 +1,5 @@
 // carrega variáveis do .env sem mensagens informativas
-require('dotenv').config({ quiet: true });
+const { isDev } = require('./dataConfig');
 
 const express = require('express');
 const cors = require('cors');
@@ -35,6 +35,19 @@ const API_BASE_ORIGIN = (
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
 
+if (isDev) {
+  app.use((req, res, next) => {
+    // Bloqueia páginas externas tentando usar a sessão do app pelo loopback.
+    const origin = req.headers.origin;
+    if (origin && origin !== 'null' && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return res.status(403).json({ error: 'Origem não autorizada.' });
+    }
+    const json = res.json.bind(res);
+    res.json = body => json(sanitizarSaida(body));
+    next();
+  });
+}
+
 app.use((req, _res, next) => {
   if (!req.headers.authorization) {
     const stored = getToken();
@@ -46,6 +59,16 @@ app.use((req, _res, next) => {
   }
   next();
 });
+
+if (isDev) {
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' && ['/usuarios/confirmar-email', '/usuarios/aprovar'].includes(req.path)) return next();
+    try {
+      require('./localAuth').verifyToken(req.headers.authorization);
+      next();
+    } catch (_) { res.status(401).json({ error: 'Sessão expirada. Entre novamente.' }); }
+  });
+}
 
 app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);
@@ -142,6 +165,7 @@ app.use(passwordResetRouter);
 // sempre nas iniciais. Repassamos a imagem por aqui.
 // (app.use e não app.get('/imagens/*'): no Express 5 o curinga precisa de nome)
 app.use('/imagens', async (req, res) => {
+  if (isDev) return res.sendStatus(404); // Fotos DEV são lidas do BYTEA local.
   try {
     const destino = `${API_BASE_ORIGIN}${req.originalUrl}`;
     const resposta = await fetch(destino);
@@ -181,7 +205,20 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // a linha direto por aqui e trocaria o modelo de todo mundo.
 //
 // A licao das duas vezes e a mesma: prefixo do MODULO, nao da tabela.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_)/i;
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_)/i;
+// Em DEV uma rota genérica só pode alcançar tabelas de negócio conhecidas.
+// Isso exclui também tabelas extras/segredos existentes no PostgreSQL local.
+const TABELAS_PUBLICAS_DEV = new Set([
+  'cancelamento_destinacoes', 'categoria', 'estoque_movimentos', 'colecao',
+  'etapas_producao', 'clientes', 'materia_prima_movimentacoes', 'materia_prima_ordenada',
+  'notificacoes_estoque', 'orcamento_parcelas', 'orcamentos', 'pedido_itens_ext',
+  'pedido_parcelas', 'pedidos_itens_faltantes', 'pedidos_itens', 'orcamentos_itens',
+  'pedidos', 'ordem_producao_itens', 'pedido_historico_eventos', 'produtos_insumos',
+  'produtos_em_cada_ponto', 'precos_detalhados', 'realocacoes', 'tabela_fixa',
+  'transportadoras', 'unidades', 'reservas_estoque', 'vw_modal_conversao',
+  'vw_pedidos_candidatos_realocacao', 'vw_relatorio_producao', 'contatos_cliente',
+  'ordens_producao', 'materia_prima', 'produtos'
+]);
 
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;
@@ -189,7 +226,7 @@ app.get('/api/:table', async (req, res) => {
     res.status(400).json({ error: 'Tabela inválida' });
     return;
   }
-  if (TABELAS_BLOQUEADAS.test(table)) {
+  if (TABELAS_BLOQUEADAS.test(table) || (isDev && !TABELAS_PUBLICAS_DEV.has(table))) {
     return res.status(403).json({ error: 'Acesso negado a esta tabela', code: 'FORBIDDEN' });
   }
 
@@ -223,7 +260,7 @@ app.post('/api/:table', async (req, res) => {
   // permissao, mas a ESCRITA seguia aberta — dava para inserir linha em perm_*,
   // modelos_permissoes ou usuarios direto pelo proxy, sem passar por nenhuma
   // checagem. Escrever nessas tabelas so pelos controllers dedicados.
-  if (TABELAS_BLOQUEADAS.test(table)) {
+  if (TABELAS_BLOQUEADAS.test(table) || (isDev && !TABELAS_PUBLICAS_DEV.has(table))) {
     return res.status(403).json({ error: 'Acesso negado a esta tabela', code: 'FORBIDDEN' });
   }
 
@@ -244,8 +281,8 @@ app.get('/status', (_req, res) => {
 });
 
 async function runHealthCheck() {
-  const dbStatus = db.getStatus();
   const health = await db.healthCheck();
+  const dbStatus = db.getStatus();
   const ok = Boolean(health?.ok && dbStatus.ready);
   const statusCode = ok ? 200 : health?.statusCode || 503;
 
@@ -294,7 +331,7 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   if (!process.env.PORT) console.warn('PORT not set, defaulting to 3000');
   const DEBUG = process.env.DEBUG === 'true';
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '127.0.0.1', () => {
     if (DEBUG) console.log(`API server running on port ${PORT}`);
   });
   try {

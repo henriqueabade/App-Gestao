@@ -1,3 +1,4 @@
+const { isDev } = require('./dataConfig');
 const { getToken } = require('./tokenStore');
 
 const RAW_API_BASE_URL =
@@ -159,6 +160,11 @@ function garantirDestinoSeguroEmTeste(method, url) {
 }
 
 function createApiClient(req) {
+  if (isDev) {
+    return require('./localDataClient').createLocalDataClient(undefined, {
+      token: req?.headers?.authorization || getToken()
+    });
+  }
   function resolveBearer() {
     const stored = normalizeToken(getToken());
     return normalizeToken(req?.headers?.authorization || '') || stored || DEFAULT_BEARER_TOKEN;

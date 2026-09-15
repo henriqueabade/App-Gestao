@@ -1,138 +1,49 @@
-Arquitetura Oficial (100% HTTP / 0% Banco Local)
+# Santíssimo Decor Dashboard
 
-Este projeto é o Dashboard Desktop da Santíssimo Decor, desenvolvido em Electron, que se comunica exclusivamente com a API externa do sistema corporativo.
+Aplicativo desktop em Electron com backend local e duas opções de acesso aos dados.
 
-Ele não acessa PostgreSQL local, não executa SQL e não contém backend próprio.
-O Electron atua somente como:
+## Escolher o ambiente
 
-interface gráfica (UI)
+- **BANCO=PROD**: usa a API remota, mantendo o comportamento existente. É o padrão quando BANCO está vazio ou ausente.
+- **BANCO=DEV**: usa o PostgreSQL configurado no .env, exclusivamente pelo backend.
 
-gerenciador do Token JWT
+O frontend usa IPC e HTTP local em ambos os modos. Credenciais DB nunca são enviadas pela configuração pública; o instalador exclui arquivos .env e dados locais.
 
-orquestrador de requisições HTTP
+Consulte [Configuração DEV/PROD](docs/banco-dev-prod.md) e [.env.example](.env.example). Reinicie o app após alterar o ambiente. O banco DEV precisa ter o schema do aplicativo e um usuário ativo com senha bcrypt. Não há cópia automática de dados entre ambientes.
 
-parser/interpretador de JSON
+## Executar
 
-🚨 ARQUITETURA OFICIAL – REGRAS INFRAUTILMENTE OBRIGATÓRIAS
-✔ Modelo Real
+Requisitos: Node.js, npm e, para DEV, PostgreSQL acessível.
 
-100% baseado em HTTP → API externa
-
-0% PostgreSQL local
-
-0% SQL
-
-0% SELECT / FROM / JOIN
-
-0% pg, pg-pool, migrations, seeds, warmup, rollback
-
-✔ API REST simples
-
-A API usa REST puro, sem qualquer sintaxe avançada.
-
-❗Proibido (não funciona):
-
-eq., neq., gte., lte.
-
-in.(1,2,3)
-
-like.*
-
-select=id,nome,perfil:perfil_id(...)
-
-joins virtuais tipo:
-
-materia_prima:insumo_id(...)
-
-processo:etapa_id(...)
-
-✔ Permitido (funciona):
-GET /api/tabela?id=1
-GET /api/tabela?id=1&id=2&id=3
-GET /api/tabela?status=ativo
-
-
-📌 Qualquer uso de arrays via URLSearchParams vira erro.
-Use apenas múltiplos parâmetros repetidos:
-
-Correto:
-?id=1&id=2&id=3
-
-Errado (API não entende):
-?id=1,2,3
-
-⚙️ Requisitos
-
-Node.js 18+
-
-npm
-
-Windows / macOS / Linux
-
-Nenhum banco ou serviço adicional é necessário na máquina local.
-
-🔐 Variáveis de Ambiente (.env)
-
-Somente variáveis relacionadas à API e serviços externos:
-
-APP_URL=http://localhost:3000
-API_BASE_URL=https://api.santissimodecor.com.br
-
-SMTP_HOST=
-SMTP_PORT=
-SMTP_USER=
-SMTP_PASS=
-FROM_EMAIL=
-
-❌ NÃO USAR (obsoletos)
-DB_HOST
-DB_USER
-DB_NAME
-DB_PASSWORD
-DB_PORT
-
-▶️ Execução em Desenvolvimento
+```sh
+npm install
 npm start
+```
 
+## Testar
 
-Isso inicia o Electron + ponte HTTP para a API externa.
+```sh
+npm test
+node --test backend/localDataClient.test.js
+```
 
-❗Não existe mais:
+## Variáveis de ambiente
 
-nenhum backend local
+```dotenv
+BANCO=PROD
+API_BASE_URL=https://api.santissimodecor.com.br
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=
+DB_NAME=
+DB_PASSWORD=
+```
 
-server.js
+As configurações de SMTP e demais serviços continuam independentes da seleção do banco.
 
-pg ou pg-pool
+## Contrato da API de produção
 
-conexões PostgreSQL locais
-
-queries SQL
-
-migrations
-
-seeds
-
-introspecção information_schema
-
-🔑 Autenticação – Fluxo Oficial
-
-Electron envia POST /login para a API
-
-API retorna:
-
-{ sucesso, token, usuario }
-
-
-Electron salva o token (localStorage / storage interno)
-
-Todas as requisições passam a enviar:
-
-Authorization: Bearer TOKEN
-
-
-Sem o token → 403
-Token inválido → 401
+As orientações abaixo descrevem a API remota. Ela usa comparações simples; mantenha os controllers compatíveis com esse contrato, mesmo ao desenvolver em DEV.
 
 📦 Acesso às Tabelas (CRUD Oficial)
 
@@ -163,7 +74,7 @@ GET /api/pedidos
 
 🔄 Como o Electron interpreta colunas, tipos e tabelas
 
-Toda a estrutura vem pura da API.
+Os controllers recebem registros JSON do adaptador selecionado.
 
 O Electron deduz:
 
@@ -223,7 +134,7 @@ Criação de .exe, .dmg, .AppImage
 
 Usa electron-builder
 
-A arquitetura não afeta o build
+O build exclui .env, .env.*, dados locais e arquivos SQL.
 
 🚫 ERROS MAIS COMUNS (NÃO PODEM ACONTECER)
 1. Usar operadores PostgREST
@@ -245,14 +156,14 @@ A arquitetura não afeta o build
 
 → é REST simples; tudo manual
 
-5. Achar que Electron tem backend próprio
+5. Colocar credenciais ou SQL no frontend
 
-→ Electron só faz chamadas HTTP
+→ A seleção do ambiente e o acesso PostgreSQL pertencem somente ao backend.
 
 🧠 PRINCÍPIO CENTRAL
 
 O frontend deve se comportar como um cliente HTTP burro — sem regras de banco, sem joins, sem SQL.
-Toda lógica de dados está na API externa.
+As regras ficam no backend; a origem dos dados é selecionada por BANCO.
 
 ✅ Conclusão
 
@@ -260,10 +171,9 @@ O Santíssimo Decor Dashboard é:
 
 ✔ Electron + HTTP
 ✔ 100% REST
-✔ API externa como única fonte de dados
+✔ API externa em PROD e PostgreSQL local em DEV
 ✔ Token JWT obrigatório
-✔ Zero SQL local
-✔ Zero PostgreSQL
+✔ SQL e PostgreSQL somente no backend DEV
 ✔ Estrutura dinâmica deduzida de JSON
 ✔ Sem operadores PostgREST
 ✔ Sem joins automáticos

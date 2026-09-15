@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { isDev } = require('./dataConfig');
 
 // ---------------------------------------------------------------------------
 // Onde o token e guardado.
@@ -48,8 +49,8 @@ function resolverDiretorio() {
   return path.join(__dirname, '..', 'data');
 }
 
-const TOKEN_DIR = resolverDiretorio();
-const TOKEN_PATH = path.join(TOKEN_DIR, 'authToken.json');
+const TOKEN_DIR = isDev ? path.join(__dirname, '..', 'data') : resolverDiretorio();
+const TOKEN_PATH = path.join(TOKEN_DIR, isDev ? 'authToken.dev.json' : 'authToken.json');
 const CAMINHO_ANTIGO = path.join(__dirname, '..', 'data', 'authToken.json');
 
 const TOKEN_REFRESH_INTERVAL_MS = Math.max(
@@ -64,6 +65,7 @@ let lastStatCheckAt = 0;
 let limpezaDeliberada = false;
 
 function persistToken(token) {
+  if (isDev) return true;
   try {
     fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
     fs.writeFileSync(TOKEN_PATH, JSON.stringify({ token, salvoEm: Date.now() }), 'utf-8');
@@ -83,6 +85,7 @@ function lerArquivo(caminho) {
 }
 
 function loadPersistedToken() {
+  if (isDev) return;
   try {
     currentToken = lerArquivo(TOKEN_PATH);
     lastKnownMtimeMs = fs.statSync(TOKEN_PATH)?.mtimeMs || null;
@@ -137,6 +140,7 @@ function clearToken() {
   currentToken = null;
   lastKnownMtimeMs = null;
   limpezaDeliberada = true;
+  if (isDev) return;
   try {
     fs.rmSync(TOKEN_PATH, { force: true });
   } catch (err) {
@@ -145,6 +149,7 @@ function clearToken() {
 }
 
 function refreshTokenFromDisk(force = false) {
+  if (isDev) return;
   const now = Date.now();
   if (!force && now - lastStatCheckAt < TOKEN_REFRESH_INTERVAL_MS) return;
   lastStatCheckAt = now;

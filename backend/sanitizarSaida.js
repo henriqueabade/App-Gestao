@@ -5,14 +5,15 @@
 // pela interface e nao deve sair do backend.
 const CAMPOS_PROIBIDOS = [
   'senha', 'password', 'password_hash', 'senha_hash',
-  'confirmacao_token', 'aprovacao_token', 'reset_token', 'token'
+  'confirmacao_token', 'aprovacao_token', 'reset_token', 'token', 'token_hash',
+  'db_host', 'db_port', 'db_user', 'db_name', 'db_password', 'connectionstring'
 ];
 
 function limparRegistro(registro) {
   if (!registro || typeof registro !== 'object') return registro;
   const copia = Array.isArray(registro) ? [] : {};
   for (const [chave, valor] of Object.entries(registro)) {
-    if (CAMPOS_PROIBIDOS.includes(chave)) continue;
+    if (CAMPOS_PROIBIDOS.includes(chave.toLowerCase())) continue;
     copia[chave] = valor && typeof valor === 'object' ? limparRegistro(valor) : valor;
   }
   return copia;

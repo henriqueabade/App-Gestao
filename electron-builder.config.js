@@ -11,6 +11,13 @@ module.exports = {
 
   files: [
     "**/*",
+    "!**/.env",
+    "!**/.env.*",
+    "!**/data/**",
+    "!**/*.sqlite",
+    "!**/*.sql",
+    "!**/.claude/**",
+    "!**/*.test.js",
     "!node_modules/.bin",
     "!node_modules/electron*",
     "!node_modules/@electron*",

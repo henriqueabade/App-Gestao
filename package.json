@@ -9,7 +9,7 @@
     "dist:publish": "electron-builder --config electron-builder.config.js --publish onTagOrDraft",
     "publish": "npm run dist:publish",
     "verify-smtp": "node backend/verifyTransporter.js",
-    "test": "node --test backend src/js/__tests__",
+    "test": "node --test",
     "build:tailwind": "tailwindcss -i ./src/styles/tailwind-input.css -o ./src/styles/tailwind-offline.css --minify",
     "start:dev-safe": "powershell -Command \"$env:ELECTRON_DISABLE_GPU='1'; electron .\""
   },
@@ -32,7 +32,8 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^7.0.5"
+    "nodemailer": "^7.0.5",
+    "pg": "^8.23.0"
   },
   "type": "commonjs",
   "build": {

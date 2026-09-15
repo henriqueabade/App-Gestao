@@ -1,4 +1,5 @@
 const db = require('./db');
+const { isDev } = require('./dataConfig');
 const { createApiClient } = require('./apiHttpClient');
 const { setToken, clearToken, getToken } = require('./tokenStore');
 
@@ -41,6 +42,7 @@ function normalizeEmail(email) {
 }
 
 async function registrarUsuario(nome, email, senha) {
+  if (isDev) return require('./localAuth').register(nome, normalizeEmail(email), senha);
   const api = createApiClient();
   const payload = {
     nome,
@@ -84,18 +86,18 @@ function normalizarStatusAcesso(valor) {
 async function loginUsuario(email, senha) {
   const normalizedEmail = normalizeEmail(email);
   try {
-    const response = await fetch(`${API_BASE_URL}/login`, {
+    const response = isDev ? null : await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalizedEmail, senha })
     });
 
-    let data = null;
-    try {
+    let data = isDev ? await require('./localAuth').login(normalizedEmail, senha) : null;
+    if (response) try {
       data = await response.json();
     } catch (_) {}
 
-    if (!response.ok) {
+    if (response && !response.ok) {
       const error = new Error(data?.message || 'Falha ao autenticar.');
       error.code = response.status === 401 ? 'auth-failed' : 'login-error';
       if (response.status === 401) {
@@ -232,6 +234,10 @@ function ensureDatabaseReady() {
 }
 
 function waitForDatabaseReady() {
+  if (isDev) return db.healthCheck().then(result => {
+    if (!result.ok) throw db.createNotReadyError();
+    return true;
+  });
   return Promise.resolve(true);
 }
 
