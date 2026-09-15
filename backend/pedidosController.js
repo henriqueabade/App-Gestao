@@ -122,9 +122,10 @@ function permissaoDeStatus(req) {
  * com a previsão de embarque. O dia é o de São Paulo — o corte do ISO daria o
  * dia seguinte a quem marcasse "Enviado" depois das 21h.
  *
- * Pedido "ao embarcar" que embarca DEPOIS do combinado leva o novo início do
- * faturamento no MESMO payload da situação: sem transação, um PUT só é a única
- * atomicidade que existe. Os vencimentos são refeitos em seguida, na rota.
+ * Pedido "ao embarcar" leva o novo início do faturamento — o dia real do
+ * embarque, antes ou depois da previsão — no MESMO payload da situação: sem
+ * transação, um PUT só é a única atomicidade que existe. Os vencimentos são
+ * refeitos em seguida, na rota.
  */
 function payloadDeStatus(status, agora = new Date(), pedido = null) {
   const payload = { situacao: status };
@@ -257,7 +258,7 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     await api.put(`/api/pedidos/${id}`, payload);
 
     // ------------------------------------------------------------------
-    // Embarque atrasado num pedido "ao embarcar": o início novo já foi gravado
+    // Pedido "ao embarcar": o início novo (o dia real do embarque) já foi gravado
     // no PUT acima, junto da situação. Os vencimentos vêm agora, no lugar, e
     // cada falha vira aviso — a política do estorno: sem transação não há
     // como desfazer o envio, então o que não deu certo é dito, nunca

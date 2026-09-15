@@ -207,19 +207,15 @@ function baseDoFaturamento(pedido) {
 /**
  * O novo início do faturamento quando o pedido embarca, ou `null` (não muda).
  *
- * Só a regra 'ao_embarcar' reage ao embarque, e só para FRENTE: embarcar
- * depois do início combinado (o atual, ou a previsão) empurra o início para
- * o dia real. No dia ou adiantado, nada — o cliente não passa a pagar antes do
- * combinado porque a fábrica foi rápida. Sem previsão nem início (dado que a
- * tela não produz), vale o dia real: é o que "ao embarcar" quer dizer.
+ * Só a regra 'ao_embarcar' reage ao embarque: o início passa a ser o dia REAL
+ * do embarque, antes ou depois da previsão — a previsão só valia até o pedido
+ * embarcar. Se o dia real já é o início gravado, nada muda.
  */
 function inicioAposEmbarque(pedido, embarcarReal) {
   if (String(pedido?.faturamento_regra || '').trim() !== 'ao_embarcar') return null;
   const real = diaValido(embarcarReal);
   if (!real) return null;
-  const combinado = diaValido(pedido?.inicio_faturamento) || diaValido(pedido?.embarcar_previsao);
-  if (!combinado) return real;
-  return real > combinado ? real : null;
+  return real === diaValido(pedido?.inicio_faturamento) ? null : real;
 }
 
 const formatarDia = dia => {

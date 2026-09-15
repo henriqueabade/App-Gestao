@@ -231,7 +231,7 @@ test('enviar grava o DIA do embarque em São Paulo; entregar, o instante', () =>
   assert.equal(payloadDeStatus('Enviado', noite).embarcar_real, '2026-07-31');
 });
 
-test('embarque atrasado de um pedido "ao embarcar" leva o novo início no mesmo payload', () => {
+test('pedido "ao embarcar" leva o dia real do embarque como início, no mesmo payload', () => {
   const pedido = {
     faturamento_regra: 'ao_embarcar',
     embarcar_previsao: '2026-08-10',
@@ -239,17 +239,21 @@ test('embarque atrasado de um pedido "ao embarcar" leva o novo início no mesmo 
   };
 
   // Um PUT só: sem transação, é a única forma de a situação e o início não
-  // ficarem pela metade.
-  assert.deepEqual(payloadDeStatus('Enviado', new Date('2026-08-12T15:00:00Z'), pedido), {
-    situacao: 'Enviado',
-    embarcar_real: '2026-08-12',
-    inicio_faturamento: '2026-08-12'
-  });
+  // ficarem pela metade. Atrasado ou adiantado, conta do embarque real.
+  for (const [agora, dia] of [
+    [new Date('2026-08-12T15:00:00Z'), '2026-08-12'],
+    [new Date('2026-08-05T15:00:00Z'), '2026-08-05']
+  ]) {
+    assert.deepEqual(payloadDeStatus('Enviado', agora, pedido), {
+      situacao: 'Enviado',
+      embarcar_real: dia,
+      inicio_faturamento: dia
+    });
+  }
 
-  // No dia, adiantado, em outra regra ou sem o pedido, o início não se mexe.
+  // No dia, em outra regra ou sem o pedido, o início não se mexe.
   for (const [agora, doPedido] of [
     [new Date('2026-08-10T15:00:00Z'), pedido],
-    [new Date('2026-08-05T15:00:00Z'), pedido],
     [new Date('2026-08-12T15:00:00Z'), { ...pedido, faturamento_regra: 'data' }],
     [new Date('2026-08-12T15:00:00Z'), { ...pedido, faturamento_regra: 'ao_converter' }],
     [new Date('2026-08-12T15:00:00Z'), null]

@@ -1,2 +1,664 @@
-/* Estilos do módulo Financeiro */
+/* Estilos do módulo Financeiro — Comissões e Produção */
 
+/*
+ * Só UMA folha de módulo fica carregada por vez (o menu troca o link#page-style
+ * a cada navegação), por isso cada módulo redeclara a base visual da casa:
+ * cores, vidro, botões, badges e inputs. Este bloco é o mesmo de Pedidos —
+ * inclusive para o diálogo padrão (DialogPadrao) e os modais, que usam
+ * glass-surface / btn-* e ficariam sem estilo aqui.
+ */
+:root {
+    --color-primary: #b6a03e;
+    --color-primary-light: #d4c169;
+    --color-primary-dark: #7f6a27;
+    --color-violet: #A394A7;
+    --color-bordeaux: #6a152c;
+    --color-bg-deep: #310017;
+    --color-surface: rgba(255,255,255,0.08);
+    --color-green: #a2ffa6;
+    --color-green-dark: #065f46;
+    --color-red: #ff5858;
+    --color-blue: #8aa7f3;
+    --color-input: rgba(0,0,0,0.3);
+    --color-inputBorder: rgba(255,255,255,0.15);
+    --neutral-100: #f9fafb;
+    --neutral-500: #6b7280;
+}
+
+body {
+    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.glass-surface {
+    background: var(--color-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.btn-primary { background: var(--color-primary); transition: all 150ms ease; }
+.btn-primary:hover { background: var(--color-primary-light); transform: scale(1.05); }
+
+.btn-secondary { background: var(--color-blue); transition: all 150ms ease; }
+.btn-secondary:hover { background: rgba(138, 167, 243, 0.9); }
+
+.btn-warning { background: var(--color-bordeaux); transition: all 150ms ease; }
+.btn-warning:hover { background: rgba(106, 21, 44, 0.8); transform: scale(1.05); }
+
+.btn-danger { background: var(--color-red); transition: all 150ms ease; }
+.btn-danger:hover { background: rgba(255,88,88,0.8); transform: scale(1.1); }
+
+.btn-neutral { background: rgba(255,255,255,0.1); transition: all 150ms ease; }
+.btn-neutral:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
+
+.btn-success { background: var(--color-green); color: #000; transition: all 150ms ease; }
+.btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
+
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+.focus\:ring-primary\/50:focus { box-shadow: 0 0 0 2px rgba(182,160,62,0.5); }
+.appearance-none { appearance: none; }
+
+.select-arrow {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+.badge-success { background: rgba(162, 255, 166, 0.2); color: var(--color-green); }
+.badge-info { background: rgba(138, 167, 243, 0.2); color: var(--color-blue); }
+.badge-warning { background: rgba(212, 193, 105, 0.2); color: var(--color-primary); }
+.badge-danger { background: rgba(255, 88, 88, 0.2); color: var(--color-red); }
+.badge-neutral { background: rgba(163, 148, 167, 0.2); color: var(--color-violet); }
+
+.info-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--fin-texto-1, #fff);
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+.info-icon::after { content: 'i'; font-style: italic; font-weight: bold; }
+.info-icon:hover { background: rgba(255, 255, 255, 0.445); transform: scale(1.1); }
+
+.input-glass {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 150ms ease;
+}
+.input-glass:focus {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.tab-active {
+    color: var(--color-primary) !important;
+    border-bottom-color: var(--color-primary) !important;
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+.animate-fade-in-up:nth-child(1) { animation-delay: 0.1s; }
+.animate-fade-in-up:nth-child(2) { animation-delay: 0.2s; }
+.animate-fade-in-up:nth-child(3) { animation-delay: 0.3s; }
+.animate-fade-in-up:nth-child(4) { animation-delay: 0.4s; }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+.animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
+.slide-in { animation: slideIn 0.3s ease-out forwards; }
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateY(12px); } to { transform: translateY(0); } }
+
+/* Toast notifications */
+.toast {
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: opacity 0.5s ease-in-out;
+    background-color: #374151;
+}
+.toast-success { background-color: #16a34a; }
+.toast-error { background-color: #dc2626; }
+.toast-info { background-color: #2563eb; }
+
+/* ================================================================ módulo */
+
+/* As variáveis --menu-* vêm de menu.css e trocam com o tema claro/escuro; o
+   valor de reserva é o da casa no escuro, para a página aberta solta. */
+.financeiro-module {
+    --fin-espaco: 1.5rem;          /* 24px entre blocos grandes */
+    --fin-borda: var(--menu-surface-border, rgba(255, 255, 255, 0.1));
+    --fin-texto-1: var(--menu-text-strong, #fff);
+    --fin-texto-2: var(--menu-text-secondary, #9ca3af);   /* texto secundário */
+    --fin-texto-3: var(--menu-text-tertiary, #6b7280);
+    --fin-hover: var(--menu-surface-soft, rgba(255, 255, 255, 0.05));
+    --fin-acao-fundo: var(--menu-surface-soft, rgba(0, 0, 0, 0.2));
+    --fin-bordo-fundo: rgba(106, 21, 44, 0.28);
+    --fin-bordo-borda: rgba(106, 21, 44, 0.75);
+    --fin-bordo-texto: #e08aa6;    /* bordô legível sobre o fundo escuro */
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------ cabeçalho */
+
+.fin-cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+}
+
+.fin-cabecalho__controles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.fin-competencia {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.fin-competencia__rotulo {
+    font-size: 0.75rem;
+    color: var(--fin-texto-2);
+}
+
+#finCompetencia { min-width: 13rem; }
+
+/* ---------------------------------------------------------- indicadores */
+
+.fin-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--fin-espaco);
+    margin-bottom: var(--fin-espaco);
+}
+
+.fin-kpi {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.35rem 1.5rem;
+    border: 1px solid var(--fin-borda);
+    cursor: pointer;
+    transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.fin-kpi:hover,
+.fin-kpi:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(182, 160, 62, 0.45);
+    outline: none;
+}
+
+.fin-kpi:hover .fin-kpi__seta,
+.fin-kpi:focus-visible .fin-kpi__seta {
+    background: var(--color-primary);
+    color: var(--fin-texto-1, #fff);
+}
+
+.fin-kpi__topo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.fin-kpi__icone {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    background: rgba(182, 160, 62, 0.18);
+    color: var(--color-primary-light);
+}
+
+.fin-kpi__icone[data-tom="bordo"] {
+    background: var(--fin-bordo-fundo);
+    color: var(--fin-bordo-texto);
+}
+
+.fin-kpi__rotulo {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--fin-texto-2);
+}
+
+.fin-kpi__seta {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--fin-texto-1, #fff);
+    transition: all 150ms ease;
+}
+
+.fin-kpi__linha {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fin-kpi__valor {
+    font-size: 1.85rem;
+    line-height: 1.1;
+    font-weight: 700;
+    color: var(--fin-texto-1, #fff);
+    font-variant-numeric: tabular-nums;
+}
+
+.fin-kpi__auxiliar { font-size: 0.9rem; color: var(--fin-texto-2); }
+
+.fin-kpi__rodape {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--fin-texto-2);
+}
+
+/* Cartão de atenção: bordô da identidade, mais peso, nada de cor nova. */
+.fin-kpi--atencao {
+    border-color: var(--fin-bordo-borda);
+    background: linear-gradient(160deg, var(--fin-bordo-fundo), var(--color-surface) 70%);
+}
+
+.fin-kpi--atencao .fin-kpi__valor { color: var(--fin-bordo-texto); }
+.fin-kpi--atencao:hover,
+.fin-kpi--atencao:focus-visible { border-color: var(--fin-bordo-texto); }
+
+/* --------------------------------------------------------------- painéis */
+
+.fin-painel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--fin-borda);
+    padding: 1.35rem 1.5rem;
+}
+
+.fin-painel__cabeca {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.fin-painel__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+.fin-painel__titulo h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--fin-texto-1, #fff);
+    margin: 0;
+}
+
+.fin-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.fin-badge--contagem {
+    background: rgba(182, 160, 62, 0.2);
+    color: var(--color-primary-light);
+    min-width: 1.6rem;
+}
+
+.fin-link {
+    background: none;
+    border: 0;
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+    color: var(--color-primary-light);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 150ms ease;
+}
+
+.fin-link i { font-size: 0.75rem; margin-left: 0.25rem; }
+.fin-link:hover { color: var(--fin-texto-1, #fff); }
+
+/* Segunda faixa: 70 / 30 */
+.fin-operacional {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    gap: var(--fin-espaco);
+    margin-bottom: var(--fin-espaco);
+}
+
+/* ----------------------------------------------------------- pendências */
+
+.fin-pendencias {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.fin-pendencia {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 0.75rem;
+    margin: 0 -0.75rem;
+    border-radius: 0.75rem;
+    border-bottom: 1px solid var(--fin-borda);
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.fin-pendencia:last-child { border-bottom: 0; }
+.fin-pendencia:hover { background: var(--fin-hover); }
+
+.fin-pendencia__status {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(182, 160, 62, 0.18);
+}
+
+.fin-pendencia__status[data-nivel="critico"] {
+    background: var(--fin-bordo-texto);
+    box-shadow: 0 0 0 4px var(--fin-bordo-fundo);
+}
+
+.fin-pendencia__texto { min-width: 0; }
+
+.fin-pendencia__titulo {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--fin-texto-1, #fff);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fin-pendencia__descricao {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--fin-texto-2);
+    margin-top: 0.15rem;
+}
+
+.fin-pendencia__data {
+    font-size: 0.8rem;
+    color: var(--fin-texto-2);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.fin-pendencia__acao {
+    min-width: 5.5rem;
+}
+
+/* -------------------------------------------------------- ações rápidas */
+
+.fin-acoes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+/* Superfície escura com borda; o dourado só no hover, para não virarem seis
+   botões dourados empilhados. */
+.fin-acao {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--fin-borda);
+    background: var(--fin-acao-fundo);
+    color: var(--fin-texto-1, #fff);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.fin-acao > i:first-child {
+    width: 1.25rem;
+    text-align: center;
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+
+.fin-acao > span { flex: 1; min-width: 0; }
+
+.fin-acao__seta {
+    font-size: 0.7rem;
+    color: var(--fin-texto-3);
+    transition: transform 150ms ease, color 150ms ease;
+}
+
+.fin-acao:hover,
+.fin-acao:focus-visible {
+    border-color: var(--color-primary);
+    background: rgba(182, 160, 62, 0.1);
+    outline: none;
+}
+
+.fin-acao:hover .fin-acao__seta,
+.fin-acao:focus-visible .fin-acao__seta {
+    color: var(--color-primary-light);
+    transform: translateX(2px);
+}
+
+/* ---------------------------------------------------------------- resumos */
+
+.fin-resumos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--fin-espaco);
+    margin-bottom: var(--fin-espaco);
+}
+
+.fin-resumo {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.fin-resumo__linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--fin-borda);
+}
+
+.fin-resumo__linha:last-child { border-bottom: 0; }
+
+.fin-resumo__linha dt { font-size: 0.9rem; color: var(--fin-texto-2); }
+
+.fin-resumo__linha dd {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--fin-texto-1, #fff);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.fin-resumo__linha dd.fin-resumo__atencao { color: var(--fin-bordo-texto); }
+
+.fin-proximo {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--fin-borda);
+}
+
+.fin-proximo > i {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(182, 160, 62, 0.18);
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+
+.fin-proximo__rotulo { display: block; font-size: 0.75rem; color: var(--fin-texto-2); }
+
+.fin-proximo__data {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--fin-texto-1, #fff);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------- atividade recente */
+
+.fin-atividade {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 0.25rem;
+    position: relative;
+}
+
+/* A linha vertical liga os eventos; cada item traz a bolinha por cima dela. */
+.fin-atividade::before {
+    content: "";
+    position: absolute;
+    left: 0.55rem;
+    top: 0.6rem;
+    bottom: 0.6rem;
+    width: 1px;
+    background: var(--fin-borda);
+}
+
+.fin-evento {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.35rem 0 0.9rem 1.5rem;
+}
+
+.fin-evento::before {
+    content: "";
+    position: absolute;
+    left: 0.3rem;
+    top: 0.65rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-bg-deep);
+}
+
+.fin-evento__hora {
+    font-size: 0.8rem;
+    color: var(--fin-texto-2);
+    font-variant-numeric: tabular-nums;
+    padding-top: 0.05rem;
+}
+
+.fin-evento__texto { min-width: 0; }
+.fin-evento__titulo { display: block; font-size: 0.9rem; color: var(--fin-texto-1, #fff); }
+.fin-evento__detalhe { display: block; font-size: 0.8rem; color: var(--fin-texto-2); margin-top: 0.1rem; }
+
+/* --------------------------------------------------------- esqueleto/vazio */
+
+.fin-esqueleto {
+    display: inline-block;
+    height: 1em;
+    min-width: 6rem;
+    border-radius: 0.35rem;
+    background: linear-gradient(90deg, rgba(255,255,255,0.08) 25%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.08) 75%);
+    background-size: 200% 100%;
+    animation: finBrilho 1.4s ease-in-out infinite;
+}
+
+@keyframes finBrilho { to { background-position: -200% 0; } }
+
+.fin-vazio {
+    padding: 1.5rem 0;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--fin-texto-2);
+}
+
+/* ------------------------------------------------------------ responsivo */
+
+@media (max-width: 1279px) {
+    .fin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fin-operacional { grid-template-columns: minmax(0, 1fr); }
+    .fin-resumos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+    .fin-kpis,
+    .fin-resumos { grid-template-columns: minmax(0, 1fr); }
+    .fin-pendencia { grid-template-columns: auto minmax(0, 1fr); }
+    .fin-pendencia__data,
+    .fin-pendencia__acao { grid-column: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fin-esqueleto { animation: none; }
+    .fin-kpi,
+    .fin-acao,
+    .fin-pendencia { transition: none; }
+}

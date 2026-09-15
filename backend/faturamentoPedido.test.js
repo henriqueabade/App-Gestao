@@ -189,13 +189,13 @@ test('os prazos contam do início gravado; no legado, do dia da emissão', () =>
 
 // --------------------------------------------------------------- embarque
 
-test('"ao embarcar": só o embarque ATRASADO move o início', () => {
+test('"ao embarcar": o início passa a ser o dia real do embarque, antes ou depois da previsão', () => {
   const pedido = {
     faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-08-10', inicio_faturamento: '2026-08-10'
   };
-  assert.equal(inicioAposEmbarque(pedido, '2026-08-05'), null, 'adiantado não antecipa a cobrança');
+  assert.equal(inicioAposEmbarque(pedido, '2026-08-05'), '2026-08-05', 'adiantado conta do embarque real');
   assert.equal(inicioAposEmbarque(pedido, '2026-08-10'), null, 'no dia não muda nada');
-  assert.equal(inicioAposEmbarque(pedido, '2026-08-12'), '2026-08-12', 'atrasado passa a contar do embarque');
+  assert.equal(inicioAposEmbarque(pedido, '2026-08-12'), '2026-08-12', 'atrasado conta do embarque real');
   // DATE serializada entra cortada: no dia continua sendo no dia.
   const serializado = {
     ...pedido, embarcar_previsao: '2026-08-10T00:00:00.000Z', inicio_faturamento: '2026-08-10T00:00:00.000Z'
@@ -203,15 +203,16 @@ test('"ao embarcar": só o embarque ATRASADO move o início', () => {
   assert.equal(inicioAposEmbarque(serializado, '2026-08-10'), null);
 });
 
-test('o embarque compara com o início atual, e só na regra "ao embarcar"', () => {
-  // Início e previsão diferentes: o que vale é o início.
+test('o embarque compara com o início gravado, e só na regra "ao embarcar"', () => {
+  // Início e previsão diferentes: o que se compara é o início.
   const pedido = { faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-08-10', inicio_faturamento: '2026-08-20' };
-  assert.equal(inicioAposEmbarque(pedido, '2026-08-15'), null);
+  assert.equal(inicioAposEmbarque(pedido, '2026-08-20'), null);
+  assert.equal(inicioAposEmbarque(pedido, '2026-08-15'), '2026-08-15');
   assert.equal(inicioAposEmbarque(pedido, '2026-08-21'), '2026-08-21');
-  // Sem início gravado, vale a previsão.
+  // Sem início gravado, o embarque define o início — mesmo no dia da previsão.
   assert.equal(
-    inicioAposEmbarque({ faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-08-10' }, '2026-08-11'),
-    '2026-08-11'
+    inicioAposEmbarque({ faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-08-10' }, '2026-08-10'),
+    '2026-08-10'
   );
   // Sem nenhum dos dois (a tela não produz isso), "ao embarcar" é o embarque.
   assert.equal(inicioAposEmbarque({ faturamento_regra: 'ao_embarcar' }, '2026-08-11'), '2026-08-11');

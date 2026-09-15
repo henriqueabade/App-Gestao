@@ -55,7 +55,7 @@ function formatarDataLocal(isoDate) {
  *
  * O upstream pode servir a data como '2026-09-13T00:00:00.000Z', e qualquer
  * conversão de fuso no caminho mostraria o dia 12 — justo na data de embarque,
- * que é o que decide se o faturamento atrasou.
+ * que é de onde o faturamento passa a contar.
  */
 function formatarDiaDate(valor) {
     const achado = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? '').trim());
@@ -80,15 +80,15 @@ function mensagensDaTrocaDeStatus(ok, httpStatus, corpo) {
         }];
     }
     const mensagens = [];
-    // Embarque depois da previsão num pedido "ao embarcar": o backend moveu o
-    // início do faturamento para o dia real e refez os vencimentos.
+    // Pedido "ao embarcar": o backend passou o início do faturamento para o
+    // dia real do embarque (antes ou depois da previsão) e refez os vencimentos.
     const faturamento = corpo?.faturamento;
     if (faturamento?.reprogramado) {
         const inicio = formatarDiaDate(faturamento.inicio_faturamento);
         mensagens.push({
             texto: inicio
-                ? `Embarque atrasado: vencimentos reprogramados a partir de ${inicio}`
-                : 'Embarque atrasado: vencimentos reprogramados.',
+                ? `Vencimentos reprogramados a partir do embarque: ${inicio}`
+                : 'Vencimentos reprogramados a partir do embarque.',
             tipo: 'info'
         });
     }

@@ -97,7 +97,7 @@ test('recusa da troca de status mostra o motivo do backend', () => {
   assert.equal(semCorpo[0].tipo, 'error');
 });
 
-test('embarque atrasado avisa a partir de quando os vencimentos contam', () => {
+test('embarque que reprograma avisa a partir de quando os vencimentos contam', () => {
   const { mensagensDaTrocaDeStatus } = carregarLista();
 
   const mensagens = Array.from(mensagensDaTrocaDeStatus(true, 200, {
@@ -107,7 +107,7 @@ test('embarque atrasado avisa a partir de quando os vencimentos contam', () => {
   }));
 
   assert.equal(mensagens.length, 1);
-  assert.equal(mensagens[0].texto, 'Embarque atrasado: vencimentos reprogramados a partir de 12/08/2026');
+  assert.equal(mensagens[0].texto, 'Vencimentos reprogramados a partir do embarque: 12/08/2026');
   assert.equal(mensagens[0].tipo, 'info');
 });
 

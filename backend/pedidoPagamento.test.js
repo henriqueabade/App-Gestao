@@ -733,16 +733,19 @@ test('embarque atrasado num pedido "ao embarcar" move o início e reprograma as 
   }
 });
 
-test('embarque adiantado num pedido "ao embarcar" não mexe no início', async () => {
+test('embarque adiantado num pedido "ao embarcar" também passa a contar do embarque real', async () => {
   const ctx = await montar(cenario({
     faturamento_regra: 'ao_embarcar', embarcar_previsao: '2099-12-31', inicio_faturamento: '2099-12-31'
   }));
   try {
     const resposta = await mudarStatus(ctx.porta, 1, 'Enviado');
     assert.strictEqual(resposta.status, 200);
-    assert.strictEqual(ctx.tabelas.pedidos[0].inicio_faturamento, '2099-12-31');
-    assert.ok(!ctx.chamadas.some(c => c.tabela === 'pedido_parcelas' && c.metodo === 'PUT'));
-    assert.strictEqual((await resposta.json()).faturamento.reprogramado, false);
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.inicio_faturamento, pedido.embarcar_real, 'a previsão só valia até embarcar');
+    assert.strictEqual(parcelaDe(ctx, 1).data_vencimento, somarDias(pedido.embarcar_real, 30));
+    assert.strictEqual(parcelaDe(ctx, 2).data_vencimento, somarDias(pedido.embarcar_real, 60));
+    assert.ok(!recriouParcela(ctx), 'as parcelas não podem ser apagadas nem recriadas');
+    assert.strictEqual((await resposta.json()).faturamento.reprogramado, true);
   } finally {
     await ctx.encerrar();
   }

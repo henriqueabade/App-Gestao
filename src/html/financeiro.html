@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Tela principal do módulo Financeiro -->
+<!-- Tela principal do módulo Financeiro — Comissões e Produção -->
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -13,19 +13,176 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container">
-    <div>
-      <!-- Header -->
-      <div class="module-header flex justify-between items-center mb-8 animate-fade-in-up">
-        <div>
-          <h1 class="text-2xl font-semibold mb-2 flex items-center gap-2 module-header__title">
-            Financeiro
-            <i class="info-icon"></i>
-          </h1>
-          <p class="module-header__description">Gerenciamento financeiro</p>
-        </div>
+  <!--
+    Só o .modulo-container é importado pelo menu (src/js/menu.js). Os números
+    e listas são preenchidos por src/js/financeiro.js a partir de um único
+    objeto de dados: nesta etapa são dados de EXEMPLO, e trocar a fonte pelo
+    backend não mexe no HTML. Cada botão/cartão traz `data-fin-acao`; quem
+    ainda não tem função real abre o aviso "em implementação".
+  -->
+  <div class="modulo-container financeiro-module">
+    <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
+    <div class="module-header fin-cabecalho mb-8 animate-fade-in-up">
+      <div>
+        <h1 class="text-2xl font-semibold mb-2 module-header__title">Comissões e Produção</h1>
+        <p class="module-header__description">Acompanhamento financeiro e produtivo dos pedidos</p>
       </div>
-      <!-- Conteúdo do módulo Financeiro -->
+      <div class="fin-cabecalho__controles">
+        <label class="fin-competencia" for="finCompetencia">
+          <span class="fin-competencia__rotulo">Competência</span>
+          <select id="finCompetencia" class="input-glass text-white rounded-md px-4 py-3 select-arrow appearance-none"></select>
+        </label>
+        <button id="finHoje" type="button" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium">Hoje</button>
+        <button id="finAtualizar" type="button" class="btn-primary text-white rounded-md px-5 py-3 text-sm font-medium" data-fin-acao="atualizar">
+          <i class="fas fa-rotate mr-2" aria-hidden="true"></i>Atualizar
+        </button>
+      </div>
+    </div>
+
+    <!-- Primeira faixa: indicadores principais -->
+    <div class="fin-kpis animate-fade-in-up">
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="aguardando-nf" role="button" tabindex="0" aria-label="Aguardando NF — abrir pedidos sem nota fiscal">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-file-invoice" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Aguardando NF</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="nf.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="nf.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="nf.rodape"></p>
+      </article>
+
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="comissoes-competencia" role="button" tabindex="0" aria-label="Comissões a pagar — abrir competência atual">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-hand-holding-usd" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Comissões a pagar</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="comissoes.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="comissoes.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="comissoes.rodape"></p>
+      </article>
+
+      <!-- Atenção: bordô da identidade, sem cor nova -->
+      <article class="fin-kpi fin-kpi--atencao glass-surface rounded-xl" data-fin-acao="comissoes-atrasadas" role="button" tabindex="0" aria-label="Comissões atrasadas — abrir parcelas vencidas">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="bordo"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Comissões atrasadas</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="atrasadas.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="atrasadas.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="atrasadas.rodape"></p>
+      </article>
+
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="producao-competencia" role="button" tabindex="0" aria-label="Produção a pagar — abrir fechamento da produção">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-industry" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Produção a pagar</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="producao.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="producao.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="producao.rodape"></p>
+      </article>
+    </div>
+
+    <!-- Segunda faixa: pendências (70%) e ações rápidas (30%) -->
+    <div class="fin-operacional animate-fade-in-up">
+      <section class="fin-painel glass-surface rounded-xl">
+        <header class="fin-painel__cabeca">
+          <div class="fin-painel__titulo">
+            <h2>Pendências que exigem ação</h2>
+            <span class="fin-badge fin-badge--contagem" data-fin="pendencias.total">0</span>
+          </div>
+          <button type="button" class="fin-link" data-fin-acao="pendencias-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+        </header>
+        <ul class="fin-pendencias" data-fin-lista="pendencias"></ul>
+      </section>
+
+      <section class="fin-painel glass-surface rounded-xl">
+        <header class="fin-painel__cabeca">
+          <div class="fin-painel__titulo"><h2>Ações rápidas</h2></div>
+        </header>
+        <div class="fin-acoes">
+          <button type="button" class="fin-acao" data-fin-acao="registrar-nf">
+            <i class="fas fa-file-invoice" aria-hidden="true"></i><span>Registrar NF</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-fin-acao="registrar-recebimento">
+            <i class="fas fa-money-bill-wave" aria-hidden="true"></i><span>Registrar recebimento</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-fin-acao="registrar-ajuste">
+            <i class="fas fa-undo" aria-hidden="true"></i><span>Registrar ajuste</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-fin-acao="registrar-producao">
+            <i class="fas fa-hammer" aria-hidden="true"></i><span>Registrar produção</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-fin-acao="fechar-competencia">
+            <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-fin-acao="relatorios">
+            <i class="fas fa-chart-line" aria-hidden="true"></i><span>Relatórios</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Terceira faixa: resumos e atividade -->
+    <div class="fin-resumos animate-fade-in-up">
+      <section class="fin-painel glass-surface rounded-xl">
+        <header class="fin-painel__cabeca">
+          <div class="fin-painel__titulo"><h2>Resumo de Comissões</h2></div>
+          <button type="button" class="fin-link" data-fin-acao="comissoes-detalhes">Ver detalhes <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+        </header>
+        <dl class="fin-resumo">
+          <div class="fin-resumo__linha"><dt>Previstas</dt><dd data-fin="resumoComissoes.previstas">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Apuradas</dt><dd data-fin="resumoComissoes.apuradas">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Ajustes</dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
+        </dl>
+        <footer class="fin-proximo">
+          <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+          <div>
+            <span class="fin-proximo__rotulo">Próximo pagamento</span>
+            <strong class="fin-proximo__data" data-fin="resumoComissoes.proximoPagamento">—</strong>
+          </div>
+        </footer>
+      </section>
+
+      <section class="fin-painel glass-surface rounded-xl">
+        <header class="fin-painel__cabeca">
+          <div class="fin-painel__titulo"><h2>Resumo de Produção</h2></div>
+        </header>
+        <dl class="fin-resumo">
+          <div class="fin-resumo__linha"><dt>Pedidos em produção</dt><dd data-fin="resumoProducao.emProducao">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Parcialmente concluídos</dt><dd data-fin="resumoProducao.parciais">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Peças finalizadas no mês</dt><dd data-fin="resumoProducao.pecasMes">—</dd></div>
+          <div class="fin-resumo__linha"><dt>Valor da competência</dt><dd data-fin="resumoProducao.valorCompetencia">—</dd></div>
+        </dl>
+        <footer class="fin-proximo">
+          <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+          <div>
+            <span class="fin-proximo__rotulo">Próximo pagamento</span>
+            <strong class="fin-proximo__data" data-fin="resumoProducao.proximoPagamento">—</strong>
+          </div>
+        </footer>
+      </section>
+
+      <section class="fin-painel glass-surface rounded-xl">
+        <header class="fin-painel__cabeca">
+          <div class="fin-painel__titulo"><h2>Atividade recente</h2></div>
+          <button type="button" class="fin-link" data-fin-acao="atividade-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+        </header>
+        <ol class="fin-atividade" data-fin-lista="atividade"></ol>
+      </section>
     </div>
   </div>
 </body>

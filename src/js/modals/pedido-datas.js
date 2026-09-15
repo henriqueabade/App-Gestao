@@ -6,9 +6,9 @@
  * início por uma de três regras, que ficam gravadas no pedido
  * (`faturamento_regra`):
  *
- *   ao_embarcar   o início é a previsão de embarque. Se o embarque atrasar, o
- *                 backend passa a contar da data real ao marcar "Enviado";
- *                 embarcar no dia ou antes não muda nada.
+ *   ao_embarcar   o início é a previsão de embarque até o pedido embarcar; ao
+ *                 marcar "Enviado", o backend passa a contar do dia real do
+ *                 embarque, antes ou depois da previsão.
  *   ao_converter  o início é o dia da conversão.
  *   data          o início é a data escolhida aqui.
  *
@@ -363,10 +363,10 @@
 
   function atualizarPrevia() {
     const previsao = lerDataDigitada(embarque.texto.value).iso;
-    const seAtrasar = 'Se o embarque atrasar, passa a contar do dia em que embarcar.';
+    const aoEmbarcar = 'Quando o pedido embarcar, passa a contar do dia real do embarque.';
     infoEmbarque.textContent = previsao
-      ? `Usa a previsão: ${textoDoDia(previsao)}. ${seAtrasar}`
-      : `Usa a previsão de embarque. ${seAtrasar}`;
+      ? `Usa a previsão: ${textoDoDia(previsao)}. ${aoEmbarcar}`
+      : `Usa a previsão de embarque. ${aoEmbarcar}`;
 
     // Aviso, não bloqueio: registrar um pedido que já devia ter embarcado é
     // legítimo; o que se quer é evitar o ano digitado errado.
