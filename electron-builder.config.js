@@ -1,5 +1,14 @@
 const path = require('path');
 
+// Publicar com BANCO=DEV é bloqueado aqui também, e não só no botão do app:
+// `npm run publish` pelo terminal chega ao electron-builder sem passar pelo
+// publisher.js. Gerar o instalador sem publicar (`npm run dist`) continua livre.
+// Ver backend/travaPublicacao.js.
+require('./backend/travaPublicacao').exigirBancoProdParaPublicar({
+  argv: process.argv,
+  caminhoEnv: path.join(__dirname, '.env')
+});
+
 module.exports = {
   appId: 'com.santissimo.decor',
   productName: 'Santíssimo Decor',

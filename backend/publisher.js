@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const path = require('path');
 const fs = require('fs');
+const { verificarBancoParaPublicar } = require('./travaPublicacao');
 
 const emitter = new EventEmitter();
 const projectRoot = path.resolve(__dirname, '..');
@@ -265,7 +266,13 @@ function verificarTokenGithub() {
 }
 
 function validatePublishEnvironment() {
-  // 🔒 ÚNICO requisito obrigatório: GH_TOKEN (lido direto do .env, sempre atual)
+  // 🔒 PRIMEIRO o banco. O .env vai dentro do instalador, e com BANCO=DEV todos
+  // os clientes ficariam sem sistema. Antes do token de propósito: nem vale a
+  // pena conferir credencial de uma publicação que não pode acontecer.
+  const bancoBloqueia = verificarBancoParaPublicar(path.join(projectRoot, '.env'));
+  if (bancoBloqueia) return bancoBloqueia;
+
+  // 🔒 GH_TOKEN (lido direto do .env, sempre atual)
   const token = getFreshGithubToken();
   if (!token) return new Error('Defina GH_TOKEN (no .env ou nas variáveis do sistema) antes de publicar.');
 

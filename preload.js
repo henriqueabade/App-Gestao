@@ -252,6 +252,8 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     if (DEBUG) ipcRenderer.send('debug-log', msg);
   },
   getRuntimeConfig: () => getRuntimeConfigCached(),
+  // 'DEV' ou 'PROD' — só para o selo do cabeçalho.
+  getModoBanco: () => ipcRenderer.invoke('get-modo-banco'),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
   obterPerfil: () => ipcRenderer.invoke('perfil:obter'),
   enviarImagemPerfil: (file) => ipcRenderer.invoke('perfil:enviar-imagem', file),

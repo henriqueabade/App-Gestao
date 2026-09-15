@@ -1235,6 +1235,26 @@ header.glass-surface {
     margin-left: 0;
 }
 
+/* Selo do banco DEV, ao lado do nome. Fica visível mesmo com o menu recolhido
+   (quando o nome some, ele encosta no logo). Não define `display`: a classe
+   `hidden` precisa continuar valendo para escondê-lo em PROD. */
+.selo-banco-dev {
+    margin-left: 0.5rem;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1.4;
+    color: #1a1200;
+    background: #f5b82e;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 0 2px rgba(245, 184, 46, 0.25);
+    white-space: nowrap;
+    user-select: none;
+    cursor: default;
+}
+
 #logoContainer img {
     width: 48px !important;
     height: auto !important;

@@ -39,6 +39,11 @@ O banco DEV deve conter o schema e os dados do aplicativo. Esta implementação 
 - Durante esta fase de uso interno, o empacotamento inclui o `.env` no `app.asar`, onde o backend já o carrega. O instalador utiliza o `BANCO` e as configurações presentes nesse arquivo no momento da geração. Variantes `.env.*`, dados locais e arquivos SQL continuam excluídos.
 - As janelas usam sandbox e um bloqueio de requisições `file://` para `.env` e arquivos de sessão, inclusive durante o desenvolvimento.
 
+## Publicação e selo DEV
+
+- **Publicar com `BANCO=DEV` é bloqueado.** A trava lê o `.env` no momento da publicação (é ele que vai no instalador), tanto pelo botão "Publicar atualização" quanto por `npm run publish`. Gerar o instalador sem publicar (`npm run dist`) continua liberado. Implementação: `backend/travaPublicacao.js`.
+- **Selo "DEV" no cabeçalho**, ao lado do nome, quando o app está rodando em `BANCO=DEV`. Em PROD não aparece nada.
+
 ## Verificação
 
 ```sh

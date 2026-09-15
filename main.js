@@ -154,6 +154,12 @@ let connectionMonitorController = null;
 ipcMain.handle('get-runtime-config', () => {
   return { apiBaseUrl: getLocalApiBaseUrl() };
 });
+
+// Só o NOME do modo, para o selo "DEV" do cabeçalho. Canal separado de
+// propósito: `get-runtime-config` é mantido mínimo e nada de configuração do
+// banco atravessa para o renderer. É o modo em que o app ESTÁ rodando —
+// decidido na inicialização —, não o que o .env diz agora.
+ipcMain.handle('get-modo-banco', () => (useLocalDatabase ? 'DEV' : 'PROD'));
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();

@@ -82,6 +82,19 @@ const laminacaoSubmenu = document.getElementById('laminacaoSubmenu');
 const laminacaoChevron = laminacaoToggle?.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
 
+// Selo "DEV" ao lado do nome. Pergunta ao processo principal o modo em que o
+// app está rodando; se a pergunta falhar, o selo fica escondido.
+(async function mostrarSeloDoBanco() {
+    const selo = document.getElementById('seloBancoDev');
+    if (!selo || !window.electronAPI?.getModoBanco) return;
+    try {
+        const modo = await window.electronAPI.getModoBanco();
+        selo.classList.toggle('hidden', modo !== 'DEV');
+    } catch (err) {
+        console.warn('Não foi possível saber o modo do banco para o selo DEV.', err);
+    }
+})();
+
 const MODULES_WITHOUT_SCROLL = new Set([
     'materia-prima',
     'produtos',
