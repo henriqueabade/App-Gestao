@@ -196,7 +196,14 @@ const CSS = `
   .campo .r { display: block; font-size: 5.5pt; text-transform: uppercase; color: #222; }
   .campo .v { display: block; font-size: 8pt; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .campo .v.quebra { white-space: normal; }
-  .titulo { font-size: 6.5pt; font-weight: bold; text-transform: uppercase; margin: 2.5mm 0 1mm; }
+  .titulo { font-size: 6.5pt; font-weight: bold; text-transform: uppercase; margin: 2.5mm 0 1mm; break-after: avoid; page-break-after: avoid; }
+  /* Paginação: um bloco nunca é cortado ao meio — vai inteiro para a folha
+     seguinte. A tabela de itens pode continuar na outra folha (linha inteira,
+     cabeçalho repetido); os "dados adicionais" são o último bloco: se não
+     couberem, descem inteiros para a folha 2 e o resto fica na 1. */
+  .bloco { break-inside: avoid; page-break-inside: avoid; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }
   table { width: 100%; border-collapse: collapse; }
   th, td { border: 1px solid #000; padding: 2px 3px; font-size: 7pt; vertical-align: top; }
   th { font-size: 5.5pt; text-transform: uppercase; background: #f2f2f2; }
@@ -269,6 +276,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
 <div class="folha">
   ${marca ? `<div class="marca">${esc(marca)}</div>` : ''}
 
+  <div class="bloco">
   <div class="canhoto">
     <div>
       <div class="texto">RECEBEMOS DE <b>${esc(e.nome)}</b> OS PRODUTOS/SERVIÇOS CONSTANTES DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO. EMISSÃO: ${dataFmt(n.dhEmi)} — DESTINATÁRIO: ${esc(d.nome)} — VALOR TOTAL: R$ ${moeda(t.vNF)}</div>
@@ -311,7 +319,9 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     ${campoHtml('Inscrição estadual do subst. tributário', '')}
     ${campoHtml('CNPJ', cnpjFmt(e.cnpj))}
   </div>
+  </div>
 
+  <div class="bloco">
   <div class="titulo">Destinatário / Remetente</div>
   <div class="grade" style="grid-template-columns: 3fr 1.3fr 1fr">
     ${campoHtml('Nome / Razão social', d.nome)}
@@ -331,10 +341,14 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     ${campoHtml('Inscrição estadual', d.ie)}
     ${campoHtml('Hora da saída', horaFmt(n.dhSaiEnt))}
   </div>
+  </div>
 
+  <div class="bloco">
   <div class="titulo">Fatura / Duplicatas</div>
   ${duplicatas}
+  </div>
 
+  <div class="bloco">
   <div class="titulo">Cálculo do imposto</div>
   <div class="grade" style="grid-template-columns: repeat(6, 1fr)">
     ${campoHtml('Base de cálculo do ICMS', moeda(t.vBC))}
@@ -352,7 +366,9 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     ${campoHtml('Valor do IPI', moeda(t.vIPI))}
     ${campoHtml('Valor total da nota', moeda(t.vNF))}
   </div>
+  </div>
 
+  <div class="bloco">
   <div class="titulo">Transportador / Volumes transportados</div>
   <div class="grade" style="grid-template-columns: 2.6fr 1.5fr 0.9fr 1fr 0.5fr 1.4fr">
     ${campoHtml('Razão social', tr.nome)}
@@ -377,6 +393,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     ${campoHtml('Peso líquido', tr.pesoL ? quantidade(tr.pesoL) : '')}
   </div>
   ${volumesDetalhados}
+  </div>
 
   <div class="titulo">Dados dos produtos / serviços</div>
   <table>
@@ -386,10 +403,12 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     <tbody>${linhasItens}</tbody>
   </table>
 
+  <div class="bloco">
   <div class="titulo">Dados adicionais</div>
   <div class="grade" style="grid-template-columns: 2fr 1fr">
     <div class="campo adicionais"><span class="r">Informações complementares</span><span class="v quebra" style="font-weight: normal">${esc(n.infCpl) || '&nbsp;'}</span></div>
     <div class="campo adicionais"><span class="r">Reservado ao fisco</span><span class="v">&nbsp;</span></div>
+  </div>
   </div>
 </div>
 </body></html>`;

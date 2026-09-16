@@ -80,7 +80,7 @@
   // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
   // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
   // ------------------------------------------------------------------
-  function tagsDoEmbarque(pedido, notas) {
+  function tagsDoEmbarque(pedido, notas, cartas = 0) {
     const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
     const STATUS_NF = {
       autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
@@ -103,6 +103,8 @@
     } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
       tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
     }
+    const totalCartas = Number(cartas) || 0;
+    if (nota && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
     const modalidade = p.modalidade_frete;
     if (modalidade !== null && modalidade !== undefined && modalidade !== '' && ROTULO_FRETE[Number(modalidade)]) {
       tags.push({ classe: 'badge-neutral', texto: `Frete: ${ROTULO_FRETE[Number(modalidade)]}` });
@@ -400,8 +402,10 @@
       const respNotas = await fetchApi(`/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}`);
       if (respNotas.ok) notas = await respNotas.json();
     } catch (_) { /* sem notas, sem tag */ }
-    pintarTags(tagsDoEmbarque(data, notas));
-    ligarDocumentosDaNota(notaParaDocumentos(notas), data);
+    const notaDocs = notaParaDocumentos(notas);
+    const cartas = notaDocs && window.NfeDocumentos?.listarCartasCorrecao ? await window.NfeDocumentos.listarCartasCorrecao(notaDocs.id) : [];
+    pintarTags(tagsDoEmbarque(data, notas, cartas.length));
+    ligarDocumentosDaNota(notaDocs, data);
 
     if (pagamentoBox) {
       pagamentoBox.classList.add('hidden');

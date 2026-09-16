@@ -53,7 +53,7 @@ test('visualizar: DANFE vai ao PDF em retrato, XML ao arquivo .xml (e o do cance
   assert.ok(UTIL.includes("salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true })"));
   assert.ok(UTIL.includes('/api/fiscal/notas/${encodeURIComponent(notaId)}/xml'));
   assert.ok(UTIL.includes("extensao: 'xml'") && UTIL.includes('corpo.xml_cancelamento'));
-  assert.ok(UTIL.includes('window.NfeDocumentos = { gerarDanfe, salvarXml };'));
+  assert.ok(UTIL.includes('window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };'));
   assert.ok(MENU.indexOf('js/utils/nfe-documentos.js') > MENU.indexOf('js/utils/cliente-fiscal.js'), 'o menu carrega o utilitário');
   assert.ok(VIS_JS.includes('window.NfeDocumentos.gerarDanfe(nota.id)') && VIS_JS.includes('window.NfeDocumentos.salvarXml(nota.id)'));
   assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe')"));
@@ -64,7 +64,12 @@ test('visualizar: DANFE vai ao PDF em retrato, XML ao arquivo .xml (e o do cance
   assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe')"));
   assert.ok(VIS_JS.includes("email: nota.destinatario?.email || ''"), 'o e-mail do destinatário da nota vai no contexto');
   assert.ok(/id="visualizarPedidoEmailNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML) && /id="visualizarPedidoCartaNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML));
-  assert.ok(VIS_JS.includes('ligarDocumentosDaNota(notaParaDocumentos(notas), data)'));
+  assert.ok(VIS_JS.includes('ligarDocumentosDaNota(notaDocs, data)') && VIS_JS.includes('window.NfeDocumentos.listarCartasCorrecao(notaDocs.id)'), 'as cartas da nota entram nas tags');
+  // Botões só com texto (sem ícone), como o dono pediu.
+  for (const id of ['visualizarPedidoDanfe', 'visualizarPedidoXml', 'visualizarPedidoEmailNfe', 'visualizarPedidoCartaNfe', 'visualizarPedidoCancelarNfe']) {
+    const linha = VIS_HTML.split('\n').find(l => l.includes(`id="${id}"`)) || '';
+    assert.ok(linha && !linha.includes('<i class="fas'), `#${id} sem ícone`);
+  }
 });
 
 test('Electron: o PDF aceita retrato e existe o IPC de salvar texto, exposto no preload', () => {
@@ -107,6 +112,13 @@ test('modal E-mail: destinatários pré-preenchidos, DANFE gerado no app (base64
   assert.strictEqual(fc.textoDoContador('abc'), '3 / 1000 — mínimo de 15 caracteres');
   assert.match(fc.mensagemDeErro(422, { sefaz: { cStat: '573', xMotivo: 'Duplicidade' } }), /recusou a carta \(573\)/);
   assert.ok(CCE_JS.includes('/api/fiscal/notas/${encodeURIComponent(ctx.notaId)}/carta-correcao') && CCE_JS.includes('window.DialogPadrao?.confirm?.({'));
+  // Onde as cartas ficam: lista no próprio modal, com segunda via em PDF e o XML; a registrada não fecha o modal.
+  assert.ok(CCE_HTML.includes('id="cartaCorrecaoNfeRegistradas"') && CCE_HTML.includes('id="cartaCorrecaoNfeLista"'));
+  assert.ok(CCE_JS.includes('window.NfeDocumentos.listarCartasCorrecao(ctx.notaId)') && CCE_JS.includes('gerarCartaCorrecaoPdf(ctx.notaId, carta.nSeqEvento)') && CCE_JS.includes('salvarXmlCartaCorrecao(ctx.notaId, carta.nSeqEvento)'));
+  assert.ok(CCE_JS.includes('await pintarRegistradas();') && !CCE_JS.includes('fechar();\n    } finally'), 'depois de registrar, a lista é repintada');
+  const UTIL2 = ler('js', 'utils', 'nfe-documentos.js');
+  assert.ok(UTIL2.includes('/cartas-correcao/${encodeURIComponent(seq)}/documento') && UTIL2.includes("titulo: 'Salvar carta de correção em PDF', retrato: true"));
+  assert.ok(UTIL2.includes('window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };'));
   assert.ok(!/innerHTML|insertAdjacentHTML|window\.confirm\(/.test(CCE_JS));
   assert.ok(MAIN.includes("ipcMain.handle('gerar-pdf-de-html'") && PRELOAD.includes("gerarPdfDeHtml: (payload) => ipcRenderer.invoke('gerar-pdf-de-html', payload)"));
 });
@@ -122,7 +134,12 @@ test('configuração fiscal: seções de e-mail (senha só no computador) e de i
     assert.ok(CFG_HTML.includes(`id="${id}"`), `sem #${id}`);
   }
   assert.ok(/id="finCfgInutilizar"[^>]*data-perm="financeiro\.nfe\.cancel"/.test(CFG_HTML));
-  assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha }) })"));
+  assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha, destino }) })"));
+  // Destino dos segredos: banco (todas as máquinas, com chave mestra) ou só este computador.
+  assert.ok(CFG_HTML.includes('name="finCfgCertDestino" value="banco"') && CFG_HTML.includes('name="finCfgCertDestino" value="computador"'));
+  assert.ok(CFG_HTML.includes('name="finCfgEmailDestino" value="banco"') && CFG_HTML.includes('id="finCfgCertDestinoAviso"'));
+  assert.ok(CFG_JS.includes("body: JSON.stringify({ caminho, senha, destino })") && CFG_JS.includes('pintarDestinos(Boolean(estado?.banco_chave_mestra))'));
+  assert.ok(CFG_JS.includes("c.origem === 'banco' ? `Guardado no banco"), 'a tela diz onde o certificado está');
   assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/email/testar', { method: 'POST'"));
   assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/inutilizacoes', { method: 'POST'") && CFG_JS.includes("fetchApi('/api/fiscal/inutilizacoes')"));
   for (const par of ["ligar('finCfgEmailGuardar', guardarSenhaEmail)", "ligar('finCfgEmailRemover', removerSenhaEmail)", "ligar('finCfgEmailTestar', testarEmail)", "ligar('finCfgInutilizar', inutilizar)"]) {

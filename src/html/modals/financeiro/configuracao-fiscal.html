@@ -70,7 +70,7 @@
           <!-- Certificado digital -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-key" aria-hidden="true"></i>Certificado digital A1</h3>
-            <p class="text-xs text-gray-400 mb-4">Fica só neste computador: o arquivo é copiado para a pasta do aplicativo e a senha é guardada cifrada pelo Windows. Não vai para o banco nem para o instalador.</p>
+            <p class="text-xs text-gray-400 mb-4">Guardado <strong>no banco</strong> (cifrado com a chave mestra do .env, vale para todas as máquinas) ou <strong>só neste computador</strong> (cofre do Windows). A senha nunca fica em claro em lugar nenhum.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="glass-surface rounded-xl border border-white/10 px-4 py-3">
                 <div class="flex items-center justify-between gap-3 mb-2">
@@ -98,9 +98,14 @@
                   <label for="finCfgCertSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do certificado</label>
                   <input id="finCfgCertSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
+                <div role="radiogroup" aria-label="Onde guardar o certificado" class="flex flex-wrap gap-5">
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgCertDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco — todas as máquinas</label>
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgCertDestino" value="computador" style="accent-color: var(--color-primary)" /> Só neste computador</label>
+                </div>
+                <p id="finCfgCertDestinoAviso" class="hidden text-xs" style="color: var(--color-primary-light)">Para guardar no banco, defina SEGREDOS_CHAVE_MESTRA no .env desta máquina (veja .env.example).</p>
                 <div class="flex flex-wrap gap-3">
                   <button id="finCfgCertGuardar" type="button" class="btn-success px-5 py-2 rounded-lg font-medium"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar certificado</button>
-                  <button id="finCfgCertRemover" type="button" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Remover deste computador</button>
+                  <button id="finCfgCertRemover" type="button" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Remover</button>
                 </div>
               </div>
             </div>
@@ -315,8 +320,12 @@
             <div id="finCfgEmailSenhaBloco" class="mt-5 pt-4 border-t border-inputBorder">
               <div class="flex flex-wrap items-end gap-3">
                 <div>
-                  <label for="finCfgEmailSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do e-mail (fica só neste computador)</label>
+                  <label for="finCfgEmailSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do e-mail</label>
                   <input id="finCfgEmailSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-72 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div role="radiogroup" aria-label="Onde guardar a senha do e-mail" class="flex flex-wrap gap-4 pb-3">
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgEmailDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco</label>
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgEmailDestino" value="computador" style="accent-color: var(--color-primary)" /> Só aqui</label>
                 </div>
                 <button id="finCfgEmailGuardar" type="button" class="btn-success px-5 py-3 rounded-lg font-medium"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar senha</button>
                 <button id="finCfgEmailRemover" type="button" class="btn-danger px-5 py-3 rounded-lg text-white font-medium">Remover</button>

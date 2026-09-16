@@ -18,6 +18,12 @@
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <div class="p-6 space-y-5">
+        <!-- Cartas já registradas: a segunda via (PDF) e o XML de cada uma. -->
+        <div id="cartaCorrecaoNfeRegistradas" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Cartas já registradas nesta nota (a última é a que vale)</p>
+          <ul id="cartaCorrecaoNfeLista" class="divide-y divide-white/10"></ul>
+        </div>
+
         <div class="text-xs text-gray-400 rounded-xl border border-white/10 px-4 py-3">
           A carta de correção NÃO pode mudar: valores e impostos (base de cálculo, alíquota, preço, quantidade, valor da operação), dados que troquem o remetente ou o destinatário, nem a data de emissão ou de saída. Para isso, cancele a nota e emita outra. Cada nova carta substitui a anterior.
         </div>

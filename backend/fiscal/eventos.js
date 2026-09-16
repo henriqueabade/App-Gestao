@@ -133,6 +133,31 @@ async function cartaCorrecao({ api, notaId, correcao, certificado, transporte, u
   throw erro(`SEFAZ ${cStat}: ${xMotivo}`, 422, { sefaz: { cStat, xMotivo } });
 }
 
+/** As cartas registradas de uma nota, da mais antiga à mais nova (sem o XML). */
+async function listarCartasCorrecao(api, notaId) {
+  const id = Number(notaId);
+  const eventos = await api.get('/api/notas_fiscais_eventos', { query: { nota_fiscal_id: id, tipo: 'cce' } }).then(lista).catch(() => []);
+  return eventos
+    .filter(e => e && ['135', '136'].includes(String(e.codigo_sefaz)))
+    .map(e => {
+      const det = typeof e.detalhe === 'string' ? JSON.parse(e.detalhe || '{}') : (e.detalhe || {});
+      return { id: e.id, nSeqEvento: Number(det.nSeqEvento) || 1, correcao: det.correcao || '', protocolo: det.protocolo || null, registradaEm: e.criado_em || null, tem_xml: Boolean(det.xml) };
+    })
+    .sort((a, b) => a.nSeqEvento - b.nSeqEvento);
+}
+
+/** Uma carta pela sequência, com o XML (procEventoNFe). */
+async function lerCartaCorrecao(api, notaId, nSeqEvento) {
+  const id = Number(notaId);
+  const seq = Number(nSeqEvento);
+  const eventos = await api.get('/api/notas_fiscais_eventos', { query: { nota_fiscal_id: id, tipo: 'cce' } }).then(lista).catch(() => []);
+  const achado = eventos
+    .map(e => ({ e, det: typeof e?.detalhe === 'string' ? JSON.parse(e.detalhe || '{}') : (e?.detalhe || {}) }))
+    .find(({ e, det }) => e && ['135', '136'].includes(String(e.codigo_sefaz)) && (Number(det.nSeqEvento) || 1) === seq);
+  if (!achado) throw erro(`Carta de correção ${seq} não encontrada.`, 404);
+  return { id: achado.e.id, nSeqEvento: seq, correcao: achado.det.correcao || '', protocolo: achado.det.protocolo || null, registradaEm: achado.e.criado_em || null, xml: achado.det.xml || null };
+}
+
 /**
  * Inutiliza uma faixa de números da série no ambiente escolhido (o efetivo,
  * ou homologação quando pedido). Registra em notas_fiscais_inutilizacoes.
@@ -183,4 +208,4 @@ async function listarInutilizacoes(api) {
   return linhas.map(({ xml, ...resto }) => ({ ...resto, tem_xml: Boolean(xml) })).sort((a, b) => Number(b.id) - Number(a.id));
 }
 
-module.exports = { cancelar, cartaCorrecao, inutilizar, listarInutilizacoes };
+module.exports = { cancelar, cartaCorrecao, listarCartasCorrecao, lerCartaCorrecao, inutilizar, listarInutilizacoes };

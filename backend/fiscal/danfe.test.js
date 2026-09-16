@@ -99,6 +99,12 @@ test('montarDanfeHtml: página A4 retrato com os blocos, a chave formatada, o c�
   assert.ok(html.includes('<th>Valor IPI</th>') && html.includes('<th>Alíq. IPI</th>') && html.includes('<th>Desconto</th>'));
   assert.ok(html.includes('Código ANTT') && html.includes('Valor aprox. dos tributos'));
   assert.ok(html.includes('<b>362/001</b>') && html.includes('<b>362/002</b>'), 'duplicata = número da nota / parcela');
+  // Paginação: cada bloco inteiro (break-inside: avoid); linhas de item inteiras; cabeçalho da tabela repetido;
+  // os dados adicionais são o último bloco e descem inteiros quando não cabem.
+  assert.ok(html.includes('.bloco { break-inside: avoid; page-break-inside: avoid; }') && html.includes('tr { break-inside: avoid; page-break-inside: avoid; }') && html.includes('thead { display: table-header-group; }'));
+  assert.equal((html.match(/<div class="bloco">/g) || []).length, 6, 'cabeçalho, destinatário, fatura, imposto, transporte e dados adicionais');
+  assert.ok(html.lastIndexOf('<div class="bloco">') < html.indexOf('Dados adicionais'), 'os dados adicionais são o último bloco');
+  assert.ok(html.indexOf('Dados dos produtos / serviços') < html.lastIndexOf('<div class="bloco">'), 'a tabela de itens fica fora de bloco: pode continuar na folha seguinte');
   assert.ok(html.includes('SANTÍSSIMO DECOR LTDA SD'), 'marca dos volumes (sem fantasia na configuração do teste, vai a razão social + SD)');
   assert.ok(!html.includes('<table style="margin-top: -1px">'), 'um volume só não tem a tabela detalhada');
   assert.equal(danfe.montarDanfeHtml(xml, { logo: '' }).includes('<img'), false, 'sem logo quando pedido');

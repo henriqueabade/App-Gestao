@@ -1299,7 +1299,9 @@
       texto('finCfgCertValidade', `${formatarData(String(c.validoAte).slice(0, 10))} (${c.diasRestantes} dias)`);
       texto('finCfgCertConfere', c.confereComEmitente === null ? '—' : (c.confereComEmitente ? 'Sim' : 'NÃO — o CNPJ do certificado é outro'));
       const m = el('finCfgCertMensagem');
-      const origem = c.origem === 'env' ? 'Lido das variáveis de ambiente (DEV).' : (c.guardadoEm ? `Guardado neste computador em ${formatarData(String(c.guardadoEm).slice(0, 10))}.` : '');
+      const quando = c.guardadoEm ? ` em ${formatarData(String(c.guardadoEm).slice(0, 10))}` : '';
+      const origem = c.origem === 'env' ? 'Lido das variáveis de ambiente (DEV).'
+        : (c.origem === 'banco' ? `Guardado no banco${quando} — vale para todas as máquinas.` : (c.guardadoEm ? `Guardado só neste computador${quando}.` : ''));
       m.textContent = origem;
       m.style.color = '';
       m.classList.toggle('hidden', !origem);
@@ -1332,6 +1334,7 @@
 
       pintarCertificado(estado?.certificado);
       pintarEmail(estado?.email);
+      pintarDestinos(Boolean(estado?.banco_chave_mestra));
       texto('finCfgInutAmbiente', producao ? 'produção' : 'homologação');
       el('finCfgInutSerie').value = String(estado?.numeracao?.serie ?? '');
       el('finCfgEmailSenhaBloco')?.classList.toggle('hidden', !podeEditar);
@@ -1339,13 +1342,34 @@
       carregarInutilizacoes();
     }
 
+    /**
+     * Onde certificado e senha do e-mail podem ser guardados: no banco só
+     * quando esta máquina tem a chave mestra (senão, fica só o computador).
+     */
+    let bancoChaveMestra = false;
+    function pintarDestinos(temChave) {
+      bancoChaveMestra = temChave;
+      for (const nome of ['finCfgCertDestino', 'finCfgEmailDestino']) {
+        const radios = overlay.querySelectorAll(`input[name="${nome}"]`);
+        radios.forEach(r => {
+          if (r.value === 'banco') r.disabled = !temChave;
+          if (!radios.length) return;
+        });
+        const marcado = Array.from(radios).some(r => r.checked && !r.disabled);
+        if (!marcado) radios.forEach(r => { r.checked = r.value === (temChave ? 'banco' : 'computador'); });
+      }
+      el('finCfgCertDestinoAviso')?.classList.toggle('hidden', temChave);
+    }
+    const destinoEscolhido = nome => overlay.querySelector(`input[name="${nome}"]:checked`)?.value || (bancoChaveMestra ? 'banco' : 'computador');
+
     function pintarEmail(estadoEmail) {
       const e = el('finCfgEmailEstado');
       if (!e) return;
       if (!estadoEmail) { e.textContent = ''; return; }
       const partes = [];
-      if (estadoEmail.senha_guardada) partes.push(`Senha guardada neste computador${estadoEmail.guardada_em ? ` em ${formatarData(String(estadoEmail.guardada_em).slice(0, 10))}` : ''}.`);
-      else partes.push('Sem senha neste computador: o envio de e-mail não funciona aqui até guardá-la.');
+      const onde = estadoEmail.origem === 'banco' ? 'no banco (todas as máquinas)' : (estadoEmail.origem === 'env' ? 'no .env (DEV)' : 'só neste computador');
+      if (estadoEmail.senha_guardada) partes.push(`Senha guardada ${onde}${estadoEmail.guardada_em ? ` em ${formatarData(String(estadoEmail.guardada_em).slice(0, 10))}` : ''}.`);
+      else partes.push('Sem senha do e-mail: o envio não funciona até guardá-la.');
       if (estadoEmail.erro) partes.push(estadoEmail.erro);
       if (Array.isArray(estadoEmail.pendencias) && estadoEmail.pendencias.length) partes.push(`Falta: ${estadoEmail.pendencias.join(', ')}.`);
       e.textContent = partes.join(' ');
@@ -1357,16 +1381,23 @@
       const senha = el('finCfgEmailSenha').value;
       if (!senha) { mensagem('Informe a senha do e-mail.'); return; }
       try {
-        const r = await fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha }) });
+        const destino = destinoEscolhido('finCfgEmailDestino');
+        const r = await fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha, destino }) });
         el('finCfgEmailSenha').value = '';
         pintarEmail(r);
-        window.showToast?.('Senha do e-mail guardada neste computador.', 'success');
+        window.showToast?.(destino === 'banco' ? 'Senha do e-mail guardada no banco, para todas as máquinas.' : 'Senha do e-mail guardada neste computador.', 'success');
       } catch (e) {
         mensagem(e.message);
       }
     }
 
     async function removerSenhaEmail() {
+      const ok = await (window.DialogPadrao?.confirm?.({
+        title: 'Remover a senha do e-mail?',
+        message: 'A senha sai do banco e deste computador. O envio de NF-e por e-mail para de funcionar até guardá-la de novo.',
+        confirmText: 'Remover'
+      }) ?? Promise.resolve(true));
+      if (!ok) return;
       try {
         pintarEmail(await fetchApi('/api/fiscal/email/senha', { method: 'DELETE' }));
       } catch (e) {
@@ -1486,10 +1517,11 @@
       if (!caminho) { mensagem('Escolha o arquivo .pfx do certificado.'); return; }
       if (!senha) { mensagem('Informe a senha do certificado.'); return; }
       try {
-        const r = await fetchApi('/api/fiscal/certificado', { method: 'POST', body: JSON.stringify({ caminho, senha }) });
+        const destino = destinoEscolhido('finCfgCertDestino');
+        const r = await fetchApi('/api/fiscal/certificado', { method: 'POST', body: JSON.stringify({ caminho, senha, destino }) });
         el('finCfgCertSenha').value = '';
         pintarCertificado(r);
-        window.showToast?.('Certificado guardado neste computador.', 'success');
+        window.showToast?.(destino === 'banco' ? 'Certificado guardado no banco, para todas as máquinas.' : 'Certificado guardado neste computador.', 'success');
       } catch (e) {
         mensagem(e.message);
       }
@@ -1498,13 +1530,12 @@
     async function removerCertificado() {
       const ok = await (window.DialogPadrao?.confirm?.({
         title: 'Remover certificado',
-        message: 'O certificado e a senha serão apagados deste computador. A emissão de NF-e aqui deixa de funcionar até cadastrar de novo.',
+        message: 'O certificado e a senha saem do banco e deste computador. A emissão de NF-e deixa de funcionar até cadastrar de novo.',
         confirmText: 'Remover'
       }) ?? Promise.resolve(true));
       if (!ok) return;
       try {
-        await fetchApi('/api/fiscal/certificado', { method: 'DELETE' });
-        pintarCertificado({ configurado: false });
+        pintarCertificado(await fetchApi('/api/fiscal/certificado', { method: 'DELETE' }));
       } catch (e) {
         mensagem(e.message);
       }

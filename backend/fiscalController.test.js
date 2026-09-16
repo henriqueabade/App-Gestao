@@ -650,6 +650,105 @@ test('carta de correção e inutilização: rotas com as permissões de emitir e
   }
 });
 
+test('segredos no banco: com a chave mestra o certificado e a senha do SMTP vão cifrados para segredos_app e valem sem cofre local', async () => {
+  const CHAVE_MESTRA = require('./fiscal/chaveMestra').gerar();
+  const tabelas = { ...tabelasDoPedido(), segredos_app: [] };
+  const t = await montar({ tabelas, comCertificado: false, env: { SEGREDOS_CHAVE_MESTRA: CHAVE_MESTRA } });
+  try {
+    t.estado.supAdmin = true;
+    let estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.banco_chave_mestra, true);
+    assert.equal(estado.corpo.certificado.configurado, false);
+
+    const guardado = await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx, senha: SENHA, destino: 'banco' });
+    assert.equal(guardado.status, 200, JSON.stringify(guardado.corpo));
+    assert.equal(guardado.corpo.origem, 'banco');
+    assert.equal(guardado.corpo.titular, 'SANTISSIMO DECOR LTDA');
+    assert.equal(tabelas.segredos_app.length, 1);
+    const linha = JSON.stringify(tabelas.segredos_app[0]);
+    assert.ok(!linha.includes(SENHA) && !linha.includes(PFX.toString('base64').slice(0, 40)), 'nem a senha nem o .pfx ficam em claro no banco');
+    assert.equal(tabelas.segredos_app[0].nome, 'certificado');
+    assert.equal(tabelas.segredos_app[0].cifra, 'aes-256-gcm');
+    assert.equal(t.segredo.fonte(), null, 'nada foi para o cofre local');
+
+    estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.certificado.origem, 'banco');
+    assert.equal(estado.corpo.certificado.confereComEmitente, true);
+
+    // Emite com o certificado do banco (este computador não tem cofre com ele).
+    t.estado.chaves.add('financeiro.nfe.emit');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(emitida.status, 200, JSON.stringify(emitida.corpo));
+    assert.equal(emitida.corpo.autorizada, true);
+
+    const senhaEmail = await t.chamar('POST', '/api/fiscal/email/senha', { senha: 's3nha', destino: 'banco' });
+    assert.equal(senhaEmail.status, 200);
+    assert.equal(senhaEmail.corpo.origem, 'banco');
+    assert.equal(senhaEmail.corpo.senha_guardada, true);
+    assert.ok(!JSON.stringify(tabelas.segredos_app).includes('s3nha'));
+    assert.equal(tabelas.segredos_app.length, 2);
+
+    const removido = await t.chamar('DELETE', '/api/fiscal/certificado?destino=banco');
+    assert.equal(removido.corpo.configurado, false);
+    assert.equal(tabelas.segredos_app.length, 1);
+  } finally {
+    await t.fechar();
+  }
+
+  // Outra máquina, sem a chave: vê que há segredo no banco mas não abre; e não consegue gravar lá.
+  const tabelas2 = { ...tabelasDoPedido(), segredos_app: [] };
+  const comChave = await montar({ tabelas: tabelas2, comCertificado: false, env: { SEGREDOS_CHAVE_MESTRA: CHAVE_MESTRA } });
+  try {
+    comChave.estado.supAdmin = true;
+    assert.equal((await comChave.chamar('POST', '/api/fiscal/certificado', { caminho: comChave.arquivoPfx, senha: SENHA, destino: 'banco' })).status, 200);
+  } finally {
+    await comChave.fechar();
+  }
+  const semChave = await montar({ tabelas: tabelas2, comCertificado: false, env: {} });
+  try {
+    semChave.estado.supAdmin = true;
+    const estado = await semChave.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.banco_chave_mestra, false);
+    assert.equal(estado.corpo.certificado.configurado, false);
+    assert.match(estado.corpo.certificado.erro, /não tem a chave mestra/);
+    assert.equal((await semChave.chamar('POST', '/api/fiscal/certificado', { caminho: semChave.arquivoPfx, senha: SENHA, destino: 'banco' })).status, 409);
+    const local = await semChave.chamar('POST', '/api/fiscal/certificado', { caminho: semChave.arquivoPfx, senha: SENHA, destino: 'computador' });
+    assert.equal(local.status, 200);
+    assert.equal(local.corpo.origem, 'arquivo');
+  } finally {
+    await semChave.fechar();
+  }
+});
+
+test('cartas de correção: lista, segunda via em HTML e XML do evento', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const notaId = (await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {})).corpo.nota.id;
+    assert.deepEqual((await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao`)).corpo, []);
+    await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'Onde se lê Caixa, leia-se Engradado na espécie dos volumes' });
+    const lista = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao`);
+    assert.equal(lista.status, 200);
+    assert.equal(lista.corpo.length, 1);
+    assert.equal(lista.corpo[0].nSeqEvento, 1);
+    assert.equal(lista.corpo[0].protocolo, '131260000444444');
+    assert.ok(!('xml' in lista.corpo[0]));
+
+    const doc = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/1/documento`);
+    assert.equal(doc.status, 200);
+    assert.equal(doc.corpo.nome, 'CCe-1-NFe-1-000000001');
+    assert.ok(doc.corpo.html.includes('CARTA DE CORREÇÃO ELETRÔNICA') && doc.corpo.html.includes('Onde se lê Caixa, leia-se Engradado') && doc.corpo.html.includes('SEM VALOR FISCAL'));
+    const xml = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/1/xml`);
+    assert.ok(xml.corpo.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe'));
+    assert.equal(xml.corpo.nome, `${tabelas.notas_fiscais[0].chave_acesso}-procEventoNFe-cce-1`);
+    assert.equal((await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/2/documento`)).status, 404);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('POST /pedidos/:id/dispensar-nfe exige ped.status.ship e marca o pedido como enviado sem nota', async () => {
   const tabelas = tabelasDoPedido();
   const t = await montar({ tabelas });

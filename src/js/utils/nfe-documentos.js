@@ -59,5 +59,47 @@
     }
   }
 
-  window.NfeDocumentos = { gerarDanfe, salvarXml };
+  /** Segunda via da carta de correção (sequência `seq`) em PDF. */
+  async function gerarCartaCorrecaoPdf(notaId, seq) {
+    if (!notaId || !seq) return false;
+    try {
+      const corpo = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(notaId)}/cartas-correcao/${encodeURIComponent(seq)}/documento`);
+      const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar carta de correção em PDF', retrato: true });
+      if (!r) { avisar('Geração de PDF indisponível nesta janela.', 'error'); return false; }
+      if (r.success) { avisar(r.opened ? 'Carta de correção salva e aberta.' : (r.message || 'Carta de correção salva.'), 'success'); return true; }
+      if (!r.canceled) avisar(r.message || 'Não foi possível gerar o PDF da carta.', 'error');
+      return false;
+    } catch (e) {
+      avisar(e.message || 'Não foi possível montar a carta de correção.', 'error');
+      return false;
+    }
+  }
+
+  async function salvarXmlCartaCorrecao(notaId, seq) {
+    if (!notaId || !seq) return false;
+    try {
+      const corpo = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(notaId)}/cartas-correcao/${encodeURIComponent(seq)}/xml`);
+      const r = await window.electronAPI?.salvarTextoComoArquivo?.({ conteudo: corpo.xml, nomeSugerido: corpo.nome, extensao: 'xml', titulo: 'Salvar XML da carta de correção', descricao: 'XML do evento' });
+      if (!r) { avisar('Salvar arquivo indisponível nesta janela.', 'error'); return false; }
+      if (r.success) { avisar('XML da carta de correção salvo.', 'success'); return true; }
+      if (!r.canceled) avisar(r.message || 'Não foi possível salvar o XML.', 'error');
+      return false;
+    } catch (e) {
+      avisar(e.message || 'Não foi possível ler o XML da carta.', 'error');
+      return false;
+    }
+  }
+
+  /** As cartas registradas de uma nota (lista sem XML); [] quando não há ou sem permissão. */
+  async function listarCartasCorrecao(notaId) {
+    if (!notaId) return [];
+    try {
+      const lista = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(notaId)}/cartas-correcao`);
+      return Array.isArray(lista) ? lista : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };
 })();

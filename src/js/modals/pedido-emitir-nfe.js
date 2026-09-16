@@ -402,6 +402,16 @@
       volumesCorpo.appendChild(tr);
     }
     volumesBloco.classList.toggle('hidden', volumesLinhas.length === 0);
+    // Com a tabela aberta, os campos gerais (espécie e pesos) valem só como
+    // padrão das linhas novas: ficam travados para não confundir. Um volume
+    // só continua neles.
+    const detalhado = volumesLinhas.length > 0;
+    for (const campo of [campos.volumes_especie, campos.peso_bruto, campos.peso_liquido]) {
+      if (!campo) continue;
+      campo.disabled = detalhado;
+      campo.style.opacity = detalhado ? '0.5' : '';
+      campo.title = detalhado ? 'Com mais de um volume, preencha a tabela abaixo.' : '';
+    }
   }
 
   function valoresDosCampos() {

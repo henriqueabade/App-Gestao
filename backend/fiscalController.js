@@ -24,6 +24,8 @@ const emissao = require('./fiscal/emissao');
 const eventos = require('./fiscal/eventos');
 const danfe = require('./fiscal/danfe');
 const email = require('./fiscal/email');
+const segredoBanco = require('./fiscal/segredoBanco');
+const cartaCorrecaoDoc = require('./fiscal/cartaCorrecaoDoc');
 const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -59,22 +61,35 @@ function responder(res, err, contexto) {
 function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps, env = process.env, municipiosRede = undefined, criarTransporteEmail = undefined } = {}) {
   const router = express.Router();
   const cofre = segredo || segredoLocal.criar();
+  // Segredos que valem para todas as máquinas: no banco, cifrados com a chave
+  // mestra do .env. Sem a chave, vale só o cofre local desta máquina.
+  const banco = segredoBanco.criar({ env });
 
-  /** A senha do SMTP guardada nesta máquina (cofre) ou, em DEV, NFE_SMTP_SENHA do .env. */
-  function senhaDoEmail() {
+  /**
+   * A senha do SMTP, nesta ordem: banco (todas as máquinas) → cofre local →
+   * NFE_SMTP_SENHA (DEV). Devolve { senha, origem, guardadaEm, erro }.
+   */
+  async function fonteDaSenhaDoEmail(api) {
+    let avisoBanco = null;
+    if (api) {
+      const s = await banco.ler(api, 'smtp_senha').catch(() => null);
+      if (s?.valor?.senha) return { senha: s.valor.senha, origem: 'banco', guardadaEm: s.atualizadoEm };
+      if (s?.erro) avisoBanco = s.erro;
+    }
     const guardada = typeof cofre.lerSegredo === 'function' ? cofre.lerSegredo('smtp') : null;
-    if (guardada?.valor) return guardada.valor;
-    return env.NFE_SMTP_SENHA || null;
+    if (guardada?.valor) return { senha: guardada.valor, origem: 'computador', guardadaEm: guardada.guardadoEm };
+    if (env.NFE_SMTP_SENHA) return { senha: env.NFE_SMTP_SENHA, origem: 'env', guardadaEm: null };
+    return { senha: null, origem: null, guardadaEm: null, erro: avisoBanco || guardada?.erro || null };
   }
 
-  function estadoDoEmail(cfg) {
-    const guardada = typeof cofre.lerSegredo === 'function' ? cofre.lerSegredo('smtp') : null;
-    const senha = senhaDoEmail();
+  async function estadoDoEmail(api, cfg) {
+    const f = await fonteDaSenhaDoEmail(api);
     return {
-      senha_guardada: Boolean(guardada?.valor) || Boolean(env.NFE_SMTP_SENHA),
-      guardada_em: guardada?.guardadoEm || null,
-      erro: guardada?.erro || null,
-      pendencias: email.pendenciasDeEmail(cfg, senha)
+      senha_guardada: Boolean(f.senha),
+      origem: f.origem,
+      guardada_em: f.guardadaEm || null,
+      erro: f.erro || null,
+      pendencias: email.pendenciasDeEmail(cfg, f.senha)
     };
   }
 
@@ -82,9 +97,26 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   // muda entre uma chamada e outra. Trocar o arquivo invalida pelo mtime.
   let certificadoAberto = { chave: null, dados: null };
 
-  function carregarCertificado() {
+  /**
+   * O certificado, nesta ordem: banco (cifrado, vale para todas as máquinas)
+   * → cofre local desta máquina → .env (DEV). Aberto uma vez por versão.
+   */
+  async function carregarCertificado(api) {
+    let avisoBanco = null;
+    if (api) {
+      const s = await banco.ler(api, 'certificado').catch(() => null);
+      if (s?.valor?.pfxBase64) {
+        const chave = `banco|${s.atualizadoEm}|${s.valor.pfxBase64.length}`;
+        if (certificadoAberto.chave !== chave) {
+          const dados = certificado.abrirPfx(Buffer.from(s.valor.pfxBase64, 'base64'), s.valor.senha ?? '');
+          certificadoAberto = { chave, dados: { ...dados, origem: 'banco', guardadoEm: s.atualizadoEm || null, nomeArquivo: s.valor.nomeArquivo || null } };
+        }
+        return certificadoAberto.dados;
+      }
+      if (s?.erro) avisoBanco = s.erro;
+    }
     const fonte = cofre.fonte();
-    if (!fonte) throw erro('Nenhum certificado digital configurado neste computador.', 409);
+    if (!fonte) throw erro(avisoBanco || 'Nenhum certificado digital configurado (nem no banco, nem neste computador).', 409);
     if (fonte.erro) throw erro(fonte.erro, 409);
     let stat;
     try {
@@ -101,9 +133,9 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   }
 
   /** Resumo para a tela: nunca lança; o erro vira texto. */
-  function resumoDoCertificado(cfg) {
+  async function resumoDoCertificado(api, cfg) {
     try {
-      const dados = carregarCertificado();
+      const dados = await carregarCertificado(api);
       const r = certificado.resumo(dados);
       return {
         ...r,
@@ -138,9 +170,10 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       travado_em_homologacao_nesta_maquina: String(env.NFE_AMBIENTE || '').toLowerCase() === configuracao.HOMOLOGACAO,
       numeracao: configuracao.numeracao(cfg, ambiente),
       pendencias: configuracao.pendencias(cfg),
-      certificado: resumoDoCertificado(cfg),
-      email: estadoDoEmail(cfg),
+      certificado: await resumoDoCertificado(api, cfg),
+      email: await estadoDoEmail(api, cfg),
       cofre_disponivel: cofre.temCofre,
+      banco_chave_mestra: banco.disponivel,
       pode_editar: await ehSupAdmin(req)
     };
   }
@@ -177,24 +210,39 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     }
   });
 
-  /** Guarda o .pfx escolhido na tela e a senha (cifrada) neste computador. */
+  /**
+   * Guarda o .pfx escolhido na tela e a senha: no banco (cifrado, para todas
+   * as máquinas — o padrão quando há chave mestra) ou só neste computador.
+   */
   router.post('/certificado', exigirSupAdmin, async (req, res) => {
     try {
       const caminho = String(req.body?.caminho || '').trim();
       const senha = String(req.body?.senha ?? '');
+      const destino = String(req.body?.destino || (banco.disponivel ? 'banco' : 'computador')).toLowerCase();
       if (!caminho) throw erro('Escolha o arquivo do certificado (.pfx).');
       if (!/\.(pfx|p12)$/i.test(caminho)) throw erro('O certificado precisa ser um arquivo .pfx ou .p12.');
       if (!fs.existsSync(caminho)) throw erro('O arquivo do certificado não foi encontrado.');
-
-      const dados = cofre.guardar({ caminhoOrigem: path.resolve(caminho), senha, validar: certificado.abrirPfx });
-      certificadoAberto = { chave: null, dados: null };
+      if (!['banco', 'computador'].includes(destino)) throw erro('Destino inválido: banco ou computador.');
 
       const api = createApiClient(req);
+      let dados;
+      if (destino === 'banco') {
+        if (!banco.disponivel) throw erro('Guardar no banco exige a chave mestra (SEGREDOS_CHAVE_MESTRA) no .env desta máquina.', 409);
+        const conteudo = fs.readFileSync(path.resolve(caminho));
+        dados = certificado.abrirPfx(conteudo, senha);
+        await banco.guardar(api, 'certificado', { pfxBase64: conteudo.toString('base64'), senha, nomeArquivo: path.basename(caminho) },
+          { descricao: 'Certificado A1 (.pfx) e senha', usuarioId: usuarioDaRequisicao(req) });
+      } else {
+        dados = cofre.guardar({ caminhoOrigem: path.resolve(caminho), senha, validar: certificado.abrirPfx });
+      }
+      certificadoAberto = { chave: null, dados: null };
+
       const cfg = await configuracao.carregar(api, { forcar: true });
       const r = certificado.resumo(dados);
       res.json({
         ...r,
-        origem: 'arquivo',
+        origem: destino === 'banco' ? 'banco' : 'arquivo',
+        guardadoEm: new Date().toISOString(),
         confereComEmitente: !cfg?.cnpj || !r.cnpj ? null : String(cfg.cnpj) === String(r.cnpj)
       });
     } catch (err) {
@@ -202,11 +250,16 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     }
   });
 
+  /** Remove do banco, deste computador ou (sem `destino`) dos dois. */
   router.delete('/certificado', exigirSupAdmin, async (req, res) => {
     try {
-      cofre.remover();
+      const destino = String(req.query?.destino || req.body?.destino || 'ambos').toLowerCase();
+      if (destino === 'banco' || destino === 'ambos') await banco.remover(createApiClient(req), 'certificado').catch(() => {});
+      if (destino === 'computador' || destino === 'ambos') cofre.remover();
       certificadoAberto = { chave: null, dados: null };
-      res.json({ configurado: false });
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      res.json(await resumoDoCertificado(api, cfg));
     } catch (err) {
       responder(res, err, 'DELETE /api/fiscal/certificado');
     }
@@ -227,7 +280,7 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
         ? configuracao.PRODUCAO
         : configuracao.HOMOLOGACAO;
 
-      const dados = carregarCertificado();
+      const dados = await carregarCertificado(api);
       const transporte = transporteDoCertificado(dados);
       const resultado = await sefaz.statusServico({ uf: cfg?.uf || 'MG', ambiente, transporte });
       res.json({ ...resultado, certificado: certificado.resumo(dados) });
@@ -259,7 +312,7 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       const api = createApiClient(req);
       const dados = await emissao.lerPedidoFiscal(api, req.params.id);
       res.json({
-        ...prontidao.avaliar({ ...dados, certificado: resumoDoCertificado(dados.configuracao) }),
+        ...prontidao.avaliar({ ...dados, certificado: await resumoDoCertificado(api, dados.configuracao) }),
         // A tela de embarque precisa saber em que ambiente a nota sairá e o que já existe.
         ambiente: configuracao.ambienteEfetivo(dados.configuracao, env),
         notas: dados.notas.map(emissao.semXml)
@@ -278,13 +331,13 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     try {
       const api = createApiClient(req);
       const cfg = await configuracao.carregar(api, { forcar: true });
-      const dados = carregarCertificado();
+      const dados = await carregarCertificado(api);
       const resultado = await emissao.emitir({
         api,
         pedidoId: req.params.id,
         entrada: req.body || {},
         certificado: dados,
-        resumoCertificado: resumoDoCertificado(cfg),
+        resumoCertificado: await resumoDoCertificado(api, cfg),
         transporte: transporteDoCertificado(dados),
         env,
         usuarioId: usuarioDaRequisicao(req),
@@ -371,9 +424,10 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   /** Cancela a NF-e na SEFAZ (evento 110111). Exige justificativa de 15 a 255 caracteres. */
   router.post('/notas/:id/cancelar', exigirPermissao('financeiro.nfe.cancel'), async (req, res) => {
     try {
-      const dados = carregarCertificado();
+      const api = createApiClient(req);
+      const dados = await carregarCertificado(api);
       res.json(await eventos.cancelar({
-        api: createApiClient(req), notaId: req.params.id, justificativa: req.body?.justificativa,
+        api, notaId: req.params.id, justificativa: req.body?.justificativa,
         certificado: dados, transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
       }));
     } catch (err) {
@@ -383,15 +437,23 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
 
   // ------------------------------------------------------------ e-mail
 
-  /** Guarda a senha do SMTP neste computador (cofre). Nunca vai ao banco. */
+  /** Guarda a senha do SMTP: no banco (cifrada, todas as máquinas) ou só neste computador. */
   router.post('/email/senha', exigirSupAdmin, async (req, res) => {
     try {
       const senha = String(req.body?.senha ?? '');
       if (!senha) throw erro('Informe a senha do e-mail.');
-      if (typeof cofre.guardarSegredo !== 'function') throw erro('Cofre indisponível.', 500);
-      cofre.guardarSegredo('smtp', senha);
-      const cfg = await configuracao.carregar(createApiClient(req), { forcar: true });
-      res.json(estadoDoEmail(cfg));
+      const destino = String(req.body?.destino || (banco.disponivel ? 'banco' : 'computador')).toLowerCase();
+      const api = createApiClient(req);
+      if (destino === 'banco') {
+        await banco.guardar(api, 'smtp_senha', { senha }, { descricao: 'Senha do SMTP do e-mail da NF-e', usuarioId: usuarioDaRequisicao(req) });
+      } else if (destino === 'computador') {
+        if (typeof cofre.guardarSegredo !== 'function') throw erro('Cofre indisponível.', 500);
+        cofre.guardarSegredo('smtp', senha);
+      } else {
+        throw erro('Destino inválido: banco ou computador.');
+      }
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      res.json(await estadoDoEmail(api, cfg));
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/email/senha');
     }
@@ -399,9 +461,12 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
 
   router.delete('/email/senha', exigirSupAdmin, async (req, res) => {
     try {
-      cofre.removerSegredo?.('smtp');
-      const cfg = await configuracao.carregar(createApiClient(req), { forcar: true });
-      res.json(estadoDoEmail(cfg));
+      const destino = String(req.query?.destino || req.body?.destino || 'ambos').toLowerCase();
+      const api = createApiClient(req);
+      if (destino === 'banco' || destino === 'ambos') await banco.remover(api, 'smtp_senha').catch(() => {});
+      if (destino === 'computador' || destino === 'ambos') cofre.removerSegredo?.('smtp');
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      res.json(await estadoDoEmail(api, cfg));
     } catch (err) {
       responder(res, err, 'DELETE /api/fiscal/email/senha');
     }
@@ -410,8 +475,9 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   /** Manda um e-mail de teste com a configuração atual. */
   router.post('/email/testar', exigirSupAdmin, async (req, res) => {
     try {
-      const cfg = await configuracao.carregar(createApiClient(req), { forcar: true });
-      const r = await email.testar({ cfg, senha: senhaDoEmail(), para: req.body?.para, ...(criarTransporteEmail ? { criarTransporte: criarTransporteEmail } : {}) });
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      const r = await email.testar({ cfg, senha: (await fonteDaSenhaDoEmail(api)).senha, para: req.body?.para, ...(criarTransporteEmail ? { criarTransporte: criarTransporteEmail } : {}) });
       res.json({ ok: true, ...r });
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/email/testar');
@@ -425,7 +491,7 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       const nota = await emissao.lerNota(api, req.params.id);
       const cfg = await configuracao.carregar(api);
       const r = await email.enviarNota({
-        cfg, senha: senhaDoEmail(), nota, para: req.body?.para, mensagem: req.body?.mensagem, pdfBase64: req.body?.pdf_base64,
+        cfg, senha: (await fonteDaSenhaDoEmail(api)).senha, nota, para: req.body?.para, mensagem: req.body?.mensagem, pdfBase64: req.body?.pdf_base64,
         incluirXml: req.body?.incluir_xml !== false, ...(criarTransporteEmail ? { criarTransporte: criarTransporteEmail } : {})
       });
       await api.post('/api/notas_fiscais_eventos', {
@@ -443,13 +509,52 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
 
   router.post('/notas/:id/carta-correcao', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
     try {
-      const dados = carregarCertificado();
+      const api = createApiClient(req);
+      const dados = await carregarCertificado(api);
       res.json(await eventos.cartaCorrecao({
-        api: createApiClient(req), notaId: req.params.id, correcao: req.body?.correcao, certificado: dados,
+        api, notaId: req.params.id, correcao: req.body?.correcao, certificado: dados,
         transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
       }));
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/notas/:id/carta-correcao');
+    }
+  });
+
+  /** As cartas de correção registradas da nota (sem XML). */
+  router.get('/notas/:id/cartas-correcao', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await eventos.listarCartasCorrecao(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id/cartas-correcao');
+    }
+  });
+
+  /** A carta em HTML (segunda via para o PDF) e o XML do evento. */
+  router.get('/notas/:id/cartas-correcao/:seq/documento', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const nota = await emissao.lerNota(api, req.params.id);
+      if (!nota.xml_autorizado) throw erro('A nota não tem o XML autorizado.', 409);
+      const carta = await eventos.lerCartaCorrecao(api, nota.id, req.params.seq);
+      res.json({
+        nome: `CCe-${carta.nSeqEvento}-NFe-${nota.serie}-${String(nota.numero).padStart(9, '0')}`,
+        html: cartaCorrecaoDoc.montarCartaCorrecaoHtml({ xmlNfeProc: nota.xml_autorizado, carta, cancelada: nota.status_fiscal === 'cancelada' }),
+        carta: { ...carta, xml: undefined }
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id/cartas-correcao/:seq/documento');
+    }
+  });
+
+  router.get('/notas/:id/cartas-correcao/:seq/xml', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const nota = await emissao.lerNota(api, req.params.id);
+      const carta = await eventos.lerCartaCorrecao(api, nota.id, req.params.seq);
+      if (!carta.xml) throw erro('Esta carta não tem XML guardado.', 409);
+      res.json({ nome: `${nota.chave_acesso}-procEventoNFe-cce-${carta.nSeqEvento}`, xml: carta.xml });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas/:id/cartas-correcao/:seq/xml');
     }
   });
 
@@ -463,9 +568,10 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
 
   router.post('/inutilizacoes', exigirPermissao('financeiro.nfe.cancel'), async (req, res) => {
     try {
-      const dados = carregarCertificado();
+      const api = createApiClient(req);
+      const dados = await carregarCertificado(api);
       res.json(await eventos.inutilizar({
-        api: createApiClient(req), entrada: req.body || {}, certificado: dados, transporte: transporteDoCertificado(dados), env, usuarioId: usuarioDaRequisicao(req)
+        api, entrada: req.body || {}, certificado: dados, transporte: transporteDoCertificado(dados), env, usuarioId: usuarioDaRequisicao(req)
       }));
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/inutilizacoes');
@@ -475,9 +581,10 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   /** Pergunta à SEFAZ a situação da nota (recibo ou chave) e atualiza o banco. */
   router.post('/notas/:id/sincronizar', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {
-      const dados = carregarCertificado();
+      const api = createApiClient(req);
+      const dados = await carregarCertificado(api);
       res.json(await emissao.sincronizar({
-        api: createApiClient(req), notaId: req.params.id, transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
+        api, notaId: req.params.id, transporte: transporteDoCertificado(dados), usuarioId: usuarioDaRequisicao(req)
       }));
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/notas/:id/sincronizar');

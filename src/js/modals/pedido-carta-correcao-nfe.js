@@ -110,7 +110,11 @@
       if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
       window.showToast?.(`Carta de correção nº ${corpo?.nSeqEvento || 1} registrada na SEFAZ (${corpo?.sefaz?.cStat || ''}).`, 'success');
       window.dispatchEvent(new CustomEvent('nfe:carta-correcao', { detail: { notaId: ctx.notaId, nSeqEvento: corpo?.nSeqEvento || null } }));
-      fechar();
+      // Fica aberto mostrando a carta registrada, com PDF e XML à mão.
+      textoEl.value = '';
+      contadorEl.textContent = textoDoContador('');
+      exibirMensagem('ok', `Carta ${corpo?.nSeqEvento || 1} registrada. Gere a segunda via em PDF na lista acima.`);
+      await pintarRegistradas();
     } finally {
       emAndamento = false;
     }
@@ -123,8 +127,47 @@
   if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(confirmarBtn, confirmar);
   else confirmarBtn.addEventListener('click', confirmar);
 
+  // ------------------------------------------------ cartas registradas
+  const diaDoTexto = valor => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+
+  async function pintarRegistradas() {
+    const bloco = el('cartaCorrecaoNfeRegistradas');
+    const lista = el('cartaCorrecaoNfeLista');
+    if (!bloco || !lista || !window.NfeDocumentos?.listarCartasCorrecao) return;
+    const cartas = await window.NfeDocumentos.listarCartasCorrecao(ctx.notaId);
+    lista.replaceChildren();
+    for (const carta of cartas) {
+      const li = document.createElement('li');
+      li.className = 'px-4 py-3 flex flex-wrap items-start gap-3';
+      const texto = document.createElement('div');
+      texto.className = 'flex-1 min-w-[12rem]';
+      const cabecalho = document.createElement('p');
+      cabecalho.className = 'text-xs text-gray-400';
+      cabecalho.textContent = `Carta ${carta.nSeqEvento}${carta.registradaEm ? ` · ${diaDoTexto(carta.registradaEm)}` : ''}${carta.protocolo ? ` · protocolo ${carta.protocolo}` : ''}`;
+      const corpo = document.createElement('p');
+      corpo.className = 'text-sm text-white whitespace-pre-wrap';
+      corpo.textContent = carta.correcao;
+      texto.append(cabecalho, corpo);
+      const acoes = document.createElement('div');
+      acoes.className = 'flex gap-2';
+      for (const [rotulo, fn] of [['PDF', () => window.NfeDocumentos.gerarCartaCorrecaoPdf(ctx.notaId, carta.nSeqEvento)], ['XML', () => window.NfeDocumentos.salvarXmlCartaCorrecao(ctx.notaId, carta.nSeqEvento)]]) {
+        const botao = document.createElement('button');
+        botao.type = 'button';
+        botao.className = 'btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium';
+        botao.textContent = rotulo;
+        if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, fn);
+        else botao.addEventListener('click', fn);
+        acoes.appendChild(botao);
+      }
+      li.append(texto, acoes);
+      lista.appendChild(li);
+    }
+    bloco.classList.toggle('hidden', cartas.length === 0);
+  }
+
   el('cartaCorrecaoNfeSubtitulo').textContent = [`NF-e série ${ctx.serie} nº ${ctx.numero}`, ctx.pedidoNumero ? `Pedido ${ctx.pedidoNumero}` : ''].filter(Boolean).join(' · ');
   contadorEl.textContent = textoDoContador('');
+  pintarRegistradas();
   overlay.classList.remove('hidden');
   overlay.removeAttribute('aria-hidden');
   window.Modal?.signalReady?.(overlayId);

@@ -118,6 +118,20 @@ test('carta de correção: registrada (135) fica no histórico com o procEventoN
   assert.equal(r2.nSeqEvento, 2, 'a segunda carta conta a primeira registrada');
   assert.match(t.chamadas[1].corpo, new RegExp(`Id="ID110110${CHAVE}02".*<nSeqEvento>2</nSeqEvento>`));
 
+  // As cartas ficam listáveis (sem XML) e cada uma pode ser lida com o XML.
+  const cartas = await eventos.listarCartasCorrecao(t.api, 10);
+  assert.deepEqual(cartas.map(c => [c.nSeqEvento, c.correcao, c.protocolo, c.tem_xml]), [
+    [1, 'Onde se lê Caixa, leia-se Engradado na espécie dos volumes', '131260000222222', true],
+    [2, 'Segunda correção: leia-se Nogueira onde se lê Café', '131260000222222', true]
+  ]);
+  assert.ok(!('xml' in cartas[0]));
+  const segunda = await eventos.lerCartaCorrecao(t.api, 10, 2);
+  assert.ok(segunda.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe'));
+  await assert.rejects(eventos.lerCartaCorrecao(t.api, 10, 3), e => e.status === 404);
+  const doc = require('./cartaCorrecaoDoc').montarCartaCorrecaoHtml({ xmlNfeProc: t.api.dados.notas_fiscais[0].xml_autorizado, carta: segunda });
+  assert.ok(doc.includes('CARTA DE CORREÇÃO ELETRÔNICA') && doc.includes('Sequência 2') && doc.includes('Segunda correção: leia-se Nogueira onde se lê Café') && doc.includes('131260000222222'));
+  assert.ok(doc.includes('substitui as anteriores') && doc.includes('A Carta de Correcao e disciplinada'));
+
   const recusa = montar({ resposta: retEnvEvento('128', 'Lote de Evento Processado', retCce('573', 'Rejeicao: Duplicidade de Evento')) });
   await assert.rejects(eventos.cartaCorrecao({ api: recusa.api, notaId: 10, correcao: 'Correção recusada pela SEFAZ no teste', certificado: CERT, transporte: async () => ({ status: 200, corpo: envelope(retEnvEvento('128', 'x', retCce('573', 'Rejeicao: Duplicidade de Evento'))) }) }), e => e.status === 422 && e.extra.sefaz.cStat === '573');
   assert.equal(recusa.api.dados.notas_fiscais_eventos[0].tipo, 'rejeitada');

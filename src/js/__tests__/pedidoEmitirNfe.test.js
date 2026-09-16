@@ -60,6 +60,7 @@ test('mais de um volume: uma linha por volume, guardando o que já foi digitado;
   assert.ok(HTML.includes('id="emitirNfeVolumesDetalhe"') && HTML.includes('id="emitirNfeVolumesLinhas"'), 'bloco das linhas no HTML');
   assert.ok(FONTE.includes("campos.volumes_quantidade.addEventListener('input', renderizarVolumes)"), 'a quantidade redesenha as linhas');
   assert.ok(FONTE.includes('input.dataset.volume = chave;'), 'linhas montadas por createElement');
+  assert.ok(FONTE.includes('campo.disabled = detalhado;'), 'com a tabela aberta, espécie e pesos gerais ficam travados; com um volume só, liberados');
 });
 
 test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/NF roxa; a nota que conta por pedido', () => {
@@ -255,7 +256,10 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(f({ nfe_dispensada: true }, [])), [{ classe: 'badge-neutral', texto: 'Sem nota fiscal' }]);
   assert.strictEqual(plano(f({ nfe_dispensada: true }, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }]))[0].texto, 'NF-e 1/1 · autorizada', 'com nota autorizada a marca "sem nota" não aparece');
   assert.strictEqual(plano(f({}, [{ id: 1, serie: 1, numero: 2, status_fiscal: 'processando' }]))[0].classe, 'badge-warning');
-  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas))'));
+  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, cartas.length))'));
+  assert.deepStrictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 2)).map(t => t.texto), ['NF-e 1/1 · autorizada', 'CC-e ×2'], 'as cartas de correção viram tag');
+  assert.strictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 1)).at(-1).texto, 'CC-e 1');
+  assert.strictEqual(plano(f({}, [], 3)).length, 0, 'sem nota, sem tag de carta');
 });
 
 test('pedidos.js: o ✓ de Produção → Enviado abre o modal da NF-e; Enviado → Entregue continua na pergunta', () => {
