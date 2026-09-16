@@ -49,6 +49,7 @@ const FIN_ACOES = {
     'confirmar-pagamento-comissao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'comissao' }) },
     'confirmar-pagamento-producao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'producao' }) },
     'configuracao-fiscal': { rotulo: 'Configuração fiscal', abrir: m => finAbrirModal('configuracao-fiscal', m) },
+    'configuracao-cobranca': { rotulo: 'Configuração de cobrança', abrir: m => finAbrirModal('configuracao-cobranca', m) },
     'pendencias-todas': { rotulo: 'Todas as pendências', abrir: m => finMostrarTodasPendencias(m) },
     'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
     'registrar-ajuste': { rotulo: 'Registrar ajuste', abrir: m => finAbrirModal('registrar-ajuste', m) },
@@ -75,7 +76,8 @@ const FIN_MODAIS = {
     'visualizar-relatorio': { html: 'modals/financeiro/visualizar-relatorio.html', overlay: 'finVisualizarRelatorio' },
     'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
     'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' },
-    'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' }
+    'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' },
+    'configuracao-cobranca': { html: 'modals/financeiro/configuracao-cobranca.html', overlay: 'finConfiguracaoCobranca' }
 };
 const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
 

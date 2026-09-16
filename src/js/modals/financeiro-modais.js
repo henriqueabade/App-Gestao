@@ -297,6 +297,28 @@
       && (!termo || [l.numero, l.cliente].some(v => String(v ?? '').toLowerCase().includes(termo))));
   }
 
+  /**
+   * Prévia dos encargos de um boleto de `valor` pela configuração da tela —
+   * a mesma conta do backend (juros por dia = taxa mensal ÷ 30 sobre o
+   * bruto; multa sobre o bruto). Pura: os campos chegam como texto.
+   */
+  function previaDeEncargos(valor, cfg = {}) {
+    const bruto = centavos(valor);
+    const numero = v => Number(String(v ?? '').replace(',', '.'));
+    const partes = [];
+    const taxa = numero(cfg.juros_percentual_mes) || 0;
+    if (cfg.juros_tipo === 'valor_dia' && taxa > 0) partes.push(`juros de ${formatarMoeda(centavos(bruto * taxa / 100 / 30))} por dia de atraso (${String(taxa).replace('.', ',')}% ao mês)`);
+    else if (cfg.juros_tipo === 'percentual_mes' && taxa > 0) partes.push(`juros de ${String(taxa).replace('.', ',')}% ao mês`);
+    else partes.push('sem juros');
+    const multa = numero(cfg.multa_percentual) || 0;
+    partes.push(multa > 0 ? `multa de ${formatarMoeda(centavos(bruto * multa / 100))} (${String(multa).replace('.', ',')}%)` : 'sem multa');
+    const protesto = cfg.protesto_dias === '' || cfg.protesto_dias === null || cfg.protesto_dias === undefined ? NaN : Number(cfg.protesto_dias);
+    partes.push(Number.isFinite(protesto) ? `protesto ${protesto} dias após o vencimento` : 'sem protesto');
+    const limite = Number(cfg.dias_limite_recebimento) || 0;
+    partes.push(limite > 0 ? `pagável até ${limite} dias depois de vencido` : 'não aceita pagamento depois de vencido');
+    return `Num boleto de ${formatarMoeda(bruto)}: ${partes.join(' · ')}.`;
+  }
+
   /** O relatório "Pedidos aguardando NF" a partir do painel (só os que contam). */
   function linhasDoRelatorioAguardando(painel) {
     return linhasAguardando(painel).map(l => ({
@@ -603,7 +625,7 @@
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro,
     faixaDeAtraso, calcularAtrasadas, resumoAtrasadas, agingDe, resumoProducao, montarRelatorio,
-    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando,
+    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     RELATORIOS: Object.keys(RELATORIOS), EXEMPLO, TAXA_CMS, TAXA_ROYALTY, FAIXAS_ATRASO
   };
 
@@ -2032,8 +2054,213 @@
     return carregarLista();
   }
 
+  // ------------------------------------------- configuração de cobrança
+  //
+  // REAL: GET/PUT /api/cobranca/configuracao, o client_secret por
+  // POST/DELETE /api/cobranca/credenciais e o teste POST /api/cobranca/testar.
+  // Mesma anatomia da configuração fiscal.
+
+  function montarConfiguracaoCobranca() {
+    const campos = overlay.querySelectorAll('[data-fin-cob]');
+    let podeEditar = false;
+    let ambienteNoBanco = 'sandbox';
+    let bancoChaveMestra = false;
+
+    const texto = (id, valor) => { const e = el(id); if (e) e.textContent = valor ?? '—'; };
+    const mensagem = (txt, tipo = 'erro') => mostrarMensagem('finCobMensagem', txt, tipo);
+    const marcarTag = (id, classe, rotulo, extra = '') => {
+      const e = el(id);
+      if (!e) return;
+      e.className = `${classe} px-3 py-1 rounded-full text-xs font-medium ${extra}`.trim();
+      e.textContent = rotulo;
+    };
+
+    function valoresDaTela() {
+      const corpo = {};
+      for (const campo of campos) corpo[campo.dataset.finCob] = campo.value;
+      return corpo;
+    }
+
+    function pintarPrevia() {
+      const previa = el('finCobPrevia');
+      if (previa) previa.textContent = previaDeEncargos(3327, valoresDaTela());
+    }
+
+    function pintarCredenciais(credenciais) {
+      for (const ambiente of ['sandbox', 'producao']) {
+        const c = credenciais?.[ambiente] || {};
+        const onde = c.origem === 'banco' ? 'no banco (todas as máquinas)' : (c.origem === 'env' ? 'no .env (DEV)' : 'só neste computador');
+        marcarTag(`finCobSecretTag_${ambiente}`, c.secret_guardado ? 'badge-success' : 'badge-danger', c.secret_guardado ? 'Secret guardado' : 'Sem secret');
+        const partes = [];
+        if (c.secret_guardado) partes.push(`Client secret guardado ${onde}${c.guardado_em ? ` em ${formatarData(String(c.guardado_em).slice(0, 10))}` : ''}.`);
+        else partes.push('Sem client secret: o BB não dá o token sem ele.');
+        if (c.erro) partes.push(c.erro);
+        if (Array.isArray(c.pendencias) && c.pendencias.length) partes.push(`Falta: ${c.pendencias.join('; ')}.`);
+        const estado = el(`finCobSecretEstado_${ambiente}`);
+        if (estado) {
+          estado.textContent = partes.join(' ');
+          estado.style.color = c.secret_guardado && !c.pendencias?.length ? 'var(--color-green)' : '';
+        }
+      }
+    }
+
+    function pintarDestinos(temChave) {
+      bancoChaveMestra = temChave;
+      const radios = overlay.querySelectorAll('input[name="finCobSecretDestino"]');
+      radios.forEach(r => { if (r.value === 'banco') r.disabled = !temChave; });
+      const marcado = Array.from(radios).some(r => r.checked && !r.disabled);
+      if (!marcado) radios.forEach(r => { r.checked = r.value === (temChave ? 'banco' : 'computador'); });
+      el('finCobSecretDestinoAviso')?.classList.toggle('hidden', temChave);
+    }
+    const destinoEscolhido = () => overlay.querySelector('input[name="finCobSecretDestino"]:checked')?.value || (bancoChaveMestra ? 'banco' : 'computador');
+
+    function alternarConfirmacao() {
+      const escolhido = el('finCob_ambiente')?.value;
+      el('finCobConfirmacaoProducao')?.classList.toggle('hidden', !(escolhido === 'producao' && ambienteNoBanco !== 'producao'));
+    }
+
+    function pintar(estado) {
+      podeEditar = Boolean(estado?.pode_editar);
+      ambienteNoBanco = estado?.ambiente_no_banco || 'sandbox';
+      const cfg = estado?.configuracao || {};
+      for (const campo of campos) {
+        const valor = cfg[campo.dataset.finCob];
+        campo.value = valor === null || valor === undefined ? '' : String(valor);
+        campo.disabled = !podeEditar;
+      }
+      el('finCobSalvar')?.classList.toggle('hidden', !podeEditar);
+      el('finCobSecretBloco')?.classList.toggle('hidden', !podeEditar);
+      el('finCobRodapeAviso').textContent = podeEditar
+        ? 'Alterações valem para todos os usuários.'
+        : 'Só o Sup Admin altera a configuração. Você vê o que está valendo.';
+
+      const producao = estado?.ambiente === 'producao';
+      marcarTag('finCobAmbienteTag', producao ? 'badge-danger' : 'badge-warning', producao ? 'PRODUÇÃO' : 'Sandbox (testes)', 'justify-self-end');
+      el('finCobTravaMaquina')?.classList.toggle('hidden', !estado?.travado_em_sandbox_nesta_maquina);
+      const teste = el('finCobTesteAmbiente');
+      if (teste) teste.value = producao ? 'producao' : 'sandbox';
+      const secretAmb = el('finCobSecretAmbiente');
+      if (secretAmb) secretAmb.value = producao ? 'producao' : 'sandbox';
+
+      const pend = el('finCobPendencias');
+      const lista = estado?.credenciais?.[estado?.ambiente || 'sandbox']?.pendencias || [];
+      if (pend) {
+        pend.classList.toggle('hidden', !lista.length);
+        pend.querySelector('span').textContent = `${producao ? 'Produção' : 'Sandbox'}: ${lista.join(' • ')}`;
+      }
+
+      pintarCredenciais(estado?.credenciais);
+      pintarDestinos(Boolean(estado?.banco_chave_mestra));
+      texto('finCobNossoNumeroSandbox', estado?.nosso_numero?.sandbox || '—');
+      texto('finCobNossoNumeroProducao', estado?.nosso_numero?.producao || '—');
+      alternarConfirmacao();
+      pintarPrevia();
+    }
+
+    async function carregar() {
+      try {
+        pintar(await fetchApi('/api/cobranca/configuracao'));
+        el('finCobConteudo').classList.remove('hidden');
+      } catch (e) {
+        const erroEl = el('finCobErroGeral');
+        erroEl.querySelector('span').textContent = e.message;
+        erroEl.classList.remove('hidden');
+      } finally {
+        el('finCobCarregando').classList.add('hidden');
+      }
+    }
+
+    async function salvar() {
+      mensagem('');
+      const corpo = valoresDaTela();
+      const confirmacao = el('finCobConfirmacao')?.value || '';
+      if (confirmacao) corpo.confirmacao = confirmacao;
+      try {
+        pintar(await fetchApi('/api/cobranca/configuracao', { method: 'PUT', body: JSON.stringify(corpo) }));
+        if (el('finCobConfirmacao')) el('finCobConfirmacao').value = '';
+        window.showToast?.('Configuração de cobrança salva.', 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function guardarSecret() {
+      mensagem('');
+      const secret = el('finCobSecret').value;
+      const ambiente = el('finCobSecretAmbiente').value;
+      if (!secret) { mensagem('Informe o client secret.'); return; }
+      try {
+        const destino = destinoEscolhido();
+        await fetchApi('/api/cobranca/credenciais', { method: 'POST', body: JSON.stringify({ ambiente, client_secret: secret, destino }) });
+        el('finCobSecret').value = '';
+        window.showToast?.(destino === 'banco' ? `Client secret de ${ambiente} guardado no banco, para todas as máquinas.` : `Client secret de ${ambiente} guardado neste computador.`, 'success');
+        await carregar();
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function removerSecret() {
+      const ambiente = el('finCobSecretAmbiente').value;
+      const ok = await (window.DialogPadrao?.confirm?.({
+        title: `Remover o client secret de ${ambiente}?`,
+        message: 'O secret sai do banco e deste computador. Os boletos desse ambiente param até guardá-lo de novo.',
+        confirmText: 'Remover'
+      }) ?? Promise.resolve(true));
+      if (!ok) return;
+      try {
+        await fetchApi(`/api/cobranca/credenciais?ambiente=${encodeURIComponent(ambiente)}`, { method: 'DELETE' });
+        await carregar();
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function testar() {
+      const resultado = el('finCobTesteResultado');
+      const detalhe = el('finCobTesteDetalhe');
+      resultado.textContent = 'Pedindo o token ao BB…';
+      resultado.style.color = '';
+      detalhe.classList.add('hidden');
+      try {
+        const r = await fetchApi('/api/cobranca/testar', { method: 'POST', body: JSON.stringify({ ambiente: el('finCobTesteAmbiente').value }) });
+        resultado.textContent = `Conectado ao BB (${r.ambiente === 'producao' ? 'produção' : 'sandbox'}).${r.observacao ? ` ${r.observacao}` : ''}`;
+        resultado.style.color = 'var(--color-green)';
+        texto('finCobTesteAmbienteTestado', r.ambiente === 'producao' ? 'Produção' : 'Sandbox');
+        texto('finCobTesteEscopos', (r.escopos || []).join(', ') || '—');
+        texto('finCobTesteBoletos', r.boletosAbertos === null || r.boletosAbertos === undefined ? '—' : String(r.boletosAbertos));
+        texto('finCobTesteOrigem', r.origem_secret === 'banco' ? 'banco' : (r.origem_secret === 'env' ? '.env (DEV)' : 'este computador'));
+        texto('finCobTesteTempo', `${r.tempoMs} ms`);
+        detalhe.classList.remove('hidden');
+      } catch (e) {
+        resultado.textContent = e.message;
+        resultado.style.color = 'var(--color-red)';
+      }
+    }
+
+    const ligar = (id, fn) => {
+      const botao = el(id);
+      if (!botao) return;
+      botao.dataset.acaoGerida = 'true';
+      botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+    };
+    ligar('finCobSalvar', salvar);
+    ligar('finCobSecretGuardar', guardarSecret);
+    ligar('finCobSecretRemover', removerSecret);
+    ligar('finCobTestar', testar);
+    el('finCob_ambiente')?.addEventListener('change', alternarConfirmacao);
+    for (const chave of ['juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'protesto_dias', 'dias_limite_recebimento']) {
+      const campo = overlay.querySelector(`[data-fin-cob="${chave}"]`);
+      campo?.addEventListener('input', pintarPrevia);
+      campo?.addEventListener('change', pintarPrevia);
+    }
+
+    return carregar();
+  }
+
   const montadores = {
     finConfiguracaoFiscal: montarConfiguracaoFiscal,
+    finConfiguracaoCobranca: montarConfiguracaoCobranca,
     finAguardandoNfe: montarAguardandoNfe,
     finNotasFiscais: montarNotasFiscais,
     finRegistrarRecebimento: montarRecebimento,

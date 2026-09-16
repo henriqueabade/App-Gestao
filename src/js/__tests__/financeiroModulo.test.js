@@ -365,6 +365,9 @@ test('o HTML tem os blocos da descrição e todo data-fin-acao tem rótulo no sc
     assert.ok(!FONTE_HTML.includes('Registrar NF<') && !FONTE_HTML.includes('registrar-nf'), 'o HTML não oferece "Registrar NF"');
     assert.match(FONTE_HTML, /data-perm="financeiro\.nfe\.emit" data-fin-acao="emitir-nfe"/);
     assert.match(FONTE_HTML, /data-perm="financeiro\.nfe\.view" data-fin-acao="notas-fiscais"/);
+    // As duas engrenagens do cabeçalho: fiscal (NF-e) e cobrança (boletos BB), só para quem vê configuração.
+    assert.match(FONTE_HTML, /data-perm="financeiro\.config\.view" data-fin-acao="configuracao-fiscal"/);
+    assert.match(FONTE_HTML, /data-perm="financeiro\.config\.view" data-fin-acao="configuracao-cobranca"/);
     const acoesHtml = [...FONTE_HTML.matchAll(/data-fin-acao="([^"]+)"/g)].map(m => m[1]);
     const acoesJs = [...FONTE_JS.matchAll(/^\s+'([\w-]+)': \{ rotulo:/gm)].map(m => m[1]);
     for (const a of acoesHtml) assert.ok(acoesJs.includes(a), `ação "${a}" do HTML sem rótulo em FIN_ACOES`);

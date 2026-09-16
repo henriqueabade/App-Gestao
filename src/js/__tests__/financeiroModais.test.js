@@ -33,7 +33,8 @@ const MODAIS = {
     'visualizar-relatorio': 'finVisualizarRelatorio',
     'comissoes-atrasadas': 'finComissoesAtrasadas',
     'producao-competencia': 'finProducaoCompetencia',
-    'configuracao-fiscal': 'finConfiguracaoFiscal'
+    'configuracao-fiscal': 'finConfiguracaoFiscal',
+    'configuracao-cobranca': 'finConfiguracaoCobranca'
 };
 /* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
 const DE_ACAO = ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
@@ -233,6 +234,43 @@ test('configuração fiscal é o modal REAL: lê e grava em /api/fiscal, só o S
     assert.match(MODULO, /'configuracao-fiscal': \{ rotulo: 'Configuração fiscal', abrir: m => finAbrirModal\('configuracao-fiscal', m\) \}/);
     const tela = fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8');
     assert.match(tela, /data-perm="financeiro\.config\.view" data-fin-acao="configuracao-fiscal"/);
+});
+
+test('configuração de cobrança (boletos BB) é o modal REAL: lê e grava em /api/cobranca, o secret nunca fica na tela, teste de conexão', () => {
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'configuracao-cobranca.html'), 'utf8');
+    for (const chave of ['ambiente', 'agencia', 'agencia_dv', 'conta', 'conta_dv', 'convenio', 'carteira', 'variacao',
+        'beneficiario_nome', 'beneficiario_cnpj', 'beneficiario_endereco', 'beneficiario_cep', 'beneficiario_cidade', 'beneficiario_uf',
+        'client_id_sandbox', 'app_key_sandbox', 'client_id_producao', 'app_key_producao', 'proximo_sequencial_sandbox', 'proximo_sequencial_producao',
+        'especie', 'aceite', 'juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'multa_dias', 'protesto_dias', 'negativacao_dias',
+        'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto']) {
+        assert.ok(html.includes(`data-fin-cob="${chave}"`), `campo ${chave} sem data-fin-cob`);
+    }
+    assert.match(html, /id="finCobSecret" type="password"/, 'o secret entra num campo de senha');
+    assert.ok(!html.includes('data-fin-cob="client_secret'), 'o secret NÃO é um campo da configuração (nunca volta do servidor)');
+    assert.match(html, /id="finCobConfirmacao"/, 'palavra de confirmação para ligar a produção');
+    assert.match(html, /name="finCobSecretDestino" value="banco"/);
+    assert.match(html, /name="finCobSecretDestino" value="computador"/);
+    assert.ok(!/data-fin-principal/.test(html), 'nada aqui é "em implementação"');
+    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(html), 'botões só com texto, sem ícone');
+
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/configuracao'\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/configuracao', \{ method: 'PUT'/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/credenciais', \{ method: 'POST', body: JSON\.stringify\(\{ ambiente, client_secret: secret, destino \}\) \}\)/);
+    assert.match(SCRIPT, /fetchApi\(`\/api\/cobranca\/credenciais\?ambiente=\$\{encodeURIComponent\(ambiente\)\}`, \{ method: 'DELETE' \}\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/testar', \{ method: 'POST'/);
+    assert.match(SCRIPT, /el\('finCobSecret'\)\.value = '';/, 'o secret é limpo da tela depois de guardar');
+    assert.match(SCRIPT, /finConfiguracaoCobranca: montarConfiguracaoCobranca/);
+    assert.match(MODULO, /'configuracao-cobranca': \{ rotulo: 'Configuração de cobrança', abrir: m => finAbrirModal\('configuracao-cobranca', m\) \}/);
+    const tela = fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8');
+    assert.match(tela, /data-perm="financeiro\.config\.view" data-fin-acao="configuracao-cobranca"/);
+
+    // A prévia dos encargos é a mesma conta do backend (boleto real: R$ 3.327,00 → R$ 9,98/dia e multa R$ 66,54).
+    const f = puro();
+    assert.strictEqual(semNbsp(f.previaDeEncargos(3327, { juros_tipo: 'valor_dia', juros_percentual_mes: '9', multa_percentual: '2', protesto_dias: '7', dias_limite_recebimento: '15' })),
+        'Num boleto de R$ 3.327,00: juros de R$ 9,98 por dia de atraso (9% ao mês) · multa de R$ 66,54 (2%) · protesto 7 dias após o vencimento · pagável até 15 dias depois de vencido.');
+    assert.strictEqual(semNbsp(f.previaDeEncargos(100, { juros_tipo: 'sem', multa_percentual: '0', protesto_dias: '', dias_limite_recebimento: '0' })),
+        'Num boleto de R$ 100,00: sem juros · sem multa · sem protesto · não aceita pagamento depois de vencido.');
+    assert.match(f.previaDeEncargos(100, { juros_tipo: 'percentual_mes', juros_percentual_mes: '1,5' }), /juros de 1,5% ao mês/);
 });
 
 test('o script dos modais não monta dado por innerHTML e solta os ouvintes globais ao fechar', () => {

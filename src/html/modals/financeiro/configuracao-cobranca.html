@@ -1,0 +1,324 @@
+<!--
+  Configuração de cobrança (boletos pela API do Banco do Brasil): ambiente,
+  conta e convênio, beneficiário como sai no boleto, credenciais do Portal
+  Developers (o client_secret vai para o banco cifrado ou para o cofre deste
+  computador — nunca em claro), teste de conexão, numeração do nosso número
+  e padrões do boleto. Quem tem financeiro.config.view vê; só o Sup Admin
+  altera. Dados reais de GET/PUT /api/cobranca/configuracao.
+  Script: src/js/modals/financeiro-modais.js (montador finConfiguracaoCobranca).
+-->
+<div id="finConfiguracaoCobrancaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finCobTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finCobTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Configuração de cobrança</h2>
+        <p class="text-xs text-gray-300 truncate">Boletos pela API do Banco do Brasil</p>
+      </div>
+      <span id="finCobAmbienteTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-8">
+        <div id="finCobCarregando" class="text-sm text-gray-400">Carregando configuração…</div>
+        <div id="finCobErroGeral" class="hidden fin-aviso" role="alert"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><span></span></div>
+
+        <div id="finCobConteudo" class="hidden space-y-8">
+          <!-- O que falta no ambiente que vale -->
+          <div id="finCobPendencias" class="hidden fin-aviso" role="status">
+            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+            <span></span>
+          </div>
+
+          <!-- Ambiente -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-toggle-on" aria-hidden="true"></i>Ambiente</h3>
+            <p class="text-xs text-gray-400 mb-4">No sandbox do BB os boletos são de mentira: ninguém paga e nada entra na conta. Produção registra boletos reais no convênio.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label for="finCob_ambiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente (vale para todos)</label>
+                <select id="finCob_ambiente" data-fin-cob="ambiente" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="sandbox">Sandbox (testes, boletos sem valor)</option>
+                  <option value="producao">Produção (boletos reais)</option>
+                </select>
+                <p id="finCobTravaMaquina" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Esta máquina está presa em sandbox pelo .env (BB_AMBIENTE).</p>
+              </div>
+            </div>
+            <div id="finCobConfirmacaoProducao" class="hidden mt-4 fin-aviso">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <div class="flex-1 min-w-0">
+                <p class="mb-2">Ligar a produção passa a registrar boletos reais na conta da empresa, para todos os usuários. Digite <strong>PRODUCAO</strong> para confirmar ao salvar.</p>
+                <input id="finCobConfirmacao" type="text" placeholder="PRODUCAO" autocomplete="off" class="w-full md:w-64 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Conta e convênio -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-university" aria-hidden="true"></i>Conta e convênio de cobrança</h3>
+            <p class="text-xs text-gray-400 mb-4">Como no painel "Gerar Boleto" do Gerenciador Financeiro: modalidade Simples, forma de pagamento Único, carteira 17.</p>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-6">
+              <div>
+                <label for="finCob_agencia" class="block text-sm font-medium text-gray-300 mb-2">Agência <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_agencia" data-fin-cob="agencia" type="text" inputmode="numeric" maxlength="5" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_agencia_dv" class="block text-sm font-medium text-gray-300 mb-2">Dígito</label>
+                <input id="finCob_agencia_dv" data-fin-cob="agencia_dv" type="text" maxlength="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_conta" class="block text-sm font-medium text-gray-300 mb-2">Conta <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_conta" data-fin-cob="conta" type="text" inputmode="numeric" maxlength="12" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_conta_dv" class="block text-sm font-medium text-gray-300 mb-2">Dígito</label>
+                <input id="finCob_conta_dv" data-fin-cob="conta_dv" type="text" maxlength="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="col-span-2">
+                <label for="finCob_convenio" class="block text-sm font-medium text-gray-300 mb-2">Convênio de cobrança (7 dígitos) <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_convenio" data-fin-cob="convenio" type="text" inputmode="numeric" maxlength="7" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_carteira" class="block text-sm font-medium text-gray-300 mb-2">Carteira <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_carteira" data-fin-cob="carteira" type="number" min="1" max="99" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_variacao" class="block text-sm font-medium text-gray-300 mb-2">Variação <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_variacao" data-fin-cob="variacao" type="number" min="1" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Beneficiário -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-building" aria-hidden="true"></i>Beneficiário (como sai impresso no boleto)</h3>
+            <p class="text-xs text-gray-400 mb-4">O endereço é o cadastrado no banco para a conta — pode ser diferente do endereço fiscal da NF-e.</p>
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
+              <div class="md:col-span-4">
+                <label for="finCob_beneficiario_nome" class="block text-sm font-medium text-gray-300 mb-2">Nome <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_beneficiario_nome" data-fin-cob="beneficiario_nome" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label for="finCob_beneficiario_cnpj" class="block text-sm font-medium text-gray-300 mb-2">CNPJ <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_beneficiario_cnpj" data-fin-cob="beneficiario_cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-3">
+                <label for="finCob_beneficiario_endereco" class="block text-sm font-medium text-gray-300 mb-2">Endereço</label>
+                <input id="finCob_beneficiario_endereco" data-fin-cob="beneficiario_endereco" type="text" maxlength="80" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_beneficiario_cep" class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
+                <input id="finCob_beneficiario_cep" data-fin-cob="beneficiario_cep" type="text" inputmode="numeric" maxlength="9" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_beneficiario_cidade" class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
+                <input id="finCob_beneficiario_cidade" data-fin-cob="beneficiario_cidade" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_beneficiario_uf" class="block text-sm font-medium text-gray-300 mb-2">UF</label>
+                <input id="finCob_beneficiario_uf" data-fin-cob="beneficiario_uf" type="text" maxlength="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white uppercase focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Credenciais do Portal Developers -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-key" aria-hidden="true"></i>Credenciais do Portal Developers BB</h3>
+            <p class="text-xs text-gray-400 mb-4">Client ID e app key ficam no banco (valem para todos). O <strong>client secret</strong> vai <strong>para o banco cifrado</strong> (chave mestra do .env) ou <strong>só para este computador</strong> (cofre do Windows) — nunca em claro, nunca de volta à tela.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="glass-surface rounded-xl border border-white/10 px-4 py-3 space-y-4">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-white">Sandbox</p>
+                  <span id="finCobSecretTag_sandbox" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
+                </div>
+                <div>
+                  <label for="finCob_client_id_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+                  <input id="finCob_client_id_sandbox" data-fin-cob="client_id_sandbox" type="text" maxlength="200" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="finCob_app_key_sandbox" class="block text-sm font-medium text-gray-300 mb-2">App key (gw-dev-app-key)</label>
+                  <input id="finCob_app_key_sandbox" data-fin-cob="app_key_sandbox" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <p id="finCobSecretEstado_sandbox" class="text-xs text-gray-400" role="status"></p>
+              </div>
+              <div class="glass-surface rounded-xl border border-white/10 px-4 py-3 space-y-4">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-white">Produção</p>
+                  <span id="finCobSecretTag_producao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
+                </div>
+                <div>
+                  <label for="finCob_client_id_producao" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+                  <input id="finCob_client_id_producao" data-fin-cob="client_id_producao" type="text" maxlength="200" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="finCob_app_key_producao" class="block text-sm font-medium text-gray-300 mb-2">App key (gw-dev-app-key)</label>
+                  <input id="finCob_app_key_producao" data-fin-cob="app_key_producao" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <p id="finCobSecretEstado_producao" class="text-xs text-gray-400" role="status"></p>
+              </div>
+            </div>
+            <div id="finCobSecretBloco" class="mt-5 pt-4 border-t border-inputBorder">
+              <div class="flex flex-wrap items-end gap-3">
+                <div>
+                  <label for="finCobSecretAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Client secret de</label>
+                  <select id="finCobSecretAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                    <option value="sandbox">Sandbox</option>
+                    <option value="producao">Produção</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="finCobSecret" class="block text-sm font-medium text-gray-300 mb-2">Client secret</label>
+                  <input id="finCobSecret" type="password" autocomplete="off" placeholder="••••••••" class="w-72 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div role="radiogroup" aria-label="Onde guardar o client secret" class="flex flex-wrap gap-4 pb-3">
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCobSecretDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco</label>
+                  <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCobSecretDestino" value="computador" style="accent-color: var(--color-primary)" /> Só aqui</label>
+                </div>
+                <button id="finCobSecretGuardar" type="button" class="btn-success px-5 py-3 rounded-lg font-medium">Guardar secret</button>
+                <button id="finCobSecretRemover" type="button" class="btn-danger px-5 py-3 rounded-lg text-white font-medium">Remover</button>
+              </div>
+              <p id="finCobSecretDestinoAviso" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Para guardar no banco, defina SEGREDOS_CHAVE_MESTRA no .env desta máquina (veja .env.example).</p>
+            </div>
+          </div>
+
+          <!-- Teste de conexão -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-satellite-dish" aria-hidden="true"></i>Conexão com o Banco do Brasil</h3>
+            <p class="text-xs text-gray-400 mb-4">Pede o token ao BB e lista os boletos em aberto da conta. É a prova de que client ID, secret, app key, agência e conta estão certos. Produção só é testada quando ela está valendo.</p>
+            <div class="flex flex-wrap items-end gap-3">
+              <div>
+                <label for="finCobTesteAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
+                <select id="finCobTesteAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="sandbox">Sandbox</option>
+                  <option value="producao">Produção</option>
+                </select>
+              </div>
+              <button id="finCobTestar" type="button" class="btn-primary text-white px-5 py-3 rounded-lg font-medium">Testar conexão</button>
+              <span id="finCobTesteResultado" class="text-sm text-gray-300 pb-3"></span>
+            </div>
+            <dl id="finCobTesteDetalhe" class="hidden fin-dl mt-3 max-w-md">
+              <div class="fin-dl__linha"><dt>Ambiente testado</dt><dd id="finCobTesteAmbienteTestado">—</dd></div>
+              <div class="fin-dl__linha"><dt>Escopos do token</dt><dd id="finCobTesteEscopos">—</dd></div>
+              <div class="fin-dl__linha"><dt>Boletos em aberto</dt><dd id="finCobTesteBoletos">—</dd></div>
+              <div class="fin-dl__linha"><dt>Secret lido de</dt><dd id="finCobTesteOrigem">—</dd></div>
+              <div class="fin-dl__linha"><dt>Tempo</dt><dd id="finCobTesteTempo">—</dd></div>
+            </dl>
+          </div>
+
+          <!-- Numeração -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-list-ol" aria-hidden="true"></i>Nosso número</h3>
+            <p class="text-xs text-gray-400 mb-4">Convênio de 7 posições: "000" + convênio + sequencial de 10 dígitos. Em produção continue do último boleto emitido pelo Gerenciador Financeiro (o nº 393 saiu em 15/09/2026): um número repetido é recusado pelo banco.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="finCob_proximo_sequencial_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Sandbox: próximo sequencial</label>
+                <input id="finCob_proximo_sequencial_sandbox" data-fin-cob="proximo_sequencial_sandbox" type="number" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <p class="mt-2 text-xs text-gray-400">Próximo nosso número: <span id="finCobNossoNumeroSandbox" class="text-white">—</span></p>
+              </div>
+              <div>
+                <label for="finCob_proximo_sequencial_producao" class="block text-sm font-medium text-gray-300 mb-2">Produção: próximo sequencial</label>
+                <input id="finCob_proximo_sequencial_producao" data-fin-cob="proximo_sequencial_producao" type="number" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <p class="mt-2 text-xs text-gray-400">Próximo nosso número: <span id="finCobNossoNumeroProducao" class="text-white">—</span></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Padrões do boleto -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-sliders-h" aria-hidden="true"></i>Padrões do boleto</h3>
+            <p class="text-xs text-gray-400 mb-4">Juros e multa incidem sobre o valor bruto do boleto (sem o desconto, quando há). Os juros saem como valor por dia de atraso: a taxa mensal dividida por 30.</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div>
+                <label for="finCob_especie" class="block text-sm font-medium text-gray-300 mb-2">Espécie</label>
+                <select id="finCob_especie" data-fin-cob="especie" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="DM">DM — Duplicata mercantil</option>
+                  <option value="DS">DS — Duplicata de serviço</option>
+                  <option value="NP">NP — Nota promissória</option>
+                  <option value="RC">RC — Recibo</option>
+                  <option value="OU">OU — Outros</option>
+                </select>
+              </div>
+              <div>
+                <label for="finCob_aceite" class="block text-sm font-medium text-gray-300 mb-2">Aceite</label>
+                <select id="finCob_aceite" data-fin-cob="aceite" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="false">N — Sem aceite</option>
+                  <option value="true">A — Com aceite</option>
+                </select>
+              </div>
+              <div>
+                <label for="finCob_juros_tipo" class="block text-sm font-medium text-gray-300 mb-2">Juros de mora</label>
+                <select id="finCob_juros_tipo" data-fin-cob="juros_tipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="valor_dia">Valor por dia (taxa ÷ 30)</option>
+                  <option value="percentual_mes">Percentual ao mês</option>
+                  <option value="sem">Sem juros</option>
+                </select>
+              </div>
+              <div>
+                <label for="finCob_juros_percentual_mes" class="block text-sm font-medium text-gray-300 mb-2">Taxa de juros (% ao mês)</label>
+                <input id="finCob_juros_percentual_mes" data-fin-cob="juros_percentual_mes" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_multa_percentual" class="block text-sm font-medium text-gray-300 mb-2">Multa (%)</label>
+                <input id="finCob_multa_percentual" data-fin-cob="multa_percentual" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_multa_dias" class="block text-sm font-medium text-gray-300 mb-2">Multa a partir de (dias após vencer)</label>
+                <input id="finCob_multa_dias" data-fin-cob="multa_dias" type="number" min="0" max="30" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_protesto_dias" class="block text-sm font-medium text-gray-300 mb-2">Protesto (dias após vencer)</label>
+                <input id="finCob_protesto_dias" data-fin-cob="protesto_dias" type="number" min="0" max="99" placeholder="vazio = não protesta" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_negativacao_dias" class="block text-sm font-medium text-gray-300 mb-2">Negativação (dias após vencer)</label>
+                <input id="finCob_negativacao_dias" data-fin-cob="negativacao_dias" type="number" min="0" max="99" placeholder="vazio = não negativa" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_dias_limite_recebimento" class="block text-sm font-medium text-gray-300 mb-2">Receber até (dias após vencer)</label>
+                <input id="finCob_dias_limite_recebimento" data-fin-cob="dias_limite_recebimento" type="number" min="0" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_desconto_percentual" class="block text-sm font-medium text-gray-300 mb-2">Desconto por antecipação (%)</label>
+                <input id="finCob_desconto_percentual" data-fin-cob="desconto_percentual" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_desconto_dias" class="block text-sm font-medium text-gray-300 mb-2">Desconto até (dias antes de vencer)</label>
+                <input id="finCob_desconto_dias" data-fin-cob="desconto_dias" type="number" min="0" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_indicador_pix" class="block text-sm font-medium text-gray-300 mb-2">QR Code Pix no boleto</label>
+                <select id="finCob_indicador_pix" data-fin-cob="indicador_pix" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="true">Sim</option>
+                  <option value="false">Não</option>
+                </select>
+              </div>
+              <div class="col-span-2">
+                <label for="finCob_gerar_ao_emitir_nfe" class="block text-sm font-medium text-gray-300 mb-2">Ao emitir a NF-e</label>
+                <select id="finCob_gerar_ao_emitir_nfe" data-fin-cob="gerar_ao_emitir_nfe" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="true">"Gerar boleto" já marcado (pode desmarcar na hora)</option>
+                  <option value="false">"Gerar boleto" desmarcado (gerar à mão depois)</option>
+                </select>
+              </div>
+              <div class="col-span-2 md:col-span-4">
+                <label for="finCob_mensagem_boleto" class="block text-sm font-medium text-gray-300 mb-2">Mensagem no boleto (opcional)</label>
+                <textarea id="finCob_mensagem_boleto" data-fin-cob="mensagem_boleto" rows="2" maxlength="400" placeholder="Sai nas informações de responsabilidade do beneficiário, depois de juros, multa e protesto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+              </div>
+            </div>
+            <p id="finCobPrevia" class="mt-4 text-xs" style="color: var(--color-primary-light)" role="status"></p>
+          </div>
+        </div>
+
+        <div id="finCobMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-between gap-4 flex-shrink-0">
+      <span id="finCobRodapeAviso" class="text-xs text-gray-400"></span>
+      <div class="flex items-center gap-4">
+        <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+        <button id="finCobSalvar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Salvar</button>
+      </div>
+    </footer>
+  </div>
+</div>

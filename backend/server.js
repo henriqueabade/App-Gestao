@@ -80,6 +80,8 @@ app.use('/api/ia', iaRouter);
 // Fiscal (NF-e): configuração do emitente, certificado e SEFAZ. Antes do
 // proxy genérico, que não confere permissão.
 app.use('/api/fiscal', require('./fiscalController'));
+// Cobrança (boletos BB): configuração, credenciais e teste de conexão.
+app.use('/api/cobranca', require('./cobrancaController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.
