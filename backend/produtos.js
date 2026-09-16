@@ -21,6 +21,30 @@ const CAMPOS_NUMERICOS_PRODUTO = [
 ];
 const CAMPOS_NUMERICOS_ITEM = ['quantidade'];
 
+/**
+ * Campos fiscais da peça para a NF-e (sql/notas_fiscais_base.sql), limpos.
+ * Chave ausente fica ausente (não mexe no que está gravado); vazio vira null
+ * (volta ao padrão da configuração fiscal). NCM continua no fluxo antigo.
+ */
+function camposFiscaisDaPeca(dados = {}) {
+  const saida = {};
+  const digitos = (valor, tamanho) => {
+    const d = String(valor ?? '').replace(/\D/g, '');
+    return d ? d.slice(0, tamanho) : null;
+  };
+  if (dados.origem_mercadoria !== undefined) {
+    const n = Number(dados.origem_mercadoria);
+    saida.origem_mercadoria = Number.isInteger(n) && n >= 0 && n <= 8 ? n : 0;
+  }
+  if (dados.unidade_comercial !== undefined) saida.unidade_comercial = String(dados.unidade_comercial ?? '').trim().slice(0, 6) || null;
+  if (dados.cest !== undefined) saida.cest = digitos(dados.cest, 7);
+  if (dados.gtin !== undefined) saida.gtin = String(dados.gtin ?? '').trim().slice(0, 14) || null;
+  if (dados.cfop_dentro_uf !== undefined) saida.cfop_dentro_uf = digitos(dados.cfop_dentro_uf, 4);
+  if (dados.cfop_fora_uf !== undefined) saida.cfop_fora_uf = digitos(dados.cfop_fora_uf, 4);
+  if (dados.csosn !== undefined) saida.csosn = digitos(dados.csosn, 3);
+  return saida;
+}
+
 function extrairListaIn(valor) {
   if (typeof valor !== 'string') return null;
   const match = valor.trim().match(/^in\.\((.*)\)$/i);
@@ -859,7 +883,8 @@ async function adicionarProduto(dados) {
     categoria,
     preco_venda,
     pct_markup,
-    status
+    status,
+    ...camposFiscaisDaPeca(dados)
   });
 
   // Peça nova nasce com preço praticado igual ao calculado. Sem esta linha o
@@ -910,7 +935,8 @@ async function atualizarProduto(id, dados) {
     preco_venda,
     pct_markup,
     status,
-    ncm: ncmSanitizado
+    ncm: ncmSanitizado,
+    ...camposFiscaisDaPeca(dados)
   });
   const atualizado = await pool.put(`/produtos/${id}`, payload);
   // O catálogo mudou: o cache de produtos/rotas não vale mais.
@@ -1475,7 +1501,8 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     nome,
     ncm: ncmSanitizado,
     categoria,
-    status
+    status,
+    ...camposFiscaisDaPeca(produto)
   });
   try {
     await pool.put(`/produtos/${produtoAtual.id}`, payload);
@@ -1938,5 +1965,6 @@ module.exports = {
   listarColecoes,
   adicionarColecao,
   removerColecao,
-  colecaoTemDependencias
+  colecaoTemDependencias,
+  camposFiscaisDaPeca
 };

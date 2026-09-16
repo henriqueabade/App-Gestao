@@ -1,0 +1,105 @@
+<!--
+  Notas fiscais (Financeiro). Modal extra grande, REAL: as NF-e emitidas pelo
+  sistema (GET /api/fiscal/notas), com filtros por competência, situação,
+  ambiente e busca. Cada linha traz o que a nota permite — DANFE, XML,
+  e-mail, carta de correção, cancelar (modais dos Pedidos, abertos por cima)
+  e "Consultar na SEFAZ" para a nota parada. Só texto nos botões.
+  Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finNotasFiscaisOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finNotasTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finNotasTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-alt mr-2" aria-hidden="true"></i>Notas fiscais</h2>
+        <p class="text-xs text-gray-300 truncate">NF-e emitidas pelo sistema na SEFAZ</p>
+      </div>
+      <span id="finNotasAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="fin-indicadores">
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Emitidas</span>
+            <strong class="fin-indicador__valor" id="finNotasEmitidas">—</strong>
+          </div>
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Autorizadas</span>
+            <strong class="fin-indicador__valor" id="finNotasAutorizadas">—</strong>
+          </div>
+          <div class="fin-indicador fin-indicador--atencao">
+            <span class="fin-indicador__rotulo">Canceladas</span>
+            <strong class="fin-indicador__valor" id="finNotasCanceladas">—</strong>
+          </div>
+          <div class="fin-indicador fin-indicador--destaque">
+            <span class="fin-indicador__rotulo">Valor autorizado</span>
+            <strong class="fin-indicador__valor" id="finNotasValor">—</strong>
+          </div>
+        </div>
+
+        <div class="fin-filtros fin-filtros--4">
+          <div>
+            <label for="finNotasCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <select id="finNotasCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div>
+            <label for="finNotasStatus" class="block text-sm font-medium text-gray-300 mb-2">Situação</label>
+            <select id="finNotasStatus" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todas</option>
+              <option value="autorizada">Autorizadas</option>
+              <option value="cancelada">Canceladas</option>
+              <option value="processando">Aguardando a SEFAZ</option>
+              <option value="rejeitada">Recusadas</option>
+            </select>
+          </div>
+          <div>
+            <label for="finNotasAmbienteFiltro" class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
+            <select id="finNotasAmbienteFiltro" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+              <option value="producao">Produção</option>
+              <option value="homologacao">Homologação</option>
+            </select>
+          </div>
+          <div>
+            <label for="finNotasBusca" class="block text-sm font-medium text-gray-300 mb-2">Nota, pedido ou cliente</label>
+            <input id="finNotasBusca" type="text" placeholder="Nº da nota, do pedido ou cliente" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div id="finNotasCarregando" class="text-sm text-gray-400">Lendo as notas…</div>
+        <div id="finNotasMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">NF-e</th>
+                <th class="px-4 py-3 text-left text-xs">Ambiente</th>
+                <th class="px-4 py-3 text-left text-xs">Pedido</th>
+                <th class="px-4 py-3 text-left text-xs">Cliente</th>
+                <th class="px-4 py-3 text-left text-xs">Emissão</th>
+                <th class="px-4 py-3 text-right text-xs">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">CC-e</th>
+                <th class="px-4 py-3 text-left text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="finNotasCorpo" class="divide-y divide-white/10"></tbody>
+          </table>
+        </div>
+        <div id="finNotasVazio" class="hidden py-8 text-center">
+          <p class="text-white font-medium">Nenhuma nota fiscal para estes filtros.</p>
+          <p class="text-sm text-gray-400 mt-1">As NF-e são emitidas ao marcar o pedido como enviado, ou pela lista de pedidos aguardando NF-e.</p>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button id="finNotasAtualizar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Atualizar lista</button>
+    </footer>
+  </div>
+</div>

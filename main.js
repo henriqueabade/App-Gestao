@@ -160,6 +160,20 @@ ipcMain.handle('get-runtime-config', () => {
 // banco atravessa para o renderer. É o modo em que o app ESTÁ rodando —
 // decidido na inicialização —, não o que o .env diz agora.
 ipcMain.handle('get-modo-banco', () => (useLocalDatabase ? 'DEV' : 'PROD'));
+
+// Escolha do .pfx do certificado fiscal. Só o CAMINHO volta ao renderer: quem
+// lê o arquivo, valida a senha e o guarda cifrado é o backend
+// (backend/fiscalController.js). A chave privada nunca passa pela tela.
+ipcMain.handle('fiscal:selecionar-certificado', async () => {
+  const janela = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+  const escolha = await dialog.showOpenDialog(janela, {
+    title: 'Escolher o certificado digital A1 (.pfx)',
+    properties: ['openFile'],
+    filters: [{ name: 'Certificado A1', extensions: ['pfx', 'p12'] }]
+  });
+  if (escolha.canceled || !escolha.filePaths?.length) return null;
+  return escolha.filePaths[0];
+});
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();
@@ -5037,7 +5051,7 @@ ipcMain.handle('get-saved-display', () => {
  * O HTML vai para um arquivo temporário em vez de `data:` URL porque data URLs
  * têm limite de tamanho e um relatório com muitos processos estoura.
  */
-ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titulo } = {}) => {
+ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titulo, retrato = false } = {}) => {
   if (!html || typeof html !== 'string') {
     return { success: false, message: 'Nada para gerar.' };
   }
@@ -5067,7 +5081,8 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
     const pdf = await janela.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      landscape: true,
+      // O DANFE da NF-e é em retrato; os relatórios continuam em paisagem.
+      landscape: !retrato,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
@@ -5096,6 +5111,66 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
   } finally {
     if (janela && !janela.isDestroyed()) janela.close();
     fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
+/**
+ * Gera o PDF de um HTML e devolve os bytes em base64, sem diálogo — para o
+ * DANFE ir anexado ao e-mail. Mesma janela oculta do PDF salvo.
+ */
+ipcMain.handle('gerar-pdf-de-html', async (_event, { html, retrato = false } = {}) => {
+  if (!html || typeof html !== 'string') return { success: false, message: 'Nada para gerar.' };
+  const arquivoTemp = path.join(app.getPath('temp'), `sd-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+  let janela = null;
+  try {
+    await fs.promises.writeFile(arquivoTemp, html, 'utf8');
+    janela = new BrowserWindow({ show: false, webPreferences: { offscreen: true, javascript: false } });
+    await janela.loadFile(arquivoTemp);
+    const pdf = await janela.webContents.printToPDF({
+      printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    return { success: true, base64: Buffer.from(pdf).toString('base64'), tamanho: pdf.length };
+  } catch (err) {
+    console.error('Erro ao gerar PDF em memória:', err);
+    return { success: false, message: err?.message || 'Erro ao gerar o PDF.' };
+  } finally {
+    if (janela && !janela.isDestroyed()) janela.close();
+    fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
+/**
+ * Salva um texto (o XML da NF-e, por exemplo) num arquivo escolhido pelo
+ * usuário. Mesmo caminho do PDF: diálogo de salvar na pasta Documentos.
+ */
+ipcMain.handle('salvar-texto-como-arquivo', async (_event, { conteudo, nomeSugerido, titulo, extensao = 'txt', descricao } = {}) => {
+  if (typeof conteudo !== 'string' || !conteudo) {
+    return { success: false, message: 'Nada para salvar.' };
+  }
+  const ext = String(extensao || 'txt').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'txt';
+  const nomeBase = String(nomeSugerido || 'arquivo')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'arquivo';
+  try {
+    const dono = getPrimaryMonitorWindow();
+    const opcoes = {
+      title: titulo || 'Salvar arquivo',
+      defaultPath: path.join(app.getPath('documents'), `${nomeBase}.${ext}`),
+      filters: [{ name: descricao || `Arquivos ${ext.toUpperCase()}`, extensions: [ext] }]
+    };
+    const { canceled, filePath } = dono
+      ? await dialog.showSaveDialog(dono, opcoes)
+      : await dialog.showSaveDialog(opcoes);
+    if (canceled || !filePath) return { success: false, canceled: true };
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, conteudo, 'utf8');
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Erro ao salvar arquivo de texto:', err);
+    return { success: false, message: err?.message || 'Erro ao salvar o arquivo.' };
   }
 });
 

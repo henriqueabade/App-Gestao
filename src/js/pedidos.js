@@ -63,6 +63,69 @@ function formatarDiaDate(valor) {
 }
 
 /**
+ * Tag roxa ao lado do número: o pedido foi enviado SEM nota fiscal (marcado
+ * assim no modal de embarque). Emitir a nota depois apaga a marca. Pura, para
+ * o teste; devolve '' quando não há o que mostrar.
+ */
+function tagSemNota(p) {
+    if (!p || p.nfe_dispensada !== true && p.nfe_dispensada !== 'true') return '';
+    const quando = formatarDiaDate(p.nfe_dispensada_em);
+    const titulo = quando ? `Sem nota fiscal — enviado sem NF-e em ${quando}` : 'Sem nota fiscal — enviado sem NF-e';
+    return ` <span class="badge-neutral ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">S/NF</span>`;
+}
+
+/**
+ * A nota que conta para cada pedido, a partir da lista de notas (sem XML):
+ * autorizada vence cancelada, que vence o resto; empate, a mais nova. Pura.
+ */
+function indexarNotas(notas) {
+    const peso = { autorizada: 3, cancelada: 2 };
+    const porPedido = {};
+    for (const n of Array.isArray(notas) ? notas : []) {
+        if (!n || n.pedido_id === undefined || n.pedido_id === null) continue;
+        const chave = String(n.pedido_id);
+        const atual = porPedido[chave];
+        const melhor = !atual
+            || (peso[n.status_fiscal] || 1) > (peso[atual.status_fiscal] || 1)
+            || ((peso[n.status_fiscal] || 1) === (peso[atual.status_fiscal] || 1) && Number(n.id) > Number(atual.id));
+        if (melhor) porPedido[chave] = n;
+    }
+    return porPedido;
+}
+
+/**
+ * Tag amarela "CC-e" na frente da DANFE quando a nota tem carta de correção
+ * registrada: o clique gera o PDF da ÚLTIMA carta (cada carta substitui as
+ * anteriores, então é ela que vale). Pura; '' sem carta.
+ */
+function tagCartaCorrecao(nota) {
+    const total = Number(nota?.cartas_correcao) || 0;
+    const seq = Number(nota?.ultima_carta_seq) || total;
+    if (!nota || total <= 0) return '';
+    const titulo = `${total === 1 ? '1 carta de correção registrada' : `${total} cartas de correção registradas`} na NF-e série ${nota.serie} nº ${nota.numero} — clique para gerar o PDF da última (nº ${seq})`;
+    return ` <span class="badge-warning tag-cce ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" data-carta-seq="${seq}" role="button" title="${titulo}" aria-label="${titulo}">CC-e</span>`;
+}
+
+/**
+ * Tag ao lado do número do pedido, pela nota que ele tem: verde "DANFE"
+ * (autorizada — o clique gera o PDF), vermelha "X/NF" (cancelada) ou a roxa
+ * "S/NF" (enviado sem nota). Com carta de correção, a amarela "CC-e" vem
+ * antes. Pura; '' quando não há o que mostrar.
+ */
+function tagNota(p, nota) {
+    if (nota && nota.status_fiscal === 'autorizada') {
+        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para gerar o DANFE`;
+        return `${tagCartaCorrecao(nota)} <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
+    }
+    if (nota && nota.status_fiscal === 'cancelada') {
+        const quando = formatarDiaDate(nota.cancelada_em);
+        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} cancelada${quando ? ` em ${quando}` : ''}`;
+        return `${tagCartaCorrecao(nota)} <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
+    }
+    return tagSemNota(p);
+}
+
+/**
  * O que dizer depois de pedir a troca de status.
  *
  * A resposta era descartada: um 403, um 409 (pedido já enviado por outra aba)
@@ -292,6 +355,14 @@ function abrirPagamentoPedido(id) {
     openPedidoModal('modals/pedidos/pagamento.html', '../js/modals/pedido-pagamento.js', 'pagamentoPedido');
 }
 
+/** Conferência e emissão da NF-e ao marcar o pedido como "Enviado". */
+function abrirEmitirNfePedido(p) {
+    if (!p?.id) return;
+    window.selectedOrderId = p.id;
+    window.emitirNfeContext = { pedidoId: p.id, numero: p.numero, cliente: obterNomeCliente(p.cliente_id) };
+    openPedidoModal('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido');
+}
+
 function abrirRelatorioProducao(pedidoId, cliente) {
     if (!pedidoId) return;
     window.relatorioProducaoContext = { pedidoId, cliente };
@@ -318,11 +389,16 @@ async function carregarPedidos() {
         // os pedidos começarem a ser buscados — duas idas à rede em fila para
         // montar uma tela só. O cache de nomes é aditivo e não expira, então
         // depois da primeira carga não há nada de novo a buscar.
-        const [resp] = await Promise.all([
+        // As notas fiscais (sem XML) entram junto, para as tags DANFE / X/NF ao
+        // lado do número. Quem não tem financeiro.nfe.view recebe 403 e fica sem
+        // as tags — a lista não depende disso.
+        const [resp, respNotas] = await Promise.all([
             fetchApi('/api/pedidos'),
+            fetchApi('/api/fiscal/notas').catch(() => null),
             cacheClientes.size ? Promise.resolve() : carregarClientes()
         ]);
         const data = await resp.json();
+        const notasPorPedido = indexarNotas(respNotas?.ok ? await respNotas.json().catch(() => []) : []);
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -367,7 +443,7 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
@@ -383,6 +459,16 @@ async function carregarPedidos() {
                         <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
+            // A tag verde "DANFE" gera o PDF da nota; o clique não abre a linha.
+            tr.querySelector('.tag-danfe')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId));
+            });
+            // A amarela "CC-e" gera o PDF da última carta de correção.
+            tr.querySelector('.tag-cce')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarCartaCorrecaoPdf(Number(e.currentTarget.dataset.notaId), Number(e.currentTarget.dataset.cartaSeq));
+            });
             const checkIcon = tr.querySelector('.fa-check');
             const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };
             const nextStatus = nextStatusMap[p.situacao];
@@ -391,6 +477,13 @@ async function carregarPedidos() {
             } else {
                 checkIcon.addEventListener('click', e => {
                     e.stopPropagation();
+                    // Marcar "Enviado" é o momento da NF-e: abre a conferência
+                    // da nota, que emite e só então muda a situação (ou envia
+                    // sem nota, com confirmação). Ver pedido-emitir-nfe.js.
+                    if (nextStatus === 'Enviado') {
+                        abrirEmitirNfePedido(p);
+                        return;
+                    }
                     showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
                         if (!ok) return;
                         try {

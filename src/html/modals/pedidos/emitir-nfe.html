@@ -1,0 +1,176 @@
+<!--
+  Emitir NF-e e enviar (Pedidos). Abre no lugar da pergunta "alterar para
+  Enviado?": o embarque é o momento de emitir a nota, e é aqui que se preenche
+  o que só se sabe na hora — frete, transportadora, volumes, pesos e forma de
+  pagamento. Conferência em cima (cliente, itens, valor, parcelas, pendências),
+  campos embaixo. Não fecha clicando fora (docs/padroes-de-interface.md).
+  Script: src/js/modals/pedido-emitir-nfe.js.
+-->
+<div id="emitirNfePedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="emitirNfeTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarEmitirNfe" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="emitirNfeTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</h2>
+        <p id="emitirNfeSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="emitirNfeAmbiente" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="emitirNfeCarregando" class="text-sm text-gray-400">Conferindo o pedido…</div>
+
+        <div id="emitirNfeConteudo" class="hidden space-y-6">
+          <!-- Nota que já existe para o pedido (autorizada, processando, rejeitada). -->
+          <div id="emitirNfeNotaExistente" class="hidden glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">NF-e deste pedido</p>
+            <p id="emitirNfeNotaTexto" class="text-sm text-white"></p>
+            <div class="mt-3 flex flex-wrap gap-3">
+              <button id="emitirNfeConsultar" type="button" class="hidden btn-neutral px-4 py-2 rounded-lg text-white font-medium"><i class="fas fa-sync-alt mr-2" aria-hidden="true"></i>Consultar na SEFAZ</button>
+            </div>
+          </div>
+
+          <!-- Conferência: o que vai na nota. -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10 md:col-span-2">
+              <p class="text-xs text-gray-400 mb-1">Destinatário</p>
+              <p id="emitirNfeCliente" class="text-sm text-white truncate">—</p>
+              <p id="emitirNfeClienteDetalhe" class="text-xs text-gray-400 truncate"></p>
+            </div>
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Valor da nota</p>
+              <p id="emitirNfeValor" class="text-sm text-white">—</p>
+            </div>
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Parcelas</p>
+              <p id="emitirNfeParcelas" class="text-sm text-white">—</p>
+            </div>
+          </div>
+
+          <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
+            <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Itens da nota</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs">Código</th>
+                    <th class="px-4 py-3 text-left text-xs">Descrição</th>
+                    <th class="px-4 py-3 text-left text-xs">NCM</th>
+                    <th class="px-4 py-3 text-left text-xs">CFOP</th>
+                    <th class="px-4 py-3 text-right text-xs">Qtd</th>
+                    <th class="px-4 py-3 text-right text-xs">Total</th>
+                  </tr>
+                </thead>
+                <tbody id="emitirNfeItens" class="divide-y divide-white/10"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Pendências: o que bloqueia (vermelho) e o que a emissão resolve sozinha (amarelo). -->
+          <div id="emitirNfePendencias" class="hidden rounded-xl px-4 py-3 border border-white/10" role="status">
+            <p id="emitirNfePendenciasTitulo" class="text-sm font-medium text-white mb-2"></p>
+            <ul id="emitirNfePendenciasLista" class="ml-5 list-disc space-y-1 text-sm"></ul>
+          </div>
+
+          <!-- Transporte: o que se sabe na hora do embarque. -->
+          <div data-emitir-nfe-campos>
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-truck mr-2" aria-hidden="true"></i>Transporte</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label for="emitirNfeFrete" class="block text-sm font-medium text-gray-300 mb-2">Modalidade do frete</label>
+                <select id="emitirNfeFrete" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="0">0 — Por conta do emitente (CIF)</option>
+                  <option value="1">1 — Por conta do destinatário (FOB)</option>
+                  <option value="2">2 — Por conta de terceiros</option>
+                  <option value="3">3 — Transporte próprio, por conta do emitente</option>
+                  <option value="4">4 — Transporte próprio, por conta do destinatário</option>
+                  <option value="9">9 — Sem frete</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label for="emitirNfeTransportadora" class="block text-sm font-medium text-gray-300 mb-2">Transportadora</label>
+                <input id="emitirNfeTransportadora" type="text" maxlength="60" placeholder="Nome da transportadora (opcional)" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="emitirNfeVolumes" class="block text-sm font-medium text-gray-300 mb-2">Volumes (qtd)</label>
+                <input id="emitirNfeVolumes" type="text" inputmode="numeric" placeholder="ex.: 2" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="emitirNfeEspecie" class="block text-sm font-medium text-gray-300 mb-2">Espécie</label>
+                <input id="emitirNfeEspecie" type="text" maxlength="60" placeholder="ex.: Caixa, Volume, Peça" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label for="emitirNfePesoBruto" class="block text-sm font-medium text-gray-300 mb-2">Peso bruto (kg)</label>
+                  <input id="emitirNfePesoBruto" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="emitirNfePesoLiquido" class="block text-sm font-medium text-gray-300 mb-2">Peso líq. (kg)</label>
+                  <input id="emitirNfePesoLiquido" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Mais de um volume: uma linha por volume (espécie e pesos de cada um). -->
+            <div id="emitirNfeVolumesDetalhe" class="hidden mt-4 glass-surface rounded-xl border border-white/10 overflow-hidden">
+              <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Um volume por linha: espécie e pesos de cada um. A numeração (1, 2, 3…) e a marca saem na nota; os pesos somados vão para o pedido.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th class="px-4 py-2 text-left text-xs">Nº</th>
+                      <th class="px-4 py-2 text-left text-xs">Espécie</th>
+                      <th class="px-4 py-2 text-left text-xs">Peso bruto (kg)</th>
+                      <th class="px-4 py-2 text-left text-xs">Peso líq. (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="emitirNfeVolumesLinhas" class="divide-y divide-white/10"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagamento e informações da nota. -->
+          <div data-emitir-nfe-campos>
+            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-money-check-alt mr-2" aria-hidden="true"></i>Pagamento e informações</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label for="emitirNfePagamento" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento (NF-e)</label>
+                <select id="emitirNfePagamento" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="15">15 — Boleto bancário</option>
+                  <option value="17">17 — PIX</option>
+                  <option value="01">01 — Dinheiro</option>
+                  <option value="02">02 — Cheque</option>
+                  <option value="03">03 — Cartão de crédito</option>
+                  <option value="04">04 — Cartão de débito</option>
+                  <option value="14">14 — Duplicata mercantil</option>
+                  <option value="16">16 — Depósito bancário</option>
+                  <option value="18">18 — Transferência bancária</option>
+                  <option value="90">90 — Sem pagamento</option>
+                  <option value="99">99 — Outros</option>
+                </select>
+                <p id="emitirNfePagamentoOrigem" class="mt-2 text-xs text-gray-400"></p>
+              </div>
+              <div class="md:col-span-2">
+                <label for="emitirNfeInformacoes" class="block text-sm font-medium text-gray-300 mb-2">Informações complementares</label>
+                <textarea id="emitirNfeInformacoes" rows="3" maxlength="2000" placeholder="Opcional — sai no DANFE (ex.: número do pedido do cliente, referência da obra)" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="emitirNfeMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex flex-wrap items-center justify-end gap-4 flex-shrink-0">
+      <span id="emitirNfeRodapeAviso" class="text-xs text-gray-400 mr-auto"></span>
+      <button id="cancelarEmitirNfe" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <!-- As guardas ficam ESCRITAS no HTML (o permissoes.js só aplica em nó inserido). -->
+      <button id="enviarSemNfe" type="button" data-perm="ped.status.ship" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Enviar sem NF-e</button>
+      <button id="emitirNfeConfirmar" type="button" data-perm="financeiro.nfe.emit" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[200px]"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</button>
+    </footer>
+  </div>
+</div>

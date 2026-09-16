@@ -33,6 +33,16 @@
   const codigoInput     = document.getElementById('codigoInput');
   const ncmInput        = document.getElementById('ncmInput');
   const colecaoSelect   = document.getElementById('colecaoSelect');
+  // Dados fiscais da peça (NF-e). Vazio = usa o padrão da configuração fiscal.
+  const camposFiscais = () => ({
+    origem_mercadoria: document.getElementById('origemMercadoriaInput')?.value ?? '0',
+    unidade_comercial: (document.getElementById('unidadeComercialInput')?.value || '').trim(),
+    cest: (document.getElementById('cestInput')?.value || '').trim(),
+    gtin: (document.getElementById('gtinInput')?.value || '').trim(),
+    cfop_dentro_uf: (document.getElementById('cfopDentroInput')?.value || '').trim(),
+    cfop_fora_uf: (document.getElementById('cfopForaInput')?.value || '').trim(),
+    csosn: (document.getElementById('csosnInput')?.value || '').trim()
+  });
   const fabricacaoInput = document.getElementById('fabricacaoInput');
   const acabamentoInput = document.getElementById('acabamentoInput');
   const montagemInput   = document.getElementById('montagemInput');
@@ -564,7 +574,8 @@
         categoria: colecaoSelect.value.trim(),
         preco_venda: totals.valorVenda || 0,
         pct_markup: parseFloat(markupInput?.value) || 0,
-        status: 'Em linha'
+        status: 'Em linha',
+        ...camposFiscais()
       });
 
       const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();
@@ -607,7 +618,8 @@
         codigo,
         ncm,
         categoria: colecaoSelect.value.trim(),
-        status: 'Em linha'
+        status: 'Em linha',
+        ...camposFiscais()
       }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoId);
 
       if (typeof atualizarProdutoLocal === 'function') {

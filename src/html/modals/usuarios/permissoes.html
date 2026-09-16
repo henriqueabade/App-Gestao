@@ -4184,7 +4184,7 @@
                 <i class="fas fa-dollar-sign text-[var(--color-primary)]"></i>
                 Financeiro
               </h3>
-              <p class="text-sm text-gray-400">Controle financeiro.</p>
+              <p class="text-sm text-gray-400">Comissões, produção e notas fiscais (NF-e).</p>
             </div>
             <label class="usuario-permissao-toggle" data-module-toggle="financeiro">
               <input type="checkbox" class="sr-only" />
@@ -4195,10 +4195,87 @@
             </label>
           </div>
           <div data-module-content="financeiro" class="space-y-6">
-            <p class="text-sm text-gray-400 italic">
-              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
-              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
-            </p>
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="acoes-financeiro" aria-expanded="true">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-play text-[var(--color-primary)]"></i>
+                  <span class="font-semibold text-lg text-[var(--color-primary)]">Ações</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4 is-open"
+                data-accordion-content="acoes-financeiro"
+                data-group-container="acoes-financeiro"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterAcoesFinanceiro" data-role="master" data-group="acoes-financeiro" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterAcoesFinanceiro" class="font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="acoes-financeiro">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 gap-6">
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Painel</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver painel financeiro indicadores pendencias">
+                        <input type="checkbox" name="financeiro.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver o painel</span>
+                          <p class="text-sm text-gray-400">Indicadores, pendências e resumos do Financeiro</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Notas fiscais (NF-e)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver notas fiscais nfe danfe xml">
+                        <input type="checkbox" name="financeiro.nfe.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver notas fiscais</span>
+                          <p class="text-sm text-gray-400">Consultar a NF-e do pedido, baixar o DANFE e o XML</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="emitir nota fiscal nfe sefaz faturar">
+                        <input type="checkbox" name="financeiro.nfe.emit" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Emitir NF-e</span>
+                          <p class="text-sm text-gray-400">Gerar a nota do pedido e enviar à SEFAZ</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="cancelar nota fiscal nfe sefaz">
+                        <input type="checkbox" name="financeiro.nfe.cancel" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cancelar NF-e</span>
+                          <p class="text-sm text-gray-400">Cancelamento com justificativa na SEFAZ</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Configuração</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="configuracao fiscal emitente certificado sefaz">
+                        <input type="checkbox" name="financeiro.config.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver configuração fiscal</span>
+                          <p class="text-sm text-gray-400">Emitente, numeração, certificado e teste da SEFAZ (alterar é só o Sup Admin)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </article>
           </div>
         </section>
       </div>

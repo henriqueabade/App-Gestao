@@ -2182,6 +2182,46 @@ const PERMISSIONS_CATALOG = {
       }
     ]
   },
+  "financeiro": {
+    "code": "financeiro",
+    "label": "Financeiro",
+    "page": "financeiro",
+    "table": "perm_financeiro",
+    "configured": true,
+    "actions": [
+      {
+        "key": "financeiro.view",
+        "column": "acao_view",
+        "label": "Ver o painel",
+        "desc": "Indicadores, pendências e resumos do Financeiro"
+      },
+      {
+        "key": "financeiro.nfe.view",
+        "column": "acao_nfe_view",
+        "label": "Ver notas fiscais",
+        "desc": "Consultar a NF-e do pedido, baixar o DANFE e o XML"
+      },
+      {
+        "key": "financeiro.nfe.emit",
+        "column": "acao_nfe_emit",
+        "label": "Emitir NF-e",
+        "desc": "Gerar a nota do pedido e enviar à SEFAZ"
+      },
+      {
+        "key": "financeiro.nfe.cancel",
+        "column": "acao_nfe_cancel",
+        "label": "Cancelar NF-e",
+        "desc": "Cancelamento com justificativa na SEFAZ"
+      },
+      {
+        "key": "financeiro.config.view",
+        "column": "acao_config_view",
+        "label": "Ver configuração fiscal",
+        "desc": "Emitente, numeração, certificado e teste da SEFAZ (alterar é só o Sup Admin)"
+      }
+    ],
+    "columns": []
+  },
   "dashboard": {
     "code": "dashboard",
     "label": "Dashboard",
@@ -2232,15 +2272,6 @@ const PERMISSIONS_CATALOG = {
     "label": "Laminação · Relatórios",
     "page": "laminacao-relatorios",
     "table": "perm_lam_relatorios",
-    "configured": false,
-    "actions": [],
-    "columns": []
-  },
-  "financeiro": {
-    "code": "financeiro",
-    "label": "Financeiro",
-    "page": "financeiro",
-    "table": "perm_financeiro",
     "configured": false,
     "actions": [],
     "columns": []

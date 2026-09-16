@@ -1,0 +1,818 @@
+/**
+ * Rotas fiscais (backend/fiscalController.js): configuração, certificado e
+ * teste da SEFAZ.
+ *
+ * Upstream falso serve a linha de configuracao_fiscal (e recebe o PUT); as
+ * permissões são um dublê; o certificado é um .pfx gerado pelo teste, guardado
+ * num cofre falso; a SEFAZ é uma função que devolve o XML do Status. O que se
+ * prende: quem pode ver e quem pode mudar, a senha e a chave nunca saem na
+ * resposta, a trava do NFE_AMBIENTE, a confirmação para ligar a produção e o
+ * ambiente que o teste da SEFAZ realmente usa.
+ */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const express = require('express');
+const { gerarPfx } = require('./fiscal/certificadoDeTeste');
+
+const MODULOS = ['./apiHttpClient', './permissionsController', './fiscal/configuracaoFiscal', './fiscalController'];
+const TOKEN = 'x.eyJpZCI6MX0.assinatura';
+const SENHA = 'segredo';
+const PFX = gerarPfx({ cn: 'SANTISSIMO DECOR LTDA:44039257000122', senha: SENHA });
+const PFX_OUTRO = gerarPfx({ cn: 'OUTRA EMPRESA:11111111000191', senha: SENHA });
+
+const LINHA = {
+  id: 1, cnpj: '44039257000122', razao_social: 'SANTÍSSIMO DECOR LTDA', inscricao_estadual: '0041842150081',
+  logradouro: 'Av. Abílio Machado', numero: '1264', bairro: 'Inconfidência', codigo_municipio: '3106200',
+  municipio: 'Belo Horizonte', uf: 'MG', cep: '30820272', crt: 1, ambiente: 'homologacao',
+  serie_homologacao: 1, proximo_numero_homologacao: 1, serie_producao: 2, proximo_numero_producao: 1,
+  natureza_operacao: 'Venda de produtos de fabricação própria', cfop_dentro_uf: '5101', cfop_fora_uf: '6101',
+  csosn: '101', pcred_sn: 2.33, pis_cst: '07', cofins_cst: '07', unidade_padrao: 'Peça', modalidade_frete_padrao: 4
+};
+
+const RESPOSTA_107 = tpAmb => `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><nfeResultMsg>`
+  + `<retConsStatServ versao="4.00"><tpAmb>${tpAmb}</tpAmb><verAplic>W-3.4.35</verAplic><cStat>107</cStat><xMotivo>Servico em operacao</xMotivo><cUF>31</cUF></retConsStatServ>`
+  + `</nfeResultMsg></soap:Body></soap:Envelope>`;
+
+function cofreFalso() {
+  return {
+    nome: 'teste',
+    cifrar: t => Buffer.from(t).toString('base64'),
+    decifrar: b => Buffer.from(b, 'base64').toString()
+  };
+}
+
+/**
+ * API genérica de mentira: GET /api/:tabela filtra por igualdade (como a API
+ * real), POST cria com id, PUT /:id mescla, DELETE /:id apaga; o UNIQUE
+ * (ambiente, série, número) das notas é aplicado. configuracao_fiscal é a
+ * linha única. Tabela ausente responde 404, que é o que acontece antes de
+ * rodar o SQL.
+ */
+function criarUpstream(linhas, tabelas = {}) {
+  const puts = [];
+  tabelas.configuracao_fiscal = linhas;
+  const servidor = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    const responder = (status, payload) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); };
+    const [, tabela, id] = url.pathname.match(/^\/api\/([a-z_]+)(?:\/(\d+))?$/) || [];
+    const lista = tabela && tabelas[tabela];
+    if (!lista) return responder(404, { error: 'não há' });
+    let corpo = '';
+    req.on('data', p => { corpo += p; });
+    req.on('end', () => {
+      const dados = corpo ? JSON.parse(corpo) : {};
+      if (req.method === 'GET') {
+        if (id) return responder(200, lista.find(l => String(l.id) === id) || null);
+        const filtros = [...url.searchParams.entries()];
+        return responder(200, lista.filter(l => filtros.every(([c, v]) => String(l[c]) === String(v))));
+      }
+      if (req.method === 'POST') {
+        if (tabela === 'notas_fiscais' && lista.some(l => l.ambiente === dados.ambiente && Number(l.serie) === Number(dados.serie) && Number(l.numero) === Number(dados.numero))) {
+          return responder(500, { error: 'duplicate key value violates unique constraint "notas_fiscais_numero_unico"' });
+        }
+        const linha = { id: lista.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1, ...dados };
+        lista.push(linha);
+        return responder(201, linha);
+      }
+      if (req.method === 'PUT' && id) {
+        const linha = lista.find(l => String(l.id) === id);
+        if (!linha) return responder(404, { error: 'não há' });
+        if (tabela === 'configuracao_fiscal') puts.push(dados);
+        Object.assign(linha, dados);
+        return responder(200, linha);
+      }
+      if (req.method === 'DELETE' && id) {
+        const i = lista.findIndex(l => String(l.id) === id);
+        if (i >= 0) lista.splice(i, 1);
+        return responder(200, {});
+      }
+      return responder(404, { error: 'não há' });
+    });
+    return undefined;
+  });
+  return { servidor, puts };
+}
+
+const PROTOCOLO_100 = chave => `<protNFe versao="4.00"><infProt Id="ID131260000123456"><tpAmb>2</tpAmb><verAplic>MG</verAplic><chNFe>${chave}</chNFe>`
+  + `<dhRecbto>2026-09-15T15:10:01-03:00</dhRecbto><nProt>131260000123456</nProt><digVal>x=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>`;
+
+/** A SEFAZ de mentira por serviço: status 107, autorização 100 (ou o que `sefazAutoriza` mandar), consulta 100. */
+function respostaSefaz(url, corpo, sefazAutoriza) {
+  const tpAmb = /<tpAmb>1<\/tpAmb>/.test(corpo) ? 1 : 2;
+  const envelope = miolo => `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><nfeResultMsg>${miolo}</nfeResultMsg></soap:Body></soap:Envelope>`;
+  if (/NFeAutorizacao4$/.test(url)) {
+    const chave = /Id="NFe(\d{44})"/.exec(corpo)[1];
+    const dentro = sefazAutoriza ? sefazAutoriza(chave) : PROTOCOLO_100(chave);
+    return envelope(`<retEnviNFe versao="4.00"><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>31</cUF><dhRecbto>2026-09-15T15:10:00-03:00</dhRecbto>${dentro}</retEnviNFe>`);
+  }
+  if (/NFeConsultaProtocolo4$/.test(url)) {
+    const chave = /<chNFe>(\d{44})</.exec(corpo)[1];
+    return envelope(`<retConsSitNFe versao="4.00"><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo><cUF>31</cUF><chNFe>${chave}</chNFe>${PROTOCOLO_100(chave)}</retConsSitNFe>`);
+  }
+  if (/NFeInutilizacao4$/.test(url)) {
+    const ini = /<nNFIni>(\d+)</.exec(corpo)[1];
+    const fim = /<nNFFin>(\d+)</.exec(corpo)[1];
+    return envelope(`<retInutNFe versao="4.00"><infInut><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cStat>102</cStat><xMotivo>Inutilizacao de numero homologado</xMotivo><cUF>31</cUF><ano>26</ano><CNPJ>44039257000122</CNPJ><mod>55</mod><serie>1</serie><nNFIni>${ini}</nNFIni><nNFFin>${fim}</nNFFin><dhRecbto>2026-09-15T16:00:00-03:00</dhRecbto><nProt>131260000333333</nProt></infInut></retInutNFe>`);
+  }
+  if (/NFeRecepcaoEvento4$/.test(url)) {
+    const chave = /<chNFe>(\d{44})</.exec(corpo)[1];
+    if (/<tpEvento>110110<\/tpEvento>/.test(corpo)) {
+      return envelope(`<retEnvEvento versao="1.00"><idLote>1</idLote><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>128</cStat><xMotivo>Lote de Evento Processado</xMotivo>`
+        + `<retEvento versao="1.00"><infEvento><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>135</cStat><xMotivo>Evento registrado e vinculado a NF-e</xMotivo><chNFe>${chave}</chNFe><tpEvento>110110</tpEvento><xEvento>Carta de Correcao</xEvento><nSeqEvento>1</nSeqEvento><dhRegEvento>2026-09-15T16:00:00-03:00</dhRegEvento><nProt>131260000444444</nProt></infEvento></retEvento></retEnvEvento>`);
+    }
+    return envelope(`<retEnvEvento versao="1.00"><idLote>1</idLote><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>128</cStat><xMotivo>Lote de Evento Processado</xMotivo>`
+      + `<retEvento versao="1.00"><infEvento><tpAmb>${tpAmb}</tpAmb><verAplic>MG</verAplic><cOrgao>31</cOrgao><cStat>135</cStat><xMotivo>Evento registrado e vinculado a NF-e</xMotivo><chNFe>${chave}</chNFe><tpEvento>110111</tpEvento><xEvento>Cancelamento</xEvento><nSeqEvento>1</nSeqEvento><dhRegEvento>2026-09-15T16:00:00-03:00</dhRegEvento><nProt>131260000222222</nProt></infEvento></retEvento></retEnvEvento>`);
+  }
+  return RESPOSTA_107(tpAmb);
+}
+
+async function montar({ linhas = [JSON.parse(JSON.stringify(LINHA))], env = {}, comCertificado = true, tabelas = {}, municipiosRede, sefazAutoriza, criarTransporteEmail } = {}) {
+  const upstream = criarUpstream(linhas, tabelas);
+  await new Promise(r => upstream.servidor.listen(0, '127.0.0.1', r));
+  process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
+  for (const m of MODULOS) delete require.cache[require.resolve(m)];
+  // Os módulos fiscais guardam cache (configuração, municípios): cada teste parte do zero.
+  for (const chave of Object.keys(require.cache)) {
+    if (chave.includes(`${path.sep}backend${path.sep}fiscal${path.sep}`)) delete require.cache[chave];
+  }
+
+  const estado = { chaves: new Set(['financeiro.config.view']), supAdmin: false };
+  const caminhoPerm = require.resolve('./permissionsController');
+  require.cache[caminhoPerm] = {
+    id: caminhoPerm, filename: caminhoPerm, loaded: true,
+    exports: {
+      exigirPermissao: chave => (req, res, next) => (estado.supAdmin || estado.chaves.has(chave) ? next() : res.status(403).json({ error: 'Sem permissão' })),
+      exigirSupAdmin: (req, res, next) => (estado.supAdmin ? next() : res.status(403).json({ error: 'Somente Sup Admin' })),
+      ehSupAdmin: async () => estado.supAdmin
+    }
+  };
+
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'fiscal-rotas-'));
+  const arquivoPfx = path.join(pasta, 'santissimo.pfx');
+  fs.writeFileSync(arquivoPfx, PFX);
+  const arquivoOutro = path.join(pasta, 'outra.pfx');
+  fs.writeFileSync(arquivoOutro, PFX_OUTRO);
+
+  const segredoLocal = require('./fiscal/segredoLocal');
+  const segredo = segredoLocal.criar({ pasta: path.join(pasta, 'guardado'), cofre: cofreFalso(), env: {} });
+  if (comCertificado) segredo.guardar({ caminhoOrigem: arquivoPfx, senha: SENHA });
+
+  const chamadasSefaz = [];
+  const transporteFabrica = opcoes => async (url, corpo) => { chamadasSefaz.push({ url, corpo, opcoes }); return { status: 200, corpo: respostaSefaz(url, corpo, sefazAutoriza) }; };
+
+  const { criarRouter } = require('./fiscalController');
+  const app = express();
+  app.use(express.json());
+  app.use('/api/fiscal', criarRouter({ segredo, transporteFabrica, env, municipiosRede, criarTransporteEmail }));
+  const servidor = http.createServer(app);
+  await new Promise(r => servidor.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+
+  async function chamar(metodo, caminho, corpo) {
+    const r = await fetch(base + caminho, {
+      method: metodo,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: corpo ? JSON.stringify(corpo) : undefined
+    });
+    return { status: r.status, corpo: await r.json() };
+  }
+
+  const fechar = () => Promise.all([
+    new Promise(r => servidor.close(r)), new Promise(r => upstream.servidor.close(r))
+  ]);
+  return { chamar, estado, upstream, chamadasSefaz, fechar, arquivoPfx, arquivoOutro, pasta, segredo };
+}
+
+test('ver a configuração exige financeiro.config.view; a resposta traz o emitente e o certificado sem chave nem senha', async () => {
+  const t = await montar();
+  try {
+    t.estado.chaves.clear();
+    assert.equal((await t.chamar('GET', '/api/fiscal/configuracao')).status, 403);
+
+    t.estado.chaves.add('financeiro.config.view');
+    const { status, corpo } = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(status, 200);
+    assert.equal(corpo.configuracao.cnpj, '44039257000122');
+    assert.equal(corpo.ambiente, 'homologacao');
+    assert.equal(corpo.travado_em_homologacao_nesta_maquina, false);
+    assert.deepEqual(corpo.numeracao, { serie: 1, proximoNumero: 1 });
+    assert.deepEqual(corpo.pendencias, []);
+    assert.equal(corpo.pode_editar, false);
+    assert.equal(corpo.cofre_disponivel, true);
+    assert.equal(corpo.certificado.configurado, true);
+    assert.equal(corpo.certificado.titular, 'SANTISSIMO DECOR LTDA');
+    assert.equal(corpo.certificado.cnpj, '44039257000122');
+    assert.equal(corpo.certificado.confereComEmitente, true);
+    assert.equal(corpo.certificado.origem, 'arquivo');
+    const texto = JSON.stringify(corpo);
+    assert.ok(!texto.includes(SENHA) && !/PRIVATE KEY|Pem"/.test(texto), 'nada da chave ou da senha sai na resposta');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('sem certificado guardado o resumo diz que não está configurado, sem derrubar a rota', async () => {
+  const t = await montar({ comCertificado: false });
+  try {
+    const { corpo } = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(corpo.certificado.configurado, false);
+    assert.match(corpo.certificado.erro, /Nenhum certificado/);
+    const sefaz = await t.chamar('POST', '/api/fiscal/sefaz/status', {});
+    assert.equal(sefaz.status, 409);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('NFE_AMBIENTE=homologacao prende a máquina mesmo com produção ligada no banco', async () => {
+  const linhas = [{ ...LINHA, ambiente: 'producao' }];
+  const t = await montar({ linhas, env: { NFE_AMBIENTE: 'homologacao' } });
+  try {
+    const { corpo } = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(corpo.ambiente, 'homologacao');
+    assert.equal(corpo.ambiente_no_banco, 'producao');
+    assert.equal(corpo.travado_em_homologacao_nesta_maquina, true);
+    assert.deepEqual(corpo.numeracao, { serie: 1, proximoNumero: 1 }, 'numeração da homologação, não da produção');
+
+    // Pedir produção no teste da SEFAZ não passa da trava: a mensagem vai com tpAmb 2.
+    const sefaz = await t.chamar('POST', '/api/fiscal/sefaz/status', { ambiente: 'producao' });
+    assert.equal(sefaz.status, 200);
+    assert.equal(sefaz.corpo.ambiente, 'homologacao');
+    assert.match(t.chamadasSefaz[0].corpo, /<tpAmb>2<\/tpAmb>/);
+    assert.match(t.chamadasSefaz[0].url, /^https:\/\/hnfe\.fazenda\.mg\.gov\.br\//);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('só o Sup Admin grava; ligar a produção exige a palavra de confirmação', async () => {
+  const t = await montar();
+  try {
+    assert.equal((await t.chamar('PUT', '/api/fiscal/configuracao', { ambiente: 'producao' })).status, 403);
+
+    t.estado.supAdmin = true;
+    const invalido = await t.chamar('PUT', '/api/fiscal/configuracao', { cnpj: '123' });
+    assert.equal(invalido.status, 400);
+    assert.match(invalido.corpo.error, /cnpj: precisa ter 14 dígitos/);
+    assert.equal((await t.chamar('PUT', '/api/fiscal/configuracao', {})).status, 400);
+
+    const semConfirmacao = await t.chamar('PUT', '/api/fiscal/configuracao', { ambiente: 'producao' });
+    assert.equal(semConfirmacao.status, 400);
+    assert.match(semConfirmacao.corpo.error, /PRODUCAO/);
+    assert.equal(t.upstream.puts.length, 0, 'nada gravado sem a confirmação');
+
+    const ok = await t.chamar('PUT', '/api/fiscal/configuracao', { ambiente: 'producao', proximo_numero_producao: '5', confirmacao: 'producao' });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.corpo.ambiente, 'producao');
+    assert.equal(ok.corpo.pode_editar, true);
+    assert.deepEqual(ok.corpo.numeracao, { serie: 2, proximoNumero: 5 });
+    assert.equal(t.upstream.puts[0].ambiente, 'producao');
+    assert.equal(t.upstream.puts[0].proximo_numero_producao, 5);
+    assert.equal(t.upstream.puts[0].atualizado_por, 1);
+    assert.ok(!('confirmacao' in t.upstream.puts[0]), 'a confirmação não vira coluna');
+
+    // Já em produção, mexer em outra coisa não pede a palavra de novo.
+    const outra = await t.chamar('PUT', '/api/fiscal/configuracao', { ambiente: 'producao', natureza_operacao: 'Venda' });
+    assert.equal(outra.status, 200);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('guardar o certificado valida a senha, avisa CNPJ diferente do emitente e nunca devolve a senha; remover apaga', async () => {
+  const t = await montar({ comCertificado: false });
+  try {
+    assert.equal((await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx, senha: SENHA })).status, 403);
+    t.estado.supAdmin = true;
+
+    const errada = await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx, senha: 'errada' });
+    assert.equal(errada.status, 400);
+    assert.match(errada.corpo.error, /Senha do certificado incorreta/);
+    assert.equal((await t.chamar('POST', '/api/fiscal/certificado', { caminho: path.join(t.pasta, 'nao-existe.pfx'), senha: SENHA })).status, 400);
+    assert.equal((await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx.replace(/\.pfx$/, '.txt'), senha: SENHA })).status, 400);
+
+    const outra = await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoOutro, senha: SENHA });
+    assert.equal(outra.status, 200);
+    assert.equal(outra.corpo.confereComEmitente, false);
+
+    const certa = await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx, senha: SENHA });
+    assert.equal(certa.status, 200);
+    assert.equal(certa.corpo.titular, 'SANTISSIMO DECOR LTDA');
+    assert.equal(certa.corpo.confereComEmitente, true);
+    assert.ok(!JSON.stringify(certa.corpo).includes(SENHA));
+
+    const estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.certificado.origem, 'arquivo');
+
+    const sefaz = await t.chamar('POST', '/api/fiscal/sefaz/status', {});
+    assert.equal(sefaz.status, 200);
+    assert.equal(sefaz.corpo.emOperacao, true);
+    assert.equal(sefaz.corpo.certificado.cnpj, '44039257000122');
+    assert.match(t.chamadasSefaz[0].opcoes.certificadoPem, /BEGIN CERTIFICATE/);
+
+    assert.equal((await t.chamar('DELETE', '/api/fiscal/certificado')).corpo.configurado, false);
+    assert.equal((await t.chamar('GET', '/api/fiscal/configuracao')).corpo.certificado.configurado, false);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('GET /municipios exige cli.view, aceita nome ou sigla do estado e devolve o exato ou os parecidos', async () => {
+  const consultas = [];
+  const municipiosRede = async uf => { consultas.push(uf); return [{ id: 3106200, nome: 'Belo Horizonte' }, { id: 3170206, nome: 'Uberlândia' }, { id: 3170107, nome: 'Uberaba' }]; };
+  const t = await montar({ municipiosRede });
+  try {
+    require('./fiscal/municipios').limparCache();
+    assert.equal((await t.chamar('GET', '/api/fiscal/municipios?uf=MG&nome=Uberaba')).status, 403);
+    t.estado.chaves.add('cli.view');
+
+    const exato = await t.chamar('GET', '/api/fiscal/municipios?uf=Minas%20Gerais&nome=uberlandia');
+    assert.equal(exato.status, 200);
+    assert.equal(exato.corpo.uf, 'MG');
+    assert.deepEqual(exato.corpo.exato, { codigo: '3170206', nome: 'Uberlândia' });
+
+    const parecidos = await t.chamar('GET', '/api/fiscal/municipios?uf=mg&nome=Uber');
+    assert.equal(parecidos.corpo.exato, null);
+    assert.deepEqual(parecidos.corpo.candidatos.map(c => c.nome).sort(), ['Uberaba', 'Uberlândia']);
+    assert.deepEqual(consultas, ['MG'], 'o IBGE é consultado uma vez por estado');
+
+    const semUf = await t.chamar('GET', '/api/fiscal/municipios?nome=Uberaba');
+    assert.equal(semUf.status, 400);
+    assert.match(semUf.corpo.error, /Informe o estado/);
+    assert.equal((await t.chamar('GET', '/api/fiscal/municipios?uf=Marte&nome=X')).status, 400);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('GET /pedidos/:id/prontidao junta pedido, itens, parcelas, cliente, peças e notas e diz o que falta', async () => {
+  const tabelas = {
+    pedidos: [{ id: 55, numero: 'PED-55', situacao: 'Produção', cliente_id: 7, valor_final: 1500 }],
+    pedidos_itens: [
+      { id: 1, pedido_id: 55, produto_id: 3, codigo: 'MESA-01', ncm: '94036000', quantidade: 1, valor_total: 1500 },
+      { id: 2, pedido_id: 56, produto_id: 3, codigo: 'OUTRO', ncm: '', quantidade: 1, valor_total: 1 }
+    ],
+    pedido_parcelas: [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: 1500, data_vencimento: '2026-10-10' }],
+    clientes: [{
+      id: 7, razao_social: 'Cliente Bom LTDA', tipo_pessoa: 'PJ', cnpj: '11222333000181', inscricao_estadual: '', indicador_ie: 9,
+      reg_logradouro: 'Rua A', reg_numero: '10', reg_bairro: 'Centro', reg_cidade: 'Uberlândia', reg_uf: 'Minas Gerais', reg_cep: '38400000', reg_codigo_municipio: null
+    }],
+    produtos: [{ id: 3, codigo: 'MESA-01', ncm: '94036000', origem_mercadoria: 0, unidade_comercial: null, cfop_dentro_uf: null, csosn: null }]
+    // notas_fiscais de propósito ausente: sem a tabela a avaliação segue.
+  };
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/55/prontidao')).status, 403);
+    t.estado.chaves.add('financeiro.nfe.view');
+
+    const { status, corpo } = await t.chamar('GET', '/api/fiscal/pedidos/55/prontidao');
+    assert.equal(status, 200);
+    assert.equal(corpo.pronto, true, JSON.stringify(corpo.pendencias));
+    assert.equal(corpo.automaticas, 1, 'só o código IBGE, que a emissão resolve sozinha');
+    assert.equal(corpo.pendencias[0].chave, 'reg_codigo_municipio');
+    assert.equal(corpo.resumo.cliente, 'Cliente Bom LTDA');
+    assert.equal(corpo.resumo.ufDestino, 'MG');
+    assert.equal(corpo.ambiente, 'homologacao', 'a tela de embarque mostra em que ambiente a nota sai');
+    assert.deepEqual(corpo.notas, [], 'e as notas que o pedido já tem (sem XML)');
+    assert.equal(corpo.resumo.tPagSugerido, '99', 'pedido sem forma de pagamento: "outros"');
+    assert.deepEqual(corpo.resumo.itens.map(i => [i.codigo, i.cfop, i.unidade]), [['MESA-01', '5101', 'Peça']], 'só os itens deste pedido; CFOP e unidade herdados da configuração');
+
+    assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/999/prontidao')).status, 404);
+    assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/abc/prontidao')).status, 400);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('prontidão sem certificado nesta máquina e com cliente incompleto lista as pendências por origem', async () => {
+  const tabelas = {
+    pedidos: [{ id: 55, numero: 'PED-55', situacao: 'Produção', cliente_id: 7, valor_final: 1500 }],
+    pedidos_itens: [{ id: 1, pedido_id: 55, produto_id: 3, codigo: 'MESA-01', ncm: '9403', quantidade: 1, valor_total: 1500 }],
+    pedido_parcelas: [],
+    clientes: [{ id: 7, razao_social: 'Cliente', tipo_pessoa: 'PJ', cnpj: '123', reg_uf: 'MG' }],
+    produtos: [{ id: 3, codigo: 'MESA-01', ncm: '9403' }],
+    notas_fiscais: [{ id: 9, pedido_id: 55, numero: 361, status_fiscal: 'autorizada' }]
+  };
+  const t = await montar({ tabelas, comCertificado: false });
+  try {
+    t.estado.chaves.add('financeiro.nfe.view');
+    const { corpo } = await t.chamar('GET', '/api/fiscal/pedidos/55/prontidao');
+    assert.equal(corpo.pronto, false);
+    const origens = new Set(corpo.pendencias.map(p => p.origem));
+    assert.deepEqual([...origens].sort(), ['certificado', 'cliente', 'peca', 'pedido']);
+    assert.match(corpo.pendencias.find(p => p.chave === 'nota_existente').mensagem, /nº 361 \(autorizada\)/);
+    assert.match(corpo.pendencias.find(p => p.origem === 'certificado').mensagem, /Nenhum certificado/);
+    assert.equal(corpo.notas.length, 1);
+    assert.equal(corpo.notas[0].numero, 361);
+    assert.ok(!('xml_envio' in corpo.notas[0]));
+  } finally {
+    await t.fechar();
+  }
+});
+
+function tabelasDoPedido() {
+  return {
+    pedidos: [{ id: 55, numero: '2548', situacao: 'Produção', cliente_id: 7, valor_final: 294, forma_pagamento: 'Boleto' }],
+    pedidos_itens: [{ id: 1, pedido_id: 55, produto_id: 3, codigo: 'MESA-01', nome: 'Mesa', ncm: '94036000', quantidade: 2, valor_unitario: 147, valor_total: 294 }],
+    pedido_parcelas: [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: 294, data_vencimento: '2026-10-14' }],
+    clientes: [{
+      id: 7, razao_social: 'Cliente Bom LTDA', tipo_pessoa: 'PJ', cnpj: '11222333000181', inscricao_estadual: '0628725380094', indicador_ie: 1,
+      reg_logradouro: 'Rua Diamante', reg_numero: '504', reg_bairro: 'São Joaquim', reg_cidade: 'Contagem', reg_uf: 'Minas Gerais', reg_cep: '32113000', reg_codigo_municipio: '3118601'
+    }],
+    produtos: [{ id: 3, codigo: 'MESA-01', ncm: '94036000', origem_mercadoria: 0 }],
+    notas_fiscais: [], notas_fiscais_itens: [], notas_fiscais_eventos: []
+  };
+}
+
+test('POST /pedidos/:id/emitir exige financeiro.nfe.emit; emite, grava a nota e as rotas de notas devolvem sem/com XML', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {})).status, 403);
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+
+    const { status, corpo } = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', { transporte: { modalidade_frete: 9 } });
+    assert.equal(status, 200, JSON.stringify(corpo));
+    assert.equal(corpo.autorizada, true);
+    assert.equal(corpo.sefaz.cStat, '100');
+    assert.equal(corpo.sefaz.protocolo, '131260000123456');
+    assert.equal(corpo.nota.status_fiscal, 'autorizada');
+    assert.equal(corpo.nota.numero, 1);
+    assert.equal(corpo.nota.ambiente, 'homologacao');
+    assert.ok(!corpo.nota.xml_envio && corpo.nota.tem_xml_autorizado);
+    assert.equal(corpo.nota.criado_por, 1, 'usuário do JWT');
+
+    const gravada = tabelas.notas_fiscais[0];
+    assert.equal(gravada.status_fiscal, 'autorizada');
+    assert.match(gravada.xml_envio, /<verProc>Santissimo \d+\.\d+\.\d+<\/verProc>/);
+    assert.match(gravada.xml_envio, /<transp><modFrete>9<\/modFrete><\/transp>/);
+    assert.ok(gravada.xml_autorizado.includes('<nfeProc'));
+    assert.equal(tabelas.notas_fiscais_itens.length, 1);
+    assert.deepEqual(tabelas.notas_fiscais_eventos.map(e => e.tipo), ['criada', 'enviada', 'autorizada']);
+    assert.equal(t.upstream.puts.at(-1).proximo_numero_homologacao, 2);
+    assert.match(t.chamadasSefaz[0].url, /hnfe\.fazenda\.mg\.gov\.br\/nfe2\/services\/NFeAutorizacao4$/);
+    assert.match(t.chamadasSefaz[0].opcoes.certificadoPem, /BEGIN CERTIFICATE/);
+
+    const listaNotas = await t.chamar('GET', '/api/fiscal/notas?pedido_id=55');
+    assert.equal(listaNotas.status, 200);
+    assert.equal(listaNotas.corpo.length, 1);
+    assert.ok(!('xml_envio' in listaNotas.corpo[0]) && listaNotas.corpo[0].tem_xml_envio);
+
+    const uma = await t.chamar('GET', `/api/fiscal/notas/${gravada.id}`);
+    assert.equal(uma.status, 200);
+    assert.match(uma.corpo.xml_envio, /<Signature/);
+    assert.equal((await t.chamar('GET', '/api/fiscal/notas/999')).status, 404);
+
+    const sinc = await t.chamar('POST', `/api/fiscal/notas/${gravada.id}/sincronizar`, {});
+    assert.equal(sinc.status, 200);
+    assert.equal(sinc.corpo.autorizada, true);
+
+    // Emitir de novo: a nota autorizada bloqueia (422 com a pendência), nada novo é gravado.
+    const de_novo = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(de_novo.status, 422);
+    assert.ok(de_novo.corpo.pendencias.some(p => p.chave === 'nota_existente'));
+    assert.equal(tabelas.notas_fiscais.length, 1);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('emitir com pendência e com rejeição da SEFAZ devolve 422 com o detalhe que a tela mostra', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.pedido_parcelas = [];
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    const pendente = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(pendente.status, 422);
+    assert.match(pendente.corpo.error, /não pode ser faturado/);
+    assert.ok(pendente.corpo.pendencias.some(p => p.origem === 'pedido' && p.chave === 'parcelas'));
+    assert.equal(tabelas.notas_fiscais.length, 0);
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/999/emitir', {})).status, 404);
+  } finally {
+    await t.fechar();
+  }
+
+  const rejeita = chave => `<protNFe versao="4.00"><infProt Id="IDx"><tpAmb>2</tpAmb><verAplic>MG</verAplic><chNFe>${chave}</chNFe><dhRecbto>2026-09-15T15:10:01-03:00</dhRecbto><cStat>778</cStat><xMotivo>Rejeicao: Informado NCM inexistente</xMotivo></infProt></protNFe>`;
+  const t2 = await montar({ tabelas: tabelasDoPedido(), sefazAutoriza: rejeita });
+  try {
+    t2.estado.chaves.add('financeiro.nfe.emit');
+    const r = await t2.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(r.status, 422);
+    assert.equal(r.corpo.error, 'SEFAZ 778: Rejeicao: Informado NCM inexistente');
+    assert.equal(r.corpo.sefaz.cStat, '778');
+    assert.equal(r.corpo.nota.status_fiscal, 'rejeitada');
+  } finally {
+    await t2.fechar();
+  }
+});
+
+test('DANFE, XML e cancelamento: rotas por nota, com as permissões de ver e de cancelar', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(emitida.status, 200);
+    const notaId = emitida.corpo.nota.id;
+
+    const d = await t.chamar('GET', `/api/fiscal/notas/${notaId}/danfe`);
+    assert.equal(d.status, 200);
+    assert.ok(d.corpo.html.startsWith('<!DOCTYPE html>') && d.corpo.html.includes('DANFE') && d.corpo.html.includes('SEM VALOR FISCAL'));
+    assert.equal(d.corpo.nome, 'DANFE-NFe-1-000000001');
+    assert.equal(d.corpo.nota.status_fiscal, 'autorizada');
+
+    const x = await t.chamar('GET', `/api/fiscal/notas/${notaId}/xml`);
+    assert.equal(x.status, 200);
+    assert.ok(x.corpo.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc'));
+    assert.equal(x.corpo.nome, `${tabelas.notas_fiscais[0].chave_acesso}-procNFe`);
+    assert.equal(x.corpo.xml_cancelamento, null);
+    assert.equal((await t.chamar('GET', '/api/fiscal/notas/999/danfe')).status, 404);
+
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Pedido cancelado pelo cliente antes do embarque' })).status, 403);
+    t.estado.chaves.add('financeiro.nfe.cancel');
+    const curta = await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'curta' });
+    assert.equal(curta.status, 400);
+    assert.match(curta.corpo.error, /entre 15 e 255/);
+    assert.equal(tabelas.notas_fiscais[0].status_fiscal, 'autorizada');
+
+    const c = await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Pedido cancelado pelo cliente antes do embarque' });
+    assert.equal(c.status, 200, JSON.stringify(c.corpo));
+    assert.equal(c.corpo.cancelada, true);
+    assert.equal(c.corpo.sefaz.cStat, '135');
+    assert.equal(c.corpo.nota.status_fiscal, 'cancelada');
+    assert.equal(tabelas.notas_fiscais[0].status_fiscal, 'cancelada');
+    assert.ok(tabelas.notas_fiscais[0].xml_cancelamento.includes('<procEventoNFe'));
+    assert.match(t.chamadasSefaz.at(-1).url, /NFeRecepcaoEvento4$/);
+
+    const x2 = await t.chamar('GET', `/api/fiscal/notas/${notaId}/xml`);
+    assert.ok(x2.corpo.xml_cancelamento.includes('<procEventoNFe'));
+    assert.equal(x2.corpo.nome_cancelamento, `${tabelas.notas_fiscais[0].chave_acesso}-procEventoNFe-cancelamento`);
+    const d2 = await t.chamar('GET', `/api/fiscal/notas/${notaId}/danfe`);
+    assert.ok(d2.corpo.html.includes('NF-e CANCELADA'));
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/cancelar`, { justificativa: 'Tentativa repetida de cancelamento' })).status, 409);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('e-mail: a senha fica no cofre local (Sup Admin), o estado sai na configuração, o teste e o envio da nota usam o transporte', async () => {
+  const enviados = [];
+  const criarTransporteEmail = () => ({ sendMail: async m => { enviados.push(m); return { messageId: '<id@teste>' }; } });
+  const linhas = [{ ...LINHA, smtp_host: 'smtp.exemplo.com', smtp_porta: 587, smtp_seguro: false, smtp_usuario: 'nfe@exemplo.com', smtp_remetente: 'nfe@exemplo.com', email_copia: 'fin@exemplo.com' }];
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ linhas, tabelas, criarTransporteEmail });
+  try {
+    t.estado.chaves.add('financeiro.config.view');
+    let estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.email.senha_guardada, false);
+    assert.deepEqual(estado.corpo.email.pendencias, ['senha (guardada neste computador)']);
+
+    assert.equal((await t.chamar('POST', '/api/fiscal/email/senha', { senha: 's3nha' })).status, 403);
+    t.estado.supAdmin = true;
+    assert.equal((await t.chamar('POST', '/api/fiscal/email/senha', { senha: '' })).status, 400);
+    const guardada = await t.chamar('POST', '/api/fiscal/email/senha', { senha: 's3nha' });
+    assert.equal(guardada.status, 200);
+    assert.equal(guardada.corpo.senha_guardada, true);
+    assert.deepEqual(guardada.corpo.pendencias, []);
+    assert.equal(t.segredo.lerSegredo('smtp').valor, 's3nha');
+    assert.ok(!JSON.stringify(guardada.corpo).includes('s3nha'), 'a senha não volta na resposta');
+
+    const teste = await t.chamar('POST', '/api/fiscal/email/testar', { para: 'eu@exemplo.com' });
+    assert.equal(teste.status, 200, JSON.stringify(teste.corpo));
+    assert.deepEqual(teste.corpo.para, ['eu@exemplo.com']);
+    assert.match(enviados[0].subject, /Teste do e-mail/);
+
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    const notaId = emitida.corpo.nota.id;
+    const enviado = await t.chamar('POST', `/api/fiscal/notas/${notaId}/email`, { para: 'cliente@x.com', pdf_base64: Buffer.from('%PDF').toString('base64'), mensagem: 'Segue a nota.' });
+    assert.equal(enviado.status, 200, JSON.stringify(enviado.corpo));
+    assert.deepEqual(enviado.corpo.para, ['cliente@x.com']);
+    assert.deepEqual(enviado.corpo.cc, ['fin@exemplo.com']);
+    assert.equal(enviado.corpo.anexos.length, 2);
+    assert.equal(enviados[1].attachments[0].filename, 'DANFE-NFe-1-000000001.pdf');
+    assert.ok(enviados[1].text.startsWith('Segue a nota.'));
+    assert.equal(tabelas.notas_fiscais_eventos.at(-1).tipo, 'email');
+    assert.match(tabelas.notas_fiscais_eventos.at(-1).mensagem, /cliente@x\.com \(cópia: fin@exemplo\.com\)/);
+
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/email`, { para: 'errado' })).status, 400);
+    assert.equal((await t.chamar('DELETE', '/api/fiscal/email/senha')).corpo.senha_guardada, false);
+    assert.equal((await t.chamar('POST', `/api/fiscal/notas/${notaId}/email`, { para: 'cliente@x.com', pdf_base64: 'x' })).status, 409, 'sem senha não envia');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('carta de correção e inutilização: rotas com as permissões de emitir e de cancelar', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.notas_fiscais_inutilizacoes = [];
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    const notaId = emitida.corpo.nota.id;
+
+    const curta = await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'curta' });
+    assert.equal(curta.status, 400);
+    const cce = await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'Onde se lê Caixa, leia-se Engradado na espécie dos volumes' });
+    assert.equal(cce.status, 200, JSON.stringify(cce.corpo));
+    assert.equal(cce.corpo.registrada, true);
+    assert.equal(cce.corpo.nSeqEvento, 1);
+    assert.equal(cce.corpo.sefaz.protocolo, '131260000444444');
+    assert.equal(tabelas.notas_fiscais[0].status_fiscal, 'autorizada');
+    assert.equal(tabelas.notas_fiscais_eventos.at(-1).tipo, 'cce');
+
+    assert.equal((await t.chamar('POST', '/api/fiscal/inutilizacoes', { serie: 1, numero_inicial: 5, numero_final: 6, justificativa: 'Numeração pulada por falha na emissão' })).status, 403);
+    t.estado.chaves.add('financeiro.nfe.cancel');
+    const usado = await t.chamar('POST', '/api/fiscal/inutilizacoes', { serie: 1, numero_inicial: 1, numero_final: 1, justificativa: 'Tentativa sobre número já usado' });
+    assert.equal(usado.status, 409);
+    const inut = await t.chamar('POST', '/api/fiscal/inutilizacoes', { serie: 1, numero_inicial: 5, numero_final: 6, justificativa: 'Numeração pulada por falha na emissão' });
+    assert.equal(inut.status, 200, JSON.stringify(inut.corpo));
+    assert.equal(inut.corpo.sefaz.cStat, '102');
+    assert.equal(inut.corpo.inutilizacao.status, 'homologada');
+    assert.equal(tabelas.notas_fiscais_inutilizacoes.length, 1);
+    assert.match(t.chamadasSefaz.at(-1).url, /NFeInutilizacao4$/);
+    const lista = await t.chamar('GET', '/api/fiscal/inutilizacoes');
+    assert.equal(lista.status, 200);
+    assert.equal(lista.corpo[0].numero_inicial, 5);
+    assert.ok(!('xml' in lista.corpo[0]));
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('segredos no banco: com a chave mestra o certificado e a senha do SMTP vão cifrados para segredos_app e valem sem cofre local', async () => {
+  const CHAVE_MESTRA = require('./fiscal/chaveMestra').gerar();
+  const tabelas = { ...tabelasDoPedido(), segredos_app: [] };
+  const t = await montar({ tabelas, comCertificado: false, env: { SEGREDOS_CHAVE_MESTRA: CHAVE_MESTRA } });
+  try {
+    t.estado.supAdmin = true;
+    let estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.banco_chave_mestra, true);
+    assert.equal(estado.corpo.certificado.configurado, false);
+
+    const guardado = await t.chamar('POST', '/api/fiscal/certificado', { caminho: t.arquivoPfx, senha: SENHA, destino: 'banco' });
+    assert.equal(guardado.status, 200, JSON.stringify(guardado.corpo));
+    assert.equal(guardado.corpo.origem, 'banco');
+    assert.equal(guardado.corpo.titular, 'SANTISSIMO DECOR LTDA');
+    assert.equal(tabelas.segredos_app.length, 1);
+    const linha = JSON.stringify(tabelas.segredos_app[0]);
+    assert.ok(!linha.includes(SENHA) && !linha.includes(PFX.toString('base64').slice(0, 40)), 'nem a senha nem o .pfx ficam em claro no banco');
+    assert.equal(tabelas.segredos_app[0].nome, 'certificado');
+    assert.equal(tabelas.segredos_app[0].cifra, 'aes-256-gcm');
+    assert.equal(t.segredo.fonte(), null, 'nada foi para o cofre local');
+
+    estado = await t.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.certificado.origem, 'banco');
+    assert.equal(estado.corpo.certificado.confereComEmitente, true);
+
+    // Emite com o certificado do banco (este computador não tem cofre com ele).
+    t.estado.chaves.add('financeiro.nfe.emit');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(emitida.status, 200, JSON.stringify(emitida.corpo));
+    assert.equal(emitida.corpo.autorizada, true);
+
+    const senhaEmail = await t.chamar('POST', '/api/fiscal/email/senha', { senha: 's3nha', destino: 'banco' });
+    assert.equal(senhaEmail.status, 200);
+    assert.equal(senhaEmail.corpo.origem, 'banco');
+    assert.equal(senhaEmail.corpo.senha_guardada, true);
+    assert.ok(!JSON.stringify(tabelas.segredos_app).includes('s3nha'));
+    assert.equal(tabelas.segredos_app.length, 2);
+
+    const removido = await t.chamar('DELETE', '/api/fiscal/certificado?destino=banco');
+    assert.equal(removido.corpo.configurado, false);
+    assert.equal(tabelas.segredos_app.length, 1);
+  } finally {
+    await t.fechar();
+  }
+
+  // Outra máquina, sem a chave: vê que há segredo no banco mas não abre; e não consegue gravar lá.
+  const tabelas2 = { ...tabelasDoPedido(), segredos_app: [] };
+  const comChave = await montar({ tabelas: tabelas2, comCertificado: false, env: { SEGREDOS_CHAVE_MESTRA: CHAVE_MESTRA } });
+  try {
+    comChave.estado.supAdmin = true;
+    assert.equal((await comChave.chamar('POST', '/api/fiscal/certificado', { caminho: comChave.arquivoPfx, senha: SENHA, destino: 'banco' })).status, 200);
+  } finally {
+    await comChave.fechar();
+  }
+  const semChave = await montar({ tabelas: tabelas2, comCertificado: false, env: {} });
+  try {
+    semChave.estado.supAdmin = true;
+    const estado = await semChave.chamar('GET', '/api/fiscal/configuracao');
+    assert.equal(estado.corpo.banco_chave_mestra, false);
+    assert.equal(estado.corpo.certificado.configurado, false);
+    assert.match(estado.corpo.certificado.erro, /não tem a chave mestra/);
+    assert.equal((await semChave.chamar('POST', '/api/fiscal/certificado', { caminho: semChave.arquivoPfx, senha: SENHA, destino: 'banco' })).status, 409);
+    const local = await semChave.chamar('POST', '/api/fiscal/certificado', { caminho: semChave.arquivoPfx, senha: SENHA, destino: 'computador' });
+    assert.equal(local.status, 200);
+    assert.equal(local.corpo.origem, 'arquivo');
+  } finally {
+    await semChave.fechar();
+  }
+});
+
+test('cartas de correção: lista, segunda via em HTML e XML do evento', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.emit');
+    t.estado.chaves.add('financeiro.nfe.view');
+    const notaId = (await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {})).corpo.nota.id;
+    assert.deepEqual((await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao`)).corpo, []);
+    await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'Onde se lê Caixa, leia-se Engradado na espécie dos volumes' });
+    const lista = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao`);
+    assert.equal(lista.status, 200);
+    assert.equal(lista.corpo.length, 1);
+    assert.equal(lista.corpo[0].nSeqEvento, 1);
+    assert.equal(lista.corpo[0].protocolo, '131260000444444');
+    assert.ok(!('xml' in lista.corpo[0]));
+
+    const doc = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/1/documento`);
+    assert.equal(doc.status, 200);
+    assert.equal(doc.corpo.nome, 'CCe-1-NFe-1-000000001');
+    assert.ok(doc.corpo.html.includes('CARTA DE CORREÇÃO ELETRÔNICA') && doc.corpo.html.includes('Onde se lê Caixa, leia-se Engradado') && doc.corpo.html.includes('SEM VALOR FISCAL'));
+    const xml = await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/1/xml`);
+    assert.ok(xml.corpo.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe'));
+    assert.equal(xml.corpo.nome, `${tabelas.notas_fiscais[0].chave_acesso}-procEventoNFe-cce-1`);
+    assert.equal((await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/2/documento`)).status, 404);
+
+    // A lista de notas traz a contagem: é dela que sai a tag "CC-e" na lista de pedidos.
+    const notas = await t.chamar('GET', '/api/fiscal/notas');
+    assert.equal(notas.corpo[0].cartas_correcao, 1);
+    assert.equal(notas.corpo[0].ultima_carta_seq, 1);
+    await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'Onde se lê Engradado, leia-se Caixa na espécie dos volumes' });
+    const depois = await t.chamar('GET', `/api/fiscal/notas?pedido_id=55`);
+    assert.equal(depois.corpo[0].cartas_correcao, 2);
+    assert.equal(depois.corpo[0].ultima_carta_seq, 2);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('GET /painel exige financeiro.nfe.view e devolve o painel fiscal da competência sem XML', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.pedidos[0].situacao = 'Enviado';
+  tabelas.pedidos[0].embarcar_real = '2026-09-10';
+  tabelas.pedidos.push({ id: 56, numero: '2549', situacao: 'Enviado', cliente_id: 7, valor_final: 100, embarcar_real: '2026-09-11', nfe_dispensada: true });
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09')).status, 403);
+    t.estado.chaves.add('financeiro.nfe.view');
+    const antes = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
+    assert.equal(antes.corpo.competencia, '2026-09');
+    assert.equal(antes.corpo.ambiente, 'homologacao');
+    assert.equal(antes.corpo.certificado.configurado, true);
+    assert.equal(antes.corpo.aguardando_nf.quantidade, 1);
+    assert.equal(antes.corpo.aguardando_nf.pedidos[0].cliente, 'Cliente Bom LTDA');
+    assert.equal(antes.corpo.aguardando_nf.pedidos.find(l => l.numero === '2549').dispensada, true);
+    assert.deepEqual(antes.corpo.pendencias.map(p => p.chave), ['aguardando_nf']);
+    assert.deepEqual(antes.corpo.atividade, []);
+
+    t.estado.chaves.add('financeiro.nfe.emit');
+    await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    const depois = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    assert.equal(depois.corpo.aguardando_nf.quantidade, 0);
+    assert.equal(depois.corpo.notas.autorizadas, 1);
+    assert.equal(depois.corpo.notas.valor_autorizado, 294);
+    assert.equal(depois.corpo.atividade[0].tipo, 'autorizada');
+    assert.equal(depois.corpo.atividade[0].titulo, 'NF-e 1/1 autorizada');
+    assert.ok(!JSON.stringify(depois.corpo).includes('xml_'), 'o painel não carrega XML');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('POST /pedidos/:id/dispensar-nfe exige ped.status.ship e marca o pedido como enviado sem nota', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/55/dispensar-nfe', {})).status, 403);
+    t.estado.chaves.add('ped.status.ship');
+    const { status, corpo } = await t.chamar('POST', '/api/fiscal/pedidos/55/dispensar-nfe', {});
+    assert.equal(status, 200);
+    assert.equal(corpo.ok, true);
+    assert.equal(tabelas.pedidos[0].nfe_dispensada, true);
+    assert.equal(tabelas.pedidos[0].nfe_dispensada_por, 1);
+    assert.match(tabelas.pedidos[0].nfe_dispensada_em, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/999/dispensar-nfe', {})).status, 404);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('server.js monta /api/fiscal antes do proxy genérico /api/:table', () => {
+  const fonte = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  const fiscal = fonte.indexOf("app.use('/api/fiscal'");
+  const generico = fonte.indexOf("app.get('/api/:table'");
+  assert.ok(fiscal > 0 && generico > fiscal);
+});

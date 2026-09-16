@@ -1,11 +1,14 @@
 /**
  * Módulo Financeiro — Comissões e Produção.
  *
- * ETAPA VISUAL: a tela nasce completa, mas os números vêm de FIN_DADOS_EXEMPLO
- * e nenhuma ação grava nada. Quem ainda não tem função real abre o aviso
- * "em implementação" — melhor que um botão que não responde, que parece
- * defeito. Quando o backend existir, `finCarregarDados` passa a ler a rota e
- * o resto da tela não muda: tudo é preenchido por `data-fin`.
+ * A parte fiscal é REAL: GET /api/fiscal/painel (competência escolhida) traz
+ * os pedidos enviados sem NF-e, as pendências que exigem ação (nota parada
+ * na SEFAZ, recusada, certificado, configuração) e a atividade recente; as
+ * ações "Emitir NF-e" e "Notas fiscais" abrem modais que falam com a SEFAZ
+ * pelo que já existe em /api/fiscal. Comissões e produção ainda vêm de
+ * FIN_DADOS_EXEMPLO e suas ações abrem o aviso "em implementação" — melhor
+ * que um botão que não responde, que parece defeito. Tudo é preenchido por
+ * `data-fin`: trocar a fonte não mexe no HTML.
  *
  * O menu reexecuta este arquivo a cada visita (src/js/menu.js injeta o script
  * de novo, embrulhado numa IIFE), então nada aqui registra ouvinte em
@@ -16,62 +19,51 @@
 const FIN_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-/* Dados de exemplo da descrição do módulo. Um único objeto, no formato que a
-   rota do backend deverá devolver. */
+/* Quantas pendências a lista mostra antes do "Ver todas". */
+const FIN_PENDENCIAS_VISIVEIS = 5;
+
+/* Dados de exemplo de comissões e produção (a etapa visual). Um único objeto,
+   no formato que a rota do backend deverá devolver. A parte fiscal (nf,
+   pendencias, atividade) vem do painel real e entra por `finMapearPainel`. */
 const FIN_DADOS_EXEMPLO = {
     kpis: {
-        nf: { quantidade: 8, total: 124680 },
         comissoes: { valor: 18450, parcelas: 12, pagamentoAte: '2026-10-15' },
         atrasadas: { valor: 7320, parcelas: 11 },
         producao: { valor: 9870, pecas: 327 }
     },
-    pendencias: [
-        { nivel: 'critico', titulo: '3 parcelas estão vencidas há mais de 30 dias',
-          descricao: 'Comissão potencial: R$ 4.280,00', data: '2026-09-14', acao: 'Ver', destino: 'comissoes-atrasadas' },
-        { nivel: 'normal', titulo: 'Competência setembro/2026 pronta para fechamento',
-          descricao: 'Comissão apurada: R$ 18.450,00', data: '2026-09-15', acao: 'Conferir', destino: 'fechar-competencia' },
-        { nivel: 'normal', titulo: '8 pedidos entregues ainda sem NF registrada',
-          descricao: 'Total: R$ 124.680,00', data: '2026-09-15', acao: 'Ver', destino: 'aguardando-nf' },
-        { nivel: 'normal', titulo: 'Produção de setembro pronta para fechamento',
-          descricao: '327 peças finalizadas • R$ 9.870,00', data: '2026-09-15', acao: 'Conferir', destino: 'producao-competencia' },
-        { nivel: 'normal', titulo: 'Ajuste de R$ 840,00 aguardando estorno',
-          descricao: 'Pedido 2501 • devolução registrada em 10/09', data: '2026-09-10', acao: 'Ver', destino: 'comissoes-detalhes' }
-    ],
     resumoComissoes: { previstas: 32500, apuradas: 18450, atrasadas: 7320, ajustes: -840, proximoPagamento: '2026-10-15' },
-    resumoProducao: { emProducao: 21, parciais: 8, pecasMes: 327, valorCompetencia: 9870, proximoPagamento: '5º dia útil de outubro' },
-    atividade: [
-        { hora: '14:32', titulo: 'NF 18842 registrada', detalhe: 'Pedido 2548' },
-        { hora: '13:18', titulo: 'Parcela liquidada', detalhe: 'Pedido 2521 • R$ 12.450,00' },
-        { hora: '11:07', titulo: '6 peças finalizadas', detalhe: 'Pedido 2537' },
-        { hora: '09:41', titulo: 'Ajuste registrado', detalhe: 'Pedido 2501 • - R$ 840,00' }
-    ]
+    resumoProducao: { emProducao: 21, parciais: 8, pecasMes: 327, valorCompetencia: 9870, proximoPagamento: '5º dia útil de outubro' }
 };
 
 /* Rótulo humano de cada ação, para o aviso "em implementação". Quando a ação
-   ganhar modal/função real, basta preencher `abrir`. */
+   ganhar modal/função real, basta preencher `abrir`. `extra` é o que a linha
+   clicada traz (o filtro de uma pendência, por exemplo). */
 const FIN_ACOES = {
-    'atualizar': { rotulo: 'Atualizar' },
-    'aguardando-nf': { rotulo: 'Pedidos aguardando NF', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'aguardando-nf' }) },
+    'atualizar': { rotulo: 'Atualizar', abrir: m => finRecarregar(m) },
+    'aguardando-nf': { rotulo: 'Pedidos aguardando NF-e', abrir: (m, extra) => finAbrirModal('aguardando-nfe', m, extra) },
+    'emitir-nfe': { rotulo: 'Emitir NF-e', abrir: (m, extra) => finAbrirModal('aguardando-nfe', m, extra) },
+    'notas-fiscais': { rotulo: 'Notas fiscais', abrir: (m, extra) => finAbrirModal('notas-fiscais', m, extra) },
     'comissoes-competencia': { rotulo: 'Comissões da competência', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'comissoes-apuradas' }) },
     'comissoes-atrasadas': { rotulo: 'Comissões atrasadas', abrir: m => finAbrirModal('comissoes-atrasadas', m) },
     'producao-competencia': { rotulo: 'Produção da competência', abrir: m => finAbrirModal('producao-competencia', m) },
     'confirmar-pagamento-comissao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'comissao' }) },
     'confirmar-pagamento-producao': { rotulo: 'Confirmar pagamento', abrir: m => finAbrirModal('confirmar-pagamento', m, { tipo: 'producao' }) },
-    'pendencias-todas': { rotulo: 'Todas as pendências' },
-    'registrar-nf': { rotulo: 'Registrar NF', abrir: m => finAbrirModal('registrar-nf', m) },
+    'configuracao-fiscal': { rotulo: 'Configuração fiscal', abrir: m => finAbrirModal('configuracao-fiscal', m) },
+    'pendencias-todas': { rotulo: 'Todas as pendências', abrir: m => finMostrarTodasPendencias(m) },
     'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
     'registrar-ajuste': { rotulo: 'Registrar ajuste', abrir: m => finAbrirModal('registrar-ajuste', m) },
     'registrar-producao': { rotulo: 'Registrar produção', abrir: m => finAbrirModal('registrar-producao', m) },
     'fechar-competencia': { rotulo: 'Fechar competência', abrir: m => finAbrirModal('fechar-competencia', m) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
-    'atividade-todas': { rotulo: 'Atividade recente' }
+    'atividade-todas': { rotulo: 'Notas fiscais', abrir: m => finAbrirModal('notas-fiscais', m) }
 };
 
 /* Modais do módulo (src/html/modals/financeiro). Todos usam o mesmo script,
    que descobre qual modal montar por `window.financeiroModalContexto`. */
 const FIN_MODAIS = {
-    'registrar-nf': { html: 'modals/financeiro/registrar-nf.html', overlay: 'finRegistrarNf' },
+    'aguardando-nfe': { html: 'modals/financeiro/aguardando-nfe.html', overlay: 'finAguardandoNfe' },
+    'notas-fiscais': { html: 'modals/financeiro/notas-fiscais.html', overlay: 'finNotasFiscais' },
     'registrar-recebimento': { html: 'modals/financeiro/registrar-recebimento.html', overlay: 'finRegistrarRecebimento' },
     'registrar-ajuste': { html: 'modals/financeiro/registrar-ajuste.html', overlay: 'finRegistrarAjuste' },
     'registrar-producao': { html: 'modals/financeiro/registrar-producao.html', overlay: 'finRegistrarProducao' },
@@ -82,14 +74,15 @@ const FIN_MODAIS = {
     'confirmar-pagamento': { html: 'modals/financeiro/confirmar-pagamento.html', overlay: 'finConfirmarPagamento' },
     'visualizar-relatorio': { html: 'modals/financeiro/visualizar-relatorio.html', overlay: 'finVisualizarRelatorio' },
     'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
-    'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' }
+    'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' },
+    'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' }
 };
 const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
 
 /**
  * Abre um modal do módulo. `extra` leva o que o modal precisa (relatório,
- * tipo, pedido, parcela) e `extra.empilhar` abre POR CIMA do modal atual —
- * é como um modal abre outro (detalhes, relatório, fechamento).
+ * tipo, pedido, parcela, filtro) e `extra.empilhar` abre POR CIMA do modal
+ * atual — é como um modal abre outro (detalhes, relatório, fechamento).
  */
 function finAbrirModal(chave, moduleEl, extra = {}) {
     const modal = FIN_MODAIS[chave];
@@ -134,6 +127,18 @@ function finFormatarData(texto) {
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (texto || '—');
 }
 
+/**
+ * Quando um evento aconteceu, para a atividade recente: 'HH:MM' se foi no
+ * dia `hoje` ('YYYY-MM-DD'), senão 'dd/mm'. Corte de texto, sem fuso — o
+ * instante vem da SEFAZ já em horário de Brasília ('…T15:10:01-03:00').
+ */
+function finFormatarQuando(instante, hoje) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(String(instante || ''));
+    if (!m) return '—';
+    if (`${m[1]}-${m[2]}-${m[3]}` === hoje && m[4]) return `${m[4]}:${m[5]}`;
+    return `${m[3]}/${m[2]}`;
+}
+
 function finRotuloCompetencia(ano, mes) {
     return `${FIN_MESES[mes - 1]} / ${ano}`;
 }
@@ -154,10 +159,16 @@ function finMontarCompetencias(select, hoje) {
         if (desloca === 0) opcao.selected = true;
         select.appendChild(opcao);
     }
+    // Explícito: é este valor que a leitura do painel usa.
+    select.value = finCompetenciaAtual(hoje);
 }
 
 function finCompetenciaAtual(hoje) {
     return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function finDiaDe(hoje) {
+    return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 }
 
 function finAvisarEmImplementacao(chave) {
@@ -170,13 +181,83 @@ function finAvisarEmImplementacao(chave) {
     }
 }
 
-function finExecutarAcao(chave, moduleEl) {
+function finExecutarAcao(chave, moduleEl, extra = {}) {
     const acao = FIN_ACOES[chave];
     if (acao && typeof acao.abrir === 'function') {
-        acao.abrir(moduleEl);
+        acao.abrir(moduleEl, extra);
         return;
     }
     finAvisarEmImplementacao(chave);
+}
+
+/* ------------------------------------------------------------- painel */
+
+/**
+ * O que a tela mostra de fiscal, a partir do painel do backend (ou da sua
+ * ausência: sem permissão, sem rede). Pura — recebe o painel e devolve as
+ * três partes no formato que o render usa.
+ */
+function finMapearPainel(painel, erro) {
+    if (!painel) {
+        const motivo = erro?.status === 403 ? 'Sem permissão para ver as notas fiscais.'
+            : (erro ? 'Não foi possível carregar as notas fiscais.' : '');
+        return {
+            nf: { quantidade: null, total: null, rodape: motivo || 'Sem dados fiscais.' },
+            pendencias: erro && erro.status !== 403
+                ? [{ nivel: 'critico', titulo: 'Painel fiscal indisponível', descricao: erro.message || motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
+                : [],
+            atividade: [],
+            ambiente: null
+        };
+    }
+    const a = painel.aguardando_nf || {};
+    const desde = finFormatarData(painel.desde);
+    return {
+        nf: {
+            quantidade: Number(a.quantidade) || 0,
+            total: Number(a.total) || 0,
+            rodape: `Total: ${finFormatarMoeda(Number(a.total) || 0)} · enviados desde ${desde}${a.dispensados ? ` · ${a.dispensados} sem NF-e (S/NF)` : ''}`
+        },
+        pendencias: (painel.pendencias || []).map(p => ({
+            nivel: p.nivel === 'critico' ? 'critico' : 'normal',
+            titulo: p.titulo, descricao: p.descricao, data: p.data, acao: p.acao || 'Ver', destino: p.destino, filtro: p.filtro || null
+        })),
+        atividade: (painel.atividade || []).map(e => ({ quando: e.quando, titulo: e.titulo, detalhe: e.detalhe, notaId: e.nota_id })),
+        ambiente: painel.ambiente || null
+    };
+}
+
+async function finBuscarPainel(competencia) {
+    if (typeof window.apiConfig?.getApiBaseUrl !== 'function' || typeof fetch !== 'function') {
+        return { painel: null, erro: null };
+    }
+    try {
+        const base = await window.apiConfig.getApiBaseUrl();
+        const resposta = await fetch(`${base}/api/fiscal/painel?competencia=${encodeURIComponent(competencia || '')}`);
+        const corpo = await resposta.json().catch(() => null);
+        if (!resposta.ok) {
+            const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);
+            e.status = resposta.status;
+            return { painel: null, erro: e };
+        }
+        return { painel: corpo, erro: null };
+    } catch (e) {
+        return { painel: null, erro: e };
+    }
+}
+
+/** Comissões e produção (exemplo) + a parte fiscal real da competência. */
+async function finCarregarDados(competencia) {
+    const { painel, erro } = await finBuscarPainel(competencia);
+    const fiscal = finMapearPainel(painel, erro);
+    return {
+        kpis: { nf: fiscal.nf, ...FIN_DADOS_EXEMPLO.kpis },
+        pendencias: fiscal.pendencias,
+        atividade: fiscal.atividade,
+        ambiente: fiscal.ambiente,
+        resumoComissoes: FIN_DADOS_EXEMPLO.resumoComissoes,
+        resumoProducao: FIN_DADOS_EXEMPLO.resumoProducao
+    };
 }
 
 /* ------------------------------------------------------------- render */
@@ -196,8 +277,8 @@ function finPreencher(moduleEl, caminho, texto) {
 function finRenderizarKpis(moduleEl, kpis) {
     const { nf, comissoes, atrasadas, producao } = kpis;
     finPreencher(moduleEl, 'nf.valor', finFormatarInteiro(nf.quantidade));
-    finPreencher(moduleEl, 'nf.auxiliar', nf.quantidade === 1 ? 'pedido' : 'pedidos');
-    finPreencher(moduleEl, 'nf.rodape', `Total: ${finFormatarMoeda(nf.total)}`);
+    finPreencher(moduleEl, 'nf.auxiliar', nf.quantidade === null || nf.quantidade === undefined ? '' : (nf.quantidade === 1 ? 'pedido' : 'pedidos'));
+    finPreencher(moduleEl, 'nf.rodape', nf.rodape || `Total: ${finFormatarMoeda(nf.total)}`);
 
     finPreencher(moduleEl, 'comissoes.valor', finFormatarMoeda(comissoes.valor));
     finPreencher(moduleEl, 'comissoes.auxiliar', `${finFormatarInteiro(comissoes.parcelas)} parcelas`);
@@ -212,20 +293,23 @@ function finRenderizarKpis(moduleEl, kpis) {
     finPreencher(moduleEl, 'producao.rodape', 'Pagamento até o 5º dia útil');
 }
 
-function finRenderizarPendencias(moduleEl, pendencias) {
+function finRenderizarPendencias(moduleEl, pendencias, todas = false) {
     const lista = moduleEl.querySelector('[data-fin-lista="pendencias"]');
     if (!lista) return;
     lista.replaceChildren();
     finPreencher(moduleEl, 'pendencias.total', String(pendencias.length));
+    const verTodas = moduleEl.querySelector('[data-fin-acao="pendencias-todas"]');
+    if (verTodas) verTodas.classList.toggle('hidden', todas || pendencias.length <= FIN_PENDENCIAS_VISIVEIS);
 
     if (!pendencias.length) {
-        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhuma pendência no momento. Tudo em dia por aqui.'));
+        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhuma pendência fiscal no momento. Tudo em dia por aqui.'));
         return;
     }
 
-    for (const p of pendencias) {
+    for (const p of todas ? pendencias : pendencias.slice(0, FIN_PENDENCIAS_VISIVEIS)) {
         const item = finCriar('li', 'fin-pendencia');
         item.dataset.finAcao = p.destino;
+        if (p.filtro) item.dataset.finFiltro = JSON.stringify(p.filtro);
         item.setAttribute('role', 'button');
         item.tabIndex = 0;
 
@@ -239,8 +323,9 @@ function finRenderizarPendencias(moduleEl, pendencias) {
         const botao = finCriar('button', 'btn-neutral text-white rounded-md px-3 py-2 text-sm font-medium fin-pendencia__acao', p.acao);
         botao.type = 'button';
         botao.dataset.finAcao = p.destino;
+        if (p.filtro) botao.dataset.finFiltro = JSON.stringify(p.filtro);
 
-        item.append(status, texto, finCriar('span', 'fin-pendencia__data', finFormatarData(p.data)), botao);
+        item.append(status, texto, finCriar('span', 'fin-pendencia__data', p.data ? finFormatarData(p.data) : ''), botao);
         lista.appendChild(item);
     }
 }
@@ -261,12 +346,12 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoProducao.proximoPagamento', p.proximoPagamento);
 }
 
-function finRenderizarAtividade(moduleEl, eventos) {
+function finRenderizarAtividade(moduleEl, eventos, hoje) {
     const lista = moduleEl.querySelector('[data-fin-lista="atividade"]');
     if (!lista) return;
     lista.replaceChildren();
     if (!eventos.length) {
-        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhuma atividade registrada hoje.'));
+        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhum movimento de NF-e registrado ainda.'));
         return;
     }
     for (const e of eventos) {
@@ -274,33 +359,55 @@ function finRenderizarAtividade(moduleEl, eventos) {
         const texto = finCriar('div', 'fin-evento__texto');
         texto.appendChild(finCriar('span', 'fin-evento__titulo', e.titulo));
         texto.appendChild(finCriar('span', 'fin-evento__detalhe', e.detalhe));
-        item.append(finCriar('span', 'fin-evento__hora', e.hora), texto);
+        item.append(finCriar('span', 'fin-evento__hora', e.hora || finFormatarQuando(e.quando, hoje)), texto);
         lista.appendChild(item);
     }
 }
 
-function finRenderizar(moduleEl, dados) {
+function finRenderizar(moduleEl, dados, hoje) {
+    moduleEl.finDados = dados;
     finRenderizarKpis(moduleEl, dados.kpis);
-    finRenderizarPendencias(moduleEl, dados.pendencias);
+    finRenderizarPendencias(moduleEl, dados.pendencias, moduleEl.dataset.pendenciasTodas === '1');
     finRenderizarResumos(moduleEl, dados);
-    finRenderizarAtividade(moduleEl, dados.atividade);
+    finRenderizarAtividade(moduleEl, dados.atividade, hoje);
 }
 
-/** Nesta etapa devolve o exemplo; o backend entra aqui depois. */
-async function finCarregarDados() {
-    return FIN_DADOS_EXEMPLO;
+function finMostrarTodasPendencias(moduleEl) {
+    if (!moduleEl?.finDados) return;
+    moduleEl.dataset.pendenciasTodas = '1';
+    finRenderizarPendencias(moduleEl, moduleEl.finDados.pendencias, true);
 }
+
+/** Relê o painel da competência escolhida e redesenha. Os modais chamam ao fechar. */
+function finRecarregar(moduleEl) {
+    const raiz = moduleEl || document.querySelector('.modulo-container.financeiro-module');
+    if (!raiz) return Promise.resolve();
+    const competencia = raiz.querySelector('#finCompetencia')?.value || null;
+    const promessa = finCarregarDados(competencia)
+        .then(dados => finRenderizar(raiz, dados, raiz.dataset.hoje))
+        .catch(erro => {
+            console.error('[financeiro] não foi possível montar a tela:', erro);
+            window.showToast?.('Não foi possível carregar o Financeiro agora.', 'error');
+        });
+    raiz.moduleReadyPromise = promessa;
+    return promessa;
+}
+window.FinanceiroRecarregar = () => finRecarregar(null);
 
 /* --------------------------------------------------------------- init */
 
 function finLigarAcoes(moduleEl) {
     // Um ouvinte só, por delegação: cartões, linhas de pendência, botões e
     // links trazem `data-fin-acao`. O botão dentro da linha vence a linha.
+    const extraDe = alvo => {
+        if (!alvo.dataset.finFiltro) return {};
+        try { return { filtro: JSON.parse(alvo.dataset.finFiltro) }; } catch (_) { return {}; }
+    };
     const disparar = (evento) => {
         const alvo = evento.target.closest('[data-fin-acao]');
         if (!alvo || !moduleEl.contains(alvo)) return;
         evento.stopPropagation();
-        finExecutarAcao(alvo.dataset.finAcao, moduleEl);
+        finExecutarAcao(alvo.dataset.finAcao, moduleEl, extraDe(alvo));
     };
     moduleEl.addEventListener('click', disparar);
     moduleEl.addEventListener('keydown', (evento) => {
@@ -308,7 +415,7 @@ function finLigarAcoes(moduleEl) {
         const alvo = evento.target.closest('[data-fin-acao][role="button"]');
         if (!alvo) return;
         evento.preventDefault();
-        finExecutarAcao(alvo.dataset.finAcao, moduleEl);
+        finExecutarAcao(alvo.dataset.finAcao, moduleEl, extraDe(alvo));
     });
 }
 
@@ -317,21 +424,21 @@ function finIniciar(moduleEl) {
     moduleEl.dataset.iniciado = '1';
 
     const hoje = new Date();
+    moduleEl.dataset.hoje = finDiaDe(hoje);
     const select = moduleEl.querySelector('#finCompetencia');
     finMontarCompetencias(select, hoje);
+    // Trocar a competência (ou voltar para hoje) relê o painel fiscal.
+    select?.addEventListener('change', () => finRecarregar(moduleEl));
     moduleEl.querySelector('#finHoje')?.addEventListener('click', () => {
-        if (select) select.value = finCompetenciaAtual(hoje);
+        if (!select) return;
+        select.value = finCompetenciaAtual(hoje);
+        finRecarregar(moduleEl);
     });
 
     finLigarAcoes(moduleEl);
 
     // O menu espera esta promessa antes de tirar a máscara de carregamento.
-    moduleEl.moduleReadyPromise = finCarregarDados()
-        .then(dados => finRenderizar(moduleEl, dados))
-        .catch(erro => {
-            console.error('[financeiro] não foi possível montar a tela:', erro);
-            window.showToast?.('Não foi possível carregar o Financeiro agora.', 'error');
-        });
+    finRecarregar(moduleEl);
 }
 
 (function finBoot() {

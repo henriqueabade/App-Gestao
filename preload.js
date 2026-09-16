@@ -254,6 +254,8 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   getRuntimeConfig: () => getRuntimeConfigCached(),
   // 'DEV' ou 'PROD' — só para o selo do cabeçalho.
   getModoBanco: () => ipcRenderer.invoke('get-modo-banco'),
+  // Abre o seletor de arquivo do certificado fiscal; devolve só o caminho.
+  selecionarCertificadoFiscal: () => ipcRenderer.invoke('fiscal:selecionar-certificado'),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
   obterPerfil: () => ipcRenderer.invoke('perfil:obter'),
   enviarImagemPerfil: (file) => ipcRenderer.invoke('perfil:enviar-imagem', file),
@@ -488,6 +490,8 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   setDisplay: (id) => ipcRenderer.invoke('set-display', id),
   openPdf: (id, tipo) => ipcRenderer.invoke('open-pdf', { id, tipo }),
   salvarHtmlComoPdf: (payload) => ipcRenderer.invoke('salvar-html-como-pdf', payload),
+  salvarTextoComoArquivo: (payload) => ipcRenderer.invoke('salvar-texto-como-arquivo', payload),
+  gerarPdfDeHtml: (payload) => ipcRenderer.invoke('gerar-pdf-de-html', payload),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openExternalHtml: (html) => ipcRenderer.invoke('open-external-html', html),
   recordActivity: (info) => {
