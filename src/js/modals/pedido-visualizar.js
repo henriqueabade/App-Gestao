@@ -80,7 +80,7 @@
   // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
   // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
   // ------------------------------------------------------------------
-  function tagsDoEmbarque(pedido, notas, cartas = 0) {
+  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null) {
     const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
     const STATUS_NF = {
       autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
@@ -105,6 +105,13 @@
     }
     const totalCartas = Number(cartas) || 0;
     if (nota && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
+    // Boletos das parcelas (cobrança BB): quantas parcelas já têm boleto vivo, e quantos pagos.
+    const parcelas = Number(boletos?.parcelas) || 0;
+    const registrados = Number(boletos?.registrados) || 0;
+    if (parcelas > 0 && registrados > 0) {
+      const pagos = Number(boletos?.pagos) || 0;
+      tags.push({ classe: registrados === parcelas ? 'badge-success' : 'badge-warning', texto: `Boletos ${registrados}/${parcelas}${pagos ? ` · ${pagos} pago${pagos > 1 ? 's' : ''}` : ''}` });
+    }
     const modalidade = p.modalidade_frete;
     if (modalidade !== null && modalidade !== undefined && modalidade !== '' && ROTULO_FRETE[Number(modalidade)]) {
       tags.push({ classe: 'badge-neutral', texto: `Frete: ${ROTULO_FRETE[Number(modalidade)]}` });
@@ -116,6 +123,26 @@
     if (Number(p.peso_liquido) > 0) pesos.push(`${kg(p.peso_liquido)} líq.`);
     if (pesos.length) tags.push({ classe: 'badge-neutral', texto: `Peso: ${pesos.join(' · ')}` });
     return tags;
+  }
+
+  /** O resumo dos boletos para a tag, a partir do estado GET /api/cobranca/pedidos/:id/boletos. Pura. */
+  function resumoDeBoletos(estado) {
+    const linhas = Array.isArray(estado?.parcelas) ? estado.parcelas : [];
+    return {
+      parcelas: linhas.length,
+      registrados: linhas.filter(l => l?.tem_boleto_vivo).length,
+      pagos: linhas.filter(l => l?.boleto?.status === 'pago').length,
+      com_erro: linhas.filter(l => l?.boleto?.status === 'erro').length
+    };
+  }
+
+  /** Como cada boleto aparece na coluna das parcelas: classe da tag e texto. Pura. */
+  function rotuloDoBoleto(boleto) {
+    if (!boleto) return { classe: 'badge-neutral', texto: 'sem boleto' };
+    const ROTULO = { registrado: ['badge-success', 'registrado'], pago: ['badge-success', 'pago'], baixado: ['badge-neutral', 'baixado'], vencido: ['badge-warning', 'vencido'], protestado: ['badge-danger', 'protestado'], erro: ['badge-danger', 'erro'], reservado: ['badge-warning', 'reservado'] };
+    const [classe, rotulo] = ROTULO[boleto.status] || ['badge-neutral', String(boleto.status || '')];
+    const numero = boleto.nosso_numero ? `${boleto.nosso_numero}${boleto.nosso_numero_dv ? `-${boleto.nosso_numero_dv}` : ''}` : '';
+    return { classe, texto: `${rotulo}${numero ? ` · ${numero}` : ''}${boleto.ambiente === 'sandbox' ? ' · homologação' : ''}`, detalhe: boleto.status === 'erro' ? (boleto.erro || '') : (boleto.linha_digitavel || '') };
   }
 
   function pintarTags(tags) {
@@ -177,6 +204,53 @@
       ligar(overlay.querySelector('#visualizarPedidoCartaNfe'), cartaNfe);
       ligar(cancelarBtn, cancelarNfe);
     }
+  }
+
+  /**
+   * A coluna "BOLETO" na tabela de parcelas, montada por createElement sobre
+   * as linhas já desenhadas (uma por parcela, na ordem de `detalhes`).
+   */
+  function pintarColunaDeBoletos(caixa, detalhes, estado) {
+    if (!estado || !Array.isArray(estado.parcelas)) return;
+    const tabela = caixa.querySelector('table');
+    const cabecalho = tabela?.querySelector('thead tr');
+    const linhas = tabela ? Array.from(tabela.querySelectorAll('tbody tr')) : [];
+    if (!cabecalho || !linhas.length) return;
+    const th = document.createElement('th');
+    th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+    th.textContent = 'BOLETO';
+    cabecalho.appendChild(th);
+    const porParcela = new Map(estado.parcelas.map(l => [String(l?.parcela?.id), l]));
+    detalhes.forEach((p, i) => {
+      const tr = linhas[i];
+      if (!tr) return;
+      const td = document.createElement('td');
+      td.className = 'px-6 py-4 text-left text-sm';
+      const linha = porParcela.get(String(p.id)) || estado.parcelas.find(l => Number(l?.parcela?.numero_parcela) === Number(p.numero_parcela));
+      const r = rotuloDoBoleto(linha?.boleto || null);
+      const tag = document.createElement('span');
+      tag.className = `${r.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+      tag.textContent = r.texto;
+      if (r.detalhe) tag.title = r.detalhe;
+      td.appendChild(tag);
+      tr.appendChild(td);
+    });
+  }
+
+  /** "Gerar boletos" no rodapé: só quando há parcela sem boleto vivo e o pedido não está cancelado. */
+  function ligarGerarBoletos(estado, pedido) {
+    const botao = overlay.querySelector('#visualizarPedidoGerarBoletos');
+    if (!botao || !estado || !Array.isArray(estado.parcelas)) return;
+    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo);
+    if (!falta || String(pedido?.situacao || '').toLowerCase() === 'cancelado') return;
+    const abrir = () => {
+      window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
+      close();
+      Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos');
+    };
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
+    else botao.addEventListener('click', abrir);
   }
 
   const close = () => {
@@ -404,7 +478,13 @@
     } catch (_) { /* sem notas, sem tag */ }
     const notaDocs = notaParaDocumentos(notas);
     const cartas = notaDocs && window.NfeDocumentos?.listarCartasCorrecao ? await window.NfeDocumentos.listarCartasCorrecao(notaDocs.id) : [];
-    pintarTags(tagsDoEmbarque(data, notas, cartas.length));
+    // Boletos das parcelas (cobrança BB): sem permissão (403) ou sem a cobrança configurada, fica tudo como era.
+    let boletosEstado = null;
+    try {
+      const respBoletos = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos`);
+      if (respBoletos.ok) boletosEstado = await respBoletos.json();
+    } catch (_) { /* sem boletos, sem coluna */ }
+    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado)));
     ligarDocumentosDaNota(notaDocs, data);
 
     if (pagamentoBox) {
@@ -455,8 +535,10 @@
             </table>
           </div>`;
         pagamentoBox.classList.remove('hidden');
+        pintarColunaDeBoletos(pagamentoBox, detalhes, boletosEstado);
       }
     }
+    ligarGerarBoletos(boletosEstado, data);
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';
     const contatoNome = contatoSel?.selectedOptions?.[0]?.textContent?.trim() || data.contato || '';

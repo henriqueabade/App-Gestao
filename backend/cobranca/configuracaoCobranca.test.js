@@ -68,12 +68,29 @@ test('credenciais e sequencial por ambiente; pendências dizem o que falta para 
   assert.equal(cfgMod.proximoSequencial({}, 'producao'), 1);
 
   assert.deepEqual(cfgMod.pendencias(LINHA, 'sandbox', { secret: true }), []);
-  assert.deepEqual(cfgMod.pendencias(LINHA, 'sandbox'), ['Sem client_secret de sandbox guardado (banco ou este computador)']);
+  assert.deepEqual(cfgMod.pendencias(LINHA, 'sandbox'), ['Sem client_secret de homologação guardado (banco ou este computador)']);
   assert.deepEqual(cfgMod.pendencias(LINHA, 'producao', { secret: false }), [
     'Sem client_id de produção (Portal Developers BB)', 'Sem app key de produção (Portal Developers BB)', 'Sem client_secret de produção guardado (banco ou este computador)'
   ]);
-  assert.match(cfgMod.pendencias({ ...LINHA, convenio: '123', agencia: '' }, 'sandbox', { secret: true }).join(' | '), /Cobrança sem agência.*Convênio precisa ter 7 dígitos/);
+  // A conta real só pesa em produção; na homologação vale a de teste.
+  assert.match(cfgMod.pendencias({ ...LINHA, convenio: '123', agencia: '', client_id_producao: 'x', app_key_producao: 'y' }, 'producao', { secret: true }).join(' | '), /Cobrança sem agência.*Convênio precisa ter 7 dígitos/);
+  assert.deepEqual(cfgMod.pendencias({ ...LINHA, convenio: '123', agencia: '' }, 'sandbox', { secret: true }), [], 'a conta real incompleta não trava os testes');
+  assert.match(cfgMod.pendencias({ ...LINHA, homologacao_convenio: '99' }, 'sandbox', { secret: true }).join(' | '), /Convênio de teste \(homologação\) precisa ter 7 dígitos/);
   assert.match(cfgMod.pendencias(null)[0], /rode sql\/cobranca_base\.sql/);
+});
+
+test('conta por ambiente: produção usa a real; homologação usa a de teste do BB (ou a gravada nas colunas homologacao_*)', () => {
+  assert.deepEqual(cfgMod.dadosDaConta(LINHA, 'producao'), { convenio: '3453481', agencia: '1614', conta: '16773', carteira: 17, variacao: 19, teste: false });
+  assert.deepEqual(cfgMod.dadosDaConta(LINHA, 'sandbox'), { convenio: '3128557', agencia: '452', conta: '123873', carteira: 17, variacao: 35, teste: true });
+  assert.deepEqual(cfgMod.dadosDaConta({ ...LINHA, homologacao_convenio: '1234567', homologacao_agencia: '1', homologacao_conta: '2', homologacao_carteira: 18, homologacao_variacao: 1 }, 'sandbox'),
+    { convenio: '1234567', agencia: '1', conta: '2', carteira: 18, variacao: 1, teste: true });
+  assert.deepEqual(cfgMod.dadosDaConta({ ...LINHA, homologacao_convenio: '' }, 'sandbox').convenio, '3128557', 'vazio volta ao padrão');
+  assert.equal(cfgMod.ambienteEfetivo({ ambiente: 'producao' }, { BB_AMBIENTE: 'homologacao' }), 'sandbox', 'BB_AMBIENTE=homologacao também prende em testes');
+  assert.equal(cfgMod.nomeDoAmbiente('sandbox'), 'homologação');
+  assert.equal(cfgMod.nomeDoAmbiente('producao'), 'produção');
+  const { valores, erros } = cfgMod.validar({ homologacao_convenio: '3128557', homologacao_agencia: '', homologacao_carteira: '' });
+  assert.deepEqual(erros, []);
+  assert.deepEqual(valores, { homologacao_convenio: '3128557', homologacao_agencia: null, homologacao_carteira: null });
 });
 
 test('carregar lê a linha 1 (com cache curto) e gravar faz PUT com auditoria; sem a linha, avisa do SQL', async () => {

@@ -9,7 +9,11 @@
  *
  * AMBIENTE — duas travas, e a mais restritiva vence (como na NF-e):
  *   banco ..... o que o Sup Admin escolheu na tela (vale para todo mundo);
- *   .env ...... BB_AMBIENTE=sandbox prende ESTA máquina em sandbox.
+ *   .env ...... BB_AMBIENTE=sandbox prende ESTA máquina no ambiente de testes.
+ *
+ * O ambiente de testes é gravado como 'sandbox' (nome das colunas), mas é a
+ * HOMOLOGAÇÃO do BB (api.hm) — o sandbox do portal só serve ao portal — e usa
+ * a conta de teste da documentação (`dadosDaConta`), não a real.
  * O .env nunca liga a produção sozinho.
  */
 const SANDBOX = 'sandbox';
@@ -37,6 +41,12 @@ const CAMPOS = {
   client_id_producao: { tipo: 'texto', max: 200 },
   app_key_producao: { tipo: 'texto', max: 120 },
   proximo_sequencial_sandbox: { tipo: 'inteiro', min: 1, max: 9999999999 },
+  // Conta de teste da homologação (sql/cobranca_homologacao.sql); vazio = a da documentação do BB.
+  homologacao_convenio: { tipo: 'digitos', tamanho: 7, opcional: true },
+  homologacao_agencia: { tipo: 'digitos', min: 1, max: 5, opcional: true },
+  homologacao_conta: { tipo: 'digitos', min: 1, max: 12, opcional: true },
+  homologacao_carteira: { tipo: 'inteiro', min: 1, max: 99, opcional: true },
+  homologacao_variacao: { tipo: 'inteiro', min: 1, max: 999, opcional: true },
   proximo_sequencial_producao: { tipo: 'inteiro', min: 1, max: 9999999999 },
   especie: { tipo: 'opcao', opcoes: ['DM', 'DS', 'NP', 'RC', 'OU'] },
   aceite: { tipo: 'booleano' },
@@ -157,14 +167,45 @@ async function gravar(api, valores, usuarioId) {
 }
 
 /**
- * O ambiente que VALE nesta máquina: o do banco, rebaixado a sandbox quando
- * o .env desta máquina prende em sandbox. Sem configuração é sandbox.
+ * O ambiente que VALE nesta máquina: o do banco, rebaixado ao de testes
+ * quando o .env desta máquina prende em testes (BB_AMBIENTE=sandbox ou
+ * homologacao). Sem configuração é o de testes.
  */
 function ambienteEfetivo(cfg, env = process.env) {
   const doBanco = String(cfg?.ambiente || SANDBOX).trim().toLowerCase();
   const daMaquina = String(env.BB_AMBIENTE || '').trim().toLowerCase();
-  if (daMaquina === SANDBOX) return SANDBOX;
+  if (daMaquina === SANDBOX || daMaquina === 'homologacao') return SANDBOX;
   return doBanco === PRODUCAO ? PRODUCAO : SANDBOX;
+}
+
+/** Como o ambiente aparece nas mensagens. */
+function nomeDoAmbiente(ambiente) {
+  return ambiente === PRODUCAO ? 'produção' : 'homologação';
+}
+
+/**
+ * Conta e convênio de TESTE da homologação do BB (documentação da API
+ * Cobranças; o convênio e a carteira conferem com a listagem do portal).
+ * Na homologação o BB só aceita estes — a conta real dá 403.
+ */
+const CONTA_TESTE = { convenio: '3128557', agencia: '452', conta: '123873', carteira: 17, variacao: 35 };
+/**
+ * Pagador de teste da homologação (o do exemplo do portal: 86.761.393/0001-71).
+ * Um CNPJ real, mesmo válido, é recusado lá ("4500947 — O CNPJ informado
+ * para o pagador está inválido", 16/09/2026). BB_PAGADOR_TESTE no .env troca.
+ */
+const PAGADOR_TESTE_CNPJ = '86761393000171';
+
+/** Conta, convênio, carteira e variação que valem no ambiente: os reais em produção, os de teste na homologação. */
+function dadosDaConta(cfg, ambiente) {
+  if (ambiente === PRODUCAO) {
+    return { convenio: String(cfg?.convenio || ''), agencia: String(cfg?.agencia || ''), conta: String(cfg?.conta || ''), carteira: Number(cfg?.carteira) || null, variacao: Number(cfg?.variacao) || null, teste: false };
+  }
+  const v = (chave, padrao) => (cfg?.[`homologacao_${chave}`] === null || cfg?.[`homologacao_${chave}`] === undefined || cfg?.[`homologacao_${chave}`] === '' ? padrao : cfg[`homologacao_${chave}`]);
+  return {
+    convenio: String(v('convenio', CONTA_TESTE.convenio)), agencia: String(v('agencia', CONTA_TESTE.agencia)), conta: String(v('conta', CONTA_TESTE.conta)),
+    carteira: Number(v('carteira', CONTA_TESTE.carteira)), variacao: Number(v('variacao', CONTA_TESTE.variacao)), teste: true
+  };
 }
 
 /** client_id e app key do ambiente pedido (o secret vem de outro lugar). */
@@ -188,13 +229,17 @@ function pendencias(cfg, ambiente = SANDBOX, { secret = false } = {}) {
   if (!cfg) return ['Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).'];
   const faltas = [];
   const vazio = v => v === null || v === undefined || String(v).trim() === '';
-  for (const [chave, rotulo] of [['agencia', 'agência'], ['conta', 'conta'], ['convenio', 'convênio'], ['carteira', 'carteira'], ['variacao', 'variação'],
-    ['beneficiario_nome', 'nome do beneficiário'], ['beneficiario_cnpj', 'CNPJ do beneficiário']]) {
+  const conta = dadosDaConta(cfg, ambiente);
+  const sufixo = conta.teste ? ' de teste (homologação)' : '';
+  for (const [chave, rotulo] of [['agencia', 'agência'], ['conta', 'conta'], ['convenio', 'convênio'], ['carteira', 'carteira'], ['variacao', 'variação']]) {
+    if (vazio(conta[chave])) faltas.push(`Cobrança sem ${rotulo}${sufixo}`);
+  }
+  for (const [chave, rotulo] of [['beneficiario_nome', 'nome do beneficiário'], ['beneficiario_cnpj', 'CNPJ do beneficiário']]) {
     if (vazio(cfg[chave])) faltas.push(`Cobrança sem ${rotulo}`);
   }
-  if (String(cfg.convenio || '').replace(/\D/g, '').length !== 7) faltas.push('Convênio precisa ter 7 dígitos (nosso número de 17 posições)');
+  if (String(conta.convenio || '').replace(/\D/g, '').length !== 7) faltas.push(`Convênio${sufixo} precisa ter 7 dígitos (nosso número de 17 posições)`);
   const c = credenciais(cfg, ambiente);
-  const nome = c.ambiente === PRODUCAO ? 'produção' : 'sandbox';
+  const nome = nomeDoAmbiente(c.ambiente);
   if (!c.clientId) faltas.push(`Sem client_id de ${nome} (Portal Developers BB)`);
   if (!c.appKey) faltas.push(`Sem app key de ${nome} (Portal Developers BB)`);
   if (!secret) faltas.push(`Sem client_secret de ${nome} guardado (banco ou este computador)`);
@@ -202,6 +247,6 @@ function pendencias(cfg, ambiente = SANDBOX, { secret = false } = {}) {
 }
 
 module.exports = {
-  CAMPOS, VALIDADE_MS, SANDBOX, PRODUCAO, AMBIENTES,
-  carregar, validar, gravar, limparCache, ambienteEfetivo, credenciais, proximoSequencial, pendencias
+  CAMPOS, VALIDADE_MS, SANDBOX, PRODUCAO, AMBIENTES, CONTA_TESTE, PAGADOR_TESTE_CNPJ,
+  carregar, validar, gravar, limparCache, ambienteEfetivo, nomeDoAmbiente, dadosDaConta, credenciais, proximoSequencial, pendencias
 };

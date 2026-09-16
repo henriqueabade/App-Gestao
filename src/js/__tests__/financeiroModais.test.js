@@ -241,6 +241,7 @@ test('configuração de cobrança (boletos BB) é o modal REAL: lê e grava em /
     for (const chave of ['ambiente', 'agencia', 'agencia_dv', 'conta', 'conta_dv', 'convenio', 'carteira', 'variacao',
         'beneficiario_nome', 'beneficiario_cnpj', 'beneficiario_endereco', 'beneficiario_cep', 'beneficiario_cidade', 'beneficiario_uf',
         'client_id_sandbox', 'app_key_sandbox', 'client_id_producao', 'app_key_producao', 'proximo_sequencial_sandbox', 'proximo_sequencial_producao',
+        'homologacao_convenio', 'homologacao_carteira', 'homologacao_variacao', 'homologacao_agencia', 'homologacao_conta',
         'especie', 'aceite', 'juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'multa_dias', 'protesto_dias', 'negativacao_dias',
         'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto']) {
         assert.ok(html.includes(`data-fin-cob="${chave}"`), `campo ${chave} sem data-fin-cob`);

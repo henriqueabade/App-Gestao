@@ -2218,6 +2218,24 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_config_view",
         "label": "Ver configuração fiscal",
         "desc": "Emitente, numeração, certificado e teste da SEFAZ (alterar é só o Sup Admin)"
+      },
+      {
+        "key": "financeiro.boleto.view",
+        "column": "acao_boleto_view",
+        "label": "Ver boletos",
+        "desc": "Boletos das parcelas do pedido: situação, linha digitável e PDF"
+      },
+      {
+        "key": "financeiro.boleto.emit",
+        "column": "acao_boleto_emit",
+        "label": "Gerar boletos",
+        "desc": "Registrar boletos das parcelas no Banco do Brasil (junto da NF-e ou à mão)"
+      },
+      {
+        "key": "financeiro.boleto.baixa",
+        "column": "acao_boleto_baixa",
+        "label": "Baixar e alterar boletos",
+        "desc": "Baixar boleto registrado, prorrogar vencimento e conceder abatimento"
       }
     ],
     "columns": []

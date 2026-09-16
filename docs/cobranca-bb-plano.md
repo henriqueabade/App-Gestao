@@ -39,7 +39,7 @@ vencimento 1695 para 18/01/2027, juros R$ 9,98/dia.
 | Recurso | Uso |
 |---|---|
 | OAuth2 client_credentials (`client_id`/`client_secret` em Basic; escopos `cobrancas.boletos-info` e `cobrancas.boletos-requisicao`); `gw-dev-app-key` em toda chamada | `backend/cobranca/bbCliente.js` — token renovado sozinho, secret nunca sai do backend |
-| Sandbox `oauth.sandbox.bb.com.br` / `api.sandbox.bb.com.br/cobrancas/v2`; produção `oauth.bb.com.br` / `api.bb.com.br/cobrancas/v2` (o `.env` pode sobrepor) | ambiente por configuração, com trava `BB_AMBIENTE=sandbox` por máquina |
+| Testes: **homologação** `oauth.hm.bb.com.br` / `api.hm.bb.com.br/cobrancas/v2` (app key em `gw-dev-app-key`), com a **conta de teste do BB** (convênio 3128557, carteira 17/35, agência 452, conta 123873 — a conta real dá 403); o "sandbox" do portal só serve ao portal. Produção `oauth.bb.com.br` / `api.bb.com.br/cobrancas/v2` (app key em `gw-app-key`) com a conta real. O `.env` pode fixar endereços | ambiente de testes gravado como `sandbox` (nome das colunas), mostrado como "Homologação"; conta de teste em `homologacao_*` (`sql/cobranca_homologacao.sql`) | ambiente por configuração, com trava `BB_AMBIENTE=sandbox` por máquina |
 | `POST /boletos` (registro), `GET /boletos/{id}`, `GET /boletos` (situação A/B, exige agência e conta), `PATCH /boletos/{id}`, `POST /boletos/{id}/baixar`, Pix no boleto, `GET /boletos-baixa-operacional`, webhook BAIXA OPERACIONAL | fases B a F |
 
 Armadilhas já mapeadas: o sandbox não liquida boleto; a API não devolve PDF
@@ -60,11 +60,11 @@ emitidos no convênio; datas `dd.mm.aaaa`; listagens paginadas.
 | Fase | Entrega | Situação |
 |---|---|---|
 | **A** Acesso e configuração | SQL base; modal "Configuração de cobrança" (⚙ ao lado da fiscal); credenciais com secret no banco/cofre; **Testar conexão**; cliente do BB; contas do boleto conferidas com o real | **entregue em 16/09/2026** (aguardando o app no Portal Developers para o teste real) |
-| B Registrar boletos por parcela (sandbox) | payload por parcela/pedido/cliente, nosso número com trava UNIQUE, rota de registro, caixa "Gerar boleto" no modal da NF-e (marcada por padrão), modal "Gerar boletos" no pedido, tags por parcela | próxima |
-| C Boleto em PDF | ficha de compensação igual à do BB (ITF-25, QR Pix, instruções), "Baixar boleto" por parcela/todos — sem e-mail ao cliente | — |
+| **B** Registrar boletos por parcela (sandbox) | `sql/cobranca_boletos.sql` (`boletos`, `boletos_eventos`, permissões `financeiro.boleto.*`); `bbBoleto.js` (payload conferido com o boleto real), `boletos.js` (reserva do nosso número pelo UNIQUE + retry, registro, erro reaproveitável), rotas `GET/POST /api/cobranca/pedidos/:id/boletos`, `GET /api/cobranca/boletos`; caixa **"Gerar boleto das parcelas"** no modal da NF-e (marcada por padrão, gera após a autorização); coluna BOLETO nas parcelas, tag "Boletos n/n" e botão **"Gerar boletos"** no Visualizar pedido (modal próprio); **receptor do webhook** BAIXA OPERACIONAL na API pública (`Santissimo-db-API/webhooks/bbBaixaOperacional.js`, `POST /webhooks/bb/baixa-operacional/<token>`, grava a fila `boletos_eventos`) | **entregue em 16/09/2026** (aguardando credenciais sandbox para o registro real) |
+| C Boleto em PDF | ficha de compensação igual à do BB (ITF-25, QR Pix, instruções), "Baixar boleto" por parcela/todos — sem e-mail ao cliente | próxima |
 | D Alterações e baixa | prorrogar, abatimento, baixar (quitado por fora / cancelado / reemissão), sincronizar | — |
-| E Recebimentos e conciliação por consulta | parcela liquidada → recebimento → competência → CMS/Royalty; polling; Financeiro real | — |
-| F Webhook | receptor público BAIXA OPERACIONAL + fila; polling vira rede de segurança | — |
+| E Recebimentos e conciliação | consumir a fila do webhook + consulta: parcela liquidada → recebimento → competência → CMS/Royalty; Financeiro real | — |
+| F Webhook (conclusão) | cadastro da URL no portal, teste com "Testar webhook", polling como rede de segurança | receptor já no ar (fase B) |
 | G Financeiro completo | ajustes, fechamento de competência, comissões, produção, relatórios reais | — |
 | H Homologação e produção | credenciais reais, primeiro boleto de valor baixo, monitoramento | — |
 
@@ -74,5 +74,8 @@ emitidos no convênio; datas `dd.mm.aaaa`; listagens paginadas.
    Cobrança [V2]" e pegar as credenciais de **sandbox** (client ID, client
    secret, app key). O secret entra só pela tela de configuração.
 2. Confirmar o último nosso número usado no convênio depois do 393.
-3. Onde hospedar o webhook (Fase F) — HTTPS público.
+3. Webhook: decidido — roda na própria API (Santissimo-db-API). Falta gerar o
+   `BB_WEBHOOK_TOKEN` no `.env` da API, reiniciar e cadastrar a URL
+   `https://<host da API>/webhooks/bb/baixa-operacional/<token>` no Portal
+   Developers (evento BAIXA OPERACIONAL).
 4. Regras reais de CMS e Royalty e da competência (Fase E).

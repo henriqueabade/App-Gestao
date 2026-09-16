@@ -32,6 +32,17 @@
             </div>
           </div>
 
+          <!-- Boleto das parcelas (cobrança BB): só aparece para quem vê boletos e com a cobrança configurada. -->
+          <div id="emitirNfeBoletoBloco" class="hidden glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input id="emitirNfeGerarBoleto" type="checkbox" class="mt-1 w-4 h-4 rounded border-inputBorder bg-input" style="accent-color: var(--color-primary)" />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium text-white">Gerar boleto das parcelas no Banco do Brasil</span>
+                <span id="emitirNfeBoletoAviso" class="block text-xs text-gray-400 mt-1"></span>
+              </span>
+            </label>
+          </div>
+
           <!-- Conferência: o que vai na nota. -->
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="glass-surface rounded-xl px-4 py-3 border border-white/10 md:col-span-2">

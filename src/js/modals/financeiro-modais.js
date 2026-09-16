@@ -2135,7 +2135,7 @@
         : 'Só o Sup Admin altera a configuração. Você vê o que está valendo.';
 
       const producao = estado?.ambiente === 'producao';
-      marcarTag('finCobAmbienteTag', producao ? 'badge-danger' : 'badge-warning', producao ? 'PRODUÇÃO' : 'Sandbox (testes)', 'justify-self-end');
+      marcarTag('finCobAmbienteTag', producao ? 'badge-danger' : 'badge-warning', producao ? 'PRODUÇÃO' : 'Homologação (testes)', 'justify-self-end');
       el('finCobTravaMaquina')?.classList.toggle('hidden', !estado?.travado_em_sandbox_nesta_maquina);
       const teste = el('finCobTesteAmbiente');
       if (teste) teste.value = producao ? 'producao' : 'sandbox';
@@ -2146,7 +2146,7 @@
       const lista = estado?.credenciais?.[estado?.ambiente || 'sandbox']?.pendencias || [];
       if (pend) {
         pend.classList.toggle('hidden', !lista.length);
-        pend.querySelector('span').textContent = `${producao ? 'Produção' : 'Sandbox'}: ${lista.join(' • ')}`;
+        pend.querySelector('span').textContent = `${producao ? 'Produção' : 'Homologação'}: ${lista.join(' • ')}`;
       }
 
       pintarCredenciais(estado?.credenciais);
@@ -2193,7 +2193,8 @@
         const destino = destinoEscolhido();
         await fetchApi('/api/cobranca/credenciais', { method: 'POST', body: JSON.stringify({ ambiente, client_secret: secret, destino }) });
         el('finCobSecret').value = '';
-        window.showToast?.(destino === 'banco' ? `Client secret de ${ambiente} guardado no banco, para todas as máquinas.` : `Client secret de ${ambiente} guardado neste computador.`, 'success');
+        const nomeAmb = ambiente === 'producao' ? 'produção' : 'homologação';
+        window.showToast?.(destino === 'banco' ? `Client secret de ${nomeAmb} guardado no banco, para todas as máquinas.` : `Client secret de ${nomeAmb} guardado neste computador.`, 'success');
         await carregar();
       } catch (e) {
         mensagem(e.message);
@@ -2203,7 +2204,7 @@
     async function removerSecret() {
       const ambiente = el('finCobSecretAmbiente').value;
       const ok = await (window.DialogPadrao?.confirm?.({
-        title: `Remover o client secret de ${ambiente}?`,
+        title: `Remover o client secret de ${ambiente === 'producao' ? 'produção' : 'homologação'}?`,
         message: 'O secret sai do banco e deste computador. Os boletos desse ambiente param até guardá-lo de novo.',
         confirmText: 'Remover'
       }) ?? Promise.resolve(true));
@@ -2224,9 +2225,10 @@
       detalhe.classList.add('hidden');
       try {
         const r = await fetchApi('/api/cobranca/testar', { method: 'POST', body: JSON.stringify({ ambiente: el('finCobTesteAmbiente').value }) });
-        resultado.textContent = `Conectado ao BB (${r.ambiente === 'producao' ? 'produção' : 'sandbox'}).${r.observacao ? ` ${r.observacao}` : ''}`;
+        const contaTestada = r.conta ? ` · agência ${r.conta.agencia} / conta ${r.conta.conta}${r.conta.teste ? ' (conta de teste do BB)' : ''}` : '';
+        resultado.textContent = `Conectado ao BB (${r.ambiente === 'producao' ? 'produção' : 'homologação'})${contaTestada}.${r.observacao ? ` ${r.observacao}` : ''}`;
         resultado.style.color = 'var(--color-green)';
-        texto('finCobTesteAmbienteTestado', r.ambiente === 'producao' ? 'Produção' : 'Sandbox');
+        texto('finCobTesteAmbienteTestado', `${r.ambiente === 'producao' ? 'Produção' : 'Homologação'}${r.hosts?.oauth ? ` · ${new URL(r.hosts.oauth).host}` : ''}`);
         texto('finCobTesteEscopos', (r.escopos || []).join(', ') || '—');
         texto('finCobTesteBoletos', r.boletosAbertos === null || r.boletosAbertos === undefined ? '—' : String(r.boletosAbertos));
         texto('finCobTesteOrigem', r.origem_secret === 'banco' ? 'banco' : (r.origem_secret === 'env' ? '.env (DEV)' : 'este computador'));

@@ -34,15 +34,15 @@
           <!-- Ambiente -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-toggle-on" aria-hidden="true"></i>Ambiente</h3>
-            <p class="text-xs text-gray-400 mb-4">No sandbox do BB os boletos são de mentira: ninguém paga e nada entra na conta. Produção registra boletos reais no convênio.</p>
+            <p class="text-xs text-gray-400 mb-4">Os testes vão para a <strong>homologação</strong> do BB, com a conta de teste do banco: os boletos são de mentira, ninguém paga e nada entra na sua conta. Produção registra boletos reais no seu convênio.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label for="finCob_ambiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente (vale para todos)</label>
                 <select id="finCob_ambiente" data-fin-cob="ambiente" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
-                  <option value="sandbox">Sandbox (testes, boletos sem valor)</option>
+                  <option value="sandbox">Homologação (testes, boletos sem valor)</option>
                   <option value="producao">Produção (boletos reais)</option>
                 </select>
-                <p id="finCobTravaMaquina" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Esta máquina está presa em sandbox pelo .env (BB_AMBIENTE).</p>
+                <p id="finCobTravaMaquina" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Esta máquina está presa em homologação pelo .env (BB_AMBIENTE).</p>
               </div>
             </div>
             <div id="finCobConfirmacaoProducao" class="hidden mt-4 fin-aviso">
@@ -90,6 +90,34 @@
             </div>
           </div>
 
+          <!-- Conta de teste da homologação -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-flask" aria-hidden="true"></i>Conta de teste (homologação)</h3>
+            <p class="text-xs text-gray-400 mb-4">Na homologação o Banco do Brasil só aceita a conta e o convênio de teste da documentação da API Cobranças, não os seus. Vazio = os da documentação (convênio 3128557, carteira 17/35, agência 452, conta 123873). Em produção valem os dados reais acima.</p>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+              <div>
+                <label for="finCob_homologacao_convenio" class="block text-sm font-medium text-gray-300 mb-2">Convênio de teste</label>
+                <input id="finCob_homologacao_convenio" data-fin-cob="homologacao_convenio" type="text" inputmode="numeric" maxlength="7" placeholder="3128557" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_homologacao_carteira" class="block text-sm font-medium text-gray-300 mb-2">Carteira</label>
+                <input id="finCob_homologacao_carteira" data-fin-cob="homologacao_carteira" type="number" min="1" max="99" placeholder="17" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_homologacao_variacao" class="block text-sm font-medium text-gray-300 mb-2">Variação</label>
+                <input id="finCob_homologacao_variacao" data-fin-cob="homologacao_variacao" type="number" min="1" max="999" placeholder="35" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_homologacao_agencia" class="block text-sm font-medium text-gray-300 mb-2">Agência</label>
+                <input id="finCob_homologacao_agencia" data-fin-cob="homologacao_agencia" type="text" inputmode="numeric" maxlength="5" placeholder="452" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCob_homologacao_conta" class="block text-sm font-medium text-gray-300 mb-2">Conta</label>
+                <input id="finCob_homologacao_conta" data-fin-cob="homologacao_conta" type="text" inputmode="numeric" maxlength="12" placeholder="123873" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+
           <!-- Beneficiário -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-building" aria-hidden="true"></i>Beneficiário (como sai impresso no boleto)</h3>
@@ -129,7 +157,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="glass-surface rounded-xl border border-white/10 px-4 py-3 space-y-4">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-white">Sandbox</p>
+                  <p class="text-sm font-semibold text-white">Homologação (testes)</p>
                   <span id="finCobSecretTag_sandbox" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
                 </div>
                 <div>
@@ -163,7 +191,7 @@
                 <div>
                   <label for="finCobSecretAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Client secret de</label>
                   <select id="finCobSecretAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
-                    <option value="sandbox">Sandbox</option>
+                    <option value="sandbox">Homologação</option>
                     <option value="producao">Produção</option>
                   </select>
                 </div>
@@ -190,7 +218,7 @@
               <div>
                 <label for="finCobTesteAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
                 <select id="finCobTesteAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
-                  <option value="sandbox">Sandbox</option>
+                  <option value="sandbox">Homologação</option>
                   <option value="producao">Produção</option>
                 </select>
               </div>
@@ -212,7 +240,7 @@
             <p class="text-xs text-gray-400 mb-4">Convênio de 7 posições: "000" + convênio + sequencial de 10 dígitos. Em produção continue do último boleto emitido pelo Gerenciador Financeiro (o nº 393 saiu em 15/09/2026): um número repetido é recusado pelo banco.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label for="finCob_proximo_sequencial_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Sandbox: próximo sequencial</label>
+                <label for="finCob_proximo_sequencial_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Homologação: próximo sequencial</label>
                 <input id="finCob_proximo_sequencial_sandbox" data-fin-cob="proximo_sequencial_sandbox" type="number" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-2 text-xs text-gray-400">Próximo nosso número: <span id="finCobNossoNumeroSandbox" class="text-white">—</span></p>
               </div>

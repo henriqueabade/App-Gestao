@@ -9,6 +9,11 @@
  *   DELETE /credenciais      remove (?ambiente=&destino=banco|computador|ambos)
  *   POST   /testar           token + listagem de boletos no ambiente pedido
  *
+ * Fase B — boletos por parcela:
+ *   GET    /pedidos/:id/boletos   parcelas com o boleto de cada uma e o que impede gerar
+ *   POST   /pedidos/:id/boletos   registra no BB (parcelas: [ids] ou todas sem boleto)
+ *   GET    /boletos, /boletos/:id
+ *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
  * tela, é cifrado e só sai daqui para o OAuth do BB. Mesmo padrão do
  * certificado A1 e da senha do SMTP (fiscalController.js).
@@ -21,6 +26,8 @@ const segredoBanco = require('./fiscal/segredoBanco');
 const configuracao = require('./cobranca/configuracaoCobranca');
 const bbCliente = require('./cobranca/bbCliente');
 const calculo = require('./cobranca/boletoCalculo');
+const boletos = require('./cobranca/boletos');
+const bbBoleto = require('./cobranca/bbBoleto');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -35,15 +42,17 @@ function usuarioDaRequisicao(req) {
   }
 }
 
-function erro(mensagem, status = 400) {
+function erro(mensagem, status = 400, extra = null) {
   const e = new Error(mensagem);
   e.status = status;
+  if (extra) e.extra = extra;
   return e;
 }
 
 function responder(res, err, contexto) {
   const status = err?.status || 500;
   if (status >= 500) console.error(`Erro em ${contexto}:`, err);
+  // `extra` leva o que a tela precisa além da mensagem (pendências, o retorno do BB).
   res.status(status).json({ error: err?.message || 'Erro interno no módulo de cobrança', ...(err?.extra || {}) });
 }
 
@@ -98,7 +107,7 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
 
   function previaDoNossoNumero(cfg, ambiente) {
     try {
-      return calculo.nossoNumero(cfg?.convenio, configuracao.proximoSequencial(cfg, ambiente)).formatado;
+      return calculo.nossoNumero(configuracao.dadosDaConta(cfg, ambiente).convenio, configuracao.proximoSequencial(cfg, ambiente)).formatado;
     } catch (_) {
       return null;
     }
@@ -111,7 +120,9 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       configuracao: cfg,
       ambiente,
       ambiente_no_banco: cfg?.ambiente || configuracao.SANDBOX,
-      travado_em_sandbox_nesta_maquina: String(env.BB_AMBIENTE || '').toLowerCase() === configuracao.SANDBOX,
+      travado_em_sandbox_nesta_maquina: ['sandbox', 'homologacao'].includes(String(env.BB_AMBIENTE || '').toLowerCase()),
+      // A conta que cada ambiente usa: na homologação, a de teste do BB.
+      contas: cfg ? { sandbox: configuracao.dadosDaConta(cfg, configuracao.SANDBOX), producao: configuracao.dadosDaConta(cfg, configuracao.PRODUCAO) } : null,
       credenciais: await estadoDasCredenciais(api, cfg),
       nosso_numero: {
         sandbox: previaDoNossoNumero(cfg, configuracao.SANDBOX),
@@ -198,7 +209,8 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
 
   /**
    * Token + listagem de boletos: prova credenciais, app key e conta. POST
-   * porque sai para fora. Sandbox é sempre permitido; produção só quando vale.
+   * porque sai para fora. Homologação (com a conta de teste) é sempre
+   * permitida; produção só quando vale.
    */
   router.post('/testar', exigirPermissao('financeiro.config.view'), async (req, res) => {
     try {
@@ -212,10 +224,93 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       const f = await fonteDoSecret(api, ambiente);
       const faltas = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
       if (faltas.length) throw erro(`Antes de testar: ${faltas.join('; ')}.`, 409);
-      const r = await cliente.testarConexao({ ambiente, clientId: c.clientId, clientSecret: f.secret, appKey: c.appKey, agencia: cfg.agencia, conta: cfg.conta });
-      res.json({ ...r, origem_secret: f.origem });
+      const conta = configuracao.dadosDaConta(cfg, ambiente);
+      const r = await cliente.testarConexao({ ambiente, clientId: c.clientId, clientSecret: f.secret, appKey: c.appKey, agencia: conta.agencia, conta: conta.conta });
+      res.json({ ...r, origem_secret: f.origem, conta: { agencia: conta.agencia, conta: conta.conta, convenio: conta.convenio, teste: conta.teste } });
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/testar');
+    }
+  });
+
+  // ----------------------------------------------------------- boletos
+
+  /** 'YYYY-MM-DD' de hoje em Brasília (a data de emissão do boleto). */
+  function hojeEmBrasilia(agora = new Date()) {
+    const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(agora);
+    const v = tipo => partes.find(p => p.type === tipo)?.value;
+    return `${v('year')}-${v('month')}-${v('day')}`;
+  }
+
+  /** O que a tela do pedido precisa: parcelas com o boleto de cada uma, o que impede gerar e o padrão da caixa "Gerar boleto". */
+  async function estadoDoPedido(api, pedidoId) {
+    const dados = await boletos.lerPedidoCobranca(api, pedidoId);
+    const cfg = dados.configuracao;
+    const ambiente = configuracao.ambienteEfetivo(cfg, env);
+    const f = cfg ? await fonteDoSecret(api, ambiente) : { secret: null };
+    const pendencias = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
+    const pagador = dados.cliente ? bbBoleto.pagadorDoCliente(dados.cliente) : null;
+    const pendenciasPagador = pagador ? bbBoleto.pendenciasDoPagador(pagador) : ['Pedido sem cliente.'];
+    if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
+    const linhas = boletos.parcelasComBoletos(dados);
+    return {
+      pedido: { id: dados.pedido.id, numero: dados.pedido.numero, situacao: dados.pedido.situacao, cliente: dados.cliente ? (dados.cliente.nome_fantasia || dados.cliente.razao_social || dados.cliente.nome || null) : null },
+      ambiente,
+      nota_fiscal: dados.notaViva ? { id: dados.notaViva.id, serie: dados.notaViva.serie, numero: dados.notaViva.numero } : null,
+      parcelas: linhas,
+      pendencias: [...pendencias, ...pendenciasPagador],
+      pode_gerar: !pendencias.length && !pendenciasPagador.length && linhas.some(l => !l.tem_boleto_vivo) && String(dados.pedido.situacao || '').toLowerCase() !== 'cancelado',
+      gerar_ao_emitir_nfe: cfg ? cfg.gerar_ao_emitir_nfe !== false : false,
+      resumo: boletos.resumo(dados.boletos)
+    };
+  }
+
+  router.get('/pedidos/:id/boletos', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      res.json(await estadoDoPedido(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/pedidos/:id/boletos');
+    }
+  });
+
+  /**
+   * Registra no BB os boletos das parcelas pedidas (`parcelas: [ids]`; vazio =
+   * todas as que ainda não têm boleto vivo). Devolve o resultado parcela a
+   * parcela: uma recusa do BB não impede as outras.
+   */
+  router.post('/pedidos/:id/boletos', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      if (!cfg) throw erro('Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).', 409);
+      const ambiente = configuracao.ambienteEfetivo(cfg, env);
+      const c = configuracao.credenciais(cfg, ambiente);
+      const f = await fonteDoSecret(api, ambiente);
+      const faltas = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
+      if (faltas.length) throw erro(`A cobrança não está pronta: ${faltas.join('; ')}.`, 409, { pendencias: faltas });
+      const parcelaIds = Array.isArray(req.body?.parcelas) ? req.body.parcelas : [];
+      res.json(await boletos.registrar({
+        api, pedidoId: req.params.id, parcelaIds, notaFiscalId: req.body?.nota_fiscal_id ?? null,
+        bb: cliente, credenciais: { clientId: c.clientId, clientSecret: f.secret }, appKey: c.appKey,
+        ambiente, cfg, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia()
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos');
+    }
+  });
+
+  router.get('/boletos', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      res.json(await boletos.listar(createApiClient(req), { pedido_id: req.query?.pedido_id }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/boletos');
+    }
+  });
+
+  router.get('/boletos/:id', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      res.json(boletos.enxuto(await boletos.ler(createApiClient(req), req.params.id)));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/boletos/:id');
     }
   });
 

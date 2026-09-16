@@ -51,6 +51,9 @@ function criarUpstream(tabelas) {
         return responder(200, lista.filter(l => filtros.every(([c, v]) => String(l[c]) === String(v))));
       }
       if (req.method === 'POST') {
+        if (tabela === 'boletos' && lista.some(l => l.ambiente === dados.ambiente && l.nosso_numero === dados.nosso_numero)) {
+          return responder(500, { error: 'duplicate key value violates unique constraint "boletos_nosso_numero_unico"' });
+        }
         const linha = { id: lista.reduce((m, l) => Math.max(m, Number(l.id) || 0), 0) + 1, ...dados };
         lista.push(linha);
         return responder(201, linha);
@@ -84,8 +87,32 @@ function bbFalso(chamadas) {
       if (secret !== 'ok') return responder(401, { error: 'invalid_client', error_description: 'Invalid client credentials' });
       return responder(200, { access_token: 'tok', token_type: 'Bearer', expires_in: 600, scope: 'cobrancas.boletos-info cobrancas.boletos-requisicao' });
     }
-    if (url.includes('/boletos?')) return responder(404, { erros: [{ codigo: '4874916', mensagem: 'Nenhum boleto encontrado' }] });
+    if (url.includes('/boletos?') && opcoes.method !== 'POST') return responder(404, { erros: [{ codigo: '4874916', mensagem: 'Nenhum boleto encontrado' }] });
+    if (url.includes('/boletos?') && opcoes.method === 'POST') {
+      const corpo = JSON.parse(opcoes.body);
+      if (corpo.valorOriginal === 999) return responder(422, { erros: [{ codigo: '4874990', versao: '1', mensagem: 'Valor inválido', ocorrencia: 'x' }] });
+      return responder(201, {
+        numero: corpo.numeroTituloCliente, linhaDigitavel: '00190000090345348100800000393173116950000332700', codigoBarraNumerico: '00191169500003327000000003453481000000039317',
+        qrCode: { url: 'https://qrcodepix.bb.com.br/x', txId: `tx-${corpo.numeroTituloCliente}`, emv: '000201...' }
+      });
+    }
     return responder(500, { erros: [{ mensagem: 'inesperado' }] });
+  };
+}
+
+/** Um pedido enviado com três parcelas (vencimentos no futuro) e o cliente completo para ser pagador. */
+function tabelasDoPedido() {
+  const venc = meses => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() + meses); return d.toISOString().slice(0, 10); };
+  return {
+    pedidos: [{ id: 55, numero: '2548', situacao: 'Enviado', cliente_id: 7, valor_final: 3000 }],
+    pedido_parcelas: [
+      { id: 1, pedido_id: 55, numero_parcela: 1, valor: 1000, data_vencimento: venc(1) },
+      { id: 2, pedido_id: 55, numero_parcela: 2, valor: 1000, data_vencimento: venc(2) },
+      { id: 3, pedido_id: 55, numero_parcela: 3, valor: 1000, data_vencimento: venc(3) }
+    ],
+    clientes: [{ id: 7, tipo_pessoa: 'PJ', razao_social: 'Cliente Bom LTDA', nome_fantasia: 'Cliente Bom', cnpj: '11222333000181', reg_logradouro: 'Rua Diamante', reg_numero: '504', reg_bairro: 'São Joaquim', reg_cidade: 'Contagem', reg_uf: 'Minas Gerais', reg_cep: '32113000' }],
+    notas_fiscais: [{ id: 10, pedido_id: 55, serie: 1, numero: 5, status_fiscal: 'autorizada' }],
+    boletos: [], boletos_eventos: []
   };
 }
 
@@ -149,10 +176,14 @@ test('ver a configuração exige financeiro.config.view; a resposta traz conta, 
     assert.equal(corpo.pode_editar, false);
     assert.equal(corpo.credenciais.sandbox.client_id, 'cid-sb');
     assert.equal(corpo.credenciais.sandbox.secret_guardado, false);
-    assert.deepEqual(corpo.credenciais.sandbox.pendencias, ['Sem client_secret de sandbox guardado (banco ou este computador)']);
+    assert.deepEqual(corpo.credenciais.sandbox.pendencias, ['Sem client_secret de homologação guardado (banco ou este computador)']);
     assert.equal(corpo.nosso_numero.producao, '00034534810000000394-X'.replace('-X', `-${require('./cobranca/boletoCalculo').dvNossoNumero('00034534810000000394')}`));
-    assert.equal(corpo.nosso_numero.sandbox, '00034534810000000001-' + require('./cobranca/boletoCalculo').dvNossoNumero('00034534810000000001'));
-    assert.equal(corpo.urls.sandbox.api, 'https://api.sandbox.bb.com.br/cobrancas/v2');
+    assert.equal(corpo.nosso_numero.sandbox, '00031285570000000001-' + require('./cobranca/boletoCalculo').dvNossoNumero('00031285570000000001'), 'homologação numera no convênio de teste');
+    assert.equal(corpo.contas.sandbox.convenio, '3128557');
+    assert.equal(corpo.contas.sandbox.teste, true);
+    assert.equal(corpo.contas.producao.convenio, '3453481');
+    assert.equal(corpo.contas.producao.teste, false);
+    assert.equal(corpo.urls.sandbox.api, 'https://api.hm.bb.com.br/cobrancas/v2');
     assert.equal(corpo.banco_chave_mestra, false);
     assert.ok(!JSON.stringify(corpo).toLowerCase().includes('secret_"') && !JSON.stringify(corpo).includes('"secret"'), 'nenhum secret na resposta');
   } finally {
@@ -214,8 +245,10 @@ test('credenciais: o secret vai para o cofre (ou para o banco cifrado), nunca vo
     assert.equal(teste.corpo.ambiente, 'sandbox');
     assert.equal(teste.corpo.boletosAbertos, 0);
     assert.equal(teste.corpo.origem_secret, 'computador');
-    assert.match(t.chamadasBB[0].url, /oauth\.sandbox\.bb\.com\.br/);
-    assert.match(t.chamadasBB[1].url, /api\.sandbox\.bb\.com\.br\/cobrancas\/v2\/boletos\?gw-dev-app-key=key-sb&indicadorSituacao=A&agenciaBeneficiario=1614&contaBeneficiario=16773/);
+    // O ambiente de testes é a homologação do BB, com a conta de teste da documentação (não a real 1614/16773).
+    assert.match(t.chamadasBB[0].url, /^https:\/\/oauth\.hm\.bb\.com\.br\/oauth\/token$/);
+    assert.match(t.chamadasBB[1].url, /^https:\/\/api\.hm\.bb\.com\.br\/cobrancas\/v2\/boletos\?gw-dev-app-key=key-sb&indicadorSituacao=A&agenciaBeneficiario=452&contaBeneficiario=123873$/);
+    assert.deepEqual(teste.corpo.conta, { agencia: '452', conta: '123873', convenio: '3128557', teste: true });
 
     // Produção não vale (banco em sandbox): o teste cai em sandbox mesmo pedindo produção.
     assert.equal((await t.chamar('POST', '/api/cobranca/testar', { ambiente: 'producao' })).corpo.ambiente, 'sandbox');
@@ -229,7 +262,7 @@ test('credenciais: o secret vai para o cofre (ou para o banco cifrado), nunca vo
     assert.equal((await t.chamar('DELETE', '/api/cobranca/credenciais?ambiente=sandbox')).corpo.secret_guardado, false);
     const semSecret = await t.chamar('POST', '/api/cobranca/testar', {});
     assert.equal(semSecret.status, 409);
-    assert.match(semSecret.corpo.error, /Antes de testar: Sem client_secret de sandbox/);
+    assert.match(semSecret.corpo.error, /Antes de testar: Sem client_secret de homologação/);
   } finally {
     await t.fechar();
   }
@@ -277,6 +310,105 @@ test('sem a tabela (SQL não rodou): GET avisa nas pendências e testar responde
     assert.equal(estado.corpo.configuracao, null);
     assert.match(estado.corpo.credenciais.sandbox.pendencias[0], /sql\/cobranca_base\.sql/);
     assert.equal((await t.chamar('POST', '/api/cobranca/testar', {})).status, 409);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('boletos do pedido: ver exige financeiro.boleto.view; o estado diz o que impede; gerar registra no BB parcela a parcela e não duplica', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    assert.equal((await t.chamar('GET', '/api/cobranca/pedidos/55/boletos')).status, 403);
+    t.estado.chaves.add('financeiro.boleto.view');
+    const antes = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
+    assert.equal(antes.corpo.pedido.numero, '2548');
+    assert.equal(antes.corpo.pedido.cliente, 'Cliente Bom');
+    assert.equal(antes.corpo.ambiente, 'sandbox');
+    assert.deepEqual(antes.corpo.nota_fiscal, { id: 10, serie: 1, numero: 5 });
+    assert.equal(antes.corpo.parcelas.length, 3);
+    assert.ok(antes.corpo.parcelas.every(l => l.boleto === null && l.tem_boleto_vivo === false));
+    assert.deepEqual(antes.corpo.pendencias, []);
+    assert.equal(antes.corpo.pode_gerar, true);
+    assert.equal(antes.corpo.gerar_ao_emitir_nfe, true);
+    assert.equal((await t.chamar('GET', '/api/cobranca/pedidos/999/boletos')).status, 404);
+
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', {})).status, 403);
+    t.estado.chaves.add('financeiro.boleto.emit');
+    const gerado = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', { parcelas: [1, 2] });
+    assert.equal(gerado.status, 200, JSON.stringify(gerado.corpo));
+    assert.equal(gerado.corpo.registrados, 2);
+    assert.equal(gerado.corpo.erros, 0);
+    assert.deepEqual(gerado.corpo.resultados.map(r => r.boleto.nosso_numero), ['00031285570000000001', '00031285570000000002']);
+    assert.equal(gerado.corpo.resultados[0].boleto.linha_digitavel, '00190.00009 03453.481008 00000.393173 1 16950000332700');
+    assert.equal(gerado.corpo.resultados[0].boleto.tem_pix, true);
+    assert.ok(!('pix_emv' in gerado.corpo.resultados[0].boleto) && !('requisicao' in gerado.corpo.resultados[0].boleto), 'a resposta não carrega os payloads');
+    assert.equal(tabelas.boletos.length, 2);
+    assert.equal(tabelas.boletos[0].status, 'registrado');
+    assert.equal(tabelas.boletos[0].nota_fiscal_id, 10);
+    assert.equal(tabelas.boletos[0].criado_por, 1, 'usuário do JWT');
+    assert.equal(tabelas.boletos[0].requisicao.pagador.numeroInscricao, 86761393000171, 'homologação: pagador de teste do BB');
+    assert.equal(tabelas.boletos[0].pagador.documento, '11222333000181', 'o documento real do cliente fica gravado');
+    assert.equal(tabelas.boletos[0].requisicao.jurosMora.valor, 3, '9% ÷ 30 sobre R$ 1.000,00');
+    assert.equal(tabelas.configuracao_cobranca[0].proximo_sequencial_sandbox, 3);
+    assert.deepEqual(tabelas.boletos_eventos.map(e => e.tipo), ['reservado', 'registrado', 'reservado', 'registrado']);
+    const registro = t.chamadasBB.find(c => c.opcoes.method === 'POST' && c.url.includes('/cobrancas/v2/boletos?gw-dev-app-key=key-sb'));
+    assert.ok(registro, 'o registro foi para o sandbox com a app key');
+
+    // O resto (parcela 3) sem lista = todas as que faltam; as duas primeiras não duplicam.
+    const resto = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', {});
+    assert.equal(resto.corpo.registrados, 1);
+    assert.equal(resto.corpo.resultados.filter(r => r.ja_existia).length, 2);
+    assert.equal(tabelas.boletos.length, 3);
+
+    const depois = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.ok(depois.corpo.parcelas.every(l => l.tem_boleto_vivo));
+    assert.equal(depois.corpo.pode_gerar, false, 'nada mais a gerar');
+    assert.deepEqual(depois.corpo.resumo, { total: 3, registrados: 3, pagos: 0, com_erro: 0, valor_registrado: 3000 });
+
+    const lista = await t.chamar('GET', '/api/cobranca/boletos?pedido_id=55');
+    assert.equal(lista.corpo.length, 3);
+    const um = await t.chamar('GET', `/api/cobranca/boletos/${tabelas.boletos[0].id}`);
+    assert.equal(um.corpo.nosso_numero, '00031285570000000001');
+    assert.equal((await t.chamar('GET', '/api/cobranca/boletos/999')).status, 404);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('sem o secret a cobrança não está pronta (409 com as pendências); recusa do BB fica "erro" na parcela sem derrubar as outras', async () => {
+  const semSecret = await montar({ tabelas: tabelasDoPedido() });
+  try {
+    semSecret.estado.chaves.add('financeiro.boleto.view');
+    semSecret.estado.chaves.add('financeiro.boleto.emit');
+    const estado = await semSecret.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.equal(estado.corpo.pode_gerar, false);
+    assert.deepEqual(estado.corpo.pendencias, ['Sem client_secret de homologação guardado (banco ou este computador)']);
+    const r = await semSecret.chamar('POST', '/api/cobranca/pedidos/55/boletos', {});
+    assert.equal(r.status, 409);
+    assert.match(r.corpo.error, /A cobrança não está pronta: Sem client_secret/);
+    assert.deepEqual(r.corpo.pendencias, ['Sem client_secret de homologação guardado (banco ou este computador)']);
+  } finally {
+    await semSecret.fechar();
+  }
+
+  const tabelas = tabelasDoPedido();
+  tabelas.pedido_parcelas[1].valor = 999;
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    t.estado.chaves.add('financeiro.boleto.view');
+    t.estado.chaves.add('financeiro.boleto.emit');
+    const r = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', {});
+    assert.equal(r.status, 200);
+    assert.equal(r.corpo.registrados, 2);
+    assert.equal(r.corpo.erros, 1);
+    assert.match(r.corpo.resultados[1].erro, /4874990 — Valor inválido/);
+    assert.equal(tabelas.boletos.find(b => b.numero_parcela === 2).status, 'erro');
+    const estado = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.equal(estado.corpo.parcelas[1].tem_boleto_vivo, false);
+    assert.equal(estado.corpo.parcelas[1].boleto.status, 'erro');
+    assert.equal(estado.corpo.pode_gerar, true, 'a parcela com erro ainda pode ser gerada');
   } finally {
     await t.fechar();
   }
