@@ -16,9 +16,11 @@
   <!--
     Só o .modulo-container é importado pelo menu (src/js/menu.js). Os números
     e listas são preenchidos por src/js/financeiro.js a partir de um único
-    objeto de dados: nesta etapa são dados de EXEMPLO, e trocar a fonte pelo
-    backend não mexe no HTML. Cada botão/cartão traz `data-fin-acao`; quem
-    ainda não tem função real abre o aviso "em implementação".
+    objeto de dados. A parte fiscal (Aguardando NF-e, pendências, atividade
+    recente, Emitir NF-e, Notas fiscais) vem do backend — GET /api/fiscal/painel
+    da competência escolhida; comissões e produção ainda são dados de EXEMPLO,
+    e cada botão/cartão traz `data-fin-acao`: quem ainda não tem função real
+    abre o aviso "em implementação".
   -->
   <div class="modulo-container financeiro-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
@@ -44,10 +46,11 @@
 
     <!-- Primeira faixa: indicadores principais -->
     <div class="fin-kpis animate-fade-in-up">
-      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="aguardando-nf" role="button" tabindex="0" aria-label="Aguardando NF — abrir pedidos sem nota fiscal">
+      <!-- Real: pedidos enviados sem NF-e desde o 1º dia da competência (GET /api/fiscal/painel). -->
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="aguardando-nf" role="button" tabindex="0" aria-label="Aguardando NF-e — abrir pedidos enviados sem nota fiscal">
         <div class="fin-kpi__topo">
           <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-file-invoice" aria-hidden="true"></i></span>
-          <span class="fin-kpi__rotulo">Aguardando NF</span>
+          <span class="fin-kpi__rotulo">Aguardando NF-e</span>
           <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
         </div>
         <div class="fin-kpi__linha">
@@ -106,6 +109,7 @@
             <h2>Pendências que exigem ação</h2>
             <span class="fin-badge fin-badge--contagem" data-fin="pendencias.total">0</span>
           </div>
+          <!-- A lista mostra as primeiras; "Ver todas" abre o resto no lugar. -->
           <button type="button" class="fin-link" data-fin-acao="pendencias-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
         <ul class="fin-pendencias" data-fin-lista="pendencias"></ul>
@@ -116,8 +120,12 @@
           <div class="fin-painel__titulo"><h2>Ações rápidas</h2></div>
         </header>
         <div class="fin-acoes">
-          <button type="button" class="fin-acao" data-fin-acao="registrar-nf">
-            <i class="fas fa-file-invoice" aria-hidden="true"></i><span>Registrar NF</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          <!-- NF-e é emitida na SEFAZ pelo próprio sistema: daqui saem os pedidos que ainda não têm nota. -->
+          <button type="button" class="fin-acao" data-perm="financeiro.nfe.emit" data-fin-acao="emitir-nfe">
+            <i class="fas fa-file-invoice" aria-hidden="true"></i><span>Emitir NF-e</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-perm="financeiro.nfe.view" data-fin-acao="notas-fiscais">
+            <i class="fas fa-file-alt" aria-hidden="true"></i><span>Notas fiscais</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="fin-acao" data-fin-acao="registrar-recebimento">
             <i class="fas fa-money-bill-wave" aria-hidden="true"></i><span>Registrar recebimento</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
@@ -181,6 +189,7 @@
         </footer>
       </section>
 
+      <!-- Real: os últimos movimentos na SEFAZ (autorizações, cancelamentos, recusas, cartas). -->
       <section class="fin-painel glass-surface rounded-xl">
         <header class="fin-painel__cabeca">
           <div class="fin-painel__titulo"><h2>Atividade recente</h2></div>

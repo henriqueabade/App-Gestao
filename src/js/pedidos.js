@@ -94,19 +94,33 @@ function indexarNotas(notas) {
 }
 
 /**
+ * Tag amarela "CC-e" na frente da DANFE quando a nota tem carta de correção
+ * registrada: o clique gera o PDF da ÚLTIMA carta (cada carta substitui as
+ * anteriores, então é ela que vale). Pura; '' sem carta.
+ */
+function tagCartaCorrecao(nota) {
+    const total = Number(nota?.cartas_correcao) || 0;
+    const seq = Number(nota?.ultima_carta_seq) || total;
+    if (!nota || total <= 0) return '';
+    const titulo = `${total === 1 ? '1 carta de correção registrada' : `${total} cartas de correção registradas`} na NF-e série ${nota.serie} nº ${nota.numero} — clique para gerar o PDF da última (nº ${seq})`;
+    return ` <span class="badge-warning tag-cce ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" data-carta-seq="${seq}" role="button" title="${titulo}" aria-label="${titulo}">CC-e</span>`;
+}
+
+/**
  * Tag ao lado do número do pedido, pela nota que ele tem: verde "DANFE"
  * (autorizada — o clique gera o PDF), vermelha "X/NF" (cancelada) ou a roxa
- * "S/NF" (enviado sem nota). Pura; '' quando não há o que mostrar.
+ * "S/NF" (enviado sem nota). Com carta de correção, a amarela "CC-e" vem
+ * antes. Pura; '' quando não há o que mostrar.
  */
 function tagNota(p, nota) {
     if (nota && nota.status_fiscal === 'autorizada') {
         const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para gerar o DANFE`;
-        return ` <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
+        return `${tagCartaCorrecao(nota)} <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
     }
     if (nota && nota.status_fiscal === 'cancelada') {
         const quando = formatarDiaDate(nota.cancelada_em);
         const titulo = `NF-e série ${nota.serie} nº ${nota.numero} cancelada${quando ? ` em ${quando}` : ''}`;
-        return ` <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
+        return `${tagCartaCorrecao(nota)} <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
     }
     return tagSemNota(p);
 }
@@ -449,6 +463,11 @@ async function carregarPedidos() {
             tr.querySelector('.tag-danfe')?.addEventListener('click', e => {
                 e.stopPropagation();
                 window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId));
+            });
+            // A amarela "CC-e" gera o PDF da última carta de correção.
+            tr.querySelector('.tag-cce')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarCartaCorrecaoPdf(Number(e.currentTarget.dataset.notaId), Number(e.currentTarget.dataset.cartaSeq));
             });
             const checkIcon = tr.querySelector('.fa-check');
             const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };

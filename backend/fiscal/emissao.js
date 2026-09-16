@@ -81,10 +81,36 @@ async function lerNota(api, notaId) {
   return nota;
 }
 
+/**
+ * Cartas de correção registradas por nota, a partir dos eventos 'cce' (uma
+ * leitura só para a lista inteira): quantas há e a sequência da última — a
+ * que vale, porque cada carta substitui as anteriores. Pura.
+ */
+function cartasPorNota(eventos) {
+  const porNota = {};
+  for (const e of Array.isArray(eventos) ? eventos : []) {
+    if (!e || e.tipo !== 'cce' || !['135', '136'].includes(String(e.codigo_sefaz))) continue;
+    let det = e.detalhe;
+    if (typeof det === 'string') { try { det = JSON.parse(det || '{}'); } catch (_) { det = {}; } }
+    const seq = Number(det?.nSeqEvento) || 1;
+    const chave = String(e.nota_fiscal_id);
+    const atual = porNota[chave] || { cartas_correcao: 0, ultima_carta_seq: 0 };
+    porNota[chave] = { cartas_correcao: atual.cartas_correcao + 1, ultima_carta_seq: Math.max(atual.ultima_carta_seq, seq) };
+  }
+  return porNota;
+}
+
+/** As notas sem XML, com a contagem de cartas de correção (`cartas_correcao`, `ultima_carta_seq`). */
 async function listarNotas(api, { pedido_id } = {}) {
   const query = pedido_id ? { pedido_id: Number(pedido_id) } : {};
-  const notas = await api.get('/api/notas_fiscais', { query }).then(lista).catch(() => []);
-  return notas.map(semXml).sort((a, b) => Number(b.id) - Number(a.id));
+  const [notas, eventosCce] = await Promise.all([
+    api.get('/api/notas_fiscais', { query }).then(lista).catch(() => []),
+    api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => [])
+  ]);
+  const cartas = cartasPorNota(eventosCce);
+  return notas.map(semXml)
+    .map(n => ({ ...n, ...(cartas[String(n.id)] || { cartas_correcao: 0, ultima_carta_seq: null }) }))
+    .sort((a, b) => Number(b.id) - Number(a.id));
 }
 
 // -------------------------------------------------------------- gravação
@@ -449,6 +475,6 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
 
 module.exports = {
   STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO,
-  semXml, lerPedidoFiscal, lerNota, listarNotas, ehNumeroDuplicado, reservarNumero, notaReutilizavel,
+  semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel,
   camposTransporteDoPedido, emitir, sincronizar
 };

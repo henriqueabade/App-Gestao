@@ -25,7 +25,7 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const trecho = FONTE.slice(inicio, fim);
   const contexto = vm.createContext({});
-  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro })`, contexto);
+  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado })`, contexto);
 }
 
 test('mais de um volume: uma linha por volume, guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
@@ -65,8 +65,8 @@ test('mais de um volume: uma linha por volume, guardando o que já foi digitado;
 
 test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/NF roxa; a nota que conta por pedido', () => {
   const contexto = vm.createContext({});
-  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota'), recortarFuncao(PEDIDOS, 'indexarNotas'), recortarFuncao(PEDIDOS, 'tagNota')].join('\n'), contexto);
-  const { indexarNotas, tagNota } = contexto;
+  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota'), recortarFuncao(PEDIDOS, 'indexarNotas'), recortarFuncao(PEDIDOS, 'tagCartaCorrecao'), recortarFuncao(PEDIDOS, 'tagNota')].join('\n'), contexto);
+  const { indexarNotas, tagNota, tagCartaCorrecao } = contexto;
   const idx = plano(indexarNotas([
     { id: 1, pedido_id: 55, status_fiscal: 'rejeitada' }, { id: 2, pedido_id: 55, status_fiscal: 'autorizada', numero: 2 },
     { id: 3, pedido_id: 56, status_fiscal: 'cancelada', numero: 3 }, { id: 4, pedido_id: 56, status_fiscal: 'rejeitada' },
@@ -92,6 +92,19 @@ test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/N
   assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>'));
   assert.ok(PEDIDOS.includes("fetchApi('/api/fiscal/notas').catch(() => null)"), 'as notas entram junto com os pedidos');
   assert.ok(PEDIDOS.includes("tr.querySelector('.tag-danfe')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId))'));
+
+  // Carta de correção: tag amarela "CC-e" NA FRENTE da DANFE; o clique gera o PDF da última carta.
+  const comCarta = tagNota({}, { id: 2, serie: 1, numero: 2, status_fiscal: 'autorizada', ambiente: 'producao', cartas_correcao: 2, ultima_carta_seq: 2 });
+  assert.ok(comCarta.indexOf('tag-cce') < comCarta.indexOf('tag-danfe'), 'CC-e antes da DANFE');
+  assert.match(comCarta, /badge-warning tag-cce[^>]*data-nota-id="2" data-carta-seq="2"/);
+  assert.match(comCarta, /title="2 cartas de correção registradas na NF-e série 1 nº 2 — clique para gerar o PDF da última \(nº 2\)"/);
+  assert.match(comCarta, />CC-e<\/span>/);
+  assert.match(tagCartaCorrecao({ id: 3, serie: 1, numero: 3, cartas_correcao: 1, ultima_carta_seq: 1 }), /title="1 carta de correção registrada na NF-e série 1 nº 3 — clique para gerar o PDF da última \(nº 1\)"/);
+  assert.strictEqual(tagCartaCorrecao({ id: 3, cartas_correcao: 0 }), '');
+  assert.strictEqual(tagCartaCorrecao(null), '');
+  assert.doesNotMatch(danfe, /tag-cce/, 'sem carta, sem tag');
+  assert.match(tagNota({}, { id: 4, serie: 1, numero: 4, status_fiscal: 'cancelada', cartas_correcao: 1, ultima_carta_seq: 1 }), /tag-cce[\s\S]*X\/NF/, 'a nota cancelada mantém a carta que teve');
+  assert.ok(PEDIDOS.includes("tr.querySelector('.tag-cce')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.gerarCartaCorrecaoPdf(Number(e.currentTarget.dataset.notaId), Number(e.currentTarget.dataset.cartaSeq))'));
 });
 const plano = v => JSON.parse(JSON.stringify(v));
 
@@ -153,6 +166,14 @@ test('acaoPrincipal, classificarPendencias, rotuloAmbiente e mensagemDeErro', ()
   assert.strictEqual(f.acaoPrincipal({ pronto: false, notaViva: null }).bloqueada, true);
   assert.deepStrictEqual(plano(f.acaoPrincipal({ pronto: true, notaViva: { status_fiscal: 'autorizada' } })), { acao: 'marcar', rotulo: 'Marcar como Enviado', consultar: false });
   assert.deepStrictEqual(plano(f.acaoPrincipal({ pronto: true, notaViva: { status_fiscal: 'processando' } })), { acao: 'aguardar', rotulo: 'Aguardando a SEFAZ', consultar: true });
+  // Pedido que já saiu (aberto pelo Financeiro): emite sem mudar a situação; autorizada encerra.
+  assert.deepStrictEqual(plano(f.acaoPrincipal({ pronto: true, notaViva: null, jaEnviado: true })), { acao: 'emitir', rotulo: 'Emitir NF-e', consultar: false, bloqueada: false });
+  assert.deepStrictEqual(plano(f.acaoPrincipal({ pronto: true, notaViva: { status_fiscal: 'autorizada' }, jaEnviado: true })), { acao: 'concluido', rotulo: 'NF-e autorizada', consultar: false });
+  assert.strictEqual(f.acaoPrincipal({ pronto: true, notaViva: { status_fiscal: 'processando' }, jaEnviado: true }).acao, 'aguardar');
+  assert.strictEqual(f.pedidoJaEnviado('Enviado'), true);
+  assert.strictEqual(f.pedidoJaEnviado('entregue'), true);
+  assert.strictEqual(f.pedidoJaEnviado('Produção'), false);
+  assert.strictEqual(f.pedidoJaEnviado(null), false);
 
   const c = f.classificarPendencias([{ chave: 'a' }, { chave: 'b', automatico: true }]);
   assert.deepStrictEqual(plano(c.bloqueiam), [{ chave: 'a' }]);
@@ -192,7 +213,10 @@ test('script: carrega a prontidão, emite antes de mudar a situação, solta os 
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/prontidao'));
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/emitir'));
   assert.ok(FONTE.includes("body: JSON.stringify({ status: 'Enviado' })"));
-  assert.ok(FONTE.indexOf('async function emitir()') < FONTE.indexOf('if (corpo?.autorizada) return marcarEnviado(corpo.nota);'), 'só marca enviado com a nota autorizada');
+  assert.ok(FONTE.indexOf('async function emitir()') < FONTE.indexOf('if (corpo?.autorizada) return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);'), 'só marca enviado com a nota autorizada; pedido que já saiu só conclui');
+  assert.ok(FONTE.includes('jaEnviado: pedidoJaEnviado(corpo.resumo?.situacao)'), 'a situação vem da prontidão');
+  assert.ok(FONTE.includes('semNfeBtn.classList.toggle(\'hidden\', Boolean(viva) || estado.jaEnviado)'), 'pedido que já saiu não tem "enviar sem NF-e"');
+  assert.ok(FONTE.includes("window.dispatchEvent(new CustomEvent('nfe:emitida'"), 'quem abriu (Financeiro) fica sabendo');
   assert.ok(FONTE.includes('/api/fiscal/notas/${encodeURIComponent(viva.id)}/sincronizar'));
   assert.ok(FONTE.includes("window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }))"));
   assert.ok(FONTE.includes("document.removeEventListener('keydown', aoEsc)") && FONTE.includes("window.removeEventListener('modalFechado', aoFecharModal)"));

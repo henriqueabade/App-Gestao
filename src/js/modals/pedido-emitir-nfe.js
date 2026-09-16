@@ -18,6 +18,10 @@
  * pede confirmação e muda a situação sem nota. Quem já tem nota autorizada
  * (a situação falhou numa tentativa anterior) só marca como enviado.
  *
+ * O Financeiro abre o mesmo modal para um pedido que JÁ saiu (Enviado ou
+ * Entregue, "aguardando NF-e"): aí a nota é emitida sem mudar a situação,
+ * não há "enviar sem NF-e" e a nota autorizada encerra (`pedidoJaEnviado`).
+ *
  * Contexto: `window.emitirNfeContext = { pedidoId, numero, cliente }`.
  */
 (async () => {
@@ -149,14 +153,25 @@
       : { texto: 'Homologação (teste, sem valor fiscal)', classe: 'badge-warning' };
   }
 
+  /** Pedido que já saiu (Enviado/Entregue): a nota é emitida depois, sem mexer na situação. */
+  function pedidoJaEnviado(situacao) {
+    return ['enviado', 'entregue'].includes(String(situacao || '').trim().toLowerCase());
+  }
+
   /**
    * Qual é a ação principal: emitir, só marcar como enviado (nota já
-   * autorizada) ou esperar (nota a caminho, que se consulta).
+   * autorizada) ou esperar (nota a caminho, que se consulta). Para um pedido
+   * que já saiu (aberto pelo Financeiro, "aguardando NF-e"), emitir não muda
+   * a situação e a nota autorizada encerra o assunto.
    */
-  function acaoPrincipal({ pronto, notaViva } = {}) {
-    if (notaViva?.status_fiscal === 'autorizada') return { acao: 'marcar', rotulo: 'Marcar como Enviado', consultar: false };
+  function acaoPrincipal({ pronto, notaViva, jaEnviado = false } = {}) {
+    if (notaViva?.status_fiscal === 'autorizada') {
+      return jaEnviado
+        ? { acao: 'concluido', rotulo: 'NF-e autorizada', consultar: false }
+        : { acao: 'marcar', rotulo: 'Marcar como Enviado', consultar: false };
+    }
     if (notaViva) return { acao: 'aguardar', rotulo: 'Aguardando a SEFAZ', consultar: true };
-    return { acao: 'emitir', rotulo: 'Emitir NF-e e enviar', consultar: false, bloqueada: !pronto };
+    return { acao: 'emitir', rotulo: jaEnviado ? 'Emitir NF-e' : 'Emitir NF-e e enviar', consultar: false, bloqueada: !pronto };
   }
 
   /** O que dizer quando a emissão ou a troca de situação é recusada. */
@@ -208,7 +223,7 @@
     tPag: el('emitirNfePagamento'), informacoes_complementares: el('emitirNfeInformacoes')
   };
 
-  let estado = { pronto: false, pendencias: [], resumo: null, ambiente: 'homologacao', notas: [] };
+  let estado = { pronto: false, pendencias: [], resumo: null, ambiente: 'homologacao', notas: [], jaEnviado: false };
   let emAndamento = false;
   let fechado = false;
 
@@ -312,20 +327,37 @@
 
   function pintarBotoes() {
     const viva = notaQueVale(estado.notas);
-    const acao = acaoPrincipal({ pronto: estado.pronto, notaViva: viva });
+    const acao = acaoPrincipal({ pronto: estado.pronto, notaViva: viva, jaEnviado: estado.jaEnviado });
     confirmarBtn.replaceChildren();
     const icone = document.createElement('i');
-    icone.className = `fas ${acao.acao === 'marcar' ? 'fa-check' : 'fa-paper-plane'} mr-2`;
+    icone.className = `fas ${['marcar', 'concluido'].includes(acao.acao) ? 'fa-check' : 'fa-paper-plane'} mr-2`;
     icone.setAttribute('aria-hidden', 'true');
     confirmarBtn.append(icone, document.createTextNode(acao.rotulo));
-    confirmarBtn.disabled = acao.acao === 'aguardar' || Boolean(acao.bloqueada);
+    confirmarBtn.disabled = ['aguardar', 'concluido'].includes(acao.acao) || Boolean(acao.bloqueada);
     confirmarBtn.dataset.acao = acao.acao;
     // Com nota viva os campos de transporte já foram usados: some o que não se aplica.
     overlay.querySelectorAll('[data-emitir-nfe-campos]').forEach(sec => sec.classList.toggle('hidden', Boolean(viva)));
-    semNfeBtn.classList.toggle('hidden', Boolean(viva));
-    rodapeAviso.textContent = acao.acao === 'emitir'
-      ? (estado.ambiente === 'producao' ? 'A nota sai com valor fiscal. Confira antes de emitir.' : 'Ambiente de homologação: a nota não tem valor fiscal.')
-      : (acao.acao === 'marcar' ? 'A nota já foi autorizada; falta só mudar a situação do pedido.' : 'Consulte a SEFAZ para saber se a nota foi autorizada.');
+    // Pedido que já saiu não tem "enviar sem NF-e": ele já foi.
+    semNfeBtn.classList.toggle('hidden', Boolean(viva) || estado.jaEnviado);
+    const avisos = {
+      emitir: estado.jaEnviado
+        ? `O pedido já está ${String(estado.resumo?.situacao || 'enviado').toLowerCase()}: a nota sai sem mudar a situação.${estado.ambiente === 'producao' ? ' Ela tem valor fiscal.' : ' Homologação: sem valor fiscal.'}`
+        : (estado.ambiente === 'producao' ? 'A nota sai com valor fiscal. Confira antes de emitir.' : 'Ambiente de homologação: a nota não tem valor fiscal.'),
+      marcar: 'A nota já foi autorizada; falta só mudar a situação do pedido.',
+      concluido: 'A nota deste pedido já está autorizada. Nada mais a fazer aqui.',
+      aguardar: 'Consulte a SEFAZ para saber se a nota foi autorizada.'
+    };
+    rodapeAviso.textContent = avisos[acao.acao] || '';
+  }
+
+  /** Título do modal: "Emitir NF-e e enviar" no embarque; só "Emitir NF-e" para pedido que já saiu. */
+  function pintarTitulo() {
+    const titulo = el('emitirNfeTitulo');
+    if (!titulo) return;
+    const icone = document.createElement('i');
+    icone.className = 'fas fa-file-invoice mr-2';
+    icone.setAttribute('aria-hidden', 'true');
+    titulo.replaceChildren(icone, document.createTextNode(estado.jaEnviado ? 'Emitir NF-e' : 'Emitir NF-e e enviar'));
   }
 
   function pintar() {
@@ -341,6 +373,7 @@
     el('emitirNfeParcelas').textContent = r.parcelas ? `${r.parcelas} · somam ${formatarMoeda(r.somaParcelas)}` : 'nenhuma';
     pintarItens(r.itens);
     pintarPendencias(estado.pendencias);
+    pintarTitulo();
     pintarNota();
     pintarBotoes();
   }
@@ -492,11 +525,22 @@
     }
     if (corpo?.nota) estado.notas = [corpo.nota, ...estado.notas.filter(n => Number(n.id) !== Number(corpo.nota.id))];
     (corpo?.avisos || []).forEach(a => window.showToast?.(a, 'info'));
-    if (corpo?.autorizada) return marcarEnviado(corpo.nota);
+    // Só com a nota autorizada a situação muda (embarque); pedido que já saiu só conclui.
+    if (corpo?.autorizada) return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);
     pintarNota();
     pintarBotoes();
-    exibirMensagem('info', `A SEFAZ ainda está processando a nota (${corpo?.sefaz?.cStat || ''} ${corpo?.sefaz?.xMotivo || ''}). Clique em "Consultar na SEFAZ" em instantes; o pedido continua em produção até a autorização.`);
+    exibirMensagem('info', `A SEFAZ ainda está processando a nota (${corpo?.sefaz?.cStat || ''} ${corpo?.sefaz?.xMotivo || ''}). Clique em "Consultar na SEFAZ" em instantes${estado.jaEnviado ? '.' : '; o pedido continua em produção até a autorização.'}`);
     return false;
+  }
+
+  /** Nota autorizada para um pedido que já saiu: avisa, recarrega quem estiver ouvindo e fecha. */
+  function concluirEmissao(nota) {
+    window.showToast?.(`NF-e nº ${nota?.numero ?? '?'} autorizada para o pedido ${ctx.numero}.`, 'success');
+    window.dispatchEvent(new CustomEvent('nfe:emitida', { detail: { pedidoId, nota: nota || null } }));
+    // A lista de pedidos só existe na tela de Pedidos; aberto pelo Financeiro, não há o que reler aqui.
+    if (document.getElementById('pedidosTabela')) window.carregarPedidos?.();
+    fechar();
+    return true;
   }
 
   async function consultar() {
@@ -514,7 +558,7 @@
     pintarNota();
     pintarBotoes();
     if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
-    if (corpo?.autorizada) exibirMensagem('ok', 'NF-e autorizada. Agora é só marcar o pedido como enviado.');
+    if (corpo?.autorizada) exibirMensagem('ok', estado.jaEnviado ? 'NF-e autorizada.' : 'NF-e autorizada. Agora é só marcar o pedido como enviado.');
     else if (corpo?.naoConsta) exibirMensagem('info', 'A SEFAZ não recebeu a nota. Pode emitir de novo: o número será reaproveitado.');
     else exibirMensagem('info', `SEFAZ ${corpo?.sefaz?.cStat || ''}: ${corpo?.sefaz?.xMotivo || 'ainda em processamento.'}`);
   }
@@ -566,7 +610,8 @@
     if (!resp.ok) throw new Error(mensagemDeErro(resp.status, corpo));
     estado = {
       pronto: Boolean(corpo.pronto), pendencias: corpo.pendencias || [], resumo: corpo.resumo || null,
-      ambiente: corpo.ambiente === 'producao' ? 'producao' : 'homologacao', notas: Array.isArray(corpo.notas) ? corpo.notas : []
+      ambiente: corpo.ambiente === 'producao' ? 'producao' : 'homologacao', notas: Array.isArray(corpo.notas) ? corpo.notas : [],
+      jaEnviado: pedidoJaEnviado(corpo.resumo?.situacao)
     };
     preencherCampos();
     renderizarVolumes();

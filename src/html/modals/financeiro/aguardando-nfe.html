@@ -1,0 +1,88 @@
+<!--
+  Pedidos aguardando NF-e (Financeiro). Modal extra grande, REAL: a lista vem
+  de GET /api/fiscal/painel — pedidos enviados/entregues sem nota viva a
+  partir do 1º dia da competência escolhida. "Emitir NF-e" abre o mesmo modal
+  de emissão dos Pedidos por cima deste (a nota sai sem mudar a situação);
+  "Sem NF-e" marca o pedido como enviado sem nota (tag roxa S/NF). O número
+  do pedido abre o Visualizar pedido. Script: src/js/modals/financeiro-modais.js.
+-->
+<div id="finAguardandoNfeOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finAguardNfeTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finAguardNfeTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Pedidos aguardando NF-e</h2>
+        <p class="text-xs text-gray-300 truncate">Enviados sem nota fiscal a partir da competência escolhida</p>
+      </div>
+      <span id="finAguardNfeAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="fin-indicadores">
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Pedidos sem NF-e</span>
+            <strong class="fin-indicador__valor" id="finAguardNfeQuantidade">—</strong>
+          </div>
+          <div class="fin-indicador fin-indicador--destaque">
+            <span class="fin-indicador__rotulo">Valor a faturar</span>
+            <strong class="fin-indicador__valor" id="finAguardNfeTotal">—</strong>
+          </div>
+          <div class="fin-indicador">
+            <span class="fin-indicador__rotulo">Enviados desde</span>
+            <strong class="fin-indicador__valor" id="finAguardNfeDesde">—</strong>
+          </div>
+        </div>
+
+        <div class="fin-filtros fin-filtros--4">
+          <div>
+            <label for="finAguardNfeCompetencia" class="block text-sm font-medium text-gray-300 mb-2">A partir da competência</label>
+            <select id="finAguardNfeCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div class="md:col-span-2">
+            <label for="finAguardNfeBusca" class="block text-sm font-medium text-gray-300 mb-2">Pedido ou cliente</label>
+            <input id="finAguardNfeBusca" type="text" placeholder="Número do pedido ou nome do cliente" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div class="flex items-end">
+            <label class="flex items-center gap-3 text-sm text-gray-300 pb-3 cursor-pointer">
+              <input id="finAguardNfeIncluirDispensados" type="checkbox" class="w-4 h-4 rounded border-inputBorder bg-input" />
+              <span>Mostrar os enviados sem NF-e (S/NF)</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="finAguardNfeCarregando" class="text-sm text-gray-400">Lendo os pedidos…</div>
+        <div id="finAguardNfeMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Pedido</th>
+                <th class="px-4 py-3 text-left text-xs">Cliente</th>
+                <th class="px-4 py-3 text-left text-xs">Enviado em</th>
+                <th class="px-4 py-3 text-right text-xs">Dias sem NF-e</th>
+                <th class="px-4 py-3 text-left text-xs">Condição</th>
+                <th class="px-4 py-3 text-right text-xs">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Última nota</th>
+                <th class="px-4 py-3 text-left text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="finAguardNfeCorpo" class="divide-y divide-white/10"></tbody>
+          </table>
+        </div>
+        <div id="finAguardNfeVazio" class="hidden py-8 text-center">
+          <p class="text-white font-medium">Nenhum pedido aguardando NF-e.</p>
+          <p class="text-sm text-gray-400 mt-1">Todo pedido enviado desde a competência escolhida já tem nota fiscal.</p>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button type="button" data-fin-abrir="visualizar-relatorio" data-fin-relatorio="aguardando-nf" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Ver relatório</button>
+    </footer>
+  </div>
+</div>

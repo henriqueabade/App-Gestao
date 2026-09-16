@@ -20,7 +20,8 @@ const SCRIPT = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'financeiro-modai
 const MODULO = fs.readFileSync(path.join(RAIZ, 'js', 'financeiro.js'), 'utf8');
 const PASTA_HTML = path.join(RAIZ, 'html', 'modals', 'financeiro');
 const MODAIS = {
-    'registrar-nf': 'finRegistrarNf',
+    'aguardando-nfe': 'finAguardandoNfe',
+    'notas-fiscais': 'finNotasFiscais',
     'registrar-recebimento': 'finRegistrarRecebimento',
     'registrar-ajuste': 'finRegistrarAjuste',
     'registrar-producao': 'finRegistrarProducao',
@@ -34,8 +35,8 @@ const MODAIS = {
     'producao-competencia': 'finProducaoCompetencia',
     'configuracao-fiscal': 'finConfiguracaoFiscal'
 };
-/* Os seis de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
-const DE_ACAO = ['registrar-nf', 'registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
+/* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
+const DE_ACAO = ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
 
 /** Carrega o script sem overlay no DOM: só as funções puras ficam expostas. */
 function puro() {
@@ -141,21 +142,26 @@ test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o H
         assert.ok(fs.existsSync(path.join(PASTA_HTML, `${chave}.html`)));
         assert.match(SCRIPT, new RegExp(`\\b${overlay}: montar`), `${overlay} sem montador no script`);
     }
-    for (const chave of ['registrar-nf', 'registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios']) {
+    for (const chave of ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios']) {
         assert.match(MODULO, new RegExp(`'${chave}': \\{ rotulo: '[^']+', abrir: m => finAbrirModal\\('${chave}', m\\) \\}`));
     }
+    // Os fiscais recebem o `extra` da linha clicada (o filtro de uma pendência).
+    assert.match(MODULO, /'emitir-nfe': \{ rotulo: 'Emitir NF-e', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
+    assert.match(MODULO, /'aguardando-nf': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
+    assert.match(MODULO, /'notas-fiscais': \{ rotulo: 'Notas fiscais', abrir: \(m, extra\) => finAbrirModal\('notas-fiscais', m, extra\) \}/);
+    assert.match(MODULO, /'atividade-todas': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('notas-fiscais', m\) \}/);
+    assert.ok(!MODULO.includes("'registrar-nf'"), 'não existe mais "Registrar NF" à mão');
     assert.match(MODULO, /window\.Modal\.open\(modal\.html, FIN_SCRIPT_MODAIS, modal\.overlay, extra\.empilhar === true\)/);
     assert.match(MODULO, /window\.FinanceiroAbrirModal = finAbrirModal/);
     // Os cartões e os rodapés "Próximo pagamento" abrem modais de consulta.
     assert.match(MODULO, /'comissoes-atrasadas': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('comissoes-atrasadas', m\) \}/);
     assert.match(MODULO, /'producao-competencia': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('producao-competencia', m\) \}/);
-    assert.match(MODULO, /'aguardando-nf': \{[^}]*relatorio: 'aguardando-nf'/);
     assert.match(MODULO, /'confirmar-pagamento-producao': \{[^}]*tipo: 'producao'/);
 });
 
 test('modais empilhados: o Esc só fecha o de cima, e as linhas/botões abrem outro modal por cima', () => {
     assert.match(SCRIPT, /ehOModalDeCima/);
-    assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| !ehOModalDeCima\(\)\) return;/);
+    assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| filhoAberto \|\| !ehOModalDeCima\(\)\) return;/);
     assert.match(SCRIPT, /window\.FinanceiroAbrirModal\(chave, null, \{ \.\.\.extra, empilhar: true/);
     assert.match(SCRIPT, /\{ abrir: 'detalhes-parcela' \}/, 'linha de comissão atrasada abre Detalhes da parcela');
     assert.match(SCRIPT, /botao\.dataset\.finAbrir = 'detalhes-pedido'/, 'número do pedido abre Detalhes do pedido');
@@ -189,14 +195,19 @@ test('todo relatório da central tem folha: colunas, linhas e totais fecham com 
     const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
     assert.strictEqual(chavesDaCentral.length, 9);
     for (const chave of chavesDaCentral) {
-        const r = plano(f.montarRelatorio(chave));
+        // "Pedidos aguardando NF-e" é real: as linhas vêm do painel fiscal.
+        const r = plano(f.montarRelatorio(chave, chave === 'aguardando-nf' ? { linhas: f.linhasDoRelatorioAguardando(PAINEL) } : {}));
         assert.ok(r && r.linhas.length > 0, `relatório "${chave}" sem folha ou sem linhas`);
         assert.ok(r.colunas.length >= 4, `relatório "${chave}" com poucas colunas`);
     }
     assert.strictEqual(plano(f.montarRelatorio('comissoes-apuradas')).totais.comissao, 18450);
     assert.strictEqual(plano(f.montarRelatorio('previsao-comissoes')).totais.comissao, 32500);
-    assert.strictEqual(plano(f.montarRelatorio('aguardando-nf')).totais.valor, 124680);
-    assert.strictEqual(plano(f.montarRelatorio('aguardando-nf')).linhas.length, 8);
+    const aguardando = plano(f.montarRelatorio('aguardando-nf', { linhas: f.linhasDoRelatorioAguardando(PAINEL) }));
+    assert.strictEqual(aguardando.totais.valor, 1900, 'o dispensado (S/NF) não entra no relatório');
+    assert.strictEqual(aguardando.linhas.length, 2);
+    assert.deepStrictEqual(aguardando.linhas[0], { pedido: '2540', pedido_id: 1, cliente: 'Casa Vicenzo', entrega: '2026-09-10', condicao: '3x · Boleto', dias: 6, valor: 1500 });
+    assert.strictEqual(aguardando.colunas[0].tipo, 'pedido-real', 'o número abre o Visualizar pedido de verdade');
+    assert.deepStrictEqual(plano(f.montarRelatorio('aguardando-nf')).linhas, [], 'sem painel, sem linhas de exemplo');
     assert.strictEqual(plano(f.montarRelatorio('producao-competencia')).totais.total, 9870);
     assert.strictEqual(plano(f.montarRelatorio('producao-por-pedido')).totais.pecas, 327);
     assert.strictEqual(f.montarRelatorio('inexistente'), null);
@@ -230,4 +241,99 @@ test('o script dos modais não monta dado por innerHTML e solta os ouvintes glob
     assert.match(SCRIPT, /window\.removeEventListener\('modalFechado', aoFecharPorFora\)/);
     assert.match(SCRIPT, /if \(processando\) return;/, 'fechamento em andamento não fecha por Esc/Cancelar');
     assert.match(SCRIPT, /window\.BotaoAcao\?\.run\) window\.BotaoAcao\.run\(botao, executar\)/, 'trava de clique duplo');
+});
+
+/* O painel fiscal como o backend devolve (backend/fiscal/painel.js). */
+const PAINEL = {
+    competencia: '2026-09', desde: '2026-09-01', ambiente: 'homologacao',
+    aguardando_nf: {
+        quantidade: 2, total: 1900, dispensados: 1,
+        pedidos: [
+            { pedido_id: 1, numero: '2540', cliente_id: 7, cliente: 'Casa Vicenzo', situacao: 'Enviado', enviado_em: '2026-09-10', dias_sem_nfe: 6, valor: 1500, parcelas: 3, forma_pagamento: 'Boleto', dispensada: false, ultima_nota: null },
+            { pedido_id: 4, numero: '2543', cliente_id: 9, cliente: null, situacao: 'Enviado', enviado_em: '2026-09-11', dias_sem_nfe: 5, valor: 250, parcelas: 1, forma_pagamento: null, dispensada: true, ultima_nota: null },
+            { pedido_id: 6, numero: '2544', cliente_id: 8, cliente: 'Marcenaria Serrana', situacao: 'Enviado', enviado_em: '2026-09-15', dias_sem_nfe: 1, valor: 400, parcelas: null, forma_pagamento: 'Pix', dispensada: false, ultima_nota: { id: 11, serie: 1, numero: 2, status_fiscal: 'rejeitada', motivo_sefaz: 'NCM inexistente' } }
+        ]
+    },
+    pendencias: [], atividade: []
+};
+
+test('NF-e (puras): situação da nota, filtros da lista, indicadores, condição do pedido e linhas de "aguardando"', () => {
+    const f = puro();
+    assert.deepStrictEqual(plano(f.rotuloStatusNota('autorizada')), { rotulo: 'Autorizada', badge: 'badge-success', grupo: 'autorizada' });
+    assert.strictEqual(f.rotuloStatusNota('enviando').grupo, 'processando');
+    assert.strictEqual(f.rotuloStatusNota('erro_tecnico').grupo, 'rejeitada');
+    assert.strictEqual(f.rotuloStatusNota('cancelada').badge, 'badge-danger');
+    assert.deepStrictEqual(plano(f.rotuloStatusNota('coisa')), { rotulo: 'coisa', badge: 'badge-neutral', grupo: 'outro' });
+
+    const notas = [
+        { id: 1, serie: 1, numero: 1, status_fiscal: 'autorizada', ambiente: 'homologacao', data_emissao: '2026-09-14T10:00:00-03:00', valor_total: '800.00', pedido_numero: '2541', cliente: 'Marcenaria Serrana' },
+        { id: 2, serie: 1, numero: 2, status_fiscal: 'rejeitada', ambiente: 'homologacao', data_emissao: '2026-09-15T09:00:00-03:00', valor_total: 400, pedido_numero: '2544', cliente: 'Marcenaria Serrana' },
+        { id: 3, serie: 1, numero: 3, status_fiscal: 'enviando', ambiente: 'producao', data_emissao: '2026-09-16T08:00:00-03:00', valor_total: 120, pedido_numero: '2546', cliente: 'Casa Vicenzo' },
+        { id: 4, serie: 1, numero: 4, status_fiscal: 'cancelada', ambiente: 'homologacao', data_emissao: '2026-08-25T08:00:00-03:00', valor_total: 9999, pedido_numero: '2500', cliente: 'Casa Vicenzo' },
+        { id: 5, serie: 1, numero: 5, status_fiscal: 'rascunho', ambiente: 'homologacao', data_emissao: '2026-09-16T09:00:00-03:00', valor_total: 1, pedido_numero: '2547', cliente: 'X' }
+    ];
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas)).map(n => n.id), [1, 2, 3, 4], 'rascunho nunca aparece');
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { competencia: '2026-09' })).map(n => n.id), [1, 2, 3]);
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { status: 'processando' })).map(n => n.id), [3]);
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { status: 'rejeitada' })).map(n => n.id), [2]);
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { ambiente: 'producao' })).map(n => n.id), [3]);
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { busca: 'vicenzo' })).map(n => n.id), [3, 4], 'busca pelo cliente');
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { busca: '2544' })).map(n => n.id), [2], 'busca pelo pedido');
+    assert.deepStrictEqual(plano(f.filtrarNotas(notas, { busca: '3' })).map(n => n.id), [3], 'busca pelo nº da nota');
+    assert.deepStrictEqual(plano(f.filtrarNotas(null)), []);
+    assert.deepStrictEqual(plano(f.resumoDeNotas(f.filtrarNotas(notas, { competencia: '2026-09' }))), { emitidas: 3, autorizadas: 1, canceladas: 0, valor: 800 });
+
+    assert.strictEqual(f.condicaoDoPedido({ parcelas: 3, forma_pagamento: 'Boleto' }), '3x · Boleto');
+    assert.strictEqual(f.condicaoDoPedido({ parcelas: 1 }), 'À vista');
+    assert.strictEqual(f.condicaoDoPedido({ parcelas: null, forma_pagamento: 'Pix' }), 'À vista · Pix');
+
+    assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL)).map(l => l.numero), ['2540', '2544'], 'o dispensado (S/NF) fica de fora por padrão');
+    assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { incluirDispensados: true })).map(l => l.numero), ['2540', '2543', '2544']);
+    assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { busca: 'serrana' })).map(l => l.numero), ['2544']);
+    assert.deepStrictEqual(plano(f.linhasAguardando(null)), []);
+});
+
+test('os modais fiscais são REAIS: aguardando NF-e e notas fiscais leem /api/fiscal e abrem os modais dos Pedidos por cima', () => {
+    const aguardando = fs.readFileSync(path.join(PASTA_HTML, 'aguardando-nfe.html'), 'utf8');
+    for (const id of ['finAguardNfeCompetencia', 'finAguardNfeBusca', 'finAguardNfeIncluirDispensados', 'finAguardNfeQuantidade', 'finAguardNfeTotal', 'finAguardNfeDesde', 'finAguardNfeCorpo', 'finAguardNfeVazio', 'finAguardNfeMensagem', 'finAguardNfeCarregando', 'finAguardNfeAmbiente']) {
+        assert.ok(aguardando.includes(`id="${id}"`), `aguardando-nfe sem #${id}`);
+    }
+    assert.match(aguardando, /data-fin-abrir="visualizar-relatorio" data-fin-relatorio="aguardando-nf"/);
+    assert.ok(!/data-fin-principal/.test(aguardando), 'nada aqui é "em implementação"');
+
+    const notas = fs.readFileSync(path.join(PASTA_HTML, 'notas-fiscais.html'), 'utf8');
+    for (const id of ['finNotasCompetencia', 'finNotasStatus', 'finNotasAmbienteFiltro', 'finNotasBusca', 'finNotasEmitidas', 'finNotasAutorizadas', 'finNotasCanceladas', 'finNotasValor', 'finNotasCorpo', 'finNotasVazio', 'finNotasMensagem', 'finNotasCarregando', 'finNotasAtualizar']) {
+        assert.ok(notas.includes(`id="${id}"`), `notas-fiscais sem #${id}`);
+    }
+    for (const v of ['autorizada', 'cancelada', 'processando', 'rejeitada']) assert.ok(notas.includes(`<option value="${v}">`), `filtro de situação ${v}`);
+    assert.ok(!/data-fin-principal/.test(notas), 'nada aqui é "em implementação"');
+    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(notas) && !/<button[^>]*>\s*<i class="fas/.test(aguardando), 'botões só com texto, sem ícone');
+
+    // O que o script faz com o backend.
+    assert.match(SCRIPT, /fetchApi\(`\/api\/fiscal\/painel\?competencia=\$\{encodeURIComponent\(competenciaSel\.value \|\| ''\)\}`\)/, 'aguardando lê o painel da competência');
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/notas'\)/, 'a lista de notas vem do backend');
+    assert.match(SCRIPT, /\/api\/fiscal\/pedidos\/\$\{encodeURIComponent\(l\.pedido_id\)\}\/dispensar-nfe/, '"Sem NF-e" marca o pedido');
+    assert.match(SCRIPT, /\/api\/fiscal\/notas\/\$\{encodeURIComponent\(n\.id\)\}\/sincronizar/, '"Consultar na SEFAZ" da nota parada');
+    assert.match(SCRIPT, /confirmText: 'Marcar sem NF-e'/, 'marcar sem nota confirma na caixa da casa');
+    // Os modais dos Pedidos, com o contexto que eles esperam, empilhados (keepExisting = true).
+    assert.match(SCRIPT, /window\.emitirNfeContext = \{ pedidoId: l\.pedido_id, numero: String\(l\.numero\), cliente: l\.cliente \|\| '' \}/);
+    assert.match(SCRIPT, /abrirModalDePedido\('modals\/pedidos\/emitir-nfe\.html', '\.\.\/js\/modals\/pedido-emitir-nfe\.js', 'emitirNfePedido', \{ esperar: true, aoFechar: carregarLista \}\)/);
+    assert.match(SCRIPT, /abrirModalDePedido\('modals\/pedidos\/visualizar\.html', '\.\.\/js\/modals\/pedido-visualizar\.js', 'visualizarPedido', \{ esperar: true \}\)/);
+    assert.match(SCRIPT, /window\.Modal\.open\(htmlPath, scriptPath, id, true\)/);
+    for (const [html, js, id, ctx] of [
+        ['enviar-nfe-email', 'pedido-enviar-nfe-email', 'enviarNfeEmail', 'emailNfeContext'],
+        ['carta-correcao-nfe', 'pedido-carta-correcao-nfe', 'cartaCorrecaoNfe', 'cartaCorrecaoContext'],
+        ['cancelar-nfe', 'pedido-cancelar-nfe', 'cancelarNfe', 'cancelarNfeContext']]) {
+        assert.ok(SCRIPT.includes(`'modals/pedidos/${html}.html', '../js/modals/${js}.js', '${id}', '${ctx}'`), `modal ${id} com o contexto ${ctx}`);
+    }
+    assert.match(SCRIPT, /email: n\.destinatario\?\.email \|\| ''/, 'o e-mail do destinatário da nota vai no contexto');
+    assert.match(SCRIPT, /window\.NfeDocumentos\?\.gerarDanfe\(n\.id\)/);
+    assert.match(SCRIPT, /window\.NfeDocumentos\?\.salvarXml\(n\.id\)/);
+    assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| filhoAberto \|\| !ehOModalDeCima\(\)\) return;/, 'com um modal de Pedidos por cima, o Esc é dele');
+    assert.match(SCRIPT, /const RECARREGAM_O_PAINEL = new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal'\]\)/, 'fechar relê o painel da tela');
+    assert.match(SCRIPT, /emitir\.dataset\.perm = 'financeiro\.nfe\.emit'/);
+    assert.match(SCRIPT, /semNf\.dataset\.perm = 'ped\.status\.ship'/);
+    assert.match(SCRIPT, /perm: 'financeiro\.nfe\.cancel'/);
+    assert.match(SCRIPT, /const painel = await fetchApi\(`\/api\/fiscal\/painel\?competencia=\$\{encodeURIComponent\(competencia\)\}`\);/, 'o relatório "aguardando NF" é real');
+    assert.ok(!SCRIPT.includes('montarRegistrarNf'), 'não existe mais "Registrar NF" à mão');
 });

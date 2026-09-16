@@ -1,19 +1,23 @@
 /**
- * Modais do Financeiro — Comissões e Produção (etapa visual).
+ * Modais do Financeiro — Comissões e Produção.
  *
- * Um script para os doze modais do módulo: a anatomia é a mesma — Voltar,
+ * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
  * muda de um para outro são as contas de conferência e as listas mostradas.
  * Quem abre diz qual é o modal por `window.financeiroModalContexto.overlayId`
  * (ver `finAbrirModal` em financeiro.js), e um modal abre outro por cima
  * (detalhes, relatório, fechamento) pelo mesmo caminho, com `empilhar`.
  *
- * Nada aqui grava: as ações principais abrem o aviso "em implementação", já
- * com a trava de clique duplo do BotaoAcao, para o comportamento não mudar
- * quando o backend entrar. As contas (parcelas da NF, impacto do ajuste,
- * saldo da produção, aging e totais dos relatórios) são reais e ficam em
- * funções puras, expostas em `window.FinanceiroModais` para os testes e para
- * o backend reaproveitar.
+ * Os modais FISCAIS são reais e falam com /api/fiscal: Configuração fiscal
+ * (certificado, SEFAZ, e-mail, inutilização), Pedidos aguardando NF-e
+ * (painel + emissão pelo modal dos Pedidos, aberto por cima) e Notas fiscais
+ * (lista com DANFE, XML, e-mail, carta de correção, cancelamento e consulta).
+ * O relatório "Pedidos aguardando NF" também lê o painel. Comissões e
+ * produção seguem na etapa visual: as ações principais abrem o aviso "em
+ * implementação", já com a trava de clique duplo do BotaoAcao, e as contas
+ * (parcelas, impacto do ajuste, saldo da produção, aging e totais) são reais
+ * e ficam em funções puras, expostas em `window.FinanceiroModais` para os
+ * testes e para o backend reaproveitar.
  *
  * Datas são texto 'YYYY-MM-DD' somadas por Date.UTC: passar pelo relógio local
  * volta um dia em São Paulo. Taxas de CMS e Royalty são as de exemplo da etapa.
@@ -228,15 +232,82 @@
     };
   }
 
+  // ------------------------------------------------ NF-e (funções puras)
+
+  /** Como cada situação da nota aparece: rótulo, cor e o grupo do filtro. */
+  const STATUS_NOTA = {
+    autorizada: { rotulo: 'Autorizada', badge: 'badge-success', grupo: 'autorizada' },
+    cancelada: { rotulo: 'Cancelada', badge: 'badge-danger', grupo: 'cancelada' },
+    processando: { rotulo: 'Aguardando a SEFAZ', badge: 'badge-warning', grupo: 'processando' },
+    enviando: { rotulo: 'Enviada, sem resposta', badge: 'badge-warning', grupo: 'processando' },
+    cancelamento_pendente: { rotulo: 'Cancelamento pendente', badge: 'badge-warning', grupo: 'processando' },
+    rejeitada: { rotulo: 'Rejeitada', badge: 'badge-danger', grupo: 'rejeitada' },
+    denegada: { rotulo: 'Denegada', badge: 'badge-danger', grupo: 'rejeitada' },
+    erro_tecnico: { rotulo: 'Erro técnico', badge: 'badge-danger', grupo: 'rejeitada' },
+    rascunho: { rotulo: 'Rascunho', badge: 'badge-neutral', grupo: 'rascunho' }
+  };
+
+  function rotuloStatusNota(status) {
+    return STATUS_NOTA[String(status || '')] || { rotulo: String(status || '—'), badge: 'badge-neutral', grupo: 'outro' };
+  }
+
+  /**
+   * Filtra as notas da lista: competência ('YYYY-MM' ou '' = todas), grupo da
+   * situação, ambiente e busca (nº da nota, do pedido, cliente ou chave).
+   * Rascunho nunca aparece: é só um número reservado que a emissão reaproveita.
+   */
+  function filtrarNotas(notas, { competencia = '', status = '', ambiente = '', busca = '' } = {}) {
+    const termo = String(busca || '').trim().toLowerCase();
+    return (Array.isArray(notas) ? notas : []).filter(n => {
+      if (!n || n.status_fiscal === 'rascunho') return false;
+      if (competencia && !String(n.data_emissao || '').startsWith(competencia)) return false;
+      if (status && rotuloStatusNota(n.status_fiscal).grupo !== status) return false;
+      if (ambiente && n.ambiente !== ambiente) return false;
+      if (termo) {
+        const alvos = [n.numero, n.pedido_numero, n.cliente, n.chave_acesso].map(v => String(v ?? '').toLowerCase());
+        if (!alvos.some(v => v.includes(termo))) return false;
+      }
+      return true;
+    });
+  }
+
+  /** Indicadores da lista de notas (sobre as já filtradas por competência e ambiente). */
+  function resumoDeNotas(notas) {
+    const lista = Array.isArray(notas) ? notas : [];
+    return {
+      emitidas: lista.length,
+      autorizadas: lista.filter(n => n.status_fiscal === 'autorizada').length,
+      canceladas: lista.filter(n => n.status_fiscal === 'cancelada').length,
+      valor: centavos(lista.filter(n => n.status_fiscal === 'autorizada').reduce((s, n) => s + Number(n.valor_total || 0), 0))
+    };
+  }
+
+  /** "3x · Boleto", "À vista · Pix": a condição do pedido que aguarda nota. */
+  function condicaoDoPedido(linha) {
+    const n = Number(linha?.parcelas) || 0;
+    const base = n > 1 ? `${n}x` : 'À vista';
+    return linha?.forma_pagamento ? `${base} · ${linha.forma_pagamento}` : base;
+  }
+
+  /** As linhas de "aguardando NF-e" do painel: sem os dispensados (a não ser que se peça) e pela busca. */
+  function linhasAguardando(painel, { incluirDispensados = false, busca = '' } = {}) {
+    const termo = String(busca || '').trim().toLowerCase();
+    return (painel?.aguardando_nf?.pedidos || []).filter(l => l
+      && (incluirDispensados || !l.dispensada)
+      && (!termo || [l.numero, l.cliente].some(v => String(v ?? '').toLowerCase().includes(termo))));
+  }
+
+  /** O relatório "Pedidos aguardando NF" a partir do painel (só os que contam). */
+  function linhasDoRelatorioAguardando(painel) {
+    return linhasAguardando(painel).map(l => ({
+      pedido: l.numero, pedido_id: l.pedido_id, cliente: l.cliente || '—', entrega: l.enviado_em,
+      condicao: condicaoDoPedido(l), dias: l.dias_sem_nfe, valor: l.valor
+    }));
+  }
+
   // ------------------------------------------------- dados de exemplo
 
   const EXEMPLO = {
-    pedidos: [
-      { numero: '2548', cliente: 'Cliente Exemplo LTDA', valor: 21500 },
-      { numero: '2521', cliente: 'Marcenaria Serrana', valor: 52680 },
-      { numero: '2537', cliente: 'Casa Vicenzo', valor: 17560 },
-      { numero: '2501', cliente: 'Decorações Silvia', valor: 60000 }
-    ],
     recebimento: {
       pedido: '2521', nf: '18790', cliente: 'Marcenaria Serrana',
       parcelas: [
@@ -498,25 +569,27 @@
         return [...porPedido.values()];
       }
     },
+    // REAL: as linhas vêm do painel fiscal (montarVisualizarRelatorio passa
+    // `linhas`); o número do pedido abre o Visualizar pedido de verdade.
     'aguardando-nf': {
-      titulo: 'Pedidos aguardando NF',
+      titulo: 'Pedidos aguardando NF-e',
       colunas: [
-        { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
+        { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido-real' },
         { chave: 'cliente', rotulo: 'Cliente' },
-        { chave: 'entrega', rotulo: 'Entrega', tipo: 'data' },
+        { chave: 'entrega', rotulo: 'Enviado em', tipo: 'data' },
         { chave: 'condicao', rotulo: 'Condição' },
-        { chave: 'dias', rotulo: 'Dias sem NF', tipo: 'inteiro' },
+        { chave: 'dias', rotulo: 'Dias sem NF-e', tipo: 'inteiro' },
         { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
       ],
-      linhas: () => EXEMPLO.aguardandoNf.map(l => ({ ...l, dias: Math.max(0, diferencaDias(hojeLocal(), l.entrega) ?? 0) }))
+      linhas: () => []
     }
   };
 
-  /** Monta o relatório pronto para a tela: linhas e a linha de totais. */
-  function montarRelatorio(chave) {
+  /** Monta o relatório pronto para a tela: linhas e a linha de totais. `extra.linhas` substitui as do exemplo. */
+  function montarRelatorio(chave, extra = {}) {
     const def = RELATORIOS[chave];
     if (!def) return null;
-    const linhas = def.linhas();
+    const linhas = Array.isArray(extra.linhas) ? extra.linhas : def.linhas();
     const totais = {};
     for (const c of def.colunas) {
       if (c.total) totais[c.chave] = c.tipo === 'inteiro'
@@ -530,6 +603,7 @@
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro,
     faixaDeAtraso, calcularAtrasadas, resumoAtrasadas, agingDe, resumoProducao, montarRelatorio,
+    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando,
     RELATORIOS: Object.keys(RELATORIOS), EXEMPLO, TAXA_CMS, TAXA_ROYALTY, FAIXAS_ATRASO
   };
 
@@ -542,12 +616,19 @@
 
   const el = id => overlay.querySelector(`#${id}`);
   let processando = false;
+  // Um modal de Pedidos aberto por cima deste (emitir NF-e, visualizar,
+  // cancelar, e-mail, carta): enquanto ele está aberto, o Esc é dele.
+  let filhoAberto = false;
+  // Ao fechar, a tela relê o painel fiscal: o que se fez aqui muda os números.
+  const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal']);
+  const recarregarPainel = () => { if (RECARREGAM_O_PAINEL.has(overlayId)) window.FinanceiroRecarregar?.(); };
 
   const fechar = () => {
     // Fechamento de competência em andamento não pode ser cancelado por engano.
     if (processando) return;
     desligar();
     window.Modal?.close(overlayId);
+    recarregarPainel();
   };
   // Modais empilhados: o Esc só fecha o de cima, senão fecharia a pilha inteira.
   const ehOModalDeCima = () => {
@@ -555,11 +636,11 @@
     return abertos[abertos.length - 1] === overlay;
   };
   const aoEsc = e => {
-    if (e.key !== 'Escape' || !ehOModalDeCima()) return;
+    if (e.key !== 'Escape' || filhoAberto || !ehOModalDeCima()) return;
     e.preventDefault();
     fechar();
   };
-  const aoFecharPorFora = e => { if (e?.detail === overlayId) desligar(); };
+  const aoFecharPorFora = e => { if (e?.detail === overlayId) { desligar(); recarregarPainel(); } };
   function desligar() {
     document.removeEventListener('keydown', aoEsc);
     window.removeEventListener('modalFechado', aoFecharPorFora);
@@ -611,6 +692,63 @@
     if (alvo.dataset.finPedido) extra.pedido = alvo.dataset.finPedido;
     if (dadosDaLinha.has(alvo)) extra.parcela = dadosDaLinha.get(alvo);
     abrirOutro(alvo.dataset.finAbrir, extra);
+  });
+
+  /**
+   * Abre um modal de Pedidos POR CIMA deste, como pedidos.js faz
+   * (openPedidoModal): spinner até o `pedidoModalLoaded` de quem o dispara
+   * (`esperar`), ou o próprio modal se revela. Ao fechar, `aoFechar` relê a
+   * lista daqui.
+   */
+  function abrirModalDePedido(htmlPath, scriptPath, id, { esperar = false, aoFechar = null } = {}) {
+    if (typeof window.Modal?.open !== 'function') return;
+    filhoAberto = true;
+    let spinner = null;
+    if (esperar) {
+      spinner = criar('div', 'fixed inset-0 bg-black/50 flex items-center justify-center');
+      spinner.id = 'modalLoading';
+      spinner.style.zIndex = 'var(--z-dialog)';
+      const indicador = criar('div', 'app-loading-indicator app-loading-indicator--compact');
+      indicador.setAttribute('aria-hidden', 'true');
+      const nucleo = criar('span', 'module-loading-core');
+      const logo = document.createElement('img');
+      logo.src = '../assets/Logo.ico';
+      logo.alt = '';
+      nucleo.appendChild(logo);
+      indicador.append(criar('span', 'module-loading-orbit'), nucleo);
+      spinner.appendChild(indicador);
+      document.body.appendChild(spinner);
+    }
+    const aoCarregar = e => {
+      if (e?.detail !== id) return;
+      window.removeEventListener('pedidoModalLoaded', aoCarregar);
+      spinner?.remove();
+      document.getElementById(`${id}Overlay`)?.classList.remove('hidden');
+    };
+    const aoFecharFilho = e => {
+      if (e?.detail !== id) return;
+      window.removeEventListener('modalFechado', aoFecharFilho);
+      window.removeEventListener('pedidoModalLoaded', aoCarregar);
+      spinner?.remove();
+      filhoAberto = false;
+      aoFechar?.();
+    };
+    if (esperar) window.addEventListener('pedidoModalLoaded', aoCarregar);
+    window.addEventListener('modalFechado', aoFecharFilho);
+    window.Modal.open(htmlPath, scriptPath, id, true);
+  }
+
+  /** O Visualizar pedido de verdade (Pedidos), por cima deste modal. */
+  function abrirVisualizarPedido(pedidoId) {
+    if (!pedidoId) return;
+    window.selectedOrderId = pedidoId;
+    abrirModalDePedido('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido', { esperar: true });
+  }
+  overlay.addEventListener('click', evento => {
+    const alvo = evento.target.closest('[data-fin-pedido-id]');
+    if (!alvo || !overlay.contains(alvo) || !alvo.dataset.finPedidoId) return;
+    evento.stopPropagation();
+    abrirVisualizarPedido(Number(alvo.dataset.finPedidoId));
   });
 
   overlay.querySelectorAll('input[type="date"]').forEach(campo => { if (!campo.value) campo.value = hojeLocal(); });
@@ -700,6 +838,14 @@
       td.appendChild(botao);
       return td;
     }
+    // Pedido de verdade (linha vinda do backend): abre o Visualizar pedido dos Pedidos.
+    if (coluna.tipo === 'pedido-real') {
+      const botao = criar('button', 'fin-link-celula', String(bruto ?? '—'));
+      botao.type = 'button';
+      botao.dataset.finPedidoId = String(linha.pedido_id ?? '');
+      td.appendChild(botao);
+      return td;
+    }
     if (coluna.tipo === 'badge') { td.appendChild(badge(String(bruto ?? '—'))); return td; }
     if (coluna.tipo === 'moeda') td.textContent = formatarMoeda(bruto);
     else if (coluna.tipo === 'data') td.textContent = formatarData(bruto);
@@ -755,50 +901,6 @@
   }
 
   // ------------------------------------------------------- montadores
-
-  function montarRegistrarNf() {
-    const pedidoCampo = el('finNfPedido');
-    const clienteCampo = el('finNfCliente');
-    const valorCampo = el('finNfValor');
-    const condicaoSel = el('finNfCondicao');
-    const emissaoCampo = el('finNfEmissao');
-    const bloco = el('finNfParcelas');
-    const corpo = el('finNfParcelasCorpo');
-
-    montarDatalist(el('finNfPedidosLista'), EXEMPLO.pedidos.map(p => ({ valor: p.numero, rotulo: p.cliente })));
-    const pedidoEscolhido = () => EXEMPLO.pedidos.find(p => p.numero === String(pedidoCampo.value).trim());
-
-    function aoEscolherPedido() {
-      const pedido = pedidoEscolhido();
-      clienteCampo.value = pedido ? pedido.cliente : '';
-      if (pedido && lerMoeda(valorCampo.value) === null) valorCampo.value = formatoMoeda.format(pedido.valor);
-      atualizarParcelas();
-    }
-
-    function atualizarParcelas() {
-      const valor = lerMoeda(valorCampo.value);
-      const prazos = lerPrazos(condicaoSel.value);
-      corpo.replaceChildren();
-      const parcelas = valor && prazos ? calcularParcelas(valor, prazos, emissaoCampo.value) : [];
-      bloco.classList.toggle('hidden', parcelas.length === 0);
-      for (const p of parcelas) {
-        const linha = document.createElement('tr');
-        linha.append(
-          criar('td', 'px-4 py-3 text-white', `${p.numero}/${p.total}`),
-          criar('td', 'px-4 py-3 text-right text-gray-300', p.prazo === 0 ? 'à vista' : `${p.prazo} dias`),
-          criar('td', 'px-4 py-3 text-white', formatarData(p.vencimento)),
-          criar('td', 'px-4 py-3 text-right text-white', formatarMoeda(p.valor))
-        );
-        corpo.appendChild(linha);
-      }
-    }
-
-    pedidoCampo.addEventListener('input', aoEscolherPedido);
-    pedidoCampo.addEventListener('change', aoEscolherPedido);
-    ligarCampoMoeda(valorCampo, atualizarParcelas);
-    condicaoSel.addEventListener('change', atualizarParcelas);
-    emissaoCampo.addEventListener('change', atualizarParcelas);
-  }
 
   function montarRecebimento() {
     const dados = EXEMPLO.recebimento;
@@ -1101,12 +1203,25 @@
     atualizar();
   }
 
-  function montarVisualizarRelatorio() {
-    const relatorio = montarRelatorio(contexto.relatorio) || montarRelatorio('comissoes-apuradas');
+  async function montarVisualizarRelatorio() {
+    const chave = RELATORIOS[contexto.relatorio] ? contexto.relatorio : 'comissoes-apuradas';
     const competencia = contexto.competencia || competenciaAtual();
-    const filtro = contexto.periodo?.inicio
+    let filtro = contexto.periodo?.inicio
       ? `Período: ${formatarData(contexto.periodo.inicio)} a ${formatarData(contexto.periodo.fim)}`
       : `Competência: ${rotuloCompetenciaCurto(competencia)}`;
+    // "Pedidos aguardando NF-e" é real: as linhas vêm do painel fiscal.
+    let extra = {};
+    if (chave === 'aguardando-nf') {
+      try {
+        const painel = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competencia)}`);
+        extra = { linhas: linhasDoRelatorioAguardando(painel) };
+        filtro = `Enviados desde ${formatarData(painel.desde)} sem NF-e`;
+      } catch (e) {
+        extra = { linhas: [] };
+        filtro = e.status === 403 ? 'Sem permissão para ver as notas fiscais.' : `Não foi possível ler o painel fiscal: ${e.message}`;
+      }
+    }
+    const relatorio = montarRelatorio(chave, extra);
 
     el('finRelatorioTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-chart-line mr-2' }),
       document.createTextNode(`${relatorio.titulo} — ${rotuloCompetenciaCurto(competencia)}`));
@@ -1640,9 +1755,287 @@
     carregar();
   }
 
+  // ------------------------------------------- pedidos aguardando NF-e
+  //
+  // REAL: GET /api/fiscal/painel da competência escolhida. "Emitir NF-e" abre
+  // o modal de emissão dos Pedidos por cima (pedido já enviado: a nota sai
+  // sem mudar a situação); "Sem NF-e" marca o pedido como enviado sem nota.
+
+  function montarAguardandoNfe() {
+    const competenciaSel = el('finAguardNfeCompetencia');
+    const busca = el('finAguardNfeBusca');
+    const incluir = el('finAguardNfeIncluirDispensados');
+    const corpo = el('finAguardNfeCorpo');
+    const tabela = corpo.closest('.fin-tabela');
+    montarCompetencias(competenciaSel, contexto.competencia);
+    let painel = null;
+
+    function pintarAmbiente(ambiente) {
+      const tag = el('finAguardNfeAmbiente');
+      if (!tag) return;
+      const producao = ambiente === 'producao';
+      tag.className = `${ambiente ? (producao ? 'badge-success' : 'badge-warning') : 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium justify-self-end`;
+      tag.textContent = ambiente ? (producao ? 'Produção' : 'Homologação') : '—';
+    }
+
+    async function carregarLista() {
+      mostrarMensagem('finAguardNfeMensagem', '');
+      el('finAguardNfeCarregando').classList.remove('hidden');
+      try {
+        painel = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competenciaSel.value || '')}`);
+      } catch (e) {
+        painel = null;
+        mostrarMensagem('finAguardNfeMensagem', e.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : e.message);
+      } finally {
+        el('finAguardNfeCarregando').classList.add('hidden');
+      }
+      desenhar();
+    }
+
+    function desenhar() {
+      const a = painel?.aguardando_nf || { quantidade: 0, total: 0, pedidos: [] };
+      el('finAguardNfeQuantidade').textContent = painel ? String(a.quantidade || 0) : '—';
+      el('finAguardNfeTotal').textContent = painel ? formatarMoeda(a.total || 0) : '—';
+      el('finAguardNfeDesde').textContent = painel?.desde ? formatarData(painel.desde) : '—';
+      pintarAmbiente(painel?.ambiente || null);
+      const linhas = linhasAguardando(painel, { incluirDispensados: incluir.checked, busca: busca.value });
+      corpo.replaceChildren();
+      for (const l of linhas) corpo.appendChild(linhaAguardando(l));
+      el('finAguardNfeVazio').classList.toggle('hidden', !painel || linhas.length > 0);
+      tabela?.classList.toggle('hidden', linhas.length === 0);
+    }
+
+    function linhaAguardando(l) {
+      const tr = document.createElement('tr');
+      const celula = (conteudo, classe = 'px-4 py-3') => {
+        const td = criar('td', classe);
+        if (conteudo && typeof conteudo === 'object') td.appendChild(conteudo);
+        else td.textContent = conteudo == null || conteudo === '' ? '—' : String(conteudo);
+        return td;
+      };
+      const pedidoBtn = criar('button', 'fin-link-celula', String(l.numero));
+      pedidoBtn.type = 'button';
+      pedidoBtn.dataset.finPedidoId = String(l.pedido_id);
+
+      const dias = celula(String(l.dias_sem_nfe), 'px-4 py-3 text-right');
+      if (l.dias_sem_nfe > 30) dias.classList.add('fin-dias--critico');
+      else if (l.dias_sem_nfe > 7) dias.classList.add('fin-dias--alto');
+
+      let situacao;
+      if (l.dispensada) {
+        situacao = criar('span', 'badge-neutral px-3 py-1 rounded-full text-xs font-medium', 'S/NF');
+        situacao.title = 'Marcado como enviado sem NF-e';
+      } else if (l.ultima_nota) {
+        const s = rotuloStatusNota(l.ultima_nota.status_fiscal);
+        situacao = criar('span', `${s.badge} px-3 py-1 rounded-full text-xs font-medium`, `${l.ultima_nota.serie}/${l.ultima_nota.numero} ${s.rotulo.toLowerCase()}`);
+        if (l.ultima_nota.motivo_sefaz) situacao.title = l.ultima_nota.motivo_sefaz;
+      }
+
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      const emitir = criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Emitir NF-e');
+      emitir.type = 'button';
+      emitir.dataset.perm = 'financeiro.nfe.emit';
+      emitir.addEventListener('click', () => abrirEmissao(l));
+      acoes.appendChild(emitir);
+      if (!l.dispensada) {
+        const semNf = criar('button', 'btn-neutral px-3 py-1 rounded-md text-xs font-medium text-white', 'Sem NF-e');
+        semNf.type = 'button';
+        semNf.dataset.perm = 'ped.status.ship';
+        semNf.title = 'Marcar como enviado sem nota fiscal (S/NF)';
+        semNf.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(semNf, () => marcarSemNfe(l)) : marcarSemNfe(l)));
+        acoes.appendChild(semNf);
+      }
+
+      tr.append(
+        celula(pedidoBtn), celula(l.cliente), celula(formatarData(l.enviado_em)), dias, celula(condicaoDoPedido(l)),
+        celula(formatarMoeda(l.valor), 'px-4 py-3 text-right'), celula(situacao || '—'), celula(acoes)
+      );
+      return tr;
+    }
+
+    function abrirEmissao(l) {
+      window.selectedOrderId = l.pedido_id;
+      window.emitirNfeContext = { pedidoId: l.pedido_id, numero: String(l.numero), cliente: l.cliente || '' };
+      abrirModalDePedido('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido', { esperar: true, aoFechar: carregarLista });
+    }
+
+    async function marcarSemNfe(l) {
+      const ok = await (window.DialogPadrao?.confirm?.({
+        title: 'Marcar como enviado sem NF-e?',
+        message: `O pedido ${l.numero} sai da lista de "aguardando NF-e" e fica sinalizado como "sem nota" (S/NF). Use só quando a nota foi (ou será) emitida por fora.`,
+        confirmText: 'Marcar sem NF-e'
+      }) ?? Promise.resolve(true));
+      if (!ok) return;
+      try {
+        await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(l.pedido_id)}/dispensar-nfe`, { method: 'POST', body: '{}' });
+        window.showToast?.(`Pedido ${l.numero} marcado como enviado sem NF-e.`, 'success');
+        await carregarLista();
+      } catch (e) {
+        mostrarMensagem('finAguardNfeMensagem', e.message);
+      }
+    }
+
+    competenciaSel.addEventListener('change', carregarLista);
+    busca.addEventListener('input', desenhar);
+    incluir.addEventListener('change', desenhar);
+    return carregarLista();
+  }
+
+  // ------------------------------------------------------ notas fiscais
+  //
+  // REAL: GET /api/fiscal/notas (todas, com a contagem de cartas), os pedidos
+  // (número) e os clientes (nome). As ações reaproveitam o que o Visualizar
+  // pedido já usa: NfeDocumentos (DANFE, XML) e os modais de cancelar,
+  // e-mail e carta de correção, abertos por cima deste.
+
+  function montarNotasFiscais() {
+    const competenciaSel = el('finNotasCompetencia');
+    const statusSel = el('finNotasStatus');
+    const ambienteSel = el('finNotasAmbienteFiltro');
+    const busca = el('finNotasBusca');
+    const corpo = el('finNotasCorpo');
+    const tabela = corpo.closest('.fin-tabela');
+    montarCompetencias(competenciaSel, contexto.competencia);
+    const todas = document.createElement('option');
+    todas.value = '';
+    todas.textContent = 'Todas';
+    competenciaSel.insertBefore(todas, competenciaSel.firstChild);
+    // Uma pendência ("nota parada", "nota recusada") abre já filtrada, em todas as competências.
+    if (contexto.filtro?.status) {
+      statusSel.value = contexto.filtro.status;
+      competenciaSel.value = '';
+    }
+    let notas = [];
+
+    async function carregarLista() {
+      mostrarMensagem('finNotasMensagem', '');
+      el('finNotasCarregando').classList.remove('hidden');
+      try {
+        const [lista, pedidos, clientes] = await Promise.all([
+          fetchApi('/api/fiscal/notas'),
+          fetchApi('/api/pedidos').catch(() => []),
+          fetchApi('/api/clientes/lista').catch(() => [])
+        ]);
+        const nomes = new Map((Array.isArray(clientes) ? clientes : []).map(c => [String(c.id), c.nome_fantasia || c.razao_social || c.nome || '']));
+        const porId = new Map((Array.isArray(pedidos) ? pedidos : []).map(p => [String(p.id), p]));
+        notas = (Array.isArray(lista) ? lista : []).map(n => {
+          const p = porId.get(String(n.pedido_id));
+          return { ...n, pedido_numero: p?.numero ?? String(n.pedido_id ?? ''), cliente: nomes.get(String(p?.cliente_id)) || n.destinatario?.nome || '' };
+        });
+      } catch (e) {
+        notas = [];
+        mostrarMensagem('finNotasMensagem', e.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : e.message);
+      } finally {
+        el('finNotasCarregando').classList.add('hidden');
+      }
+      desenhar();
+    }
+
+    /** De onde são as notas listadas: produção, homologação ou as duas (o filtro de ambiente separa). */
+    function pintarAmbiente() {
+      const tag = el('finNotasAmbiente');
+      if (!tag) return;
+      const temProducao = notas.some(n => n.ambiente === 'producao');
+      const temHomologacao = notas.some(n => n.ambiente === 'homologacao');
+      tag.className = `${temProducao ? 'badge-success' : (temHomologacao ? 'badge-warning' : 'badge-neutral')} px-3 py-1 rounded-full text-xs font-medium justify-self-end`;
+      tag.textContent = temProducao && temHomologacao ? 'Produção e homologação' : (temProducao ? 'Produção' : (temHomologacao ? 'Homologação' : '—'));
+    }
+
+    function desenhar() {
+      const filtros = { competencia: competenciaSel.value, status: statusSel.value, ambiente: ambienteSel.value, busca: busca.value };
+      const r = resumoDeNotas(filtrarNotas(notas, { competencia: filtros.competencia, ambiente: filtros.ambiente }));
+      el('finNotasEmitidas').textContent = String(r.emitidas);
+      el('finNotasAutorizadas').textContent = String(r.autorizadas);
+      el('finNotasCanceladas').textContent = String(r.canceladas);
+      el('finNotasValor').textContent = formatarMoeda(r.valor);
+      pintarAmbiente();
+      const linhas = filtrarNotas(notas, filtros);
+      corpo.replaceChildren();
+      for (const n of linhas) corpo.appendChild(linhaNota(n));
+      el('finNotasVazio').classList.toggle('hidden', linhas.length > 0);
+      tabela?.classList.toggle('hidden', linhas.length === 0);
+    }
+
+    const contextoDaNota = n => ({ notaId: n.id, serie: n.serie, numero: n.numero, chave: n.chave_acesso, pedidoId: n.pedido_id, pedidoNumero: n.pedido_numero || '', email: n.destinatario?.email || '' });
+
+    function linhaNota(n) {
+      const tr = document.createElement('tr');
+      const celula = (conteudo, classe = 'px-4 py-3') => {
+        const td = criar('td', classe);
+        if (conteudo && typeof conteudo === 'object') td.appendChild(conteudo);
+        else td.textContent = conteudo == null || conteudo === '' ? '—' : String(conteudo);
+        return td;
+      };
+      const s = rotuloStatusNota(n.status_fiscal);
+      const situacao = criar('span', `${s.badge} px-3 py-1 rounded-full text-xs font-medium`, s.rotulo);
+      if (n.motivo_sefaz) situacao.title = `${n.codigo_status_sefaz ? `${n.codigo_status_sefaz} — ` : ''}${n.motivo_sefaz}`;
+      const ambiente = criar('span', `${n.ambiente === 'producao' ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium`, n.ambiente === 'producao' ? 'Produção' : 'Homologação');
+      const pedidoBtn = criar('button', 'fin-link-celula', String(n.pedido_numero || n.pedido_id || '—'));
+      pedidoBtn.type = 'button';
+      pedidoBtn.dataset.finPedidoId = String(n.pedido_id ?? '');
+
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      const botao = (texto, fn, { classe = 'btn-neutral text-white', perm = null, titulo = '' } = {}) => {
+        const b = criar('button', `${classe} px-3 py-1 rounded-md text-xs font-medium`, texto);
+        b.type = 'button';
+        if (perm) b.dataset.perm = perm;
+        if (titulo) b.title = titulo;
+        b.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(b, fn) : fn()));
+        acoes.appendChild(b);
+      };
+      const documentos = ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
+      if (documentos) {
+        botao('DANFE', () => window.NfeDocumentos?.gerarDanfe(n.id), { titulo: 'Gerar o DANFE em PDF' });
+        botao('XML', () => window.NfeDocumentos?.salvarXml(n.id), { titulo: 'Salvar o XML da nota' });
+        botao('E-mail', () => abrirDaNota(n, 'modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail', 'emailNfeContext'), { perm: 'financeiro.nfe.emit', titulo: 'Enviar DANFE e XML por e-mail' });
+      }
+      if (n.status_fiscal === 'autorizada') {
+        botao('Carta de correção', () => abrirDaNota(n, 'modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe', 'cartaCorrecaoContext'), { perm: 'financeiro.nfe.emit' });
+        botao('Cancelar NF-e', () => abrirDaNota(n, 'modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe', 'cancelarNfeContext'), { classe: 'btn-danger text-white', perm: 'financeiro.nfe.cancel' });
+      }
+      if (s.grupo === 'processando') {
+        botao('Consultar na SEFAZ', () => consultar(n), { classe: 'btn-success', perm: 'financeiro.nfe.view' });
+      }
+
+      tr.append(
+        celula(`${n.serie}/${n.numero}`, 'px-4 py-3 text-white font-medium'), celula(ambiente), celula(pedidoBtn), celula(n.cliente),
+        celula(formatarData(n.data_emissao)), celula(formatarMoeda(n.valor_total), 'px-4 py-3 text-right'), celula(situacao),
+        celula(n.cartas_correcao ? String(n.cartas_correcao) : '—', 'px-4 py-3 text-right'), celula(acoes)
+      );
+      return tr;
+    }
+
+    /** Cancelar, e-mail e carta: os modais dos Pedidos, com o contexto que eles esperam, por cima deste. */
+    function abrirDaNota(n, htmlPath, scriptPath, id, nomeDoContexto) {
+      window[nomeDoContexto] = contextoDaNota(n);
+      abrirModalDePedido(htmlPath, scriptPath, id, { aoFechar: carregarLista });
+    }
+
+    async function consultar(n) {
+      mostrarMensagem('finNotasMensagem', '');
+      try {
+        const r = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(n.id)}/sincronizar`, { method: 'POST', body: '{}' });
+        const texto = r.autorizada ? `NF-e ${n.serie}/${n.numero} autorizada.`
+          : (r.naoConsta ? `A SEFAZ não recebeu a NF-e ${n.serie}/${n.numero}: o número será reaproveitado na próxima emissão.` : `SEFAZ ${r.sefaz?.cStat || ''}: ${r.sefaz?.xMotivo || 'ainda em processamento.'}`);
+        mostrarMensagem('finNotasMensagem', texto, r.autorizada ? 'ok' : 'erro');
+        window.showToast?.(texto, r.autorizada ? 'success' : 'info');
+      } catch (e) {
+        mostrarMensagem('finNotasMensagem', e.message);
+      }
+      await carregarLista();
+    }
+
+    [competenciaSel, statusSel, ambienteSel].forEach(campo => campo.addEventListener('change', desenhar));
+    busca.addEventListener('input', desenhar);
+    const atualizar = el('finNotasAtualizar');
+    if (atualizar) atualizar.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(atualizar, carregarLista) : carregarLista()));
+    return carregarLista();
+  }
+
   const montadores = {
     finConfiguracaoFiscal: montarConfiguracaoFiscal,
-    finRegistrarNf: montarRegistrarNf,
+    finAguardandoNfe: montarAguardandoNfe,
+    finNotasFiscais: montarNotasFiscais,
     finRegistrarRecebimento: montarRecebimento,
     finRegistrarAjuste: montarAjuste,
     finRegistrarProducao: montarProducao,
@@ -1656,8 +2049,9 @@
     finProducaoCompetencia: montarProducaoCompetencia
   };
 
+  // Os montadores fiscais são assíncronos (leem o backend): o erro deles cai no mesmo lugar.
   try {
-    montadores[overlayId]?.();
+    Promise.resolve(montadores[overlayId]?.()).catch(erro => console.error('[financeiro] falha ao montar o modal', overlayId, erro));
   } catch (erro) {
     console.error('[financeiro] falha ao montar o modal', overlayId, erro);
   }

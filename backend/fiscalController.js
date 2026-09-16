@@ -26,6 +26,7 @@ const danfe = require('./fiscal/danfe');
 const email = require('./fiscal/email');
 const segredoBanco = require('./fiscal/segredoBanco');
 const cartaCorrecaoDoc = require('./fiscal/cartaCorrecaoDoc');
+const painel = require('./fiscal/painel');
 const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -376,6 +377,26 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       res.json(await emissao.listarNotas(createApiClient(req), { pedido_id: req.query?.pedido_id }));
     } catch (err) {
       responder(res, err, 'GET /api/fiscal/notas');
+    }
+  });
+
+  /**
+   * Painel fiscal do Financeiro (?competencia=YYYY-MM): pedidos enviados sem
+   * NF-e, notas da competência, pendências que exigem ação e atividade recente.
+   */
+  router.get('/painel', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api);
+      res.json(await painel.carregar({
+        api,
+        competencia: req.query?.competencia,
+        certificado: await resumoDoCertificado(api, cfg),
+        pendenciasConfiguracao: configuracao.pendencias(cfg),
+        ambiente: configuracao.ambienteEfetivo(cfg, env)
+      }));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/painel');
     }
   });
 

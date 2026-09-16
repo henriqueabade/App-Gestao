@@ -744,6 +744,49 @@ test('cartas de correção: lista, segunda via em HTML e XML do evento', async (
     assert.ok(xml.corpo.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe'));
     assert.equal(xml.corpo.nome, `${tabelas.notas_fiscais[0].chave_acesso}-procEventoNFe-cce-1`);
     assert.equal((await t.chamar('GET', `/api/fiscal/notas/${notaId}/cartas-correcao/2/documento`)).status, 404);
+
+    // A lista de notas traz a contagem: é dela que sai a tag "CC-e" na lista de pedidos.
+    const notas = await t.chamar('GET', '/api/fiscal/notas');
+    assert.equal(notas.corpo[0].cartas_correcao, 1);
+    assert.equal(notas.corpo[0].ultima_carta_seq, 1);
+    await t.chamar('POST', `/api/fiscal/notas/${notaId}/carta-correcao`, { correcao: 'Onde se lê Engradado, leia-se Caixa na espécie dos volumes' });
+    const depois = await t.chamar('GET', `/api/fiscal/notas?pedido_id=55`);
+    assert.equal(depois.corpo[0].cartas_correcao, 2);
+    assert.equal(depois.corpo[0].ultima_carta_seq, 2);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('GET /painel exige financeiro.nfe.view e devolve o painel fiscal da competência sem XML', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.pedidos[0].situacao = 'Enviado';
+  tabelas.pedidos[0].embarcar_real = '2026-09-10';
+  tabelas.pedidos.push({ id: 56, numero: '2549', situacao: 'Enviado', cliente_id: 7, valor_final: 100, embarcar_real: '2026-09-11', nfe_dispensada: true });
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09')).status, 403);
+    t.estado.chaves.add('financeiro.nfe.view');
+    const antes = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
+    assert.equal(antes.corpo.competencia, '2026-09');
+    assert.equal(antes.corpo.ambiente, 'homologacao');
+    assert.equal(antes.corpo.certificado.configurado, true);
+    assert.equal(antes.corpo.aguardando_nf.quantidade, 1);
+    assert.equal(antes.corpo.aguardando_nf.pedidos[0].cliente, 'Cliente Bom LTDA');
+    assert.equal(antes.corpo.aguardando_nf.pedidos.find(l => l.numero === '2549').dispensada, true);
+    assert.deepEqual(antes.corpo.pendencias.map(p => p.chave), ['aguardando_nf']);
+    assert.deepEqual(antes.corpo.atividade, []);
+
+    t.estado.chaves.add('financeiro.nfe.emit');
+    await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    const depois = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    assert.equal(depois.corpo.aguardando_nf.quantidade, 0);
+    assert.equal(depois.corpo.notas.autorizadas, 1);
+    assert.equal(depois.corpo.notas.valor_autorizado, 294);
+    assert.equal(depois.corpo.atividade[0].tipo, 'autorizada');
+    assert.equal(depois.corpo.atividade[0].titulo, 'NF-e 1/1 autorizada');
+    assert.ok(!JSON.stringify(depois.corpo).includes('xml_'), 'o painel não carrega XML');
   } finally {
     await t.fechar();
   }
