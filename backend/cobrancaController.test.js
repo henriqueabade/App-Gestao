@@ -663,6 +663,59 @@ test('fase E: painel, visões, recebimento à mão (e com boleto em aberto), est
   }
 });
 
+test('fase F: estado do webhook (sem token), a conciliação pelo botão fica registrada e a agenda usa a mesma conciliação', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.recebimentos = [];
+  tabelas.cobranca_execucoes = [];
+  tabelas.boletos_eventos = [
+    { id: 1, origem: 'webhook', tipo: 'baixa_operacional', nosso_numero: '00031285579999999999', processado_em: null, criado_em: '2026-09-16T12:00:00Z',
+      payload: { id: '00031285579999999999', numeroConvenio: 3128557, codigoEstadoBaixaOperacional: 1 } }
+  ];
+  const linha = { ...JSON.parse(JSON.stringify(LINHA)), conciliacao_automatica: true, conciliacao_intervalo_min: 30 };
+  const t = await montar({ linhas: [linha], tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    t.estado.chaves.clear();
+    assert.equal((await t.chamar('GET', '/api/cobranca/webhook/estado')).status, 403);
+    t.estado.chaves.add('financeiro.config.view');
+    const antes = await t.chamar('GET', '/api/cobranca/webhook/estado');
+    assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
+    assert.equal(antes.corpo.url_modelo, 'https://api.santissimodecor.com.br/webhooks/bb/baixa-operacional/<token>');
+    assert.deepEqual([antes.corpo.avisos.total, antes.corpo.avisos.na_fila], [1, 1]);
+    assert.deepEqual([antes.corpo.agenda.sql_pronto, antes.corpo.agenda.ligada, antes.corpo.agenda.intervalo_min], [true, true, 30]);
+    assert.deepEqual(antes.corpo.execucoes, []);
+
+    t.estado.chaves.add('financeiro.recebimento.view');
+    const r = await t.chamar('POST', '/api/cobranca/conciliar', {});
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.fila.ignorados, 1, 'o nosso número não é deste sistema');
+    assert.equal(tabelas.cobranca_execucoes.length, 1);
+    const exec = tabelas.cobranca_execucoes[0];
+    assert.equal(exec.tipo, 'conciliacao_manual');
+    assert.equal(exec.usuario_id, 1);
+    assert.match(exec.chave, /^manual:\d+:/);
+    assert.ok(exec.concluido_em);
+    assert.equal(exec.resumo, '1 aviso(s) do BB · 0 boleto(s) consultado(s)');
+    // Só a fila não fica no registro (é a leitura automática da tela).
+    await t.chamar('POST', '/api/cobranca/conciliar', { so_fila: true });
+    assert.equal(tabelas.cobranca_execucoes.length, 1);
+
+    const depois = await t.chamar('GET', '/api/cobranca/webhook/estado');
+    assert.deepEqual([depois.corpo.avisos.na_fila, depois.corpo.avisos.ignorados], [0, 1]);
+    assert.equal(depois.corpo.recentes[0].situacao, 'ignorado');
+    assert.deepEqual(depois.corpo.execucoes.map(x => [x.como, x.terminou]), [['pelo botão', true]]);
+
+    // O painel de recebimentos conta a última conciliação.
+    const painel = await t.chamar('GET', '/api/cobranca/recebimentos/painel');
+    assert.equal(painel.corpo.ultima_conciliacao.como, 'pelo botão');
+    assert.match(painel.corpo.ultima_conciliacao.quando, /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+
+    const { conciliarEmSegundoPlano } = require('./cobrancaController');
+    assert.equal(typeof conciliarEmSegundoPlano, 'function', 'a agenda automática usa a conciliação do controller');
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('fase D: boleto de produção com a cobrança em homologação não é mexido', async () => {
   const tabelas = tabelasDoPedido();
   tabelas.boletos.push({

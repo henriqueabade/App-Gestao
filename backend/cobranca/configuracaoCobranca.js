@@ -63,7 +63,10 @@ const CAMPOS = {
   gerar_ao_emitir_nfe: { tipo: 'booleano' },
   mensagem_boleto: { tipo: 'texto', max: 400 },
   // Fase E (sql/cobranca_recebimentos.sql): a partir de que vencimento o app cobra as parcelas.
-  recebimentos_desde: { tipo: 'data', opcional: true }
+  recebimentos_desde: { tipo: 'data', opcional: true },
+  // Fase F (sql/cobranca_webhook.sql): a conciliação automática.
+  conciliacao_automatica: { tipo: 'booleano' },
+  conciliacao_intervalo_min: { tipo: 'inteiro', min: 15, max: 720 }
 };
 
 /** Curto: quem muda o ambiente na tela precisa ver o efeito no próximo boleto. */

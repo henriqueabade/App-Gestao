@@ -234,6 +234,61 @@
             </dl>
           </div>
 
+          <!-- Webhook e conciliação automática (fase F): GET /api/cobranca/webhook/estado. -->
+          <div id="finCobWebhookSecao" class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-bell" aria-hidden="true"></i>Avisos de pagamento e conciliação automática</h3>
+            <p class="text-xs text-gray-400 mb-3">Quando um boleto é pago, o Banco do Brasil avisa a API da Santíssimo (webhook "BAIXA OPERACIONAL") e o app lança o recebimento. Cadastre no Portal Developers, na aplicação do BB, esta URL, trocando &lt;token&gt; pelo BB_WEBHOOK_TOKEN do .env da API (o token não fica neste app). Abrindo a URL completa no navegador, a resposta deve ser <span class="text-white">"ok": true</span>.</p>
+            <p class="text-sm mb-4"><span class="text-gray-400">URL: </span><span id="finCobWebhookUrl" class="text-white break-all select-all">—</span></p>
+            <dl class="fin-dl mb-4 max-w-xl">
+              <div class="fin-dl__linha"><dt>Último aviso recebido</dt><dd id="finCobWebhookUltimo">—</dd></div>
+              <div class="fin-dl__linha"><dt>Na fila</dt><dd id="finCobWebhookFila">—</dd></div>
+              <div class="fin-dl__linha"><dt>Conciliados / ignorados / alertas</dt><dd id="finCobWebhookContagens">—</dd></div>
+              <div class="fin-dl__linha"><dt>Última conciliação automática</dt><dd id="finCobAgendaUltima">—</dd></div>
+              <div class="fin-dl__linha"><dt>Próxima, por volta de</dt><dd id="finCobAgendaProxima">—</dd></div>
+            </dl>
+            <div id="finCobWebhookSemSql" class="hidden fin-aviso mb-4" role="status"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><span>A conciliação automática ainda não está ativa: rode sql/cobranca_webhook.sql no banco (depois dos SQL das fases D e E) e reinicie a API.</span></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+              <div data-fin-cob-bloco="conciliacao_automatica">
+                <label for="finCob_conciliacao_automatica" class="block text-sm font-medium text-gray-300 mb-2">Conciliação automática</label>
+                <select id="finCob_conciliacao_automatica" data-fin-cob="conciliacao_automatica" data-fin-cob-coluna-nova="true" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="true">Ligada (processa os avisos e consulta os boletos a pagar)</option>
+                  <option value="false">Desligada (só pelo botão "Conciliar com o BB")</option>
+                </select>
+              </div>
+              <div data-fin-cob-bloco="conciliacao_intervalo_min">
+                <label for="finCob_conciliacao_intervalo_min" class="block text-sm font-medium text-gray-300 mb-2">A cada (minutos, de 15 a 720)</label>
+                <input id="finCob_conciliacao_intervalo_min" data-fin-cob="conciliacao_intervalo_min" data-fin-cob-coluna-nova="true" type="number" min="15" max="720" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <p class="mt-1 text-xs text-gray-400">Com o app aberto em várias máquinas, só uma concilia em cada intervalo.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="finCobWebhookAtualizar" type="button" class="btn-neutral px-5 py-3 rounded-lg text-white font-medium">Atualizar</button>
+              <button id="finCobWebhookProcessar" type="button" data-perm="financeiro.recebimento.view" class="btn-neutral px-5 py-3 rounded-lg text-white font-medium">Processar avisos agora</button>
+              <button id="finCobWebhookConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-primary text-white px-5 py-3 rounded-lg font-medium">Conciliar agora</button>
+              <span id="finCobWebhookResultado" class="text-sm text-gray-300"></span>
+            </div>
+            <div class="space-y-5 mt-5">
+              <div>
+                <p class="text-xs text-gray-400 mb-2">Avisos recebidos (mais novos primeiro)</p>
+                <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+                  <table class="w-full text-sm">
+                    <thead><tr><th class="px-3 py-2 text-left text-xs">Recebido em</th><th class="px-3 py-2 text-left text-xs">Nosso número</th><th class="px-3 py-2 text-left text-xs">Situação</th></tr></thead>
+                    <tbody id="finCobWebhookAvisos" class="divide-y divide-white/10"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 mb-2">Conciliações (últimas 10)</p>
+                <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+                  <table class="w-full text-sm">
+                    <thead><tr><th class="px-3 py-2 text-left text-xs">Quando</th><th class="px-3 py-2 text-left text-xs">Como</th><th class="px-3 py-2 text-left text-xs">Resultado</th></tr></thead>
+                    <tbody id="finCobExecucoes" class="divide-y divide-white/10"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Numeração -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-list-ol" aria-hidden="true"></i>Nosso número</h3>
@@ -329,7 +384,7 @@
                 </select>
               </div>
               <!-- Fase E: sem a coluna (sql/cobranca_recebimentos.sql) o campo some e não é enviado. -->
-              <div id="finCobRecebimentosDesdeBloco" class="col-span-2">
+              <div id="finCobRecebimentosDesdeBloco" data-fin-cob-bloco="recebimentos_desde" class="col-span-2">
                 <label for="finCob_recebimentos_desde" class="block text-sm font-medium text-gray-300 mb-2">Controlar recebimentos a partir de</label>
                 <input id="finCob_recebimentos_desde" data-fin-cob="recebimentos_desde" data-fin-cob-coluna-nova="true" type="date" style="color-scheme: dark" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-1 text-xs text-gray-400">Parcelas que venceram antes desta data ficam fora de "a receber" e "em atraso" (eram controladas por fora).</p>

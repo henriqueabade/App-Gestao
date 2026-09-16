@@ -93,6 +93,18 @@ test('conta por ambiente: produção usa a real; homologação usa a de teste do
   assert.deepEqual(valores, { homologacao_convenio: '3128557', homologacao_agencia: null, homologacao_carteira: null });
 });
 
+test('fases E e F: controle de recebimentos (data) e conciliação automática (sim/não, 15 a 720 minutos)', () => {
+  const ok = cfgMod.validar({ recebimentos_desde: '2026-09-01', conciliacao_automatica: 'false', conciliacao_intervalo_min: '30' });
+  assert.deepEqual(ok, { valores: { recebimentos_desde: '2026-09-01', conciliacao_automatica: false, conciliacao_intervalo_min: 30 }, erros: [] });
+  assert.deepEqual(cfgMod.validar({ recebimentos_desde: '' }).valores, { recebimentos_desde: null }, 'data vazia pode');
+  const ruim = cfgMod.validar({ recebimentos_desde: '2026-02-30', conciliacao_automatica: '', conciliacao_intervalo_min: '10' });
+  assert.deepEqual(ruim.erros, [
+    'recebimentos_desde: data inválida',
+    'conciliacao_automatica: não pode ficar vazio',
+    'conciliacao_intervalo_min: precisa ser um inteiro entre 15 e 720'
+  ]);
+});
+
 test('carregar lê a linha 1 (com cache curto) e gravar faz PUT com auditoria; sem a linha, avisa do SQL', async () => {
   cfgMod.limparCache();
   const api = apiFalsa({ ...LINHA });

@@ -16,6 +16,8 @@
  */
 const boletos = require('./boletos');
 const recebimentos = require('./recebimentos');
+const execucoes = require('./execucoes');
+const webhookEstado = require('./webhookEstado');
 
 const SITUACOES_FATURADAS = new Set(['enviado', 'entregue']);
 /** Dias depois do vencimento em que o BB ainda recebe o boleto (configuração padrão). */
@@ -187,7 +189,7 @@ function visoes({ linhas, recebidos, competencia }) {
  * avisos do BB esperando conciliação; `alertas`, os conciliados com alerta
  * ({ mensagem, quando }), mais novos primeiro.
  */
-function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = [], sqlPendente = false, hoje }) {
+function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = [], sqlPendente = false, hoje, ultimaConciliacao = null }) {
   const v = visoes({ linhas, recebidos, competencia });
   const confirmados = recebidos.filter(r => r.status === 'confirmado');
   const atrasadas = v.em_atraso;
@@ -231,6 +233,12 @@ function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = []
     boletos_abertos: { quantidade: comBoletoAberto.length, total: somar(comBoletoAberto, 'a_receber') },
     a_conciliar: { fila, lancamentos: aLancar.length, alertas: alertas.length },
     sql_pendente: sqlPendente,
+    // A conciliação mais recente (automática ou pelo botão), já no horário de Brasília.
+    ultima_conciliacao: ultimaConciliacao ? {
+      quando: webhookEstado.momentoBR(ultimaConciliacao.iniciado_em),
+      como: ultimaConciliacao.tipo_rotulo || ultimaConciliacao.tipo,
+      resumo: ultimaConciliacao.resumo || ''
+    } : null,
     pendencias
   };
 }
@@ -258,8 +266,11 @@ async function lerBase(api, hoje) {
   // Os XMLs das notas não servem aqui.
   const notasLeves = notas.map(n => ({ id: n.id, pedido_id: n.pedido_id, serie: n.serie, numero: n.numero, status_fiscal: n.status_fiscal }));
   const doWebhook = eventos.filter(e => e && e.origem === 'webhook');
+  // Sem a tabela da fase F, simplesmente não há "última conciliação".
+  const execs = await execucoes.recentes(api, 1).catch(() => ({ linhas: [] }));
   return {
     pedidos, parcelas, boletos: bols, notas: notasLeves, recebimentos: recs, sqlPendente,
+    ultimaConciliacao: execs.linhas[0] || null,
     fila: doWebhook.filter(e => !e.processado_em).length,
     // Aviso conciliado com alerta (pagamento de boleto já baixado aqui), dos últimos dias.
     alertas: doWebhook
@@ -281,7 +292,7 @@ async function carregarPainel({ api, competencia, hoje, desde }) {
   const comp = competenciaValida(competencia, hoje);
   const linhas = parcelasDosPedidos({ ...base, hoje, desde });
   const recebidos = recebidosDaCompetencia({ ...base, competencia: comp });
-  return resumir({ linhas, recebidos, competencia: comp, desde, fila: base.fila, alertas: base.alertas, sqlPendente: base.sqlPendente, hoje });
+  return resumir({ linhas, recebidos, competencia: comp, desde, fila: base.fila, alertas: base.alertas, sqlPendente: base.sqlPendente, hoje, ultimaConciliacao: base.ultimaConciliacao });
 }
 
 const VISOES = ['recebidos', 'a_receber', 'em_atraso', 'abertas'];
@@ -306,7 +317,7 @@ async function carregarVisao({ api, competencia, visao, hoje, desde }) {
     desde: dia(desde),
     sql_pendente: base.sqlPendente,
     linhas: escolhidas.map(l => ({ ...l, cliente: l.cliente || nomes.get(String(l.cliente_id)) || null })),
-    resumo: resumir({ linhas, recebidos, competencia: comp, desde, fila: base.fila, alertas: base.alertas, sqlPendente: base.sqlPendente, hoje })
+    resumo: resumir({ linhas, recebidos, competencia: comp, desde, fila: base.fila, alertas: base.alertas, sqlPendente: base.sqlPendente, hoje, ultimaConciliacao: base.ultimaConciliacao })
   };
 }
 

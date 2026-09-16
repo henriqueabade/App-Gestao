@@ -341,6 +341,8 @@ test('finMapearReceber e finResumoDaConciliacao são puras', () => {
     assert.strictEqual(r.fila, 3);
     assert.strictEqual(r.boletos.rodape, '3 avisos de pagamento do BB para conciliar');
     assert.strictEqual(mapear(receberFalso({ desde: null }), null).nota, 'Todas as parcelas dos pedidos faturados');
+    assert.strictEqual(mapear(receberFalso({ ultima_conciliacao: { quando: '16/09/2026 10:05', como: 'automática', resumo: 'x' } }), null).nota,
+        'Parcelas controladas a partir de 01/09/2026 · última conciliação com o BB: 16/09/2026 10:05 (automática)');
     assert.strictEqual(mapear(receberFalso({ em_atraso: { quantidade: 0, total: 0 } }), null).atraso.rodape, 'Nenhuma parcela vencida');
     const semPermissao = mapear(null, Object.assign(new Error('x'), { status: 403 }));
     assert.strictEqual(semPermissao.recebido.valor, null);

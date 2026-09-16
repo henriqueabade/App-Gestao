@@ -350,4 +350,14 @@ if (require.main === module) {
   }
 }
 
+// Conciliação automática com o Banco do Brasil (boletos, fase F): só no
+// processo principal do app. Nos testes e no servidor solto não liga.
+if (process.versions && process.versions.electron && process.env.NODE_ENV !== 'test') {
+  try {
+    require('./cobranca/agendaConciliacao').iniciarNoApp();
+  } catch (err) {
+    console.error('[cobranca] a conciliação automática não iniciou:', err?.message || err);
+  }
+}
+
 module.exports = app;

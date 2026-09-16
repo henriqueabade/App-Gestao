@@ -392,6 +392,28 @@
     };
   }
 
+  /** A tag de cada situação de aviso do BB (webhook). */
+  const BADGE_DO_AVISO = { 'conciliado': 'badge-success', 'na fila': 'badge-warning', 'na fila (erro)': 'badge-danger', 'alerta': 'badge-danger', 'ignorado': 'badge-neutral' };
+
+  /** O resultado de POST /api/cobranca/conciliar em uma frase, e os erros à parte. */
+  function textoDaConciliacao(r, soFila = false) {
+    if (r?.sql_pendente) return { texto: 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.', erros: [] };
+    const f = r?.fila || {};
+    const c = r?.consultas || {};
+    const a = r?.acerto || {};
+    const partes = [`${Number(f.lidos) || 0} aviso(s) do BB lido(s)`];
+    if (Number(f.pagos)) partes.push(`${f.pagos} pagamento(s)`);
+    if (Number(f.cancelados)) partes.push(`${f.cancelados} cancelamento(s)`);
+    if (Number(f.ignorados)) partes.push(`${f.ignorados} ignorado(s)`);
+    if (Number(f.alertas)) partes.push(`${f.alertas} alerta(s)`);
+    if (!soFila) {
+      partes.push(`${Number(c.consultados) || 0} boleto(s) consultado(s)`);
+      if (Number(c.pagos)) partes.push(`${c.pagos} pago(s) na consulta`);
+      if (Number(a.lancados)) partes.push(`${a.lancados} recebimento(s) lançado(s)`);
+    }
+    return { texto: `${partes.join(' · ')}.`, erros: [...(f.mensagens || []), ...(c.mensagens || []), ...(a.mensagens || [])] };
+  }
+
   // ------------------------------------------------- dados de exemplo
 
   const EXEMPLO = {
@@ -692,6 +714,7 @@
     faixaDeAtraso, calcularAtrasadas, resumoAtrasadas, agingDe, resumoProducao, montarRelatorio,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
+    textoDaConciliacao, BADGE_DO_AVISO,
     RELATORIOS: Object.keys(RELATORIOS), EXEMPLO, TAXA_CMS, TAXA_ROYALTY, FAIXAS_ATRASO
   };
 
@@ -1346,13 +1369,8 @@
       mostrarMensagem('finRecebimentosMensagem', '');
       try {
         const r = await fetchApi('/api/cobranca/conciliar', { method: 'POST', body: '{}' });
-        const f = r?.fila || {};
-        const c = r?.consultas || {};
-        const partes = [`${Number(f.pagos) || 0} pagamento(s) avisado(s) pelo BB`, `${Number(c.consultados) || 0} boleto(s) consultado(s)`];
-        if (Number(c.pagos)) partes.push(`${c.pagos} pago(s) na consulta`);
-        if (Number(r?.acerto?.lancados)) partes.push(`${r.acerto.lancados} recebimento(s) lançado(s)`);
-        const erros = [...(f.mensagens || []), ...(c.mensagens || []), ...(r?.acerto?.mensagens || [])];
-        mostrarMensagem('finRecebimentosMensagem', `Conciliação: ${partes.join(' · ')}.${erros.length ? ` ${erros.slice(0, 3).join(' | ')}` : ''}`, erros.length ? 'erro' : 'ok');
+        const t = textoDaConciliacao(r);
+        mostrarMensagem('finRecebimentosMensagem', `Conciliação: ${t.texto}${t.erros.length ? ` ${t.erros.slice(0, 3).join(' | ')}` : ''}`, t.erros.length ? 'erro' : 'ok');
         window.FinanceiroRecarregar?.();
       } catch (e) {
         mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para conciliar.' : e.message);
@@ -2543,7 +2561,7 @@
       colunasAusentes = new Set(Array.from(campos)
         .filter(c => c.dataset.finCobColunaNova === 'true' && !Object.prototype.hasOwnProperty.call(cfg, c.dataset.finCob))
         .map(c => c.dataset.finCob));
-      el('finCobRecebimentosDesdeBloco')?.classList.toggle('hidden', colunasAusentes.has('recebimentos_desde'));
+      overlay.querySelectorAll('[data-fin-cob-bloco]').forEach(bloco => bloco.classList.toggle('hidden', colunasAusentes.has(bloco.dataset.finCobBloco)));
       for (const campo of campos) {
         const valor = cfg[campo.dataset.finCob];
         // DATE chega como '2026-09-16' ou '2026-09-16T00:00:00.000Z': o campo de data quer só o dia.
@@ -2579,10 +2597,85 @@
       pintarPrevia();
     }
 
+    // ------------------------------- webhook e conciliação automática (fase F)
+    function pintarWebhook(w) {
+      texto('finCobWebhookUrl', w?.url_modelo || '—');
+      const a = w?.avisos || {};
+      texto('finCobWebhookUltimo', a.ultimo_em || 'nenhum aviso recebido ainda');
+      texto('finCobWebhookFila', `${Number(a.na_fila) || 0}${Number(a.com_erro) ? ` (${a.com_erro} com erro)` : ''}`);
+      texto('finCobWebhookContagens', `${Number(a.conciliados) || 0} / ${Number(a.ignorados) || 0} / ${Number(a.alertas) || 0}`);
+      const ag = w?.agenda || {};
+      const u = ag.ultima_automatica;
+      texto('finCobAgendaUltima', u ? `${u.quando}${u.maquina ? ` · ${u.maquina}` : ''}${u.erro ? ` · falhou: ${u.erro}` : (u.resumo ? ` · ${u.resumo}` : '')}` : 'ainda não rodou');
+      texto('finCobAgendaProxima', ag.ligada === false ? 'desligada' : (ag.proxima_por_volta ? `${ag.proxima_por_volta} (com o app aberto em alguma máquina)` : '—'));
+      el('finCobWebhookSemSql')?.classList.toggle('hidden', Boolean(ag.sql_pronto));
+
+      const avisos = el('finCobWebhookAvisos');
+      avisos.replaceChildren();
+      for (const r of w?.recentes || []) {
+        const tr = document.createElement('tr');
+        const situacao = criar('span', `${BADGE_DO_AVISO[r.situacao] || 'badge-neutral'} px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap`, r.situacao);
+        if (r.detalhe || r.mensagem) situacao.title = [r.mensagem, r.detalhe].filter(Boolean).join(' — ');
+        const tdSit = criar('td', 'px-3 py-2');
+        tdSit.appendChild(situacao);
+        tr.append(criar('td', 'px-3 py-2 text-white whitespace-nowrap', r.quando || '—'), criar('td', 'px-3 py-2 break-all', r.nosso_numero || '—'), tdSit);
+        avisos.appendChild(tr);
+      }
+      if (!(w?.recentes || []).length) {
+        const tr = document.createElement('tr');
+        const td = criar('td', 'px-3 py-3 text-gray-400', 'Nenhum aviso do BB chegou ainda.');
+        td.colSpan = 3;
+        tr.appendChild(td);
+        avisos.appendChild(tr);
+      }
+
+      const execs = el('finCobExecucoes');
+      execs.replaceChildren();
+      for (const x of w?.execucoes || []) {
+        const tr = document.createElement('tr');
+        const resultado = x.erro ? `Falhou: ${x.erro}` : (x.terminou ? (x.resumo || '—') : 'não terminou');
+        tr.append(criar('td', 'px-3 py-2 text-white whitespace-nowrap', x.quando || '—'), criar('td', 'px-3 py-2', `${x.como}${x.maquina ? ` · ${x.maquina}` : ''}`), criar('td', 'px-3 py-2', resultado));
+        execs.appendChild(tr);
+      }
+      if (!(w?.execucoes || []).length) {
+        const tr = document.createElement('tr');
+        const td = criar('td', 'px-3 py-3 text-gray-400', ag.sql_pronto ? 'Nenhuma conciliação registrada ainda.' : 'O registro começa depois do SQL da fase F.');
+        td.colSpan = 3;
+        tr.appendChild(td);
+        execs.appendChild(tr);
+      }
+    }
+
+    async function carregarWebhook() {
+      try {
+        pintarWebhook(await fetchApi('/api/cobranca/webhook/estado'));
+      } catch (e) {
+        texto('finCobWebhookResultado', e.message);
+      }
+    }
+
+    async function conciliarDaConfiguracao(soFila) {
+      const saida = el('finCobWebhookResultado');
+      saida.textContent = soFila ? 'Processando os avisos…' : 'Conciliando com o Banco do Brasil…';
+      saida.style.color = '';
+      try {
+        const r = await fetchApi('/api/cobranca/conciliar', { method: 'POST', body: JSON.stringify(soFila ? { so_fila: true } : {}) });
+        const t = textoDaConciliacao(r, soFila);
+        saida.textContent = `${t.texto}${t.erros.length ? ` ${t.erros.slice(0, 3).join(' | ')}` : ''}`;
+        saida.style.color = t.erros.length ? 'var(--color-red)' : 'var(--color-green)';
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        saida.textContent = e.status === 403 ? 'Você não tem permissão para conciliar.' : e.message;
+        saida.style.color = 'var(--color-red)';
+      }
+      await carregarWebhook();
+    }
+
     async function carregar() {
       try {
         pintar(await fetchApi('/api/cobranca/configuracao'));
         el('finCobConteudo').classList.remove('hidden');
+        carregarWebhook();
       } catch (e) {
         const erroEl = el('finCobErroGeral');
         erroEl.querySelector('span').textContent = e.message;
@@ -2672,6 +2765,9 @@
     ligar('finCobSecretGuardar', guardarSecret);
     ligar('finCobSecretRemover', removerSecret);
     ligar('finCobTestar', testar);
+    ligar('finCobWebhookAtualizar', carregarWebhook);
+    ligar('finCobWebhookProcessar', () => conciliarDaConfiguracao(true));
+    ligar('finCobWebhookConciliar', () => conciliarDaConfiguracao(false));
     el('finCob_ambiente')?.addEventListener('change', alternarConfirmacao);
     for (const chave of ['juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'protesto_dias', 'dias_limite_recebimento']) {
       const campo = overlay.querySelector(`[data-fin-cob="${chave}"]`);

@@ -295,10 +295,12 @@ function finMapearReceber(painel, erro) {
     const extras = [];
     if (Number(r.encargos) > 0) extras.push(`juros e multa ${finFormatarMoeda(r.encargos)}`);
     if (Number(r.estornados) > 0) extras.push(finPlural(r.estornados, 'estornado', 'estornados'));
+    const controle = painel.sql_pendente
+        ? 'Falta ativar: rode sql/cobranca_recebimentos.sql e reinicie a API.'
+        : (painel.desde ? `Parcelas controladas a partir de ${finFormatarData(painel.desde)}` : 'Todas as parcelas dos pedidos faturados');
+    const ultima = painel.ultima_conciliacao;
     return {
-        nota: painel.sql_pendente
-            ? 'Falta ativar: rode sql/cobranca_recebimentos.sql e reinicie a API.'
-            : (painel.desde ? `Parcelas controladas a partir de ${finFormatarData(painel.desde)}` : 'Todas as parcelas dos pedidos faturados'),
+        nota: ultima?.quando ? `${controle} · última conciliação com o BB: ${ultima.quando}${ultima.como ? ` (${ultima.como})` : ''}` : controle,
         recebido: {
             valor: Number(r.total) || 0,
             auxiliar: finPlural(Number(r.quantidade) || 0, 'recebimento', 'recebimentos'),

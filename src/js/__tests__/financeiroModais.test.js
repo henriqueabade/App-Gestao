@@ -249,7 +249,8 @@ test('configuração de cobrança (boletos BB) é o modal REAL: lê e grava em /
         'client_id_sandbox', 'app_key_sandbox', 'client_id_producao', 'app_key_producao', 'proximo_sequencial_sandbox', 'proximo_sequencial_producao',
         'homologacao_convenio', 'homologacao_carteira', 'homologacao_variacao', 'homologacao_agencia', 'homologacao_conta',
         'especie', 'aceite', 'juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'multa_dias', 'protesto_dias', 'negativacao_dias',
-        'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto', 'recebimentos_desde']) {
+        'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto', 'recebimentos_desde',
+        'conciliacao_automatica', 'conciliacao_intervalo_min']) {
         assert.ok(html.includes(`data-fin-cob="${chave}"`), `campo ${chave} sem data-fin-cob`);
     }
     assert.match(html, /id="finCobSecret" type="password"/, 'o secret entra num campo de senha');
@@ -477,4 +478,37 @@ test('todo botão que chama BotaoAcao.run no próprio clique leva data-acao-geri
         }
     }
     assert.match(SCRIPT, /function acionar\(botao, fn\) \{\s*botao\.dataset\.acaoGerida = 'true';/);
+});
+
+test('configuração de cobrança (fase F): avisos do BB e conciliação automática, sem token na tela', () => {
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'configuracao-cobranca.html'), 'utf8');
+    for (const id of ['finCobWebhookSecao', 'finCobWebhookUrl', 'finCobWebhookUltimo', 'finCobWebhookFila', 'finCobWebhookContagens', 'finCobAgendaUltima',
+        'finCobAgendaProxima', 'finCobWebhookSemSql', 'finCobWebhookAtualizar', 'finCobWebhookProcessar', 'finCobWebhookConciliar', 'finCobWebhookResultado',
+        'finCobWebhookAvisos', 'finCobExecucoes']) {
+        assert.ok(html.includes(`id="${id}"`), `configuração de cobrança sem #${id}`);
+    }
+    assert.match(html, /id="finCobWebhookProcessar" type="button" data-perm="financeiro\.recebimento\.view"/);
+    assert.match(html, /id="finCobWebhookConciliar" type="button" data-perm="financeiro\.recebimento\.view"/);
+    for (const coluna of ['recebimentos_desde', 'conciliacao_automatica', 'conciliacao_intervalo_min']) {
+        assert.match(html, new RegExp(`data-fin-cob-bloco="${coluna}"`), `${coluna}: o bloco some sem a coluna`);
+        assert.match(html, new RegExp(`data-fin-cob="${coluna}" data-fin-cob-coluna-nova="true"`), `${coluna}: não vai no PUT sem a coluna`);
+    }
+    assert.ok(!/BB_WEBHOOK_TOKEN=|data-fin-cob="[^"]*token/i.test(html), 'o token não é campo da tela');
+    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(html), 'botões só com texto');
+
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/webhook\/estado'\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/conciliar', \{ method: 'POST', body: JSON\.stringify\(soFila \? \{ so_fila: true \} : \{\}\) \}\)/);
+    assert.match(SCRIPT, /ligar\('finCobWebhookProcessar', \(\) => conciliarDaConfiguracao\(true\)\)/);
+    assert.match(SCRIPT, /ligar\('finCobWebhookConciliar', \(\) => conciliarDaConfiguracao\(false\)\)/);
+    assert.match(SCRIPT, /overlay\.querySelectorAll\('\[data-fin-cob-bloco\]'\)\.forEach\(bloco => bloco\.classList\.toggle\('hidden', colunasAusentes\.has\(bloco\.dataset\.finCobBloco\)\)\)/);
+
+    const f = puro();
+    const r = {
+        fila: { lidos: 3, pagos: 1, cancelados: 0, ignorados: 2, alertas: 0, mensagens: ['Aviso 7: erro'] },
+        consultas: { consultados: 4, pagos: 1, mensagens: [] }, acerto: { lancados: 2, mensagens: [] }
+    };
+    assert.deepStrictEqual(plano(f.textoDaConciliacao(r)), { texto: '3 aviso(s) do BB lido(s) · 1 pagamento(s) · 2 ignorado(s) · 4 boleto(s) consultado(s) · 1 pago(s) na consulta · 2 recebimento(s) lançado(s).', erros: ['Aviso 7: erro'] });
+    assert.strictEqual(f.textoDaConciliacao(r, true).texto, '3 aviso(s) do BB lido(s) · 1 pagamento(s) · 2 ignorado(s).', 'só a fila não fala da consulta');
+    assert.match(f.textoDaConciliacao({ sql_pendente: true }).texto, /sql\/cobranca_recebimentos\.sql/);
+    assert.deepStrictEqual(plano(f.BADGE_DO_AVISO), { 'conciliado': 'badge-success', 'na fila': 'badge-warning', 'na fila (erro)': 'badge-danger', 'alerta': 'badge-danger', 'ignorado': 'badge-neutral' });
 });

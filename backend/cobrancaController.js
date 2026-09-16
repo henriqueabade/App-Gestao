@@ -33,6 +33,10 @@
  *   POST   /recebimentos/:id/estornar                 { motivo }
  *   POST   /conciliar                                 fila do webhook + consulta dos boletos a pagar (so_fila: só a fila)
  *
+ * Fase F — webhook e conciliação automática:
+ *   GET    /webhook/estado    URL a cadastrar (sem o token), avisos recebidos, agenda e execuções
+ *   (a agenda roda sozinha: backend/cobranca/agendaConciliacao.js, ligada pelo server.js no app)
+ *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
  * tela, é cifrado e só sai daqui para o OAuth do BB. Mesmo padrão do
  * certificado A1 e da senha do SMTP (fiscalController.js).
@@ -52,6 +56,9 @@ const operacoes = require('./cobranca/boletoOperacoes');
 const recebimentos = require('./cobranca/recebimentos');
 const contasReceber = require('./cobranca/contasReceber');
 const conciliacao = require('./cobranca/conciliacao');
+const execucoes = require('./cobranca/execucoes');
+const webhookEstado = require('./cobranca/webhookEstado');
+const os = require('os');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -545,16 +552,47 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     }
   });
 
+  /** A conciliação inteira com as peças deste router (a agenda automática usa a mesma). */
+  function conciliarCom({ api, cfg, usuarioId = null, soFila = false }) {
+    return conciliacao.conciliar({ api, bb: cliente, conexao: conexoesDe(api, cfg), cfg, hoje: hojeEmBrasilia(), usuarioId, soFila });
+  }
+  router.conciliarEmSegundoPlano = conciliarCom;
+
   router.post('/conciliar', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
     try {
       const api = createApiClient(req);
       const cfg = await configuracao.carregar(api, { forcar: true });
-      res.json(await conciliacao.conciliar({
-        api, bb: cliente, conexao: conexoesDe(api, cfg), cfg, hoje: hojeEmBrasilia(), usuarioId: usuarioDaRequisicao(req),
-        soFila: req.body?.so_fila === true
-      }));
+      const usuarioId = usuarioDaRequisicao(req);
+      const soFila = req.body?.so_fila === true;
+      // A conciliação pelo botão também fica no registro (sem a tabela da fase F, segue sem registrar).
+      const execucao = soFila ? null : await execucoes.iniciar(api, {
+        tipo: 'conciliacao_manual', chave: `manual:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, maquina: os.hostname(), usuarioId
+      }).catch(() => null);
+      try {
+        const resultado = await conciliarCom({ api, cfg, usuarioId, soFila });
+        if (execucao?.id) await execucoes.concluir(api, execucao, { resultado }).catch(() => {});
+        res.json(resultado);
+      } catch (e) {
+        if (execucao?.id) await execucoes.concluir(api, execucao, { erro: e.message }).catch(() => {});
+        throw e;
+      }
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/conciliar');
+    }
+  });
+
+  /** O webhook e a agenda para a Configuração de cobrança (nunca traz o token: ele só existe no .env da API). */
+  router.get('/webhook/estado', exigirPermissao('financeiro.config.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const [cfg, eventos, execs] = await Promise.all([
+        configuracao.carregar(api, { forcar: true }),
+        api.get('/api/boletos_eventos', { query: { origem: 'webhook' } }).catch(() => []),
+        execucoes.recentes(api, 10)
+      ]);
+      res.json(webhookEstado.montar({ cfg, eventos: Array.isArray(eventos) ? eventos : [], execucoes: execs, env }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/webhook/estado');
     }
   });
 
@@ -565,3 +603,5 @@ const router = criarRouter();
 module.exports = router;
 module.exports.criarRouter = criarRouter;
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
+/** Para a agenda automática (fase F): a conciliação com o cofre, o banco e o cliente do BB deste módulo. */
+module.exports.conciliarEmSegundoPlano = opcoes => router.conciliarEmSegundoPlano(opcoes);
