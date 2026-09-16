@@ -232,9 +232,33 @@
       tag.className = `${r.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       tag.textContent = r.texto;
       if (r.detalhe) tag.title = r.detalhe;
+      // Boleto a pagar: a tag gera o PDF daquela parcela.
+      if (linha?.boleto && boletoImprimivel(linha.boleto) && window.BoletoDocumentos) {
+        tag.classList.add('cursor-pointer');
+        tag.setAttribute('role', 'button');
+        tag.dataset.perm = 'financeiro.boleto.view';
+        tag.title = `${r.detalhe ? `${r.detalhe} — ` : ''}clique para gerar o PDF do boleto`;
+        tag.addEventListener('click', () => window.BoletoDocumentos.gerarBoletoPdf(linha.boleto.id));
+      }
       td.appendChild(tag);
       tr.appendChild(td);
     });
+  }
+
+  /** Boleto que ainda se paga (registrado, vencido ou em protesto): tem PDF. Pura. */
+  function boletoImprimivel(boleto) {
+    return ['registrado', 'vencido', 'protestado'].includes(String(boleto?.status || ''));
+  }
+
+  /** "Boletos (PDF)" no rodapé: todos os boletos a pagar do pedido. */
+  function ligarBoletosPdf(estado) {
+    const botao = overlay.querySelector('#visualizarPedidoBoletosPdf');
+    if (!botao || !estado || !Array.isArray(estado.parcelas)) return;
+    if (!estado.parcelas.some(l => boletoImprimivel(l?.boleto)) || !window.BoletoDocumentos) return;
+    const gerar = () => window.BoletoDocumentos.gerarBoletosDoPedidoPdf(id);
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, gerar);
+    else botao.addEventListener('click', gerar);
   }
 
   /** "Gerar boletos" no rodapé: só quando há parcela sem boleto vivo e o pedido não está cancelado. */
@@ -539,6 +563,7 @@
       }
     }
     ligarGerarBoletos(boletosEstado, data);
+    ligarBoletosPdf(boletosEstado);
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';
     const contatoNome = contatoSel?.selectedOptions?.[0]?.textContent?.trim() || data.contato || '';

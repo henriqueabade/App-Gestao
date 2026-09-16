@@ -18,6 +18,8 @@ const bbBoleto = require('./bbBoleto');
 const calculo = require('./boletoCalculo');
 
 const STATUS_VIVOS = new Set(['registrado', 'pago', 'vencido', 'protestado']);
+/** Os que ainda se pagam: entram no PDF "todos os boletos do pedido". */
+const STATUS_A_PAGAR = new Set(['registrado', 'vencido', 'protestado']);
 const STATUS_REUTILIZAVEIS = new Set(['reservado', 'erro']);
 const TENTATIVAS_NUMERO = 30;
 /** Quantas vezes o registro troca de nosso número quando o BB diz que ele já existe. */
@@ -304,7 +306,7 @@ async function ler(api, boletoId) {
 }
 
 module.exports = {
-  STATUS_VIVOS, STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
+  STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
   enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, boletoDaParcela, parcelasComBoletos, resumo,
   reservarBoleto, registrar, listar, ler
 };

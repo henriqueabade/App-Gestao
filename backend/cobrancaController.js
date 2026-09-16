@@ -14,6 +14,10 @@
  *   POST   /pedidos/:id/boletos   registra no BB (parcelas: [ids] ou todas sem boleto)
  *   GET    /boletos, /boletos/:id
  *
+ * Fase C — boleto em PDF (HTML que o app imprime):
+ *   GET    /boletos/:id/documento           um boleto
+ *   GET    /pedidos/:id/boletos/documento   todos os boletos a pagar do pedido
+ *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
  * tela, é cifrado e só sai daqui para o OAuth do BB. Mesmo padrão do
  * certificado A1 e da senha do SMTP (fiscalController.js).
@@ -28,6 +32,7 @@ const bbCliente = require('./cobranca/bbCliente');
 const calculo = require('./cobranca/boletoCalculo');
 const boletos = require('./cobranca/boletos');
 const bbBoleto = require('./cobranca/bbBoleto');
+const boletoDocumento = require('./cobranca/boletoDocumento');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -311,6 +316,39 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       res.json(boletos.enxuto(await boletos.ler(createApiClient(req), req.params.id)));
     } catch (err) {
       responder(res, err, 'GET /api/cobranca/boletos/:id');
+    }
+  });
+
+  // ------------------------------------------------ boleto em PDF (fase C)
+  // O HTML volta para o app, que gera o PDF (printToPDF) — a API do BB não
+  // devolve o boleto impresso. Nada é enviado ao cliente.
+
+  /** Um boleto (a ficha completa, com recibo e código de barras). */
+  router.get('/boletos/:id/documento', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const [boleto, cfg] = await Promise.all([boletos.ler(api, req.params.id), configuracao.carregar(api)]);
+      const { html, dados } = await boletoDocumento.gerarBoletosHtml(boleto, cfg);
+      res.json({ nome: dados[0].nomeArquivo, html, boleto: boletos.enxuto(boleto) });
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/boletos/:id/documento');
+    }
+  });
+
+  /** Todos os boletos a pagar do pedido num PDF só (uma página por parcela). */
+  router.get('/pedidos/:id/boletos/documento', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const dados = await boletos.lerPedidoCobranca(api, req.params.id);
+      const aPagar = dados.parcelas
+        .map(p => boletos.boletoDaParcela(dados.boletos, p))
+        .filter(b => b && boletos.STATUS_A_PAGAR.has(String(b.status)));
+      if (!aPagar.length) throw erro('Este pedido não tem boleto registrado a pagar.', 404);
+      const { html } = await boletoDocumento.gerarBoletosHtml(aPagar, dados.configuracao);
+      const numero = String(dados.pedido.numero || dados.pedido.id).replace(/[^A-Za-z0-9]/g, '');
+      res.json({ nome: `Boletos-${numero}`, html, quantidade: aPagar.length });
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/pedidos/:id/boletos/documento');
     }
   });
 

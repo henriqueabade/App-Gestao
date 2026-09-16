@@ -367,6 +367,26 @@ test('boletos do pedido: ver exige financeiro.boleto.view; o estado diz o que im
     assert.equal(depois.corpo.pode_gerar, false, 'nada mais a gerar');
     assert.deepEqual(depois.corpo.resumo, { total: 3, registrados: 3, pagos: 0, com_erro: 0, valor_registrado: 3000 });
 
+    // Fase C: o PDF (HTML) de um boleto e de todos os do pedido.
+    t.estado.chaves.delete('financeiro.boleto.view');
+    assert.equal((await t.chamar('GET', `/api/cobranca/boletos/${tabelas.boletos[0].id}/documento`)).status, 403);
+    t.estado.chaves.add('financeiro.boleto.view');
+    const pdfUm = await t.chamar('GET', `/api/cobranca/boletos/${tabelas.boletos[0].id}/documento`);
+    assert.equal(pdfUm.status, 200, JSON.stringify(pdfUm.corpo));
+    assert.equal(pdfUm.corpo.nome, 'Boleto-2548P1-00031285570000000001');
+    assert.ok(pdfUm.corpo.html.includes('Recibo do Pagador') && pdfUm.corpo.html.includes('Ficha de Compensação'));
+    assert.ok(pdfUm.corpo.html.includes('00190.00009 03453.481008 00000.393173 1 16950000332700'), 'a linha digitável do BB');
+    assert.ok(pdfUm.corpo.html.includes('452/123873'), 'homologação: conta de teste');
+    assert.ok(pdfUm.corpo.html.includes('HOMOLOGAÇÃO — SEM VALOR'));
+    assert.ok(pdfUm.corpo.html.includes('Pague agora com o seu Pix'), 'o BB devolveu Pix');
+    assert.ok(!('requisicao' in pdfUm.corpo.boleto));
+    const todos = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos/documento');
+    assert.equal(todos.status, 200);
+    assert.equal(todos.corpo.nome, 'Boletos-2548');
+    assert.equal(todos.corpo.quantidade, 3);
+    assert.equal((todos.corpo.html.match(/<section class="pagina">/g) || []).length, 3);
+    assert.equal((await t.chamar('GET', '/api/cobranca/boletos/999/documento')).status, 404);
+
     const lista = await t.chamar('GET', '/api/cobranca/boletos?pedido_id=55');
     assert.equal(lista.corpo.length, 3);
     const um = await t.chamar('GET', `/api/cobranca/boletos/${tabelas.boletos[0].id}`);

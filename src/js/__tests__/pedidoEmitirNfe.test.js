@@ -317,8 +317,13 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.ok(VISUALIZAR.includes('pintarColunaDeBoletos(pagamentoBox, detalhes, boletosEstado);') && VISUALIZAR.includes("th.textContent = 'BOLETO';"), 'a coluna BOLETO entra na tabela de parcelas, por createElement');
   assert.ok(VISUALIZAR.includes("Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos')"));
   assert.ok(/id="visualizarPedidoGerarBoletos"[^>]*data-perm="financeiro\.boleto\.emit"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Gerar boletos" nasce escondido, com a guarda escrita');
+  assert.ok(/id="visualizarPedidoBoletosPdf"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Boletos (PDF)" nasce escondido, com a guarda escrita');
+  assert.ok(VISUALIZAR.includes('ligarBoletosPdf(boletosEstado);') && VISUALIZAR.includes('window.BoletoDocumentos.gerarBoletosDoPedidoPdf(id)'), 'PDF de todos os boletos do pedido');
+  assert.ok(VISUALIZAR.includes('window.BoletoDocumentos.gerarBoletoPdf(linha.boleto.id)'), 'a tag da parcela gera o PDF daquele boleto');
   const contexto2 = vm.createContext({});
-  vm.runInContext([recortarFuncao(VISUALIZAR, 'resumoDeBoletos'), recortarFuncao(VISUALIZAR, 'rotuloDoBoleto')].join('\n'), contexto2);
+  vm.runInContext([recortarFuncao(VISUALIZAR, 'resumoDeBoletos'), recortarFuncao(VISUALIZAR, 'rotuloDoBoleto'), recortarFuncao(VISUALIZAR, 'boletoImprimivel')].join('\n'), contexto2);
+  assert.deepStrictEqual(['registrado', 'vencido', 'protestado', 'pago', 'baixado', 'erro', 'reservado'].map(s => contexto2.boletoImprimivel({ status: s })), [true, true, true, false, false, false, false]);
+  assert.strictEqual(contexto2.boletoImprimivel(null), false);
   assert.deepStrictEqual(plano(contexto2.resumoDeBoletos({ parcelas: [{ tem_boleto_vivo: true, boleto: { status: 'pago' } }, { tem_boleto_vivo: false, boleto: { status: 'erro' } }, { tem_boleto_vivo: false, boleto: null }] })), { parcelas: 3, registrados: 1, pagos: 1, com_erro: 1 });
   assert.deepStrictEqual(plano(contexto2.resumoDeBoletos(null)), { parcelas: 0, registrados: 0, pagos: 0, com_erro: 0 });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'registrado', nosso_numero: '00034534810000000393', nosso_numero_dv: '4', ambiente: 'sandbox', linha_digitavel: '001…' })),

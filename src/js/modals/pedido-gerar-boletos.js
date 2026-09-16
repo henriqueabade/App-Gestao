@@ -5,7 +5,8 @@
  * uma e o que impede gerar), deixa marcar as parcelas sem boleto vivo e
  * registra no Banco do Brasil por POST /api/cobranca/pedidos/:id/boletos.
  * O resultado sai parcela a parcela: uma recusa do BB não impede as outras.
- * Nada vai para o cliente.
+ * Nada vai para o cliente. Com as parcelas registradas, o PDF sai por linha
+ * ("PDF") ou de todas ("Boletos (PDF)"), e o "Gerar boletos" some.
  *
  * Contexto: `window.gerarBoletosContext = { pedidoId, numero, cliente }`.
  */
@@ -30,6 +31,9 @@
       vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10),
       valor: Number(l?.parcela?.valor) || 0,
       podeGerar: !l?.tem_boleto_vivo,
+      // Tem o que imprimir: registrado, vencido ou em protesto (pago e baixado não se pagam mais).
+      temPdf: Boolean(b && ['registrado', 'vencido', 'protestado'].includes(String(b.status))),
+      boletoId: b?.id ?? null,
       classe, rotulo,
       detalhe: b ? (b.status === 'erro' ? (b.erro || '') : [b.nosso_numero ? `${b.nosso_numero}${b.nosso_numero_dv ? `-${b.nosso_numero_dv}` : ''}` : '', b.linha_digitavel || ''].filter(Boolean).join(' · ')) : ''
     };
@@ -46,6 +50,18 @@
     if (erros) partes.push(erros === 1 ? '1 com erro' : `${erros} com erro`);
     if (!partes.length) partes.push('Nenhum boleto para gerar');
     return { texto: `${partes.join(' · ')}.`, tipo: erros ? 'error' : (registrados ? 'success' : 'info') };
+  }
+
+  /** O rodapé: gerar só quando há parcela sem boleto; PDF quando há boleto a pagar. */
+  function estadoDoRodape(estado) {
+    const linhas = (estado?.parcelas || []).map(linhaDaParcela);
+    const faltam = linhas.filter(l => l.podeGerar).length;
+    const comPdf = linhas.filter(l => l.temPdf).length;
+    return {
+      mostrarGerar: Boolean(estado?.pode_gerar) && faltam > 0,
+      mostrarPdf: comPdf > 0,
+      aviso: linhas.length && faltam === 0 ? 'Todas as parcelas já têm boleto registrado.' : ''
+    };
   }
 
   function mensagemDeErro(status, corpo) {
@@ -72,6 +88,7 @@
   const mensagemEl = el('gerarBoletosMensagem');
   const resultadoEl = el('gerarBoletosResultado');
   const confirmarBtn = el('confirmarGerarBoletos');
+  const pdfTodosBtn = el('baixarBoletosPdf');
   let estado = null;
   let emAndamento = false;
   let fechado = false;
@@ -144,6 +161,16 @@
       tag.className = `${l.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       tag.textContent = l.rotulo;
       tdBoleto.appendChild(tag);
+      if (l.temPdf) {
+        const pdf = document.createElement('button');
+        pdf.type = 'button';
+        pdf.className = 'btn-neutral ml-2 px-2 py-0.5 rounded-md text-xs font-medium text-white';
+        pdf.dataset.perm = 'financeiro.boleto.view';
+        pdf.textContent = 'PDF';
+        pdf.title = `Gerar o PDF do boleto da parcela ${l.numero}`;
+        pdf.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(pdf, () => gerarPdf(l.boletoId)) : gerarPdf(l.boletoId)));
+        tdBoleto.appendChild(pdf);
+      }
       if (l.detalhe) {
         const det = document.createElement('p');
         det.className = 'mt-1 text-xs text-gray-400 break-all';
@@ -159,8 +186,28 @@
 
   function atualizarBotao() {
     const n = marcadas().length;
-    confirmarBtn.disabled = !estado?.pode_gerar || n === 0;
+    const rodape = estadoDoRodape(estado);
+    // Nada a gerar: o botão sai de cena (o verde desabilitado parecia ativo).
+    confirmarBtn.classList.toggle('hidden', !rodape.mostrarGerar);
+    confirmarBtn.disabled = !rodape.mostrarGerar || n === 0;
+    confirmarBtn.style.opacity = confirmarBtn.disabled ? '0.5' : '';
     confirmarBtn.textContent = n ? `Gerar ${n === 1 ? '1 boleto' : `${n} boletos`}` : 'Gerar boletos';
+    pdfTodosBtn?.classList.toggle('hidden', !rodape.mostrarPdf);
+    const aviso = el('gerarBoletosCompleto');
+    if (aviso) {
+      aviso.textContent = rodape.aviso;
+      aviso.classList.toggle('hidden', !rodape.aviso);
+    }
+  }
+
+  function gerarPdf(boletoId) {
+    if (!window.BoletoDocumentos) { exibirMensagem('erro', 'Geração de PDF indisponível nesta janela.'); return null; }
+    return window.BoletoDocumentos.gerarBoletoPdf(boletoId);
+  }
+
+  function gerarPdfDoPedido() {
+    if (!window.BoletoDocumentos) { exibirMensagem('erro', 'Geração de PDF indisponível nesta janela.'); return null; }
+    return window.BoletoDocumentos.gerarBoletosDoPedidoPdf(ctx.pedidoId);
   }
 
   async function carregar() {
@@ -173,6 +220,7 @@
     } catch (err) {
       exibirMensagem('erro', err?.message || 'Não foi possível ler as parcelas.');
       confirmarBtn.disabled = true;
+      confirmarBtn.classList.add('hidden');
     } finally {
       el('gerarBoletosCarregando').classList.add('hidden');
     }
@@ -225,8 +273,13 @@
     }
   }
 
-  if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(confirmarBtn, confirmar);
-  else confirmarBtn.addEventListener('click', confirmar);
+  if (typeof window.BotaoAcao?.bind === 'function') {
+    window.BotaoAcao.bind(confirmarBtn, confirmar);
+    if (pdfTodosBtn) window.BotaoAcao.bind(pdfTodosBtn, gerarPdfDoPedido);
+  } else {
+    confirmarBtn.addEventListener('click', confirmar);
+    pdfTodosBtn?.addEventListener('click', gerarPdfDoPedido);
+  }
 
   overlay.classList.remove('hidden');
   overlay.removeAttribute('aria-hidden');
