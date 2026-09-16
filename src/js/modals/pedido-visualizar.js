@@ -140,7 +140,9 @@
   function rotuloDoBoleto(boleto) {
     if (!boleto) return { classe: 'badge-neutral', texto: 'sem boleto' };
     const ROTULO = { registrado: ['badge-success', 'registrado'], pago: ['badge-success', 'pago'], baixado: ['badge-neutral', 'baixado'], vencido: ['badge-warning', 'vencido'], protestado: ['badge-danger', 'protestado'], erro: ['badge-danger', 'erro'], reservado: ['badge-warning', 'reservado'] };
-    const [classe, rotulo] = ROTULO[boleto.status] || ['badge-neutral', String(boleto.status || '')];
+    const MOTIVO = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'pelo banco' };
+    const [classe, rotuloBase] = ROTULO[boleto.status] || ['badge-neutral', String(boleto.status || '')];
+    const rotulo = boleto.status === 'baixado' && MOTIVO[boleto.motivo_baixa] ? `${rotuloBase} (${MOTIVO[boleto.motivo_baixa]})` : rotuloBase;
     const numero = boleto.nosso_numero ? `${boleto.nosso_numero}${boleto.nosso_numero_dv ? `-${boleto.nosso_numero_dv}` : ''}` : '';
     return { classe, texto: `${rotulo}${numero ? ` · ${numero}` : ''}${boleto.ambiente === 'sandbox' ? ' · homologação' : ''}`, detalhe: boleto.status === 'erro' ? (boleto.erro || '') : (boleto.linha_digitavel || '') };
   }
@@ -261,20 +263,32 @@
     else botao.addEventListener('click', gerar);
   }
 
-  /** "Gerar boletos" no rodapé: só quando há parcela sem boleto vivo e o pedido não está cancelado. */
+  /**
+   * "Gerar boletos" no rodapé: só quando há parcela sem boleto vivo e o pedido
+   * não está cancelado. Com tudo gerado, "Boletos" abre o mesmo modal para
+   * consultar, prorrogar, conceder abatimento e baixar (fase D).
+   */
   function ligarGerarBoletos(estado, pedido) {
     const botao = overlay.querySelector('#visualizarPedidoGerarBoletos');
-    if (!botao || !estado || !Array.isArray(estado.parcelas)) return;
+    const lista = overlay.querySelector('#visualizarPedidoBoletos');
+    if (!estado || !Array.isArray(estado.parcelas)) return;
     const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo);
-    if (!falta || String(pedido?.situacao || '').toLowerCase() === 'cancelado') return;
+    const cancelado = String(pedido?.situacao || '').toLowerCase() === 'cancelado';
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
       close();
       Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos');
     };
-    botao.classList.remove('hidden');
-    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
-    else botao.addEventListener('click', abrir);
+    const ligar = b => {
+      b.classList.remove('hidden');
+      if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(b, abrir);
+      else b.addEventListener('click', abrir);
+    };
+    const temBoleto = estado.parcelas.some(l => l?.boleto?.id);
+    // Quem só vê boletos (ou pedido cancelado, cujos boletos ainda se baixam) entra pela lista.
+    const podeGerar = typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode('financeiro.boleto.emit') : true;
+    if (botao && falta && !cancelado && podeGerar) ligar(botao);
+    else if (lista && temBoleto) ligar(lista);
   }
 
   const close = () => {

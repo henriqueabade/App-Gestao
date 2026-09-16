@@ -21,11 +21,23 @@ const STATUS_VIVOS = new Set(['registrado', 'pago', 'vencido', 'protestado']);
 /** Os que ainda se pagam: entram no PDF "todos os boletos do pedido". */
 const STATUS_A_PAGAR = new Set(['registrado', 'vencido', 'protestado']);
 const STATUS_REUTILIZAVEIS = new Set(['reservado', 'erro']);
+/**
+ * Baixa que resolve a parcela (fase D): quitada por fora ou cobrança
+ * cancelada. A parcela não ganha boleto novo sozinha; a baixa para
+ * reemissão (ou a do próprio banco, por prazo) deixa gerar outro.
+ */
+const MOTIVOS_QUE_ENCERRAM = new Set(['quitado_por_fora', 'cancelado']);
 const TENTATIVAS_NUMERO = 30;
 /** Quantas vezes o registro troca de nosso número quando o BB diz que ele já existe. */
 const TENTATIVAS_NO_BB = 5;
 
 const lista = r => (Array.isArray(r) ? r : (r && typeof r === 'object' && !r.error ? [r] : []));
+/**
+ * Lista vai como texto JSON: pela API remota o `pg` transformaria o array em
+ * array do Postgres ("{a,b}"), que a coluna JSONB (instrucoes) recusa. O
+ * cliente local (DEV) já fazia isso; assim os dois caminhos gravam igual.
+ */
+const paraGravar = campos => Object.fromEntries(Object.entries(campos).map(([k, v]) => [k, Array.isArray(v) ? JSON.stringify(v) : v]));
 const primeiroId = criado => criado?.id ?? criado?.data?.id ?? criado?.[0]?.id ?? null;
 
 function erro(mensagem, status = 400, extra = null) {
@@ -89,20 +101,38 @@ async function lerPedidoCobranca(api, pedidoId) {
   };
 }
 
+/** O boleto ocupa a parcela: vivo, ou baixado por quitação por fora / cancelamento. */
+function ocupaParcela(b) {
+  if (!b) return false;
+  if (STATUS_VIVOS.has(String(b.status))) return true;
+  return String(b.status) === 'baixado' && MOTIVOS_QUE_ENCERRAM.has(String(b.motivo_baixa || ''));
+}
+
+function boletosDaParcela(boletos, parcela) {
+  return (boletos || []).filter(b => b && (Number(b.parcela_id) === Number(parcela?.id)
+    || (b.parcela_id === null && Number(b.numero_parcela) === Number(parcela?.numero_parcela))));
+}
+
 /** O boleto que vale para a parcela (vivo mais novo); senão o reaproveitável mais novo; senão null. */
 function boletoDaParcela(boletos, parcela) {
-  const daParcela = (boletos || []).filter(b => b && (Number(b.parcela_id) === Number(parcela?.id)
-    || (b.parcela_id === null && Number(b.numero_parcela) === Number(parcela?.numero_parcela))));
+  const daParcela = boletosDaParcela(boletos, parcela);
   return daParcela.find(b => STATUS_VIVOS.has(String(b.status)))
+    || daParcela.find(ocupaParcela)
     || daParcela.find(b => STATUS_REUTILIZAVEIS.has(String(b.status)))
     || null;
 }
 
-/** As parcelas com o boleto de cada uma — o que a tela do pedido mostra. */
+/**
+ * As parcelas com o boleto de cada uma — o que a tela do pedido mostra.
+ * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
+ * histórico; a parcela continua livre para gerar outro.
+ */
 function parcelasComBoletos({ parcelas, boletos }) {
   return (parcelas || []).map(p => {
-    const b = boletoDaParcela(boletos, p);
-    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: Boolean(b && STATUS_VIVOS.has(String(b.status))) };
+    const b = boletoDaParcela(boletos, p)
+      || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
+      || null;
+    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b) };
   });
 }
 
@@ -132,7 +162,7 @@ async function reservarBoleto({ api, cfg, ambiente, base, usuarioId }) {
     };
     let criada;
     try {
-      criada = await api.post('/api/boletos', linha);
+      criada = await api.post('/api/boletos', paraGravar(linha));
     } catch (e) {
       if (ehNumeroDuplicado(e)) continue;
       throw e;
@@ -186,7 +216,7 @@ async function renumerar({ api, boleto, ambiente, usuarioId, motivo }) {
 
 async function atualizarBoleto(api, boleto, campos) {
   const payload = { ...campos, atualizado_em: new Date().toISOString() };
-  const r = await api.put(`/api/boletos/${boleto.id}`, payload);
+  const r = await api.put(`/api/boletos/${boleto.id}`, paraGravar(payload));
   return { ...boleto, ...payload, ...(r && typeof r === 'object' && !Array.isArray(r) ? r : {}) };
 }
 
@@ -195,9 +225,14 @@ async function atualizarBoleto(api, boleto, campos) {
  * `parcelaIds` vem vazio). Nunca para no primeiro erro: devolve o resultado
  * parcela a parcela, para a tela dizer o que saiu e o que não.
  *
- * @param {object} p { api, pedidoId, parcelaIds, notaFiscalId, cliente (do BB: chamar/credenciais), ambiente, cfg, usuarioId, hoje }
+ * Reemissão (fase D): `vencimentos` ({ [parcelaId]: 'YYYY-MM-DD' }) troca o
+ * vencimento do boleto novo sem mexer na parcela, e `substituiBoletoId`
+ * liga o novo ao baixado. Uma reemissão que falhou guarda a data: tentar de
+ * novo pelo pedido usa a mesma.
+ *
+ * @param {object} p { api, pedidoId, parcelaIds, notaFiscalId, cliente (do BB: chamar/credenciais), ambiente, cfg, usuarioId, hoje, vencimentos, substituiBoletoId }
  */
-async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, bb, credenciais, appKey, ambiente, cfg, usuarioId = null, hoje }) {
+async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, bb, credenciais, appKey, ambiente, cfg, usuarioId = null, hoje, vencimentos = {}, substituiBoletoId = null }) {
   const dados = await lerPedidoCobranca(api, pedidoId);
   const cfgCobranca = cfg || dados.configuracao;
   if (!cfgCobranca) throw erro('Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).', 409);
@@ -214,15 +249,19 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
 
   for (const parcela of alvo) {
     const existente = boletoDaParcela(dados.boletos, parcela);
-    if (existente && STATUS_VIVOS.has(String(existente.status))) {
+    if (ocupaParcela(existente)) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, boleto: enxuto(existente) });
       continue;
     }
+    const substitui = substituiBoletoId ?? existente?.substitui_boleto_id ?? null;
+    const vencimentoNovo = vencimentos?.[parcela.id]
+      || (existente?.substitui_boleto_id ? String(existente.data_vencimento || '').slice(0, 10) : null);
+    const parcelaDoBoleto = vencimentoNovo ? { ...parcela, data_vencimento: vencimentoNovo } : parcela;
 
     let montado;
     try {
       const sequencial = existente ? Number(existente.sequencial) : configuracao.proximoSequencial(cfgCobranca, ambiente);
-      montado = bbBoleto.montarRegistro({ cfg: cfgCobranca, ambiente, sequencial, pedido: dados.pedido, parcela, cliente: dados.cliente, hoje, notaNumero });
+      montado = bbBoleto.montarRegistro({ cfg: cfgCobranca, ambiente, sequencial, pedido: dados.pedido, parcela: parcelaDoBoleto, cliente: dados.cliente, hoje, notaNumero });
     } catch (e) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, pendencias: e.extra?.pendencias || [] });
       continue;
@@ -235,7 +274,8 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
       juros_valor_dia: montado.encargos.juros?.valorDia ?? null, juros_percentual_mes: montado.encargos.juros?.percentualMes ?? montado.encargos.juros?.percentual ?? null,
       multa_percentual: montado.encargos.multa?.percentual ?? null, protesto_dias: montado.encargos.protesto?.dias ?? null,
       dias_limite_recebimento: montado.encargos.diasLimiteRecebimento, pagador: montado.pagador, instrucoes: montado.encargos.instrucoes,
-      status: 'reservado', erro: null, requisicao: montado.payload, resposta: null, criado_por: usuarioId
+      status: 'reservado', erro: null, requisicao: montado.payload, resposta: null, criado_por: usuarioId,
+      ...(substitui ? { substitui_boleto_id: Number(substitui) } : {})
     };
 
     let boleto;
@@ -306,7 +346,7 @@ async function ler(api, boletoId) {
 }
 
 module.exports = {
-  STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
-  enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, boletoDaParcela, parcelasComBoletos, resumo,
-  reservarBoleto, registrar, listar, ler
+  STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, MOTIVOS_QUE_ENCERRAM, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
+  enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, ocupaParcela, boletoDaParcela, parcelasComBoletos, resumo,
+  reservarBoleto, atualizarBoleto, registrar, listar, ler
 };

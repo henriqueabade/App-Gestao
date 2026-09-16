@@ -18,6 +18,14 @@
  *   GET    /boletos/:id/documento           um boleto
  *   GET    /pedidos/:id/boletos/documento   todos os boletos a pagar do pedido
  *
+ * Fase D — alterações, baixa e consulta no BB:
+ *   GET    /boletos/:id/historico           o boleto, o histórico e o que dá para fazer
+ *   POST   /boletos/:id/sincronizar         consulta no BB e grava o que vale lá
+ *   POST   /boletos/:id/prorrogar           { data_vencimento }
+ *   POST   /boletos/:id/abatimento          { valor }
+ *   POST   /boletos/:id/baixar              { motivo, observacao, data_recebimento, valor_recebido, forma, novo_vencimento }
+ *   POST   /pedidos/:id/boletos/sincronizar consulta todos os boletos a pagar do pedido
+ *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
  * tela, é cifrado e só sai daqui para o OAuth do BB. Mesmo padrão do
  * certificado A1 e da senha do SMTP (fiscalController.js).
@@ -33,6 +41,7 @@ const calculo = require('./cobranca/boletoCalculo');
 const boletos = require('./cobranca/boletos');
 const bbBoleto = require('./cobranca/bbBoleto');
 const boletoDocumento = require('./cobranca/boletoDocumento');
+const operacoes = require('./cobranca/boletoOperacoes');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -349,6 +358,102 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       res.json({ nome: `Boletos-${numero}`, html, quantidade: aPagar.length });
     } catch (err) {
       responder(res, err, 'GET /api/cobranca/pedidos/:id/boletos/documento');
+    }
+  });
+
+  // ------------------------------------- alterações e baixa (fase D)
+  // Cada boleto fala com o ambiente em que foi registrado; um de produção
+  // só é mexido quando a produção vale (configuração e máquina).
+
+  async function conexaoDoAmbiente(api, cfg, ambienteDoBoleto) {
+    if (!cfg) throw erro('Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).', 409);
+    const ambiente = ambienteDoBoleto === configuracao.PRODUCAO ? configuracao.PRODUCAO : configuracao.SANDBOX;
+    if (ambiente === configuracao.PRODUCAO && configuracao.ambienteEfetivo(cfg, env) !== configuracao.PRODUCAO) {
+      throw erro('Este boleto é de produção, mas a cobrança está em homologação (na configuração ou nesta máquina).', 409);
+    }
+    const c = configuracao.credenciais(cfg, ambiente);
+    const f = await fonteDoSecret(api, ambiente);
+    const faltas = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
+    if (faltas.length) throw erro(`A cobrança não está pronta: ${faltas.join('; ')}.`, 409, { pendencias: faltas });
+    return { ambiente, appKey: c.appKey, credenciais: { clientId: c.clientId, clientSecret: f.secret } };
+  }
+
+  /** Lê o boleto e a configuração, confere o SQL da fase e o ambiente, roda `fn` e devolve o boleto enxuto com as ações. */
+  async function operar(req, res, contexto, fn) {
+    try {
+      const api = createApiClient(req);
+      const [boleto, cfg] = await Promise.all([boletos.ler(api, req.params.id), configuracao.carregar(api, { forcar: true })]);
+      operacoes.exigirSql(boleto);
+      const conexao = await conexaoDoAmbiente(api, cfg, boleto.ambiente);
+      const r = await fn({ api, bb: cliente, boleto, cfg, conexao, hoje: hojeEmBrasilia(), usuarioId: usuarioDaRequisicao(req) });
+      const { lido, ...resto } = r;
+      res.json({ ...resto, boleto: boletos.enxuto(r.boleto), acoes: operacoes.acoesDoBoleto(r.boleto), avisos: r.avisos || [] });
+    } catch (err) {
+      responder(res, err, contexto);
+    }
+  }
+
+  router.get('/boletos/:id/historico', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const boleto = await boletos.ler(api, req.params.id);
+      res.json({
+        boleto: boletos.enxuto(boleto),
+        eventos: await operacoes.historico(api, boleto),
+        acoes: operacoes.acoesDoBoleto(boleto),
+        sql_pronto: operacoes.sqlPronto(boleto),
+        motivos: operacoes.MOTIVOS_BAIXA,
+        formas_recebimento: operacoes.FORMAS_RECEBIMENTO,
+        hoje: hojeEmBrasilia()
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/boletos/:id/historico');
+    }
+  });
+
+  router.post('/boletos/:id/sincronizar', exigirPermissao('financeiro.boleto.view'), (req, res) => operar(req, res, 'POST /api/cobranca/boletos/:id/sincronizar',
+    ctx => operacoes.sincronizar(ctx)));
+
+  router.post('/boletos/:id/prorrogar', exigirPermissao('financeiro.boleto.baixa'), (req, res) => operar(req, res, 'POST /api/cobranca/boletos/:id/prorrogar',
+    ctx => operacoes.prorrogar({ ...ctx, novaData: String(req.body?.data_vencimento || '').slice(0, 10) })));
+
+  router.post('/boletos/:id/abatimento', exigirPermissao('financeiro.boleto.baixa'), (req, res) => operar(req, res, 'POST /api/cobranca/boletos/:id/abatimento',
+    ctx => operacoes.concederAbatimento({ ...ctx, valor: req.body?.valor })));
+
+  /** Baixa; a reemissão também registra um boleto novo, então pede as duas permissões. */
+  const permissaoDaBaixa = req => (req.body?.motivo === 'reemissao' ? ['financeiro.boleto.baixa', 'financeiro.boleto.emit'] : 'financeiro.boleto.baixa');
+  router.post('/boletos/:id/baixar', exigirPermissao(permissaoDaBaixa), (req, res) => operar(req, res, 'POST /api/cobranca/boletos/:id/baixar',
+    ctx => operacoes.baixar({
+      ...ctx,
+      entrada: req.body || {},
+      // O boleto novo sai no ambiente que vale agora, para a mesma parcela, com o vencimento escolhido.
+      registrarNovo: async ({ vencimento, substitui }) => {
+        const dados = await boletos.lerPedidoCobranca(ctx.api, substitui.pedido_id);
+        const parcela = dados.parcelas.find(p => Number(p.id) === Number(substitui.parcela_id))
+          || dados.parcelas.find(p => Number(p.numero_parcela) === Number(substitui.numero_parcela));
+        if (!parcela) throw erro('a parcela deste boleto não existe mais no pedido', 409);
+        const nova = await conexaoDoAmbiente(ctx.api, ctx.cfg, configuracao.ambienteEfetivo(ctx.cfg, env));
+        return boletos.registrar({
+          api: ctx.api, pedidoId: substitui.pedido_id, parcelaIds: [parcela.id], notaFiscalId: substitui.nota_fiscal_id ?? null,
+          vencimentos: { [parcela.id]: vencimento }, substituiBoletoId: substitui.id,
+          bb: cliente, credenciais: nova.credenciais, appKey: nova.appKey, ambiente: nova.ambiente, cfg: ctx.cfg, usuarioId: ctx.usuarioId, hoje: ctx.hoje
+        });
+      }
+    })));
+
+  router.post('/pedidos/:id/boletos/sincronizar', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      // Uma conexão por ambiente na mesma consulta (a recusa vale para todos os boletos dele).
+      const conexoes = new Map();
+      const conexao = ambiente => {
+        if (!conexoes.has(ambiente)) conexoes.set(ambiente, conexaoDoAmbiente(api, cfg, ambiente));
+        return conexoes.get(ambiente);
+      };
+      res.json(await operacoes.sincronizarPedido({ api, bb: cliente, conexao, pedidoId: req.params.id, cfg, hoje: hojeEmBrasilia(), usuarioId: usuarioDaRequisicao(req) }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos/sincronizar');
     }
   });
 

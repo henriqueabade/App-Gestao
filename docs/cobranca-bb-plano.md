@@ -41,6 +41,7 @@ vencimento 1695 para 18/01/2027, juros R$ 9,98/dia.
 | OAuth2 client_credentials (`client_id`/`client_secret` em Basic; escopos `cobrancas.boletos-info` e `cobrancas.boletos-requisicao`); `gw-dev-app-key` em toda chamada | `backend/cobranca/bbCliente.js` — token renovado sozinho, secret nunca sai do backend |
 | Testes: **homologação** `oauth.hm.bb.com.br` / `api.hm.bb.com.br/cobrancas/v2` (app key em `gw-dev-app-key`), com a **conta de teste do BB** (convênio 3128557, carteira 17/35, agência 452, conta 123873 — a conta real dá 403); o "sandbox" do portal só serve ao portal. Produção `oauth.bb.com.br` / `api.bb.com.br/cobrancas/v2` (app key em `gw-app-key`) com a conta real. O `.env` pode fixar endereços | ambiente de testes gravado como `sandbox` (nome das colunas), mostrado como "Homologação"; conta de teste em `homologacao_*` (`sql/cobranca_homologacao.sql`) | ambiente por configuração, com trava `BB_AMBIENTE=sandbox` por máquina |
 | `POST /boletos` (registro), `GET /boletos/{id}`, `GET /boletos` (situação A/B, exige agência e conta), `PATCH /boletos/{id}`, `POST /boletos/{id}/baixar`, Pix no boleto, `GET /boletos-baixa-operacional`, webhook BAIXA OPERACIONAL | fases B a F |
+| `PATCH /boletos/{nosso número}`: leva **todos** os indicadores (`indicadorNovaDataVencimento`, `indicadorIncluirAbatimento`, `indicadorAlterarAbatimento`, `indicadorCobrarMulta`…), um com "S" e os demais "N"; `POST …/baixar` só com `numeroConvenio`; `GET /boletos/{nosso número}?numeroConvenio=` devolve `codigoEstadoTituloCobranca` (1 normal, 2–4/8 cartório, 5/9/13 protestado, 6/10/11/12/16 pago, 7 baixado; 14/15/17/18/19/21/80 transitórios), `dataRecebimentoTitulo`, `valorPagoSacado`, `codigoCanalPagamento` (1º dígito = forma, dois últimos = local; 61 = Pix), `dataMultaTitulo`, `codigoTipoBaixaTitulo` | fase D (`backend/cobranca/boletoOperacoes.js`) |
 
 Armadilhas já mapeadas: o sandbox não liquida boleto; a API não devolve PDF
 (a ficha é nossa, como o DANFE); o nosso número não pode colidir com os já
@@ -51,8 +52,13 @@ emitidos no convênio; datas `dd.mm.aaaa`; listagens paginadas.
 - **Fase A** — `sql/cobranca_base.sql`: `configuracao_cobranca` (id = 1) com
   conta/convênio, ambiente, beneficiário impresso, `client_id`/`app_key` por
   ambiente, próximo sequencial por ambiente, padrões do boleto.
-- Fase B — `boletos`, `boletos_eventos`, permissões `financeiro.boleto.*`,
-  `pedido_parcelas` + situação/boleto atual.
+- Fase B — `sql/cobranca_boletos.sql`: `boletos`, `boletos_eventos`,
+  permissões `financeiro.boleto.*`; `sql/cobranca_homologacao.sql`: conta de
+  teste do BB.
+- **Fase D** — `sql/cobranca_alteracoes.sql`: em `boletos`,
+  `valor_abatimento`, `vencimento_original`, `motivo_baixa`,
+  `observacao_baixa`, `data_baixa`, `baixado_por`, `substitui_boleto_id`,
+  `sincronizado_em`. Sem essas colunas as ações da fase respondem 409.
 - Fase E — `recebimentos`; Fase G — `competencias`, `ajustes_financeiros`, `comissoes`.
 
 ## Fases
@@ -62,17 +68,16 @@ emitidos no convênio; datas `dd.mm.aaaa`; listagens paginadas.
 | **A** Acesso e configuração | SQL base; modal "Configuração de cobrança" (⚙ ao lado da fiscal); credenciais com secret no banco/cofre; **Testar conexão**; cliente do BB; contas do boleto conferidas com o real | **entregue em 16/09/2026** (aguardando o app no Portal Developers para o teste real) |
 | **B** Registrar boletos por parcela (sandbox) | `sql/cobranca_boletos.sql` (`boletos`, `boletos_eventos`, permissões `financeiro.boleto.*`); `bbBoleto.js` (payload conferido com o boleto real), `boletos.js` (reserva do nosso número pelo UNIQUE + retry, registro, erro reaproveitável), rotas `GET/POST /api/cobranca/pedidos/:id/boletos`, `GET /api/cobranca/boletos`; caixa **"Gerar boleto das parcelas"** no modal da NF-e (marcada por padrão, gera após a autorização); coluna BOLETO nas parcelas, tag "Boletos n/n" e botão **"Gerar boletos"** no Visualizar pedido (modal próprio); **receptor do webhook** BAIXA OPERACIONAL na API pública (`Santissimo-db-API/webhooks/bbBaixaOperacional.js`, `POST /webhooks/bb/baixa-operacional/<token>`, grava a fila `boletos_eventos`) | **entregue em 16/09/2026** (aguardando credenciais sandbox para o registro real) |
 | **C** Boleto em PDF | `backend/cobranca/boletoDocumento.js` (recibo do pagador + ficha de compensação no leiaute do BB, ITF-25 em SVG — decodificado de volta no teste —, QR do Pix pela biblioteca `qrcode`, marca "HOMOLOGAÇÃO — SEM VALOR"/"PAGO"/"BAIXADO"); rotas `GET /api/cobranca/boletos/:id/documento` e `GET /api/cobranca/pedidos/:id/boletos/documento`; `src/js/utils/boleto-documentos.js` (PDF em retrato pelo Electron); "PDF" por parcela e "Boletos (PDF)" no modal Gerar boletos (o "Gerar boletos" some quando está tudo gerado); tag da coluna BOLETO clicável e "Boletos (PDF)" no Visualizar pedido — sem e-mail ao cliente | **entregue em 16/09/2026** |
-| D Alterações e baixa | prorrogar, abatimento, baixar (quitado por fora / cancelado / reemissão), sincronizar | próxima |
-| E Recebimentos e conciliação | consumir a fila do webhook + consulta: parcela liquidada → recebimento → competência → CMS/Royalty; Financeiro real | — |
+| **D** Alterações e baixa | `backend/cobranca/boletoOperacoes.js`: **consultar no BB** (estado, pagamento, canal, vencimento e abatimento que valem lá; pago é final; transitório não mexe), **prorrogar** (PATCH da data; se a multa do BB ficou antes do novo vencimento, um 2º PATCH a leva; instruções refeitas; vencimento original guardado), **abatimento** (inclui/altera), **baixar** por motivo — *quitado por fora* (data, valor e forma do recebimento; a parcela fica resolvida), *cancelado* (observação obrigatória; parcela resolvida), *reemissão* (baixa e registra outro boleto para a parcela com vencimento novo, ligado por `substitui_boleto_id`; se o novo falhar, a baixa fica e tentar de novo pelo pedido usa a mesma data); baixa feita pelo próprio banco libera a parcela. Rotas `GET /boletos/:id/historico`, `POST /boletos/:id/{sincronizar,prorrogar,abatimento,baixar}`, `POST /pedidos/:id/boletos/sincronizar`; boleto de produção só é mexido com a produção valendo. Tela: modal **"Boleto"** (`boleto-detalhe.html`) aberto por "Detalhes" na lista do pedido, com situação, histórico (inclui o webhook), ações conforme `financeiro.boleto.baixa` (reemissão pede também `.emit`) e confirmação na caixa da casa; "Consultar no BB" na lista; botão "Boletos" no Visualizar quando está tudo gerado. Instruções passam a ir como texto JSON (a API remota recusava array em JSONB) | **entregue em 16/09/2026** |
+| E Recebimentos e conciliação | consumir a fila do webhook + consulta: parcela liquidada → recebimento → competência → CMS/Royalty; Financeiro real | próxima |
 | F Webhook (conclusão) | cadastro da URL no portal, teste com "Testar webhook", polling como rede de segurança | receptor já no ar (fase B) |
 | G Financeiro completo | ajustes, fechamento de competência, comissões, produção, relatórios reais | — |
 | H Homologação e produção | credenciais reais, primeiro boleto de valor baixo, monitoramento | — |
 
 ## O que falta do dono
 
-1. Criar a conta/aplicação no Portal Developers BB, habilitar "API de
-   Cobrança [V2]" e pegar as credenciais de **sandbox** (client ID, client
-   secret, app key). O secret entra só pela tela de configuração.
+1. ~~Credenciais de homologação~~ (feito: conexão e registro testados em
+   16/09/2026). Produção: credenciais reais na fase H.
 2. Confirmar o último nosso número usado no convênio depois do 393.
 3. Webhook: decidido — roda na própria API (Santissimo-db-API). Falta gerar o
    `BB_WEBHOOK_TOKEN` no `.env` da API, reiniciar e cadastrar a URL

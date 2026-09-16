@@ -77,11 +77,32 @@ function criarUpstream(tabelas) {
   return { servidor, puts };
 }
 
-/** O BB de mentira: token para qualquer par com secret "ok"; listagem vazia (404) na conta certa. */
+/**
+ * O BB de mentira: token para qualquer par com secret "ok"; listagem vazia
+ * (404) na conta certa; registro; e (fase D) o boleto registrado guardado
+ * para a consulta, a alteração e a baixa.
+ */
 function bbFalso(chamadas) {
+  const registrados = new Map();
   return async (url, opcoes = {}) => {
     chamadas.push({ url, opcoes });
     const responder = (status, corpo) => ({ ok: status < 300, status, text: async () => JSON.stringify(corpo) });
+    const umBoleto = /\/boletos\/(\d{20})(\/baixar)?\?/.exec(url);
+    if (umBoleto) {
+      const b = registrados.get(umBoleto[1]);
+      if (!b) return responder(404, { erros: [{ codigoMensagem: '4874917', textoMensagem: 'Boleto não encontrado' }] });
+      const corpo = opcoes.body ? JSON.parse(opcoes.body) : null;
+      if (umBoleto[2]) { b.estado = 7; b.tipoBaixa = 11; return responder(200, { numeroContratoCobranca: 1, dataBaixa: '16.09.2026', horarioBaixa: '10:00:00' }); }
+      if (opcoes.method === 'PATCH') {
+        if (corpo.indicadorNovaDataVencimento === 'S') b.vencimento = corpo.alteracaoData.novaDataVencimento;
+        if (corpo.indicadorIncluirAbatimento === 'S') b.abatimento = corpo.abatimento.valorAbatimento;
+        return responder(200, { numeroContratoCobranca: 1, dataAtualizacao: '16.09.2026', horarioAtualizacao: '10:00:00' });
+      }
+      return responder(200, {
+        codigoEstadoTituloCobranca: b.estado, codigoTipoBaixaTitulo: b.tipoBaixa || 0, dataVencimentoTituloCobranca: b.vencimento,
+        valorOriginalTituloCobranca: b.valor, valorAbatimentoTituloCobranca: b.abatimento, dataMultaTitulo: '', codigoLinhaDigitavel: '', textoCodigoBarrasTituloCobranca: ''
+      });
+    }
     if (url.endsWith('/oauth/token')) {
       const [, secret] = Buffer.from(opcoes.headers.Authorization.replace('Basic ', ''), 'base64').toString().split(':');
       if (secret !== 'ok') return responder(401, { error: 'invalid_client', error_description: 'Invalid client credentials' });
@@ -91,6 +112,7 @@ function bbFalso(chamadas) {
     if (url.includes('/boletos?') && opcoes.method === 'POST') {
       const corpo = JSON.parse(opcoes.body);
       if (corpo.valorOriginal === 999) return responder(422, { erros: [{ codigo: '4874990', versao: '1', mensagem: 'Valor inválido', ocorrencia: 'x' }] });
+      registrados.set(corpo.numeroTituloCliente, { estado: 1, vencimento: corpo.dataVencimento, valor: corpo.valorOriginal, abatimento: 0 });
       return responder(201, {
         numero: corpo.numeroTituloCliente, linhaDigitavel: '00190000090345348100800000393173116950000332700', codigoBarraNumerico: '00191169500003327000000003453481000000039317',
         qrCode: { url: 'https://qrcodepix.bb.com.br/x', txId: `tx-${corpo.numeroTituloCliente}`, emv: '000201...' }
@@ -132,7 +154,12 @@ async function montar({ linhas = [JSON.parse(JSON.stringify(LINHA))], env = {}, 
   require.cache[caminhoPerm] = {
     id: caminhoPerm, filename: caminhoPerm, loaded: true,
     exports: {
-      exigirPermissao: chave => (req, res, next) => (estado.supAdmin || estado.chaves.has(chave) ? next() : res.status(403).json({ error: 'Sem permissão' })),
+      // Como o real: a chave pode ser uma função da requisição e pedir mais de uma permissão.
+      exigirPermissao: chave => (req, res, next) => {
+        const bruto = typeof chave === 'function' ? chave(req) : chave;
+        const chaves = Array.isArray(bruto) ? bruto : [bruto];
+        return estado.supAdmin || chaves.every(c => estado.chaves.has(c)) ? next() : res.status(403).json({ error: 'Sem permissão', permissao: chaves.find(c => !estado.chaves.has(c)) });
+      },
       exigirSupAdmin: (req, res, next) => (estado.supAdmin ? next() : res.status(403).json({ error: 'Somente Sup Admin' })),
       ehSupAdmin: async () => estado.supAdmin
     }
@@ -429,6 +456,132 @@ test('sem o secret a cobrança não está pronta (409 com as pendências); recus
     assert.equal(estado.corpo.parcelas[1].tem_boleto_vivo, false);
     assert.equal(estado.corpo.parcelas[1].boleto.status, 'erro');
     assert.equal(estado.corpo.pode_gerar, true, 'a parcela com erro ainda pode ser gerada');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('fase D: histórico, SQL exigido, consultar, prorrogar, abatimento e baixas pelas rotas, com as permissões certas', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  const somar = (iso, dias) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + dias); return d.toISOString().slice(0, 10); };
+  try {
+    t.estado.chaves.add('financeiro.boleto.view');
+    t.estado.chaves.add('financeiro.boleto.emit');
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', {})).corpo.registrados, 3);
+    const [b1, b2, b3] = tabelas.boletos;
+
+    const hist = await t.chamar('GET', `/api/cobranca/boletos/${b1.id}/historico`);
+    assert.equal(hist.status, 200, JSON.stringify(hist.corpo));
+    assert.equal(hist.corpo.sql_pronto, false);
+    assert.deepEqual(hist.corpo.eventos.map(e => e.tipo), ['registrado', 'reservado']);
+    assert.deepEqual(hist.corpo.acoes, { sincronizar: true, prorrogar: true, abatimento: true, baixar: true, pdf: true });
+    assert.ok(hist.corpo.formas_recebimento.includes('Pix') && hist.corpo.motivos.quitado_por_fora === 'quitado por fora');
+    assert.ok(!('requisicao' in hist.corpo.boleto));
+
+    // Sem o SQL da fase: 409 explicando o que falta.
+    const semSql = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/sincronizar`);
+    assert.equal(semSql.status, 409);
+    assert.match(semSql.corpo.error, /sql\/cobranca_alteracoes\.sql/);
+    for (const b of tabelas.boletos) Object.assign(b, { valor_abatimento: 0, vencimento_original: null, motivo_baixa: null, observacao_baixa: null, data_baixa: null, baixado_por: null, substitui_boleto_id: null, sincronizado_em: null });
+
+    const sinc = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/sincronizar`);
+    assert.equal(sinc.status, 200, JSON.stringify(sinc.corpo));
+    assert.equal(sinc.corpo.boleto.status, 'registrado');
+    assert.equal(sinc.corpo.mudou, false);
+    assert.ok(tabelas.boletos[0].sincronizado_em);
+    const consulta = t.chamadasBB.find(c => c.opcoes.method === 'GET' && c.url.includes(`/boletos/${b1.nosso_numero}?`));
+    assert.ok(consulta.url.includes('numeroConvenio=3128557') && consulta.url.includes('gw-dev-app-key=key-sb'));
+
+    // Prorrogar e abatimento pedem financeiro.boleto.baixa.
+    const nova = somar(b1.data_vencimento, 10);
+    assert.equal((await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/prorrogar`, { data_vencimento: nova })).status, 403);
+    t.estado.chaves.add('financeiro.boleto.baixa');
+    const venc = b1.data_vencimento;
+    const pr = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/prorrogar`, { data_vencimento: nova });
+    assert.equal(pr.status, 200, JSON.stringify(pr.corpo));
+    assert.equal(pr.corpo.boleto.data_vencimento, nova);
+    assert.equal(pr.corpo.boleto.vencimento_original, venc);
+    assert.deepEqual(pr.corpo.avisos, []);
+    assert.ok(t.chamadasBB.some(c => c.opcoes.method === 'PATCH' && JSON.parse(c.opcoes.body).indicadorNovaDataVencimento === 'S'));
+    const invalida = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/prorrogar`, { data_vencimento: '2020-01-01' });
+    assert.equal(invalida.status, 400);
+    assert.match(invalida.corpo.error, /já passou/);
+
+    const ab = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/abatimento`, { valor: 50 });
+    assert.equal(ab.status, 200, JSON.stringify(ab.corpo));
+    assert.equal(Number(ab.corpo.boleto.valor_abatimento), 50);
+
+    // Reemissão pede também financeiro.boleto.emit: baixa o boleto 1 e registra outro para a parcela 1.
+    t.estado.chaves.delete('financeiro.boleto.emit');
+    const semEmit = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/baixar`, { motivo: 'reemissao', novo_vencimento: somar(nova, 5) });
+    assert.equal(semEmit.status, 403);
+    assert.equal(semEmit.corpo.permissao, 'financeiro.boleto.emit');
+    t.estado.chaves.add('financeiro.boleto.emit');
+    const re = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/baixar`, { motivo: 'reemissao', novo_vencimento: somar(nova, 5) });
+    assert.equal(re.status, 200, JSON.stringify(re.corpo));
+    assert.equal(re.corpo.boleto.status, 'baixado');
+    assert.equal(re.corpo.boleto.motivo_baixa, 'reemissao');
+    assert.equal(re.corpo.reemissao.registrados, 1, JSON.stringify(re.corpo.reemissao));
+    assert.deepEqual(re.corpo.avisos, []);
+    const novo = tabelas.boletos.find(b => b.substitui_boleto_id === b1.id);
+    assert.ok(novo, 'boleto novo ligado ao baixado');
+    assert.equal(novo.status, 'registrado');
+    assert.equal(novo.data_vencimento, somar(nova, 5));
+    assert.equal(novo.nosso_numero, '00031285570000000004');
+    assert.ok(t.chamadasBB.some(c => c.url.includes(`/boletos/${b1.nosso_numero}/baixar?`)));
+
+    // Quitado por fora (só baixa) e cancelado sem motivo escrito.
+    t.estado.chaves.delete('financeiro.boleto.emit');
+    const qf = await t.chamar('POST', `/api/cobranca/boletos/${b2.id}/baixar`, { motivo: 'quitado_por_fora', data_recebimento: '2026-09-01', valor_recebido: 1000, forma: 'Transferência' });
+    assert.equal(qf.status, 200, JSON.stringify(qf.corpo));
+    assert.equal(qf.corpo.boleto.canal_pagamento, 'Fora do boleto · Transferência');
+    assert.deepEqual(qf.corpo.acoes, { sincronizar: true, prorrogar: false, abatimento: false, baixar: false, pdf: false });
+    const semObs = await t.chamar('POST', `/api/cobranca/boletos/${b3.id}/baixar`, { motivo: 'cancelado' });
+    assert.equal(semObs.status, 400);
+    const deNovo = await t.chamar('POST', `/api/cobranca/boletos/${b2.id}/baixar`, { motivo: 'cancelado', observacao: 'x' });
+    assert.equal(deNovo.status, 409, 'já baixado');
+
+    // O pedido: parcela 1 com o boleto novo, parcela 2 resolvida (quitada), nada a gerar.
+    const estado = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.deepEqual(estado.corpo.parcelas.map(l => [l.boleto.id, l.boleto.status, l.tem_boleto_vivo]), [[novo.id, 'registrado', true], [b2.id, 'baixado', true], [b3.id, 'registrado', true]]);
+    assert.equal(estado.corpo.pode_gerar, false);
+
+    // Consultar todos os a pagar do pedido: o novo e o da parcela 3.
+    t.estado.chaves.delete('financeiro.boleto.view');
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos/sincronizar')).status, 403);
+    t.estado.chaves.add('financeiro.boleto.view');
+    // No banco real a linha nova já nasce com as colunas da fase; aqui o dublê só guarda o que foi enviado.
+    Object.assign(novo, { valor_abatimento: 0, vencimento_original: null, motivo_baixa: null, sincronizado_em: null });
+    const todos = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos/sincronizar');
+    assert.equal(todos.status, 200, JSON.stringify(todos.corpo));
+    assert.deepEqual(todos.corpo.resultados.map(r => r.boleto_id).sort(), [novo.id, b3.id].sort());
+    assert.equal(todos.corpo.consultados, 2);
+    assert.equal(todos.corpo.erros, 0);
+
+    const hist2 = await t.chamar('GET', `/api/cobranca/boletos/${b1.id}/historico`);
+    assert.deepEqual(hist2.corpo.eventos.map(e => e.tipo).slice(0, 5), ['baixado', 'consulta', 'abatimento', 'consulta', 'prorrogado']);
+    assert.equal(hist2.corpo.acoes.baixar, false);
+    assert.equal(hist2.corpo.sql_pronto, true);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('fase D: boleto de produção com a cobrança em homologação não é mexido', async () => {
+  const tabelas = tabelasDoPedido();
+  tabelas.boletos.push({
+    id: 7, pedido_id: 55, parcela_id: 1, numero_parcela: 1, ambiente: 'producao', convenio: '3453481', carteira: 17, variacao: 19, sequencial: 394,
+    nosso_numero: '00034534810000000394', valor: 1000, data_emissao: '2026-09-16', data_vencimento: '2027-01-18', status: 'registrado', chave_idempotencia: 'producao:00034534810000000394',
+    valor_abatimento: 0, vencimento_original: null, motivo_baixa: null, sincronizado_em: null
+  });
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok', BB_CLIENT_SECRET_PRODUCAO: 'ok' } });
+  try {
+    t.estado.chaves.add('financeiro.boleto.view');
+    const r = await t.chamar('POST', '/api/cobranca/boletos/7/sincronizar');
+    assert.equal(r.status, 409);
+    assert.match(r.corpo.error, /é de produção, mas a cobrança está em homologação/);
+    assert.equal(t.chamadasBB.length, 0, 'nada saiu para o BB');
   } finally {
     await t.fechar();
   }

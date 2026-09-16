@@ -24,13 +24,13 @@ function puras() {
   const fim = FONTE.indexOf('// ------------------------------------------------- fim das funções puras');
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const contexto = vm.createContext({});
-  return vm.runInContext(`${FONTE.slice(inicio, fim)}\n({ linhaDaParcela, resumoDosResultados, mensagemDeErro, estadoDoRodape })`, contexto);
+  return vm.runInContext(`${FONTE.slice(inicio, fim)}\n({ linhaDaParcela, resumoDosResultados, mensagemDeErro, estadoDoRodape, resumoDaConsulta })`, contexto);
 }
 
 test('linhaDaParcela: só a parcela sem boleto vivo pode ser marcada; a tag e o detalhe seguem o boleto', () => {
   const f = puras();
   const sem = plano(f.linhaDaParcela({ parcela: { id: 1, numero_parcela: 1, data_vencimento: '2027-01-18T00:00:00.000Z', valor: '1000.00' }, boleto: null, tem_boleto_vivo: false }));
-  assert.deepStrictEqual(sem, { id: 1, numero: 1, vencimento: '2027-01-18', valor: 1000, podeGerar: true, temPdf: false, boletoId: null, classe: 'badge-neutral', rotulo: 'Sem boleto', detalhe: '' });
+  assert.deepStrictEqual(sem, { id: 1, numero: 1, vencimento: '2027-01-18', valor: 1000, podeGerar: true, temPdf: false, temDetalhe: false, boletoId: null, classe: 'badge-neutral', rotulo: 'Sem boleto', detalhe: '' });
   const registrado = plano(f.linhaDaParcela({ parcela: { id: 2, numero_parcela: 2, data_vencimento: '2027-02-17', valor: 1000 }, tem_boleto_vivo: true,
     boleto: { id: 41, status: 'registrado', nosso_numero: '00034534810000000002', nosso_numero_dv: '5', linha_digitavel: '00190.00009 …' } }));
   assert.strictEqual(registrado.temPdf, true, 'registrado tem PDF');
@@ -46,14 +46,38 @@ test('linhaDaParcela: só a parcela sem boleto vivo pode ser marcada; a tag e o 
   const pago = plano(f.linhaDaParcela({ parcela: { id: 4 }, boleto: { status: 'pago' }, tem_boleto_vivo: true }));
   assert.strictEqual(pago.rotulo, 'Pago');
   assert.strictEqual(pago.temPdf, false, 'pago não se paga mais: sem PDF');
+  assert.strictEqual(registrado.temDetalhe, true);
+  assert.strictEqual(erro.temDetalhe, false, 'sem id não há o que abrir');
+  assert.strictEqual(f.linhaDaParcela({ parcela: { id: 5 }, boleto: { id: 7, status: 'reservado' } }).temDetalhe, false, 'reservado ainda não passou pelo BB');
 
-  // Rodapé: "Gerar" só com parcela sem boleto (e cobrança pronta); "Boletos (PDF)" com boleto a pagar; aviso quando está tudo gerado.
+  // Fase D: baixado diz o motivo (e a parcela quitada por fora fica ocupada); prorrogado e abatimento aparecem no detalhe.
+  const quitado = plano(f.linhaDaParcela({ parcela: { id: 6, numero_parcela: 1 }, tem_boleto_vivo: true, boleto: { id: 8, status: 'baixado', motivo_baixa: 'quitado_por_fora', nosso_numero: '1' } }));
+  assert.deepStrictEqual([quitado.rotulo, quitado.podeGerar, quitado.temPdf, quitado.temDetalhe], ['Baixado · quitado por fora', false, false, true]);
+  const reemitido = plano(f.linhaDaParcela({ parcela: { id: 6 }, tem_boleto_vivo: false, boleto: { id: 8, status: 'baixado', motivo_baixa: 'reemissao' } }));
+  assert.deepStrictEqual([reemitido.rotulo, reemitido.podeGerar], ['Baixado · reemissão', true]);
+  const prorrogado = plano(f.linhaDaParcela({ parcela: { id: 2, data_vencimento: '2027-02-17', valor: 1000 }, tem_boleto_vivo: true,
+    boleto: { id: 41, status: 'registrado', nosso_numero: '00031285570000000002', nosso_numero_dv: '5', data_vencimento: '2027-03-01', valor_abatimento: '50.00' } }));
+  assert.strictEqual(prorrogado.vencimento, '2027-02-17', 'a coluna mostra a parcela');
+  assert.strictEqual(prorrogado.detalhe, '00031285570000000002-5 · vence 01/03/2027 · abatimento R$ 50,00');
+
+  // Rodapé: "Gerar" só com parcela sem boleto (e cobrança pronta); "Boletos (PDF)" e "Consultar no BB" com boleto a pagar; aviso quando está tudo gerado.
   const reg = { parcela: { id: 1 }, tem_boleto_vivo: true, boleto: { id: 9, status: 'registrado' } };
   const semBol = { parcela: { id: 2 }, tem_boleto_vivo: false, boleto: null };
-  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: false, parcelas: [reg, { ...reg, parcela: { id: 3 } }] })), { mostrarGerar: false, mostrarPdf: true, aviso: 'Todas as parcelas já têm boleto registrado.' });
-  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: true, parcelas: [reg, semBol] })), { mostrarGerar: true, mostrarPdf: true, aviso: '' });
-  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: false, parcelas: [semBol] })), { mostrarGerar: false, mostrarPdf: false, aviso: '' }, 'cobrança não pronta: nem gerar');
-  assert.deepStrictEqual(plano(f.estadoDoRodape(null)), { mostrarGerar: false, mostrarPdf: false, aviso: '' });
+  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: false, parcelas: [reg, { ...reg, parcela: { id: 3 } }] })),
+    { mostrarGerar: false, mostrarPdf: true, mostrarConsultar: true, titulo: 'Boletos do pedido', aviso: 'Todas as parcelas já têm boleto registrado.' });
+  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: true, parcelas: [reg, semBol] })), { mostrarGerar: true, mostrarPdf: true, mostrarConsultar: true, titulo: 'Gerar boletos', aviso: '' });
+  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: false, parcelas: [semBol] })), { mostrarGerar: false, mostrarPdf: false, mostrarConsultar: false, titulo: 'Gerar boletos', aviso: '' }, 'cobrança não pronta: nem gerar');
+  assert.deepStrictEqual(plano(f.estadoDoRodape(null)), { mostrarGerar: false, mostrarPdf: false, mostrarConsultar: false, titulo: 'Gerar boletos', aviso: '' });
+  const soQuitado = { parcela: { id: 1 }, tem_boleto_vivo: true, boleto: { id: 9, status: 'baixado', motivo_baixa: 'quitado_por_fora' } };
+  assert.deepStrictEqual(plano(f.estadoDoRodape({ pode_gerar: false, parcelas: [soQuitado] })),
+    { mostrarGerar: false, mostrarPdf: false, mostrarConsultar: false, titulo: 'Boletos do pedido', aviso: 'Todas as parcelas já têm boleto registrado.' });
+});
+
+test('resumoDaConsulta: o aviso depois de consultar o pedido no BB', () => {
+  const f = puras();
+  assert.deepStrictEqual(plano(f.resumoDaConsulta({ consultados: 2, mudaram: 1, erros: 0 })), { texto: '2 boletos consultados no BB · 1 mudou de situação.', tipo: 'success' });
+  assert.deepStrictEqual(plano(f.resumoDaConsulta({ consultados: 1, mudaram: 0, erros: 1 })), { texto: '1 boleto consultado no BB · nenhuma mudança · 1 com erro.', tipo: 'error' });
+  assert.deepStrictEqual(plano(f.resumoDaConsulta({ consultados: 0, mudaram: 0, erros: 0 })), { texto: 'Nenhum boleto a pagar para consultar.', tipo: 'info' });
 });
 
 test('resumoDosResultados e mensagemDeErro', () => {
@@ -97,6 +121,24 @@ test('script: lê e grava em /api/cobranca, confirma na caixa da casa, marca só
   assert.ok(FONTE.includes('window.BoletoDocumentos.gerarBoletoPdf(boletoId)') && FONTE.includes('window.BoletoDocumentos.gerarBoletosDoPedidoPdf(ctx.pedidoId)'));
   assert.ok(FONTE.includes("pdf.dataset.perm = 'financeiro.boleto.view';"));
   assert.ok(!FONTE.includes("overlay.addEventListener('click'"), 'não fecha clicando fora');
+  // Fase D: o boleto abre POR CIMA (keepExisting), a lista se relê quando ele muda algo, o Esc é do modal de cima.
+  assert.ok(FONTE.includes("Modal.open('modals/pedidos/boleto-detalhe.html', '../js/modals/pedido-boleto-detalhe.js', 'boletoDetalhe', true)"));
+  assert.ok(FONTE.includes("ver.dataset.perm = 'financeiro.boleto.view';") && FONTE.includes("ver.textContent = 'Detalhes';"));
+  assert.ok(FONTE.includes("window.addEventListener('boletos:alterados', aoAlterarBoleto)") && FONTE.includes("window.removeEventListener('boletos:alterados', aoAlterarBoleto)"));
+  assert.ok(FONTE.includes("if (document.getElementById('boletoDetalheOverlay')) return;"));
+  assert.ok(FONTE.includes('/api/cobranca/pedidos/${encodeURIComponent(ctx.pedidoId)}/boletos/sincronizar'));
+  assert.ok(FONTE.includes('window.BotaoAcao.bind(consultarBtn, consultarNoBB)'));
+  assert.ok(/id="consultarBoletosBB"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(HTML), 'consultar pede financeiro.boleto.view e nasce escondido');
+  assert.ok(HTML.includes('<span id="gerarBoletosTituloTexto">Gerar boletos</span>'));
+});
+
+test('Visualizar pedido: "Boletos" abre a lista quando está tudo gerado, para quem só vê, e no pedido cancelado', () => {
+  const VISUALIZAR = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-visualizar.js'), 'utf8');
+  const VIS_HTML = fs.readFileSync(path.join(RAIZ, 'html', 'modals', 'pedidos', 'visualizar.html'), 'utf8');
+  assert.ok(/id="visualizarPedidoBoletos"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(VIS_HTML));
+  assert.ok(VISUALIZAR.includes('if (botao && falta && !cancelado && podeGerar) ligar(botao);') && VISUALIZAR.includes('else if (lista && temBoleto) ligar(lista);'));
+  assert.ok(VISUALIZAR.includes("window.Permissoes.pode('financeiro.boleto.emit')"));
+  assert.ok(VISUALIZAR.includes("const MOTIVO = { quitado_por_fora: 'quitado por fora'"), 'a tag do baixado diz o motivo');
 });
 
 test('utilitário BoletoDocumentos: PDF de um boleto e de todos do pedido, em retrato, pelo Electron; carregado no menu', () => {
