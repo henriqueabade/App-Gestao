@@ -33,6 +33,30 @@ function ambiente() {
   return { pasta: path.join(pasta, 'guardado'), origem };
 }
 
+test('outros segredos (senha do e-mail): cifrados no mesmo cofre, um arquivo por nome, e nunca em claro', () => {
+  const { pasta } = ambiente();
+  const segredo = segredoLocal.criar({ pasta, cofre: cofreFalso(), env: {} });
+  assert.equal(segredo.lerSegredo('smtp'), null);
+  assert.equal(segredo.guardarSegredo('smtp', 'senha-do-email'), true);
+  const lido = segredo.lerSegredo('smtp');
+  assert.equal(lido.valor, 'senha-do-email');
+  assert.match(lido.guardadoEm, /^\d{4}-\d{2}-\d{2}T/);
+  const arquivo = path.join(pasta, 'segredo-smtp.json');
+  assert.ok(fs.existsSync(arquivo));
+  assert.ok(!fs.readFileSync(arquivo, 'utf8').includes('senha-do-email'), 'nada em claro no disco');
+  assert.equal(segredo.lerSegredo('../outro'), null, 'o nome é saneado');
+
+  const outroCofre = segredoLocal.criar({ pasta, cofre: cofreFalso('outro'), env: {} });
+  assert.match(outroCofre.lerSegredo('smtp').erro, /outro cofre/);
+  const semCofre = segredoLocal.criar({ pasta, cofre: null, env: {} });
+  assert.match(semCofre.lerSegredo('smtp').erro, /cofre do sistema/);
+  assert.throws(() => semCofre.guardarSegredo('smtp', 'x'), /exige o cofre/);
+
+  segredo.removerSegredo('smtp');
+  assert.equal(segredo.lerSegredo('smtp'), null);
+  assert.equal(segredo.fonte(), null, 'os segredos não mexem no certificado');
+});
+
 test('guarda o .pfx copiado e a senha cifrada; a fonte devolve a senha decifrada', () => {
   const { pasta, origem } = ambiente();
   const segredo = segredoLocal.criar({ pasta, cofre: cofreFalso(), env: {} });

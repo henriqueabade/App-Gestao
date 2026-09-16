@@ -112,6 +112,24 @@
                 </div>
               </div>
             </div>
+
+            <!-- Mais de um volume: uma linha por volume (espécie e pesos de cada um). -->
+            <div id="emitirNfeVolumesDetalhe" class="hidden mt-4 glass-surface rounded-xl border border-white/10 overflow-hidden">
+              <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Um volume por linha: espécie e pesos de cada um. A numeração (1, 2, 3…) e a marca saem na nota; os pesos somados vão para o pedido.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th class="px-4 py-2 text-left text-xs">Nº</th>
+                      <th class="px-4 py-2 text-left text-xs">Espécie</th>
+                      <th class="px-4 py-2 text-left text-xs">Peso bruto (kg)</th>
+                      <th class="px-4 py-2 text-left text-xs">Peso líq. (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="emitirNfeVolumesLinhas" class="divide-y divide-white/10"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <!-- Pagamento e informações da nota. -->

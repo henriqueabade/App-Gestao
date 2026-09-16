@@ -106,10 +106,23 @@ test('desconto do pedido vira vDesc do item e os totais fecham; frete entra no v
   assert.match(det2, /<ICMSSN102><orig>0<\/orig><CSOSN>102<\/CSOSN><\/ICMSSN102>/);
   assert.match(entre(r.xml, 'ICMSTot'), /<vProd>594\.00<\/vProd><vFrete>20\.00<\/vFrete><vSeg>0\.00<\/vSeg><vDesc>30\.00<\/vDesc>.*<vNF>584\.00<\/vNF>/);
   assert.deepEqual(r.totais, { valor_produtos: 594, valor_desconto: 30, valor_frete: 20, valor_total: 584, credito_sn: 6.85 });
-  assert.equal(entre(r.xml, 'transp'), '<modFrete>1</modFrete><transporta><xNome>Transportes Rápido</xNome></transporta><vol><qVol>2</qVol><esp>Caixa</esp><pesoL>11.000</pesoL><pesoB>12.500</pesoB></vol>');
+  assert.equal(entre(r.xml, 'transp'), '<modFrete>1</modFrete><transporta><xNome>Transportes Rápido</xNome></transporta><vol><qVol>2</qVol><esp>Caixa</esp><marca>Santíssimo Decor SD</marca><pesoL>11.000</pesoL><pesoB>12.500</pesoB></vol>');
   assert.equal(r.itens[1].valor_desconto, 30);
   assert.equal(r.itens[1].valor_total, 270);
   assert.equal(r.itens[1].gtin, '7891234567890');
+});
+
+test('volumes detalhados: um <vol> por linha, numerado, com a marca "fantasia SD" (ou a informada); sem fantasia usa a razão social', () => {
+  const r = x.montarNfe(base({ transporte: { modalidade_frete: 1, volumes: [
+    { especie: 'Caixa', peso_bruto: '10,5', peso_liquido: 9 }, { especie: 'Engradado', peso_bruto: 20, peso_liquido: 18, numeracao: 'B-2' }, { especie: 'Caixa', quantidade: 2 }
+  ] } }));
+  assert.equal(entre(r.xml, 'transp'), '<modFrete>1</modFrete><transporta><xNome>Transportes Rápido</xNome></transporta>'
+    + '<vol><qVol>1</qVol><esp>Caixa</esp><marca>Santíssimo Decor SD</marca><nVol>1</nVol><pesoL>9.000</pesoL><pesoB>10.500</pesoB></vol>'
+    + '<vol><qVol>1</qVol><esp>Engradado</esp><marca>Santíssimo Decor SD</marca><nVol>B-2</nVol><pesoL>18.000</pesoL><pesoB>20.000</pesoB></vol>'
+    + '<vol><qVol>2</qVol><esp>Caixa</esp><marca>Santíssimo Decor SD</marca><nVol>3</nVol></vol>');
+  assert.match(x.montarNfe(base({ transporte: { modalidade_frete: 1, volumes_quantidade: 1, volumes_especie: 'Caixa', volumes_marca: 'Marca X' } })).xml, /<marca>Marca X<\/marca>/);
+  assert.match(x.montarNfe(base({ configuracao: { ...CONFIG, nome_fantasia: '' }, transporte: { modalidade_frete: 1, volumes_quantidade: 1, volumes_especie: 'Caixa' } })).xml, /<marca>SANTÍSSIMO DECOR LTDA SD<\/marca>/);
+  assert.throws(() => x.montarNfe(base({ transporte: { modalidade_frete: 1, volumes: [{ peso_bruto: 1 }] } })), /Volume 1 sem espécie/);
 });
 
 test('fora do estado: idDest 2 e CFOP de fora (da peça quando ela tem o seu)', () => {

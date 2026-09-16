@@ -85,26 +85,37 @@ function assinarNfe(xmlNfe, { chavePrivadaPem, certificadoPem } = {}) {
 }
 
 /**
- * Assina um evento da NF-e (cancelamento, carta de correção): o mesmo
- * processo, sobre `infEvento`, com o `Signature` dentro do `evento`.
+ * Assina um elemento `tag` (com atributo Id) que fecha logo antes de `pai`
+ * fechar: o `Signature` entra entre os dois. É o mesmo processo do infNFe.
  */
-function assinarEvento(xmlEvento, { chavePrivadaPem, certificadoPem } = {}) {
+function assinarElemento(xmlEntrada, { tag, pai, chavePrivadaPem, certificadoPem, rotulo = 'o XML' } = {}) {
   if (!chavePrivadaPem || !certificadoPem) throw erro('Certificado digital sem chave ou sem certificado.', 409);
-  const xml = String(xmlEvento || '');
-  if (/<Signature[\s>]/.test(xml)) throw erro('O evento já está assinado.', 400);
-  const m = /<infEvento(\s[^>]*)?>[\s\S]*?<\/infEvento>/.exec(xml);
-  if (!m || !/<\/infEvento><\/evento>/.test(xml)) throw erro('XML do evento fora do formato esperado (…</infEvento></evento>).', 400);
-  const id = /<infEvento[^>]*\sId="([^"]+)"/.exec(xml)?.[1];
-  if (!id) throw erro('infEvento sem o atributo Id.', 400);
+  const xml = String(xmlEntrada || '');
+  if (/<Signature[\s>]/.test(xml)) throw erro(`${rotulo} já está assinado.`, 400);
+  const m = new RegExp(`<${tag}(\\s[^>]*)?>[\\s\\S]*?</${tag}>`).exec(xml);
+  const fecho = `</${tag}></${pai}>`;
+  if (!m || !xml.includes(fecho)) throw erro(`${rotulo} fora do formato esperado (…${fecho}).`, 400);
+  const id = new RegExp(`<${tag}[^>]*\\sId="([^"]+)"`).exec(xml)?.[1];
+  if (!id) throw erro(`${tag} sem o atributo Id.`, 400);
   const trecho = expandirAutofechadas(m[0]);
-  const canonico = /<infEvento[^>]*\sxmlns=/.test(trecho) ? trecho : trecho.replace(/^<infEvento/, `<infEvento xmlns="${NS}"`);
+  const canonico = new RegExp(`<${tag}[^>]*\\sxmlns=`).test(trecho) ? trecho : trecho.replace(new RegExp(`^<${tag}`), `<${tag} xmlns="${NS}"`);
   const digest = crypto.createHash('sha1').update(canonico, 'utf8').digest('base64');
   const signedInfo = signedInfoCanonico(id, digest);
   const assinatura = crypto.sign('RSA-SHA1', Buffer.from(signedInfo, 'utf8'), chavePrivadaPem).toString('base64');
   const signature = `<Signature xmlns="${NS_DSIG}">${signedInfo.replace(` xmlns="${NS_DSIG}"`, '')}`
     + `<SignatureValue>${assinatura}</SignatureValue>`
     + `<KeyInfo><X509Data><X509Certificate>${corpoDoCertificado(certificadoPem)}</X509Certificate></X509Data></KeyInfo></Signature>`;
-  return xml.replace(/<\/infEvento><\/evento>/, `</infEvento>${signature}</evento>`);
+  return xml.replace(fecho, `</${tag}>${signature}</${pai}>`);
+}
+
+/** Evento da NF-e (cancelamento, carta de correção): assina o `infEvento` dentro do `evento`. */
+function assinarEvento(xmlEvento, cert = {}) {
+  return assinarElemento(xmlEvento, { tag: 'infEvento', pai: 'evento', rotulo: 'O evento', ...cert });
+}
+
+/** Inutilização de numeração: assina o `infInut` dentro do `inutNFe`. */
+function assinarInutilizacao(xmlInut, cert = {}) {
+  return assinarElemento(xmlInut, { tag: 'infInut', pai: 'inutNFe', rotulo: 'A inutilização', ...cert });
 }
 
 /**
@@ -131,4 +142,4 @@ function verificarAssinatura(xmlAssinado) {
   return { assinada: true, digestConfere: digestCalculado === digestInformado, assinaturaConfere };
 }
 
-module.exports = { NS_DSIG, canonicalInfNFe, assinarNfe, assinarEvento, verificarAssinatura, expandirAutofechadas, idDoInfNFe };
+module.exports = { NS_DSIG, canonicalInfNFe, assinarNfe, assinarElemento, assinarEvento, assinarInutilizacao, verificarAssinatura, expandirAutofechadas, idDoInfNFe };

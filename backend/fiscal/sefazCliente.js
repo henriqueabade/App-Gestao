@@ -346,6 +346,73 @@ function xmlEventoCancelamento({ uf, ambiente, cnpj, chave, protocolo, justifica
     + `</infEvento></evento>`;
 }
 
+/** Texto fixo da carta de correção (a SEFAZ exige exatamente este, sem acentos). */
+const COND_USO_CCE = 'A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art. 7o do Convenio S/N, de 15 de dezembro de 1970 e pode ser utilizada para regularizacao de erro ocorrido na emissao de documento fiscal, desde que o erro nao esteja relacionado com: I - as variaveis que determinam o valor do imposto tais como: base de calculo, aliquota, diferenca de preco, quantidade, valor da operacao ou da prestacao; II - a correcao de dados cadastrais que implique mudanca do remetente ou do destinatario; III - a data de emissao ou de saida.';
+
+/** Carta de correção (110110), SEM assinatura. `nSeqEvento` conta as cartas já feitas para a nota (a última vale). */
+function xmlEventoCartaCorrecao({ uf, ambiente, cnpj, chave, correcao, dhEvento, nSeqEvento = 1 }) {
+  const cUF = UFS[String(uf || '').toUpperCase()];
+  if (!cUF) throw erro(`UF sem código IBGE conhecido: ${uf}.`);
+  const chNFe = String(chave || '').replace(/\D/g, '');
+  if (chNFe.length !== 44) throw erro('Chave de acesso inválida.');
+  const xCorrecao = String(correcao || '').replace(/\s+/g, ' ').trim();
+  if (xCorrecao.length < 15 || xCorrecao.length > 1000) throw erro('A correção precisa ter entre 15 e 1000 caracteres.');
+  const seq = Number(nSeqEvento) || 1;
+  if (seq < 1 || seq > 20) throw erro('Uma NF-e aceita no máximo 20 cartas de correção.');
+  const id = `ID${TIPO_EVENTO.cartaCorrecao}${chNFe}${String(seq).padStart(2, '0')}`;
+  return `<evento xmlns="${NS_NFE}" versao="${VERSAO_EVENTO}"><infEvento Id="${id}">`
+    + `<cOrgao>${cUF}</cOrgao><tpAmb>${tpAmb(ambiente)}</tpAmb><CNPJ>${String(cnpj).replace(/\D/g, '')}</CNPJ><chNFe>${chNFe}</chNFe>`
+    + `<dhEvento>${dhEvento}</dhEvento><tpEvento>${TIPO_EVENTO.cartaCorrecao}</tpEvento><nSeqEvento>${seq}</nSeqEvento><verEvento>${VERSAO_EVENTO}</verEvento>`
+    + `<detEvento versao="${VERSAO_EVENTO}"><descEvento>Carta de Correcao</descEvento><xCorrecao>${escaparXml(xCorrecao)}</xCorrecao><xCondUso>${COND_USO_CCE}</xCondUso></detEvento>`
+    + `</infEvento></evento>`;
+}
+
+// ------------------------------------------------------------ inutilização
+
+/**
+ * Inutilização de uma faixa de números (NFeInutilizacao4), SEM assinatura.
+ * `ano` com dois dígitos; Id = ID + cUF + ano + CNPJ + mod + série(3) + ini(9) + fim(9).
+ */
+function xmlInutilizacao({ uf, ambiente, ano, cnpj, serie, numeroInicial, numeroFinal, justificativa }) {
+  const cUF = UFS[String(uf || '').toUpperCase()];
+  if (!cUF) throw erro(`UF sem código IBGE conhecido: ${uf}.`);
+  const aa = String(ano || '').replace(/\D/g, '').slice(-2).padStart(2, '0');
+  const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+  if (cnpjLimpo.length !== 14) throw erro('CNPJ do emitente inválido.');
+  const s = Number(serie);
+  const ini = Number(numeroInicial);
+  const fim = Number(numeroFinal);
+  if (!Number.isInteger(s) || s < 0 || s > 999) throw erro('Série inválida.');
+  if (!Number.isInteger(ini) || !Number.isInteger(fim) || ini < 1 || fim < ini || fim > 999999999) throw erro('Faixa de números inválida (o final tem de ser maior ou igual ao inicial).');
+  const xJust = String(justificativa || '').replace(/\s+/g, ' ').trim();
+  if (xJust.length < 15 || xJust.length > 255) throw erro('A justificativa precisa ter entre 15 e 255 caracteres.');
+  const id = `ID${cUF}${aa}${cnpjLimpo}55${String(s).padStart(3, '0')}${String(ini).padStart(9, '0')}${String(fim).padStart(9, '0')}`;
+  return `<inutNFe xmlns="${NS_NFE}" versao="${VERSAO}"><infInut Id="${id}"><tpAmb>${tpAmb(ambiente)}</tpAmb><xServ>INUTILIZAR</xServ><cUF>${cUF}</cUF>`
+    + `<ano>${aa}</ano><CNPJ>${cnpjLimpo}</CNPJ><mod>55</mod><serie>${s}</serie><nNFIni>${ini}</nNFIni><nNFFin>${fim}</nNFFin><xJust>${escaparXml(xJust)}</xJust></infInut></inutNFe>`;
+}
+
+/** Lê o `retInutNFe`: 102 = inutilização homologada. */
+function lerRetornoInutilizacao(xml) {
+  const ret = bloco(xml, 'retInutNFe') || xml;
+  const inf = bloco(ret, 'infInut') || ret;
+  const cStat = campo(inf, 'cStat');
+  return { cStat, xMotivo: campo(inf, 'xMotivo'), nProt: campo(inf, 'nProt'), dhRecbto: campo(inf, 'dhRecbto'), homologada: cStat === '102', xml: bloco(xml, 'retInutNFe') };
+}
+
+function montarProcInut(xmlInutAssinado, retInutXml) {
+  if (!/<Signature[\s>]/.test(String(xmlInutAssinado || ''))) throw erro('A inutilização precisa estar assinada.');
+  if (!/^<retInutNFe[\s>]/.test(String(retInutXml || '').trim())) throw erro('Retorno da inutilização ausente.');
+  return `<?xml version="1.0" encoding="UTF-8"?><procInutNFe xmlns="${NS_NFE}" versao="${VERSAO}">${xmlInutAssinado}${String(retInutXml).trim()}</procInutNFe>`;
+}
+
+async function enviarInutilizacao({ uf, ambiente, transporte, xmlInut }) {
+  if (!/<Signature[\s>]/.test(String(xmlInut || ''))) throw erro('A inutilização precisa estar assinada.');
+  const { xml, tempoMs } = await chamar({ uf, ambiente, servico: 'inutilizacao', xmlDados: xmlInut, transporte });
+  const lido = lerRetornoInutilizacao(xml);
+  if (!lido.cStat) throw erro('A SEFAZ respondeu à inutilização sem cStat.', 502);
+  return { ...lido, xmlResposta: xml, tempoMs };
+}
+
 /** Lote de um evento assinado. */
 function xmlEnvEvento({ idLote, xmlEvento }) {
   const lote = String(idLote || '1').replace(/\D/g, '').slice(0, 15) || '1';
@@ -394,7 +461,8 @@ function erro(mensagem, status = 400) {
 }
 
 module.exports = {
-  VERSAO_EVENTO, TIPO_EVENTO, escaparXml, xmlEventoCancelamento, xmlEnvEvento, lerRetornoEvento, montarProcEvento, enviarEvento,
+  VERSAO_EVENTO, TIPO_EVENTO, COND_USO_CCE, escaparXml, xmlEventoCancelamento, xmlEventoCartaCorrecao, xmlEnvEvento, lerRetornoEvento, montarProcEvento, enviarEvento,
+  xmlInutilizacao, lerRetornoInutilizacao, montarProcInut, enviarInutilizacao,
   NS_NFE, VERSAO, UFS, SERVICOS, ENDERECOS,
   urlDoServico, montarEnvelope, xmlConsultaStatus, campo, bloco, faltaSoap,
   transporteHttps, traduzirErroDeRede, chamar, lerStatusServico, statusServico,

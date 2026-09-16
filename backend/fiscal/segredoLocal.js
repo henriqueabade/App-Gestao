@@ -122,10 +122,49 @@ function criar({ pasta, cofre, env = process.env } = {}) {
     }
   }
 
+  // ------------------------------------------------ outros segredos
+  // Mesmo cofre, um arquivo por nome (`segredo-smtp.json`): a senha do e-mail
+  // da NF-e, por exemplo. Nunca passa pelo banco nem pelo renderer.
+  const arquivoSegredoEm = nome => path.join(obterPasta(), `segredo-${String(nome).replace(/[^a-z0-9_-]/gi, '')}.json`);
+
+  function guardarSegredo(nome, valor) {
+    const cofre = obterCofre();
+    if (!cofre) {
+      const e = new Error('Guardar a senha exige o cofre do sistema (só dentro do aplicativo).');
+      e.status = 500;
+      throw e;
+    }
+    fs.mkdirSync(obterPasta(), { recursive: true });
+    fs.writeFileSync(arquivoSegredoEm(nome), JSON.stringify({ cifra: cofre.nome, valor: cofre.cifrar(String(valor ?? '')), guardadoEm: new Date().toISOString() }, null, 2));
+    return true;
+  }
+
+  /** { valor, guardadoEm } ou null; `erro` quando existe mas não dá para ler. */
+  function lerSegredo(nome) {
+    let cfg;
+    try {
+      cfg = JSON.parse(fs.readFileSync(arquivoSegredoEm(nome), 'utf8'));
+    } catch (_) {
+      return null;
+    }
+    const cofre = obterCofre();
+    if (!cofre) return { valor: null, guardadoEm: cfg.guardadoEm || null, erro: 'O cofre do sistema não está disponível para ler a senha.' };
+    if (cfg.cifra !== cofre.nome) return { valor: null, guardadoEm: cfg.guardadoEm || null, erro: 'A senha foi guardada por outro cofre; cadastre de novo.' };
+    try {
+      return { valor: cofre.decifrar(cfg.valor), guardadoEm: cfg.guardadoEm || null };
+    } catch (_) {
+      return { valor: null, guardadoEm: cfg.guardadoEm || null, erro: 'Não foi possível decifrar a senha neste computador.' };
+    }
+  }
+
+  function removerSegredo(nome) {
+    try { fs.unlinkSync(arquivoSegredoEm(nome)); } catch (_) { /* já não existe */ }
+  }
+
   return {
     get pasta() { return obterPasta(); },
     get temCofre() { return Boolean(obterCofre()); },
-    fonte, guardar, remover
+    fonte, guardar, remover, guardarSegredo, lerSegredo, removerSegredo
   };
 }
 

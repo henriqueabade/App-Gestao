@@ -25,6 +25,20 @@ function apiFalsa(linhas = [LINHA]) {
   };
 }
 
+test('validar: os campos do e-mail (SMTP) e o tipo booleano', () => {
+  const { valores, erros } = cfg.validar({ smtp_host: ' smtp.exemplo.com ', smtp_porta: '465', smtp_seguro: 'true', smtp_usuario: 'nfe@x.com', smtp_remetente: 'nfe@x.com', smtp_nome_remetente: '', email_copia: 'fin@x.com', email_mensagem_padrao: 'Olá' });
+  assert.deepEqual(erros, []);
+  assert.equal(valores.smtp_host, 'smtp.exemplo.com');
+  assert.equal(valores.smtp_porta, 465);
+  assert.equal(valores.smtp_seguro, true);
+  assert.equal(valores.smtp_nome_remetente, null);
+  assert.equal(cfg.validar({ smtp_seguro: 'false' }).valores.smtp_seguro, false);
+  assert.equal(cfg.validar({ smtp_seguro: 'sim' }).valores.smtp_seguro, true);
+  assert.match(cfg.validar({ smtp_seguro: 'talvez' }).erros[0], /use sim ou não/);
+  assert.match(cfg.validar({ smtp_porta: '70000' }).erros[0], /entre 1 e 65535/);
+  assert.ok(!('smtp_senha' in cfg.CAMPOS), 'a senha do e-mail nunca é uma configuração do banco');
+});
+
 test('validar: dígitos limpos, UF em maiúsculas, opções e limites; chave desconhecida é erro', () => {
   const { valores, erros } = cfg.validar({
     cnpj: '44.039.257/0001-22', uf: 'mg', cep: '30820-272', crt: '1', ambiente: 'homologacao',

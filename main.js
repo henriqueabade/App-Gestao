@@ -5115,6 +5115,31 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
 });
 
 /**
+ * Gera o PDF de um HTML e devolve os bytes em base64, sem diálogo — para o
+ * DANFE ir anexado ao e-mail. Mesma janela oculta do PDF salvo.
+ */
+ipcMain.handle('gerar-pdf-de-html', async (_event, { html, retrato = false } = {}) => {
+  if (!html || typeof html !== 'string') return { success: false, message: 'Nada para gerar.' };
+  const arquivoTemp = path.join(app.getPath('temp'), `sd-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+  let janela = null;
+  try {
+    await fs.promises.writeFile(arquivoTemp, html, 'utf8');
+    janela = new BrowserWindow({ show: false, webPreferences: { offscreen: true, javascript: false } });
+    await janela.loadFile(arquivoTemp);
+    const pdf = await janela.webContents.printToPDF({
+      printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    return { success: true, base64: Buffer.from(pdf).toString('base64'), tamanho: pdf.length };
+  } catch (err) {
+    console.error('Erro ao gerar PDF em memória:', err);
+    return { success: false, message: err?.message || 'Erro ao gerar o PDF.' };
+  } finally {
+    if (janela && !janela.isDestroyed()) janela.close();
+    fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
+/**
  * Salva um texto (o XML da NF-e, por exemplo) num arquivo escolhido pelo
  * usuário. Mesmo caminho do PDF: diálogo de salvar na pasta Documentos.
  */

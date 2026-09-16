@@ -136,6 +136,42 @@ test('evento de cancelamento: mensagem, validações, lote assinado, leitura do 
   assert.throws(() => sefaz.montarProcEvento(evento, lido.evento.xml), /assinado/);
 });
 
+test('carta de correção: mensagem com o texto fixo de condições de uso, nSeqEvento no Id e validações', () => {
+  const base = { uf: 'MG', ambiente: 'producao', cnpj: '44039257000122', chave: CHAVE, correcao: ' Onde se lê Caixa,  leia-se Engradado ', dhEvento: '2026-09-15T15:30:00-03:00' };
+  const xml = sefaz.xmlEventoCartaCorrecao(base);
+  assert.ok(xml.startsWith(`<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="ID110110${CHAVE}01"><cOrgao>31</cOrgao><tpAmb>1</tpAmb>`));
+  assert.match(xml, /<tpEvento>110110<\/tpEvento><nSeqEvento>1<\/nSeqEvento>/);
+  assert.match(xml, /<descEvento>Carta de Correcao<\/descEvento><xCorrecao>Onde se lê Caixa, leia-se Engradado<\/xCorrecao><xCondUso>A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art\. 7o do Convenio S\/N/);
+  assert.match(sefaz.xmlEventoCartaCorrecao({ ...base, nSeqEvento: 3 }), new RegExp(`Id="ID110110${CHAVE}03".*<nSeqEvento>3</nSeqEvento>`));
+  assert.throws(() => sefaz.xmlEventoCartaCorrecao({ ...base, correcao: 'curta' }), /entre 15 e 1000/);
+  assert.throws(() => sefaz.xmlEventoCartaCorrecao({ ...base, nSeqEvento: 21 }), /no máximo 20/);
+});
+
+test('inutilização: Id com cUF+ano+CNPJ+mod+série+faixa, validações, leitura do retorno (102) e procInutNFe', async () => {
+  const base = { uf: 'MG', ambiente: 'homologacao', ano: 2026, cnpj: '44039257000122', serie: 1, numeroInicial: 5, numeroFinal: 7, justificativa: 'Numeração pulada por falha na emissão' };
+  const xml = sefaz.xmlInutilizacao(base);
+  assert.equal(xml, '<inutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut Id="ID31264403925700012255001000000005000000007"><tpAmb>2</tpAmb><xServ>INUTILIZAR</xServ><cUF>31</cUF><ano>26</ano><CNPJ>44039257000122</CNPJ><mod>55</mod><serie>1</serie><nNFIni>5</nNFIni><nNFFin>7</nNFFin><xJust>Numeração pulada por falha na emissão</xJust></infInut></inutNFe>');
+  assert.equal(/Id="ID(\d+)"/.exec(xml)[1].length, 41, 'cUF(2) ano(2) CNPJ(14) mod(2) série(3) ini(9) fim(9)');
+  assert.throws(() => sefaz.xmlInutilizacao({ ...base, numeroFinal: 4 }), /Faixa de números inválida/);
+  assert.throws(() => sefaz.xmlInutilizacao({ ...base, justificativa: 'curta' }), /entre 15 e 255/);
+  assert.throws(() => sefaz.xmlInutilizacao({ ...base, cnpj: '123' }), /CNPJ do emitente inválido/);
+
+  const assinado = xml.replace('</infInut></inutNFe>', '</infInut><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo></SignedInfo></Signature></inutNFe>');
+  const retorno = '<retInutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut><tpAmb>2</tpAmb><verAplic>MG</verAplic><cStat>102</cStat><xMotivo>Inutilizacao de numero homologado</xMotivo><cUF>31</cUF><ano>26</ano><CNPJ>44039257000122</CNPJ><mod>55</mod><serie>1</serie><nNFIni>5</nNFIni><nNFFin>7</nNFFin><dhRecbto>2026-09-15T16:00:00-03:00</dhRecbto><nProt>131260000333333</nProt></infInut></retInutNFe>';
+  const lido = sefaz.lerRetornoInutilizacao(retorno);
+  assert.equal(lido.homologada, true);
+  assert.equal(lido.nProt, '131260000333333');
+  assert.equal(sefaz.lerRetornoInutilizacao(retorno.replace('102', '241')).homologada, false);
+  const registro = [];
+  const r = await sefaz.enviarInutilizacao({ uf: 'MG', ambiente: 'homologacao', xmlInut: assinado, transporte: transporteCom(envelope('NFeInutilizacao4', retorno), registro) });
+  assert.equal(r.homologada, true);
+  assert.equal(registro[0].url, 'https://hnfe.fazenda.mg.gov.br/nfe2/services/NFeInutilizacao4');
+  assert.match(registro[0].corpo, /<nfeDadosMsg [^>]*><inutNFe /);
+  await assert.rejects(sefaz.enviarInutilizacao({ uf: 'MG', ambiente: 'homologacao', xmlInut: xml, transporte: transporteCom('') }), /assinada/);
+  const proc = sefaz.montarProcInut(assinado, lido.xml);
+  assert.ok(proc.startsWith('<?xml version="1.0" encoding="UTF-8"?><procInutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><inutNFe') && proc.endsWith('</retInutNFe></procInutNFe>'));
+});
+
 test('montarNfeProc junta a NF-e assinada e o protocolo no formato de distribuição', () => {
   const proc = sefaz.montarNfeProc(NFE_ASSINADA, protocolo('100', 'Autorizado o uso da NF-e'));
   assert.ok(proc.startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns='));

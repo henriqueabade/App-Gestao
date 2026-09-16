@@ -79,16 +79,36 @@
     return Number.isFinite(n) ? n : NaN;
   }
 
+  /**
+   * Mais de um volume: uma linha por volume. Mantém o que já foi digitado nas
+   * linhas existentes e completa as novas com a espécie/pesos dos campos gerais.
+   */
+  function linhasDeVolumes(quantidade, base = {}, existentes = []) {
+    const n = lerNumero(quantidade);
+    if (!Number.isInteger(n) || n < 2) return [];
+    const atuais = Array.isArray(existentes) ? existentes : [];
+    return Array.from({ length: n }, (_, i) => (atuais[i]
+      ? { ...atuais[i], numero: i + 1 }
+      : { numero: i + 1, especie: String(base.especie ?? ''), peso_bruto: String(base.peso_bruto ?? ''), peso_liquido: String(base.peso_liquido ?? '') }));
+  }
+
   /** O que se manda ao POST /emitir a partir dos campos da tela. */
   function corpoDaEmissao(campos = {}) {
+    const linhas = Array.isArray(campos.volumes) && campos.volumes.length >= 2 ? campos.volumes : null;
     const transporte = {
       modalidade_frete: Number(campos.modalidade_frete ?? 9),
       transportadora_nome: String(campos.transportadora ?? '').trim(),
-      volumes_quantidade: lerNumero(campos.volumes_quantidade),
+      volumes_quantidade: linhas ? linhas.length : lerNumero(campos.volumes_quantidade),
       volumes_especie: String(campos.volumes_especie ?? '').trim(),
       peso_bruto: lerNumero(campos.peso_bruto),
       peso_liquido: lerNumero(campos.peso_liquido)
     };
+    if (linhas) {
+      transporte.volumes = linhas.map((v, i) => ({
+        numeracao: String(v.numero ?? i + 1), especie: String(v.especie ?? '').trim(),
+        peso_bruto: lerNumero(v.peso_bruto), peso_liquido: lerNumero(v.peso_liquido)
+      }));
+    }
     return {
       transporte,
       pagamento: { tPag: String(campos.tPag || '').padStart(2, '0') },
@@ -104,9 +124,17 @@
       if (Number.isNaN(n) || (n !== null && n < 0)) erros.push(`${rotulo}: informe um número válido.`);
     }
     const volumes = lerNumero(campos.volumes_quantidade);
-    if (volumes > 0 && !String(campos.volumes_especie ?? '').trim()) erros.push('Informe a espécie dos volumes (ex.: Caixa).');
+    const linhas = Array.isArray(campos.volumes) && campos.volumes.length >= 2 ? campos.volumes : null;
+    if (volumes > 0 && !linhas && !String(campos.volumes_especie ?? '').trim()) erros.push('Informe a espécie dos volumes (ex.: Caixa).');
     if (volumes !== null && !Number.isNaN(volumes) && !Number.isInteger(volumes)) erros.push('Volumes: use um número inteiro.');
     if (String(campos.modalidade_frete) === '9' && volumes > 0) erros.push('Sem frete (9) não leva volumes: escolha a modalidade ou zere os volumes.');
+    for (const [i, v] of (linhas || []).entries()) {
+      if (!String(v.especie ?? '').trim()) erros.push(`Volume ${i + 1}: informe a espécie.`);
+      for (const [chave, rotulo] of [['peso_bruto', 'peso bruto'], ['peso_liquido', 'peso líquido']]) {
+        const n = lerNumero(v[chave]);
+        if (Number.isNaN(n) || (n !== null && n < 0)) erros.push(`Volume ${i + 1}: ${rotulo} inválido.`);
+      }
+    }
     return erros;
   }
 
@@ -332,8 +360,55 @@
     el('emitirNfePagamentoOrigem').textContent = r.formaPagamento ? `Sugerida pela forma de pagamento do pedido: "${r.formaPagamento}".` : '';
   }
 
+  // ------------------------------------------------- volumes detalhados
+  const volumesBloco = el('emitirNfeVolumesDetalhe');
+  const volumesCorpo = el('emitirNfeVolumesLinhas');
+  let volumesLinhas = [];
+
+  function lerVolumesDaTela() {
+    return Array.from(volumesCorpo?.querySelectorAll('tr') || []).map((tr, i) => ({
+      numero: i + 1,
+      especie: tr.querySelector('[data-volume="especie"]')?.value ?? '',
+      peso_bruto: tr.querySelector('[data-volume="peso_bruto"]')?.value ?? '',
+      peso_liquido: tr.querySelector('[data-volume="peso_liquido"]')?.value ?? ''
+    }));
+  }
+
+  function renderizarVolumes() {
+    if (!volumesBloco || !volumesCorpo) return;
+    const base = { especie: campos.volumes_especie.value, peso_bruto: campos.peso_bruto.value, peso_liquido: campos.peso_liquido.value };
+    volumesLinhas = linhasDeVolumes(campos.volumes_quantidade.value, base, lerVolumesDaTela().length ? lerVolumesDaTela() : volumesLinhas);
+    volumesCorpo.replaceChildren();
+    for (const linha of volumesLinhas) {
+      const tr = document.createElement('tr');
+      const numero = document.createElement('td');
+      numero.className = 'px-4 py-2 text-white';
+      numero.textContent = String(linha.numero);
+      tr.appendChild(numero);
+      for (const [chave, largura, modo] of [['especie', 'w-full min-w-[10rem]', 'text'], ['peso_bruto', 'w-32', 'decimal'], ['peso_liquido', 'w-32', 'decimal']]) {
+        const td = document.createElement('td');
+        td.className = 'px-4 py-2';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = modo;
+        input.dataset.volume = chave;
+        input.value = linha[chave] ?? '';
+        input.placeholder = chave === 'especie' ? 'ex.: Caixa' : '0,000';
+        input.className = `${largura} bg-input border border-inputBorder rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition`;
+        input.addEventListener('input', limparMensagem);
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      volumesCorpo.appendChild(tr);
+    }
+    volumesBloco.classList.toggle('hidden', volumesLinhas.length === 0);
+  }
+
   function valoresDosCampos() {
-    return Object.fromEntries(Object.entries(campos).map(([k, input]) => [k, input?.value ?? '']));
+    const valores = Object.fromEntries(Object.entries(campos).map(([k, input]) => [k, input?.value ?? '']));
+    const linhas = lerVolumesDaTela();
+    valores.volumes = volumesBloco && !volumesBloco.classList.contains('hidden') && linhas.length >= 2 ? linhas : null;
+    return valores;
   }
 
   // ----------------------------------------------------------- ações
@@ -470,6 +545,8 @@
   }
   semNfeBtn.addEventListener('click', enviarSemNfe);
   Object.values(campos).forEach(input => input?.addEventListener('input', limparMensagem));
+  campos.volumes_quantidade.addEventListener('input', renderizarVolumes);
+  campos.volumes_quantidade.addEventListener('change', renderizarVolumes);
 
   // ------------------------------------------------------------ carga
   try {
@@ -482,6 +559,7 @@
       ambiente: corpo.ambiente === 'producao' ? 'producao' : 'homologacao', notas: Array.isArray(corpo.notas) ? corpo.notas : []
     };
     preencherCampos();
+    renderizarVolumes();
     pintar();
     carregandoEl.classList.add('hidden');
     conteudoEl.classList.remove('hidden');

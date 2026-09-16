@@ -271,6 +271,96 @@
             </div>
           </div>
 
+          <!-- E-mail da NF-e -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-envelope" aria-hidden="true"></i>E-mail da NF-e</h3>
+            <p class="text-xs text-gray-400 mb-4">O DANFE (PDF) e o XML vão para o cliente pelo servidor abaixo. O servidor vale para todos; a senha fica só neste computador, cifrada pelo Windows.</p>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div class="md:col-span-2">
+                <label for="finCfg_smtp_host" class="block text-sm font-medium text-gray-300 mb-2">Servidor SMTP</label>
+                <input id="finCfg_smtp_host" data-fin-cfg="smtp_host" type="text" maxlength="120" placeholder="smtp.gmail.com" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCfg_smtp_porta" class="block text-sm font-medium text-gray-300 mb-2">Porta</label>
+                <input id="finCfg_smtp_porta" data-fin-cfg="smtp_porta" type="number" min="1" max="65535" placeholder="587" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCfg_smtp_seguro" class="block text-sm font-medium text-gray-300 mb-2">Conexão</label>
+                <select id="finCfg_smtp_seguro" data-fin-cfg="smtp_seguro" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="false">STARTTLS (porta 587)</option>
+                  <option value="true">TLS direto (porta 465)</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label for="finCfg_smtp_usuario" class="block text-sm font-medium text-gray-300 mb-2">Usuário (login)</label>
+                <input id="finCfg_smtp_usuario" data-fin-cfg="smtp_usuario" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label for="finCfg_smtp_remetente" class="block text-sm font-medium text-gray-300 mb-2">E-mail remetente</label>
+                <input id="finCfg_smtp_remetente" data-fin-cfg="smtp_remetente" type="email" maxlength="120" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label for="finCfg_smtp_nome_remetente" class="block text-sm font-medium text-gray-300 mb-2">Nome do remetente</label>
+                <input id="finCfg_smtp_nome_remetente" data-fin-cfg="smtp_nome_remetente" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label for="finCfg_email_copia" class="block text-sm font-medium text-gray-300 mb-2">Cópia de toda NF-e para</label>
+                <input id="finCfg_email_copia" data-fin-cfg="email_copia" type="text" maxlength="120" placeholder="financeiro@empresa.com.br (opcional)" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-4">
+                <label for="finCfg_email_mensagem_padrao" class="block text-sm font-medium text-gray-300 mb-2">Mensagem padrão do e-mail</label>
+                <textarea id="finCfg_email_mensagem_padrao" data-fin-cfg="email_mensagem_padrao" rows="3" placeholder="Opcional — se vazio, o sistema escreve uma mensagem simples com o número da nota" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+              </div>
+            </div>
+            <div id="finCfgEmailSenhaBloco" class="mt-5 pt-4 border-t border-inputBorder">
+              <div class="flex flex-wrap items-end gap-3">
+                <div>
+                  <label for="finCfgEmailSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do e-mail (fica só neste computador)</label>
+                  <input id="finCfgEmailSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-72 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <button id="finCfgEmailGuardar" type="button" class="btn-success px-5 py-3 rounded-lg font-medium"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar senha</button>
+                <button id="finCfgEmailRemover" type="button" class="btn-danger px-5 py-3 rounded-lg text-white font-medium">Remover</button>
+                <button id="finCfgEmailTestar" type="button" class="btn-primary text-white px-5 py-3 rounded-lg font-medium"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Enviar e-mail de teste</button>
+              </div>
+              <p id="finCfgEmailEstado" class="mt-3 text-xs text-gray-400" role="status"></p>
+            </div>
+          </div>
+
+          <!-- Inutilização de numeração -->
+          <div class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-eraser" aria-hidden="true"></i>Inutilizar numeração</h3>
+            <p class="text-xs text-gray-400 mb-4">Números pulados (uma nota que nunca foi autorizada e não será) precisam ser inutilizados na SEFAZ. Vale no ambiente atual (<span id="finCfgInutAmbiente">—</span>). Não dá para inutilizar número que já tem nota.</p>
+            <div class="flex flex-wrap items-end gap-3">
+              <div>
+                <label for="finCfgInutSerie" class="block text-sm font-medium text-gray-300 mb-2">Série</label>
+                <input id="finCfgInutSerie" type="text" inputmode="numeric" class="w-20 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCfgInutInicio" class="block text-sm font-medium text-gray-300 mb-2">Do nº</label>
+                <input id="finCfgInutInicio" type="text" inputmode="numeric" class="w-32 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label for="finCfgInutFim" class="block text-sm font-medium text-gray-300 mb-2">Até o nº</label>
+                <input id="finCfgInutFim" type="text" inputmode="numeric" class="w-32 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="flex-1 min-w-[16rem]">
+                <label for="finCfgInutJustificativa" class="block text-sm font-medium text-gray-300 mb-2">Justificativa (15 a 255 caracteres)</label>
+                <input id="finCfgInutJustificativa" type="text" maxlength="255" placeholder="Ex.: Numeração pulada por falha na emissão" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <button id="finCfgInutilizar" type="button" data-perm="financeiro.nfe.cancel" class="btn-danger px-5 py-3 rounded-lg text-white font-medium"><i class="fas fa-eraser mr-2" aria-hidden="true"></i>Inutilizar</button>
+            </div>
+            <div id="finCfgInutResultado" class="hidden mt-3 text-sm" role="status"></div>
+            <div id="finCfgInutLista" class="hidden mt-4 glass-surface rounded-xl border border-white/10 overflow-hidden">
+              <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Inutilizações registradas</p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead><tr><th class="px-4 py-2 text-left text-xs">Ambiente</th><th class="px-4 py-2 text-left text-xs">Série</th><th class="px-4 py-2 text-left text-xs">Faixa</th><th class="px-4 py-2 text-left text-xs">Situação</th><th class="px-4 py-2 text-left text-xs">Protocolo</th><th class="px-4 py-2 text-left text-xs">Quando</th></tr></thead>
+                  <tbody id="finCfgInutLinhas" class="divide-y divide-white/10"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- Responsável técnico (opcional) -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-user-cog" aria-hidden="true"></i>Responsável técnico (opcional)</h3>

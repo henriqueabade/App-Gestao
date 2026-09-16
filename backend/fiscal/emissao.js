@@ -160,12 +160,25 @@ const CAMPOS_TRANSPORTE_PEDIDO = {
   transportadora_nome: v => (v === null || v === undefined ? undefined : String(v).trim().slice(0, 60) || undefined)
 };
 
-/** Só as chaves que vieram; `transportadora_nome` grava em `pedidos.transportadora`. */
+/**
+ * Só as chaves que vieram; `transportadora_nome` grava em `pedidos.transportadora`.
+ * Volumes detalhados (uma linha por volume) viram o resumo: quantidade total,
+ * espécies distintas e pesos somados.
+ */
 function camposTransporteDoPedido(transporte) {
   const saida = {};
+  const entrada = { ...(transporte || {}) };
+  const detalhados = (Array.isArray(entrada.volumes) ? entrada.volumes : []).filter(v => v && typeof v === 'object');
+  if (detalhados.length) {
+    const soma = chave => detalhados.reduce((s, v) => s + (Number(v[chave]) || 0), 0);
+    entrada.volumes_quantidade = detalhados.reduce((s, v) => s + Math.max(Number(v.quantidade) || 1, 1), 0);
+    entrada.volumes_especie = [...new Set(detalhados.map(v => String(v.especie ?? '').trim()).filter(Boolean))].join(', ') || entrada.volumes_especie;
+    entrada.peso_bruto = Math.round(soma('peso_bruto') * 1000) / 1000;
+    entrada.peso_liquido = Math.round(soma('peso_liquido') * 1000) / 1000;
+  }
   for (const [chave, limpar] of Object.entries(CAMPOS_TRANSPORTE_PEDIDO)) {
-    if (!(chave in (transporte || {}))) continue;
-    const valor = limpar(transporte[chave]);
+    if (!(chave in entrada)) continue;
+    const valor = limpar(entrada[chave]);
     if (valor === undefined || Number.isNaN(valor)) continue;
     saida[chave === 'transportadora_nome' ? 'transportadora' : chave] = valor;
   }
@@ -352,7 +365,9 @@ async function emitir({
           peso_bruto: entrada.transporte?.peso_bruto ?? pedido.peso_bruto,
           peso_liquido: entrada.transporte?.peso_liquido ?? pedido.peso_liquido,
           transportadora_nome: entrada.transporte?.transportadora_nome ?? pedido.transportadora,
-          valor_frete: entrada.transporte?.valor_frete
+          valor_frete: entrada.transporte?.valor_frete,
+          volumes: entrada.transporte?.volumes,
+          volumes_marca: entrada.transporte?.volumes_marca
         },
         pagamento: entrada.pagamento || {},
         informacoesComplementares: entrada.informacoes_complementares,

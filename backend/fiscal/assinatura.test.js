@@ -82,6 +82,17 @@ test('assinarEvento: o Signature entra no evento e o resumo é do infEvento can�
   assert.throws(() => assinatura.assinarEvento('<evento><infEvento></infEvento></evento>', CERT), /sem o atributo Id/);
 });
 
+test('assinarInutilizacao: o Signature entra no inutNFe com o resumo do infInut canônico', () => {
+  const inut = '<inutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut Id="ID3126440392570001225500100000000500000000007"><tpAmb>2</tpAmb><xServ>INUTILIZAR</xServ></infInut></inutNFe>';
+  const assinado = assinatura.assinarInutilizacao(inut, CERT);
+  assert.ok(assinado.endsWith('</Signature></inutNFe>'));
+  assert.match(assinado, /<Reference URI="#ID3126440392570001225500100000000500000000007">/);
+  const canonico = '<infInut xmlns="http://www.portalfiscal.inf.br/nfe" Id="ID3126440392570001225500100000000500000000007"><tpAmb>2</tpAmb><xServ>INUTILIZAR</xServ></infInut>';
+  assert.equal(/<DigestValue>([^<]*)</.exec(assinado)[1], crypto.createHash('sha1').update(canonico, 'utf8').digest('base64'));
+  assert.throws(() => assinatura.assinarInutilizacao(assinado, CERT), /já está assinad/);
+  assert.throws(() => assinatura.assinarElemento('<a><b Id="1"></b></a>', { tag: 'b', pai: 'c', ...CERT }), /fora do formato/);
+});
+
 test('expandirAutofechadas e canonicalInfNFe aceitam XML de terceiros (com tag autofechada e xmlns já no infNFe)', () => {
   assert.equal(assinatura.expandirAutofechadas('<a><b x="1"/><c/></a>'), '<a><b x="1"></b><c></c></a>');
   const comXmlns = '<NFe><infNFe xmlns="http://www.portalfiscal.inf.br/nfe" Id="NFe1" versao="4.00"><ide/></infNFe></NFe>';

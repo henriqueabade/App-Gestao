@@ -75,6 +75,43 @@ function tagSemNota(p) {
 }
 
 /**
+ * A nota que conta para cada pedido, a partir da lista de notas (sem XML):
+ * autorizada vence cancelada, que vence o resto; empate, a mais nova. Pura.
+ */
+function indexarNotas(notas) {
+    const peso = { autorizada: 3, cancelada: 2 };
+    const porPedido = {};
+    for (const n of Array.isArray(notas) ? notas : []) {
+        if (!n || n.pedido_id === undefined || n.pedido_id === null) continue;
+        const chave = String(n.pedido_id);
+        const atual = porPedido[chave];
+        const melhor = !atual
+            || (peso[n.status_fiscal] || 1) > (peso[atual.status_fiscal] || 1)
+            || ((peso[n.status_fiscal] || 1) === (peso[atual.status_fiscal] || 1) && Number(n.id) > Number(atual.id));
+        if (melhor) porPedido[chave] = n;
+    }
+    return porPedido;
+}
+
+/**
+ * Tag ao lado do número do pedido, pela nota que ele tem: verde "DANFE"
+ * (autorizada — o clique gera o PDF), vermelha "X/NF" (cancelada) ou a roxa
+ * "S/NF" (enviado sem nota). Pura; '' quando não há o que mostrar.
+ */
+function tagNota(p, nota) {
+    if (nota && nota.status_fiscal === 'autorizada') {
+        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para gerar o DANFE`;
+        return ` <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
+    }
+    if (nota && nota.status_fiscal === 'cancelada') {
+        const quando = formatarDiaDate(nota.cancelada_em);
+        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} cancelada${quando ? ` em ${quando}` : ''}`;
+        return ` <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
+    }
+    return tagSemNota(p);
+}
+
+/**
  * O que dizer depois de pedir a troca de status.
  *
  * A resposta era descartada: um 403, um 409 (pedido já enviado por outra aba)
@@ -338,11 +375,16 @@ async function carregarPedidos() {
         // os pedidos começarem a ser buscados — duas idas à rede em fila para
         // montar uma tela só. O cache de nomes é aditivo e não expira, então
         // depois da primeira carga não há nada de novo a buscar.
-        const [resp] = await Promise.all([
+        // As notas fiscais (sem XML) entram junto, para as tags DANFE / X/NF ao
+        // lado do número. Quem não tem financeiro.nfe.view recebe 403 e fica sem
+        // as tags — a lista não depende disso.
+        const [resp, respNotas] = await Promise.all([
             fetchApi('/api/pedidos'),
+            fetchApi('/api/fiscal/notas').catch(() => null),
             cacheClientes.size ? Promise.resolve() : carregarClientes()
         ]);
         const data = await resp.json();
+        const notasPorPedido = indexarNotas(respNotas?.ok ? await respNotas.json().catch(() => []) : []);
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -387,7 +429,7 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagSemNota(p)}</td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
@@ -403,6 +445,11 @@ async function carregarPedidos() {
                         <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
+            // A tag verde "DANFE" gera o PDF da nota; o clique não abre a linha.
+            tr.querySelector('.tag-danfe')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId));
+            });
             const checkIcon = tr.querySelector('.fa-check');
             const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };
             const nextStatus = nextStatusMap[p.situacao];

@@ -46,12 +46,24 @@ test('visualizar: DANFE vai ao PDF em retrato, XML ao arquivo .xml (e o do cance
   assert.strictEqual(f([{ id: 1, status_fiscal: 'autorizada' }, { id: 2, status_fiscal: 'cancelada' }]).id, 2);
   assert.strictEqual(f([{ id: 3, status_fiscal: 'processando' }, { id: 1, status_fiscal: 'autorizada' }]).id, 1);
 
-  assert.ok(VIS_JS.includes('/api/fiscal/notas/${encodeURIComponent(nota.id)}/danfe'));
-  assert.ok(VIS_JS.includes("salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true })"));
-  assert.ok(VIS_JS.includes('/api/fiscal/notas/${encodeURIComponent(nota.id)}/xml'));
-  assert.ok(VIS_JS.includes("extensao: 'xml'") && VIS_JS.includes('corpo.xml_cancelamento'));
+  // DANFE e XML vivem no utilitário compartilhado com a lista de pedidos.
+  const UTIL = ler('js', 'utils', 'nfe-documentos.js');
+  const MENU = ler('html', 'menu.html');
+  assert.ok(UTIL.includes('/api/fiscal/notas/${encodeURIComponent(notaId)}/danfe'));
+  assert.ok(UTIL.includes("salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true })"));
+  assert.ok(UTIL.includes('/api/fiscal/notas/${encodeURIComponent(notaId)}/xml'));
+  assert.ok(UTIL.includes("extensao: 'xml'") && UTIL.includes('corpo.xml_cancelamento'));
+  assert.ok(UTIL.includes('window.NfeDocumentos = { gerarDanfe, salvarXml };'));
+  assert.ok(MENU.indexOf('js/utils/nfe-documentos.js') > MENU.indexOf('js/utils/cliente-fiscal.js'), 'o menu carrega o utilitário');
+  assert.ok(VIS_JS.includes('window.NfeDocumentos.gerarDanfe(nota.id)') && VIS_JS.includes('window.NfeDocumentos.salvarXml(nota.id)'));
   assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe')"));
-  assert.ok(VIS_JS.includes("if (nota.status_fiscal === 'autorizada') ligar(cancelarBtn, cancelarNfe);"), 'cancelar só com nota autorizada');
+  const soAutorizada = VIS_JS.slice(VIS_JS.indexOf("if (nota.status_fiscal === 'autorizada') {"), VIS_JS.indexOf('ligar(cancelarBtn, cancelarNfe);'));
+  assert.ok(soAutorizada.length > 0 && soAutorizada.includes('cartaNfe'), 'cancelar e carta de correção só com nota autorizada');
+  assert.ok(VIS_JS.includes("ligar(overlay.querySelector('#visualizarPedidoEmailNfe'), emailNfe);"), 'e-mail também para nota cancelada (DANFE cancelado)');
+  assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail')"));
+  assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe')"));
+  assert.ok(VIS_JS.includes("email: nota.destinatario?.email || ''"), 'o e-mail do destinatário da nota vai no contexto');
+  assert.ok(/id="visualizarPedidoEmailNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML) && /id="visualizarPedidoCartaNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML));
   assert.ok(VIS_JS.includes('ligarDocumentosDaNota(notaParaDocumentos(notas), data)'));
 });
 
@@ -60,6 +72,63 @@ test('Electron: o PDF aceita retrato e existe o IPC de salvar texto, exposto no 
   assert.ok(MAIN.includes('landscape: !retrato'));
   assert.ok(MAIN.includes("ipcMain.handle('salvar-texto-como-arquivo'"));
   assert.ok(PRELOAD.includes("salvarTextoComoArquivo: (payload) => ipcRenderer.invoke('salvar-texto-como-arquivo', payload)"));
+});
+
+test('modal E-mail: destinatários pré-preenchidos, DANFE gerado no app (base64) e POST /email; modal Carta de correção: 15 a 1000 e POST /carta-correcao', () => {
+  const EMAIL_HTML = ler('html', 'modals', 'pedidos', 'enviar-nfe-email.html');
+  const EMAIL_JS = ler('js', 'modals', 'pedido-enviar-nfe-email.js');
+  for (const id of ['enviarNfeEmailOverlay', 'enviarNfeEmailPara', 'enviarNfeEmailMensagem', 'enviarNfeEmailDanfe', 'enviarNfeEmailXml', 'confirmarEnviarNfeEmail', 'cancelarEnviarNfeEmail']) {
+    assert.ok(EMAIL_HTML.includes(`id="${id}"`), `e-mail sem #${id}`);
+  }
+  assert.ok(/id="confirmarEnviarNfeEmail"[^>]*data-perm="financeiro\.nfe\.emit"/.test(EMAIL_HTML));
+  assert.ok(EMAIL_JS.includes("window.electronAPI?.gerarPdfDeHtml?.({ html: corpo.html, retrato: true })"), 'o DANFE é impresso no app e vai em base64');
+  assert.ok(EMAIL_JS.includes('/api/fiscal/notas/${encodeURIComponent(ctx.notaId)}/email') && EMAIL_JS.includes('pdf_base64: pdfBase64, incluir_xml: querXml'));
+  assert.ok(EMAIL_JS.includes("paraEl.value = ctx.email || '';"), 'vem com o e-mail da NF-e do cliente');
+  const inicioE = EMAIL_JS.indexOf('const EMAIL_RE');
+  const fimE = EMAIL_JS.indexOf('// ------------------------------------------------- fim das funções puras');
+  const fe = vm.runInContext(`${EMAIL_JS.slice(inicioE, fimE)}\n({ lerDestinatarios, mensagemDeErro })`, vm.createContext({}));
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(fe.lerDestinatarios('A@b.com; c@d.com a@b.com; ruim'))), { lista: ['a@b.com', 'c@d.com', 'ruim'], invalidos: ['ruim'] });
+  assert.match(fe.mensagemDeErro(409, null), /não está configurado/);
+  assert.match(fe.mensagemDeErro(502, { error: 'O servidor de e-mail recusou o envio: 535' }), /535/);
+  assert.ok(!/innerHTML|insertAdjacentHTML|window\.confirm\(/.test(EMAIL_JS));
+
+  const CCE_HTML = ler('html', 'modals', 'pedidos', 'carta-correcao-nfe.html');
+  const CCE_JS = ler('js', 'modals', 'pedido-carta-correcao-nfe.js');
+  for (const id of ['cartaCorrecaoNfeOverlay', 'cartaCorrecaoNfeTexto', 'cartaCorrecaoNfeContador', 'confirmarCartaCorrecaoNfe', 'cancelarCartaCorrecaoNfe']) {
+    assert.ok(CCE_HTML.includes(`id="${id}"`), `carta sem #${id}`);
+  }
+  assert.ok(CCE_HTML.includes('maxlength="1000"') && /id="confirmarCartaCorrecaoNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(CCE_HTML));
+  const inicioC = CCE_JS.indexOf('const MINIMO');
+  const fimC = CCE_JS.indexOf('// ------------------------------------------------- fim das funções puras');
+  const fc = vm.runInContext(`${CCE_JS.slice(inicioC, fimC)}\n({ avaliarCorrecao, textoDoContador, mensagemDeErro })`, vm.createContext({}));
+  assert.strictEqual(fc.avaliarCorrecao('Onde se lê Caixa, leia-se Engradado').erro, null);
+  assert.match(fc.avaliarCorrecao('curta').erro, /pelo menos 15/);
+  assert.match(fc.avaliarCorrecao('x'.repeat(1001)).erro, /passa de 1000/);
+  assert.strictEqual(fc.textoDoContador('abc'), '3 / 1000 — mínimo de 15 caracteres');
+  assert.match(fc.mensagemDeErro(422, { sefaz: { cStat: '573', xMotivo: 'Duplicidade' } }), /recusou a carta \(573\)/);
+  assert.ok(CCE_JS.includes('/api/fiscal/notas/${encodeURIComponent(ctx.notaId)}/carta-correcao') && CCE_JS.includes('window.DialogPadrao?.confirm?.({'));
+  assert.ok(!/innerHTML|insertAdjacentHTML|window\.confirm\(/.test(CCE_JS));
+  assert.ok(MAIN.includes("ipcMain.handle('gerar-pdf-de-html'") && PRELOAD.includes("gerarPdfDeHtml: (payload) => ipcRenderer.invoke('gerar-pdf-de-html', payload)"));
+});
+
+test('configuração fiscal: seções de e-mail (senha só no computador) e de inutilização, ligadas no script', () => {
+  const CFG_HTML = ler('html', 'modals', 'financeiro', 'configuracao-fiscal.html');
+  const CFG_JS = ler('js', 'modals', 'financeiro-modais.js');
+  for (const campo of ['smtp_host', 'smtp_porta', 'smtp_seguro', 'smtp_usuario', 'smtp_remetente', 'smtp_nome_remetente', 'email_copia', 'email_mensagem_padrao']) {
+    assert.ok(CFG_HTML.includes(`data-fin-cfg="${campo}"`), `sem o campo ${campo}`);
+  }
+  assert.ok(!CFG_HTML.includes('data-fin-cfg="smtp_senha"'), 'a senha não é campo da configuração (não vai ao banco)');
+  for (const id of ['finCfgEmailSenha', 'finCfgEmailGuardar', 'finCfgEmailRemover', 'finCfgEmailTestar', 'finCfgEmailEstado', 'finCfgInutSerie', 'finCfgInutInicio', 'finCfgInutFim', 'finCfgInutJustificativa', 'finCfgInutilizar', 'finCfgInutResultado', 'finCfgInutLinhas']) {
+    assert.ok(CFG_HTML.includes(`id="${id}"`), `sem #${id}`);
+  }
+  assert.ok(/id="finCfgInutilizar"[^>]*data-perm="financeiro\.nfe\.cancel"/.test(CFG_HTML));
+  assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha }) })"));
+  assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/email/testar', { method: 'POST'"));
+  assert.ok(CFG_JS.includes("fetchApi('/api/fiscal/inutilizacoes', { method: 'POST'") && CFG_JS.includes("fetchApi('/api/fiscal/inutilizacoes')"));
+  for (const par of ["ligar('finCfgEmailGuardar', guardarSenhaEmail)", "ligar('finCfgEmailRemover', removerSenhaEmail)", "ligar('finCfgEmailTestar', testarEmail)", "ligar('finCfgInutilizar', inutilizar)"]) {
+    assert.ok(CFG_JS.includes(par), `sem ${par}`);
+  }
+  assert.ok(CFG_JS.includes("title: 'Inutilizar numeração na SEFAZ?'"), 'inutilizar confirma na caixa da casa');
 });
 
 test('modal Cancelar NF-e: justificativa de 15 a 255, confirmação na caixa da casa, POST /cancelar e mensagens', () => {

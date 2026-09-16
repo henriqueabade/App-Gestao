@@ -55,7 +55,16 @@ const CAMPOS = {
   resp_tec_cnpj: { tipo: 'digitos', tamanho: 14, opcional: true },
   resp_tec_contato: { tipo: 'texto', max: 60 },
   resp_tec_email: { tipo: 'texto', max: 60 },
-  resp_tec_fone: { tipo: 'digitos', min: 6, max: 14, opcional: true }
+  resp_tec_fone: { tipo: 'digitos', min: 6, max: 14, opcional: true },
+  // E-mail da NF-e (sql/nfe_email_e_inutilizacao.sql). A senha fica no cofre local.
+  smtp_host: { tipo: 'texto', max: 120 },
+  smtp_porta: { tipo: 'inteiro', min: 1, max: 65535 },
+  smtp_seguro: { tipo: 'booleano' },
+  smtp_usuario: { tipo: 'texto', max: 120 },
+  smtp_remetente: { tipo: 'texto', max: 120 },
+  smtp_nome_remetente: { tipo: 'texto', max: 60 },
+  email_copia: { tipo: 'texto', max: 120 },
+  email_mensagem_padrao: { tipo: 'texto', max: 2000 }
 };
 
 /** Curto: quem muda o ambiente na tela precisa ver o efeito na próxima emissão. */
@@ -134,6 +143,10 @@ function validar(entrada) {
         valores[chave] = Math.round(n * 100) / 100;
         break;
       }
+      case 'booleano':
+        if (!['true', 'false', '1', '0', 'sim', 'nao', 'não'].includes(texto.toLowerCase())) { erros.push(`${chave}: use sim ou não`); continue; }
+        valores[chave] = ['true', '1', 'sim'].includes(texto.toLowerCase());
+        break;
       default:
         erros.push(`${chave}: tipo desconhecido`);
     }

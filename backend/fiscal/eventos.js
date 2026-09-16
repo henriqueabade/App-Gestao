@@ -86,4 +86,101 @@ async function cancelar({ api, notaId, justificativa, certificado, transporte, u
   throw erro(`SEFAZ ${cStat}: ${xMotivo}`, 422, { nota: emissao.semXml(atual), sefaz: { cStat, xMotivo } });
 }
 
-module.exports = { cancelar };
+const lista = r => (Array.isArray(r) ? r : (r && typeof r === 'object' && !r.error ? [r] : []));
+
+/**
+ * Carta de correção (110110). A nota continua autorizada; o evento registrado
+ * fica em notas_fiscais_eventos (tipo "cce", com o procEventoNFe no detalhe).
+ * A SEFAZ numera as cartas de uma nota (nSeqEvento): a última é a que vale.
+ */
+async function cartaCorrecao({ api, notaId, correcao, certificado, transporte, usuarioId = null, agora = () => new Date() }) {
+  const nota = await emissao.lerNota(api, notaId);
+  if (nota.status_fiscal !== 'autorizada') throw erro(`Só uma nota autorizada aceita carta de correção (esta está "${nota.status_fiscal}").`, 409);
+  if (!nota.chave_acesso) throw erro('A nota não tem chave de acesso.', 409);
+  const xCorrecao = String(correcao || '').replace(/\s+/g, ' ').trim();
+  if (xCorrecao.length < 15 || xCorrecao.length > 1000) throw erro('A correção precisa ter entre 15 e 1000 caracteres.', 400);
+
+  const cfg = await configuracao.carregar(api);
+  if (!cfg) throw erro('Configuração fiscal ausente.', 409);
+  const ambiente = nota.ambiente === configuracao.PRODUCAO ? configuracao.PRODUCAO : configuracao.HOMOLOGACAO;
+
+  const anteriores = await api.get('/api/notas_fiscais_eventos', { query: { nota_fiscal_id: nota.id, tipo: 'cce' } }).then(lista).catch(() => []);
+  const nSeqEvento = anteriores.filter(e => ['135', '136'].includes(String(e?.codigo_sefaz))).length + 1;
+  const instante = agora();
+  const xmlEvento = assinatura.assinarEvento(sefaz.xmlEventoCartaCorrecao({
+    uf: cfg.uf, ambiente, cnpj: cfg.cnpj, chave: nota.chave_acesso, correcao: xCorrecao, dhEvento: xmlNfe.formatarDataHora(instante), nSeqEvento
+  }), certificado);
+
+  let retorno;
+  try {
+    retorno = await sefaz.enviarEvento({ uf: cfg.uf, ambiente, transporte, xmlEvento, idLote: String(nota.id) });
+  } catch (e) {
+    await registrarEvento(api, nota.id, { tipo: 'erro', status_anterior: 'autorizada', status_novo: 'autorizada', mensagem: `Carta de correção não enviada: ${e.message}`, usuario_id: usuarioId });
+    throw erro(e.message, e.status || 502);
+  }
+  const ev = retorno.evento;
+  if (ev?.registrado) {
+    const proc = sefaz.montarProcEvento(xmlEvento, ev.xml);
+    await registrarEvento(api, nota.id, {
+      tipo: 'cce', status_anterior: 'autorizada', status_novo: 'autorizada', codigo_sefaz: ev.cStat,
+      mensagem: `Carta de correção ${nSeqEvento}: ${xCorrecao}`, detalhe: { nSeqEvento, correcao: xCorrecao, protocolo: ev.nProt, xml: proc }, usuario_id: usuarioId
+    });
+    return { nota: emissao.semXml(nota), sefaz: { cStat: ev.cStat, xMotivo: ev.xMotivo, protocolo: ev.nProt }, nSeqEvento, registrada: true };
+  }
+  const cStat = ev?.cStat || retorno.cStat;
+  const xMotivo = ev?.xMotivo || retorno.xMotivo;
+  await registrarEvento(api, nota.id, { tipo: 'rejeitada', status_anterior: 'autorizada', status_novo: 'autorizada', codigo_sefaz: cStat, mensagem: `Carta de correção recusada: ${xMotivo}`, usuario_id: usuarioId });
+  throw erro(`SEFAZ ${cStat}: ${xMotivo}`, 422, { sefaz: { cStat, xMotivo } });
+}
+
+/**
+ * Inutiliza uma faixa de números da série no ambiente escolhido (o efetivo,
+ * ou homologação quando pedido). Registra em notas_fiscais_inutilizacoes.
+ */
+async function inutilizar({ api, entrada = {}, certificado, transporte, env = process.env, usuarioId = null, agora = () => new Date() }) {
+  const cfg = await configuracao.carregar(api);
+  if (!cfg) throw erro('Configuração fiscal ausente.', 409);
+  const efetivo = configuracao.ambienteEfetivo(cfg, env);
+  const pedido = String(entrada.ambiente || efetivo).toLowerCase();
+  const ambiente = pedido === configuracao.PRODUCAO && efetivo === configuracao.PRODUCAO ? configuracao.PRODUCAO : configuracao.HOMOLOGACAO;
+  const instante = agora();
+  const ano = Number(String(xmlNfe.partesNoFuso(instante).year).slice(-2));
+  const serie = Number(entrada.serie ?? configuracao.numeracao(cfg, ambiente).serie);
+  const numeroInicial = Number(entrada.numero_inicial);
+  const numeroFinal = Number(entrada.numero_final ?? entrada.numero_inicial);
+  const xJust = String(entrada.justificativa || '').replace(/\s+/g, ' ').trim();
+
+  // Número já usado por uma nota que existiu para a SEFAZ não pode ser inutilizado.
+  const notas = await api.get('/api/notas_fiscais', { query: { ambiente, serie } }).then(lista).catch(() => []);
+  const conflito = notas.find(n => Number(n.numero) >= numeroInicial && Number(n.numero) <= numeroFinal && ['autorizada', 'cancelada', 'denegada', 'processando', 'enviando', 'cancelamento_pendente'].includes(String(n.status_fiscal)));
+  if (conflito) throw erro(`O número ${conflito.numero} desta faixa já tem a NF-e ${conflito.status_fiscal}: não pode ser inutilizado.`, 409);
+
+  const xmlInut = assinatura.assinarInutilizacao(sefaz.xmlInutilizacao({
+    uf: cfg.uf, ambiente, ano, cnpj: cfg.cnpj, serie, numeroInicial, numeroFinal, justificativa: xJust
+  }), certificado);
+  const retorno = await sefaz.enviarInutilizacao({ uf: cfg.uf, ambiente, transporte, xmlInut });
+
+  const registro = {
+    ambiente, ano, serie, numero_inicial: numeroInicial, numero_final: numeroFinal, justificativa: xJust,
+    status: retorno.homologada ? 'homologada' : 'rejeitada', codigo_status_sefaz: retorno.cStat, motivo_sefaz: retorno.xMotivo,
+    protocolo: retorno.nProt || null, xml: retorno.homologada ? sefaz.montarProcInut(xmlInut, retorno.xml) : null,
+    criado_por: usuarioId, criado_em: instante.toISOString()
+  };
+  const criado = await api.post('/api/notas_fiscais_inutilizacoes', registro).catch(e => { console.error('Inutilização não registrada:', e.message); return null; });
+  const { xml, ...semXmlInut } = registro;
+  const resposta = { inutilizacao: { id: criado?.id ?? criado?.data?.id ?? null, ...semXmlInut }, sefaz: { cStat: retorno.cStat, xMotivo: retorno.xMotivo, protocolo: retorno.nProt } };
+  if (!retorno.homologada) throw erro(`SEFAZ ${retorno.cStat}: ${retorno.xMotivo}`, 422, resposta);
+  // A numeração não volta: se a faixa inutilizada era o próximo número, pula-a.
+  const campoProximo = ambiente === configuracao.PRODUCAO ? 'proximo_numero_producao' : 'proximo_numero_homologacao';
+  if (Number(cfg[campoProximo]) >= numeroInicial && Number(cfg[campoProximo]) <= numeroFinal) {
+    await configuracao.gravar(api, { [campoProximo]: numeroFinal + 1 }, usuarioId).catch(() => {});
+  }
+  return resposta;
+}
+
+async function listarInutilizacoes(api) {
+  const linhas = await api.get('/api/notas_fiscais_inutilizacoes').then(lista).catch(() => []);
+  return linhas.map(({ xml, ...resto }) => ({ ...resto, tem_xml: Boolean(xml) })).sort((a, b) => Number(b.id) - Number(a.id));
+}
+
+module.exports = { cancelar, cartaCorrecao, inutilizar, listarInutilizacoes };

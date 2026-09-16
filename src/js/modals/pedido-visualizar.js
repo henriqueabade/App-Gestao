@@ -141,35 +141,25 @@
     if (!nota) return;
     const aviso = (texto, tipo) => { if (typeof showToast === 'function') showToast(texto, tipo || 'info'); };
 
-    const gerarDanfe = async () => {
-      const resp = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(nota.id)}/danfe`);
-      const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) { aviso(corpo?.error || 'Não foi possível montar o DANFE.', 'error'); return; }
-      const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true });
-      if (!r) aviso('Geração de PDF indisponível nesta janela.', 'error');
-      else if (r.success) aviso(r.opened ? 'DANFE salvo e aberto.' : (r.message || 'DANFE salvo.'), 'success');
-      else if (!r.canceled) aviso(r.message || 'Não foi possível gerar o DANFE.', 'error');
-    };
+    // DANFE e XML ficam em utils/nfe-documentos.js: a lista de pedidos usa os mesmos.
+    const gerarDanfe = () => (window.NfeDocumentos ? window.NfeDocumentos.gerarDanfe(nota.id) : aviso('Documentos da NF-e indisponíveis.', 'error'));
+    const salvarXml = () => (window.NfeDocumentos ? window.NfeDocumentos.salvarXml(nota.id) : aviso('Documentos da NF-e indisponíveis.', 'error'));
 
-    const salvarXml = async () => {
-      const resp = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(nota.id)}/xml`);
-      const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) { aviso(corpo?.error || 'Não foi possível ler o XML.', 'error'); return; }
-      const salvar = (conteudo, nome, titulo) => window.electronAPI?.salvarTextoComoArquivo?.({ conteudo, nomeSugerido: nome, extensao: 'xml', titulo, descricao: 'XML da NF-e' });
-      const r = await salvar(corpo.xml, corpo.nome, 'Salvar XML da NF-e');
-      if (!r) { aviso('Salvar arquivo indisponível nesta janela.', 'error'); return; }
-      if (r.success) aviso('XML da NF-e salvo.', 'success');
-      else if (!r.canceled) { aviso(r.message || 'Não foi possível salvar o XML.', 'error'); return; }
-      if (r.success && corpo.xml_cancelamento) {
-        const rc = await salvar(corpo.xml_cancelamento, corpo.nome_cancelamento, 'Salvar XML do cancelamento');
-        if (rc?.success) aviso('XML do cancelamento salvo.', 'success');
-      }
-    };
-
+    const contextoDaNota = () => ({ notaId: nota.id, serie: nota.serie, numero: nota.numero, chave: nota.chave_acesso, pedidoId: id, pedidoNumero: pedido?.numero || '', email: nota.destinatario?.email || '' });
     const cancelarNfe = () => {
-      window.cancelarNfeContext = { notaId: nota.id, serie: nota.serie, numero: nota.numero, chave: nota.chave_acesso, pedidoId: id, pedidoNumero: pedido?.numero || '' };
+      window.cancelarNfeContext = contextoDaNota();
       close();
       Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe');
+    };
+    const emailNfe = () => {
+      window.emailNfeContext = contextoDaNota();
+      close();
+      Modal.open('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail');
+    };
+    const cartaNfe = () => {
+      window.cartaCorrecaoContext = contextoDaNota();
+      close();
+      Modal.open('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe');
     };
 
     const ligar = (botao, fn) => {
@@ -180,7 +170,11 @@
     };
     ligar(danfeBtn, gerarDanfe);
     ligar(xmlBtn, salvarXml);
-    if (nota.status_fiscal === 'autorizada') ligar(cancelarBtn, cancelarNfe);
+    ligar(overlay.querySelector('#visualizarPedidoEmailNfe'), emailNfe);
+    if (nota.status_fiscal === 'autorizada') {
+      ligar(overlay.querySelector('#visualizarPedidoCartaNfe'), cartaNfe);
+      ligar(cancelarBtn, cancelarNfe);
+    }
   }
 
   const close = () => {

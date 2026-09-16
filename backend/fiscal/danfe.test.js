@@ -90,7 +90,18 @@ test('montarDanfeHtml: página A4 retrato com os blocos, a chave formatada, o c�
     assert.ok(html.includes(bloco), `sem o bloco ${bloco}`);
   }
   assert.ok(html.includes(chave.replace(/(\d{4})(?=\d)/g, '$1 ')), 'chave em grupos de 4');
-  assert.ok(html.includes('<svg xmlns="http://www.w3.org/2000/svg"'), 'código de barras');
+  assert.ok(html.includes('<svg xmlns="http://www.w3.org/2000/svg" width="100%"'), 'código de barras ajustado ao espaço');
+  assert.ok(html.includes('Chave de acesso'), 'rótulo da chave');
+  // Canhoto de recebimento, logo embutida, IPI nos itens, ANTT e tributos aproximados.
+  assert.ok(html.includes('RECEBEMOS DE <b>SANTÍSSIMO DECOR LTDA</b>') && html.includes('Identificação e assinatura do recebedor'));
+  assert.ok(html.includes('<img src="data:image/png;base64,'), 'a logo do app vai embutida');
+  assert.ok(html.indexOf('<img src="data:image/png;base64,') < html.indexOf('<div class="nome">SANTÍSSIMO DECOR LTDA</div>'), 'logo antes do nome');
+  assert.ok(html.includes('<th>Valor IPI</th>') && html.includes('<th>Alíq. IPI</th>') && html.includes('<th>Desconto</th>'));
+  assert.ok(html.includes('Código ANTT') && html.includes('Valor aprox. dos tributos'));
+  assert.ok(html.includes('<b>362/001</b>') && html.includes('<b>362/002</b>'), 'duplicata = número da nota / parcela');
+  assert.ok(html.includes('SANTÍSSIMO DECOR LTDA SD'), 'marca dos volumes (sem fantasia na configuração do teste, vai a razão social + SD)');
+  assert.ok(!html.includes('<table style="margin-top: -1px">'), 'um volume só não tem a tabela detalhada');
+  assert.equal(danfe.montarDanfeHtml(xml, { logo: '' }).includes('<img'), false, 'sem logo quando pedido');
   assert.ok(html.includes('Nº 000.000.362'));
   assert.ok(html.includes('SÉRIE 1'));
   assert.ok(html.includes('1 - SAÍDA'));
@@ -109,4 +120,24 @@ test('montarDanfeHtml: página A4 retrato com os blocos, a chave formatada, o c�
   const producao = danfe.montarDanfeHtml(nfeProcDeTeste({ ambiente: 'producao' }).xml);
   assert.ok(!producao.includes('class="marca"'), 'produção sem marca d\'água');
   assert.ok(producao.includes('Cliente &amp; Filhos LTDA'));
+});
+
+test('vários volumes: o resumo soma pesos e quantidades e a tabela lista um por linha', () => {
+  const montada = xmlNfe.montarNfe({
+    configuracao: CONFIG, ambiente: 'producao', serie: 1, numero: 363, cNF: '14000305', dhEmi: new Date('2026-09-15T15:00:00-03:00'),
+    pedido: PEDIDO, cliente: CLIENTE, itens: ITENS, produtos: PRODUTOS, parcelas: PARCELAS,
+    transporte: { modalidade_frete: 1, volumes: [{ especie: 'Caixa', peso_bruto: 10, peso_liquido: 9 }, { especie: 'Engradado', peso_bruto: 20.5, peso_liquido: 18 }] }, verProc: 'Santissimo 1.1.1'
+  });
+  const assinada = montada.xml.replace('</infNFe></NFe>', '</infNFe><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo></SignedInfo></Signature></NFe>');
+  const proc = sefaz.montarNfeProc(assinada, `<protNFe versao="4.00"><infProt><chNFe>${montada.chave}</chNFe><nProt>1</nProt><cStat>100</cStat><dhRecbto>2026-09-15T15:10:01-03:00</dhRecbto><xMotivo>ok</xMotivo></infProt></protNFe>`);
+  const n = danfe.lerNfe(proc);
+  assert.equal(n.volumes.length, 2);
+  assert.equal(n.transporte.qVol, '2');
+  assert.equal(n.transporte.esp, 'Caixa, Engradado');
+  assert.equal(n.transporte.pesoB, '30.500');
+  assert.equal(n.transporte.pesoL, '27.000');
+  assert.equal(n.transporte.nVol, '1, 2');
+  const html = danfe.montarDanfeHtml(proc);
+  assert.ok(html.includes('<table style="margin-top: -1px">'));
+  assert.ok(html.includes('<td>Engradado</td>'));
 });

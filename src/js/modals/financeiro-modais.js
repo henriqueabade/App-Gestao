@@ -1331,7 +1331,108 @@
       pend.querySelector('span').textContent = lista.join(' • ');
 
       pintarCertificado(estado?.certificado);
+      pintarEmail(estado?.email);
+      texto('finCfgInutAmbiente', producao ? 'produção' : 'homologação');
+      el('finCfgInutSerie').value = String(estado?.numeracao?.serie ?? '');
+      el('finCfgEmailSenhaBloco')?.classList.toggle('hidden', !podeEditar);
       alternarConfirmacao();
+      carregarInutilizacoes();
+    }
+
+    function pintarEmail(estadoEmail) {
+      const e = el('finCfgEmailEstado');
+      if (!e) return;
+      if (!estadoEmail) { e.textContent = ''; return; }
+      const partes = [];
+      if (estadoEmail.senha_guardada) partes.push(`Senha guardada neste computador${estadoEmail.guardada_em ? ` em ${formatarData(String(estadoEmail.guardada_em).slice(0, 10))}` : ''}.`);
+      else partes.push('Sem senha neste computador: o envio de e-mail não funciona aqui até guardá-la.');
+      if (estadoEmail.erro) partes.push(estadoEmail.erro);
+      if (Array.isArray(estadoEmail.pendencias) && estadoEmail.pendencias.length) partes.push(`Falta: ${estadoEmail.pendencias.join(', ')}.`);
+      e.textContent = partes.join(' ');
+      e.style.color = estadoEmail.senha_guardada && !estadoEmail.pendencias?.length ? 'var(--color-green)' : '';
+    }
+
+    async function guardarSenhaEmail() {
+      mensagem('');
+      const senha = el('finCfgEmailSenha').value;
+      if (!senha) { mensagem('Informe a senha do e-mail.'); return; }
+      try {
+        const r = await fetchApi('/api/fiscal/email/senha', { method: 'POST', body: JSON.stringify({ senha }) });
+        el('finCfgEmailSenha').value = '';
+        pintarEmail(r);
+        window.showToast?.('Senha do e-mail guardada neste computador.', 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function removerSenhaEmail() {
+      try {
+        pintarEmail(await fetchApi('/api/fiscal/email/senha', { method: 'DELETE' }));
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function testarEmail() {
+      mensagem('');
+      try {
+        const r = await fetchApi('/api/fiscal/email/testar', { method: 'POST', body: JSON.stringify({}) });
+        window.showToast?.(`E-mail de teste enviado para ${r.para.join(', ')}.`, 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function carregarInutilizacoes() {
+      const bloco = el('finCfgInutLista');
+      const corpo = el('finCfgInutLinhas');
+      if (!bloco || !corpo) return;
+      let lista = [];
+      try { lista = await fetchApi('/api/fiscal/inutilizacoes'); } catch (_) { lista = []; }
+      corpo.replaceChildren();
+      for (const i of Array.isArray(lista) ? lista : []) {
+        const tr = document.createElement('tr');
+        const celula = (t, cor) => { const td = document.createElement('td'); td.className = 'px-4 py-2 text-white'; td.textContent = t; if (cor) td.style.color = cor; return td; };
+        tr.append(
+          celula(i.ambiente === 'producao' ? 'Produção' : 'Homologação'),
+          celula(String(i.serie)),
+          celula(i.numero_inicial === i.numero_final ? String(i.numero_inicial) : `${i.numero_inicial} a ${i.numero_final}`),
+          celula(i.status === 'homologada' ? `Homologada (${i.codigo_status_sefaz || '102'})` : `Rejeitada: ${i.codigo_status_sefaz || ''} ${i.motivo_sefaz || ''}`.trim(), i.status === 'homologada' ? 'var(--color-green)' : 'var(--color-red)'),
+          celula(i.protocolo || '—'),
+          celula(formatarData(String(i.criado_em || '').slice(0, 10)))
+        );
+        corpo.appendChild(tr);
+      }
+      bloco.classList.toggle('hidden', !(Array.isArray(lista) && lista.length));
+    }
+
+    async function inutilizar() {
+      const caixa = el('finCfgInutResultado');
+      const mostrar = (t, cor) => { caixa.textContent = t; caixa.style.color = cor || ''; caixa.classList.remove('hidden'); };
+      const serie = el('finCfgInutSerie').value.trim();
+      const inicio = el('finCfgInutInicio').value.trim();
+      const fim = el('finCfgInutFim').value.trim() || inicio;
+      const justificativa = el('finCfgInutJustificativa').value.trim();
+      if (!/^\d+$/.test(serie) || !/^\d+$/.test(inicio) || !/^\d+$/.test(fim)) { mostrar('Informe série e a faixa de números (só dígitos).', 'var(--color-red)'); return; }
+      if (justificativa.length < 15) { mostrar('A justificativa precisa ter pelo menos 15 caracteres.', 'var(--color-red)'); return; }
+      const ok = await window.DialogPadrao?.confirm?.({
+        title: 'Inutilizar numeração na SEFAZ?',
+        message: `Série ${serie}, ${inicio === fim ? `nº ${inicio}` : `do nº ${inicio} ao ${fim}`}. A SEFAZ registra e não dá para desfazer.`,
+        confirmText: 'Inutilizar'
+      });
+      if (!ok) return;
+      mostrar('Enviando à SEFAZ…');
+      try {
+        const r = await fetchApi('/api/fiscal/inutilizacoes', { method: 'POST', body: JSON.stringify({ serie: Number(serie), numero_inicial: Number(inicio), numero_final: Number(fim), justificativa }) });
+        mostrar(`Inutilização homologada — SEFAZ ${r.sefaz.cStat}: ${r.sefaz.xMotivo}. Protocolo ${r.sefaz.protocolo || '—'}.`, 'var(--color-green)');
+        el('finCfgInutInicio').value = ''; el('finCfgInutFim').value = ''; el('finCfgInutJustificativa').value = '';
+        carregarInutilizacoes();
+        carregar();
+      } catch (e) {
+        mostrar(e.message, 'var(--color-red)');
+        carregarInutilizacoes();
+      }
     }
 
     function alternarConfirmacao() {
@@ -1499,6 +1600,10 @@
     ligar('finCfgCertRemover', removerCertificado);
     ligar('finCfgTestarSefaz', testarSefaz);
     ligar('finCfgTesteEmitir', emitirTeste);
+    ligar('finCfgEmailGuardar', guardarSenhaEmail);
+    ligar('finCfgEmailRemover', removerSenhaEmail);
+    ligar('finCfgEmailTestar', testarEmail);
+    ligar('finCfgInutilizar', inutilizar);
     el('finCfg_ambiente')?.addEventListener('change', alternarConfirmacao);
 
     carregar();

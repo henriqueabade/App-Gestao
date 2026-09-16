@@ -98,6 +98,65 @@ test('recusa da SEFAZ (573) e falha de rede deixam a nota autorizada como estava
   assert.deepEqual(rede.api.dados.notas_fiscais_eventos.map(e => e.tipo), ['cancelamento', 'erro']);
 });
 
+test('carta de correção: registrada (135) fica no histórico com o procEventoNFe e a sequência sobe; recusa é 422 sem mexer na nota', async () => {
+  const retCce = (cStat, xMotivo) => retEvento(cStat, xMotivo).replace('<tpEvento>110111</tpEvento><xEvento>Cancelamento</xEvento>', '<tpEvento>110110</tpEvento><xEvento>Carta de Correcao</xEvento>');
+  const t = montar({ resposta: retEnvEvento('128', 'Lote de Evento Processado', retCce('135', 'Evento registrado e vinculado a NF-e')) });
+  const cce = correcao => eventos.cartaCorrecao({ api: t.api, notaId: 10, correcao, certificado: CERT, transporte: t.chamadas && (async (url, corpo) => { t.chamadas.push({ url, corpo }); return { status: 200, corpo: envelope(retEnvEvento('128', 'Lote de Evento Processado', retCce('135', 'Evento registrado e vinculado a NF-e'))) }; }), usuarioId: 9, agora: () => new Date('2026-09-15T15:30:00-03:00') });
+  const r1 = await cce('Onde se lê Caixa, leia-se Engradado na espécie dos volumes');
+  assert.equal(r1.registrada, true);
+  assert.equal(r1.nSeqEvento, 1);
+  assert.equal(r1.sefaz.cStat, '135');
+  assert.equal(t.api.dados.notas_fiscais[0].status_fiscal, 'autorizada', 'a nota não muda');
+  const evento1 = t.api.dados.notas_fiscais_eventos[0];
+  assert.equal(evento1.tipo, 'cce');
+  assert.equal(evento1.codigo_sefaz, '135');
+  assert.equal(evento1.detalhe.nSeqEvento, 1);
+  assert.ok(evento1.detalhe.xml.startsWith('<?xml version="1.0" encoding="UTF-8"?><procEventoNFe'));
+  assert.match(t.chamadas[0].corpo, new RegExp(`Id="ID110110${CHAVE}01"`));
+
+  const r2 = await cce('Segunda correção: leia-se Nogueira onde se lê Café');
+  assert.equal(r2.nSeqEvento, 2, 'a segunda carta conta a primeira registrada');
+  assert.match(t.chamadas[1].corpo, new RegExp(`Id="ID110110${CHAVE}02".*<nSeqEvento>2</nSeqEvento>`));
+
+  const recusa = montar({ resposta: retEnvEvento('128', 'Lote de Evento Processado', retCce('573', 'Rejeicao: Duplicidade de Evento')) });
+  await assert.rejects(eventos.cartaCorrecao({ api: recusa.api, notaId: 10, correcao: 'Correção recusada pela SEFAZ no teste', certificado: CERT, transporte: async () => ({ status: 200, corpo: envelope(retEnvEvento('128', 'x', retCce('573', 'Rejeicao: Duplicidade de Evento'))) }) }), e => e.status === 422 && e.extra.sefaz.cStat === '573');
+  assert.equal(recusa.api.dados.notas_fiscais_eventos[0].tipo, 'rejeitada');
+  await assert.rejects(eventos.cartaCorrecao({ api: recusa.api, notaId: 10, correcao: 'curta', certificado: CERT, transporte: async () => ({}) }), /entre 15 e 1000/);
+});
+
+test('inutilização: homologada (102) registra a faixa, pula a numeração; número com nota não pode; recusa registra como rejeitada', async () => {
+  const retInut = (cStat, xMotivo) => `<retInutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut><tpAmb>2</tpAmb><verAplic>MG</verAplic><cStat>${cStat}</cStat><xMotivo>${xMotivo}</xMotivo><cUF>31</cUF><ano>26</ano><CNPJ>44039257000122</CNPJ><mod>55</mod><serie>1</serie><nNFIni>3</nNFIni><nNFFin>4</nNFFin><dhRecbto>2026-09-15T16:00:00-03:00</dhRecbto>${cStat === '102' ? '<nProt>131260000333333</nProt>' : ''}</infInut></retInutNFe>`;
+  const tabelas = tabelasBase();
+  tabelas.notas_fiscais_inutilizacoes = [];
+  const t = montar({ tabelas, resposta: retInut('102', 'Inutilizacao de numero homologado') });
+  const inutilizar = (entrada, resposta) => eventos.inutilizar({
+    api: t.api, entrada, certificado: CERT, env: {}, usuarioId: 9, agora: () => new Date('2026-09-15T15:30:00-03:00'),
+    transporte: async (url, corpo) => { t.chamadas.push({ url, corpo }); return { status: 200, corpo: envelope(resposta || retInut('102', 'Inutilizacao de numero homologado')) }; }
+  });
+  const r = await inutilizar({ serie: 1, numero_inicial: 3, numero_final: 4, justificativa: 'Numeração pulada por falha na emissão' });
+  assert.equal(r.sefaz.cStat, '102');
+  assert.equal(r.inutilizacao.status, 'homologada');
+  assert.equal(r.inutilizacao.protocolo, '131260000333333');
+  assert.ok(!('xml' in r.inutilizacao), 'a resposta não carrega o XML');
+  const registro = t.api.dados.notas_fiscais_inutilizacoes[0];
+  assert.equal(registro.ambiente, 'homologacao');
+  assert.equal(registro.ano, 26);
+  assert.equal(registro.numero_inicial, 3);
+  assert.equal(registro.numero_final, 4);
+  assert.ok(registro.xml.includes('<procInutNFe'));
+  assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 5, 'o próximo número estava na faixa (3): pula para 5');
+  assert.match(t.chamadas[0].url, /NFeInutilizacao4$/);
+  assert.match(t.chamadas[0].corpo, /<infInut Id="ID31264403925700012255001000000003000000004">/);
+
+  await assert.rejects(inutilizar({ serie: 1, numero_inicial: 2, numero_final: 2, justificativa: 'Tentativa sobre número já usado' }), e => e.status === 409 && /já tem a NF-e autorizada/.test(e.message));
+  await assert.rejects(inutilizar({ serie: 1, numero_inicial: 8, numero_final: 8, justificativa: 'Faixa recusada pela SEFAZ' }, retInut('241', 'Rejeicao: Um numero da faixa ja esta inutilizado')), e => e.status === 422 && e.extra.inutilizacao.status === 'rejeitada');
+  assert.equal(t.api.dados.notas_fiscais_inutilizacoes.at(-1).status, 'rejeitada');
+  const lista = await eventos.listarInutilizacoes(t.api);
+  assert.equal(lista.length, 2);
+  assert.equal(lista[0].status, 'rejeitada');
+  assert.ok(!('xml' in lista[1]) && lista[1].tem_xml === true);
+});
+
 test('o que é barrado antes de ir à SEFAZ: nota não autorizada, sem protocolo, justificativa curta ou longa', async () => {
   const t = montar({ resposta: retEnvEvento('128', 'x', retEvento('135', 'ok')) });
   await assert.rejects(t.cancelar('curta demais'), /entre 15 e 255/);

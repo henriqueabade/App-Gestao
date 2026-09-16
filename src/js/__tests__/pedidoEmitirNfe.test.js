@@ -25,8 +25,73 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const trecho = FONTE.slice(inicio, fim);
   const contexto = vm.createContext({});
-  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro })`, contexto);
+  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro })`, contexto);
 }
+
+test('mais de um volume: uma linha por volume, guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
+  const f = puras();
+  assert.deepStrictEqual(plano(f.linhasDeVolumes('1', { especie: 'Caixa' })), [], 'um volume só fica nos campos gerais');
+  assert.deepStrictEqual(plano(f.linhasDeVolumes('x', {})), []);
+  const tres = plano(f.linhasDeVolumes('3', { especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' }));
+  assert.deepStrictEqual(tres, [
+    { numero: 1, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' },
+    { numero: 2, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' },
+    { numero: 3, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' }
+  ]);
+  const editadas = plano(f.linhasDeVolumes('2', { especie: 'Caixa' }, [{ numero: 1, especie: 'Engradado', peso_bruto: '20', peso_liquido: '18' }]));
+  assert.strictEqual(editadas[0].especie, 'Engradado', 'a linha editada sobrevive à mudança da quantidade');
+  assert.strictEqual(editadas[1].especie, 'Caixa');
+
+  const corpo = plano(f.corpoDaEmissao({ modalidade_frete: '1', volumes_quantidade: '2', volumes_especie: 'Caixa', volumes: [
+    { numero: 1, especie: 'Caixa', peso_bruto: '10,5', peso_liquido: '9' }, { numero: 2, especie: ' Engradado ', peso_bruto: '', peso_liquido: '18' }
+  ] }));
+  assert.deepStrictEqual(corpo.transporte.volumes, [
+    { numeracao: '1', especie: 'Caixa', peso_bruto: 10.5, peso_liquido: 9 }, { numeracao: '2', especie: 'Engradado', peso_bruto: null, peso_liquido: 18 }
+  ]);
+  assert.strictEqual(corpo.transporte.volumes_quantidade, 2);
+  assert.strictEqual(f.corpoDaEmissao({ volumes: [{ especie: 'Caixa' }] }).transporte.volumes, undefined, 'uma linha só não é detalhe');
+
+  assert.deepStrictEqual(plano(f.validarCampos({ modalidade_frete: '1', volumes_quantidade: '2', volumes: [{ especie: 'Caixa', peso_bruto: '1' }, { especie: 'Caixa' }] })), []);
+  const erros = f.validarCampos({ modalidade_frete: '1', volumes_quantidade: '2', volumes: [{ especie: '', peso_bruto: 'x' }, { especie: 'Caixa', peso_liquido: '-1' }] });
+  assert.match(erros.join(' '), /Volume 1: informe a espécie/);
+  assert.match(erros.join(' '), /Volume 1: peso bruto inválido/);
+  assert.match(erros.join(' '), /Volume 2: peso líquido inválido/);
+  assert.ok(!erros.join(' ').includes('Informe a espécie dos volumes'), 'com as linhas, a espécie geral não é exigida');
+  assert.ok(HTML.includes('id="emitirNfeVolumesDetalhe"') && HTML.includes('id="emitirNfeVolumesLinhas"'), 'bloco das linhas no HTML');
+  assert.ok(FONTE.includes("campos.volumes_quantidade.addEventListener('input', renderizarVolumes)"), 'a quantidade redesenha as linhas');
+  assert.ok(FONTE.includes('input.dataset.volume = chave;'), 'linhas montadas por createElement');
+});
+
+test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/NF roxa; a nota que conta por pedido', () => {
+  const contexto = vm.createContext({});
+  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota'), recortarFuncao(PEDIDOS, 'indexarNotas'), recortarFuncao(PEDIDOS, 'tagNota')].join('\n'), contexto);
+  const { indexarNotas, tagNota } = contexto;
+  const idx = plano(indexarNotas([
+    { id: 1, pedido_id: 55, status_fiscal: 'rejeitada' }, { id: 2, pedido_id: 55, status_fiscal: 'autorizada', numero: 2 },
+    { id: 3, pedido_id: 56, status_fiscal: 'cancelada', numero: 3 }, { id: 4, pedido_id: 56, status_fiscal: 'rejeitada' },
+    { id: 5, pedido_id: 57, status_fiscal: 'autorizada', numero: 5 }, { id: 6, pedido_id: 57, status_fiscal: 'autorizada', numero: 6 }
+  ]));
+  assert.strictEqual(idx['55'].id, 2, 'autorizada vence rejeitada');
+  assert.strictEqual(idx['56'].id, 3, 'cancelada vence rejeitada');
+  assert.strictEqual(idx['57'].id, 6, 'entre autorizadas, a mais nova');
+  assert.deepStrictEqual(plano(indexarNotas(null)), {});
+
+  const danfe = tagNota({ numero: 'PED1' }, { id: 2, serie: 1, numero: 2, status_fiscal: 'autorizada', ambiente: 'homologacao' });
+  assert.match(danfe, /badge-success tag-danfe/);
+  assert.match(danfe, /data-nota-id="2"/);
+  assert.match(danfe, /title="NF-e série 1 nº 2 autorizada \(homologação\) — clique para gerar o DANFE"/);
+  assert.match(danfe, />DANFE<\/span>/);
+  const cancelada = tagNota({ numero: 'PED1', nfe_dispensada: true }, { id: 3, serie: 1, numero: 3, status_fiscal: 'cancelada', cancelada_em: '2026-09-15T16:00:00-03:00' });
+  assert.match(cancelada, /badge-danger/);
+  assert.match(cancelada, />X\/NF<\/span>/);
+  assert.match(cancelada, /title="NF-e série 1 nº 3 cancelada em 15\/09\/2026"/);
+  assert.match(tagNota({ nfe_dispensada: true }, null), />S\/NF<\/span>/);
+  assert.match(tagNota({ nfe_dispensada: true }, { status_fiscal: 'rejeitada' }), />S\/NF<\/span>/, 'rejeitada não é nota: vale a marca do pedido');
+  assert.strictEqual(tagNota({}, null), '');
+  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>'));
+  assert.ok(PEDIDOS.includes("fetchApi('/api/fiscal/notas').catch(() => null)"), 'as notas entram junto com os pedidos');
+  assert.ok(PEDIDOS.includes("tr.querySelector('.tag-danfe')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId))'));
+});
 const plano = v => JSON.parse(JSON.stringify(v));
 
 test('notaQueVale: a mais nova entre autorizada/processando/enviando; rejeitada não conta, mas é a "última"', () => {
@@ -163,7 +228,7 @@ test('lista de pedidos: tag roxa "S/NF" ao lado do número quando o pedido foi e
   assert.match(tag, />S\/NF<\/span>/);
   assert.match(tag, /title="Sem nota fiscal — enviado sem NF-e em 15\/09\/2026"/);
   assert.match(tagSemNota({ nfe_dispensada: 'true' }), /title="Sem nota fiscal — enviado sem NF-e"/);
-  assert.ok(PEDIDOS.includes('${p.numero}${tagSemNota(p)}</td>'), 'a tag fica na célula do número');
+  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>'), 'a tag fica na célula do número');
 });
 
 test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), frete, volumes e pesos', () => {
