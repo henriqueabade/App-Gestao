@@ -5,7 +5,11 @@
  * os pedidos enviados sem NF-e, as pendências que exigem ação (nota parada
  * na SEFAZ, recusada, certificado, configuração) e a atividade recente; as
  * ações "Emitir NF-e" e "Notas fiscais" abrem modais que falam com a SEFAZ
- * pelo que já existe em /api/fiscal. Comissões e produção ainda vêm de
+ * pelo que já existe em /api/fiscal. As contas a receber também são REAIS:
+ * GET /api/cobranca/recebimentos/painel traz recebido, a receber, em atraso,
+ * boletos em aberto e as pendências de cobrança (que entram na mesma lista
+ * das fiscais); "Registrar recebimento", os cartões e "Conciliar com o BB"
+ * falam com /api/cobranca. Comissões e produção ainda vêm de
  * FIN_DADOS_EXEMPLO e suas ações abrem o aviso "em implementação" — melhor
  * que um botão que não responde, que parece defeito. Tudo é preenchido por
  * `data-fin`: trocar a fonte não mexe no HTML.
@@ -57,7 +61,13 @@ const FIN_ACOES = {
     'fechar-competencia': { rotulo: 'Fechar competência', abrir: m => finAbrirModal('fechar-competencia', m) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
-    'atividade-todas': { rotulo: 'Notas fiscais', abrir: m => finAbrirModal('notas-fiscais', m) }
+    'atividade-todas': { rotulo: 'Notas fiscais', abrir: m => finAbrirModal('notas-fiscais', m) },
+    // Contas a receber: os cartões e as pendências de cobrança abrem a lista na visão certa.
+    'recebimentos-recebidos': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'recebidos' }) },
+    'recebimentos-a-receber': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'a_receber' }) },
+    'recebimentos-atraso': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'em_atraso' }) },
+    'recebimentos-boletos': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'abertas', filtro: { boleto: 'aberto' } }) },
+    'conciliar': { rotulo: 'Conciliar com o BB', abrir: m => finConciliar(m) }
 };
 
 /* Modais do módulo (src/html/modals/financeiro). Todos usam o mesmo script,
@@ -77,7 +87,8 @@ const FIN_MODAIS = {
     'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
     'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' },
     'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' },
-    'configuracao-cobranca': { html: 'modals/financeiro/configuracao-cobranca.html', overlay: 'finConfiguracaoCobranca' }
+    'configuracao-cobranca': { html: 'modals/financeiro/configuracao-cobranca.html', overlay: 'finConfiguracaoCobranca' },
+    'recebimentos': { html: 'modals/financeiro/recebimentos.html', overlay: 'finRecebimentos' }
 };
 const FIN_SCRIPT_MODAIS = '../js/modals/financeiro-modais.js';
 
@@ -229,37 +240,183 @@ function finMapearPainel(painel, erro) {
     };
 }
 
-async function finBuscarPainel(competencia) {
+/** Uma chamada ao backend: `{ corpo, erro }`, sem lançar (sem apiConfig/fetch, os dois vêm nulos). */
+async function finChamarApi(caminho, opcoes) {
     if (typeof window.apiConfig?.getApiBaseUrl !== 'function' || typeof fetch !== 'function') {
-        return { painel: null, erro: null };
+        return { corpo: null, erro: null };
     }
     try {
         const base = await window.apiConfig.getApiBaseUrl();
-        const resposta = await fetch(`${base}/api/fiscal/painel?competencia=${encodeURIComponent(competencia || '')}`);
+        const resposta = await fetch(`${base}${caminho}`, opcoes);
         const corpo = await resposta.json().catch(() => null);
         if (!resposta.ok) {
             const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);
             e.status = resposta.status;
-            return { painel: null, erro: e };
+            return { corpo: null, erro: e };
         }
-        return { painel: corpo, erro: null };
+        return { corpo, erro: null };
     } catch (e) {
-        return { painel: null, erro: e };
+        return { corpo: null, erro: e };
     }
 }
 
-/** Comissões e produção (exemplo) + a parte fiscal real da competência. */
+async function finBuscarPainel(competencia) {
+    const { corpo, erro } = await finChamarApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competencia || '')}`);
+    return { painel: corpo, erro };
+}
+
+const finPlural = (n, um, varios) => `${finFormatarInteiro(n)} ${Number(n) === 1 ? um : varios}`;
+
+/**
+ * As contas a receber da tela, a partir do painel de recebimentos (ou da
+ * sua ausência). Pura — recebe o painel e devolve os quatro cartões, a nota
+ * da faixa, as pendências de cobrança e quantos avisos do BB estão na fila.
+ */
+function finMapearReceber(painel, erro) {
+    if (!painel) {
+        const semPermissao = erro?.status === 403;
+        const motivo = semPermissao ? 'Sem permissão para ver os recebimentos.'
+            : (erro ? 'Não foi possível carregar os recebimentos.' : 'Sem dados de recebimentos.');
+        const vazio = { valor: null, auxiliar: '', rodape: motivo };
+        return {
+            nota: motivo,
+            recebido: vazio, aReceber: vazio, atraso: vazio, boletos: vazio,
+            pendencias: erro && !semPermissao
+                ? [{ nivel: 'critico', titulo: 'Painel de recebimentos indisponível', descricao: erro.message || motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
+                : [],
+            fila: 0
+        };
+    }
+    const r = painel.recebido || {};
+    const a = painel.a_receber || {};
+    const at = painel.em_atraso || {};
+    const b = painel.boletos_abertos || {};
+    const c = painel.a_conciliar || {};
+    const extras = [];
+    if (Number(r.encargos) > 0) extras.push(`juros e multa ${finFormatarMoeda(r.encargos)}`);
+    if (Number(r.estornados) > 0) extras.push(finPlural(r.estornados, 'estornado', 'estornados'));
+    return {
+        nota: painel.sql_pendente
+            ? 'Falta ativar: rode sql/cobranca_recebimentos.sql e reinicie a API.'
+            : (painel.desde ? `Parcelas controladas a partir de ${finFormatarData(painel.desde)}` : 'Todas as parcelas dos pedidos faturados'),
+        recebido: {
+            valor: Number(r.total) || 0,
+            auxiliar: finPlural(Number(r.quantidade) || 0, 'recebimento', 'recebimentos'),
+            rodape: extras.length ? `Inclui ${extras.join(' · ')}` : 'Boletos pagos e recebimentos à mão'
+        },
+        aReceber: {
+            valor: Number(a.total) || 0,
+            auxiliar: finPlural(Number(a.quantidade) || 0, 'parcela', 'parcelas'),
+            rodape: 'Vencem nesta competência'
+        },
+        atraso: {
+            valor: Number(at.total) || 0,
+            auxiliar: finPlural(Number(at.quantidade) || 0, 'parcela', 'parcelas'),
+            rodape: Number(at.quantidade) ? `Mais antiga venceu em ${finFormatarData(at.mais_antigo)} (${finPlural(Number(at.dias_max) || 0, 'dia', 'dias')})` : 'Nenhuma parcela vencida'
+        },
+        boletos: {
+            valor: Number(b.total) || 0,
+            auxiliar: finPlural(Number(b.quantidade) || 0, 'boleto', 'boletos'),
+            rodape: Number(c.fila) ? `${finPlural(Number(c.fila), 'aviso', 'avisos')} de pagamento do BB para conciliar` : 'Registrados no BB, aguardando pagamento'
+        },
+        pendencias: (painel.pendencias || []).map(p => ({
+            nivel: p.nivel === 'critico' ? 'critico' : 'normal',
+            titulo: p.titulo, descricao: p.descricao, data: p.data, acao: p.acao || 'Ver', destino: p.destino, filtro: p.filtro || null
+        })),
+        fila: Number(c.fila) || 0
+    };
+}
+
+/** Críticas primeiro; dentro de cada nível, a ordem de cada painel (fiscal antes de cobrança). */
+function finJuntarPendencias(...listas) {
+    const todas = listas.flat().filter(Boolean);
+    return [...todas.filter(p => p.nivel === 'critico'), ...todas.filter(p => p.nivel !== 'critico')];
+}
+
+/** Comissões e produção (exemplo) + a parte fiscal e as contas a receber reais da competência. */
 async function finCarregarDados(competencia) {
-    const { painel, erro } = await finBuscarPainel(competencia);
+    const [{ painel, erro }, receberLido] = await Promise.all([
+        finBuscarPainel(competencia),
+        finChamarApi(`/api/cobranca/recebimentos/painel?competencia=${encodeURIComponent(competencia || '')}`)
+    ]);
     const fiscal = finMapearPainel(painel, erro);
+    const receber = finMapearReceber(receberLido.corpo, receberLido.erro);
     return {
         kpis: { nf: fiscal.nf, ...FIN_DADOS_EXEMPLO.kpis },
-        pendencias: fiscal.pendencias,
+        receber,
+        pendencias: finJuntarPendencias(fiscal.pendencias, receber.pendencias),
         atividade: fiscal.atividade,
         ambiente: fiscal.ambiente,
         resumoComissoes: FIN_DADOS_EXEMPLO.resumoComissoes,
         resumoProducao: FIN_DADOS_EXEMPLO.resumoProducao
     };
+}
+
+/** O que a conciliação fez, em linhas para a caixa de aviso. Pura. */
+function finResumoDaConciliacao(r) {
+    const linhas = [];
+    const f = r?.fila || {};
+    const c = r?.consultas || {};
+    const acerto = r?.acerto || {};
+    if (r?.sql_pendente) linhas.push('Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.');
+    if (Number(f.lidos)) {
+        const partes = [finPlural(f.pagos, 'pagamento', 'pagamentos')];
+        if (Number(f.cancelados)) partes.push(finPlural(f.cancelados, 'cancelamento', 'cancelamentos'));
+        if (Number(f.alertas)) partes.push(finPlural(f.alertas, 'alerta', 'alertas'));
+        if (Number(f.ignorados)) partes.push(`${finPlural(f.ignorados, 'ignorado', 'ignorados')} (não são deste sistema)`);
+        if (Number(f.erros)) partes.push(finPlural(f.erros, 'com erro', 'com erro'));
+        linhas.push(`Avisos do BB: ${partes.join(' · ')}.`);
+    } else {
+        linhas.push('Nenhum aviso do BB na fila.');
+    }
+    if (!r?.sql_pendente && c.consultados !== undefined) {
+        const partes = [`${finPlural(c.consultados, 'boleto consultado', 'boletos consultados')}`];
+        if (Number(c.mudaram)) partes.push(`${finPlural(c.mudaram, 'mudou', 'mudaram')} de situação`);
+        if (Number(c.pagos)) partes.push(`${finPlural(c.pagos, 'pago', 'pagos')}`);
+        if (Number(c.erros)) partes.push(finPlural(c.erros, 'com erro', 'com erro'));
+        linhas.push(`Consulta ao BB: ${partes.join(' · ')}.`);
+    }
+    if (Number(acerto.lancados)) linhas.push(`${finPlural(acerto.lancados, 'recebimento lançado', 'recebimentos lançados')} de boletos já pagos.`);
+    const mensagens = [...(f.mensagens || []), ...(c.mensagens || []), ...(acerto.mensagens || [])];
+    if (mensagens.length) linhas.push('', ...mensagens.slice(0, 5), ...(mensagens.length > 5 ? [`… e mais ${mensagens.length - 5}.`] : []));
+    return linhas.join('\n');
+}
+
+/** "Conciliar com o BB": fila do webhook + consulta dos boletos a pagar; mostra o resumo e relê a tela. */
+async function finConciliar(moduleEl) {
+    const raiz = moduleEl || document.querySelector('.modulo-container.financeiro-module');
+    if (raiz?.dataset.conciliando === '1') return;
+    if (raiz) raiz.dataset.conciliando = '1';
+    try {
+        window.showToast?.('Conciliando com o Banco do Brasil…', 'info');
+        const { corpo, erro } = await finChamarApi('/api/cobranca/conciliar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const titulo = erro ? 'Conciliação não concluída' : 'Conciliação com o BB';
+        const mensagem = erro
+            ? (erro.status === 403 ? 'Você não tem permissão para conciliar recebimentos.' : erro.message)
+            : finResumoDaConciliacao(corpo);
+        if (window.DialogPadrao?.info) await window.DialogPadrao.info({ title: titulo, message: mensagem });
+        await finRecarregar(raiz);
+    } finally {
+        if (raiz) delete raiz.dataset.conciliando;
+    }
+}
+
+/**
+ * Avisos do BB esperando na fila: processa só a fila (sem chamar o banco) e
+ * relê a tela quando algo foi resolvido. Uma vez por visita à tela: aviso
+ * que continua na fila (erro ao gravar) não pode virar laço — o resto fica
+ * para o "Conciliar com o BB".
+ */
+function finProcessarFila(moduleEl, dados) {
+    if (!(Number(dados?.receber?.fila) > 0) || moduleEl.dataset.filaProcessada === '1') return null;
+    moduleEl.dataset.filaProcessada = '1';
+    return finChamarApi('/api/cobranca/conciliar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ so_fila: true }) })
+        .then(({ corpo }) => {
+            const f = corpo?.fila || {};
+            const resolvidos = (Number(f.pagos) || 0) + (Number(f.cancelados) || 0) + (Number(f.alertas) || 0) + (Number(f.ignorados) || 0);
+            return resolvidos > 0 ? finRecarregar(moduleEl) : null;
+        })
+        .catch(() => null);
 }
 
 /* ------------------------------------------------------------- render */
@@ -295,6 +452,18 @@ function finRenderizarKpis(moduleEl, kpis) {
     finPreencher(moduleEl, 'producao.rodape', 'Pagamento até o 5º dia útil');
 }
 
+/** A faixa "Contas a receber": nota e os quatro cartões. */
+function finRenderizarReceber(moduleEl, receber) {
+    if (!receber) return;
+    finPreencher(moduleEl, 'receber.nota', receber.nota);
+    for (const chave of ['recebido', 'aReceber', 'atraso', 'boletos']) {
+        const cartao = receber[chave] || {};
+        finPreencher(moduleEl, `receber.${chave}.valor`, finFormatarMoeda(cartao.valor));
+        finPreencher(moduleEl, `receber.${chave}.auxiliar`, cartao.auxiliar || '');
+        finPreencher(moduleEl, `receber.${chave}.rodape`, cartao.rodape || '');
+    }
+}
+
 function finRenderizarPendencias(moduleEl, pendencias, todas = false) {
     const lista = moduleEl.querySelector('[data-fin-lista="pendencias"]');
     if (!lista) return;
@@ -304,7 +473,7 @@ function finRenderizarPendencias(moduleEl, pendencias, todas = false) {
     if (verTodas) verTodas.classList.toggle('hidden', todas || pendencias.length <= FIN_PENDENCIAS_VISIVEIS);
 
     if (!pendencias.length) {
-        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhuma pendência fiscal no momento. Tudo em dia por aqui.'));
+        lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhuma pendência fiscal ou de cobrança no momento. Tudo em dia por aqui.'));
         return;
     }
 
@@ -369,6 +538,7 @@ function finRenderizarAtividade(moduleEl, eventos, hoje) {
 function finRenderizar(moduleEl, dados, hoje) {
     moduleEl.finDados = dados;
     finRenderizarKpis(moduleEl, dados.kpis);
+    finRenderizarReceber(moduleEl, dados.receber);
     finRenderizarPendencias(moduleEl, dados.pendencias, moduleEl.dataset.pendenciasTodas === '1');
     finRenderizarResumos(moduleEl, dados);
     finRenderizarAtividade(moduleEl, dados.atividade, hoje);
@@ -386,7 +556,11 @@ function finRecarregar(moduleEl) {
     if (!raiz) return Promise.resolve();
     const competencia = raiz.querySelector('#finCompetencia')?.value || null;
     const promessa = finCarregarDados(competencia)
-        .then(dados => finRenderizar(raiz, dados, raiz.dataset.hoje))
+        .then(dados => {
+            finRenderizar(raiz, dados, raiz.dataset.hoje);
+            // Em segundo plano: não segura a tela esperando a fila.
+            finProcessarFila(raiz, dados);
+        })
         .catch(erro => {
             console.error('[financeiro] não foi possível montar a tela:', erro);
             window.showToast?.('Não foi possível carregar o Financeiro agora.', 'error');

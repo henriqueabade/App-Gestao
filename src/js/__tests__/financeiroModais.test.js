@@ -34,10 +34,11 @@ const MODAIS = {
     'comissoes-atrasadas': 'finComissoesAtrasadas',
     'producao-competencia': 'finProducaoCompetencia',
     'configuracao-fiscal': 'finConfiguracaoFiscal',
-    'configuracao-cobranca': 'finConfiguracaoCobranca'
+    'configuracao-cobranca': 'finConfiguracaoCobranca',
+    'recebimentos': 'finRecebimentos'
 };
 /* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
-const DE_ACAO = ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
+const DE_ACAO = ['registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
 
 /** Carrega o script sem overlay no DOM: só as funções puras ficam expostas. */
 function puro() {
@@ -126,6 +127,11 @@ test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé
             assert.strictEqual((html.match(/data-fin-principal=/g) || []).length, 1, `${arquivo}: uma ação principal`);
             assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
             assert.match(html, /data-fin-principal="[^"]+" (data-fin-sensivel="true" )?class="btn-success/, `${arquivo}: ação principal no padrão`);
+        } else if (arquivo === 'registrar-recebimento') {
+            // De ação e REAL: Cancelar e a ação de verdade, sem o aviso "em implementação".
+            assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
+            assert.ok(!/data-fin-principal/.test(html), `${arquivo}: nada aqui é "em implementação"`);
+            assert.match(html, /id="finRecebimentoRegistrar" type="button" data-perm="financeiro\.recebimento\.registrar" class="btn-success/);
         } else {
             assert.match(html, /btn-neutral[^>]*>Fechar</, `${arquivo}: Fechar no padrão`);
         }
@@ -243,7 +249,7 @@ test('configuração de cobrança (boletos BB) é o modal REAL: lê e grava em /
         'client_id_sandbox', 'app_key_sandbox', 'client_id_producao', 'app_key_producao', 'proximo_sequencial_sandbox', 'proximo_sequencial_producao',
         'homologacao_convenio', 'homologacao_carteira', 'homologacao_variacao', 'homologacao_agencia', 'homologacao_conta',
         'especie', 'aceite', 'juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'multa_dias', 'protesto_dias', 'negativacao_dias',
-        'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto']) {
+        'dias_limite_recebimento', 'desconto_percentual', 'desconto_dias', 'indicador_pix', 'gerar_ao_emitir_nfe', 'mensagem_boleto', 'recebimentos_desde']) {
         assert.ok(html.includes(`data-fin-cob="${chave}"`), `campo ${chave} sem data-fin-cob`);
     }
     assert.match(html, /id="finCobSecret" type="password"/, 'o secret entra num campo de senha');
@@ -369,10 +375,106 @@ test('os modais fiscais são REAIS: aguardando NF-e e notas fiscais leem /api/fi
     assert.match(SCRIPT, /window\.NfeDocumentos\?\.gerarDanfe\(n\.id\)/);
     assert.match(SCRIPT, /window\.NfeDocumentos\?\.salvarXml\(n\.id\)/);
     assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| filhoAberto \|\| !ehOModalDeCima\(\)\) return;/, 'com um modal de Pedidos por cima, o Esc é dele');
-    assert.match(SCRIPT, /const RECARREGAM_O_PAINEL = new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal'\]\)/, 'fechar relê o painel da tela');
+    assert.match(SCRIPT, /const RECARREGAM_O_PAINEL = new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal'[,\]]/, 'fechar relê o painel da tela');
     assert.match(SCRIPT, /emitir\.dataset\.perm = 'financeiro\.nfe\.emit'/);
     assert.match(SCRIPT, /semNf\.dataset\.perm = 'ped\.status\.ship'/);
     assert.match(SCRIPT, /perm: 'financeiro\.nfe\.cancel'/);
     assert.match(SCRIPT, /const painel = await fetchApi\(`\/api\/fiscal\/painel\?competencia=\$\{encodeURIComponent\(competencia\)\}`\);/, 'o relatório "aguardando NF" é real');
     assert.ok(!SCRIPT.includes('montarRegistrarNf'), 'não existe mais "Registrar NF" à mão');
+});
+
+/* Contas a receber como o backend devolve (backend/cobranca/contasReceber.js). */
+const PARCELAS = [
+    { pedido_id: 1, pedido: 'PED120', cliente: 'Casa Vicenzo', nf: '1/7', numero_parcela: 1, parcela: '1/2', vencimento: '2026-09-05', a_receber: 900, dias_atraso: 11, controlada: true, boleto: { id: 41, status: 'vencido', nosso_numero: '00031285570000000001' } },
+    { pedido_id: 1, pedido: 'PED120', cliente: 'Casa Vicenzo', nf: '1/7', numero_parcela: 2, parcela: '2/2', vencimento: '2026-10-05', a_receber: 1000, dias_atraso: 0, controlada: true, boleto: { id: 42, status: 'erro', erro: '4678420' } },
+    { pedido_id: 2, pedido: 'PED121', cliente: 'Marcenaria São José', nf: null, numero_parcela: 1, parcela: '1/1', vencimento: '2026-07-01', a_receber: 250.5, dias_atraso: 77, controlada: false, boleto: null }
+];
+
+test('recebimentos (puras): tag do boleto, filtros por busca e boleto, total da visão, rótulo da parcela e resumo do registro', () => {
+    const f = puro();
+    assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela(null)), { texto: 'Sem boleto', badge: 'badge-neutral' });
+    assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela({ status: 'registrado' })), { texto: 'Boleto registrado', badge: 'badge-success' });
+    assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela({ status: 'erro' })), { texto: 'Boleto recusado', badge: 'badge-danger' });
+    assert.strictEqual(f.rotuloBoletoDaParcela({ status: 'baixado', motivo_baixa: 'quitacao_estornada' }).texto, 'Boleto baixado (quitação estornada)');
+
+    const ids = linhas => plano(linhas).map(l => `${l.pedido}/${l.numero_parcela}`);
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'abertas', boleto: 'aberto' })), ['PED120/1']);
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'abertas', boleto: 'sem' })), ['PED120/2', 'PED121/1']);
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'abertas', boleto: 'erro' })), ['PED120/2']);
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'abertas', busca: 'sao jose' })), ['PED121/1'], 'busca sem acento');
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'abertas', busca: '1/7' })), ['PED120/1', 'PED120/2'], 'busca pela NF');
+    assert.deepStrictEqual(ids(f.filtrarRecebimentos(PARCELAS, { visao: 'recebidos', boleto: 'aberto' })), ['PED120/1', 'PED120/2', 'PED121/1'], 'o filtro de boleto não vale para recebidos');
+    assert.deepStrictEqual(plano(f.filtrarRecebimentos(null)), []);
+
+    assert.strictEqual(f.totalDaVisao(PARCELAS, 'abertas'), 2150.5);
+    assert.strictEqual(f.totalDaVisao([{ status: 'confirmado', valor: 10 }, { status: 'estornado', valor: 99 }, { status: 'confirmado', valor: '5.25' }], 'recebidos'), 15.25, 'estornado não soma');
+
+    assert.strictEqual(semNbsp(f.rotuloDaParcelaAberta(PARCELAS[0])), 'Pedido PED120 · Casa Vicenzo · parcela 1/2 · vence 05/09/2026 · R$ 900,00 · 11 dias em atraso · boleto em aberto');
+    assert.strictEqual(semNbsp(f.rotuloDaParcelaAberta(PARCELAS[2])), 'Pedido PED121 · Marcenaria São José · parcela 1/1 · vence 01/07/2026 · R$ 250,50 · 77 dias em atraso · antes do controle');
+
+    assert.deepStrictEqual(plano(f.resumoDoRecebimento({ devido: 900, recebido: 912.5, data: '2026-09-16' })),
+        { devido: 900, recebido: 912.5, diferenca: 12.5, rotuloDiferenca: 'Recebido a mais (juros, multa)', competencia: 'Setembro/2026' });
+    assert.strictEqual(f.resumoDoRecebimento({ devido: 900, recebido: 850, data: '2026-10-01' }).rotuloDiferenca, 'Recebido a menos (desconto)');
+    assert.deepStrictEqual(plano(f.resumoDoRecebimento({ devido: null, recebido: null, data: '' })), { devido: null, recebido: null, diferenca: null, rotuloDiferenca: 'Diferença', competencia: '—' });
+    assert.deepStrictEqual(plano(f.ORIGENS_RECEBIMENTO), { boleto: 'Boleto pago', quitado_por_fora: 'Quitado por fora', manual: 'À mão' });
+});
+
+test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, confirmam na caixa da casa e abrem o boleto por cima', () => {
+    const registrar = fs.readFileSync(path.join(PASTA_HTML, 'registrar-recebimento.html'), 'utf8');
+    for (const id of ['finRecebimentoBusca', 'finRecebimentoParcela', 'finRecebimentoCliente', 'finRecebimentoPedido', 'finRecebimentoNf', 'finRecebimentoAvisoBoleto',
+        'finRecebimentoData', 'finRecebimentoValor', 'finRecebimentoForma', 'finRecebimentoObservacoes', 'finRecebimentoDevido', 'finRecebimentoLiquido',
+        'finRecebimentoDiferenca', 'finRecebimentoCompetencia', 'finRecebimentoMensagem', 'finRecebimentoRegistrar', 'finRecebimentoCarregando']) {
+        assert.ok(registrar.includes(`id="${id}"`), `registrar-recebimento sem #${id}`);
+    }
+    for (const forma of ['Pix', 'Transferência', 'Depósito', 'Dinheiro', 'Cheque', 'Cartão de crédito', 'Outro']) {
+        assert.ok(registrar.includes(`<option value="${forma}">`), `forma ${forma}`);
+    }
+    assert.ok(!registrar.includes('value="boleto"'), 'boleto pago não se registra à mão');
+    assert.ok(!/CMS|Royalty|Comprovante/.test(registrar), 'sem o que ainda não existe (comissões, comprovante)');
+    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(registrar), 'botões só com texto');
+
+    const lista = fs.readFileSync(path.join(PASTA_HTML, 'recebimentos.html'), 'utf8');
+    for (const id of ['finRecebimentosVisao', 'finRecebimentosCompetencia', 'finRecebimentosBoleto', 'finRecebimentosBusca', 'finRecebimentosRecebido', 'finRecebimentosAReceber',
+        'finRecebimentosAtraso', 'finRecebimentosBoletos', 'finRecebimentosCabeca', 'finRecebimentosCorpo', 'finRecebimentosVazio', 'finRecebimentosTotal',
+        'finRecebimentosSemSql', 'finRecebimentosMensagem', 'finRecebimentosCarregando', 'finRecebimentosConciliar', 'finRecebimentosRegistrar', 'finRecebimentosDesde']) {
+        assert.ok(lista.includes(`id="${id}"`), `recebimentos sem #${id}`);
+    }
+    for (const v of ['recebidos', 'a_receber', 'em_atraso', 'abertas']) assert.ok(lista.includes(`<option value="${v}">`), `visão ${v}`);
+    assert.match(lista, /id="finRecebimentosConciliar" type="button" data-perm="financeiro\.recebimento\.view"/);
+    assert.match(lista, /id="finRecebimentosRegistrar" type="button" data-perm="financeiro\.recebimento\.registrar"/);
+    assert.ok(!/data-fin-principal/.test(lista) && !/<button[^>]*>\s*<i class="fas/.test(lista));
+
+    assert.match(SCRIPT, /fetchApi\(`\/api\/cobranca\/recebimentos\?visao=abertas&competencia=/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/recebimentos', \{\s*method: 'POST'/);
+    assert.match(SCRIPT, /\.\.\.\(aberto \? \{ baixar_boleto: true \} : \{\}\)/, 'boleto em aberto: pede a baixa junto');
+    assert.match(SCRIPT, /confirmText: aberto \? 'Baixar e registrar' : 'Registrar'/);
+    assert.match(SCRIPT, /fetchApi\(`\/api\/cobranca\/recebimentos\/\$\{encodeURIComponent\(l\.id\)\}\/estornar`, \{ method: 'POST'/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/conciliar', \{ method: 'POST', body: '\{\}' \}\)/);
+    assert.match(SCRIPT, /abrirModalDePedido\('modals\/pedidos\/boleto-detalhe\.html', '\.\.\/js\/modals\/pedido-boleto-detalhe\.js', 'boletoDetalhe', \{ aoFechar: carregarLista \}\)/);
+    assert.match(SCRIPT, /abrirOutro\('registrar-recebimento', \{ parcela: \{ pedido_id: l\.pedido_id, numero_parcela: l\.numero_parcela, pedido: l\.pedido \} \}\)/);
+    assert.match(SCRIPT, /window\.dispatchEvent\(new CustomEvent\('financeiro:recebimentos-alterados'\)\)/);
+    assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:recebimentos-alterados', aoAlterar\)\)/, 'o ouvinte sai quando a lista fecha');
+    assert.match(SCRIPT, /'app-message-overlay fixed inset-0/, 'a caixa do motivo sobe para a top layer');
+    assert.match(SCRIPT, /finRecebimentos: montarRecebimentos/);
+    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento'\]\)/, 'fechar relê o painel');
+    assert.ok(!/window\.confirm\(/.test(SCRIPT));
+
+    // O módulo: os cartões abrem a lista na visão certa; "Registrar recebimento" pede a permissão.
+    assert.match(MODULO, /'recebimentos-atraso': \{ rotulo: 'Recebimentos', abrir: m => finAbrirModal\('recebimentos', m, \{ visao: 'em_atraso' \}\) \}/);
+    assert.match(MODULO, /'recebimentos-boletos': \{[^}]*filtro: \{ boleto: 'aberto' \}/);
+    const tela = fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8');
+    assert.match(tela, /data-perm="financeiro\.recebimento\.registrar" data-fin-acao="registrar-recebimento"/);
+    assert.match(tela, /data-perm-hide="financeiro\.recebimento\.view"/, 'a faixa some para quem não vê recebimentos');
+    assert.match(tela, /data-perm="financeiro\.recebimento\.view" data-fin-acao="conciliar"/);
+});
+
+test('todo botão que chama BotaoAcao.run no próprio clique leva data-acao-gerida (senão a rede automática o ocupa antes e ele não faz nada)', () => {
+    for (const [arquivo, fonte] of [['financeiro-modais.js', SCRIPT], ['pedido-gerar-boletos.js', fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-gerar-boletos.js'), 'utf8')]]) {
+        const variaveis = [...fonte.matchAll(/window\.BotaoAcao\.run\((\w+),/g)].map(m => m[1]);
+        assert.ok(variaveis.length > 0, arquivo);
+        for (const v of new Set(variaveis)) {
+            assert.ok(fonte.includes(`${v}.dataset.acaoGerida = 'true'`), `${arquivo}: ${v} chama BotaoAcao.run sem data-acao-gerida`);
+        }
+    }
+    assert.match(SCRIPT, /function acionar\(botao, fn\) \{\s*botao\.dataset\.acaoGerida = 'true';/);
 });

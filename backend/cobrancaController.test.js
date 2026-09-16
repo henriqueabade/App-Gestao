@@ -568,6 +568,101 @@ test('fase D: histórico, SQL exigido, consultar, prorrogar, abatimento e baixas
   }
 });
 
+test('fase E: painel, visões, recebimento à mão (e com boleto em aberto), estorno e conciliação, com as permissões certas', async () => {
+  const tabelas = tabelasDoPedido();
+  const COLUNAS_D = { valor_abatimento: 0, vencimento_original: null, motivo_baixa: null, observacao_baixa: null, data_baixa: null, baixado_por: null, substitui_boleto_id: null, sincronizado_em: null };
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    // Sem a tabela de recebimentos: o painel responde e diz o que falta.
+    t.estado.chaves.add('financeiro.recebimento.view');
+    const semSql = await t.chamar('GET', '/api/cobranca/recebimentos/painel?competencia=2026-09');
+    assert.equal(semSql.status, 200, JSON.stringify(semSql.corpo));
+    assert.equal(semSql.corpo.sql_pendente, true);
+    assert.equal(semSql.corpo.pendencias[0].chave, 'recebimentos_sql');
+
+    tabelas.recebimentos = [];
+    tabelas.pedidos[0].situacao = 'Enviado';
+    t.estado.chaves.add('financeiro.boleto.view');
+    t.estado.chaves.add('financeiro.boleto.emit');
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', { parcelas: [1] })).corpo.registrados, 1);
+    for (const b of tabelas.boletos) Object.assign(b, COLUNAS_D);
+
+    t.estado.chaves.delete('financeiro.recebimento.view');
+    assert.equal((await t.chamar('GET', '/api/cobranca/recebimentos/painel')).status, 403);
+    assert.equal((await t.chamar('GET', '/api/cobranca/recebimentos?visao=abertas')).status, 403);
+    assert.equal((await t.chamar('POST', '/api/cobranca/conciliar', {})).status, 403);
+    t.estado.chaves.add('financeiro.recebimento.view');
+
+    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const abertas = await t.chamar('GET', '/api/cobranca/recebimentos?visao=abertas');
+    assert.equal(abertas.status, 200, JSON.stringify(abertas.corpo));
+    assert.deepEqual(abertas.corpo.linhas.map(l => [l.numero_parcela, l.cliente, l.boleto?.status || null]), [[1, 'Cliente Bom', 'registrado'], [2, 'Cliente Bom', null], [3, 'Cliente Bom', null]]);
+    assert.equal((await t.chamar('GET', '/api/cobranca/recebimentos?visao=tudo')).status, 400);
+
+    // Registrar à mão: pede financeiro.recebimento.registrar.
+    const entrada = { pedido_id: 55, numero_parcela: 2, data_recebimento: hoje, valor_recebido: 1000, forma: 'Pix', observacao: 'Pix na conta' };
+    assert.equal((await t.chamar('POST', '/api/cobranca/recebimentos', entrada)).status, 403);
+    t.estado.chaves.add('financeiro.recebimento.registrar');
+    const manual = await t.chamar('POST', '/api/cobranca/recebimentos', entrada);
+    assert.equal(manual.status, 200, JSON.stringify(manual.corpo));
+    assert.equal(manual.corpo.recebimento.origem, 'manual');
+    assert.equal(tabelas.recebimentos.length, 1);
+    assert.equal((await t.chamar('POST', '/api/cobranca/recebimentos', entrada)).status, 409, 'já recebida');
+
+    // Parcela 1 tem boleto em aberto: sem a confirmação, 409 dizendo qual; com ela, pede também a baixa.
+    const comBoleto = { ...entrada, numero_parcela: 1, forma: 'Transferência' };
+    const aviso = await t.chamar('POST', '/api/cobranca/recebimentos', comBoleto);
+    assert.equal(aviso.status, 409);
+    assert.equal(aviso.corpo.boleto_em_aberto.nosso_numero, '00031285570000000001');
+    const semBaixa = await t.chamar('POST', '/api/cobranca/recebimentos', { ...comBoleto, baixar_boleto: true });
+    assert.equal(semBaixa.status, 403);
+    assert.equal(semBaixa.corpo.permissao, 'financeiro.boleto.baixa');
+    t.estado.chaves.add('financeiro.boleto.baixa');
+    const baixou = await t.chamar('POST', '/api/cobranca/recebimentos', { ...comBoleto, baixar_boleto: true });
+    assert.equal(baixou.status, 200, JSON.stringify(baixou.corpo));
+    assert.equal(baixou.corpo.boleto.status, 'baixado');
+    assert.equal(baixou.corpo.boleto.motivo_baixa, 'quitado_por_fora');
+    assert.equal(baixou.corpo.recebimento.origem, 'quitado_por_fora');
+    assert.equal(baixou.corpo.recebimento.forma, 'Transferência');
+    assert.ok(t.chamadasBB.some(c => c.url.includes('/boletos/00031285570000000001/baixar?')));
+    assert.equal(tabelas.recebimentos.length, 2);
+
+    // Painel e visão dos recebidos da competência.
+    const comp = hoje.slice(0, 7);
+    const painel = await t.chamar('GET', `/api/cobranca/recebimentos/painel?competencia=${comp}`);
+    assert.deepEqual(painel.corpo.recebido, { quantidade: 2, total: 2000, encargos: 0, estornados: 0 });
+    const recebidos = await t.chamar('GET', `/api/cobranca/recebimentos?visao=recebidos&competencia=${comp}`);
+    assert.deepEqual(recebidos.corpo.linhas.map(l => [l.numero_parcela, l.origem, l.cliente]).sort(), [[1, 'quitado_por_fora', 'Cliente Bom'], [2, 'manual', 'Cliente Bom']]);
+
+    // Estorno: pede financeiro.recebimento.estornar.
+    const idManual = manual.corpo.recebimento.id;
+    assert.equal((await t.chamar('POST', `/api/cobranca/recebimentos/${idManual}/estornar`, { motivo: 'lançado errado' })).status, 403);
+    t.estado.chaves.add('financeiro.recebimento.estornar');
+    const est = await t.chamar('POST', `/api/cobranca/recebimentos/${idManual}/estornar`, { motivo: 'lançado errado' });
+    assert.equal(est.status, 200, JSON.stringify(est.corpo));
+    assert.equal(est.corpo.recebimento.status, 'estornado');
+    assert.equal((await t.chamar('POST', `/api/cobranca/recebimentos/${idManual}/estornar`, { motivo: 'de novo' })).status, 409);
+
+    // Conciliar: aviso do webhook de um boleto novo (parcela 3) → pago + recebimento.
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', { parcelas: [3] })).corpo.registrados, 1);
+    const b3 = tabelas.boletos.find(b => b.numero_parcela === 3);
+    Object.assign(b3, COLUNAS_D);
+    tabelas.boletos_eventos.push({ id: 999, origem: 'webhook', tipo: 'baixa_operacional', nosso_numero: b3.nosso_numero, processado_em: null,
+      payload: { id: b3.nosso_numero, numeroConvenio: 3128557, codigoEstadoBaixaOperacional: 1, dataLiquidacao: hoje.split('-').reverse().join('.'), valorPagoSacado: 1000 } });
+    const soFila = await t.chamar('POST', '/api/cobranca/conciliar', { so_fila: true });
+    assert.equal(soFila.status, 200, JSON.stringify(soFila.corpo));
+    assert.equal(soFila.corpo.fila.pagos, 1);
+    assert.equal(b3.status, 'pago');
+    assert.equal(tabelas.recebimentos.filter(r => r.boleto_id === b3.id).length, 1);
+    const tudo = await t.chamar('POST', '/api/cobranca/conciliar', {});
+    assert.equal(tudo.status, 200, JSON.stringify(tudo.corpo));
+    assert.equal(tudo.corpo.consultas.consultados, 0, 'não há boleto a pagar');
+    assert.equal(tudo.corpo.acerto.lancados, 0);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('fase D: boleto de produção com a cobrança em homologação não é mexido', async () => {
   const tabelas = tabelasDoPedido();
   tabelas.boletos.push({

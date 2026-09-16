@@ -328,6 +328,12 @@
                   <option value="false">"Gerar boleto" desmarcado (gerar à mão depois)</option>
                 </select>
               </div>
+              <!-- Fase E: sem a coluna (sql/cobranca_recebimentos.sql) o campo some e não é enviado. -->
+              <div id="finCobRecebimentosDesdeBloco" class="col-span-2">
+                <label for="finCob_recebimentos_desde" class="block text-sm font-medium text-gray-300 mb-2">Controlar recebimentos a partir de</label>
+                <input id="finCob_recebimentos_desde" data-fin-cob="recebimentos_desde" data-fin-cob-coluna-nova="true" type="date" style="color-scheme: dark" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <p class="mt-1 text-xs text-gray-400">Parcelas que venceram antes desta data ficam fora de "a receber" e "em atraso" (eram controladas por fora).</p>
+              </div>
               <div class="col-span-2 md:col-span-4">
                 <label for="finCob_mensagem_boleto" class="block text-sm font-medium text-gray-300 mb-2">Mensagem no boleto (opcional)</label>
                 <textarea id="finCob_mensagem_boleto" data-fin-cob="mensagem_boleto" rows="2" maxlength="400" placeholder="Sai nas informações de responsabilidade do beneficiário, depois de juros, multa e protesto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>

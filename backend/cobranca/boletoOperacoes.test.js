@@ -39,14 +39,22 @@ function apiFalsa(tabelas) {
   const dados = JSON.parse(JSON.stringify(tabelas));
   let proximoId = 500;
   const tabelaDe = caminho => caminho.replace(/^\/api\//, '').split('/');
+  // Como a API: tabela que não existe responde 404 "Tabela 'x' não encontrada."
+  const exigir = tabela => {
+    if (dados[tabela]) return dados[tabela];
+    const e = new Error(`API respondeu 404 — Tabela '${tabela}' não encontrada.`);
+    e.status = 404;
+    throw e;
+  };
   return {
     dados,
     async get(caminho, { query = {} } = {}) {
       const [tabela] = tabelaDe(caminho);
-      return (dados[tabela] || []).filter(l => Object.entries(query).every(([c, v]) => String(l[c]) === String(v)));
+      return exigir(tabela).filter(l => Object.entries(query).every(([c, v]) => String(l[c]) === String(v)));
     },
     async post(caminho, corpo) {
       const [tabela] = tabelaDe(caminho);
+      exigir(tabela);
       const linha = { id: proximoId++, ...corpo };
       dados[tabela].push(linha);
       return linha;
@@ -237,10 +245,19 @@ test('consulta: pago grava data, valor e canal; vencimento mudado no BB guarda o
 });
 
 test('sincronizar: consulta GET com o convênio, grava e deixa rastro; erro do BB também fica no histórico', async () => {
-  const api = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [] });
-  const bb = bbFalso({ detalhe: detalheBB({ codigoEstadoTituloCobranca: 6, dataRecebimentoTitulo: '20.01.2027', valorPagoSacado: 1000, codigoCanalPagamento: 101 }) });
+  const api = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [], recebimentos: [] });
+  const bb = bbFalso({ detalhe: detalheBB({ codigoEstadoTituloCobranca: 6, dataRecebimentoTitulo: '20.01.2027', dataCreditoLiquidacao: '21.01.2027', valorPagoSacado: 1003, codigoCanalPagamento: 101 }) });
   const r = await op.sincronizar({ api, bb, conexao: CONEXAO, boleto: api.dados.boletos[0], cfg: CFG, hoje: HOJE, usuarioId: 3 });
   assert.equal(r.mudou, true);
+  assert.deepEqual(r.avisos, []);
+  // Fase E: pago no banco vira recebimento no Financeiro.
+  const rec = api.dados.recebimentos[0];
+  assert.deepEqual([rec.origem, rec.forma, rec.canal, rec.data_recebimento, rec.data_credito, rec.competencia, rec.status, rec.boleto_id, rec.numero_parcela],
+    ['boleto', 'Boleto', 'agência · espécie', '2027-01-20', '2027-01-21', '2027-01', 'confirmado', 41, 1]);
+  assert.deepEqual([rec.valor_parcela, rec.valor_recebido, rec.valor_encargos], [1000, 1003, 3]);
+  // Consultar de novo não lança outro.
+  await op.sincronizar({ api, bb, conexao: CONEXAO, boleto: api.dados.boletos[0], cfg: CFG, hoje: HOJE });
+  assert.equal(api.dados.recebimentos.length, 1);
   assert.deepEqual(bb.chamadas[0], { metodo: 'GET', caminho: '/boletos/00031285570000000001', query: { numeroConvenio: '3128557' }, corpo: undefined });
   const b = api.dados.boletos[0];
   assert.equal(b.status, 'pago');
@@ -249,6 +266,13 @@ test('sincronizar: consulta GET com o convênio, grava e deixa rastro; erro do B
   assert.equal(api.dados.boletos_eventos[0].tipo, 'consulta');
   assert.equal(api.dados.boletos_eventos[0].origem, 'consulta');
   assert.equal(api.dados.boletos_eventos[0].usuario_id, 3);
+  assert.equal(api.dados.boletos_eventos[1].tipo, 'recebimento');
+
+  // Sem a tabela de recebimentos (SQL da fase E não rodou): a consulta vale e avisa.
+  const semTabela = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [] });
+  const r2 = await op.sincronizar({ api: semTabela, bb, conexao: CONEXAO, boleto: semTabela.dados.boletos[0], cfg: CFG, hoje: HOJE });
+  assert.equal(semTabela.dados.boletos[0].status, 'pago');
+  assert.match(r2.avisos[0], /recebimento não foi lançado no Financeiro: Falta rodar sql\/cobranca_recebimentos\.sql/);
 
   const falha = bbFalso({ recusar: { 'GET /boletos/00031285570000000001': 'Boleto não encontrado' } });
   const api2 = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [] });
@@ -316,9 +340,14 @@ test('abatimento: inclui na primeira vez, altera depois; a consulta não desfaz 
 });
 
 test('baixar: quitado por fora grava o recebimento; cancelado; reemissão chama o registro do boleto novo e avisa se ele falhar', async () => {
-  const api = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [] });
+  const api = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [], recebimentos: [] });
   const bb = bbFalso();
   const r = await op.baixar({ api, bb, conexao: CONEXAO, boleto: api.dados.boletos[0], entrada: { motivo: 'quitado_por_fora', data_recebimento: '2026-09-15', valor_recebido: '1000', forma: 'Pix', observacao: 'pago direto na conta' }, hoje: HOJE, usuarioId: 3 });
+  assert.deepEqual(r.avisos, []);
+  const rec = api.dados.recebimentos[0];
+  assert.deepEqual([rec.origem, rec.forma, rec.canal, rec.data_recebimento, rec.valor_recebido, rec.competencia, rec.observacao, rec.criado_por],
+    ['quitado_por_fora', 'Pix', null, '2026-09-15', 1000, '2026-09', 'pago direto na conta', 3]);
+  assert.equal(r.recebimento.ja_existia, false);
   assert.deepEqual(bb.chamadas[0], { metodo: 'POST', caminho: '/boletos/00031285570000000001/baixar', query: undefined, corpo: { numeroConvenio: 3128557 } });
   const b = api.dados.boletos[0];
   assert.equal(b.status, 'baixado');

@@ -125,12 +125,31 @@ function painelFalso() {
     };
 }
 
+/** O painel de recebimentos que o backend devolve (GET /api/cobranca/recebimentos/painel), no formato de backend/cobranca/contasReceber.js. */
+function receberFalso(extra = {}) {
+    return {
+        competencia: '2026-09', desde: '2026-09-01', sql_pendente: false,
+        recebido: { quantidade: 3, total: 3010.5, encargos: 10.5, estornados: 1 },
+        a_receber: { quantidade: 2, total: 1900 },
+        em_atraso: { quantidade: 1, total: 300, mais_antigo: '2026-09-05', dias_max: 11 },
+        boletos_abertos: { quantidade: 1, total: 900 },
+        a_conciliar: { fila: 0, lancamentos: 0, alertas: 0 },
+        pendencias: [
+            { nivel: 'normal', chave: 'em_atraso', titulo: '1 parcela vencida sem recebimento', descricao: 'Total: R$ 300,00 · mais antiga venceu em 05/09/2026', data: '2026-09-05', acao: 'Ver', destino: 'recebimentos-atraso' },
+            { nivel: 'critico', chave: 'boletos_erro', titulo: '1 boleto recusado pelo BB', descricao: 'Pedido PED103, parcela 1: 4678420', data: '2026-09-05', acao: 'Ver', destino: 'recebimentos-a-receber' }
+        ],
+        ...extra
+    };
+}
+
 /**
- * Carrega o módulo. `painel` é o que GET /api/fiscal/painel devolve;
- * `statusHttp` diferente de 200 simula a recusa (403 sem permissão). Sem
- * `painel`, não há apiConfig nem fetch — como no teste que só olha funções.
+ * Carrega o módulo. `painel` é o que GET /api/fiscal/painel devolve e
+ * `receber` o que GET /api/cobranca/recebimentos/painel devolve (padrão: sem
+ * pendências); `statusHttp` diferente de 200 simula a recusa (403 sem
+ * permissão). Sem `painel`, não há apiConfig nem fetch — como no teste que
+ * só olha funções.
  */
-function carregar({ modulo = null, painel = undefined, statusHttp = 200 } = {}) {
+function carregar({ modulo = null, painel = undefined, receber = undefined, statusHttp = 200, conciliacao = null } = {}) {
     const avisos = [];
     const chamadas = [];
     const documento = {
@@ -155,9 +174,12 @@ function carregar({ modulo = null, painel = undefined, statusHttp = 200 } = {}) 
     };
     if (painel !== undefined) {
         contexto.window.apiConfig = { getApiBaseUrl: async () => 'http://api.teste' };
-        contexto.fetch = async url => {
-            chamadas.push(url);
-            return { ok: statusHttp === 200, status: statusHttp, json: async () => (statusHttp === 200 ? painel : { error: 'Sem permissão' }) };
+        const deReceber = receber === undefined ? receberFalso({ pendencias: [] }) : receber;
+        contexto.fetch = async (url, opcoes = {}) => {
+            chamadas.push(opcoes.method === 'POST' ? `POST ${url} ${opcoes.body}` : url);
+            const corpo = url.includes('/api/cobranca/conciliar') ? conciliacao
+                : (url.includes('/api/cobranca/recebimentos/painel') ? deReceber : painel);
+            return { ok: statusHttp === 200, status: statusHttp, json: async () => (statusHttp === 200 ? corpo : { error: 'Sem permissão' }) };
         };
     }
     contexto.globalThis = contexto;
@@ -210,11 +232,15 @@ test('competências vão de 12 meses atrás a 3 à frente, com a atual seleciona
     assert.strictEqual(select.children[15].textContent, 'Abril / 2026');
 });
 
-test('a tela preenche TODOS os campos data-fin: a parte fiscal vem do painel real, comissões e produção do exemplo', async () => {
+test('a tela preenche TODOS os campos data-fin: a parte fiscal e as contas a receber vêm dos painéis reais, comissões e produção do exemplo', async () => {
     const modulo = montarModuloDoHtml();
     const { chamadas } = carregar({ modulo, painel: painelFalso() });
     await modulo.moduleReadyPromise;
-    assert.deepStrictEqual(chamadas, ['http://api.teste/api/fiscal/painel?competencia=' + hojeTexto().slice(0, 7)], 'o painel é lido na competência selecionada');
+    const competencia = hojeTexto().slice(0, 7);
+    assert.deepStrictEqual(chamadas, [
+        `http://api.teste/api/fiscal/painel?competencia=${competencia}`,
+        `http://api.teste/api/cobranca/recebimentos/painel?competencia=${competencia}`
+    ], 'os dois painéis são lidos na competência selecionada');
 
     const vazios = modulo.querySelectorAll('[data-fin]').filter(el => el.textContent === '—' || el.textContent === '');
     assert.deepStrictEqual(vazios.map(el => el.dataset.fin), [], 'campos ainda com o marcador inicial');
@@ -244,6 +270,90 @@ test('a tela preenche TODOS os campos data-fin: a parte fiscal vem do painel rea
     assert.strictEqual(eventos[0].children[0].textContent, '14:32', 'hoje: só a hora');
     assert.strictEqual(eventos[1].children[0].textContent, '15/09', 'outro dia: dia/mês');
     assert.strictEqual(eventos[0].children[1].children[0].textContent, 'NF-e 1/5 autorizada');
+
+    // Contas a receber.
+    assert.strictEqual(valores['receber.nota'], 'Parcelas controladas a partir de 01/09/2026');
+    assert.strictEqual(valores['receber.recebido.valor'], 'R$ 3.010,50');
+    assert.strictEqual(valores['receber.recebido.auxiliar'], '3 recebimentos');
+    assert.strictEqual(valores['receber.recebido.rodape'], 'Inclui juros e multa R$ 10,50 · 1 estornado');
+    assert.strictEqual(valores['receber.aReceber.valor'], 'R$ 1.900,00');
+    assert.strictEqual(valores['receber.aReceber.auxiliar'], '2 parcelas');
+    assert.strictEqual(valores['receber.atraso.valor'], 'R$ 300,00');
+    assert.strictEqual(valores['receber.atraso.rodape'], 'Mais antiga venceu em 05/09/2026 (11 dias)');
+    assert.strictEqual(valores['receber.boletos.auxiliar'], '1 boleto');
+    assert.strictEqual(valores['receber.boletos.rodape'], 'Registrados no BB, aguardando pagamento');
+});
+
+test('as pendências de cobrança entram na mesma lista: críticas primeiro, fiscal antes de cobrança', async () => {
+    const modulo = montarModuloDoHtml();
+    carregar({ modulo, painel: painelFalso(), receber: receberFalso() });
+    await modulo.moduleReadyPromise;
+    const titulos = modulo.querySelector('[data-fin-lista="pendencias"]').children.map(l => l.children[1].children[0].textContent);
+    assert.deepStrictEqual(titulos, ['1 nota aguardando resposta da SEFAZ', '1 boleto recusado pelo BB', '2 pedidos enviados sem NF-e', '1 parcela vencida sem recebimento']);
+    assert.strictEqual(modulo.querySelector('[data-fin="pendencias.total"]').textContent, '4');
+    const atraso = modulo.querySelector('[data-fin-lista="pendencias"]').children[3];
+    assert.strictEqual(atraso.dataset.finAcao, 'recebimentos-atraso');
+});
+
+test('avisos do BB na fila são processados em segundo plano (sem chamar o banco) e a tela relê só se algo foi resolvido', async () => {
+    const modulo = montarModuloDoHtml();
+    const conciliacao = { fila: { lidos: 2, pagos: 1, cancelados: 0, alertas: 0, ignorados: 1, erros: 0 }, sql_pendente: false };
+    const { chamadas } = carregar({ modulo, painel: painelFalso(), receber: receberFalso({ a_conciliar: { fila: 2, lancamentos: 0, alertas: 0 } }), conciliacao });
+    await modulo.moduleReadyPromise;
+    await new Promise(r => setTimeout(r, 20));
+    assert.ok(chamadas.includes('POST http://api.teste/api/cobranca/conciliar {"so_fila":true}'), JSON.stringify(chamadas));
+    assert.ok(chamadas.filter(c => c.includes('/recebimentos/painel')).length >= 2, 'relê depois de resolver');
+
+    const parado = montarModuloDoHtml();
+    const semProgresso = { fila: { lidos: 2, pagos: 0, cancelados: 0, alertas: 0, ignorados: 0, erros: 2 } };
+    const r2 = carregar({ modulo: parado, painel: painelFalso(), receber: receberFalso({ a_conciliar: { fila: 2 } }), conciliacao: semProgresso });
+    await parado.moduleReadyPromise;
+    await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual(r2.chamadas.filter(c => c.startsWith('POST')).length, 1, 'aviso com erro não vira laço');
+    assert.strictEqual(r2.chamadas.filter(c => c.includes('/recebimentos/painel')).length, 1);
+});
+
+test('"Conciliar com o BB" chama a conciliação inteira, mostra o resumo na caixa da casa e relê a tela', async () => {
+    const modulo = montarModuloDoHtml();
+    const conciliacao = {
+        fila: { lidos: 1, pagos: 1, cancelados: 0, alertas: 0, ignorados: 0, erros: 0, mensagens: [] },
+        consultas: { consultados: 3, mudaram: 1, pagos: 1, erros: 1, mensagens: ['Boleto 000312: O BB respondeu 503'] },
+        acerto: { lancados: 2, erros: 0, mensagens: [] }, sql_pendente: false
+    };
+    const { chamadas, avisos } = carregar({ modulo, painel: painelFalso(), conciliacao });
+    await modulo.moduleReadyPromise;
+    const botao = criarElemento('button');
+    botao.dataset.finAcao = 'conciliar';
+    modulo.appendChild(botao);
+    modulo.ouvintes.click[0]({ target: botao, stopPropagation() {} });
+    await new Promise(r => setTimeout(r, 20));
+    assert.ok(chamadas.includes('POST http://api.teste/api/cobranca/conciliar {}'));
+    assert.strictEqual(avisos[0].title, 'Conciliação com o BB');
+    assert.strictEqual(avisos[0].message, 'Avisos do BB: 1 pagamento.\nConsulta ao BB: 3 boletos consultados · 1 mudou de situação · 1 pago · 1 com erro.\n2 recebimentos lançados de boletos já pagos.\n\nBoleto 000312: O BB respondeu 503');
+    assert.strictEqual(chamadas.filter(c => c.includes('/recebimentos/painel')).length, 2, 'relê depois de conciliar');
+});
+
+test('finMapearReceber e finResumoDaConciliacao são puras', () => {
+    const f = funcoes();
+    const mapear = f('finMapearReceber');
+    const r = mapear(receberFalso({ sql_pendente: true, a_conciliar: { fila: 3 } }), null);
+    assert.strictEqual(r.nota, 'Falta ativar: rode sql/cobranca_recebimentos.sql e reinicie a API.');
+    assert.strictEqual(r.fila, 3);
+    assert.strictEqual(r.boletos.rodape, '3 avisos de pagamento do BB para conciliar');
+    assert.strictEqual(mapear(receberFalso({ desde: null }), null).nota, 'Todas as parcelas dos pedidos faturados');
+    assert.strictEqual(mapear(receberFalso({ em_atraso: { quantidade: 0, total: 0 } }), null).atraso.rodape, 'Nenhuma parcela vencida');
+    const semPermissao = mapear(null, Object.assign(new Error('x'), { status: 403 }));
+    assert.strictEqual(semPermissao.recebido.valor, null);
+    assert.strictEqual(semPermissao.recebido.rodape, 'Sem permissão para ver os recebimentos.');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(semPermissao.pendencias)), []);
+    const fora = mapear(null, new Error('rede caiu'));
+    assert.strictEqual(fora.pendencias[0].titulo, 'Painel de recebimentos indisponível');
+    assert.strictEqual(fora.pendencias[0].destino, 'atualizar');
+
+    const resumo = f('finResumoDaConciliacao');
+    assert.strictEqual(resumo({ fila: { lidos: 0 }, sql_pendente: true }), 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.\nNenhum aviso do BB na fila.');
+    assert.strictEqual(resumo({ fila: { lidos: 3, pagos: 1, cancelados: 1, ignorados: 1, mensagens: [] }, consultas: { consultados: 0 }, acerto: {} }),
+        'Avisos do BB: 1 pagamento · 1 cancelamento · 1 ignorado (não são deste sistema).\nConsulta ao BB: 0 boletos consultados.');
 });
 
 test('sem permissão (403) ou sem rede, a parte fiscal fica vazia e avisa; o resto da tela segue', async () => {
@@ -265,6 +375,9 @@ test('sem permissão (403) ou sem rede, a parte fiscal fica vazia e avisa; o res
     const linha = semRede.querySelector('[data-fin-lista="pendencias"]').children[0];
     assert.strictEqual(linha.children[1].children[0].textContent, 'Painel fiscal indisponível');
     assert.strictEqual(linha.children[3].dataset.finAcao, 'atualizar', 'a pendência leva ao "Atualizar"');
+    assert.strictEqual(semRede.querySelector('[data-fin-lista="pendencias"]').children[1].children[1].children[0].textContent, 'Painel de recebimentos indisponível');
+    const valoresSemRede = Object.fromEntries(semRede.querySelectorAll('[data-fin]').map(el => [el.dataset.fin, el.textContent]));
+    assert.strictEqual(valoresSemRede['receber.nota'], 'Não foi possível carregar os recebimentos.');
 });
 
 test('finMapearPainel e finFormatarQuando são puras: painel → kpi, pendências e atividade; instante → hora ou dia', () => {
@@ -293,13 +406,13 @@ test('toda ação sem função real abre o diálogo padrão "em implementação"
     await modulo.moduleReadyPromise;
 
     const botao = criarElemento('button');
-    botao.dataset.finAcao = 'registrar-recebimento';
+    botao.dataset.finAcao = 'registrar-ajuste';
     modulo.appendChild(botao);
     modulo.ouvintes.click[0]({ target: botao, stopPropagation() {} });
 
     assert.strictEqual(avisos.length, 1);
     assert.strictEqual(avisos[0].title, 'Função em implementação');
-    assert.match(avisos[0].message, /"Registrar recebimento" ainda está em implementação/);
+    assert.match(avisos[0].message, /"Registrar ajuste" ainda está em implementação/);
 });
 
 test('o botão dentro da linha de pendência vence a linha: um clique, uma ação (sem Modal, vira o aviso com o nome do modal)', async () => {
@@ -317,23 +430,23 @@ test('"Atualizar", a troca de competência e "Hoje" releem o painel; os modais r
     const modulo = montarModuloDoHtml();
     const { chamadas, contexto } = carregar({ modulo, painel: painelFalso() });
     await modulo.moduleReadyPromise;
-    assert.strictEqual(chamadas.length, 1);
+    assert.strictEqual(chamadas.length, 2, 'painel fiscal e de recebimentos');
 
     const atualizar = criarElemento('button');
     atualizar.dataset.finAcao = 'atualizar';
     modulo.appendChild(atualizar);
     modulo.ouvintes.click[0]({ target: atualizar, stopPropagation() {} });
     await modulo.moduleReadyPromise;
-    assert.strictEqual(chamadas.length, 2, '"Atualizar" é real: relê o painel');
+    assert.strictEqual(chamadas.length, 4, '"Atualizar" é real: relê os painéis');
 
     const select = modulo.querySelector('#finCompetencia');
     select.value = '2026-08';
     select.ouvintes.change[0]();
     await modulo.moduleReadyPromise;
-    assert.strictEqual(chamadas.at(-1), 'http://api.teste/api/fiscal/painel?competencia=2026-08');
+    assert.deepStrictEqual(chamadas.slice(-2), ['http://api.teste/api/fiscal/painel?competencia=2026-08', 'http://api.teste/api/cobranca/recebimentos/painel?competencia=2026-08']);
 
     await contexto.window.FinanceiroRecarregar();
-    assert.strictEqual(chamadas.length, 4);
+    assert.strictEqual(chamadas.length, 8);
     assert.match(FONTE_JS, /window\.FinanceiroRecarregar = \(\) => finRecarregar\(null\)/);
 });
 

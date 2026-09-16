@@ -365,6 +365,29 @@ body {
 .fin-link i { font-size: 0.75rem; margin-left: 0.25rem; }
 .fin-link:hover { color: var(--fin-texto-1, #fff); }
 
+/* Faixa "Contas a receber": título, desde quando o app controla e o atalho da conciliação. */
+.fin-faixa-titulo {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.9rem;
+    margin: 0 0 0.75rem;
+}
+
+.fin-faixa-titulo h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--fin-texto-1, #fff);
+    margin: 0;
+}
+
+.fin-faixa-titulo__nota {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--fin-texto-2);
+}
+
 /* Segunda faixa: 70 / 30 */
 .fin-operacional {
     display: grid;
@@ -854,6 +877,7 @@ body {
     gap: 1rem;
 }
 
+.fin-indicadores--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .fin-indicadores--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
 .fin-indicador {

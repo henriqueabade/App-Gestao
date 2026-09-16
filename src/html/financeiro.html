@@ -18,7 +18,10 @@
     e listas são preenchidos por src/js/financeiro.js a partir de um único
     objeto de dados. A parte fiscal (Aguardando NF-e, pendências, atividade
     recente, Emitir NF-e, Notas fiscais) vem do backend — GET /api/fiscal/painel
-    da competência escolhida; comissões e produção ainda são dados de EXEMPLO,
+    da competência escolhida; as contas a receber (recebido, a receber, em
+    atraso, boletos em aberto, pendências de cobrança, Registrar recebimento,
+    Conciliar com o BB) vêm de GET /api/cobranca/recebimentos/painel;
+    comissões e produção ainda são dados de EXEMPLO,
     e cada botão/cartão traz `data-fin-acao`: quem ainda não tem função real
     abre o aviso "em implementação".
   -->
@@ -104,6 +107,67 @@
       </article>
     </div>
 
+    <!-- Contas a receber (real): GET /api/cobranca/recebimentos/painel da competência.
+         Some para quem não tem financeiro.recebimento.view. -->
+    <div class="fin-faixa-titulo animate-fade-in-up" data-perm-hide="financeiro.recebimento.view">
+      <h2>Contas a receber</h2>
+      <span class="fin-faixa-titulo__nota" data-fin="receber.nota"></span>
+      <button type="button" class="fin-link" data-perm="financeiro.recebimento.view" data-fin-acao="conciliar" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">Conciliar com o BB</button>
+    </div>
+    <div class="fin-kpis animate-fade-in-up" data-perm-hide="financeiro.recebimento.view">
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="recebimentos-recebidos" role="button" tabindex="0" aria-label="Recebido na competência — abrir os recebimentos">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Recebido na competência</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="receber.recebido.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="receber.recebido.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="receber.recebido.rodape"></p>
+      </article>
+
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="recebimentos-a-receber" role="button" tabindex="0" aria-label="A receber na competência — abrir as parcelas que vencem no mês">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-calendar-check" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">A receber na competência</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="receber.aReceber.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="receber.aReceber.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="receber.aReceber.rodape"></p>
+      </article>
+
+      <article class="fin-kpi fin-kpi--atencao glass-surface rounded-xl" data-fin-acao="recebimentos-atraso" role="button" tabindex="0" aria-label="Parcelas em atraso — abrir as vencidas sem recebimento">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="bordo"><i class="fas fa-exclamation-circle" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Em atraso</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="receber.atraso.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="receber.atraso.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="receber.atraso.rodape"></p>
+      </article>
+
+      <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="recebimentos-boletos" role="button" tabindex="0" aria-label="Boletos em aberto — abrir as parcelas a receber com boleto">
+        <div class="fin-kpi__topo">
+          <span class="fin-kpi__icone" data-tom="ouro"><i class="fas fa-barcode" aria-hidden="true"></i></span>
+          <span class="fin-kpi__rotulo">Boletos em aberto</span>
+          <span class="fin-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="fin-kpi__linha">
+          <span class="fin-kpi__valor" data-fin="receber.boletos.valor">—</span>
+          <span class="fin-kpi__auxiliar" data-fin="receber.boletos.auxiliar"></span>
+        </div>
+        <p class="fin-kpi__rodape" data-fin="receber.boletos.rodape"></p>
+      </article>
+    </div>
+
     <!-- Segunda faixa: pendências (70%) e ações rápidas (30%) -->
     <div class="fin-operacional animate-fade-in-up">
       <section class="fin-painel glass-surface rounded-xl">
@@ -130,7 +194,7 @@
           <button type="button" class="fin-acao" data-perm="financeiro.nfe.view" data-fin-acao="notas-fiscais">
             <i class="fas fa-file-alt" aria-hidden="true"></i><span>Notas fiscais</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="fin-acao" data-fin-acao="registrar-recebimento">
+          <button type="button" class="fin-acao" data-perm="financeiro.recebimento.registrar" data-fin-acao="registrar-recebimento">
             <i class="fas fa-money-bill-wave" aria-hidden="true"></i><span>Registrar recebimento</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="fin-acao" data-fin-acao="registrar-ajuste">

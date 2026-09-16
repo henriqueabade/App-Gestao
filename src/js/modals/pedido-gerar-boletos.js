@@ -219,6 +219,8 @@
         pdf.dataset.perm = 'financeiro.boleto.view';
         pdf.textContent = 'PDF';
         pdf.title = `Gerar o PDF do boleto da parcela ${l.numero}`;
+        // Sem a marca, a rede automática do BotaoAcao ocupa o botão antes do clique e o run desiste.
+        pdf.dataset.acaoGerida = 'true';
         pdf.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(pdf, () => gerarPdf(l.boletoId)) : gerarPdf(l.boletoId)));
         tdBoleto.appendChild(pdf);
       }

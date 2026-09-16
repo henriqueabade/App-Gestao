@@ -26,6 +26,13 @@
  *   POST   /boletos/:id/baixar              { motivo, observacao, data_recebimento, valor_recebido, forma, novo_vencimento }
  *   POST   /pedidos/:id/boletos/sincronizar consulta todos os boletos a pagar do pedido
  *
+ * Fase E — recebimentos e conciliação:
+ *   GET    /recebimentos/painel?competencia=         resumo e pendências para o Financeiro
+ *   GET    /recebimentos?competencia=&visao=          recebidos | a_receber | em_atraso | abertas
+ *   POST   /recebimentos                              recebimento à mão (com baixar_boleto, baixa o boleto em aberto como quitado por fora)
+ *   POST   /recebimentos/:id/estornar                 { motivo }
+ *   POST   /conciliar                                 fila do webhook + consulta dos boletos a pagar (so_fila: só a fila)
+ *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
  * tela, é cifrado e só sai daqui para o OAuth do BB. Mesmo padrão do
  * certificado A1 e da senha do SMTP (fiscalController.js).
@@ -42,6 +49,9 @@ const boletos = require('./cobranca/boletos');
 const bbBoleto = require('./cobranca/bbBoleto');
 const boletoDocumento = require('./cobranca/boletoDocumento');
 const operacoes = require('./cobranca/boletoOperacoes');
+const recebimentos = require('./cobranca/recebimentos');
+const contasReceber = require('./cobranca/contasReceber');
+const conciliacao = require('./cobranca/conciliacao');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
 function usuarioDaRequisicao(req) {
@@ -454,6 +464,97 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       res.json(await operacoes.sincronizarPedido({ api, bb: cliente, conexao, pedidoId: req.params.id, cfg, hoje: hojeEmBrasilia(), usuarioId: usuarioDaRequisicao(req) }));
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos/sincronizar');
+    }
+  });
+
+  // ----------------------------------- recebimentos e conciliação (fase E)
+
+  /** Conexões por ambiente numa mesma operação (a recusa vale para todos os boletos dele). */
+  function conexoesDe(api, cfg) {
+    const cache = new Map();
+    return ambiente => {
+      if (!cache.has(ambiente)) cache.set(ambiente, conexaoDoAmbiente(api, cfg, ambiente));
+      return cache.get(ambiente);
+    };
+  }
+
+  router.get('/recebimentos/painel', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api);
+      res.json(await contasReceber.carregarPainel({ api, competencia: req.query?.competencia, hoje: hojeEmBrasilia(), desde: cfg?.recebimentos_desde || null }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/recebimentos/painel');
+    }
+  });
+
+  router.get('/recebimentos', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api);
+      res.json(await contasReceber.carregarVisao({
+        api, competencia: req.query?.competencia, visao: String(req.query?.visao || 'recebidos'), hoje: hojeEmBrasilia(), desde: cfg?.recebimentos_desde || null
+      }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/recebimentos');
+    }
+  });
+
+  /**
+   * Recebimento à mão. Parcela com boleto em aberto: sem `baixar_boleto` a
+   * resposta é 409 com `boleto_em_aberto` (a tela pergunta); com ele, o
+   * boleto é baixado no BB como quitado por fora, o que lança o recebimento.
+   */
+  const permissaoDoRecebimento = req => (req.body?.baixar_boleto === true
+    ? ['financeiro.recebimento.registrar', 'financeiro.boleto.baixa']
+    : 'financeiro.recebimento.registrar');
+  router.post('/recebimentos', exigirPermissao(permissaoDoRecebimento), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const hoje = hojeEmBrasilia();
+      const usuarioId = usuarioDaRequisicao(req);
+      const entrada = req.body || {};
+      try {
+        const recebimento = await recebimentos.registrarManual({ api, entrada, usuarioId, hoje });
+        res.json({ recebimento, boleto: null, avisos: [] });
+        return;
+      } catch (e) {
+        const aberto = e?.extra?.boleto_em_aberto;
+        if (!aberto || entrada.baixar_boleto !== true) throw e;
+        const v = recebimentos.validarManual(entrada, hoje);
+        const [boleto, cfg] = await Promise.all([boletos.ler(api, aberto.id), configuracao.carregar(api, { forcar: true })]);
+        operacoes.exigirSql(boleto);
+        const conexao = await conexaoDoAmbiente(api, cfg, boleto.ambiente);
+        const r = await operacoes.baixar({
+          api, bb: cliente, conexao, boleto, hoje, usuarioId,
+          entrada: { motivo: 'quitado_por_fora', data_recebimento: v.data, valor_recebido: v.valor, forma: v.forma, observacao: v.observacao || 'Registrado pelo Financeiro.' }
+        });
+        res.json({ recebimento: r.recebimento?.recebimento || null, boleto: boletos.enxuto(r.boleto), avisos: r.avisos || [] });
+      }
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/recebimentos');
+    }
+  });
+
+  router.post('/recebimentos/:id/estornar', exigirPermissao('financeiro.recebimento.estornar'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      res.json({ recebimento: await recebimentos.estornar({ api, id: req.params.id, motivo: req.body?.motivo, usuarioId: usuarioDaRequisicao(req) }) });
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/recebimentos/:id/estornar');
+    }
+  });
+
+  router.post('/conciliar', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      res.json(await conciliacao.conciliar({
+        api, bb: cliente, conexao: conexoesDe(api, cfg), cfg, hoje: hojeEmBrasilia(), usuarioId: usuarioDaRequisicao(req),
+        soFila: req.body?.so_fila === true
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/conciliar');
     }
   });
 

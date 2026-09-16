@@ -61,7 +61,9 @@ const CAMPOS = {
   desconto_dias: { tipo: 'inteiro', min: 0, max: 999 },
   indicador_pix: { tipo: 'booleano' },
   gerar_ao_emitir_nfe: { tipo: 'booleano' },
-  mensagem_boleto: { tipo: 'texto', max: 400 }
+  mensagem_boleto: { tipo: 'texto', max: 400 },
+  // Fase E (sql/cobranca_recebimentos.sql): a partir de que vencimento o app cobra as parcelas.
+  recebimentos_desde: { tipo: 'data', opcional: true }
 };
 
 /** Curto: quem muda o ambiente na tela precisa ver o efeito no próximo boleto. */
@@ -145,6 +147,13 @@ function validar(entrada) {
         if (!['true', 'false', '1', '0', 'sim', 'nao', 'não'].includes(texto.toLowerCase())) { erros.push(`${chave}: use sim ou não`); continue; }
         valores[chave] = ['true', '1', 'sim'].includes(texto.toLowerCase());
         break;
+      case 'data': {
+        const iso = texto.slice(0, 10);
+        const d = new Date(`${iso}T00:00:00Z`);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso) { erros.push(`${chave}: data inválida`); continue; }
+        valores[chave] = iso;
+        break;
+      }
       default:
         erros.push(`${chave}: tipo desconhecido`);
     }

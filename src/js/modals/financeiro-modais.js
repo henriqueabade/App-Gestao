@@ -327,6 +327,71 @@
     }));
   }
 
+  // ------------------------------------------ contas a receber (reais)
+
+  const ORIGENS_RECEBIMENTO = { boleto: 'Boleto pago', quitado_por_fora: 'Quitado por fora', manual: 'À mão' };
+  const BOLETO_A_PAGAR = ['registrado', 'vencido', 'protestado'];
+  const MOTIVOS_BAIXA_BOLETO = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'pelo banco', quitacao_estornada: 'quitação estornada' };
+  const semAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  /** A tag do boleto de uma parcela a receber. */
+  function rotuloBoletoDaParcela(boleto) {
+    if (!boleto) return { texto: 'Sem boleto', badge: 'badge-neutral' };
+    const s = String(boleto.status || '');
+    if (s === 'registrado') return { texto: 'Boleto registrado', badge: 'badge-success' };
+    if (s === 'vencido') return { texto: 'Boleto vencido', badge: 'badge-warning' };
+    if (s === 'protestado') return { texto: 'Boleto em protesto', badge: 'badge-danger' };
+    if (s === 'erro') return { texto: 'Boleto recusado', badge: 'badge-danger' };
+    if (s === 'pago') return { texto: 'Boleto pago', badge: 'badge-success' };
+    if (s === 'baixado') return { texto: `Boleto baixado${MOTIVOS_BAIXA_BOLETO[boleto.motivo_baixa] ? ` (${MOTIVOS_BAIXA_BOLETO[boleto.motivo_baixa]})` : ''}`, badge: 'badge-neutral' };
+    return { texto: `Boleto ${s}`, badge: 'badge-neutral' };
+  }
+
+  const boletoEmAberto = boleto => Boolean(boleto && BOLETO_A_PAGAR.includes(String(boleto.status)));
+
+  /** Filtra as linhas de uma visão: busca por pedido, cliente ou NF; nas de parcela, pelo boleto. */
+  function filtrarRecebimentos(linhas, { visao = 'recebidos', boleto = '', busca = '' } = {}) {
+    const termo = semAcento(busca).trim();
+    return (Array.isArray(linhas) ? linhas : []).filter(l => {
+      if (termo && ![l.pedido, l.cliente, l.nf].some(v => semAcento(v).includes(termo))) return false;
+      if (visao === 'recebidos' || !boleto) return true;
+      if (boleto === 'aberto') return boletoEmAberto(l.boleto);
+      if (boleto === 'sem') return !boletoEmAberto(l.boleto);
+      if (boleto === 'erro') return l.boleto?.status === 'erro';
+      return true;
+    });
+  }
+
+  /** O total da lista: o recebido (só confirmados) ou o que falta receber. */
+  function totalDaVisao(linhas, visao) {
+    const lista = Array.isArray(linhas) ? linhas : [];
+    if (visao === 'recebidos') return centavos(lista.filter(l => l.status === 'confirmado').reduce((s, l) => s + Number(l.valor || 0), 0));
+    return centavos(lista.reduce((s, l) => s + Number(l.a_receber || 0), 0));
+  }
+
+  /** O texto de cada parcela no seletor de "Registrar recebimento". */
+  function rotuloDaParcelaAberta(l) {
+    const partes = [`Pedido ${l.pedido}`, l.cliente || 'sem cliente', `parcela ${l.parcela || l.numero_parcela}`, `vence ${formatarData(l.vencimento)}`, formatarMoeda(l.a_receber)];
+    if (Number(l.dias_atraso) > 0) partes.push(`${l.dias_atraso} dias em atraso`);
+    if (boletoEmAberto(l.boleto)) partes.push('boleto em aberto');
+    if (l.controlada === false) partes.push('antes do controle');
+    return partes.join(' · ');
+  }
+
+  /** O quadro de "Registrar recebimento": devido, recebido, diferença (juros/multa ou desconto) e competência. */
+  function resumoDoRecebimento({ devido, recebido, data }) {
+    const d = devido === null || devido === undefined ? null : centavos(devido);
+    const r = recebido === null || recebido === undefined ? null : centavos(recebido);
+    const diferenca = d === null || r === null ? null : centavos(r - d);
+    return {
+      devido: d,
+      recebido: r,
+      diferenca,
+      rotuloDiferenca: diferenca === null || diferenca === 0 ? 'Diferença' : (diferenca > 0 ? 'Recebido a mais (juros, multa)' : 'Recebido a menos (desconto)'),
+      competencia: competenciaDe(data)
+    };
+  }
+
   // ------------------------------------------------- dados de exemplo
 
   const EXEMPLO = {
@@ -626,6 +691,7 @@
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro,
     faixaDeAtraso, calcularAtrasadas, resumoAtrasadas, agingDe, resumoProducao, montarRelatorio,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
+    rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     RELATORIOS: Object.keys(RELATORIOS), EXEMPLO, TAXA_CMS, TAXA_ROYALTY, FAIXAS_ATRASO
   };
 
@@ -642,7 +708,7 @@
   // cancelar, e-mail, carta): enquanto ele está aberto, o Esc é dele.
   let filhoAberto = false;
   // Ao fechar, a tela relê o painel fiscal: o que se fez aqui muda os números.
-  const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal']);
+  const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento']);
   const recarregarPainel = () => { if (RECARREGAM_O_PAINEL.has(overlayId)) window.FinanceiroRecarregar?.(); };
 
   const fechar = () => {
@@ -663,9 +729,12 @@
     fechar();
   };
   const aoFecharPorFora = e => { if (e?.detail === overlayId) { desligar(); recarregarPainel(); } };
+  // Ouvintes globais que um montador liga (a lista que se relê quando outro modal grava): saem junto.
+  const aoDesligar = [];
   function desligar() {
     document.removeEventListener('keydown', aoEsc);
     window.removeEventListener('modalFechado', aoFecharPorFora);
+    aoDesligar.splice(0).forEach(fn => fn());
   }
   document.addEventListener('keydown', aoEsc);
   window.addEventListener('modalFechado', aoFecharPorFora);
@@ -680,7 +749,19 @@
     return Promise.resolve(true);
   }
 
+  /**
+   * Botão que chama `BotaoAcao.run` no próprio clique precisa da marca
+   * `data-acao-gerida`: sem ela a rede automática do BotaoAcao (captura no
+   * document) o marca como ocupado antes deste handler, e o `run` desiste
+   * achando que é um segundo clique — o botão não faria nada.
+   */
+  function acionar(botao, fn) {
+    botao.dataset.acaoGerida = 'true';
+    botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+  }
+
   overlay.querySelectorAll('[data-fin-principal]').forEach(botao => {
+    botao.dataset.acaoGerida = 'true';
     botao.addEventListener('click', () => {
       const executar = async () => {
         if (botao.dataset.finSensivel === 'true') processando = true;
@@ -924,48 +1005,379 @@
 
   // ------------------------------------------------------- montadores
 
-  function montarRecebimento() {
-    const dados = EXEMPLO.recebimento;
-    el('finRecebimentoContexto').textContent = `Pedido ${dados.pedido} • NF ${dados.nf}`;
-    el('finRecebimentoCliente').textContent = dados.cliente;
-    el('finRecebimentoPedido').textContent = dados.pedido;
-    el('finRecebimentoNf').textContent = dados.nf;
+  // ------------------------------------------------ recebimentos (reais)
+  //
+  // "Registrar recebimento": GET /api/cobranca/recebimentos?visao=abertas e
+  // POST /api/cobranca/recebimentos. "Recebimentos": as quatro visões, com
+  // estorno, o boleto (modal dos Pedidos) e o registro por cima.
 
+  function montarRecebimento() {
+    const buscaCampo = el('finRecebimentoBusca');
     const parcelaSel = el('finRecebimentoParcela');
     const valorCampo = el('finRecebimentoValor');
     const dataCampo = el('finRecebimentoData');
-    parcelaSel.replaceChildren();
-    dados.parcelas.forEach((p, i) => {
-      const opcao = document.createElement('option');
-      opcao.value = String(i);
-      opcao.textContent = `${p.numero} • vencimento ${formatarData(p.vencimento)} • ${formatarMoeda(p.valor)}${p.liquidada ? ' • liquidada' : ''}`;
-      opcao.disabled = p.liquidada;
-      parcelaSel.appendChild(opcao);
-    });
-    const primeiraAberta = dados.parcelas.findIndex(p => !p.liquidada);
-    parcelaSel.value = String(primeiraAberta >= 0 ? primeiraAberta : 0);
+    const formaSel = el('finRecebimentoForma');
+    const registrarBtn = el('finRecebimentoRegistrar');
+    const aviso = el('finRecebimentoAvisoBoleto');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    let abertas = [];
+    let sqlPendente = false;
+    // Vinda de uma linha da lista de recebimentos: já escolhida.
+    const pedida = contexto.parcela && contexto.parcela.pedido_id ? contexto.parcela : null;
 
-    function atualizarResumo() {
-      const parcela = dados.parcelas[Number(parcelaSel.value)];
-      const recebido = lerMoeda(valorCampo.value);
-      const liquido = recebido ?? parcela?.valor ?? null;
-      el('finRecebimentoLiquido').textContent = formatarMoeda(liquido);
-      el('finRecebimentoCms').textContent = formatarMoeda(liquido === null ? null : liquido * TAXA_CMS);
-      el('finRecebimentoRoyalty').textContent = formatarMoeda(liquido === null ? null : liquido * TAXA_ROYALTY);
-      el('finRecebimentoCompetencia').textContent = competenciaDe(dataCampo.value);
+    const chaveDe = l => `${l.pedido_id}:${l.numero_parcela}`;
+    const escolhida = () => abertas.find(l => chaveDe(l) === parcelaSel.value) || null;
+
+    function montarOpcoes() {
+      const selecionada = parcelaSel.value;
+      const visiveis = filtrarRecebimentos(abertas, { visao: 'abertas', busca: buscaCampo.value });
+      parcelaSel.replaceChildren();
+      const vazio = document.createElement('option');
+      vazio.value = '';
+      vazio.textContent = visiveis.length ? 'Escolha a parcela' : 'Nenhuma parcela em aberto com esta busca';
+      parcelaSel.appendChild(vazio);
+      for (const l of visiveis.slice(0, 300)) {
+        const opcao = document.createElement('option');
+        opcao.value = chaveDe(l);
+        opcao.textContent = rotuloDaParcelaAberta(l);
+        parcelaSel.appendChild(opcao);
+      }
+      if (visiveis.some(l => chaveDe(l) === selecionada)) parcelaSel.value = selecionada;
     }
 
-    parcelaSel.addEventListener('change', () => {
-      const parcela = dados.parcelas[Number(parcelaSel.value)];
-      if (parcela) valorCampo.value = formatoMoeda.format(parcela.valor);
+    function pintarEscolhida({ trocouParcela = false } = {}) {
+      const l = escolhida();
+      el('finRecebimentoCliente').textContent = l?.cliente || '—';
+      el('finRecebimentoPedido').textContent = l ? `${l.pedido} · parcela ${l.parcela || l.numero_parcela}` : '—';
+      el('finRecebimentoNf').textContent = l?.nf || '—';
+      el('finRecebimentoContexto').textContent = l ? `Pedido ${l.pedido}${l.nf ? ` • NF ${l.nf}` : ''}` : '';
+      if (trocouParcela && l) valorCampo.value = formatoMoeda.format(Number(l.a_receber) || 0);
+      const aberto = l && ['registrado', 'vencido', 'protestado'].includes(String(l.boleto?.status || ''));
+      aviso.textContent = aberto
+        ? `Esta parcela tem boleto em aberto no Banco do Brasil (${l.boleto.nosso_numero}). Ao registrar, o boleto será BAIXADO no banco como quitado por fora e não poderá mais ser pago.`
+        : '';
+      aviso.classList.toggle('hidden', !aberto);
       atualizarResumo();
-    });
+    }
+
+    function atualizarResumo() {
+      const l = escolhida();
+      const r = resumoDoRecebimento({ devido: l ? l.a_receber : null, recebido: lerMoeda(valorCampo.value), data: dataCampo.value });
+      el('finRecebimentoDevido').textContent = formatarMoeda(r.devido);
+      el('finRecebimentoLiquido').textContent = formatarMoeda(r.recebido);
+      el('finRecebimentoDiferencaRotulo').textContent = r.rotuloDiferenca;
+      el('finRecebimentoDiferenca').textContent = r.diferenca === null ? '—' : formatarMoeda(Math.abs(r.diferenca));
+      el('finRecebimentoCompetencia').textContent = r.competencia;
+    }
+
+    async function carregar() {
+      mostrarMensagem('finRecebimentoMensagem', '');
+      el('finRecebimentoCarregando').classList.remove('hidden');
+      try {
+        const corpo = await fetchApi(`/api/cobranca/recebimentos?visao=abertas&competencia=${encodeURIComponent(contexto.competencia || competenciaAtual())}`);
+        abertas = Array.isArray(corpo?.linhas) ? corpo.linhas : [];
+        sqlPendente = Boolean(corpo?.sql_pendente);
+        if (sqlPendente) mostrarMensagem('finRecebimentoMensagem', 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql no banco e reinicie a API.');
+      } catch (e) {
+        abertas = [];
+        mostrarMensagem('finRecebimentoMensagem', e.status === 403 ? 'Você não tem permissão para ver as parcelas a receber.' : e.message);
+      } finally {
+        el('finRecebimentoCarregando').classList.add('hidden');
+      }
+      montarOpcoes();
+      if (pedida) {
+        parcelaSel.value = `${pedida.pedido_id}:${pedida.numero_parcela}`;
+        if (!escolhida()) mostrarMensagem('finRecebimentoMensagem', `A parcela ${pedida.numero_parcela} do pedido ${pedida.pedido || pedida.pedido_id} não está mais em aberto.`);
+      }
+      pintarEscolhida({ trocouParcela: true });
+    }
+
+    async function registrar() {
+      mostrarMensagem('finRecebimentoMensagem', '');
+      const l = escolhida();
+      if (sqlPendente) { mostrarMensagem('finRecebimentoMensagem', 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql no banco e reinicie a API.'); return; }
+      if (!l) { mostrarMensagem('finRecebimentoMensagem', 'Escolha a parcela.'); return; }
+      const valor = lerMoeda(valorCampo.value);
+      if (!dataCampo.value) { mostrarMensagem('finRecebimentoMensagem', 'Informe a data do recebimento.'); return; }
+      if (dataCampo.value > hoje) { mostrarMensagem('finRecebimentoMensagem', 'A data do recebimento não pode ser futura.'); return; }
+      if (!(valor > 0)) { mostrarMensagem('finRecebimentoMensagem', 'Informe o valor recebido.'); return; }
+      if (!formaSel.value) { mostrarMensagem('finRecebimentoMensagem', 'Informe como o valor foi recebido.'); return; }
+      const aberto = ['registrado', 'vencido', 'protestado'].includes(String(l.boleto?.status || ''));
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: aberto ? 'Baixar o boleto e registrar?' : 'Registrar o recebimento?',
+        message: `${formatarMoeda(valor)} recebidos em ${formatarData(dataCampo.value)} (${formaSel.value}) na parcela ${l.parcela || l.numero_parcela} do pedido ${l.pedido}. Competência ${competenciaDe(dataCampo.value)}.`
+          + (aberto ? ` O boleto ${l.boleto.nosso_numero} será BAIXADO no Banco do Brasil e não poderá mais ser pago. Não tem volta.` : ''),
+        confirmText: aberto ? 'Baixar e registrar' : 'Registrar'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/cobranca/recebimentos', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, data_recebimento: dataCampo.value, valor_recebido: valor,
+            forma: formaSel.value, observacao: el('finRecebimentoObservacoes').value, ...(aberto ? { baixar_boleto: true } : {})
+          })
+        });
+        const avisos = Array.isArray(r?.avisos) ? r.avisos : [];
+        window.showToast?.(aberto ? 'Boleto baixado e recebimento registrado.' : 'Recebimento registrado.', avisos.length ? 'info' : 'success');
+        if (avisos.length && window.DialogPadrao?.info) await window.DialogPadrao.info({ title: 'Recebimento registrado com aviso', message: avisos.join('\n') });
+        window.dispatchEvent(new CustomEvent('financeiro:recebimentos-alterados'));
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finRecebimentoMensagem', e.status === 403 ? 'Você não tem permissão para esta ação.' : e.message);
+      } finally {
+        processando = false;
+      }
+    }
+
+    buscaCampo.addEventListener('input', () => { montarOpcoes(); pintarEscolhida({ trocouParcela: true }); });
+    parcelaSel.addEventListener('change', () => pintarEscolhida({ trocouParcela: true }));
     ligarCampoMoeda(valorCampo, atualizarResumo);
     dataCampo.addEventListener('change', atualizarResumo);
+    if (registrarBtn) {
+      registrarBtn.dataset.acaoGerida = 'true';
+      registrarBtn.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(registrarBtn, registrar) : registrar()));
+    }
+    return carregar();
+  }
 
-    const inicial = dados.parcelas[Number(parcelaSel.value)];
-    if (inicial) valorCampo.value = formatoMoeda.format(inicial.valor);
-    atualizarResumo();
+  function montarRecebimentos() {
+    const visaoSel = el('finRecebimentosVisao');
+    const competenciaSel = el('finRecebimentosCompetencia');
+    const boletoSel = el('finRecebimentosBoleto');
+    const busca = el('finRecebimentosBusca');
+    const cabeca = el('finRecebimentosCabeca');
+    const corpo = el('finRecebimentosCorpo');
+    const tabela = corpo.closest('.fin-tabela');
+    montarCompetencias(competenciaSel, contexto.competencia);
+    if (['recebidos', 'a_receber', 'em_atraso', 'abertas'].includes(contexto.visao)) visaoSel.value = contexto.visao;
+    if (contexto.filtro?.boleto) boletoSel.value = contexto.filtro.boleto;
+    let dados = null;
+
+    const COLUNAS = {
+      recebidos: ['Recebido em', 'Pedido', 'Cliente', 'NF', 'Parcela', 'Origem', 'Forma', 'Valor', 'Situação', 'Ações'],
+      parcelas: ['Vencimento', 'Pedido', 'Cliente', 'NF', 'Parcela', 'A receber', 'Atraso', 'Boleto', 'Ações']
+    };
+    const DIREITA = new Set(['Valor', 'A receber', 'Atraso']);
+
+    function pintarCabeca(visao) {
+      const tr = document.createElement('tr');
+      for (const rotulo of COLUNAS[visao === 'recebidos' ? 'recebidos' : 'parcelas']) {
+        tr.appendChild(criar('th', `px-4 py-3 text-xs ${DIREITA.has(rotulo) ? 'text-right' : 'text-left'}`, rotulo));
+      }
+      cabeca.replaceChildren(tr);
+    }
+
+    async function carregarLista() {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      el('finRecebimentosCarregando').classList.remove('hidden');
+      try {
+        dados = await fetchApi(`/api/cobranca/recebimentos?visao=${encodeURIComponent(visaoSel.value)}&competencia=${encodeURIComponent(competenciaSel.value || '')}`);
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para ver os recebimentos.' : e.message);
+      } finally {
+        el('finRecebimentosCarregando').classList.add('hidden');
+      }
+      desenhar();
+    }
+
+    function desenhar() {
+      const visao = visaoSel.value;
+      const resumo = dados?.resumo || {};
+      el('finRecebimentosRecebido').textContent = formatarMoeda(resumo.recebido?.total ?? null);
+      el('finRecebimentosAReceber').textContent = formatarMoeda(resumo.a_receber?.total ?? null);
+      el('finRecebimentosAtraso').textContent = formatarMoeda(resumo.em_atraso?.total ?? null);
+      el('finRecebimentosBoletos').textContent = formatarMoeda(resumo.boletos_abertos?.total ?? null);
+      el('finRecebimentosDesde').textContent = dados?.desde ? `Parcelas controladas a partir de ${formatarData(dados.desde)}` : 'Contas a receber dos pedidos faturados';
+      el('finRecebimentosSemSql').classList.toggle('hidden', !dados?.sql_pendente);
+      // Competência não muda "em atraso" nem "todas em aberto"; o filtro de boleto não vale para recebidos.
+      competenciaSel.disabled = ['em_atraso', 'abertas'].includes(visao);
+      boletoSel.disabled = visao === 'recebidos';
+
+      pintarCabeca(visao);
+      const linhas = filtrarRecebimentos(dados?.linhas || [], { visao, boleto: boletoSel.value, busca: busca.value });
+      corpo.replaceChildren();
+      for (const l of linhas) corpo.appendChild(visao === 'recebidos' ? linhaRecebido(l) : linhaParcela(l));
+      el('finRecebimentosVazio').classList.toggle('hidden', linhas.length > 0 || !dados);
+      tabela?.classList.toggle('hidden', linhas.length === 0);
+      const total = totalDaVisao(linhas, visao);
+      el('finRecebimentosTotal').textContent = linhas.length ? `${linhas.length} ${linhas.length === 1 ? 'linha' : 'linhas'} · ${visao === 'recebidos' ? 'recebido' : 'a receber'}: ${formatarMoeda(total)}` : '';
+    }
+
+    const celula = (conteudo, classe = 'px-4 py-3') => {
+      const td = criar('td', classe);
+      if (conteudo && typeof conteudo === 'object') td.appendChild(conteudo);
+      else td.textContent = conteudo == null || conteudo === '' ? '—' : String(conteudo);
+      return td;
+    };
+    const linkDoPedido = l => {
+      const b = criar('button', 'fin-link-celula', String(l.pedido || l.pedido_id || '—'));
+      b.type = 'button';
+      b.dataset.finPedidoId = String(l.pedido_id ?? '');
+      return b;
+    };
+    const tag = (texto, classe, titulo = '') => {
+      const s = criar('span', `${classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`, texto);
+      if (titulo) s.title = titulo;
+      return s;
+    };
+    const botaoEm = (caixa, texto, fn, { classe = 'btn-neutral text-white', perm = null, titulo = '' } = {}) => {
+      const b = criar('button', `${classe} px-3 py-1 rounded-md text-xs font-medium`, texto);
+      b.type = 'button';
+      if (perm) b.dataset.perm = perm;
+      if (titulo) b.title = titulo;
+      acionar(b, fn);
+      caixa.appendChild(b);
+    };
+
+    function linhaRecebido(l) {
+      const tr = document.createElement('tr');
+      const estornado = l.status !== 'confirmado';
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      if (!estornado && l.origem !== 'boleto') {
+        botaoEm(acoes, 'Estornar', () => estornar(l), { classe: 'btn-danger text-white', perm: 'financeiro.recebimento.estornar', titulo: 'Desfazer este recebimento' });
+      }
+      if (l.boleto_id) botaoEm(acoes, 'Boleto', () => abrirBoleto({ id: l.boleto_id }, l), { perm: 'financeiro.boleto.view', titulo: 'Ver o boleto' });
+      const forma = [l.forma, l.canal && l.canal !== l.forma ? l.canal : ''].filter(Boolean).join(' · ');
+      tr.append(
+        celula(formatarData(l.data), 'px-4 py-3 text-white'), celula(linkDoPedido(l)), celula(l.cliente), celula(l.nf),
+        celula(String(l.numero_parcela ?? '—')), celula(tag(ORIGENS_RECEBIMENTO[l.origem] || l.origem, l.origem === 'boleto' ? 'badge-success' : 'badge-info')),
+        celula(forma), celula(formatarMoeda(l.valor), 'px-4 py-3 text-right'),
+        celula(estornado ? tag('Estornado', 'badge-danger', l.motivo_estorno || '') : tag('Confirmado', 'badge-success', l.data_credito ? `Crédito em ${formatarData(l.data_credito)}` : '')),
+        celula(acoes)
+      );
+      return tr;
+    }
+
+    function linhaParcela(l) {
+      const tr = document.createElement('tr');
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      botaoEm(acoes, 'Registrar', () => abrirOutro('registrar-recebimento', { parcela: { pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, pedido: l.pedido } }),
+        { classe: 'btn-success', perm: 'financeiro.recebimento.registrar', titulo: 'Registrar o recebimento desta parcela' });
+      if (l.boleto?.id) botaoEm(acoes, 'Boleto', () => abrirBoleto(l.boleto, l), { perm: 'financeiro.boleto.view', titulo: 'Situação no BB, prorrogar, abatimento e baixa' });
+      const b = rotuloBoletoDaParcela(l.boleto);
+      const boletoCelula = criar('div', 'flex flex-col gap-1');
+      boletoCelula.appendChild(tag(b.texto, b.badge, l.boleto?.erro || l.boleto?.nosso_numero || ''));
+      if (l.controlada === false) boletoCelula.appendChild(tag('antes do controle', 'badge-neutral', 'Venceu antes da data em que o app passou a controlar os recebimentos'));
+      const atraso = celula(Number(l.dias_atraso) > 0 ? `${l.dias_atraso} dias` : '—', 'px-4 py-3 text-right');
+      if (Number(l.dias_atraso) > 60) atraso.classList.add('fin-dias--critico');
+      else if (Number(l.dias_atraso) > 15) atraso.classList.add('fin-dias--alto');
+      tr.append(
+        celula(formatarData(l.vencimento), 'px-4 py-3 text-white'), celula(linkDoPedido(l)), celula(l.cliente), celula(l.nf),
+        celula(l.parcela), celula(formatarMoeda(l.a_receber), 'px-4 py-3 text-right'), atraso, celula(boletoCelula), celula(acoes)
+      );
+      return tr;
+    }
+
+    /** O modal "Boleto" dos Pedidos, por cima deste; ao fechar, a lista se relê. */
+    function abrirBoleto(boleto, l) {
+      window.boletoDetalheContext = { boletoId: boleto.id, pedidoId: l.pedido_id, numero: l.pedido || '', parcela: l.numero_parcela };
+      abrirModalDePedido('modals/pedidos/boleto-detalhe.html', '../js/modals/pedido-boleto-detalhe.js', 'boletoDetalhe', { aoFechar: carregarLista });
+    }
+
+    async function estornar(l) {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      const motivo = await pedirMotivo(l);
+      if (motivo === null) return;
+      try {
+        await fetchApi(`/api/cobranca/recebimentos/${encodeURIComponent(l.id)}/estornar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        window.showToast?.('Recebimento estornado.', 'success');
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para estornar recebimentos.' : e.message);
+      }
+      await carregarLista();
+    }
+
+    /**
+     * O motivo do estorno, numa caixa montada aqui (o DialogPadrao não tem
+     * campo de texto). null = desistiu.
+     */
+    function pedirMotivo(l) {
+      return new Promise(resolver => {
+        // .app-message-overlay: a caixa sobe para a top layer (src/utils/dialogTopLayer.js), acima dos modais.
+        const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+        const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
+        caixa.setAttribute('role', 'dialog');
+        caixa.setAttribute('aria-modal', 'true');
+        caixa.appendChild(criar('h3', 'text-lg font-semibold text-white', 'Estornar o recebimento?'));
+        caixa.appendChild(criar('p', 'text-sm text-gray-300', `${formatarMoeda(l.valor)} de ${formatarData(l.data)} — pedido ${l.pedido}, parcela ${l.numero_parcela}. A parcela volta a ficar em aberto${l.origem === 'quitado_por_fora' ? ' e pode ganhar um boleto novo (o boleto baixado continua baixado)' : ''}.`));
+        const campo = criar('textarea', 'w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+        campo.rows = 3;
+        campo.maxLength = 500;
+        campo.placeholder = 'Motivo do estorno (obrigatório)';
+        caixa.appendChild(campo);
+        const erroEl = criar('p', 'hidden text-sm', 'Diga o motivo (ao menos 5 letras).');
+        erroEl.style.color = 'var(--color-red)';
+        caixa.appendChild(erroEl);
+        const rodape = criar('div', 'flex justify-end gap-3');
+        const voltar = criar('button', 'btn-neutral px-5 py-2 rounded-lg text-white font-medium', 'Voltar');
+        const confirmar = criar('button', 'btn-danger px-5 py-2 rounded-lg text-white font-medium', 'Estornar');
+        voltar.type = 'button';
+        confirmar.type = 'button';
+        rodape.append(voltar, confirmar);
+        caixa.appendChild(rodape);
+        fundo.appendChild(caixa);
+        const sair = valor => {
+          document.removeEventListener('keydown', aoTecla, true);
+          filhoAberto = false;
+          fundo.remove();
+          resolver(valor);
+        };
+        const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+        voltar.addEventListener('click', () => sair(null));
+        confirmar.addEventListener('click', () => {
+          const texto = campo.value.trim();
+          if (texto.length < 5) { erroEl.classList.remove('hidden'); campo.focus(); return; }
+          sair(texto);
+        });
+        document.addEventListener('keydown', aoTecla, true);
+        filhoAberto = true;
+        document.body.appendChild(fundo);
+        campo.focus();
+      });
+    }
+
+    async function conciliar() {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      try {
+        const r = await fetchApi('/api/cobranca/conciliar', { method: 'POST', body: '{}' });
+        const f = r?.fila || {};
+        const c = r?.consultas || {};
+        const partes = [`${Number(f.pagos) || 0} pagamento(s) avisado(s) pelo BB`, `${Number(c.consultados) || 0} boleto(s) consultado(s)`];
+        if (Number(c.pagos)) partes.push(`${c.pagos} pago(s) na consulta`);
+        if (Number(r?.acerto?.lancados)) partes.push(`${r.acerto.lancados} recebimento(s) lançado(s)`);
+        const erros = [...(f.mensagens || []), ...(c.mensagens || []), ...(r?.acerto?.mensagens || [])];
+        mostrarMensagem('finRecebimentosMensagem', `Conciliação: ${partes.join(' · ')}.${erros.length ? ` ${erros.slice(0, 3).join(' | ')}` : ''}`, erros.length ? 'erro' : 'ok');
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para conciliar.' : e.message);
+      }
+      await carregarLista();
+    }
+
+    // Um recebimento registrado por cima relê a lista.
+    const aoAlterar = () => carregarLista();
+    window.addEventListener('financeiro:recebimentos-alterados', aoAlterar);
+    aoDesligar.push(() => window.removeEventListener('financeiro:recebimentos-alterados', aoAlterar));
+
+    visaoSel.addEventListener('change', carregarLista);
+    competenciaSel.addEventListener('change', carregarLista);
+    boletoSel.addEventListener('change', desenhar);
+    busca.addEventListener('input', desenhar);
+    const ligarBotao = (id, fn) => {
+      const botao = el(id);
+      if (!botao) return;
+      botao.dataset.acaoGerida = 'true';
+      botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+    };
+    ligarBotao('finRecebimentosConciliar', conciliar);
+    ligarBotao('finRecebimentosRegistrar', () => abrirOutro('registrar-recebimento'));
+    return carregarLista();
   }
 
   function montarAjuste() {
@@ -1864,7 +2276,7 @@
         semNf.type = 'button';
         semNf.dataset.perm = 'ped.status.ship';
         semNf.title = 'Marcar como enviado sem nota fiscal (S/NF)';
-        semNf.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(semNf, () => marcarSemNfe(l)) : marcarSemNfe(l)));
+        acionar(semNf, () => marcarSemNfe(l));
         acoes.appendChild(semNf);
       }
 
@@ -2002,7 +2414,7 @@
         b.type = 'button';
         if (perm) b.dataset.perm = perm;
         if (titulo) b.title = titulo;
-        b.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(b, fn) : fn()));
+        acionar(b, fn);
         acoes.appendChild(b);
       };
       const documentos = ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
@@ -2050,7 +2462,7 @@
     [competenciaSel, statusSel, ambienteSel].forEach(campo => campo.addEventListener('change', desenhar));
     busca.addEventListener('input', desenhar);
     const atualizar = el('finNotasAtualizar');
-    if (atualizar) atualizar.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(atualizar, carregarLista) : carregarLista()));
+    if (atualizar) acionar(atualizar, carregarLista);
     return carregarLista();
   }
 
@@ -2075,9 +2487,14 @@
       e.textContent = rotulo;
     };
 
+    // Coluna que só existe depois do SQL da fase: sem ela o campo some e não vai no PUT.
+    let colunasAusentes = new Set();
     function valoresDaTela() {
       const corpo = {};
-      for (const campo of campos) corpo[campo.dataset.finCob] = campo.value;
+      for (const campo of campos) {
+        if (colunasAusentes.has(campo.dataset.finCob)) continue;
+        corpo[campo.dataset.finCob] = campo.value;
+      }
       return corpo;
     }
 
@@ -2123,9 +2540,14 @@
       podeEditar = Boolean(estado?.pode_editar);
       ambienteNoBanco = estado?.ambiente_no_banco || 'sandbox';
       const cfg = estado?.configuracao || {};
+      colunasAusentes = new Set(Array.from(campos)
+        .filter(c => c.dataset.finCobColunaNova === 'true' && !Object.prototype.hasOwnProperty.call(cfg, c.dataset.finCob))
+        .map(c => c.dataset.finCob));
+      el('finCobRecebimentosDesdeBloco')?.classList.toggle('hidden', colunasAusentes.has('recebimentos_desde'));
       for (const campo of campos) {
         const valor = cfg[campo.dataset.finCob];
-        campo.value = valor === null || valor === undefined ? '' : String(valor);
+        // DATE chega como '2026-09-16' ou '2026-09-16T00:00:00.000Z': o campo de data quer só o dia.
+        campo.value = valor === null || valor === undefined ? '' : (campo.type === 'date' ? String(valor).slice(0, 10) : String(valor));
         campo.disabled = !podeEditar;
       }
       el('finCobSalvar')?.classList.toggle('hidden', !podeEditar);
@@ -2266,6 +2688,7 @@
     finAguardandoNfe: montarAguardandoNfe,
     finNotasFiscais: montarNotasFiscais,
     finRegistrarRecebimento: montarRecebimento,
+    finRecebimentos: montarRecebimentos,
     finRegistrarAjuste: montarAjuste,
     finRegistrarProducao: montarProducao,
     finFecharCompetencia: montarFechamento,

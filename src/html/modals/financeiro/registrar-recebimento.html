@@ -1,7 +1,10 @@
 <!--
-  Registrar recebimento (liquidação de parcela). Modal médio.
-  Etapa visual: o resumo inferior é calculado na tela a partir da parcela
-  escolhida; "Registrar recebimento" ainda avisa que está em implementação.
+  Registrar recebimento (liquidação de parcela). Modal médio, REAL: escolhe
+  uma parcela em aberto (GET /api/cobranca/recebimentos?visao=abertas) e
+  grava por POST /api/cobranca/recebimentos. Parcela com boleto em aberto no
+  BB: a tela avisa e, confirmado, o boleto é baixado como quitado por fora.
+  Boleto pago no banco não entra por aqui: chega pelo aviso do BB ou por
+  "Conciliar com o BB". A competência é o mês do recebimento.
   Script compartilhado: src/js/modals/financeiro-modais.js.
 -->
 <div id="finRegistrarRecebimentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
@@ -15,6 +18,20 @@
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
+        <div id="finRecebimentoCarregando" class="text-sm text-gray-400">Lendo as parcelas em aberto…</div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-1">
+            <label for="finRecebimentoBusca" class="block text-sm font-medium text-gray-300 mb-2">Procurar</label>
+            <input id="finRecebimentoBusca" type="text" placeholder="Pedido, cliente ou NF" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div class="md:col-span-2">
+            <label for="finRecebimentoParcela" class="block text-sm font-medium text-gray-300 mb-2">Parcela <span class="fin-obrigatorio">*</span></label>
+            <select id="finRecebimentoParcela" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+        </div>
+
         <!-- Resumo do pedido: o que NÃO se altera aqui. -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
@@ -31,57 +48,52 @@
           </div>
         </div>
 
-        <div>
-          <label for="finRecebimentoParcela" class="block text-sm font-medium text-gray-300 mb-2">Selecione a parcela <span class="fin-obrigatorio">*</span></label>
-          <select id="finRecebimentoParcela" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-        </div>
+        <div id="finRecebimentoAvisoBoleto" class="hidden fin-aviso" role="status"></div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finRecebimentoData" class="block text-sm font-medium text-gray-300 mb-2">Data da liquidação <span class="fin-obrigatorio">*</span></label>
+            <label for="finRecebimentoData" class="block text-sm font-medium text-gray-300 mb-2">Data do recebimento <span class="fin-obrigatorio">*</span></label>
             <input id="finRecebimentoData" type="date"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
             <label for="finRecebimentoValor" class="block text-sm font-medium text-gray-300 mb-2">Valor recebido <span class="fin-obrigatorio">*</span></label>
-            <input id="finRecebimentoValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off"
+            <input id="finRecebimentoValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" data-numeric="false"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finRecebimentoForma" class="block text-sm font-medium text-gray-300 mb-2">Forma de recebimento</label>
+            <label for="finRecebimentoForma" class="block text-sm font-medium text-gray-300 mb-2">Como foi recebido <span class="fin-obrigatorio">*</span></label>
             <select id="finRecebimentoForma" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
-              <option value="boleto">Boleto</option>
-              <option value="pix">Pix</option>
-              <option value="transferencia">Transferência</option>
-              <option value="cartao">Cartão de Crédito</option>
+              <option value="Pix">Pix</option>
+              <option value="Transferência">Transferência</option>
+              <option value="Depósito">Depósito</option>
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Cartão de crédito">Cartão de crédito</option>
+              <option value="Outro">Outro</option>
             </select>
           </div>
           <div>
-            <label for="finRecebimentoComprovante" class="block text-sm font-medium text-gray-300 mb-2">Comprovante</label>
-            <input id="finRecebimentoComprovante" type="file" accept=".pdf,image/*"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2.5 text-sm text-gray-300 fin-arquivo" />
-          </div>
-          <div class="md:col-span-2">
             <label for="finRecebimentoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-            <textarea id="finRecebimentoObservacoes" rows="3" placeholder="Opcional"
-                      class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+            <input id="finRecebimentoObservacoes" type="text" maxlength="500" placeholder="Opcional" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
 
-        <!-- Informativo: o que este recebimento gera. -->
+        <!-- Informativo: o que este recebimento grava. -->
         <div class="glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
           <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-sm text-gray-400">Valor líquido da parcela</span>
+            <span class="text-sm text-gray-400">A receber da parcela</span>
+            <span id="finRecebimentoDevido" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Valor recebido</span>
             <span id="finRecebimentoLiquido" class="text-sm text-white">—</span>
           </div>
           <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-sm text-gray-400">CMS a gerar</span>
-            <span id="finRecebimentoCms" class="text-sm text-white">—</span>
-          </div>
-          <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-sm text-gray-400">Royalty</span>
-            <span id="finRecebimentoRoyalty" class="text-sm text-white">—</span>
+            <span id="finRecebimentoDiferencaRotulo" class="text-sm text-gray-400">Diferença</span>
+            <span id="finRecebimentoDiferenca" class="text-sm text-white">—</span>
           </div>
           <div class="flex items-center justify-between px-4 py-4">
             <span class="text-base font-medium text-white">Competência</span>
@@ -95,7 +107,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" data-fin-principal="Registrar recebimento" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar recebimento</button>
+      <button id="finRecebimentoRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar recebimento</button>
     </footer>
   </div>
 </div>

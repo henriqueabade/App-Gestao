@@ -2236,6 +2236,24 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_boleto_baixa",
         "label": "Baixar e alterar boletos",
         "desc": "Baixar boleto registrado, prorrogar vencimento e conceder abatimento"
+      },
+      {
+        "key": "financeiro.recebimento.view",
+        "column": "acao_recebimento_view",
+        "label": "Ver recebimentos",
+        "desc": "Contas a receber: recebidos, a receber e em atraso; conciliação com o BB"
+      },
+      {
+        "key": "financeiro.recebimento.registrar",
+        "column": "acao_recebimento_registrar",
+        "label": "Registrar recebimentos",
+        "desc": "Registrar o recebimento de uma parcela paga fora do boleto (Pix, transferência…)"
+      },
+      {
+        "key": "financeiro.recebimento.estornar",
+        "column": "acao_recebimento_estornar",
+        "label": "Estornar recebimentos",
+        "desc": "Desfazer um recebimento registrado por engano"
       }
     ],
     "columns": []

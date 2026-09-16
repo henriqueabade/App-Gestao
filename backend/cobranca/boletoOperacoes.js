@@ -16,6 +16,7 @@
 const calculo = require('./boletoCalculo');
 const bbBoleto = require('./bbBoleto');
 const boletos = require('./boletos');
+const recebimentos = require('./recebimentos');
 
 /** codigoEstadoTituloCobranca (documentação da API Cobranças v2). */
 const ESTADOS_BB = {
@@ -41,9 +42,9 @@ const FORMAS_NO_BB = { 1: 'espécie', 2: 'débito em conta', 3: 'cartão de cré
 const LOCAIS_NO_BB = { 1: 'agência', 2: 'autoatendimento', 3: 'internet', 5: 'correspondente bancário', 6: 'central de atendimento', 7: 'arquivo eletrônico', 8: 'DDA', 61: 'Pix' };
 
 /** Motivos que a tela oferece; "banco" é a baixa que o próprio BB fez (prazo, protesto…). */
-const MOTIVOS_BAIXA = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'baixado pelo banco' };
+const MOTIVOS_BAIXA = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'baixado pelo banco', quitacao_estornada: 'quitação estornada' };
 const MOTIVOS_ESCOLHIVEIS = ['quitado_por_fora', 'cancelado', 'reemissao'];
-const FORMAS_RECEBIMENTO = ['Pix', 'Transferência', 'Depósito', 'Dinheiro', 'Cheque', 'Outro'];
+const FORMAS_RECEBIMENTO = recebimentos.FORMAS;
 
 /** Os indicadores do PATCH /boletos/{id}: todos vão, um com "S". */
 const INDICADORES = [
@@ -340,7 +341,21 @@ async function sincronizar({ api, bb, conexao, boleto, cfg = null, hoje, usuario
   const mensagem = resumoDaConsulta(boleto, lido, campos);
   const atualizado = await boletos.atualizarBoleto(api, boleto, campos);
   await evento(api, boleto, usuarioId, 'consulta', mensagem, lido, origem);
-  return { boleto: atualizado, lido, mudou, divergencias };
+
+  // Pago no banco: o dinheiro entra no Financeiro (fase E). Falha aqui não desfaz a consulta.
+  const avisos = [];
+  let recebimento = null;
+  if (campos.status === 'pago') {
+    try {
+      recebimento = await recebimentos.doBoleto({
+        api, boleto: atualizado, origem: 'boleto', usuarioId, hoje,
+        dados: { data: lido.pagoEm, valor: lido.valorPago, canal: lido.canal, dataCredito: lido.creditoEm }
+      });
+    } catch (e) {
+      avisos.push(`Boleto pago, mas o recebimento não foi lançado no Financeiro: ${e.message}`);
+    }
+  }
+  return { boleto: atualizado, lido, mudou, divergencias, recebimento, avisos };
 }
 
 /** Nova data de vencimento no BB (e a multa atrás dela, se o banco não a levou). */
@@ -359,7 +374,7 @@ async function prorrogar({ api, bb, conexao, boleto, cfg = null, novaData, hoje,
   try {
     const r = await sincronizar({ api, bb, conexao, boleto: atual, cfg, hoje, usuarioId, manter: ['data_vencimento'] });
     atual = r.boleto;
-    avisos.push(...r.divergencias.map(d => `Prorrogado, mas ${d}: consulte de novo em instantes.`));
+    avisos.push(...r.divergencias.map(d => `Prorrogado, mas ${d}: consulte de novo em instantes.`), ...r.avisos);
     if (enc.multa && r.lido.multaAPartirDe && r.lido.multaAPartirDe <= novaData) {
       const multa = payloadMulta(boleto.convenio, { percentual: enc.multa.percentual, aPartirDe: enc.multa.aPartirDe });
       try {
@@ -388,7 +403,7 @@ async function concederAbatimento({ api, bb, conexao, boleto, cfg = null, valor,
   try {
     const r = await sincronizar({ api, bb, conexao, boleto: atual, cfg, hoje, usuarioId, manter: ['valor_abatimento'] });
     atual = r.boleto;
-    avisos.push(...r.divergencias.map(d => `Abatimento concedido, mas ${d}: consulte de novo em instantes.`));
+    avisos.push(...r.divergencias.map(d => `Abatimento concedido, mas ${d}: consulte de novo em instantes.`), ...r.avisos);
   } catch (e) {
     avisos.push(`Abatimento concedido, mas a consulta ao BB falhou agora (${e.message}). Use "Consultar no BB" depois.`);
   }
@@ -417,6 +432,17 @@ async function baixar({ api, bb, conexao, boleto, entrada, hoje, usuarioId = nul
   await evento(api, boleto, usuarioId, 'baixado', `Baixado (${MOTIVOS_BAIXA[b.motivo]})${detalhe}.${b.observacao ? ` ${b.observacao}` : ''}`, { requisicao: corpo, resposta });
 
   const avisos = [];
+  let recebimento = null;
+  if (b.motivo === 'quitado_por_fora') {
+    try {
+      recebimento = await recebimentos.doBoleto({
+        api, boleto: atual, origem: 'quitado_por_fora', usuarioId, hoje,
+        dados: { data: b.dataRecebimento, valor: b.valorRecebido, forma: b.forma, observacao: b.observacao }
+      });
+    } catch (e) {
+      avisos.push(`Baixado, mas o recebimento não foi lançado no Financeiro: ${e.message}`);
+    }
+  }
   let reemissao = null;
   if (b.motivo === 'reemissao' && typeof registrarNovo === 'function') {
     try {
@@ -428,7 +454,7 @@ async function baixar({ api, bb, conexao, boleto, entrada, hoje, usuarioId = nul
       avisos.push(`Baixado, mas o boleto novo não saiu: ${e.message}. Tente de novo em "Gerar boletos".`);
     }
   }
-  return { boleto: atual, reemissao, avisos };
+  return { boleto: atual, reemissao, recebimento, avisos };
 }
 
 /** Consulta todos os boletos a pagar do pedido; um erro não para os outros. */
@@ -441,7 +467,7 @@ async function sincronizarPedido({ api, bb, conexao, pedidoId, cfg = null, hoje,
     try {
       exigirSql(boleto);
       const r = await sincronizar({ api, bb, conexao: await conexao(boleto.ambiente), boleto, cfg: cfg || dados.configuracao, hoje, usuarioId });
-      resultados.push({ ...base, ok: true, status: r.boleto.status, mudou: r.mudou, situacao: r.lido.situacao });
+      resultados.push({ ...base, ok: true, status: r.boleto.status, mudou: r.mudou, situacao: r.lido.situacao, avisos: r.avisos });
     } catch (e) {
       resultados.push({ ...base, ok: false, erro: e.message });
     }
