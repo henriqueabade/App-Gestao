@@ -76,10 +76,34 @@ const totaisDe = benefs => ({
  * Os fechamentos de um tipo: quais competências estão fechadas, a próxima a
  * fechar e os itens congelados de cada um (com o pagamento, se houver).
  */
+/**
+ * O que foi pago de um fechamento: a lista, o total e o que falta. `pagamento`
+ * continua existindo (o pagamento "de tudo", ou o primeiro) para quem só
+ * pergunta "já foi pago?".
+ */
+function pagamentosDoFechamento(fechamento, lista) {
+  const pagos = (lista || []).slice().sort((a, b) => String(a.data_pagamento).localeCompare(String(b.data_pagamento)));
+  const pago = c.centavos(pagos.reduce((s, p) => s + (Number(p.valor) || 0), 0));
+  const total = c.centavos(fechamento?.total);
+  return {
+    pagamentos: pagos,
+    pagamento: pagos.find(p => !p.beneficiario && !p.tipo_comissao) || pagos[0] || null,
+    pago,
+    falta_pagar: c.centavos(Math.max(0, total - pago))
+  };
+}
+
 function estadoDosFechamentos({ fechamentos = [], itens = [], pagamentos = [], tipo }) {
   const doTipo = fechamentos.filter(f => f && f.tipo === tipo && STATUS_FECHADOS.has(String(f.status)));
   const porId = new Map(doTipo.map(f => [String(f.id), f]));
-  const pagoPor = new Map(pagamentos.filter(Boolean).map(p => [String(p.fechamento_id), p]));
+  // Um fechamento pode ter VÁRIOS pagamentos: dá para pagar só a CMS, só o
+  // Royalty ou só uma pessoa (financeiro_pagamentos.beneficiario/tipo_comissao).
+  const pagoPor = new Map();
+  for (const p of pagamentos.filter(Boolean)) {
+    const chave = String(p.fechamento_id);
+    if (!pagoPor.has(chave)) pagoPor.set(chave, []);
+    pagoPor.get(chave).push(p);
+  }
   const congelados = itens.filter(i => i && porId.has(String(i.fechamento_id))).map(i => ({
     ...i, detalhes: c.jsonDe(i.detalhes, {}), competencia: porId.get(String(i.fechamento_id)).competencia,
     pago: pagoPor.has(String(i.fechamento_id))
@@ -87,7 +111,7 @@ function estadoDosFechamentos({ fechamentos = [], itens = [], pagamentos = [], t
   const ordenados = doTipo.slice().sort((a, b) => String(a.competencia).localeCompare(String(b.competencia)));
   const ultimo = ordenados[ordenados.length - 1] || null;
   return {
-    fechados: new Map(ordenados.map(f => [String(f.competencia).trim(), { ...f, resumo: c.jsonDe(f.por_setor, []), pagamento: pagoPor.get(String(f.id)) || null }])),
+    fechados: new Map(ordenados.map(f => [String(f.competencia).trim(), { ...f, resumo: c.jsonDe(f.por_setor, []), ...pagamentosDoFechamento(f, pagoPor.get(String(f.id)) || []) }])),
     ultimo: ultimo ? { ...ultimo, resumo: c.jsonDe(ultimo.por_setor, []) } : null,
     proxima: ultimo ? c.somarMeses(String(ultimo.competencia).trim(), 1) : null,
     congelados
@@ -329,7 +353,11 @@ function resumirItens(itens, { fechado = null, competencia }) {
   return {
     competencia,
     fechado: Boolean(fechado),
-    fechamento: fechado ? { id: fechado.id, fechado_em: fechado.fechado_em, fechado_por: fechado.fechado_por, pagar_ate: c.dia(fechado.pagar_ate), pagamento: fechado.pagamento || null } : null,
+    fechamento: fechado ? {
+      id: fechado.id, fechado_em: fechado.fechado_em, fechado_por: fechado.fechado_por, pagar_ate: c.dia(fechado.pagar_ate),
+      pagamento: fechado.pagamento || null, pagamentos: fechado.pagamentos || [],
+      pago: c.centavos(fechado.pago), falta_pagar: c.centavos(fechado.falta_pagar)
+    } : null,
     parcelas: parcelasI.length,
     base: num(parcelasI.reduce((s, i) => s + Number(i.base || 0), 0)),
     cms: num(parcelasI.reduce((s, i) => s + Number(i.cms || 0), 0)),

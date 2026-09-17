@@ -34,7 +34,7 @@
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao, exigirAlgumaPermissao } = require('./permissionsController');
+const { exigirPermissao, exigirAlgumaPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
 const { usuarioDaRequisicao } = require('./cobrancaController');
 const configuracaoCobranca = require('./cobranca/configuracaoCobranca');
 const c = require('./financeiro/comum');
@@ -42,6 +42,7 @@ const regras = require('./financeiro/regras');
 const comissoes = require('./financeiro/comissoes');
 const ajustes = require('./financeiro/ajustes');
 const producao = require('./financeiro/producao');
+const confirmacao = require('./financeiro/producaoConfirmacao');
 const fechamentos = require('./financeiro/fechamentos');
 const painel = require('./financeiro/painel');
 const relatorios = require('./financeiro/relatorios');
@@ -99,6 +100,11 @@ const linhaDaParcela = p => ({
   situacao: p.situacao, estado_parcela: p.estado_parcela, controlada: p.controlada,
   valor_original: p.valor_original, abatimento_boleto: p.abatimento_boleto, ajustes_total: p.ajustes_total, liquido: p.liquido,
   cms: p.potencial.cms, royalty: p.potencial.royalty, comissao: p.potencial.total,
+  // Quem recebe (CMS/Royalty por pessoa): a tela usa nas etiquetas e no filtro.
+  benef_lista: (p.potencial.beneficiarios || []).map(x => ({
+    tipo: x.tipo, beneficiario: x.beneficiario, valor: x.valor,
+    percentual: x.percentual === null || x.percentual === undefined ? null : Number(x.percentual)
+  })),
   taxas: { cms: p.taxas.cms, royalty: p.taxas.royalty, pct_cms: p.taxas.pct_cms, pct_royalty: p.taxas.pct_royalty, congeladas: p.taxas.congeladas },
   sem_regra: p.sem_regra, comissao_fechada: p.comissao_fechada,
   boleto: p.boleto ? { id: p.boleto.id, status: p.boleto.status, nosso_numero: p.boleto.nosso_numero } : null,
@@ -112,11 +118,16 @@ function criarRouter() {
     painel.carregar({ api, competencia: String(req.query?.competencia || ''), hoje, desde })));
 
   // ------------------------------------------------------------- regras
-  router.get('/regras', exigirPermissao(VER), rota('GET /api/financeiro/regras', ({ api }) => regras.paraTela(api)));
+  // `pode_excluir` diz à tela se aparece o botão de EXCLUIR a regra (só Sup Admin).
+  router.get('/regras', exigirPermissao(VER), rota('GET /api/financeiro/regras', async ({ api, req }) =>
+    ({ ...(await regras.paraTela(api)), pode_excluir: await ehSupAdmin(req) })));
   router.post('/regras', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/regras', ({ api, req, usuarioId }) =>
     regras.salvarRegra({ api, entrada: req.body, usuarioId })));
   router.put('/regras/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/regras/:id', ({ api, req, usuarioId }) =>
     regras.salvarRegra({ api, id: req.params.id, entrada: req.body, usuarioId })));
+  // Desativar guarda o histórico; EXCLUIR some com a linha — por isso só o Sup Admin.
+  router.delete('/regras/:id', exigirSupAdmin, rota('DELETE /api/financeiro/regras/:id', async ({ api, req, usuarioId }) =>
+    ({ removida: await regras.removerRegra({ api, id: req.params.id, usuarioId }) })));
   router.post('/setores', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/setores', ({ api, req, usuarioId }) =>
     regras.salvarSetor({ api, entrada: req.body, usuarioId })));
   router.put('/setores/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/setores/:id', ({ api, req, usuarioId }) =>
@@ -202,6 +213,18 @@ function criarRouter() {
     producao.registrar({ api, entrada: req.body, usuarioId, hoje })));
   router.post('/producao/:id/estornar', exigirPermissao(REGISTRAR_PRODUCAO), rota('POST /api/financeiro/producao/:id/estornar', ({ api, req, usuarioId, hoje }) =>
     producao.estornar({ api, id: req.params.id, motivo: req.body?.motivo, usuarioId, hoje })));
+  // Fechamento da produção: o que cada pedido tem pendente e a confirmação peça a peça.
+  router.get('/producao/pendencias', exigirPermissao(VER), rota('GET /api/financeiro/producao/pendencias', ({ api, req, hoje }) =>
+    confirmacao.lerPendencias(api, { competencia: String(req.query?.competencia || ''), hoje })));
+  router.post('/producao/confirmar', exigirPermissao(REGISTRAR_PRODUCAO), rota('POST /api/financeiro/producao/confirmar', ({ api, req, usuarioId, hoje }) =>
+    confirmacao.confirmar({
+      api, usuarioId, hoje,
+      competencia: String(req.body?.competencia || ''),
+      pedidoId: req.body?.pedido_id,
+      decisoes: Array.isArray(req.body?.decisoes) ? req.body.decisoes : [],
+      origem: 'fechamento'
+    })));
+
   router.get('/producao', exigirPermissao(VER), rota('GET /api/financeiro/producao', ({ api, req, hoje, desde }) =>
     fechamentos.previa({ api, tipo: 'producao', competencia: c.competenciaValida(req.query?.competencia) ? req.query.competencia : c.competenciaDe(hoje), hoje, desde })));
 

@@ -24,6 +24,7 @@ const c = require('./comum');
 const calendario = require('./calendario');
 const comissoes = require('./comissoes');
 const producao = require('./producao');
+const confirmacao = require('./producaoConfirmacao');
 const auditoria = require('./auditoria');
 const base = require('./base');
 
@@ -58,9 +59,17 @@ function conferir({ tipo, competencia, estado, hoje, extra = {} }) {
     if (extra.fila) avisos.push(`${c.plural(extra.fila, 'aviso de pagamento do BB está', 'avisos de pagamento do BB estão')} na fila: concilie antes, para não ficar pagamento de fora.`);
     if (extra.semRegra) avisos.push(`${c.plural(extra.semRegra, 'parcela recebida não tem', 'parcelas recebidas não têm')} regra de CMS/Royalty: entram com comissão zero.`);
     if (extra.sqlRecebimentos) bloqueios.push('Os recebimentos ainda não estão ativados (sql/cobranca_recebimentos.sql).');
-  } else if (extra.semValor?.length) {
-    const nomes = [...new Set(extra.semValor.map(l => `${l.produto} (${l.setor})`))].slice(0, 5);
-    bloqueios.push(`Produção sem valor (sem regra do processo, ou regra em % numa peça sem preço na tabela fixa): ${nomes.join('; ')}${extra.semValor.length > 5 ? '…' : ''}. Acerte em "Regras" ou no cadastro da peça.`);
+  } else {
+    if (extra.semValor?.length) {
+      const nomes = [...new Set(extra.semValor.map(l => `${l.produto} (${l.setor})`))].slice(0, 5);
+      bloqueios.push(`Produção sem valor (sem regra do processo, ou regra em % numa peça sem preço na tabela fixa): ${nomes.join('; ')}${extra.semValor.length > 5 ? '…' : ''}. Acerte em "Regras" ou no cadastro da peça.`);
+    }
+    // A produção entra sozinha e é confirmada peça a peça: sem decisão em todas as
+    // unidades, a competência não fecha (o que ficar pendente vai para o mês seguinte).
+    if (extra.semDecisao?.length) {
+      const nomes = extra.semDecisao.slice(0, 8);
+      bloqueios.push(`Falta confirmar a produção de ${c.plural(extra.semDecisao.length, 'pedido', 'pedidos')}: ${nomes.join(', ')}${extra.semDecisao.length > 8 ? '…' : ''}. Abra "Fechar competência — produção" e diga, em cada peça, o que ficou pronto.`);
+    }
   }
   return { bloqueios, avisos };
 }
@@ -100,7 +109,9 @@ async function previa({ api, tipo, competencia, hoje, desde }) {
   }
   const p = await producao.lerBase(api);
   const comp = producao.montarCompetencia({ pend: p.pend, estado: p.estado, competencia });
-  const conf = conferir({ tipo, competencia, estado: p.estado, hoje, extra: { semValor: comp.fechado ? [] : comp.sem_valor } });
+  // Sem o SQL da confirmação, segue como antes (nada a confirmar).
+  const semDecisao = comp.fechado ? [] : await confirmacao.pedidosSemDecisao(api, { competencia, hoje }).catch(() => []);
+  const conf = conferir({ tipo, competencia, estado: p.estado, hoje, extra: { semValor: comp.fechado ? [] : comp.sem_valor, semDecisao } });
   return {
     tipo, competencia, ...comp,
     pagar_ate: comp.fechamento?.pagar_ate || calendario.pagarProducaoAte(competencia, p.regras.configuracao, p.regras.feriados),
@@ -202,6 +213,38 @@ async function fechar({ api, tipo, competencia, hoje, desde, usuarioId = null })
   return { fechamento: { ...cabecalho, status: 'fechado' }, itens: congelar.length, total, pagar_ate: p.pagar_ate, a_compensar: p.a_compensar };
 }
 
+const semAcento = texto => String(texto ?? '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+const TIPOS_COMISSAO = { cms: 'CMS', royalty: 'Royalty' };
+
+/**
+ * O que se está pagando: tudo o que falta, só um tipo (CMS/Royalty) ou só uma
+ * pessoa. O valor sai do resumo congelado no fechamento (`por_setor`), que é
+ * quem guarda quanto cada beneficiário tem a receber daquela competência.
+ */
+function alvoDoPagamento(f, entrada, jaPagos) {
+  const total = c.centavos(f.total);
+  const pago = c.centavos(jaPagos.reduce((s, p) => s + (Number(p.valor) || 0), 0));
+  const beneficiario = c.texto(entrada?.beneficiario, 120) || null;
+  const tipoComissao = TIPOS_COMISSAO[String(entrada?.tipo_comissao || '')] ? String(entrada.tipo_comissao) : null;
+  if (!beneficiario && !tipoComissao) {
+    return { beneficiario: null, tipo_comissao: null, valor: c.centavos(total - pago), rotulo: 'O pagamento desta competência' };
+  }
+  if (f.tipo !== 'comissao') throw c.erro('O pagamento por beneficiário é das comissões; a produção é paga de uma vez.', 422);
+  const resumo = c.jsonDe(f.por_setor, []);
+  const linhas = resumo.filter(r => (!tipoComissao || r.tipo === tipoComissao)
+    && (!beneficiario || semAcento(r.beneficiario) === semAcento(beneficiario)));
+  if (!linhas.length) throw c.erro(`${beneficiario || TIPOS_COMISSAO[tipoComissao]} não tem valor nesta competência.`, 409);
+  const valor = c.centavos(linhas.reduce((s, r) => s + (Number(r.valor) || 0), 0));
+  const tipoNoRotulo = tipoComissao ? `${TIPOS_COMISSAO[tipoComissao]} de ` : '';
+  return {
+    beneficiario, tipo_comissao: tipoComissao, valor,
+    rotulo: beneficiario ? `${tipoNoRotulo}${beneficiario}` : TIPOS_COMISSAO[tipoComissao]
+  };
+}
+
+const mesmaChaveDePagamento = (p, alvo) => semAcento(p.beneficiario) === semAcento(alvo.beneficiario)
+  && String(p.tipo_comissao || '') === String(alvo.tipo_comissao || '');
+
 async function pagar({ api, entrada, hoje, usuarioId = null }) {
   const tipo = validarTipo(String(entrada?.tipo || ''));
   const competencia = validarCompetencia(String(entrada?.competencia || ''));
@@ -213,27 +256,38 @@ async function pagar({ api, entrada, hoje, usuarioId = null }) {
   const fech = await base.lerFechamentos(api);
   const f = fech.fechamentos.find(x => x.tipo === tipo && x.competencia === competencia && x.status === 'fechado');
   if (!f) throw c.erro(`${TIPOS[tipo]} de ${c.rotuloCompetencia(competencia)} ainda não foram fechadas: feche antes de confirmar o pagamento.`, 409);
-  const ja = fech.pagamentos.find(x => String(x.fechamento_id) === String(f.id));
-  if (ja) throw c.erro(`O pagamento desta competência já foi confirmado em ${c.impressa(ja.data_pagamento)}.`, 409);
-  const valor = c.centavos(f.total);
+  const jaPagos = fech.pagamentos.filter(x => String(x.fechamento_id) === String(f.id));
+  const alvo = alvoDoPagamento(f, entrada, jaPagos);
+  const repetido = jaPagos.find(x => mesmaChaveDePagamento(x, alvo));
+  if (repetido) throw c.erro(`${alvo.rotulo} já foi pago em ${c.impressa(repetido.data_pagamento)}.`, 409);
+  const valor = alvo.valor;
   if (!(valor > 0)) throw c.erro('Não há valor a pagar nesta competência.', 409);
+  const pagoAte = c.centavos(jaPagos.reduce((s, p) => s + (Number(p.valor) || 0), 0));
+  if (c.centavos(pagoAte + valor) > c.centavos(f.total)) {
+    throw c.erro(`O pagamento passa do total da competência: já foram pagos ${c.reais(pagoAte)} de ${c.reais(f.total)}.`, 409);
+  }
   if (data < (comissoes.diaEmBrasilia(f.fechado_em || f.criado_em) || data)) throw c.erro('O pagamento não pode ser anterior ao fechamento.');
   let pagamento;
   try {
     pagamento = await c.inserir(api, 'financeiro_pagamentos', {
       fechamento_id: f.id, tipo, competencia, valor, data_pagamento: data, forma,
+      beneficiario: alvo.beneficiario, tipo_comissao: alvo.tipo_comissao,
       observacao: c.texto(entrada?.observacao, 500) || null, criado_por: usuarioId, criado_em: c.agora()
     });
   } catch (e) {
-    if (c.ehDuplicado(e)) throw c.erro('O pagamento desta competência acabou de ser confirmado por outra pessoa.', 409);
+    if (c.ehDuplicado(e)) throw c.erro(`${alvo.rotulo} acabou de ser pago por outra pessoa.`, 409);
     throw e;
   }
   const atraso = f.pagar_ate && data > c.dia(f.pagar_ate);
+  const falta = c.centavos(Math.max(0, c.centavos(f.total) - c.centavos(pagoAte + valor)));
+  const paraQuem = alvo.beneficiario || alvo.tipo_comissao ? ` — ${alvo.rotulo}` : '';
   await auditoria.registrar(api, {
     tipo: 'pagamento_confirmado', referenciaId: pagamento.id, valor, usuarioId,
-    descricao: `Pagamento de ${TIPOS[tipo].toLowerCase()} de ${c.rotuloCompetencia(competencia)}: ${c.reais(valor)} em ${c.impressa(data)} (${forma})${atraso ? ` — depois do prazo (${c.impressa(f.pagar_ate)})` : ''}`
+    descricao: `Pagamento de ${TIPOS[tipo].toLowerCase()} de ${c.rotuloCompetencia(competencia)}${paraQuem}: `
+      + `${c.reais(valor)} em ${c.impressa(data)} (${forma})`
+      + `${falta > 0 ? `; ainda faltam ${c.reais(falta)}` : ''}${atraso ? ` — depois do prazo (${c.impressa(f.pagar_ate)})` : ''}`
   });
-  return { pagamento, atrasado: Boolean(atraso) };
+  return { pagamento, atrasado: Boolean(atraso), falta_pagar: falta, alvo: alvo.rotulo };
 }
 
 /** Os fechamentos de um tipo (mais novos primeiro), com o pagamento. */
@@ -242,11 +296,20 @@ function listarDe(fech, tipo) {
     .filter(f => f.tipo === tipo && f.status === 'fechado')
     .sort((a, b) => b.competencia.localeCompare(a.competencia))
     .map(f => {
-      const pg = fech.pagamentos.find(x => String(x.fechamento_id) === String(f.id)) || null;
+      const pagos = fech.pagamentos.filter(x => String(x.fechamento_id) === String(f.id));
+      const pg = pagos.find(x => !x.beneficiario && !x.tipo_comissao) || pagos[0] || null;
+      const pago = c.centavos(pagos.reduce((s, x) => s + (Number(x.valor) || 0), 0));
+      const total = c.centavos(f.total);
       return {
-        id: f.id, tipo, competencia: f.competencia, quantidade: Number(f.quantidade) || 0, total: c.centavos(f.total),
+        id: f.id, tipo, competencia: f.competencia, quantidade: Number(f.quantidade) || 0, total,
         pagar_ate: c.dia(f.pagar_ate), fechado_em: f.fechado_em, resumo: c.jsonDe(f.por_setor, []),
-        pagamento: pg ? { data: pg.data_pagamento, valor: c.centavos(pg.valor), forma: pg.forma } : null
+        pagamento: pg ? { data: pg.data_pagamento, valor: c.centavos(pg.valor), forma: pg.forma } : null,
+        // Pagar por beneficiário: a competência pode estar paga só em parte.
+        pagamentos: pagos.map(x => ({
+          id: x.id, data: x.data_pagamento, valor: c.centavos(x.valor), forma: x.forma,
+          beneficiario: x.beneficiario || null, tipo_comissao: x.tipo_comissao || null
+        })),
+        pago, falta_pagar: c.centavos(Math.max(0, total - pago))
       };
     });
 }
@@ -256,4 +319,4 @@ async function listar(api, tipo) {
   return listarDe(await base.lerFechamentos(api), tipo);
 }
 
-module.exports = { TIPOS, FORMAS_PAGAMENTO, conferir, dadosComissao, previa, fechar, pagar, listarDe, listar, limparTentativa };
+module.exports = { TIPOS, FORMAS_PAGAMENTO, TIPOS_COMISSAO, conferir, dadosComissao, previa, fechar, pagar, alvoDoPagamento, listarDe, listar, limparTentativa };

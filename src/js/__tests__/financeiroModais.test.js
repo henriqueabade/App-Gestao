@@ -26,6 +26,7 @@ const MODAIS = {
     'registrar-ajuste': 'finRegistrarAjuste',
     'registrar-producao': 'finRegistrarProducao',
     'fechar-competencia': 'finFecharCompetencia',
+    'fechar-producao': 'finFecharProducao',
     'relatorios': 'finRelatorios',
     'detalhes-parcela': 'finDetalhesParcela',
     'detalhes-pedido': 'finDetalhesPedido',
@@ -39,7 +40,7 @@ const MODAIS = {
     'regras': 'finRegras'
 };
 /* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
-const DE_ACAO = ['registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
+const DE_ACAO = ['registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'fechar-producao', 'relatorios', 'confirmar-pagamento'];
 
 /** Carrega o script sem overlay no DOM: só as funções puras ficam expostas. */
 function puro() {
@@ -169,7 +170,12 @@ test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé
     }
     const fechamento = fs.readFileSync(path.join(PASTA_HTML, 'fechar-competencia.html'), 'utf8');
     assert.match(fechamento, /class="fin-aviso"/, 'aviso bordô do bloqueio');
-    assert.match(fechamento, /value="comissao" checked/, 'o tipo vai como o backend espera');
+    // Fechar competência virou dois: aqui só comissões — a produção tem tela própria.
+    assert.doesNotMatch(fechamento, /name="finFechamentoTipo"/, 'o fechamento de comissões não escolhe mais o tipo');
+    assert.match(fechamento, /Fechar competência — comissões/, 'o título diz que é só de comissões');
+    assert.match(SCRIPT, /const tipoAtual = \(\) => 'comissao';/, 'o modal manda sempre comissao para o backend');
+    const producaoHtml = fs.readFileSync(path.join(PASTA_HTML, 'fechar-producao.html'), 'utf8');
+    assert.match(producaoHtml, /id="finFecharProducaoCards"/, 'a tela nova tem um card por pedido');
     const regras = fs.readFileSync(path.join(PASTA_HTML, 'regras.html'), 'utf8');
     for (const id of ['finRegraSalvar', 'finProcessoIncluir', 'finProcessoExcluir', 'finProcessoNovoSalvar', 'finProcessoRenomear', 'finProcessoPagamento', 'finValorSalvar', 'finCfgSalvar', 'finFeriadoIncluir']) {
         assert.match(regras, new RegExp(`id="${id}" type="button" data-perm="financeiro\\.regras\\.editar"`), `regras: ${id} pede financeiro.regras.editar`);
@@ -189,7 +195,10 @@ test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o H
         assert.match(MODULO, new RegExp(`'${chave}': \\{ rotulo: '[^']+', abrir: m => finAbrirModal\\('${chave}', m\\) \\}`));
     }
     // Fechar e pagar recebem o tipo e a competência da pendência.
-    assert.match(MODULO, /'fechar-competencia': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('fechar-competencia', m, finDoFiltro\(extra\)\) \}/);
+    // Fechar virou dois: comissões no modal de sempre, produção na tela dos cards.
+    assert.match(MODULO, /'fechar-competencia': \{\s*rotulo: 'Fechar competência — comissões',/);
+    assert.match(MODULO, /filtro\.tipo === 'producao'\s*\? finAbrirModal\('fechar-producao', m, filtro\)/, 'a pendência de produção abre a tela nova');
+    assert.match(MODULO, /'fechar-competencia-producao': \{ rotulo: 'Fechar competência — produção', abrir: \(m, extra\) => finAbrirModal\('fechar-producao', m, finDoFiltro\(extra\)\) \}/);
     assert.match(MODULO, /'confirmar-pagamento': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('confirmar-pagamento', m, finDoFiltro\(extra\)\) \}/);
     // Os fiscais recebem o `extra` da linha clicada (o filtro de uma pendência).
     assert.match(MODULO, /'emitir-nfe': \{ rotulo: 'Emitir NF-e', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
@@ -267,9 +276,9 @@ test('todo relatório da central tem folha: colunas e totais; planilha CSV para 
     const csv = f.relatorioEmCsv({ ...apuradas, linhas: [{ ...apuradas.linhas[0], cliente: 'Casa; "Vicenzo"', liquidacao: '2026-08-20' }] });
     const partes = csv.split('\r\n');
     assert.strictEqual(csv.charCodeAt(0), 0xFEFF, 'BOM para o Excel ler os acentos');
-    assert.strictEqual(partes[0].slice(1), 'Pedido;Cliente;NF;Parcela;Liquidação;Valor líquido;CMS;Royalty;Total comissão');
-    assert.strictEqual(partes[1], '2548;"Casa; ""Vicenzo""";;;20/08/2026;17000,00;1700,00;1700,00;3400,00');
-    assert.strictEqual(partes[2], 'Total (1);;;;;18000,10;1800,01;1800,01;3600,02', 'os totais são os da folha');
+    assert.strictEqual(partes[0].slice(1), 'Pedido;Cliente;NF;Parcela;Liquidação;Valor líquido;CMS;Royalty;Total comissão;Quem recebe');
+    assert.strictEqual(partes[1], '2548;"Casa; ""Vicenzo""";;;20/08/2026;17000,00;1700,00;1700,00;3400,00;', 'sem quem recebe, a coluna sai vazia');
+    assert.strictEqual(partes[2], 'Total (1);;;;;18000,10;1800,01;1800,01;3600,02;', 'os totais são os da folha');
     assert.deepStrictEqual(plano(f.RELATORIOS_DE_PARCELA).sort(), ['ajustes-anteriores', 'comissoes-apuradas', 'comissoes-atrasadas', 'comissoes-nao-realizadas', 'previsao-comissoes']);
     const aguardando = plano(f.montarRelatorio('aguardando-nf', { linhas: f.linhasDoRelatorioAguardando(PAINEL) }));
     assert.strictEqual(aguardando.totais.valor, 1900, 'o dispensado (S/NF) não entra no relatório');
@@ -525,7 +534,7 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
     assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:recebimentos-alterados', aoAlterar\)\)/, 'o ouvinte sai quando a lista fecha');
     assert.match(SCRIPT, /'app-message-overlay fixed inset-0/, 'a caixa do motivo sobe para a top layer');
     assert.match(SCRIPT, /finRecebimentos: montarRecebimentos/);
-    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',\s*'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela'\]\)/, 'fechar relê o painel');
+    assert.match(SCRIPT, /const RECARREGAM_O_PAINEL = new Set\(\[[^\]]*'finFecharProducao'[^\]]*'finConfirmarPagamento'[^\]]*\]\)/, 'fechar relê o painel (inclusive a tela de produção)');
     assert.ok(!/window\.confirm\(/.test(SCRIPT));
 
     // O módulo: os cartões abrem a lista na visão certa; "Registrar recebimento" pede a permissão.
@@ -562,7 +571,7 @@ test('comissões e produção são REAIS (fase G): cada modal fala com /api/fina
         'fetchApi(`/api/financeiro/buscas/${alvo}`)'
     ];
     for (const trecho of chamadas) assert.ok(SCRIPT.includes(trecho), `falta a chamada ${trecho}`);
-    for (const titulo of ['Registrar o ajuste?', 'Registrar a produção?', 'Fechar a competência?', 'Confirmar o pagamento?', 'Desativar a regra?']) {
+    for (const titulo of ['Registrar o ajuste?', 'Registrar a produção?', 'Fechar as comissões?', 'Fechar a produção?', 'Confirmar o pagamento?', 'Desativar a regra?']) {
         assert.ok(SCRIPT.includes(`'${titulo}'`), `sem confirmação "${titulo}"`);
     }
     // O fechamento não se fecha por Esc no meio da gravação.
@@ -661,4 +670,67 @@ test('configuração de cobrança: a seção Parcela vem antes de Padrões do bo
     assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/parcela-minima'\)/);
     assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/configuracao\/parcela', \{ method: 'PUT', body: JSON\.stringify\(\{ parcela_minima: valor \}\) \}\)/);
     assert.match(SCRIPT, /ligar\('finCobParcelaSalvar', salvarParcela\)/);
+});
+
+test('quem recebe (puras): opções do filtro e a parte de cada um, com os valores recalculados', () => {
+    const f = puro();
+    const linhas = [
+        { pedido: '2548', comissao: 340, cms: 170, royalty: 170, benef_lista: [
+            { tipo: 'cms', beneficiario: 'Márcio', valor: 170, percentual: 5 },
+            { tipo: 'royalty', beneficiario: 'Ana', valor: 170, percentual: 5 }
+        ] },
+        { pedido: '2560', comissao: 100, cms: 100, royalty: 0, benef_lista: [
+            { tipo: 'cms', beneficiario: 'marcio', valor: 100, percentual: 5 }
+        ] },
+        { pedido: '2570', comissao: 50, cms: 0, royalty: 50, benef_lista: [] }
+    ];
+    const opcoes = plano(f.opcoesDeBeneficiario(linhas));
+    assert.deepStrictEqual(opcoes.tipos, ['cms', 'royalty']);
+    assert.deepStrictEqual(opcoes.pessoas.map(p => p.nome), ['Ana', 'Márcio'], 'uma entrada por pessoa, em ordem');
+    assert.strictEqual(opcoes.pessoas.find(p => p.nome === 'Márcio').chave, 'marcio', 'a chave ignora acento e caixa');
+
+    const soRoyalty = plano(f.filtrarPorBeneficiario(linhas, 'tipo:royalty'));
+    assert.deepStrictEqual(soRoyalty.map(l => l.pedido), ['2548'], 'fica quem tem royalty');
+    assert.deepStrictEqual([soRoyalty[0].cms, soRoyalty[0].royalty, soRoyalty[0].comissao], [0, 170, 170], 'os valores viram a parte do filtro');
+
+    const doMarcio = plano(f.filtrarPorBeneficiario(linhas, 'pessoa:marcio'));
+    assert.deepStrictEqual(doMarcio.map(l => l.pedido), ['2548', '2560'], 'o acento não separa a mesma pessoa');
+    assert.strictEqual(doMarcio[0].comissao, 170);
+    assert.strictEqual(doMarcio[0].beneficiarios, 'Márcio 5%', 'o texto exportado acompanha o filtro');
+    assert.strictEqual(plano(f.filtrarPorBeneficiario(linhas, '')).length, 3, 'sem filtro, tudo');
+    assert.strictEqual(f.rotuloDoFiltroBenef('tipo:cms', opcoes), 'CMS');
+    assert.strictEqual(f.rotuloDoFiltroBenef('pessoa:marcio', opcoes), 'Márcio');
+
+    // O total do relatório passa a ser o do filtro.
+    const folha = plano(f.montarRelatorio('previsao-comissoes', { linhas: f.filtrarPorBeneficiario(linhas, 'pessoa:marcio') }));
+    assert.strictEqual(folha.totais.comissao, 270);
+    assert.ok(folha.colunas.some(c => c.chave === 'beneficiarios' && c.tipo === 'beneficiarios'), 'a folha mostra quem recebe');
+});
+
+test('comissões por quem recebe: etiquetas com cor, legenda e filtro nas telas; o pagamento vai por beneficiário', () => {
+    // O utilitário das cores é carregado pelo menu e dá a mesma cor à mesma pessoa.
+    const util = fs.readFileSync(path.join(RAIZ, 'js', 'utils', 'beneficiarios.js'), 'utf8');
+    assert.match(util, /window\.Beneficiarios = \{/);
+    assert.match(fs.readFileSync(path.join(RAIZ, 'html', 'menu.html'), 'utf8'), /js\/utils\/beneficiarios\.js/, 'o menu carrega o utilitário');
+    assert.match(SCRIPT, /window\.Beneficiarios\.etiqueta\(b\.beneficiario, b\.tipo/, 'a célula "quem recebe" usa a etiqueta comum');
+
+    // Onde aparece: card do módulo, atrasadas, fechar competência, detalhes (parcela e pedido) e relatórios.
+    assert.match(MODULO, /function finRenderizarBeneficiarios\(moduleEl, resumo\)/);
+    assert.match(fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8'), /id="finResumoBeneficiariosLista"/);
+    for (const [arquivo, id] of [['comissoes-atrasadas', 'finAtrasadasLegenda'], ['fechar-competencia', 'finFechamentoBeneficiariosLegenda'],
+        ['detalhes-parcela', 'finParcelaBeneficiariosLegenda'], ['detalhes-pedido', 'finPedidoParcelasLegenda'], ['visualizar-relatorio', 'finRelatorioLegendaBenef']]) {
+        assert.ok(fs.readFileSync(path.join(PASTA_HTML, `${arquivo}.html`), 'utf8').includes(`id="${id}"`), `${arquivo}: sem legenda de quem recebe`);
+    }
+    assert.match(fs.readFileSync(path.join(PASTA_HTML, 'comissoes-atrasadas.html'), 'utf8'), /id="finAtrasadasQuemRecebe"/, 'atrasadas filtra por quem recebe');
+    assert.match(fs.readFileSync(path.join(PASTA_HTML, 'visualizar-relatorio.html'), 'utf8'), /id="finRelatorioQuemRecebe"/, 'a folha filtra por quem recebe');
+    assert.match(SCRIPT, /await exportarRelatorio\(formato, mostrado\)/, 'exporta o que está na tela (com o filtro)');
+
+    // Confirmar pagamento: tudo o que falta ou um POST por beneficiário escolhido.
+    const pagamento = fs.readFileSync(path.join(PASTA_HTML, 'confirmar-pagamento.html'), 'utf8');
+    assert.match(pagamento, /id="finPagamentoTudo" type="checkbox" checked/);
+    assert.match(pagamento, /id="finPagamentoBeneficiarios"/);
+    assert.match(SCRIPT, /const envios = porPessoa \? alvos\.map\(l => \(\{ \.\.\.base, beneficiario: l\.beneficiario, tipo_comissao: l\.tipo \}\)\) : \[base\];/);
+    assert.match(SCRIPT, /confirmarBtn\.classList\.toggle\('hidden', !\(falta > 0\)\);/, 'com saldo, ainda dá para pagar o resto');
+    assert.match(SCRIPT, /'Escolha quem foi pago \(ou marque "Pagar tudo o que falta"\)\.'/);
+    assert.match(MODULO, /parcial: 'paga em parte'/, 'a competência paga pela metade tem situação própria');
 });

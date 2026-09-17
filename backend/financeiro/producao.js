@@ -116,7 +116,10 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
         valorPeca = unidades.valorDaPecaInteira(regra, precoDe(produtoId));
         regraTexto = regra ? unidades.descreverRegra(regra) : null;
         const alocado = alocacaoDe(e.pedido_item_id, etapa.id).porEvento.get(String(e.id));
-        fracao = alocado ? Math.round(alocado.fracao * 10000) / 10000 : 0;
+        // `fracao_paga` é do cancelamento: a unidade saiu do pedido, mas só se
+        // paga o trecho que ela andou aqui (producaoConfirmacao.js).
+        const manual = e.fracao_paga === null || e.fracao_paga === undefined ? null : Number(e.fracao_paga);
+        fracao = manual !== null ? Math.round(manual * 10000) / 10000 : (alocado ? Math.round(alocado.fracao * 10000) / 10000 : 0);
         if (valorPeca !== null) { total = c.centavos(valorPeca * fracao); origem = regra.origem; }
       }
       const natural = String(e.competencia || '').trim() || c.competenciaDe(e.data_finalizacao);
@@ -195,7 +198,11 @@ function montarCompetencia({ pend, estado, competencia }) {
   const r = resumir(linhas);
   return {
     competencia, fechado: Boolean(fechado),
-    fechamento: fechado ? { id: fechado.id, fechado_em: fechado.fechado_em, pagar_ate: c.dia(fechado.pagar_ate), total: c.centavos(fechado.total), pagamento: fechado.pagamento || null } : null,
+    fechamento: fechado ? {
+      id: fechado.id, fechado_em: fechado.fechado_em, pagar_ate: c.dia(fechado.pagar_ate), total: c.centavos(fechado.total),
+      pagamento: fechado.pagamento || null, pagamentos: fechado.pagamentos || [],
+      pago: c.centavos(fechado.pago), falta_pagar: c.centavos(fechado.falta_pagar)
+    } : null,
     ...r,
     a_pagar: fechado ? c.centavos(fechado.total) : r.a_pagar,
     linhas: linhas.sort((a, b) => String(a.pedido).localeCompare(String(b.pedido), 'pt-BR', { numeric: true }) || String(a.data).localeCompare(String(b.data)))
@@ -435,5 +442,7 @@ async function estornar({ api, id, motivo, usuarioId = null, hoje }) {
 
 module.exports = {
   SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas, saldosAnteriores, resumir, montarCompetencia,
-  lerBase, pedidosParaProduzir, doPedido, valorDasProximas, registrar, estornar
+  lerBase, pedidosParaProduzir, doPedido, valorDasProximas, registrar, estornar,
+  // A confirmação da produção (producaoConfirmacao.js) monta as filas do mesmo jeito.
+  itensDe, extDe, precosDaTabela, montarFilas, chaveItemSetor
 };

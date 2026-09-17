@@ -14,6 +14,7 @@ const TIPOS = {
   ajuste_registrado: 'Ajuste registrado',
   ajuste_cancelado: 'Ajuste cancelado',
   producao_registrada: 'Produção registrada',
+  producao_confirmada: 'Produção confirmada',
   producao_estornada: 'Produção estornada',
   competencia_fechada: 'Competência fechada',
   pagamento_confirmado: 'Pagamento confirmado',

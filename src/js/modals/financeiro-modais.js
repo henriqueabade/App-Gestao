@@ -535,7 +535,8 @@
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
         { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
-        { chave: 'comissao', rotulo: 'Comissão prevista', tipo: 'moeda', total: true }
+        { chave: 'comissao', rotulo: 'Comissão prevista', tipo: 'moeda', total: true },
+        { chave: 'beneficiarios', rotulo: 'Quem recebe', tipo: 'beneficiarios' }
       ]
     },
     'comissoes-atrasadas': {
@@ -550,7 +551,8 @@
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
         { chave: 'cms', rotulo: 'CMS potencial', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
-        { chave: 'comissao', rotulo: 'Comissão potencial', tipo: 'moeda', total: true }
+        { chave: 'comissao', rotulo: 'Comissão potencial', tipo: 'moeda', total: true },
+        { chave: 'beneficiarios', rotulo: 'Quem recebe', tipo: 'beneficiarios' }
       ]
     },
     'comissoes-apuradas': {
@@ -564,7 +566,8 @@
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
         { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
-        { chave: 'comissao', rotulo: 'Total comissão', tipo: 'moeda', total: true }
+        { chave: 'comissao', rotulo: 'Total comissão', tipo: 'moeda', total: true },
+        { chave: 'beneficiarios', rotulo: 'Quem recebe', tipo: 'beneficiarios' }
       ]
     },
     'ajustes-anteriores': {
@@ -578,7 +581,8 @@
         { chave: 'origem', rotulo: 'Competência de origem' },
         { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
-        { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
+        { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true },
+        { chave: 'beneficiarios', rotulo: 'Quem recebe', tipo: 'beneficiarios' }
       ]
     },
     'comissoes-nao-realizadas': {
@@ -656,6 +660,86 @@
     return { chave, titulo: def.titulo, colunas: def.colunas, linhas, totais };
   }
 
+  const chaveDoBeneficiario = nome => semAcento(nome).trim();
+
+  /**
+   * As duas primeiras células de uma linha de "quem recebe": o tipo como
+   * etiqueta (CMS preenchida, Royalty vazada) e a pessoa com a cor dela — a
+   * mesma cor em todas as telas (src/js/utils/beneficiarios.js).
+   */
+  function celulasDeBeneficiario(b) {
+    const tipo = criar('td', 'px-4 py-3 text-left');
+    tipo.appendChild(criar('span', `fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--${b.tipo === 'royalty' ? 'royalty' : 'cms'}`, TIPOS_REGRA[b.tipo] || b.tipo));
+    const quem = criar('td', 'px-4 py-3 text-left text-white');
+    const caixa = criar('div', 'fin-benef__nome');
+    if (window.Beneficiarios) caixa.appendChild(window.Beneficiarios.ponto(b.beneficiario));
+    caixa.appendChild(criar('span', null, b.beneficiario || '—'));
+    quem.appendChild(caixa);
+    return [tipo, quem];
+  }
+
+  /** A legenda (CMS = dono do cliente, Royalty = desenhista) embaixo de uma tabela. */
+  function pintarLegendaBenef(id, lista = []) {
+    const alvo = el(id);
+    if (!alvo) return;
+    if (!window.Beneficiarios || !lista.length) { alvo.replaceChildren(); return; }
+    alvo.replaceChildren(window.Beneficiarios.legenda([]));
+  }
+
+  /** As opções do filtro "quem recebe": os tipos e as pessoas que aparecem nas linhas. */
+  function opcoesDeBeneficiario(linhas) {
+    const pessoas = new Map();
+    const tipos = new Set();
+    for (const l of linhas) {
+      for (const b of l.benef_lista || []) {
+        if (!b?.beneficiario) continue;
+        tipos.add(b.tipo === 'royalty' ? 'royalty' : 'cms');
+        const k = chaveDoBeneficiario(b.beneficiario);
+        if (!pessoas.has(k)) pessoas.set(k, b.beneficiario);
+      }
+    }
+    return {
+      tipos: ['cms', 'royalty'].filter(t => tipos.has(t)),
+      pessoas: [...pessoas].map(([chave, nome]) => ({ chave, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    };
+  }
+
+  /**
+   * Filtro por quem recebe ('tipo:cms', 'tipo:royalty' ou 'pessoa:<chave>'):
+   * ficam só as linhas em que a pessoa (ou o tipo) tem parte, e os valores
+   * passam a ser a parte dela — assim o total do relatório bate com o filtro.
+   */
+  function filtrarPorBeneficiario(linhas, filtro) {
+    if (!filtro) return linhas;
+    const [campo, valor] = String(filtro).split(':');
+    const cabe = b => (campo === 'tipo'
+      ? (b.tipo === 'royalty' ? 'royalty' : 'cms') === valor
+      : chaveDoBeneficiario(b.beneficiario) === valor);
+    const saida = [];
+    for (const l of linhas) {
+      const lista = (l.benef_lista || []).filter(cabe);
+      if (!lista.length) continue;
+      const somaDe = royalty => centavos(lista
+        .filter(b => (b.tipo === 'royalty') === royalty)
+        .reduce((s, b) => s + (Number(b.valor) || 0), 0));
+      const cms = somaDe(false);
+      const royalty = somaDe(true);
+      const total = centavos(cms + royalty);
+      const linha = { ...l, benef_lista: lista, cms, royalty, beneficiarios: lista.map(b => `${b.beneficiario}${b.percentual == null ? '' : ` ${percentualTexto(b.percentual)}`}`).join(' · ') };
+      if (l.comissao !== undefined) linha.comissao = total;
+      if (l.valor !== undefined) linha.valor = total;
+      saida.push(linha);
+    }
+    return saida;
+  }
+
+  const rotuloDoFiltroBenef = (filtro, opcoes) => {
+    if (!filtro) return '';
+    const [campo, valor] = String(filtro).split(':');
+    if (campo === 'tipo') return valor === 'royalty' ? 'Royalty' : 'CMS';
+    return opcoes.pessoas.find(p => p.chave === valor)?.nome || valor;
+  };
+
   window.FinanceiroModais = {
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
@@ -664,6 +748,7 @@
     rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     textoDaConciliacao, BADGE_DO_AVISO,
+    opcoesDeBeneficiario, filtrarPorBeneficiario, rotuloDoFiltroBenef,
     RELATORIOS: Object.keys(RELATORIOS), RELATORIOS_DE_PARCELA: [...RELATORIOS_DE_PARCELA], FAIXAS_ATRASO
   };
 
@@ -681,7 +766,7 @@
   let filhoAberto = false;
   // Ao fechar, a tela relê o painel fiscal: o que se fez aqui muda os números.
   const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',
-    'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela']);
+    'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finFecharProducao', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela']);
   const recarregarPainel = () => { if (RECARREGAM_O_PAINEL.has(overlayId)) window.FinanceiroRecarregar?.(); };
 
   const fechar = () => {
@@ -930,6 +1015,20 @@
       return td;
     }
     if (coluna.tipo === 'badge') { td.appendChild(badge(String(bruto ?? '—'))); return td; }
+    // Quem recebe: uma etiqueta por pessoa, com a cor dela e o tipo (CMS/Royalty).
+    if (coluna.tipo === 'beneficiarios') {
+      const lista = linha.benef_lista || [];
+      if (!lista.length || !window.Beneficiarios) { td.textContent = bruto ? String(bruto) : '—'; return td; }
+      const caixa = criar('div', 'fin-etiquetas-benef');
+      for (const b of lista) {
+        const titulo = [`${b.tipo === 'royalty' ? 'Royalty' : 'CMS'} de ${b.beneficiario}`,
+          b.percentual == null ? null : `${percentualTexto(b.percentual)}`,
+          b.valor == null ? null : formatarMoeda(b.valor)].filter(Boolean).join(' · ');
+        caixa.appendChild(window.Beneficiarios.etiqueta(b.beneficiario, b.tipo, { titulo }));
+      }
+      td.appendChild(caixa);
+      return td;
+    }
     if (coluna.tipo === 'moeda') td.textContent = formatarMoeda(bruto);
     else if (coluna.tipo === 'data') td.textContent = formatarData(bruto);
     else if (coluna.tipo === 'inteiro') td.textContent = bruto == null ? '—' : String(bruto);
@@ -1944,26 +2043,22 @@
     alvo.textContent = texto;
   }
 
+  /** Fechar competência — COMISSÕES (a produção tem tela própria: montarFecharProducao). */
   function montarFechamento() {
     const compSel = el('finFechamentoCompetencia');
     montarCompetencias(compSel, contexto.competencia);
-    const radios = overlay.querySelectorAll('input[name="finFechamentoTipo"]');
-    if (contexto.tipo) radios.forEach(r => { r.checked = r.value === contexto.tipo; });
     const confirmarBtn = el('finFechamentoConfirmar');
     let previa = null;
     let leitura = 0;
-    const tipoAtual = () => overlay.querySelector('input[name="finFechamentoTipo"]:checked')?.value || 'comissao';
+    const tipoAtual = () => 'comissao';
     const preencher = (chave, texto) => {
       const alvo = overlay.querySelector(`[data-fin-valor="${chave}"]`);
       if (alvo) alvo.textContent = texto;
     };
 
     function pintar() {
-      const tipo = tipoAtual();
       const p = previa;
-      el('finFechamentoResumoComissoes').classList.toggle('hidden', tipo !== 'comissao');
-      el('finFechamentoResumoProducao').classList.toggle('hidden', tipo !== 'producao');
-      el('finFechamentoBeneficiariosBloco').classList.toggle('hidden', tipo !== 'comissao' || !(p?.beneficiarios || []).length);
+      el('finFechamentoBeneficiariosBloco').classList.toggle('hidden', !(p?.beneficiarios || []).length);
       pintarSituacao(el('finFechamentoSituacao'), !p ? '—' : (p.fechamento?.pagamento ? 'Paga' : (p.fechado ? 'Fechada' : 'Em aberto')));
       const info = [];
       if (p) {
@@ -1974,35 +2069,20 @@
       el('finFechamentoInfo').textContent = info.join(' · ');
 
       const moeda = v => (p ? formatarMoeda(v) : '—');
-      if (tipo === 'comissao') {
-        preencher('comissoes.parcelas', p ? String(p.parcelas) : '—');
-        preencher('comissoes.base', moeda(p?.base));
-        preencher('comissoes.comissao', moeda(p?.comissao));
-        preencher('comissoes.ajustes', moeda(p?.ajustes));
-        preencher('comissoes.compensar', moeda(p?.a_compensar));
-        preencher('comissoes.total', moeda(p?.a_pagar));
-        const corpo = el('finFechamentoBeneficiarios');
-        corpo.replaceChildren();
-        for (const b of p?.beneficiarios || []) {
-          const tr = document.createElement('tr');
-          tr.append(celulaG(TIPOS_REGRA[b.tipo] || b.tipo), celulaG(b.beneficiario, 'px-4 py-3 text-white'), celulaG(formatarMoeda(b.valor), 'px-4 py-3 text-right'));
-          corpo.appendChild(tr);
-        }
-      } else {
-        preencher('producao.pecas', p ? String(p.pecas) : '—');
-        preencher('producao.compensar', moeda(p?.a_compensar));
-        preencher('producao.total', moeda(p?.a_pagar));
-        const setores = el('finFechamentoSetores');
-        setores.replaceChildren();
-        for (const s of p?.setores || []) {
-          const linha = criar('div', 'flex items-center justify-between px-4 py-3');
-          linha.append(
-            criar('span', 'text-sm text-gray-400', `${s.setor} (${s.pecas} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
-            criar('span', 'text-sm text-white', formatarMoeda(s.total))
-          );
-          setores.appendChild(linha);
-        }
+      preencher('comissoes.parcelas', p ? String(p.parcelas) : '—');
+      preencher('comissoes.base', moeda(p?.base));
+      preencher('comissoes.comissao', moeda(p?.comissao));
+      preencher('comissoes.ajustes', moeda(p?.ajustes));
+      preencher('comissoes.compensar', moeda(p?.a_compensar));
+      preencher('comissoes.total', moeda(p?.a_pagar));
+      const corpo = el('finFechamentoBeneficiarios');
+      corpo.replaceChildren();
+      for (const b of p?.beneficiarios || []) {
+        const tr = document.createElement('tr');
+        tr.append(...celulasDeBeneficiario(b), celulaG(formatarMoeda(b.valor), 'px-4 py-3 text-right'));
+        corpo.appendChild(tr);
       }
+      pintarLegendaBenef('finFechamentoBeneficiariosLegenda', p?.beneficiarios || []);
       overlay.querySelectorAll('[data-fin-compensar]').forEach(x => x.classList.toggle('hidden', !(p && Number(p.a_compensar) < 0)));
 
       const aberta = Boolean(p) && !p.fechado;
@@ -2042,18 +2122,17 @@
         mostrarMensagem('finFechamentoMensagem', (previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
         return;
       }
-      const tipo = tipoAtual();
       const confirmado = await window.DialogPadrao?.confirm?.({
-        title: 'Fechar a competência?',
-        message: `Fechar ${tipo === 'comissao' ? 'as comissões' : 'a produção'} de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(previa.a_pagar)} a pagar até ${formatarData(previa.pagar_ate)}.`
+        title: 'Fechar as comissões?',
+        message: `Fechar as comissões de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(previa.a_pagar)} a pagar até ${formatarData(previa.pagar_ate)}.`
           + ' Depois disso nada desta competência muda; correções entram como ajustes no mês seguinte. Não tem volta.',
         confirmText: 'Fechar competência'
       });
       if (!confirmado) return;
       processando = true;
       try {
-        const r = await fetchApi('/api/financeiro/fechamentos', { method: 'POST', body: JSON.stringify({ tipo, competencia: compSel.value }) });
-        window.showToast?.(`Competência fechada: ${formatarMoeda(r?.total ?? 0)} a pagar até ${formatarData(r?.pagar_ate)}.`, 'success');
+        const r = await fetchApi('/api/financeiro/fechamentos', { method: 'POST', body: JSON.stringify({ tipo: 'comissao', competencia: compSel.value }) });
+        window.showToast?.(`Comissões fechadas: ${formatarMoeda(r?.total ?? 0)} a pagar até ${formatarData(r?.pagar_ate)}.`, 'success');
         avisarAlteracao();
         processando = false;
         fechar();
@@ -2067,12 +2146,319 @@
       }
     }
 
-    radios.forEach(r => r.addEventListener('change', carregar));
     compSel.addEventListener('change', carregar);
-    acionar(el('finFechamentoVerItens'), () => abrirOutro('visualizar-relatorio', {
-      relatorio: tipoAtual() === 'comissao' ? 'comissoes-apuradas' : 'producao-competencia', competencia: compSel.value
-    }));
+    acionar(el('finFechamentoVerItens'), () => abrirOutro('visualizar-relatorio', { relatorio: 'comissoes-apuradas', competencia: compSel.value }));
     acionar(confirmarBtn, confirmarFechamento);
+    return carregar();
+  }
+
+  /**
+   * Fechar competência — PRODUÇÃO.
+   *
+   * O pedido que entra em produção já traz o que há para produzir (a fila de
+   * cada peça em cada processo). Aqui vai um CARD por pedido: a peça abre e,
+   * em cada processo, o usuário diz quantas unidades ficaram PRONTAS — o que
+   * sobra fica pendente e volta no mês seguinte. "Nada pronto" (zero) também
+   * é decisão, e sem decisão em todas as unidades a competência não fecha.
+   */
+  function montarFecharProducao() {
+    const compSel = el('finFecharProducaoCompetencia');
+    const caixaCards = el('finFecharProducaoCards');
+    const confirmarBtn = el('finFecharProducaoConfirmar');
+    montarCompetencias(compSel, contexto.competencia);
+    let dados = null;
+    let previa = null;
+    let leitura = 0;
+    const abertas = new Set();   // peças expandidas: 'pedido:item'
+    const escolhas = new Map();  // 'item:etapa' -> unidades prontas (antes de confirmar)
+
+    const chaveDaPeca = (pedido, peca) => `${pedido.pedido_id}:${peca.pedido_item_id}`;
+    const chaveDoProcesso = (peca, processo) => `${peca.pedido_item_id}:${processo.etapa_id}`;
+    /** Quantas unidades ainda cabem na decisão (o saldo mais o que já foi confirmado no mês). */
+    const limite = processo => processo.saldo + (processo.decidido?.prontas || 0);
+    /** A escolha da tela; vazio (null) = ninguém decidiu ainda. */
+    const escolhido = (peca, processo) => {
+      const k = chaveDoProcesso(peca, processo);
+      if (escolhas.has(k)) return escolhas.get(k);
+      return processo.decidido ? processo.decidido.prontas : null;
+    };
+    const aviso = texto => mostrarMensagem('finFecharProducaoMensagem', texto);
+    const nomeDaPecaCurto = peca => [peca.codigo, peca.nome].filter(Boolean).join(' — ') || `peça ${peca.pedido_item_id}`;
+    const faltamNaPeca = peca => peca.processos.filter(p => limite(p) > 0 && escolhido(peca, p) === null).length;
+
+    // ------------------------------------------------------------ desenho
+    function linhaDoProcesso(pedido, peca, processo) {
+      const linha = criar('div', 'flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10');
+      const esquerda = criar('div', 'min-w-0');
+      esquerda.appendChild(criar('p', 'text-sm text-white', processo.nome));
+      const detalhe = [
+        `${processo.saldo} un. a decidir de ${processo.pedida}`,
+        processo.valor_unitario === null ? 'sem regra de produção' : `${formatarMoeda(processo.valor_unitario)} por peça inteira`,
+        processo.valor_pendente === null ? null : `pendente ${formatarMoeda(processo.valor_pendente)}`
+      ].filter(Boolean).join(' · ');
+      const sub = criar('p', 'text-xs text-gray-400', detalhe);
+      if (processo.regra) sub.title = `Regra: ${processo.regra}`;
+      esquerda.appendChild(sub);
+      if (processo.decidido) {
+        esquerda.appendChild(criar('p', 'text-xs', `Já decidido ${processo.decidido.rotulo}: ${processo.decidido.prontas} pronta(s), ${processo.decidido.pendentes} pendente(s)`));
+        esquerda.lastChild.style.color = 'var(--color-green)';
+      }
+
+      const controles = criar('div', 'flex items-center gap-2');
+      const campo = criar('input', 'w-20 bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      campo.type = 'number';
+      campo.min = '0';
+      campo.max = String(limite(processo));
+      campo.step = '1';
+      campo.placeholder = '—';
+      const atual = escolhido(peca, processo);
+      campo.value = atual === null ? '' : String(atual);
+      campo.setAttribute('aria-label', `Unidades prontas em ${processo.nome}`);
+      const marcar = valor => {
+        escolhas.set(chaveDoProcesso(peca, processo), valor);
+        campo.value = String(valor);
+        pintarCabecaDaPeca(pedido, peca);
+      };
+      const tudo = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Tudo');
+      tudo.type = 'button';
+      tudo.title = 'Todas as unidades ficaram prontas';
+      tudo.addEventListener('click', () => marcar(limite(processo)));
+      const nada = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada');
+      nada.type = 'button';
+      nada.title = 'Nada ficou pronto: tudo fica pendente para o mês seguinte';
+      nada.addEventListener('click', () => marcar(0));
+      campo.addEventListener('input', () => {
+        const n = Math.max(0, Math.min(limite(processo), Math.trunc(Number(campo.value) || 0)));
+        escolhas.set(chaveDoProcesso(peca, processo), campo.value === '' ? null : n);
+        pintarCabecaDaPeca(pedido, peca);
+      });
+      campo.addEventListener('blur', () => {
+        const escolha = escolhido(peca, processo);
+        if (escolha !== null) campo.value = String(escolha);
+      });
+      controles.append(tudo, nada, campo, criar('span', 'text-xs text-gray-400', `de ${limite(processo)}`));
+      linha.append(esquerda, controles);
+      return linha;
+    }
+
+    /** A etiqueta do cabeçalho da peça (decidida / quantas faltam). */
+    function pintarCabecaDaPeca(pedido, peca) {
+      const alvo = caixaCards.querySelector(`[data-peca="${chaveDaPeca(pedido, peca)}"] [data-estado]`);
+      if (!alvo) return;
+      const faltam = faltamNaPeca(peca);
+      alvo.className = `${faltam ? 'badge-warning' : 'badge-success'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+      alvo.textContent = faltam ? `${faltam} processo(s) a decidir` : 'Tudo decidido';
+    }
+
+    function blocoDaPeca(pedido, peca) {
+      const chave = chaveDaPeca(pedido, peca);
+      const bloco = criar('div', 'rounded-lg border border-white/10');
+      bloco.dataset.peca = chave;
+
+      const cabeca = criar('button', 'w-full flex items-center justify-between gap-3 px-4 py-3 text-left');
+      cabeca.type = 'button';
+      const esquerda = criar('div', 'min-w-0');
+      esquerda.appendChild(criar('p', 'text-sm text-white truncate', nomeDaPecaCurto(peca)));
+      esquerda.appendChild(criar('p', 'text-xs text-gray-400', `${peca.quantidade} un.${peca.do_estoque ? ` · ${peca.do_estoque} do estoque (paga só o que faltava)` : ''}`));
+      const direita = criar('div', 'flex items-center gap-2');
+      const estado = criar('span', 'badge-warning px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap', '');
+      estado.dataset.estado = 'true';
+      const seta = criar('i', 'fas fa-chevron-down text-xs text-gray-400');
+      direita.append(estado, seta);
+      cabeca.append(esquerda, direita);
+
+      const corpo = criar('div', 'px-4 pb-4 space-y-2');
+      for (const processo of peca.processos) corpo.appendChild(linhaDoProcesso(pedido, peca, processo));
+      const rodape = criar('div', 'flex justify-end pt-1');
+      const confirmar = criar('button', 'btn-success px-5 py-2 rounded-lg font-medium', 'Confirmar peça');
+      confirmar.type = 'button';
+      confirmar.dataset.perm = 'financeiro.producao.registrar';
+      acionar(confirmar, () => confirmarPeca(pedido, peca));
+      rodape.appendChild(confirmar);
+      corpo.appendChild(rodape);
+      corpo.classList.toggle('hidden', !abertas.has(chave));
+      seta.classList.toggle('fa-chevron-up', abertas.has(chave));
+
+      cabeca.addEventListener('click', () => {
+        const aberto = abertas.has(chave);
+        if (aberto) abertas.delete(chave); else abertas.add(chave);
+        corpo.classList.toggle('hidden', aberto);
+        seta.classList.toggle('fa-chevron-up', !aberto);
+      });
+
+      bloco.append(cabeca, corpo);
+      return bloco;
+    }
+
+    function cardDoPedido(pedido) {
+      const card = criar('div', 'glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4');
+      const topo = criar('div', 'flex items-start justify-between gap-3');
+      const titulo = criar('div', 'min-w-0');
+      titulo.appendChild(criar('p', 'text-white font-semibold truncate', `Pedido ${pedido.numero}`));
+      titulo.appendChild(criar('p', 'text-xs text-gray-400 truncate', [pedido.cliente, pedido.situacao].filter(Boolean).join(' • ')));
+      topo.append(titulo, pedido.confirmado
+        ? tagG('Confirmado', 'badge-success')
+        : tagG(`${pedido.unidades_pendentes} un. a decidir`, 'badge-warning'));
+      card.appendChild(topo);
+
+      const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
+      etiquetas.appendChild(tagG(`Pendente: ${formatarMoeda(pedido.valor_pendente)}`, 'badge-neutral'));
+      if (pedido.sem_valor) etiquetas.appendChild(tagG('Peça sem regra de produção', 'badge-danger', 'Acerte em "Regras" ou no cadastro da peça: sem valor a competência não fecha'));
+      const tudoPronto = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido');
+      tudoPronto.type = 'button';
+      tudoPronto.dataset.perm = 'financeiro.producao.registrar';
+      acionar(tudoPronto, () => confirmarPedidoInteiro(pedido));
+      etiquetas.appendChild(tudoPronto);
+      card.appendChild(etiquetas);
+
+      for (const peca of pedido.pecas) card.appendChild(blocoDaPeca(pedido, peca));
+      return card;
+    }
+
+    function pintar() {
+      const totais = dados?.totais || null;
+      el('finFecharProducaoPedidos').textContent = totais ? `${totais.pendentes} de ${totais.pedidos}` : '—';
+      el('finFecharProducaoUnidades').textContent = totais ? String(totais.unidades_pendentes) : '—';
+      el('finFecharProducaoPendente').textContent = totais ? formatarMoeda(totais.valor_pendente) : '—';
+      el('finFecharProducaoConfirmado').textContent = previa ? formatarMoeda(previa.a_pagar) : '—';
+      pintarSituacao(el('finFecharProducaoSituacao'), !previa ? '—' : (previa.fechamento?.pagamento ? 'Paga' : (previa.fechado ? 'Fechada' : 'Em aberto')));
+
+      caixaCards.replaceChildren();
+      for (const pedido of dados?.pedidos || []) caixaCards.appendChild(cardDoPedido(pedido));
+      for (const pedido of dados?.pedidos || []) for (const peca of pedido.pecas) pintarCabecaDaPeca(pedido, peca);
+      el('finFecharProducaoVazio').classList.toggle('hidden', Boolean(dados?.pedidos?.length) || !dados);
+
+      el('finFecharProducaoPecas').textContent = previa ? String(previa.pecas) : '—';
+      el('finFecharProducaoTotal').textContent = previa ? formatarMoeda(previa.a_pagar) : '—';
+      const processos = el('finFecharProducaoProcessos');
+      processos.replaceChildren();
+      for (const s of previa?.setores || []) {
+        const linha = criar('div', 'flex items-center justify-between px-4 py-3');
+        linha.append(
+          criar('span', 'text-sm text-gray-400', `${s.setor} (${s.pecas} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
+          criar('span', 'text-sm text-white', formatarMoeda(s.total))
+        );
+        processos.appendChild(linha);
+      }
+
+      const aberta = Boolean(previa) && !previa.fechado;
+      const bloqueios = aberta ? (previa.bloqueios || []) : [];
+      el('finFecharProducaoBloqueiosLista').replaceChildren(...bloqueios.map(b => criar('li', null, b)));
+      el('finFecharProducaoBloqueios').classList.toggle('hidden', !bloqueios.length);
+      const avisos = aberta ? (previa.avisos || []) : [];
+      el('finFecharProducaoAvisos').replaceChildren(...avisos.map(a => criar('li', null, a)));
+      el('finFecharProducaoAvisos').classList.toggle('hidden', !avisos.length);
+      confirmarBtn.classList.toggle('hidden', Boolean(previa?.fechado));
+    }
+
+    // ------------------------------------------------------------ dados
+    async function carregar() {
+      const minha = ++leitura;
+      aviso('');
+      el('finFecharProducaoCarregando').classList.remove('hidden');
+      try {
+        const [pend, prev] = await Promise.all([
+          fetchApi(`/api/financeiro/producao/pendencias?competencia=${encodeURIComponent(compSel.value)}`),
+          fetchApi(`/api/financeiro/fechamentos/previa?tipo=producao&competencia=${encodeURIComponent(compSel.value)}`).catch(() => null)
+        ]);
+        if (minha !== leitura) return;
+        dados = pend;
+        previa = prev;
+        el('finFecharProducaoSemSql').classList.add('hidden');
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        if (e?.corpo?.sql_pendente) {
+          el('finFecharProducaoSemSqlTexto').textContent = e.message;
+          el('finFecharProducaoSemSql').classList.remove('hidden');
+        } else {
+          aviso(textoDoErro(e, 'Você não tem permissão para ver a produção.'));
+        }
+      } finally {
+        if (minha === leitura) el('finFecharProducaoCarregando').classList.add('hidden');
+      }
+      pintar();
+    }
+
+    async function enviarDecisoes(pedido, decisoes, mensagem) {
+      try {
+        await fetchApi('/api/financeiro/producao/confirmar', {
+          method: 'POST',
+          body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes })
+        });
+        window.showToast?.(mensagem, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        aviso(textoDoErro(e, 'Você não tem permissão para registrar produção.'));
+      }
+    }
+
+    async function confirmarPeca(pedido, peca) {
+      aviso('');
+      const decisoes = [];
+      for (const processo of peca.processos) {
+        if (!limite(processo)) continue;
+        const valor = escolhido(peca, processo);
+        if (valor === null) {
+          aviso(`${nomeDaPecaCurto(peca)}: diga quantas unidades ficaram prontas em ${processo.nome} (pode ser zero).`);
+          return;
+        }
+        decisoes.push({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: valor });
+      }
+      if (!decisoes.length) return;
+      abertas.delete(chaveDaPeca(pedido, peca));
+      await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`);
+    }
+
+    async function confirmarPedidoInteiro(pedido) {
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Tudo pronto neste pedido?',
+        message: `Todas as unidades pendentes do pedido ${pedido.numero} entram como prontas nesta competência `
+          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)}).`,
+        confirmText: 'Confirmar tudo'
+      });
+      if (!confirmado) return;
+      const decisoes = pedido.pecas.flatMap(peca => peca.processos
+        .filter(processo => limite(processo) > 0)
+        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) })));
+      if (!decisoes.length) return;
+      for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`);
+    }
+
+    async function fecharCompetencia() {
+      aviso('');
+      if (!previa) return;
+      if (!previa.pode_fechar) {
+        aviso((previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
+        return;
+      }
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Fechar a produção?',
+        message: `Fechar a produção de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(previa.a_pagar)} a pagar até ${formatarData(previa.pagar_ate)}.`
+          + ' O que ficou pendente volta no mês seguinte. Depois disso nada desta competência muda. Não tem volta.',
+        confirmText: 'Fechar competência'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/financeiro/fechamentos', { method: 'POST', body: JSON.stringify({ tipo: 'producao', competencia: compSel.value }) });
+        window.showToast?.(`Produção fechada: ${formatarMoeda(r?.total ?? 0)} a pagar até ${formatarData(r?.pagar_ate)}.`, 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        processando = false;
+        await carregar();
+        aviso(textoDoErro(e, 'Você não tem permissão para fechar competência.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    compSel.addEventListener('change', () => { escolhas.clear(); abertas.clear(); carregar(); });
+    acionar(confirmarBtn, fecharCompetencia);
     return carregar();
   }
 
@@ -2084,27 +2470,107 @@
     const dataCampo = el('finPagamentoData');
     const formaSel = el('finPagamentoForma');
     const confirmarBtn = el('finPagamentoConfirmar');
+    const caixaQuem = el('finPagamentoQuemRecebe');
+    const listaQuem = el('finPagamentoBeneficiarios');
+    const tudoCampo = el('finPagamentoTudo');
     const hoje = hojeLocal();
     dataCampo.max = hoje;
     const listas = {};
+    const escolhidos = new Set(); // as linhas de "quem recebe" marcadas (tipo|pessoa)
+    const TIPOS_COMISSAO = { cms: 'CMS', royalty: 'Royalty' };
+    const semAcento = t => String(t ?? '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+    const somaDe = linhas => Math.round(linhas.reduce((s, l) => s + l.valor, 0) * 100) / 100;
     const tipoAtual = () => overlay.querySelector('input[name="finPagamentoTipo"]:checked')?.value || 'comissao';
     const atual = () => (listas[tipoAtual()] || []).find(f => f.competencia === compSel.value) || null;
+
+    /**
+     * Quem recebe as comissões da competência: o resumo congelado no
+     * fechamento vira uma linha por tipo (CMS/Royalty) de cada pessoa, já
+     * dizendo se aquela linha foi paga — sozinha, junto com o tipo inteiro,
+     * junto com a pessoa inteira ou no pagamento de tudo.
+     */
+    function linhasDe(f) {
+      if (!f || f.tipo !== 'comissao') return [];
+      const mapa = new Map();
+      for (const r of (f.resumo || [])) {
+        if (!r?.beneficiario || !TIPOS_COMISSAO[r.tipo]) continue;
+        const chave = `${r.tipo}|${semAcento(r.beneficiario)}`;
+        const linha = mapa.get(chave) || { chave, tipo: r.tipo, beneficiario: r.beneficiario, valor: 0, pago: null };
+        linha.valor = Math.round((linha.valor + (Number(r.valor) || 0)) * 100) / 100;
+        mapa.set(chave, linha);
+      }
+      const linhas = [...mapa.values()]
+        .sort((a, b) => b.valor - a.valor || String(a.beneficiario).localeCompare(String(b.beneficiario), 'pt-BR'));
+      for (const linha of linhas) {
+        linha.pago = (f.pagamentos || []).find(p => (!p.beneficiario || semAcento(p.beneficiario) === semAcento(linha.beneficiario))
+          && (!p.tipo_comissao || p.tipo_comissao === linha.tipo)) || null;
+      }
+      return linhas;
+    }
+
+    function pintarQuemRecebe(f) {
+      const linhas = linhasDe(f);
+      caixaQuem.classList.toggle('hidden', !linhas.length);
+      listaQuem.replaceChildren();
+      for (const chave of [...escolhidos]) {
+        if (!linhas.some(l => l.chave === chave && !l.pago)) escolhidos.delete(chave);
+      }
+      if (!linhas.length) return linhas;
+      for (const linha of linhas) {
+        const item = criar('li', 'fin-benef__item');
+        const nome = criar('label', 'fin-benef__nome');
+        const marca = criar('input');
+        marca.type = 'checkbox';
+        marca.style.accentColor = 'var(--color-primary)';
+        marca.checked = escolhidos.has(linha.chave);
+        marca.disabled = Boolean(linha.pago) || tudoCampo.checked;
+        marca.addEventListener('change', () => {
+          if (marca.checked) escolhidos.add(linha.chave); else escolhidos.delete(linha.chave);
+          pintar();
+        });
+        nome.appendChild(marca);
+        if (window.Beneficiarios) nome.appendChild(window.Beneficiarios.ponto(linha.beneficiario));
+        nome.appendChild(criar('span', null, linha.beneficiario));
+        nome.appendChild(criar('span', `fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--${linha.tipo}`, TIPOS_COMISSAO[linha.tipo]));
+        if (linha.pago) nome.appendChild(criar('span', 'fin-benef__pago', `pago em ${formatarData(linha.pago.data)}`));
+        item.append(nome, criar('span', 'fin-benef__valor', formatarMoeda(linha.valor)));
+        listaQuem.appendChild(item);
+      }
+      const legenda = el('finPagamentoLegenda');
+      if (legenda && window.Beneficiarios) legenda.replaceChildren(window.Beneficiarios.legenda([]));
+      return linhas;
+    }
 
     function pintar() {
       const lida = Boolean(listas[tipoAtual()]);
       const f = atual();
-      el('finPagamentoValor').value = f ? formatarMoeda(f.total) : '—';
-      pintarSituacao(el('finPagamentoSituacao'), !lida ? '—' : (!f ? 'Não fechada' : (f.pagamento ? 'Paga' : 'A pagar')));
+      const linhas = pintarQuemRecebe(f);
+      const porPessoa = Boolean(linhas.length) && !tudoCampo.checked;
+      const selecionadas = linhas.filter(l => !l.pago && escolhidos.has(l.chave));
+      const falta = f ? Number(f.falta_pagar ?? f.total) || 0 : 0;
+      const pago = f ? Number(f.pago) || 0 : 0;
+      const valor = !f ? null : (porPessoa ? somaDe(selecionadas) : falta);
+      el('finPagamentoValor').value = valor == null ? '—' : formatarMoeda(valor);
+      const selo = el('finPagamentoSelecao');
+      if (selo) {
+        selo.textContent = !f ? '—'
+          : porPessoa ? `selecionado: ${formatarMoeda(somaDe(selecionadas))}`
+            : `falta pagar: ${formatarMoeda(falta)}`;
+      }
+      pintarSituacao(el('finPagamentoSituacao'), !lida ? '—'
+        : (!f ? 'Não fechada' : (!(falta > 0) && pago > 0 ? 'Paga' : (pago > 0 ? 'Parcial' : 'A pagar'))));
       let info = '';
       if (lida) {
         const nome = tipoAtual() === 'comissao' ? 'As comissões' : 'A produção';
+        const prazo = `pagamento até ${formatarData(f?.pagar_ate)}${f?.pagar_ate && hoje > f.pagar_ate ? ' — prazo vencido' : ''}`;
         if (!f) info = `${nome} de ${rotuloCompetenciaCurto(compSel.value)} ainda não foi fechada: feche a competência antes de confirmar o pagamento.`;
-        else if (f.pagamento) info = `Paga em ${formatarData(f.pagamento.data)} (${f.pagamento.forma || '—'}): ${formatarMoeda(f.pagamento.valor)}.`;
         else if (!(Number(f.total) > 0)) info = 'Não há valor a pagar nesta competência (o saldo ficou para compensar no mês seguinte).';
-        else info = `Fechada; pagamento até ${formatarData(f.pagar_ate)}${f.pagar_ate && hoje > f.pagar_ate ? ' — prazo vencido' : ''}.`;
+        else if (!(falta > 0)) info = `Paga por inteiro: ${formatarMoeda(pago)} em ${f.pagamentos?.length === 1 ? '1 pagamento' : `${f.pagamentos?.length || 1} pagamentos`}.`;
+        else if (pago > 0) info = `Já foram pagos ${formatarMoeda(pago)} de ${formatarMoeda(f.total)}; faltam ${formatarMoeda(falta)} — ${prazo}.`;
+        else info = `Fechada; ${prazo}.`;
       }
       el('finPagamentoInfo').textContent = info;
-      confirmarBtn.classList.toggle('hidden', Boolean(f?.pagamento));
+      confirmarBtn.classList.toggle('hidden', !(falta > 0));
     }
 
     async function carregar() {
@@ -2123,39 +2589,62 @@
     async function confirmarPagamento() {
       mostrarMensagem('finPagamentoMensagem', '');
       const f = atual();
+      const linhas = linhasDe(f);
+      const porPessoa = Boolean(linhas.length) && !tudoCampo.checked;
+      const alvos = porPessoa ? linhas.filter(l => !l.pago && escolhidos.has(l.chave)) : [];
+      const falta = f ? Number(f.falta_pagar ?? f.total) || 0 : 0;
+      const valor = porPessoa ? somaDe(alvos) : falta;
       const erro = !f ? 'Esta competência ainda não foi fechada.'
-        : f.pagamento ? 'O pagamento desta competência já foi confirmado.'
-          : !(Number(f.total) > 0) ? 'Não há valor a pagar nesta competência.'
-            : !dataCampo.value ? 'Informe a data do pagamento.'
-              : dataCampo.value > hoje ? 'A data do pagamento não pode ser futura.'
-                : !formaSel.value ? 'Informe como foi pago.' : '';
+        : !(Number(f.total) > 0) ? 'Não há valor a pagar nesta competência.'
+          : !(falta > 0) ? 'O pagamento desta competência já foi confirmado por inteiro.'
+            : porPessoa && !alvos.length ? 'Escolha quem foi pago (ou marque "Pagar tudo o que falta").'
+              : !dataCampo.value ? 'Informe a data do pagamento.'
+                : dataCampo.value > hoje ? 'A data do pagamento não pode ser futura.'
+                  : !formaSel.value ? 'Informe como foi pago.' : '';
       if (erro) { mostrarMensagem('finPagamentoMensagem', erro); return; }
       const tipo = tipoAtual();
+      const quem = porPessoa ? alvos.map(l => `${TIPOS_COMISSAO[l.tipo]} de ${l.beneficiario}`).join(', ') : 'tudo o que falta';
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Confirmar o pagamento?',
-        message: `${tipo === 'comissao' ? 'Comissões' : 'Produção'} de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(f.total)} pagos em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
+        message: `${tipo === 'comissao' ? 'Comissões' : 'Produção'} de ${rotuloCompetenciaCurto(compSel.value)} — ${quem}: `
+          + `${formatarMoeda(valor)} pagos em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
         confirmText: 'Confirmar pagamento'
       });
       if (!confirmado) return;
+      const base = { tipo, competencia: compSel.value, data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finPagamentoObservacoes').value };
+      // Um pagamento por beneficiário escolhido: cada um fica registrado com o nome dele.
+      const envios = porPessoa ? alvos.map(l => ({ ...base, beneficiario: l.beneficiario, tipo_comissao: l.tipo })) : [base];
       processando = true;
+      let feitos = 0;
+      let atrasado = false;
       try {
-        const r = await fetchApi('/api/financeiro/pagamentos', {
-          method: 'POST',
-          body: JSON.stringify({ tipo, competencia: compSel.value, data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finPagamentoObservacoes').value })
-        });
-        window.showToast?.(r?.atrasado ? 'Pagamento confirmado (depois do prazo).' : 'Pagamento confirmado.', 'success');
+        for (const corpo of envios) {
+          const r = await fetchApi('/api/financeiro/pagamentos', { method: 'POST', body: JSON.stringify(corpo) });
+          feitos += 1;
+          atrasado = atrasado || Boolean(r?.atrasado);
+        }
+        window.showToast?.(atrasado ? 'Pagamento confirmado (depois do prazo).' : 'Pagamento confirmado.', 'success');
         avisarAlteracao();
         processando = false;
         fechar();
       } catch (e) {
-        mostrarMensagem('finPagamentoMensagem', textoDoErro(e, 'Você não tem permissão para confirmar pagamentos.'));
+        // Se parte já entrou, a tela recarrega para mostrar o que falta.
+        const parcial = feitos ? `${feitos} de ${envios.length} pagamentos já foram gravados. ` : '';
+        mostrarMensagem('finPagamentoMensagem', parcial + textoDoErro(e, 'Você não tem permissão para confirmar pagamentos.'));
+        if (feitos) {
+          avisarAlteracao();
+          listas[tipo] = null;
+          escolhidos.clear();
+          await carregar();
+        }
       } finally {
         processando = false;
       }
     }
 
-    radios.forEach(r => r.addEventListener('change', carregar));
-    compSel.addEventListener('change', pintar);
+    radios.forEach(r => r.addEventListener('change', () => { escolhidos.clear(); carregar(); }));
+    compSel.addEventListener('change', () => { escolhidos.clear(); pintar(); });
+    tudoCampo?.addEventListener('change', pintar);
     acionar(confirmarBtn, confirmarPagamento);
     return carregar();
   }
@@ -2287,31 +2776,72 @@
     const periodo = contexto.periodo?.inicio ? contexto.periodo : null;
     let relatorio = { ...montarRelatorio(chave, { linhas: [] }), competencia, periodo, filtro: '' };
     let carregado = false;
+    let quemRecebe = '';
+    const temColunaBenef = (RELATORIOS[chave]?.colunas || []).some(c => c.tipo === 'beneficiarios');
+    const selQuem = el('finRelatorioQuemRecebe');
     // Relatório de comissão: a linha abre os Detalhes da parcela.
     const destinoDaLinha = l => (RELATORIOS_DE_PARCELA.has(chave) && l.pedido_id && l.numero_parcela ? 'detalhes-parcela' : null);
 
+    /** O relatório como está na tela: já filtrado por quem recebe (é o que se exporta). */
+    function visivel() {
+      const linhas = filtrarPorBeneficiario(relatorio.linhas, quemRecebe);
+      const opcoes = opcoesDeBeneficiario(relatorio.linhas);
+      const marca = quemRecebe ? ` • Quem recebe: ${rotuloDoFiltroBenef(quemRecebe, opcoes)}` : '';
+      return { ...relatorio, ...montarRelatorio(chave, { linhas }), filtro: `${relatorio.filtro || ''}${marca}` };
+    }
+
+    /** O filtro só existe onde há quem receba: monta as opções a cada leitura. */
+    function pintarFiltroBenef() {
+      const bloco = el('finRelatorioQuemRecebeBloco');
+      if (!bloco || !selQuem) return;
+      const opcoes = opcoesDeBeneficiario(relatorio.linhas);
+      const tem = temColunaBenef && (opcoes.pessoas.length > 0 || opcoes.tipos.length > 0);
+      bloco.classList.toggle('hidden', !tem);
+      if (!tem) { quemRecebe = ''; return; }
+      const escolhido = quemRecebe;
+      selQuem.replaceChildren(opcao('', 'Todos'));
+      if (opcoes.tipos.length > 1) {
+        const grupo = criar('optgroup');
+        grupo.label = 'Tipo';
+        for (const t of opcoes.tipos) grupo.appendChild(opcao(`tipo:${t}`, t === 'royalty' ? 'Royalty' : 'CMS'));
+        selQuem.appendChild(grupo);
+      }
+      if (opcoes.pessoas.length) {
+        const grupo = criar('optgroup');
+        grupo.label = 'Pessoa';
+        for (const p of opcoes.pessoas) grupo.appendChild(opcao(`pessoa:${p.chave}`, p.nome));
+        selQuem.appendChild(grupo);
+      }
+      selQuem.value = [...selQuem.options].some(o => o.value === escolhido) ? escolhido : '';
+      quemRecebe = selQuem.value;
+      const legenda = el('finRelatorioLegendaBenef');
+      if (legenda && window.Beneficiarios) legenda.replaceChildren(window.Beneficiarios.legenda([]));
+    }
+
     function pintar() {
+      pintarFiltroBenef();
+      const mostrado = visivel();
       el('finRelatorioTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-chart-line mr-2' }),
-        document.createTextNode(tituloDoRelatorio(relatorio)));
+        document.createTextNode(tituloDoRelatorio(mostrado)));
       el('finRelatorioSubtitulo').textContent = 'Conferência antes da exportação';
       el('finRelatorioGeradoEm').textContent = `Gerado em ${formatarData(hojeLocal())}`;
-      el('finRelatorioNome').textContent = relatorio.titulo;
-      el('finRelatorioFiltro').textContent = relatorio.filtro || (periodo ? `Período: ${formatarData(periodo.inicio)} a ${formatarData(periodo.fim)}` : `Competência: ${rotuloCompetenciaCurto(competencia)}`);
+      el('finRelatorioNome').textContent = mostrado.titulo;
+      el('finRelatorioFiltro').textContent = mostrado.filtro || (periodo ? `Período: ${formatarData(periodo.inicio)} a ${formatarData(periodo.fim)}` : `Competência: ${rotuloCompetenciaCurto(competencia)}`);
       const cabecalho = el('finRelatorioCabecalho');
       cabecalho.replaceChildren();
-      for (const c of relatorio.colunas) {
+      for (const c of mostrado.colunas) {
         cabecalho.appendChild(criar('th', `px-4 py-3 text-xs ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`, c.rotulo));
       }
-      montarLinhas(el('finRelatorioCorpo'), relatorio.linhas, relatorio.colunas.map(c => (c.chave === 'dias' ? { ...c, enfase: true } : c)), { abrir: destinoDaLinha });
+      montarLinhas(el('finRelatorioCorpo'), mostrado.linhas, mostrado.colunas.map(c => (c.chave === 'dias' ? { ...c, enfase: true } : c)), { abrir: destinoDaLinha });
       const totais = el('finRelatorioTotais');
       totais.replaceChildren();
-      relatorio.colunas.forEach((c, i) => {
+      mostrado.colunas.forEach((c, i) => {
         const td = criar('td', `px-4 py-3 ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`);
-        if (i === 0) td.textContent = `Total (${relatorio.linhas.length} ${relatorio.linhas.length === 1 ? 'registro' : 'registros'})`;
-        else if (c.total) td.textContent = c.tipo === 'inteiro' ? String(relatorio.totais[c.chave]) : formatarMoeda(relatorio.totais[c.chave]);
+        if (i === 0) td.textContent = `Total (${mostrado.linhas.length} ${mostrado.linhas.length === 1 ? 'registro' : 'registros'})`;
+        else if (c.total) td.textContent = c.tipo === 'inteiro' ? String(mostrado.totais[c.chave]) : formatarMoeda(mostrado.totais[c.chave]);
         totais.appendChild(td);
       });
-      el('finRelatorioVazio').classList.toggle('hidden', !carregado || relatorio.linhas.length > 0);
+      el('finRelatorioVazio').classList.toggle('hidden', !carregado || mostrado.linhas.length > 0);
     }
 
     async function carregar() {
@@ -2328,15 +2858,18 @@
     }
 
     const exportar = formato => async () => {
-      if (!relatorio.linhas.length) { window.showToast?.('Nada para exportar.', 'info'); return; }
+      // Sai o que está na tela: com o filtro de quem recebe, se houver.
+      const mostrado = visivel();
+      if (!mostrado.linhas.length) { window.showToast?.('Nada para exportar.', 'info'); return; }
       try {
-        await exportarRelatorio(formato, relatorio);
+        await exportarRelatorio(formato, mostrado);
       } catch (e) {
         window.showToast?.(e.message || 'Não foi possível exportar.', 'error');
       }
     };
     acionar(el('finRelatorioPdf'), exportar('pdf'));
     acionar(el('finRelatorioExcel'), exportar('excel'));
+    selQuem?.addEventListener('change', () => { quemRecebe = selQuem.value; pintar(); });
     aoAlterar(carregar);
     pintar();
     return carregar();
@@ -2389,10 +2922,11 @@
       if (!bens.length) linhaVazia(corpoB, 4, 'Sem regra de CMS/Royalty para esta parcela.');
       for (const b of bens) {
         const tr = document.createElement('tr');
-        tr.append(celulaG(TIPOS_REGRA[b.tipo] || b.tipo), celulaG(b.beneficiario, 'px-4 py-3 text-white'),
+        tr.append(...celulasDeBeneficiario(b),
           celulaG(percentualTexto(b.percentual), 'px-4 py-3 text-right'), celulaG(formatarMoeda(b.valor), 'px-4 py-3 text-right'));
         corpoB.appendChild(tr);
       }
+      pintarLegendaBenef('finParcelaBeneficiariosLegenda', bens);
 
       if (!(d.fechamentos || []).length) linhaVazia(corpoF, 5, 'A comissão desta parcela ainda não entrou em fechamento.');
       for (const f of d.fechamentos || []) {
@@ -2525,9 +3059,11 @@
         ['Saldo a pagar', formatarMoeda(centavos(Number(c.prevista || 0) + Number(c.realizada || 0) - Number(c.paga || 0))), true]
       ]);
       montarLinhas(el('finPedidoParcelas'), (d.parcelas || []).map(p => ({ ...p, situacao_texto: p.situacao_rotulo })), [
-        { chave: 'parcela' }, { chave: 'vencimento', tipo: 'data' }, { chave: 'liquido', tipo: 'moeda' }, { chave: 'comissao', tipo: 'moeda' }, { chave: 'situacao_texto', tipo: 'badge' }
+        { chave: 'parcela' }, { chave: 'vencimento', tipo: 'data' }, { chave: 'liquido', tipo: 'moeda' }, { chave: 'comissao', tipo: 'moeda' }, { chave: 'situacao_texto', tipo: 'badge' },
+        { chave: 'beneficiarios', tipo: 'beneficiarios' }
       ], { abrir: 'detalhes-parcela' });
-      if (!(d.parcelas || []).length) linhaVazia(el('finPedidoParcelas'), 5, 'O pedido ainda não tem parcelas faturadas.');
+      if (!(d.parcelas || []).length) linhaVazia(el('finPedidoParcelas'), 6, 'O pedido ainda não tem parcelas faturadas.');
+      pintarLegendaBenef('finPedidoParcelasLegenda', (d.parcelas || []).flatMap(p => p.benef_lista || []));
 
       montarLinhaDoTempo(el('finPedidoHistorico'), (d.historico || []).map(h => ({ quando: formatarDataCurta(h.quando), titulo: h.titulo, detalhe: h.detalhe })));
     }
@@ -2564,11 +3100,14 @@
     let todas = [];
     let carregado = false;
 
+    const quemSel = el('finAtrasadasQuemRecebe');
+
     const colunas = [
       { chave: 'pedido', tipo: 'pedido' }, { chave: 'cliente' }, { chave: 'nf' }, { chave: 'parcela' },
       { chave: 'vencimento', tipo: 'data' }, { chave: 'dias', tipo: 'inteiro', enfase: true },
       { chave: 'liquido', tipo: 'moeda' }, { chave: 'cms', tipo: 'moeda' }, { chave: 'royalty', tipo: 'moeda' },
-      { chave: 'comissao', tipo: 'moeda', classe: 'font-semibold' }
+      { chave: 'comissao', tipo: 'moeda', classe: 'font-semibold' },
+      { chave: 'beneficiarios', tipo: 'beneficiarios' }
     ];
 
     function montarClientes() {
@@ -2580,18 +3119,42 @@
       clienteSel.value = [...clienteSel.options].some(o => o.value === atual) ? atual : '';
     }
 
+    /** Filtro por quem recebe: os tipos e as pessoas que aparecem nas parcelas atrasadas. */
+    function montarQuemRecebe() {
+      if (!quemSel) return;
+      const atual = quemSel.value;
+      const opcoes = opcoesDeBeneficiario(todas);
+      quemSel.replaceChildren(opcao('', 'Todos'));
+      if (opcoes.tipos.length > 1) {
+        const grupo = criar('optgroup');
+        grupo.label = 'Tipo';
+        for (const t of opcoes.tipos) grupo.appendChild(opcao(`tipo:${t}`, t === 'royalty' ? 'Royalty' : 'CMS'));
+        quemSel.appendChild(grupo);
+      }
+      if (opcoes.pessoas.length) {
+        const grupo = criar('optgroup');
+        grupo.label = 'Pessoa';
+        for (const p of opcoes.pessoas) grupo.appendChild(opcao(`pessoa:${p.chave}`, p.nome));
+        quemSel.appendChild(grupo);
+      }
+      quemSel.value = [...quemSel.options].some(o => o.value === atual) ? atual : '';
+      quemSel.closest('div')?.classList.toggle('hidden', !opcoes.pessoas.length);
+    }
+
     function filtrar() {
       const cliente = clienteSel.value;
       const pedido = String(el('finAtrasadasPedido').value).trim();
       const faixa = el('finAtrasadasFaixa').value;
       const inicio = el('finAtrasadasInicio').value;
       const fim = el('finAtrasadasFim').value;
-      return todas.filter(l =>
+      const linhas = todas.filter(l =>
         (!cliente || l.cliente === cliente)
         && (!pedido || String(l.pedido).includes(pedido))
         && (!faixa || l.faixa === faixa)
         && (!inicio || String(l.vencimento) >= inicio)
         && (!fim || String(l.vencimento) <= fim));
+      // Com quem recebe escolhido, os valores viram a parte dele (o total bate com o filtro).
+      return filtrarPorBeneficiario(linhas, quemSel?.value || '');
     }
 
     function desenhar() {
@@ -2601,6 +3164,7 @@
       el('finAtrasadasLiquido').textContent = carregado ? formatarMoeda(resumo.liquido) : '—';
       el('finAtrasadasComissao').textContent = carregado ? formatarMoeda(resumo.comissao) : '—';
       montarLinhas(el('finAtrasadasCorpo'), linhas, colunas, { abrir: 'detalhes-parcela' });
+      pintarLegendaBenef('finAtrasadasLegenda', linhas.flatMap(l => l.benef_lista || []));
       el('finAtrasadasVazio').classList.toggle('hidden', !carregado || linhas.length > 0);
       el('finAtrasadasCorpo').closest('.fin-tabela').classList.toggle('hidden', linhas.length === 0);
 
@@ -2636,10 +3200,11 @@
         el('finAtrasadasCarregando').classList.add('hidden');
       }
       montarClientes();
+      montarQuemRecebe();
       desenhar();
     }
 
-    ['finAtrasadasCliente', 'finAtrasadasFaixa', 'finAtrasadasInicio', 'finAtrasadasFim'].forEach(id => el(id).addEventListener('change', desenhar));
+    ['finAtrasadasCliente', 'finAtrasadasQuemRecebe', 'finAtrasadasFaixa', 'finAtrasadasInicio', 'finAtrasadasFim'].forEach(id => el(id)?.addEventListener('change', desenhar));
     el('finAtrasadasPedido').addEventListener('input', desenhar);
     // Enter numa linha abre os detalhes, como o clique.
     el('finAtrasadasCorpo').addEventListener('keydown', e => {
@@ -2907,6 +3472,28 @@
       }
     }
 
+    /** Excluir some com a linha (só Sup Admin); o que já foi fechado não muda. */
+    async function excluirRegra(r) {
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Excluir a regra?',
+        message: `${TIPOS_REGRA[r.tipo]} ${percentualTexto(r.percentual)} para ${quemRecebeDaRegra(r)} (${alcanceDaRegra(r)}) sai da lista para sempre. `
+          + 'O que já foi fechado mantém os percentuais com que fechou; o que ainda não foi fechado deixa de ter esta comissão. '
+          + 'Para guardar o histórico, use "Desativar".',
+        confirmText: 'Excluir'
+      });
+      if (!confirmado) return;
+      avisar('');
+      try {
+        await fetchApi(`/api/financeiro/regras/${encodeURIComponent(r.id)}`, { method: 'DELETE' });
+        window.showToast?.('Regra excluída.', 'success');
+        if (editandoRegra?.id === r.id) limparFormRegra();
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(textoDoErro(e, 'Só o Sup Admin exclui uma regra.'));
+      }
+    }
+
     async function alternarRegra(r) {
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: r.ativo ? 'Desativar a regra?' : 'Reativar a regra?',
@@ -2942,6 +3529,8 @@
           botaoG(acoes, 'Alterar', () => editarRegra(r), { perm: 'financeiro.regras.editar' });
           botaoG(acoes, r.ativo ? 'Desativar' : 'Reativar', () => alternarRegra(r), { classe: r.ativo ? 'btn-danger text-white' : 'btn-success', perm: 'financeiro.regras.editar' });
         }
+        // Excluir de vez: só o Sup Admin (o backend confere de novo).
+        if (dados?.pode_excluir) botaoG(acoes, 'Excluir', () => excluirRegra(r), { classe: 'btn-danger text-white', titulo: 'Apaga a regra (o fechado não muda)' });
         const tr = document.createElement('tr');
         if (!r.ativo) tr.classList.add('opacity-60');
         tr.append(
@@ -3087,10 +3676,12 @@
 
     async function montarProdutos(selecionado) {
       const itens = await lista('produtos');
-      const rotulo = p => [p.codigo, p.nome].filter(Boolean).join(' — ') || `Peça ${p.id}`;
+      // Na caixa aparece só o NOME; a busca continua achando pelo código.
+      const rotulo = p => p.nome || p.codigo || `Peça ${p.id}`;
+      const paraBusca = p => `${p.codigo || ''} ${p.nome || ''}`.toLowerCase();
       const atual = selecionado !== undefined ? String(selecionado) : produtoSel.value;
       const termo = produtoBusca.value.trim().toLowerCase();
-      const visiveis = itens.filter(p => !termo || rotulo(p).toLowerCase().includes(termo) || String(p.id) === atual);
+      const visiveis = itens.filter(p => !termo || paraBusca(p).includes(termo) || String(p.id) === atual);
       produtoSel.replaceChildren(opcao('padrao', PADRAO_DO_PROCESSO));
       for (const p of visiveis.slice(0, 500)) produtoSel.appendChild(opcao(String(p.id), rotulo(p)));
       produtoSel.value = [...produtoSel.options].some(o => o.value === atual) ? atual : 'padrao';
@@ -3167,7 +3758,7 @@
         const tr = document.createElement('tr');
         tr.append(
           celulaG(v.etapa || '—', 'px-4 py-3 text-white'),
-          celulaG(semPeca(v) ? tagG('Padrão do processo', 'badge-info') : v.produto),
+          celulaG(semPeca(v) ? tagG('Padrão do processo', 'badge-info') : tagG(v.produto_codigo || v.produto, 'badge-warning', v.produto_nome || v.produto || '')),
           celulaG(v.descricao || '—'), celulaG(acoes)
         );
         corpo.appendChild(tr);
@@ -4320,6 +4911,7 @@
     finRegistrarAjuste: montarAjuste,
     finRegistrarProducao: montarProducao,
     finFecharCompetencia: montarFechamento,
+    finFecharProducao: montarFecharProducao,
     finRelatorios: montarRelatorios,
     finDetalhesParcela: montarDetalhesParcela,
     finDetalhesPedido: montarDetalhesPedido,

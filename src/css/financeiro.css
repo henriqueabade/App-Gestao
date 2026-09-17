@@ -75,6 +75,21 @@ body {
 .badge-danger { background: rgba(255, 88, 88, 0.2); color: var(--color-red); }
 .badge-neutral { background: rgba(163, 148, 167, 0.2); color: var(--color-violet); }
 
+/**
+ * Botão só com ícone (o + e o − da caixa de processos), no mesmo tamanho dos
+ * de Produtos e Matéria-prima: sem esta regra o botão nascia do tamanho do
+ * ícone, colado no canto e fora do padrão dos outros modais.
+ */
+.icon-only {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
 .info-icon {
     width: 20px;
     height: 20px;
@@ -535,6 +550,115 @@ body {
     flex-direction: column;
     flex: 1;
 }
+
+/* ------------------------------------------------------------------
+   QUEM RECEBE (CMS e Royalty por pessoa).
+   A cor é de cada PESSOA (src/js/utils/beneficiarios.js, sempre a mesma em
+   todas as telas); o tipo vem na etiqueta. Fica dentro do card sem esticá-lo:
+   a lista rola sozinha quando há muita gente.
+   ------------------------------------------------------------------ */
+.fin-benef {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-inputBorder, rgba(255, 255, 255, 0.1));
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.fin-benef__topo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.fin-benef__titulo {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-pen, #a394a7);
+}
+
+.fin-benef__total { font-size: 0.8rem; color: var(--color-green); font-weight: 600; }
+
+.fin-benef__lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 11rem;
+    overflow-y: auto;
+}
+
+.fin-benef__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+}
+
+.fin-benef__nome { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.fin-benef__nome > span:not(.fin-ponto):not([class*="tipo"]) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-benef__valor { white-space: nowrap; font-weight: 600; }
+
+.fin-benef__legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; }
+
+/* Filtro "quem recebe" dos relatórios de comissão, acima da tabela. */
+.fin-filtro-benef {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.9rem;
+    margin: 0 0 0.75rem;
+}
+
+/* Várias etiquetas na mesma célula (coluna "Quem recebe"). */
+.fin-etiquetas-benef { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+/* No Confirmar pagamento cada linha é escolhível: a linha inteira é o rótulo. */
+label.fin-benef__nome { cursor: pointer; }
+.fin-benef__nome input[type="checkbox"] { flex-shrink: 0; cursor: pointer; accent-color: var(--color-primary); }
+.fin-benef__nome input[type="checkbox"]:disabled { cursor: default; }
+.fin-benef__pago { flex-shrink: 0; white-space: nowrap; font-size: 0.72rem; color: var(--color-pen, #a394a7); }
+
+.fin-ponto {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.fin-etiqueta-benef {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.fin-etiqueta-benef__tipo {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+}
+
+/* CMS preenchida, Royalty vazada: dá para distinguir sem depender da cor. */
+.fin-etiqueta-benef__tipo--cms { background: var(--color-primary); color: #1a1a1a; }
+.fin-etiqueta-benef__tipo--royalty { border: 1px solid var(--color-primary); color: var(--color-primary); }
+
+.fin-legenda { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; font-size: 0.7rem; color: var(--color-pen, #a394a7); }
+.fin-legenda__item { display: inline-flex; align-items: center; gap: 0.3rem; }
 
 .fin-resumo__linha {
     display: flex;

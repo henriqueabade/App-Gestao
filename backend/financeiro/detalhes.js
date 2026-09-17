@@ -126,7 +126,9 @@ async function pedido({ api, pedidoId, hoje, desde }) {
     })),
     parcelas: parcelas.sort((x, y) => x.numero_parcela - y.numero_parcela).map(p => ({
       pedido_id: p.pedido_id, numero_parcela: p.numero_parcela, parcela: p.parcela, vencimento: p.vencimento, liquido: p.liquido,
-      situacao: p.situacao, situacao_rotulo: ROTULO_SITUACAO[p.situacao] || p.situacao, comissao: p.potencial.total
+      situacao: p.situacao, situacao_rotulo: ROTULO_SITUACAO[p.situacao] || p.situacao, comissao: p.potencial.total,
+      // Quem recebe a comissão desta parcela (CMS do dono do cliente, Royalty do desenhista).
+      benef_lista: (p.potencial.beneficiarios || []).map(x => ({ tipo: x.tipo, beneficiario: x.beneficiario, valor: x.valor, percentual: x.percentual == null ? null : Number(x.percentual) }))
     })),
     producao: prod.eventos.map(e => ({
       id: e.id, data: e.data_finalizacao, quantidade: Number(e.quantidade), setor: e.setor, status: e.status, estornado: Boolean(e.estornado_em),

@@ -24,7 +24,17 @@ function instanteBR(instante) {
   return `${v('year')}-${v('month')}-${v('day')}T${v('hour')}:${v('minute')}-03:00`;
 }
 
-const situacaoDe = r => (r.fechamento?.pagamento ? 'paga' : (r.fechado ? 'fechada' : 'aberta'));
+/**
+ * A situação da competência. Com o pagamento por beneficiário ela pode ficar
+ * PARCIAL: parte dos beneficiários já recebeu e parte não.
+ */
+const situacaoDe = r => {
+  const f = r.fechamento;
+  if (!f) return r.fechado ? 'fechada' : 'aberta';
+  const falta = f.falta_pagar === undefined || f.falta_pagar === null ? (f.pagamento ? 0 : 1) : Number(f.falta_pagar);
+  if (falta <= 0) return 'paga';
+  return Number(f.pago) > 0 ? 'parcial' : 'fechada';
+};
 
 /** Pedidos com produção começada e algum item/setor ainda por terminar. Pura. */
 function pedidosParciais({ eventos, itensPor }) {
@@ -82,12 +92,14 @@ function pendencias({ hoje, regrasTudo, apuradas, estadoC, estadoP, pend, fecham
     comp => calendario.pagarProducaoAte(comp, regrasTudo.configuracao, regrasTudo.feriados), 'Produção', false);
 
   // Fechadas e não pagas.
-  for (const f of fechamentosLista.filter(x => !x.pagamento && x.total > 0)) {
+  // Pago em parte (por beneficiário) continua pendente pelo que falta.
+  for (const f of fechamentosLista.filter(x => (x.falta_pagar ?? x.total) > 0 && x.total > 0)) {
     const vencido = f.pagar_ate && hoje > f.pagar_ate;
+    const falta = c.centavos(f.falta_pagar ?? f.total);
     lista.push({
       nivel: vencido ? 'critico' : 'normal', chave: `pagar_${f.tipo}_${f.competencia}`,
       titulo: `Pagamento ${f.tipo === 'comissao' ? 'das comissões' : 'da produção'} de ${c.rotuloCompetencia(f.competencia)}${vencido ? ' atrasado' : ''}`,
-      descricao: `${c.reais(f.total)} até ${c.impressa(f.pagar_ate)} · confirme quando pagar`,
+      descricao: `${c.reais(falta)}${falta !== c.centavos(f.total) ? ` de ${c.reais(f.total)}` : ''} até ${c.impressa(f.pagar_ate)} · confirme quando pagar`,
       data: f.pagar_ate, acao: 'Confirmar', destino: 'confirmar-pagamento', filtro: { tipo: f.tipo, competencia: f.competencia }
     });
   }
@@ -151,7 +163,14 @@ async function carregar({ api, competencia, hoje, desde }) {
       atrasadas: comissoes.soma(v.atrasadas, p => p.potencial.total),
       ajustes: resumo.ajustes,
       proximo_pagamento: pagarComissao,
-      situacao: situacaoDe(resumo)
+      situacao: situacaoDe(resumo),
+      // Quem recebe o quê (CMS e Royalty, por pessoa): a tela mostra com
+      // etiqueta colorida e legenda, e o pagamento pode ser feito por pessoa.
+      beneficiarios: resumo.beneficiarios || [],
+      beneficiarios_previstos: [...comissoes.somarBeneficiarios(v.previstas.map(p => p.potencial.beneficiarios)).values()]
+        .sort((a, b) => Number(b.valor) - Number(a.valor)),
+      pago: resumo.fechamento?.pago ?? 0,
+      falta_pagar: resumo.fechamento ? resumo.fechamento.falta_pagar : null
     },
     resumo_producao: {
       em_producao: b.receber.pedidos.filter(p => producao.podeProduzir(p) && String(p.situacao || '').toLowerCase().startsWith('produ')).length,

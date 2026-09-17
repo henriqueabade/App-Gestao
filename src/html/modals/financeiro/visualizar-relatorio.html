@@ -27,6 +27,16 @@
           </div>
           <p class="text-xs text-gray-400">Santíssimo Decor • Comissões e Produção</p>
         </div>
+        <!--
+          Comissões: filtra por quem recebe (CMS/Royalty e pessoa) e só aparece
+          nos relatórios que têm essa coluna. O filtro vale também para o que é
+          exportado, e os valores passam a ser a parte de quem foi escolhido.
+        -->
+        <div id="finRelatorioQuemRecebeBloco" class="hidden fin-filtro-benef">
+          <label for="finRelatorioQuemRecebe" class="text-xs text-gray-300">Quem recebe</label>
+          <select id="finRelatorioQuemRecebe" class="input-glass text-white rounded-md px-3 py-2 text-sm select-arrow appearance-none"></select>
+          <div id="finRelatorioLegendaBenef" class="fin-legenda"></div>
+        </div>
         <div class="fin-tabela fin-tabela--folha flex-1 min-h-0">
           <table class="w-full text-sm">
             <thead><tr id="finRelatorioCabecalho"></tr></thead>

@@ -1,0 +1,93 @@
+<!--
+  Fechar competência — produção. Modal extra grande: um CARD por pedido com
+  produção pendente no mês. Dentro do card, cada peça abre e, em cada
+  processo, o usuário diz quantas unidades ficaram PRONTAS; o que sobra fica
+  pendente para o mês seguinte ("nada pronto" também é decisão). Só fecha
+  depois que todos os pedidos estiverem confirmados.
+  Dados: GET /api/financeiro/producao/pendencias?competencia=
+  Confirma: POST /api/financeiro/producao/confirmar (financeiro.producao.registrar)
+  Fecha:    POST /api/financeiro/fechamentos { tipo: 'producao' } (financeiro.competencia.fechar)
+  Script: src/js/modals/financeiro-modais.js (montarFecharProducao).
+-->
+<div id="finFecharProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finFecharProducaoTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finFecharProducaoTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Fechar competência — produção</h2>
+        <p class="text-xs text-gray-300 truncate">Confirme, peça a peça, o que ficou pronto no mês</p>
+      </div>
+      <span id="finFecharProducaoSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p class="text-sm text-gray-300">
+          O pedido que entra em produção já traz o que há para produzir: cada peça, em cada processo que ela usa (a peça que saiu do estoque
+          adiantada deve só o que faltava). Aqui você diz <strong>quantas unidades ficaram prontas</strong> em cada processo — o que sobra fica
+          <strong>pendente</strong> e volta no mês seguinte. Enviar o pedido ao cliente confirma sozinho o que estava pendente.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          <div>
+            <label for="finFecharProducaoCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+            <select id="finFecharProducaoCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div class="md:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Pedidos a confirmar</p>
+              <p id="finFecharProducaoPedidos" class="text-lg font-semibold text-white">—</p>
+            </div>
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Unidades pendentes</p>
+              <p id="finFecharProducaoUnidades" class="text-lg font-semibold text-white">—</p>
+            </div>
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Valor pendente</p>
+              <p id="finFecharProducaoPendente" class="text-lg font-semibold" style="color: var(--color-primary-light)">—</p>
+            </div>
+            <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+              <p class="text-xs text-gray-400 mb-1">Confirmado no mês</p>
+              <p id="finFecharProducaoConfirmado" class="text-lg font-semibold" style="color: var(--color-green)">—</p>
+            </div>
+          </div>
+        </div>
+
+        <p id="finFecharProducaoCarregando" class="hidden fin-vazio">Carregando os pedidos...</p>
+        <div id="finFecharProducaoSemSql" class="hidden fin-aviso" role="alert">
+          <i class="fas fa-database" aria-hidden="true"></i>
+          <span id="finFecharProducaoSemSqlTexto">Falta rodar sql/fechamento_producao_e_pagamentos.sql no banco e reiniciar a API.</span>
+        </div>
+        <div id="finFecharProducaoMensagem" class="hidden text-sm" role="alert"></div>
+
+        <!-- Um card por pedido -->
+        <div id="finFecharProducaoCards" class="grid grid-cols-1 xl:grid-cols-2 gap-6"></div>
+        <p id="finFecharProducaoVazio" class="hidden fin-vazio">Nenhum pedido com produção pendente nesta competência.</p>
+
+        <div id="finFecharProducaoBloqueios" class="hidden fin-aviso" role="alert">
+          <i class="fas fa-ban" aria-hidden="true"></i>
+          <ul id="finFecharProducaoBloqueiosLista" class="space-y-1"></ul>
+        </div>
+        <ul id="finFecharProducaoAvisos" class="hidden space-y-1 text-sm" style="color: var(--color-primary-light)"></ul>
+
+        <div class="glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Peças finalizadas na competência</span>
+            <span id="finFecharProducaoPecas" class="text-sm text-white">—</span>
+          </div>
+          <div id="finFecharProducaoProcessos" class="divide-y divide-white/10"></div>
+          <div class="flex items-center justify-between px-4 py-4">
+            <span class="text-base font-medium text-white">Total a pagar</span>
+            <span id="finFecharProducaoTotal" class="text-xl font-bold" style="color: var(--color-green)">—</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button id="finFecharProducaoConfirmar" type="button" data-perm="financeiro.competencia.fechar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Fechar competência</button>
+    </footer>
+  </div>
+</div>

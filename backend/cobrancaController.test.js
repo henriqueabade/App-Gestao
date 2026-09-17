@@ -712,6 +712,21 @@ test('fase F: estado do webhook (sem token), a conciliação pelo botão fica re
 
     const { conciliarEmSegundoPlano } = require('./cobrancaController');
     assert.equal(typeof conciliarEmSegundoPlano, 'function', 'a agenda automática usa a conciliação do controller');
+
+    // `module.exports` É o router: reexportar `x` como `(...) => router.x(...)` trocava a
+    // função pela que chama a si mesma, e a primeira chamada estourava a pilha (a devolução
+    // gravava "Maximum call stack size exceeded" na pendência do boleto).
+    const semRecursao = async (fn, nome) => {
+      try {
+        await fn();
+      } catch (e) {
+        assert.ok(!(e instanceof RangeError) && !/call stack/i.test(String(e?.message || '')), `${nome} chama a si mesma: ${e?.message}`);
+      }
+    };
+    const cobranca = require('./cobrancaController');
+    assert.equal(typeof cobranca.contextoDoBoleto, 'function', 'a devolução usa o contexto do BB do controller');
+    await semRecursao(() => cobranca.contextoDoBoleto({}, { id: 1, ambiente: 'sandbox' }), 'contextoDoBoleto');
+    await semRecursao(() => cobranca.conciliarEmSegundoPlano({}), 'conciliarEmSegundoPlano');
   } finally {
     await t.fechar();
   }

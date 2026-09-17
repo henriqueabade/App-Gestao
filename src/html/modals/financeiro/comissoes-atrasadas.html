@@ -48,6 +48,10 @@
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
+            <label for="finAtrasadasQuemRecebe" class="block text-sm font-medium text-gray-300 mb-2">Quem recebe</label>
+            <select id="finAtrasadasQuemRecebe" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"><option value="">Todos</option></select>
+          </div>
+          <div>
             <label for="finAtrasadasFaixa" class="block text-sm font-medium text-gray-300 mb-2">Faixa de atraso</label>
             <select id="finAtrasadasFaixa" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todas</option>
@@ -82,11 +86,13 @@
                 <th class="px-4 py-3 text-right text-xs">CMS potencial</th>
                 <th class="px-4 py-3 text-right text-xs">Royalty</th>
                 <th class="px-4 py-3 text-right text-xs">Total comissão</th>
+                <th class="px-4 py-3 text-left text-xs">Quem recebe</th>
               </tr>
             </thead>
             <tbody id="finAtrasadasCorpo" class="divide-y divide-white/10"></tbody>
           </table>
         </div>
+        <div id="finAtrasadasLegenda" class="fin-legenda"></div>
         <div id="finAtrasadasVazio" class="hidden py-8 text-center">
           <p class="text-white font-medium">Nenhuma comissão atrasada nesta competência.</p>
           <p class="text-sm text-gray-400 mt-1">Todas as parcelas vencidas foram liquidadas.</p>

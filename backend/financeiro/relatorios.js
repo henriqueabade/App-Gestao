@@ -42,20 +42,43 @@ function criterio({ competencia, inicio, fim }) {
   return { texto: `Competência: ${c.rotuloCompetencia(competencia)}`, cabe: d => Boolean(d) && String(d).startsWith(competencia), periodo: false };
 }
 
-const linhaDeParcela = (p, extra = {}) => ({
-  pedido_id: p.pedido_id, pedido: p.pedido, cliente: p.cliente, nf: p.nf, parcela: p.parcela, vencimento: p.vencimento,
-  numero_parcela: p.numero_parcela, dias: p.dias_atraso, faixa: p.faixa, liquido: p.liquido,
-  cms: p.potencial.cms, royalty: p.potencial.royalty, comissao: p.potencial.total,
-  beneficiarios: p.potencial.beneficiarios.map(b => `${b.beneficiario} ${String(b.percentual).replace('.', ',')}%`).join(' · '),
-  ...extra
-});
+/**
+ * Quem recebe, em duas formas: `benef_lista` (estruturada — a tela usa para as
+ * etiquetas coloridas e para o filtro por pessoa/tipo) e `beneficiarios`
+ * (texto, que é o que vai para o PDF e para a planilha).
+ */
+const listaDeBeneficiarios = lista => (Array.isArray(lista) ? lista : [])
+  .filter(b => b && b.beneficiario)
+  .map(b => ({
+    tipo: b.tipo, beneficiario: b.beneficiario, valor: c.centavos(b.valor),
+    percentual: b.percentual === null || b.percentual === undefined ? null : Number(b.percentual)
+  }));
 
-const linhaDeItem = i => ({
-  pedido_id: i.pedido_id, pedido: i.pedido, cliente: i.cliente, nf: i.nf, parcela: i.parcela, numero_parcela: i.numero_parcela,
-  liquidacao: i.data_referencia, data: i.data_referencia, liquido: i.base, cms: i.cms, royalty: i.royalty, comissao: i.total, valor: i.total,
-  motivo: i.motivo || (i.tipo_item === 'saldo' ? 'Saldo anterior' : ''), origem: i.tipo_item === 'saldo' ? 'Saldo' : c.rotuloCompetencia(i.competencia_natural),
-  tipo: i.tipo_item === 'saldo' ? 'Saldo' : 'Ajuste'
-});
+const textoDosBeneficiarios = lista => lista
+  .map(b => `${b.beneficiario}${b.percentual === null ? '' : ` ${String(b.percentual).replace('.', ',')}%`}`)
+  .join(' · ');
+
+const linhaDeParcela = (p, extra = {}) => {
+  const benef = listaDeBeneficiarios(p.potencial.beneficiarios);
+  return {
+    pedido_id: p.pedido_id, pedido: p.pedido, cliente: p.cliente, nf: p.nf, parcela: p.parcela, vencimento: p.vencimento,
+    numero_parcela: p.numero_parcela, dias: p.dias_atraso, faixa: p.faixa, liquido: p.liquido,
+    cms: p.potencial.cms, royalty: p.potencial.royalty, comissao: p.potencial.total,
+    benef_lista: benef, beneficiarios: textoDosBeneficiarios(benef),
+    ...extra
+  };
+};
+
+const linhaDeItem = i => {
+  const benef = listaDeBeneficiarios(i.detalhes?.beneficiarios);
+  return {
+    pedido_id: i.pedido_id, pedido: i.pedido, cliente: i.cliente, nf: i.nf, parcela: i.parcela, numero_parcela: i.numero_parcela,
+    liquidacao: i.data_referencia, data: i.data_referencia, liquido: i.base, cms: i.cms, royalty: i.royalty, comissao: i.total, valor: i.total,
+    benef_lista: benef, beneficiarios: textoDosBeneficiarios(benef),
+    motivo: i.motivo || (i.tipo_item === 'saldo' ? 'Saldo anterior' : ''), origem: i.tipo_item === 'saldo' ? 'Saldo' : c.rotuloCompetencia(i.competencia_natural),
+    tipo: i.tipo_item === 'saldo' ? 'Saldo' : 'Ajuste'
+  };
+};
 
 async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);

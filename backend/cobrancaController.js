@@ -681,7 +681,14 @@ const router = criarRouter();
 module.exports = router;
 module.exports.criarRouter = criarRouter;
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
-/** Para a agenda automática (fase F): a conciliação com o cofre, o banco e o cliente do BB deste módulo. */
-module.exports.conciliarEmSegundoPlano = opcoes => router.conciliarEmSegundoPlano(opcoes);
-/** Para a devolução de pedidos: o contexto do BB para operar um boleto (abatimento, baixa). */
-module.exports.contextoDoBoleto = (api, boleto, opcoes) => router.contextoDoBoleto(api, boleto, opcoes);
+
+/**
+ * `module.exports` É o router: o que `criarRouter` pendurou nele já sai daqui —
+ *   `conciliarEmSegundoPlano` (a agenda automática da fase F) e
+ *   `contextoDoBoleto`      (o BB da devolução: abatimento, baixa, reemissão).
+ *
+ * NÃO reatribuir essas chaves com um repasse (`module.exports.x = (...) => router.x(...)`):
+ * como os dois objetos são o MESMO, a atribuição troca a função original por uma
+ * que chama a si mesma, e a primeira chamada estoura a pilha ("Maximum call stack
+ * size exceeded" — era o que aparecia na pendência da devolução).
+ */

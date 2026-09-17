@@ -204,8 +204,13 @@
           <button type="button" class="fin-acao" data-perm="financeiro.producao.registrar" data-fin-acao="registrar-producao">
             <i class="fas fa-hammer" aria-hidden="true"></i><span>Registrar produção</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
+          <!-- Fechar virou dois: comissões (parcelas liquidadas) e produção (o que
+               cada pedido produziu no mês, confirmado peça a peça). -->
           <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="fechar-competencia">
-            <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+            <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência — comissões</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="fechar-competencia-producao">
+            <i class="fas fa-industry" aria-hidden="true"></i><span>Fechar competência — produção</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="relatorios">
             <i class="fas fa-chart-line" aria-hidden="true"></i><span>Relatórios</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
@@ -231,6 +236,16 @@
           <div class="fin-resumo__linha"><dt>Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
           <div class="fin-resumo__linha"><dt>Ajustes</dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
         </dl>
+        <!-- Quem recebe: CMS (dono do cliente) e Royalty (desenhista da peça), por pessoa,
+             com a cor de cada um e a legenda. Some quando não há regra nenhuma. -->
+        <div id="finResumoBeneficiarios" class="fin-benef hidden">
+          <div class="fin-benef__topo">
+            <span class="fin-benef__titulo">Quem recebe</span>
+            <span id="finResumoBeneficiariosTotal" class="fin-benef__total">—</span>
+          </div>
+          <ul id="finResumoBeneficiariosLista" class="fin-benef__lista"></ul>
+          <div id="finResumoBeneficiariosLegenda" class="fin-benef__legenda"></div>
+        </div>
         <footer class="fin-proximo" data-fin-acao="confirmar-pagamento-comissao" role="button" tabindex="0" title="Confirmar pagamento das comissões">
           <i class="fas fa-calendar-alt" aria-hidden="true"></i>
           <div>

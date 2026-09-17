@@ -4,6 +4,7 @@ const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+const confirmacaoDaProducao = require('./financeiro/producaoConfirmacao');
 const {
   hojeEmSaoPaulo,
   diaEmSaoPaulo,
@@ -288,6 +289,25 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     const payload = payloadDeStatus(status, new Date(), atual);
     await api.put(`/api/pedidos/${id}`, payload);
 
+    // Cancelado: a produção pendente não vai para o mês seguinte — paga-se só o
+    // trecho que cada peça andou (o estágio de volta menos o de saída, gravados
+    // em `cancelamento_destinacoes`). Vem DEPOIS do estorno, que é quem escreve
+    // essas decisões (ver backend/financeiro/producaoConfirmacao.js).
+    if (status === 'Cancelado') {
+      try {
+        const dia = hojeEmSaoPaulo();
+        const r = await confirmacaoDaProducao.confirmarCancelamento({
+          api, pedidoId: id, data: dia, hoje: dia, usuarioId: idDoUsuarioDaRequisicao(req)
+        });
+        avisos.push(...(r.avisos || []));
+        if (r.confirmado) {
+          avisos.push(`Produção do cancelamento apurada na competência ${r.competencia}: ${r.lancados.length} processo(s) pelo que andou.`);
+        }
+      } catch (err) {
+        avisos.push(`O pedido foi cancelado, mas a produção não foi apurada: ${err?.message || err}`);
+      }
+    }
+
     // ------------------------------------------------------------------
     // Pedido "ao embarcar": o início novo (o dia real do embarque) já foi gravado
     // no PUT acima, junto da situação. Os vencimentos vêm agora, no lugar, e
@@ -313,6 +333,23 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     // ------------------------------------------------------------------
     if (status === 'Enviado' || status === 'Entregue') {
       await atualizarStatusDasReservas(api, id, RESERVA.FINALIZADO, avisos);
+
+      // A produção que ainda estava pendente entra como PRONTA: o que saiu para
+      // o cliente foi produzido. Cai na competência do envio — o que ficou
+      // pendente de um mês anterior é pago no mês em que o pedido saiu
+      // (ver backend/financeiro/producaoConfirmacao.js).
+      try {
+        const dia = hojeEmSaoPaulo();
+        const r = await confirmacaoDaProducao.confirmarTudoDoPedido({
+          api, pedidoId: id, origem: 'envio', data: dia, hoje: dia, usuarioId: idDoUsuarioDaRequisicao(req)
+        });
+        if (r.confirmado) {
+          avisos.push(`Produção confirmada no envio: ${r.decisoes.length} etapa(s) de peça entraram na competência ${r.competencia}.`);
+        }
+      } catch (err) {
+        // Sem o SQL da confirmação (ou com o banco fora), o envio continua.
+        avisos.push(`O pedido foi marcado como ${status}, mas a produção pendente não foi confirmada: ${err?.message || err}`);
+      }
     }
     const eventoPorStatus = {
       Enviado: EVENTO.ABATIMENTO,

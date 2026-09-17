@@ -22,7 +22,7 @@ const express = require('express');
 const TOKEN = 'x.eyJpZCI6MX0.assinatura';
 const TABELAS_G = [
   'financeiro_configuracao', 'comissao_regras', 'producao_setores', 'producao_valores', 'financeiro_feriados', 'ajustes_financeiros',
-  'producao_eventos', 'financeiro_fechamentos', 'financeiro_fechamento_itens', 'financeiro_pagamentos', 'financeiro_eventos'
+  'producao_eventos', 'producao_confirmacoes', 'financeiro_fechamentos', 'financeiro_fechamento_itens', 'financeiro_pagamentos', 'financeiro_eventos'
 ];
 
 function hojeBR() {
@@ -42,7 +42,12 @@ function unicoViolado(tabela, lista, dados) {
     return (dados.producao_evento_id && lista.some(l => l.producao_evento_id === dados.producao_evento_id))
       || (dados.tipo_item === 'parcela' && dados.recebimento_id && lista.some(l => l.tipo_item === 'parcela' && l.recebimento_id === dados.recebimento_id));
   }
-  if (tabela === 'financeiro_pagamentos') return lista.some(l => l.fechamento_id === dados.fechamento_id);
+  // Um pagamento por fechamento + beneficiário + tipo (sql/fechamento_producao_e_pagamentos.sql).
+  if (tabela === 'financeiro_pagamentos') {
+    return lista.some(l => l.fechamento_id === dados.fechamento_id
+      && String(l.beneficiario || '') === String(dados.beneficiario || '')
+      && String(l.tipo_comissao || '') === String(dados.tipo_comissao || ''));
+  }
   return false;
 }
 
@@ -298,6 +303,17 @@ test('ponta a ponta: regras, ajuste, fechamento, estorno futuro, pagamento, prod
     assert.equal(bloqueada.corpo.pode_fechar, false);
     assert.match(bloqueada.corpo.bloqueios.join(' '), /Produção sem valor/);
     await t.chamar('POST', `/api/financeiro/producao/${semValor.corpo.evento.id}/estornar`, { motivo: 'lançado no processo errado' });
+
+    // A produção só fecha com decisão em TODAS as unidades: o que sobrou fica
+    // "nada pronto" e volta no mês seguinte (Fechar competência — produção).
+    const semDecisao = await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'producao', competencia: ant });
+    assert.equal(semDecisao.status, 409);
+    assert.match(semDecisao.corpo.error, /Falta confirmar a produção de 1 pedido/);
+    assert.equal((await t.chamar('POST', '/api/financeiro/producao/confirmar', {
+      competencia: ant, pedido_id: 55,
+      decisoes: [{ pedido_item_id: 501, etapa_id: 1, prontas: 0 }, { pedido_item_id: 501, etapa_id: 2, prontas: 0 }]
+    })).status, 200);
+
     const prodFechou = await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'producao', competencia: ant });
     assert.equal(prodFechou.status, 200);
     assert.equal(prodFechou.corpo.total, 62.5);
@@ -422,6 +438,121 @@ test('processos: incluir, renomear (acompanha matéria-prima e estoque), desliga
     } finally {
       await soPecas.fechar();
     }
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('produção: o pedido entra pendente sozinho, a confirmação é peça a peça (e sem decidir tudo a competência não fecha)', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.producao.registrar', 'financeiro.regras.editar', 'financeiro.competencia.fechar');
+    // Marcenaria a 10% da tabela (R$ 1.000 → R$ 100) e Acabamento a R$ 25 por peça.
+    await t.chamar('POST', '/api/financeiro/valores', { etapa_id: 1, produto_id: null, tipo: 'percentual', valor: 10 });
+    await t.chamar('POST', '/api/financeiro/valores', { etapa_id: 2, produto_id: null, tipo: 'valor', valor: 25 });
+
+    // O pedido 55 está "Enviado" e produz: 5 poltronas, uma delas do estoque com o acabamento pela metade.
+    const pend = await t.chamar('GET', `/api/financeiro/producao/pendencias?competencia=${ant}`);
+    assert.equal(pend.status, 200, JSON.stringify(pend.corpo));
+    assert.equal(pend.corpo.pedidos.length, 1);
+    const pedido = pend.corpo.pedidos[0];
+    assert.equal(pedido.numero, '2548');
+    assert.equal(pedido.confirmado, false, 'nasce pendente, sem ninguém registrar nada');
+    const peca = pedido.pecas[0];
+    assert.deepEqual(peca.processos.map(p => [p.nome, p.saldo, p.valor_unitario]), [['Marcenaria', 4, 100], ['Acabamento', 5, 25]]);
+    assert.equal(peca.do_estoque, 1);
+    assert.equal(pedido.valor_pendente, 512.5, '4 × 100 + (0,5 + 4) × 25');
+    assert.deepEqual(pend.corpo.totais, { pedidos: 1, pendentes: 1, unidades_pendentes: 9, valor_pendente: 512.5, sem_valor: [] });
+
+    // Sem decisão em tudo, a produção não fecha.
+    const bloqueada = await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${ant}`);
+    assert.equal(bloqueada.corpo.pode_fechar, false);
+    assert.match(bloqueada.corpo.bloqueios.join(' '), /Falta confirmar a produção de 1 pedido: 2548/);
+
+    // Peça a peça: marcenaria toda pronta, acabamento 3 de 5 (2 ficam para o mês seguinte).
+    const confirmada = await t.chamar('POST', '/api/financeiro/producao/confirmar', {
+      competencia: ant, pedido_id: 55,
+      decisoes: [{ pedido_item_id: 501, etapa_id: 1, prontas: 4 }, { pedido_item_id: 501, etapa_id: 2, prontas: 3 }]
+    });
+    assert.equal(confirmada.status, 200, JSON.stringify(confirmada.corpo));
+    assert.equal(confirmada.corpo.pedido.confirmado, true);
+    const acabamento = confirmada.corpo.pedido.pecas[0].processos.find(p => p.nome === 'Acabamento');
+    assert.deepEqual([acabamento.saldo, acabamento.decidido.prontas, acabamento.decidido.pendentes], [2, 3, 2]);
+    assert.equal(t.tabelas.producao_confirmacoes.length, 2);
+
+    // O valor do mês: 4 × 100 (marcenaria) + (0,5 + 1 + 1) × 25 (acabamento, a do estoque paga meia).
+    const previa = await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${ant}`);
+    assert.equal(previa.corpo.a_pagar, 462.5);
+    assert.equal(previa.corpo.pode_fechar, true, 'tudo decidido: pode fechar');
+
+    // Editar antes de fechar: o registro anterior é estornado e entra o novo.
+    const refeita = await t.chamar('POST', '/api/financeiro/producao/confirmar', {
+      competencia: ant, pedido_id: 55,
+      decisoes: [{ pedido_item_id: 501, etapa_id: 2, prontas: 5 }]
+    });
+    assert.equal(refeita.status, 200, JSON.stringify(refeita.corpo));
+    assert.equal(t.tabelas.producao_confirmacoes.length, 2, 'a decisão do mês é uma por peça e processo');
+    const depois = await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${ant}`);
+    assert.equal(depois.corpo.a_pagar, 512.5, 'agora o acabamento inteiro entra');
+
+    // Passar do que falta é recusado.
+    const demais = await t.chamar('POST', '/api/financeiro/producao/confirmar', {
+      competencia: ant, pedido_id: 55, decisoes: [{ pedido_item_id: 501, etapa_id: 1, prontas: 9 }]
+    });
+    assert.equal(demais.status, 409);
+    assert.match(demais.corpo.error, /passa das 4 unidades/);
+
+    // Fechada a competência, não sobra pendência nenhuma para o mês seguinte.
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'producao', competencia: ant })).status, 200);
+    const proximo = await t.chamar('GET', `/api/financeiro/producao/pendencias?competencia=${hoje.slice(0, 7)}`);
+    assert.deepEqual(proximo.corpo.pedidos, [], 'tudo foi produzido');
+    assert.ok(t.tabelas.financeiro_eventos.some(e => e.tipo === 'producao_confirmada'));
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('pagamento por beneficiário: dá para pagar só a CMS, só uma pessoa, e o resto fica pendente', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar', 'financeiro.competencia.fechar', 'financeiro.pagamento.confirmar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'royalty', percentual: 10, escopo: 'todos' });
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'comissao', competencia: ant })).corpo.total, 4000);
+
+    const pagar = corpo => t.chamar('POST', '/api/financeiro/pagamentos', { tipo: 'comissao', competencia: ant, data_pagamento: hoje, forma: 'Pix', ...corpo });
+
+    // Só a CMS (a dona do cliente).
+    const cms = await pagar({ tipo_comissao: 'cms' });
+    assert.equal(cms.status, 200, JSON.stringify(cms.corpo));
+    assert.equal(Number(cms.corpo.pagamento.valor), 2000);
+    assert.equal(cms.corpo.falta_pagar, 2000);
+    assert.equal((await pagar({ tipo_comissao: 'cms' })).status, 409, 'a mesma CMS duas vezes');
+
+    const parcial = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.equal(parcial.corpo.comissoes.situacao, 'parcial');
+    assert.match(parcial.corpo.pendencias.find(p => p.chave === `pagar_comissao_${ant}`).descricao, /R\$\s2\.000,00 de R\$\s4\.000,00/);
+
+    // Agora o desenhista (royalty), pelo nome.
+    const royalty = await pagar({ beneficiario: 'barral & lamounier' });
+    assert.equal(royalty.status, 200, JSON.stringify(royalty.corpo));
+    assert.equal(Number(royalty.corpo.pagamento.valor), 2000);
+    assert.equal(royalty.corpo.falta_pagar, 0);
+    assert.equal(t.tabelas.financeiro_pagamentos.length, 2);
+    assert.deepEqual(t.tabelas.financeiro_pagamentos.map(p => [p.tipo_comissao, p.beneficiario, p.valor]), [['cms', null, 2000], [null, 'barral & lamounier', 2000]]);
+
+    const paga = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.equal(paga.corpo.comissoes.situacao, 'paga');
+    assert.ok(!paga.corpo.pendencias.some(p => p.chave === `pagar_comissao_${ant}`), 'nada mais a pagar');
+
+    // Não sobrou nada: pagar "tudo" é recusado, e quem não tem valor também.
+    assert.equal((await pagar({})).status, 409);
+    assert.match((await pagar({ beneficiario: 'Fulano' })).corpo.error, /não tem valor nesta competência/);
+    assert.equal((await pagar({ tipo: 'producao', tipo_comissao: 'cms' })).status, 409, 'produção é paga de uma vez');
   } finally {
     await t.fechar();
   }

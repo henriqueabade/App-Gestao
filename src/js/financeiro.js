@@ -57,7 +57,17 @@ const FIN_ACOES = {
     'registrar-recebimento': { rotulo: 'Registrar recebimento', abrir: m => finAbrirModal('registrar-recebimento', m) },
     'registrar-ajuste': { rotulo: 'Registrar ajuste', abrir: m => finAbrirModal('registrar-ajuste', m) },
     'registrar-producao': { rotulo: 'Registrar produção', abrir: m => finAbrirModal('registrar-producao', m) },
-    'fechar-competencia': { rotulo: 'Fechar competência', abrir: (m, extra) => finAbrirModal('fechar-competencia', m, finDoFiltro(extra)) },
+    // Fechar virou dois: comissões (o modal de sempre) e produção (a tela dos cards
+    // por pedido, onde se confirma peça a peça). A pendência do painel já traz o tipo.
+    'fechar-competencia': { rotulo: 'Fechar competência — comissões',
+        abrir: (m, extra) => {
+            const filtro = finDoFiltro(extra);
+            return filtro.tipo === 'producao'
+                ? finAbrirModal('fechar-producao', m, filtro)
+                : finAbrirModal('fechar-competencia', m, filtro);
+        }
+    },
+    'fechar-competencia-producao': { rotulo: 'Fechar competência — produção', abrir: (m, extra) => finAbrirModal('fechar-producao', m, finDoFiltro(extra)) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
     'atividade-todas': { rotulo: 'Atividade recente', abrir: m => finMostrarTodaAtividade(m) },
@@ -78,6 +88,7 @@ const FIN_MODAIS = {
     'registrar-ajuste': { html: 'modals/financeiro/registrar-ajuste.html', overlay: 'finRegistrarAjuste' },
     'registrar-producao': { html: 'modals/financeiro/registrar-producao.html', overlay: 'finRegistrarProducao' },
     'fechar-competencia': { html: 'modals/financeiro/fechar-competencia.html', overlay: 'finFecharCompetencia' },
+    'fechar-producao': { html: 'modals/financeiro/fechar-producao.html', overlay: 'finFecharProducao' },
     'relatorios': { html: 'modals/financeiro/relatorios.html', overlay: 'finRelatorios' },
     'detalhes-parcela': { html: 'modals/financeiro/detalhes-parcela.html', overlay: 'finDetalhesParcela' },
     'detalhes-pedido': { html: 'modals/financeiro/detalhes-pedido.html', overlay: 'finDetalhesPedido' },
@@ -347,7 +358,7 @@ function finJuntarPendencias(...listas) {
     return [...todas.filter(p => p.nivel === 'critico'), ...todas.filter(p => p.nivel !== 'critico')];
 }
 
-const FIN_SITUACAO = { aberta: 'em aberto', fechada: 'fechada', paga: 'paga' };
+const FIN_SITUACAO = { aberta: 'em aberto', fechada: 'fechada', paga: 'paga', parcial: 'paga em parte' };
 
 /**
  * Comissões e produção da tela, a partir do painel da fase G (ou da sua
@@ -363,7 +374,7 @@ function finMapearComissoes(painel, erro) {
         const vazio = { valor: null, auxiliar: '', rodape: motivo };
         return {
             kpis: { comissoes: vazio, atrasadas: vazio, producao: vazio },
-            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, ajustes: null, proximoPagamento: '—' },
+            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, ajustes: null, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
             resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, proximoPagamento: '—' },
             pendencias: sqlPendente
                 ? [{ nivel: 'critico', titulo: 'Comissões e produção ainda não ativadas', descricao: motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
@@ -393,7 +404,12 @@ function finMapearComissoes(painel, erro) {
         },
         resumoComissoes: {
             previstas: Number(rc.previstas) || 0, apuradas: Number(rc.apuradas) || 0, atrasadas: Number(rc.atrasadas) || 0, ajustes: Number(rc.ajustes) || 0,
-            proximoPagamento: `${finFormatarData(rc.proximo_pagamento)}${rc.situacao && rc.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rc.situacao]}` : ''}`
+            proximoPagamento: `${finFormatarData(rc.proximo_pagamento)}${rc.situacao && rc.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rc.situacao]}` : ''}`,
+            // Quem recebe: o apurado do mês; sem apuração, a previsão (para o card nunca ficar vazio à toa).
+            beneficiarios: Array.isArray(rc.beneficiarios) ? rc.beneficiarios : [],
+            previstos: Array.isArray(rc.beneficiarios_previstos) ? rc.beneficiarios_previstos : [],
+            pago: Number(rc.pago) || 0,
+            faltaPagar: rc.falta_pagar === null || rc.falta_pagar === undefined ? null : Number(rc.falta_pagar)
         },
         resumoProducao: {
             emProducao: Number(rp.em_producao) || 0, parciais: Number(rp.parciais) || 0, pecasMes: Number(rp.pecas_mes) || 0, valorCompetencia: Number(rp.valor) || 0,
@@ -609,6 +625,7 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoComissoes.atrasadas', finFormatarMoeda(c.atrasadas));
     finPreencher(moduleEl, 'resumoComissoes.ajustes', finFormatarMoeda(c.ajustes));
     finPreencher(moduleEl, 'resumoComissoes.proximoPagamento', c.proximoPagamento);
+    finRenderizarBeneficiarios(moduleEl, c);
 
     const p = dados.resumoProducao;
     finPreencher(moduleEl, 'resumoProducao.emProducao', finFormatarInteiro(p.emProducao));
@@ -616,6 +633,54 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoProducao.pecasMes', finFormatarInteiro(p.pecasMes));
     finPreencher(moduleEl, 'resumoProducao.valorCompetencia', finFormatarMoeda(p.valorCompetencia));
     finPreencher(moduleEl, 'resumoProducao.proximoPagamento', p.proximoPagamento);
+}
+
+/**
+ * Quem recebe, dentro do card de comissões: uma linha por pessoa, com a cor
+ * dela, as etiquetas CMS/Royalty e o valor. Mostra o APURADO do mês; se ainda
+ * não há nada apurado, mostra a PREVISÃO, dizendo qual é qual.
+ */
+function finRenderizarBeneficiarios(moduleEl, resumo) {
+    const caixa = moduleEl.querySelector('#finResumoBeneficiarios');
+    const lista = moduleEl.querySelector('#finResumoBeneficiariosLista');
+    const legenda = moduleEl.querySelector('#finResumoBeneficiariosLegenda');
+    const total = moduleEl.querySelector('#finResumoBeneficiariosTotal');
+    if (!caixa || !lista || !window.Beneficiarios) return;
+
+    const apurados = resumo.beneficiarios || [];
+    const usados = apurados.length ? apurados : (resumo.previstos || []);
+    caixa.classList.toggle('hidden', !usados.length);
+    if (!usados.length) return;
+
+    const pessoas = window.Beneficiarios.porPessoa(usados);
+    const somaTotal = pessoas.reduce((s, p) => s + p.total, 0);
+    total.textContent = `${apurados.length ? 'apurado' : 'previsto'}: ${finFormatarMoeda(somaTotal)}`;
+    total.title = apurados.length
+        ? 'O que a competência apurou até agora, por pessoa'
+        : 'Ainda não há comissão apurada no mês: o que aparece é a previsão';
+
+    lista.replaceChildren();
+    for (const pessoa of pessoas) {
+        const item = finCriar('li', 'fin-benef__item');
+        const nome = finCriar('div', 'fin-benef__nome');
+        nome.appendChild(window.Beneficiarios.ponto(pessoa.beneficiario));
+        nome.appendChild(finCriar('span', null, pessoa.beneficiario || '—'));
+        if (pessoa.cms > 0) {
+            const tag = finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--cms', 'CMS');
+            tag.title = `CMS: ${finFormatarMoeda(pessoa.cms)}`;
+            nome.appendChild(tag);
+        }
+        if (pessoa.royalty > 0) {
+            const tag = finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--royalty', 'Royalty');
+            tag.title = `Royalty: ${finFormatarMoeda(pessoa.royalty)}`;
+            nome.appendChild(tag);
+        }
+        const valor = finCriar('span', 'fin-benef__valor', finFormatarMoeda(pessoa.total));
+        item.append(nome, valor);
+        lista.appendChild(item);
+    }
+
+    legenda.replaceChildren(window.Beneficiarios.legenda([]));
 }
 
 function finRenderizarAtividade(moduleEl, eventos, hoje, todas = false) {

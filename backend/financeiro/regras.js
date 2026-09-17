@@ -229,6 +229,7 @@ async function paraTela(api) {
   const nomeCliente = new Map(clientes.filter(Boolean).map(x => [String(x.id), c.nomeDoCliente(x)]));
   const numeroPedido = new Map(pedidos.filter(Boolean).map(x => [String(x.id), x.numero || String(x.id)]));
   const nomeProduto = new Map(produtos.filter(Boolean).map(x => [String(x.id), [x.codigo, x.nome].filter(Boolean).join(' — ')]));
+  const dadosProduto = new Map(produtos.filter(Boolean).map(x => [String(x.id), { codigo: x.codigo || null, nome: x.nome || null }]));
   const ano = Number(new Date().getFullYear());
   return {
     configuracao: tudo.configuracao,
@@ -246,6 +247,9 @@ async function paraTela(api) {
       valor_unitario: c.centavos(v.valor_unitario), percentual: v.percentual === null || v.percentual === undefined ? null : Number(v.percentual),
       descricao: descreverValor(v), observacao: v.observacao || null,
       produto: v.produto_id ? (nomeProduto.get(String(v.produto_id)) || `peça ${v.produto_id}`) : null,
+      // Na tabela a peça aparece só pelo CÓDIGO (etiqueta), com o nome no título.
+      produto_codigo: v.produto_id ? (dadosProduto.get(String(v.produto_id))?.codigo || `peça ${v.produto_id}`) : null,
+      produto_nome: v.produto_id ? (dadosProduto.get(String(v.produto_id))?.nome || null) : null,
       etapa: (tudo.etapas.find(e => String(e.id) === String(v.etapa_id)) || {}).nome || null,
       // Nome antigo, para quem ainda lê `setor`.
       setor_id: v.etapa_id, setor: (tudo.etapas.find(e => String(e.id) === String(v.etapa_id)) || {}).nome || null
@@ -334,6 +338,24 @@ async function salvarRegra({ api, id = null, entrada, usuarioId = null }) {
   const criada = await c.inserir(api, 'comissao_regras', { ...nova, criado_por: usuarioId, criado_em: quando, atualizado_por: usuarioId, atualizado_em: quando });
   await auditoria.registrar(api, { tipo: 'regra_criada', descricao: descreverRegra(nova), referenciaId: criada.id, pedidoId: nova.pedido_id, usuarioId, dados: { depois: nova } });
   return criada;
+}
+
+/**
+ * Apaga a regra de vez (só Sup Admin). Desativar guarda o histórico; excluir
+ * some com a linha. O que já foi FECHADO não muda: o fechamento guarda os
+ * percentuais com que fechou.
+ */
+async function removerRegra({ api, id, usuarioId = null }) {
+  const regras = await c.ler(api, 'comissao_regras');
+  const alvo = regras.find(r => String(r.id) === String(id));
+  if (!alvo) throw c.erro('Regra não encontrada.', 404);
+  await api.delete(`/api/comissao_regras/${alvo.id}`);
+  await auditoria.registrar(api, {
+    tipo: 'regra_alterada', usuarioId, referenciaId: alvo.id, pedidoId: alvo.pedido_id ?? null,
+    descricao: `${descreverRegra({ ...alvo, percentual: Number(alvo.percentual) })} — EXCLUÍDA`,
+    dados: { antes: { tipo: alvo.tipo, beneficiario: alvo.beneficiario, percentual: Number(alvo.percentual), escopo: alvo.escopo, ativo: ativo(alvo.ativo) } }
+  });
+  return true;
 }
 
 /** (Fase G) Setores de produção — ficaram no banco, sem uso na tela. */
@@ -609,7 +631,7 @@ module.exports = {
   TIPOS_REGRA, ESCOPOS, SQL_PROCESSOS, DESENHISTA_DA_PECA, ativo,
   taxasDoPedido, valoresSobre, valorUnitario, validarRegra,
   lerConfiguracao, lerEtapas, lerTudo, donosDeClientes, paraTela,
-  salvarRegra, salvarSetor, salvarEtapa, removerEtapa, salvarValor,
+  salvarRegra, removerRegra, salvarSetor, salvarEtapa, removerEtapa, salvarValor,
   processosDaPecaNoBanco, precoDaTabela, regraDaPeca, salvarRegraDaPeca,
   adicionarFeriado, removerFeriado, salvarConfiguracao
 };

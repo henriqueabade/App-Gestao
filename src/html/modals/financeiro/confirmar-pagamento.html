@@ -42,6 +42,24 @@
           <div class="md:col-span-2">
             <p id="finPagamentoInfo" class="text-xs text-gray-400"></p>
           </div>
+
+          <!--
+            Comissão: dá para pagar tudo de uma vez ou escolher quem recebe
+            (CMS e Royalty de cada pessoa, em linhas separadas). Cada linha vira
+            um pagamento próprio; o que sobrar continua a pagar.
+          -->
+          <div id="finPagamentoQuemRecebe" class="hidden md:col-span-2 fin-benef">
+            <div class="fin-benef__topo">
+              <span class="fin-benef__titulo">Quem recebe</span>
+              <span id="finPagamentoSelecao" class="fin-benef__total">—</span>
+            </div>
+            <label class="fin-opcao mb-2">
+              <input id="finPagamentoTudo" type="checkbox" checked style="accent-color: var(--color-primary)" />
+              <span class="text-white font-medium">Pagar tudo o que falta</span>
+            </label>
+            <ul id="finPagamentoBeneficiarios" class="fin-benef__lista" role="group" aria-label="Beneficiários da competência"></ul>
+            <div id="finPagamentoLegenda" class="fin-benef__legenda"></div>
+          </div>
           <div>
             <label for="finPagamentoData" class="block text-sm font-medium text-gray-300 mb-2">Data do pagamento <span class="fin-obrigatorio">*</span></label>
             <input id="finPagamentoData" type="date"

@@ -1,5 +1,6 @@
 <!--
-  Fechar competência (comissões ou produção). Modal médio, ação sensível.
+  Fechar competência — COMISSÕES. Modal médio, ação sensível. A produção
+  fecha na tela própria (fechar-producao.html), onde se confirma peça a peça.
   A prévia vem de GET /api/financeiro/fechamentos/previa; "Confirmar
   fechamento" grava por POST /api/financeiro/fechamentos
   (financeiro.competencia.fechar). Enquanto fecha, o modal não fecha por
@@ -11,34 +12,16 @@
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finFechamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência</h2>
+      <h2 id="finFechamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência — comissões</h2>
       <span id="finFechamentoSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
-        <!-- Seleção exclusiva do tipo, no padrão de rádio da casa -->
-        <div role="radiogroup" aria-labelledby="finFechamentoTipoTitulo">
-          <p id="finFechamentoTipoTitulo" class="block text-sm font-medium text-gray-300 mb-3">Tipo de fechamento</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label class="fin-opcao">
-              <input type="radio" name="finFechamentoTipo" value="comissao" checked style="accent-color: var(--color-primary)" />
-              <span class="fin-opcao__icone"><i class="fas fa-hand-holding-usd" aria-hidden="true"></i></span>
-              <span class="min-w-0">
-                <span class="block text-white font-medium">Comissões</span>
-                <span class="block text-xs text-gray-400">Parcelas liquidadas na competência</span>
-              </span>
-            </label>
-            <label class="fin-opcao">
-              <input type="radio" name="finFechamentoTipo" value="producao" style="accent-color: var(--color-primary)" />
-              <span class="fin-opcao__icone"><i class="fas fa-industry" aria-hidden="true"></i></span>
-              <span class="min-w-0">
-                <span class="block text-white font-medium">Produção</span>
-                <span class="block text-xs text-gray-400">Peças finalizadas na competência</span>
-              </span>
-            </label>
-          </div>
-        </div>
+        <p class="text-sm text-gray-300">
+          Fecha as <strong>comissões</strong> (CMS e Royalty das parcelas liquidadas no mês). A produção fecha em
+          "Fechar competência — produção", onde se confirma, peça a peça, o que ficou pronto.
+        </p>
 
         <div>
           <label for="finFechamentoCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
@@ -76,23 +59,6 @@
           </div>
         </div>
 
-        <!-- Resumo de produção: uma linha por setor -->
-        <div id="finFechamentoResumoProducao" class="hidden glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
-          <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-sm text-gray-400">Peças finalizadas</span>
-            <span class="text-sm text-white" data-fin-valor="producao.pecas">—</span>
-          </div>
-          <div id="finFechamentoSetores" class="divide-y divide-white/10"></div>
-          <div class="flex items-center justify-between px-4 py-3" data-fin-compensar>
-            <span class="text-sm text-gray-400">Fica para compensar no próximo mês</span>
-            <span class="text-sm text-white" data-fin-valor="producao.compensar">—</span>
-          </div>
-          <div class="flex items-center justify-between px-4 py-4">
-            <span class="text-base font-medium text-white">Total a pagar</span>
-            <span class="text-xl font-bold" style="color: var(--color-green)" data-fin-valor="producao.total">—</span>
-          </div>
-        </div>
-
         <!-- Por beneficiário (comissões) -->
         <div id="finFechamentoBeneficiariosBloco" class="space-y-2">
           <p class="text-xs text-gray-400 uppercase tracking-wider">Por beneficiário</p>
@@ -102,6 +68,7 @@
               <tbody id="finFechamentoBeneficiarios" class="divide-y divide-white/10"></tbody>
             </table>
           </div>
+          <div id="finFechamentoBeneficiariosLegenda" class="fin-legenda"></div>
         </div>
 
         <div class="flex justify-end">

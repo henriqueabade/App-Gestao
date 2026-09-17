@@ -88,6 +88,13 @@ roda e reinicia a API). Sem o SQL, as telas avisam qual arquivo rodar e nada
   alterações. Código: `backend/cobranca/parcelaMinima.js` e
   `src/js/utils/parcelamento.js`.
 
+## Continuação
+
+O fechamento da produção (confirmação peça a peça) e as comissões por quem
+recebe estão em
+[fechamento-producao-e-comissoes-por-beneficiario.md](fechamento-producao-e-comissoes-por-beneficiario.md),
+com o SQL próprio (`sql/fechamento_producao_e_pagamentos.sql`).
+
 ## Permissões novas
 
 | Chave | Rótulo | Coluna |
