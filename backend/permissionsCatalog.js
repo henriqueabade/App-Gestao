@@ -2254,6 +2254,42 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_recebimento_estornar",
         "label": "Estornar recebimentos",
         "desc": "Desfazer um recebimento registrado por engano"
+      },
+      {
+        "key": "financeiro.comissao.view",
+        "column": "acao_comissao_view",
+        "label": "Ver comissões e produção",
+        "desc": "CMS, Royalty, produção, fechamentos, regras e relatórios (só leitura)"
+      },
+      {
+        "key": "financeiro.regras.editar",
+        "column": "acao_regras_editar",
+        "label": "Editar regras de comissão e produção",
+        "desc": "Percentuais de CMS/Royalty, valores por peça, setores, feriados e prazos de pagamento"
+      },
+      {
+        "key": "financeiro.ajuste.registrar",
+        "column": "acao_ajuste_registrar",
+        "label": "Registrar ajustes",
+        "desc": "Devolução, desconto, abatimento e cancelamento parcial de parcelas (e cancelar ajuste ainda não fechado)"
+      },
+      {
+        "key": "financeiro.producao.registrar",
+        "column": "acao_producao_registrar",
+        "label": "Registrar produção",
+        "desc": "Peças finalizadas por setor e estorno de registro"
+      },
+      {
+        "key": "financeiro.competencia.fechar",
+        "column": "acao_competencia_fechar",
+        "label": "Fechar competência",
+        "desc": "Congelar as comissões ou a produção do mês (não tem volta)"
+      },
+      {
+        "key": "financeiro.pagamento.confirmar",
+        "column": "acao_pagamento_confirmar",
+        "label": "Confirmar pagamento",
+        "desc": "Registrar que a competência fechada foi paga"
       }
     ],
     "columns": []

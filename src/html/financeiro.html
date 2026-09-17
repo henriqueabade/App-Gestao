@@ -21,9 +21,10 @@
     da competência escolhida; as contas a receber (recebido, a receber, em
     atraso, boletos em aberto, pendências de cobrança, Registrar recebimento,
     Conciliar com o BB) vêm de GET /api/cobranca/recebimentos/painel;
-    comissões e produção ainda são dados de EXEMPLO,
-    e cada botão/cartão traz `data-fin-acao`: quem ainda não tem função real
-    abre o aviso "em implementação".
+    comissões e produção (cartões, resumos, pendências e atividade do
+    módulo) vêm de GET /api/financeiro/painel. Cada botão/cartão traz
+    `data-fin-acao`: quem ainda não tem função real abre o aviso
+    "em implementação".
   -->
   <div class="modulo-container financeiro-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
@@ -197,17 +198,21 @@
           <button type="button" class="fin-acao" data-perm="financeiro.recebimento.registrar" data-fin-acao="registrar-recebimento">
             <i class="fas fa-money-bill-wave" aria-hidden="true"></i><span>Registrar recebimento</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="fin-acao" data-fin-acao="registrar-ajuste">
+          <button type="button" class="fin-acao" data-perm="financeiro.ajuste.registrar" data-fin-acao="registrar-ajuste">
             <i class="fas fa-undo" aria-hidden="true"></i><span>Registrar ajuste</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="fin-acao" data-fin-acao="registrar-producao">
+          <button type="button" class="fin-acao" data-perm="financeiro.producao.registrar" data-fin-acao="registrar-producao">
             <i class="fas fa-hammer" aria-hidden="true"></i><span>Registrar produção</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="fin-acao" data-fin-acao="fechar-competencia">
+          <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="fechar-competencia">
             <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="fin-acao" data-fin-acao="relatorios">
+          <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="relatorios">
             <i class="fas fa-chart-line" aria-hidden="true"></i><span>Relatórios</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Quem recebe CMS/Royalty e quanto, valor por peça de cada setor, feriados e prazos: tudo editável aqui. -->
+          <button type="button" class="fin-acao" data-perm="financeiro.comissao.view" data-fin-acao="regras">
+            <i class="fas fa-percent" aria-hidden="true"></i><span>Regras de comissão e produção</span><i class="fas fa-chevron-right fin-acao__seta" aria-hidden="true"></i>
           </button>
         </div>
       </section>
@@ -256,7 +261,7 @@
         </footer>
       </section>
 
-      <!-- Real: os últimos movimentos na SEFAZ (autorizações, cancelamentos, recusas, cartas). -->
+      <!-- Real: os últimos movimentos na SEFAZ (autorizações, cancelamentos, recusas, cartas) e do módulo (ajustes, produção, fechamentos, pagamentos, regras). -->
       <section class="fin-painel glass-surface rounded-xl">
         <header class="fin-painel__cabeca">
           <div class="fin-painel__titulo"><h2>Atividade recente</h2></div>

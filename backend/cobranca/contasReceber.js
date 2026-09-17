@@ -264,7 +264,7 @@ async function lerBase(api, hoje) {
     sqlPendente = true;
   }
   // Os XMLs das notas não servem aqui.
-  const notasLeves = notas.map(n => ({ id: n.id, pedido_id: n.pedido_id, serie: n.serie, numero: n.numero, status_fiscal: n.status_fiscal }));
+  const notasLeves = notas.map(n => ({ id: n.id, pedido_id: n.pedido_id, serie: n.serie, numero: n.numero, status_fiscal: n.status_fiscal, data_emissao: n.data_emissao ?? null, valor_total: n.valor_total ?? null }));
   const doWebhook = eventos.filter(e => e && e.origem === 'webhook');
   // Sem a tabela da fase F, simplesmente não há "última conciliação".
   const execs = await execucoes.recentes(api, 1).catch(() => ({ linhas: [] }));

@@ -82,6 +82,8 @@ app.use('/api/ia', iaRouter);
 app.use('/api/fiscal', require('./fiscalController'));
 // Cobrança (boletos BB): configuração, credenciais e teste de conexão.
 app.use('/api/cobranca', require('./cobrancaController'));
+// Financeiro completo (fase G): comissões, ajustes, produção, fechamentos e pagamentos.
+app.use('/api/financeiro', require('./financeiroController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.

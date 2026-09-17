@@ -1,7 +1,9 @@
 <!--
   Central de relatórios do módulo. Modal médio, com abas no padrão da casa
-  (Clientes / Relatórios). Etapa visual: "Gerar relatório" ainda avisa que
-  está em implementação. Script: src/js/modals/financeiro-modais.js.
+  (Clientes / Relatórios). "Gerar relatório" abre a folha de conferência
+  (Visualizar) ou salva direto em PDF ou planilha (Excel, CSV), com as
+  linhas de GET /api/financeiro/relatorios/:chave.
+  Script: src/js/modals/financeiro-modais.js (montarRelatorios).
 -->
 <div id="finRelatoriosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRelatoriosTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -21,7 +23,7 @@
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
-        <div id="finRelPainelComissoes" role="tabpanel" aria-labelledby="finRelTabComissoes" class="fin-lista-opcoes">
+        <div id="finRelPainelComissoes" data-fin-painel="comissoes" role="tabpanel" aria-labelledby="finRelTabComissoes" class="fin-lista-opcoes">
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="previsao-comissoes" checked style="accent-color: var(--color-primary)" /><span class="text-white">Previsão de comissões</span></label>
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="comissoes-atrasadas" style="accent-color: var(--color-primary)" /><span class="text-white">Comissões atrasadas</span></label>
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="comissoes-apuradas" style="accent-color: var(--color-primary)" /><span class="text-white">Comissões apuradas no mês</span></label>
@@ -29,7 +31,7 @@
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="comissoes-nao-realizadas" style="accent-color: var(--color-primary)" /><span class="text-white">Comissões não realizadas</span></label>
         </div>
 
-        <div id="finRelPainelProducao" role="tabpanel" aria-labelledby="finRelTabProducao" class="hidden fin-lista-opcoes">
+        <div id="finRelPainelProducao" data-fin-painel="producao" role="tabpanel" aria-labelledby="finRelTabProducao" class="hidden fin-lista-opcoes">
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="producao-competencia" style="accent-color: var(--color-primary)" /><span class="text-white">Produção da competência</span></label>
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="pagamento-pintura" style="accent-color: var(--color-primary)" /><span class="text-white">Pagamento pintura</span></label>
           <label class="fin-opcao"><input type="radio" name="finRelatorio" value="pagamento-marcenaria" style="accent-color: var(--color-primary)" /><span class="text-white">Pagamento marcenaria</span></label>
@@ -76,7 +78,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" data-fin-principal="Gerar relatório" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Gerar relatório</button>
+      <button id="finRelGerar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Gerar relatório</button>
     </footer>
   </div>
 </div>

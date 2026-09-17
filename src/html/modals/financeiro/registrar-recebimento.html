@@ -95,6 +95,19 @@
             <span id="finRecebimentoDiferencaRotulo" class="text-sm text-gray-400">Diferença</span>
             <span id="finRecebimentoDiferenca" class="text-sm text-white">—</span>
           </div>
+          <!-- Fase G: a comissão que este recebimento gera (sobre o valor líquido da parcela). Some sem financeiro.comissao.view. -->
+          <div class="flex items-center justify-between px-4 py-3" data-perm-hide="financeiro.comissao.view">
+            <span class="text-sm text-gray-400">Valor líquido da parcela</span>
+            <span id="finRecebimentoBase" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3" data-perm-hide="financeiro.comissao.view">
+            <span class="text-sm text-gray-400">CMS a gerar</span>
+            <span id="finRecebimentoCms" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3" data-perm-hide="financeiro.comissao.view">
+            <span class="text-sm text-gray-400">Royalty</span>
+            <span id="finRecebimentoRoyalty" class="text-sm text-white">—</span>
+          </div>
           <div class="flex items-center justify-between px-4 py-4">
             <span class="text-base font-medium text-white">Competência</span>
             <span id="finRecebimentoCompetencia" class="text-base font-semibold" style="color: var(--color-primary-light)">—</span>

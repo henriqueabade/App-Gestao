@@ -1,11 +1,11 @@
 /**
  * Modais de ação do Financeiro (src/js/modals/financeiro-modais.js e
- * src/html/modals/financeiro/*.html) — etapa visual.
+ * src/html/modals/financeiro/*.html).
  *
- * As contas de conferência mostradas nos modais são reais (parcelas da NF,
- * impacto do ajuste, saldo da produção) e ficam em funções puras: são elas
- * que o backend vai reaproveitar, então cada regra tem um caso aqui. O resto
- * prende a anatomia da casa nos seis HTML e a ligação com o módulo.
+ * As contas de conferência mostradas nos modais (parcelas da NF, impacto do
+ * ajuste, saldo da produção, aging, CSV) ficam em funções puras, com um caso
+ * aqui para cada regra; o resto prende a anatomia da casa nos HTML, a
+ * ligação com o módulo e as chamadas reais (fiscal, cobrança e fase G).
  */
 process.env.TZ = 'America/Sao_Paulo';
 
@@ -35,7 +35,8 @@ const MODAIS = {
     'producao-competencia': 'finProducaoCompetencia',
     'configuracao-fiscal': 'finConfiguracaoFiscal',
     'configuracao-cobranca': 'finConfiguracaoCobranca',
-    'recebimentos': 'finRecebimentos'
+    'recebimentos': 'finRecebimentos',
+    'regras': 'finRegras'
 };
 /* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
 const DE_ACAO = ['registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios', 'confirmar-pagamento'];
@@ -102,11 +103,33 @@ test('leitura de dinheiro aceita os formatos que o usuário digita', () => {
     assert.strictEqual(f.lerPrazos(''), null);
 });
 
-test('impacto do ajuste: novo líquido e comissão recalculada, como no exemplo da descrição', () => {
+test('impacto do ajuste: novo líquido e comissão recalculada com os percentuais da parcela (espelho do backend)', () => {
     const f = puro();
-    const i = plano(f.impactoDoAjuste(20000, -1000, 2000));
-    assert.deepStrictEqual(i, { original: 20000, anteriores: -1000, novo: -2000, liquido: 17000, cms: 1700, royalty: 1700 });
-    assert.strictEqual(f.impactoDoAjuste(100, 0, 150).liquido, -50, 'ajuste maior que a parcela fica negativo para a tela avisar');
+    // Parcela de 20.000 com 1.000 de ajuste anterior; CMS de dois arquitetos (6% + 4%) e Royalty 10%.
+    const parcela = {
+        valor_original: 20000, ajustes_total: 1000, abatimento_boleto: 0, liquido: 19000, estado_parcela: 'a_receber', comissao_fechada: false,
+        taxas: { pct_cms: 10, pct_royalty: 10, cms: [{ percentual: 6 }, { percentual: 4 }], royalty: [{ percentual: 10 }] }
+    };
+    const i = plano(f.impactoDoAjuste(parcela, 2000));
+    assert.deepStrictEqual(i, {
+        original: 20000, anteriores: -1000, novo: -2000, liquido_antes: 19000, liquido: 17000,
+        cms: 1700, royalty: 1700, pct_cms: 10, pct_royalty: 10, excede: false, gera_estorno: false
+    });
+    const maior = plano(f.impactoDoAjuste(parcela, 19500));
+    assert.strictEqual(maior.excede, true, 'ajuste maior que o líquido é sinalizado');
+    assert.strictEqual(maior.liquido, 0);
+    const fechada = plano(f.impactoDoAjuste({ ...parcela, estado_parcela: 'recebida', comissao_fechada: true }, 3000));
+    assert.strictEqual(fechada.gera_estorno, true, 'parcela recebida e já fechada: estorno na próxima competência');
+    assert.strictEqual(plano(f.impactoDoAjuste({ ...parcela, taxas: {} }, 0)).cms, 0, 'sem regra, comissão zero');
+    assert.strictEqual(f.percentualTexto(7.5), '7,5%');
+    assert.strictEqual(f.percentualTexto('10.0000'), '10%');
+    const linhas = [{ pedido: '2548', cliente: 'Casa Vicenzo', nf: '1/7' }, { pedido: '2560', cliente: 'Outra', nf: null }];
+    assert.deepStrictEqual(plano(f.filtrarParcelasAjuste(linhas, 'vicen')).map(l => l.pedido), ['2548']);
+    assert.deepStrictEqual(plano(f.filtrarParcelasAjuste(linhas, '1/7')).map(l => l.pedido), ['2548']);
+    assert.strictEqual(semNbsp(f.rotuloDaParcelaAjuste({ pedido: '2548', parcela: '1/3', cliente: 'Casa', vencimento: '2026-10-14', liquido: 1000, situacao: 'atrasada' })),
+        'Pedido 2548 • parcela 1/3 • Casa • venc. 14/10/2026 • líquido R$ 1.000,00 • Atrasada');
+    assert.strictEqual(f.alcanceDaRegra({ escopo: 'cliente', alvo: 'Casa Vicenzo' }), 'Cliente: Casa Vicenzo');
+    assert.strictEqual(f.alcanceDaRegra({ escopo: 'todos' }), 'Todos os pedidos');
 });
 
 test('status após registro de produção segue o saldo do item', () => {
@@ -123,24 +146,37 @@ test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé
         assert.match(html, new RegExp(`id="${overlay}Overlay" data-fin-modal class="hidden fixed inset-0 z-\\[1200\\]`), `${arquivo}: overlay`);
         assert.match(html, /glass-surface backdrop-blur-xl rounded-3xl border border-white\/10/, `${arquivo}: diálogo`);
         assert.strictEqual((html.match(/data-fin-fechar/g) || []).length, 2, `${arquivo}: Voltar e Cancelar/Fechar`);
-        if (DE_ACAO.includes(arquivo)) {
-            assert.strictEqual((html.match(/data-fin-principal=/g) || []).length, 1, `${arquivo}: uma ação principal`);
+        // Nada mais é "em implementação": toda ação tem botão real com id.
+        assert.ok(!/data-fin-principal/.test(html), `${arquivo}: nada aqui é "em implementação"`);
+        if (DE_ACAO.includes(arquivo) || arquivo === 'registrar-recebimento') {
             assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
-            assert.match(html, /data-fin-principal="[^"]+" (data-fin-sensivel="true" )?class="btn-success/, `${arquivo}: ação principal no padrão`);
-        } else if (arquivo === 'registrar-recebimento') {
-            // De ação e REAL: Cancelar e a ação de verdade, sem o aviso "em implementação".
-            assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
-            assert.ok(!/data-fin-principal/.test(html), `${arquivo}: nada aqui é "em implementação"`);
-            assert.match(html, /id="finRecebimentoRegistrar" type="button" data-perm="financeiro\.recebimento\.registrar" class="btn-success/);
+            assert.match(html, /<button id="fin\w+" type="button"( data-perm="financeiro\.[a-z.]+")? class="btn-success[^"]*">[^<]+<\/button>\s*<\/footer>/, `${arquivo}: ação principal no padrão, só texto`);
         } else {
             assert.match(html, /btn-neutral[^>]*>Fechar</, `${arquivo}: Fechar no padrão`);
         }
         assert.doesNotMatch(html, /\*<\/label>/, `${arquivo}: asterisco solto fora do fin-obrigatorio`);
         assert.doesNotMatch(html, /role="[^"]*"[^>]*role="/, `${arquivo}: atributo role duplicado`);
     }
+    const permissoes = {
+        'registrar-ajuste': 'finAjusteRegistrar" type="button" data-perm="financeiro.ajuste.registrar"',
+        'registrar-producao': 'finProducaoRegistrar" type="button" data-perm="financeiro.producao.registrar"',
+        'fechar-competencia': 'finFechamentoConfirmar" type="button" data-perm="financeiro.competencia.fechar"',
+        'confirmar-pagamento': 'finPagamentoConfirmar" type="button" data-perm="financeiro.pagamento.confirmar"',
+        'registrar-recebimento': 'finRecebimentoRegistrar" type="button" data-perm="financeiro.recebimento.registrar"'
+    };
+    for (const [arquivo, trecho] of Object.entries(permissoes)) {
+        assert.ok(fs.readFileSync(path.join(PASTA_HTML, `${arquivo}.html`), 'utf8').includes(trecho), `${arquivo}: a ação pede a sua permissão`);
+    }
     const fechamento = fs.readFileSync(path.join(PASTA_HTML, 'fechar-competencia.html'), 'utf8');
-    assert.match(fechamento, /data-fin-sensivel="true"/, 'fechamento é ação sensível');
     assert.match(fechamento, /class="fin-aviso"/, 'aviso bordô do bloqueio');
+    assert.match(fechamento, /value="comissao" checked/, 'o tipo vai como o backend espera');
+    const regras = fs.readFileSync(path.join(PASTA_HTML, 'regras.html'), 'utf8');
+    for (const id of ['finRegraSalvar', 'finSetorSalvar', 'finValorSalvar', 'finCfgSalvar', 'finFeriadoIncluir']) {
+        assert.match(regras, new RegExp(`id="${id}" type="button" data-perm="financeiro\\.regras\\.editar"`), `regras: ${id} pede financeiro.regras.editar`);
+    }
+    const relatorios = fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8');
+    assert.match(relatorios, /data-fin-painel="comissoes"/, 'as abas da central trocam o painel');
+    assert.match(relatorios, /data-fin-painel="producao"/);
 });
 
 test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o HTML existe', () => {
@@ -149,14 +185,17 @@ test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o H
         assert.ok(fs.existsSync(path.join(PASTA_HTML, `${chave}.html`)));
         assert.match(SCRIPT, new RegExp(`\\b${overlay}: montar`), `${overlay} sem montador no script`);
     }
-    for (const chave of ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'relatorios']) {
+    for (const chave of ['registrar-recebimento', 'registrar-ajuste', 'registrar-producao', 'relatorios', 'regras']) {
         assert.match(MODULO, new RegExp(`'${chave}': \\{ rotulo: '[^']+', abrir: m => finAbrirModal\\('${chave}', m\\) \\}`));
     }
+    // Fechar e pagar recebem o tipo e a competência da pendência.
+    assert.match(MODULO, /'fechar-competencia': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('fechar-competencia', m, finDoFiltro\(extra\)\) \}/);
+    assert.match(MODULO, /'confirmar-pagamento': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('confirmar-pagamento', m, finDoFiltro\(extra\)\) \}/);
     // Os fiscais recebem o `extra` da linha clicada (o filtro de uma pendência).
     assert.match(MODULO, /'emitir-nfe': \{ rotulo: 'Emitir NF-e', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
     assert.match(MODULO, /'aguardando-nf': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
     assert.match(MODULO, /'notas-fiscais': \{ rotulo: 'Notas fiscais', abrir: \(m, extra\) => finAbrirModal\('notas-fiscais', m, extra\) \}/);
-    assert.match(MODULO, /'atividade-todas': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('notas-fiscais', m\) \}/);
+    assert.match(MODULO, /'atividade-todas': \{ rotulo: '[^']+', abrir: m => finMostrarTodaAtividade\(m\) \}/);
     assert.ok(!MODULO.includes("'registrar-nf'"), 'não existe mais "Registrar NF" à mão');
     assert.match(MODULO, /window\.Modal\.open\(modal\.html, FIN_SCRIPT_MODAIS, modal\.overlay, extra\.empilhar === true\)/);
     assert.match(MODULO, /window\.FinanceiroAbrirModal = finAbrirModal/);
@@ -169,54 +208,76 @@ test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o H
 test('modais empilhados: o Esc só fecha o de cima, e as linhas/botões abrem outro modal por cima', () => {
     assert.match(SCRIPT, /ehOModalDeCima/);
     assert.match(SCRIPT, /if \(e\.key !== 'Escape' \|\| filhoAberto \|\| !ehOModalDeCima\(\)\) return;/);
-    assert.match(SCRIPT, /window\.FinanceiroAbrirModal\(chave, null, \{ \.\.\.extra, empilhar: true/);
+    assert.match(SCRIPT, /window\.FinanceiroAbrirModal\(chave, null, \{ \.\.\.extra, empilhar: true, competencia: extra\.competencia \|\| contexto\.competencia \}\)/);
     assert.match(SCRIPT, /\{ abrir: 'detalhes-parcela' \}/, 'linha de comissão atrasada abre Detalhes da parcela');
     assert.match(SCRIPT, /botao\.dataset\.finAbrir = 'detalhes-pedido'/, 'número do pedido abre Detalhes do pedido');
     assert.match(SCRIPT, /abrirOutro\('visualizar-relatorio', \{ relatorio, competencia, periodo \}\)/, '"Gerar relatório" com Visualizar abre a folha');
 });
 
-test('comissões atrasadas: 11 parcelas, líquido 36.600 e comissão potencial 7.320; as 3 com mais de 30 dias dão 4.280', () => {
+test('comissões atrasadas: totais e aging das linhas do backend (as 5 faixas, mesmo vazias)', () => {
     const f = puro();
-    const linhas = plano(f.calcularAtrasadas(f.EXEMPLO.atrasadas, '2026-09-15'));
-    const resumo = plano(f.resumoAtrasadas(linhas));
-    assert.deepStrictEqual(resumo, { quantidade: 11, liquido: 36600, comissao: 7320 });
-    const maisDe30 = linhas.filter(l => l.dias > 30);
-    assert.strictEqual(maisDe30.length, 3);
-    assert.strictEqual(plano(f.resumoAtrasadas(maisDe30)).comissao, 4280);
-    assert.strictEqual(linhas.find(l => l.pedido === '2455').dias, 77);
-    assert.deepStrictEqual(plano(f.agingDe(linhas)).map(a => `${a.faixa}:${a.parcelas}`), ['1–15:5', '16–30:3', '31–60:2', '61–90:1', '+90:0']);
+    const linhas = [
+        { pedido: '2455', dias: 77, faixa: '61–90', liquido: 10000, comissao: 2000 },
+        { pedido: '2460', dias: 20, liquido: 5000, comissao: 1000 },
+        { pedido: '2470', dias: 3, faixa: '1–15', liquido: 1200.5, comissao: 240.1 }
+    ];
+    assert.deepStrictEqual(plano(f.resumoAtrasadas(linhas)), { quantidade: 3, liquido: 16200.5, comissao: 3240.1 });
+    assert.deepStrictEqual(plano(f.agingDe(linhas)).map(a => `${a.faixa}:${a.parcelas}:${a.comissao}`),
+        ['1–15:1:240.1', '16–30:1:1000', '31–60:0:0', '61–90:1:2000', '+90:0:0'], 'sem faixa, ela sai dos dias');
     assert.strictEqual(f.faixaDeAtraso(15), '1–15');
     assert.strictEqual(f.faixaDeAtraso(16), '16–30');
     assert.strictEqual(f.faixaDeAtraso(91), '+90');
     assert.strictEqual(f.diferencaDias('2026-09-15', '2026-06-30'), 77);
 });
 
-test('produção da competência: 327 peças, 5 pedidos, pintura 4.230 + marcenaria 5.640 = 9.870', () => {
+test('produção da competência: um cartão por setor, total em destaque e o que fica a compensar', () => {
     const f = puro();
-    assert.deepStrictEqual(plano(f.resumoProducao(f.EXEMPLO.producaoCompetencia)),
-        { pecas: 327, pedidos: 5, pintura: 4230, marcenaria: 5640, total: 9870 });
+    const cartoes = plano(f.indicadoresDaProducao({
+        pecas: 327, pedidos: 5, fechado: false, a_pagar: 9870, a_compensar: 0,
+        setores: [{ setor: 'Marcenaria', total: 5640 }, { setor: 'Pintura', total: 4230 }]
+    }));
+    assert.deepStrictEqual(cartoes.map(c => [c.rotulo, semNbsp(c.valor)]), [
+        ['Peças finalizadas', '327'], ['Pedidos envolvidos', '5'], ['Marcenaria', 'R$ 5.640,00'], ['Pintura', 'R$ 4.230,00'], ['Total a pagar', 'R$ 9.870,00']
+    ]);
+    assert.strictEqual(cartoes[4].destaque, true);
+    const negativo = plano(f.indicadoresDaProducao({ pecas: -3, pedidos: 1, fechado: true, a_pagar: 0, a_compensar: -75, setores: [{ setor: 'Pintura', total: -75 }] }));
+    assert.deepStrictEqual(negativo.slice(-2).map(c => [c.rotulo, semNbsp(c.valor)]), [['Total a pagar (fechado)', 'R$ 0,00'], ['A compensar', '- R$ 75,00']]);
+    assert.strictEqual(negativo[negativo.length - 1].atencao, true);
 });
 
-test('todo relatório da central tem folha: colunas, linhas e totais fecham com os indicadores da tela', () => {
+test('todo relatório da central tem folha: colunas e totais; planilha CSV para o Excel', () => {
     const f = puro();
     const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
     assert.strictEqual(chavesDaCentral.length, 9);
     for (const chave of chavesDaCentral) {
-        // "Pedidos aguardando NF-e" é real: as linhas vêm do painel fiscal.
-        const r = plano(f.montarRelatorio(chave, chave === 'aguardando-nf' ? { linhas: f.linhasDoRelatorioAguardando(PAINEL) } : {}));
-        assert.ok(r && r.linhas.length > 0, `relatório "${chave}" sem folha ou sem linhas`);
+        const r = plano(f.montarRelatorio(chave, { linhas: [] }));
+        assert.ok(r && Array.isArray(r.linhas), `relatório "${chave}" sem folha`);
         assert.ok(r.colunas.length >= 4, `relatório "${chave}" com poucas colunas`);
+        assert.ok(SCRIPT.includes(`'${chave}'`), `relatório "${chave}" sem definição`);
     }
-    assert.strictEqual(plano(f.montarRelatorio('comissoes-apuradas')).totais.comissao, 18450);
-    assert.strictEqual(plano(f.montarRelatorio('previsao-comissoes')).totais.comissao, 32500);
+    assert.deepStrictEqual(plano(f.montarRelatorio('comissoes-apuradas')).linhas, [], 'sem linhas do backend, folha vazia (nada de exemplo)');
+    const apuradas = plano(f.montarRelatorio('comissoes-apuradas', { linhas: [
+        { pedido: '2548', pedido_id: 55, numero_parcela: 1, liquido: 17000, cms: 1700, royalty: 1700, comissao: 3400 },
+        { pedido: '2560', pedido_id: 60, numero_parcela: 2, liquido: 1000.1, cms: 100.01, royalty: 100.01, comissao: 200.02 }
+    ] }));
+    assert.strictEqual(apuradas.totais.comissao, 3600.02);
+    assert.strictEqual(apuradas.totais.liquido, 18000.1);
+    const csv = f.relatorioEmCsv({ ...apuradas, linhas: [{ ...apuradas.linhas[0], cliente: 'Casa; "Vicenzo"', liquidacao: '2026-08-20' }] });
+    const partes = csv.split('\r\n');
+    assert.strictEqual(csv.charCodeAt(0), 0xFEFF, 'BOM para o Excel ler os acentos');
+    assert.strictEqual(partes[0].slice(1), 'Pedido;Cliente;NF;Parcela;Liquidação;Valor líquido;CMS;Royalty;Total comissão');
+    assert.strictEqual(partes[1], '2548;"Casa; ""Vicenzo""";;;20/08/2026;17000,00;1700,00;1700,00;3400,00');
+    assert.strictEqual(partes[2], 'Total (1);;;;;18000,10;1800,01;1800,01;3600,02', 'os totais são os da folha');
+    assert.deepStrictEqual(plano(f.RELATORIOS_DE_PARCELA).sort(), ['ajustes-anteriores', 'comissoes-apuradas', 'comissoes-atrasadas', 'comissoes-nao-realizadas', 'previsao-comissoes']);
     const aguardando = plano(f.montarRelatorio('aguardando-nf', { linhas: f.linhasDoRelatorioAguardando(PAINEL) }));
     assert.strictEqual(aguardando.totais.valor, 1900, 'o dispensado (S/NF) não entra no relatório');
     assert.strictEqual(aguardando.linhas.length, 2);
     assert.deepStrictEqual(aguardando.linhas[0], { pedido: '2540', pedido_id: 1, cliente: 'Casa Vicenzo', entrega: '2026-09-10', condicao: '3x · Boleto', dias: 6, valor: 1500 });
     assert.strictEqual(aguardando.colunas[0].tipo, 'pedido-real', 'o número abre o Visualizar pedido de verdade');
     assert.deepStrictEqual(plano(f.montarRelatorio('aguardando-nf')).linhas, [], 'sem painel, sem linhas de exemplo');
-    assert.strictEqual(plano(f.montarRelatorio('producao-competencia')).totais.total, 9870);
-    assert.strictEqual(plano(f.montarRelatorio('producao-por-pedido')).totais.pecas, 327);
+    const porPedido = plano(f.montarRelatorio('producao-por-pedido', { linhas: [{ pedido: '1', pecas: 3, total: 75 }, { pedido: '2', pecas: -1, total: -25 }] }));
+    assert.strictEqual(porPedido.totais.pecas, 2, 'estorno desconta peças');
+    assert.strictEqual(porPedido.totais.total, 50);
     assert.strictEqual(f.montarRelatorio('inexistente'), null);
 });
 
@@ -431,7 +492,12 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
         assert.ok(registrar.includes(`<option value="${forma}">`), `forma ${forma}`);
     }
     assert.ok(!registrar.includes('value="boleto"'), 'boleto pago não se registra à mão');
-    assert.ok(!/CMS|Royalty|Comprovante/.test(registrar), 'sem o que ainda não existe (comissões, comprovante)');
+    assert.ok(!/Comprovante/.test(registrar), 'sem o que ainda não existe (comprovante)');
+    // Fase G: a comissão que o recebimento gera, só para quem vê comissões.
+    for (const id of ['finRecebimentoBase', 'finRecebimentoCms', 'finRecebimentoRoyalty']) {
+        assert.match(registrar, new RegExp(`data-perm-hide="financeiro\\.comissao\\.view">\\s*<span[^>]*>[^<]+</span>\\s*<span id="${id}"`), `#${id} some sem financeiro.comissao.view`);
+    }
+    assert.match(SCRIPT, /if \(pode\('financeiro\.comissao\.view'\)\) \{\s*\/\/[^\n]*\n\s*fetchApi\('\/api\/financeiro\/parcelas\?visao=ajustaveis'\)/, 'a prévia da comissão vem das parcelas da fase G, em segundo plano');
     assert.ok(!/<button[^>]*>\s*<i class="fas/.test(registrar), 'botões só com texto');
 
     const lista = fs.readFileSync(path.join(PASTA_HTML, 'recebimentos.html'), 'utf8');
@@ -457,7 +523,7 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
     assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:recebimentos-alterados', aoAlterar\)\)/, 'o ouvinte sai quando a lista fecha');
     assert.match(SCRIPT, /'app-message-overlay fixed inset-0/, 'a caixa do motivo sobe para a top layer');
     assert.match(SCRIPT, /finRecebimentos: montarRecebimentos/);
-    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento'\]\)/, 'fechar relê o painel');
+    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',\s*'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finRegras', 'finDetalhesParcela'\]\)/, 'fechar relê o painel');
     assert.ok(!/window\.confirm\(/.test(SCRIPT));
 
     // O módulo: os cartões abrem a lista na visão certa; "Registrar recebimento" pede a permissão.
@@ -467,6 +533,47 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
     assert.match(tela, /data-perm="financeiro\.recebimento\.registrar" data-fin-acao="registrar-recebimento"/);
     assert.match(tela, /data-perm-hide="financeiro\.recebimento\.view"/, 'a faixa some para quem não vê recebimentos');
     assert.match(tela, /data-perm="financeiro\.recebimento\.view" data-fin-acao="conciliar"/);
+});
+
+test('comissões e produção são REAIS (fase G): cada modal fala com /api/financeiro e confirma na caixa da casa', () => {
+    const chamadas = [
+        "fetchApi('/api/financeiro/parcelas?visao=ajustaveis')",
+        "fetchApi('/api/financeiro/ajustes', {",
+        "fetchApi('/api/financeiro/producao/pedidos')",
+        'fetchApi(`/api/financeiro/producao/pedidos/${encodeURIComponent(id)}`)',
+        "fetchApi('/api/financeiro/producao', {",
+        'fetchApi(`/api/financeiro/producao/${encodeURIComponent(e.id)}/estornar`',
+        'fetchApi(`/api/financeiro/fechamentos/previa?tipo=${tipoAtual()}&competencia=',
+        "fetchApi('/api/financeiro/fechamentos', { method: 'POST'",
+        'fetchApi(`/api/financeiro/fechamentos?tipo=${tipo}`)',
+        "fetchApi('/api/financeiro/pagamentos', {",
+        'fetchApi(`/api/financeiro/relatorios/${encodeURIComponent(chave)}?${consulta}`)',
+        'fetchApi(`/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}`)',
+        'fetchApi(`/api/financeiro/ajustes/${encodeURIComponent(a.id)}/cancelar`',
+        'fetchApi(`/api/financeiro/pedidos/${encodeURIComponent(pedidoId)}`)',
+        "fetchApi('/api/financeiro/parcelas?visao=atrasadas')",
+        'fetchApi(`/api/financeiro/producao?competencia=${encodeURIComponent(mesSel.value)}`)',
+        "fetchApi('/api/financeiro/regras')",
+        "fetchApi('/api/financeiro/valores', {",
+        "fetchApi('/api/financeiro/configuracao', { method: 'PUT'",
+        "fetchApi('/api/financeiro/feriados', { method: 'POST'",
+        'fetchApi(`/api/financeiro/buscas/${alvo}`)'
+    ];
+    for (const trecho of chamadas) assert.ok(SCRIPT.includes(trecho), `falta a chamada ${trecho}`);
+    for (const titulo of ['Registrar o ajuste?', 'Registrar a produção?', 'Fechar a competência?', 'Confirmar o pagamento?', 'Desativar a regra?']) {
+        assert.ok(SCRIPT.includes(`'${titulo}'`), `sem confirmação "${titulo}"`);
+    }
+    // O fechamento não se fecha por Esc no meio da gravação.
+    assert.match(SCRIPT, /confirmText: 'Fechar competência'\s*\}\);\s*if \(!confirmado\) return;\s*processando = true;/);
+    // As listas de baixo se relêem quando outro modal grava.
+    assert.match(SCRIPT, /const avisarAlteracao = \(\) => window\.dispatchEvent\(new CustomEvent\('financeiro:alterado'\)\);/);
+    assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:alterado', ouvinte\)\);/);
+    // Exportação: PDF montado com DOM e planilha CSV pelo Electron.
+    assert.match(SCRIPT, /document\.implementation\.createHTMLDocument/);
+    assert.match(SCRIPT, /salvarHtmlComoPdf\?\.\(\{ html: documentoDoRelatorio\(r\)/);
+    assert.match(SCRIPT, /salvarTextoComoArquivo\?\.\(\{\s*conteudo: relatorioEmCsv\(r\), nomeSugerido: nome, extensao: 'csv'/);
+    assert.ok(!/EXEMPLO|TAXA_CMS|TAXA_ROYALTY/.test(SCRIPT), 'nenhum dado de exemplo sobrou');
+    assert.match(SCRIPT, /finRegras: montarRegras/);
 });
 
 test('todo botão que chama BotaoAcao.run no próprio clique leva data-acao-gerida (senão a rede automática o ocupa antes e ele não faz nada)', () => {
