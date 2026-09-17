@@ -10,6 +10,8 @@ const producao = require('./producao');
 const fechamentos = require('./fechamentos');
 const auditoria = require('./auditoria');
 const regras = require('./regras');
+// Reembolso a pagar e devolução por terminar (backend/devolucoes): entram nas pendências do módulo.
+const reembolsos = require('../devolucoes/reembolsos');
 
 /** 'YYYY-MM-DDTHH:MM-03:00' de um instante (a atividade fiscal já vem assim). */
 function instanteBR(instante) {
@@ -115,10 +117,11 @@ function pendencias({ hoje, regrasTudo, apuradas, estadoC, estadoP, pend, fecham
 
 async function carregar({ api, competencia, hoje, desde }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
-  const [dc, prod, recentes] = await Promise.all([
+  const [dc, prod, recentes, daDevolucao] = await Promise.all([
     fechamentos.dadosComissao(api, { competencia: comp, hoje, desde }),
     producao.lerBase(api),
-    auditoria.recentes(api, { limite: 8 }).catch(() => [])
+    auditoria.recentes(api, { limite: 8 }).catch(() => []),
+    reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
   const { b, estado: estadoC, apuradas, resumo } = dc;
   const v = comissoes.visoes(apuradas);
@@ -159,7 +162,10 @@ async function carregar({ api, competencia, hoje, desde }) {
       dia_util: cfg.producao_dia_util,
       situacao: situacaoDe(prodComp)
     },
-    pendencias: pendencias({ hoje, regrasTudo: b.regras, apuradas, estadoC, estadoP: prod.estado, pend: prod.pend, fechamentosLista: lista }),
+    pendencias: [
+      ...pendencias({ hoje, regrasTudo: b.regras, apuradas, estadoC, estadoP: prod.estado, pend: prod.pend, fechamentosLista: lista }),
+      ...daDevolucao
+    ],
     atividade: recentes.map(e => ({
       quando: instanteBR(e.criado_em), titulo: e.rotulo,
       detalhe: e.descricao

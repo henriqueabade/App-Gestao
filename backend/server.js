@@ -84,6 +84,8 @@ app.use('/api/fiscal', require('./fiscalController'));
 app.use('/api/cobranca', require('./cobrancaController'));
 // Financeiro completo (fase G): comissões, ajustes, produção, fechamentos e pagamentos.
 app.use('/api/financeiro', require('./financeiroController'));
+// Devolução de pedidos (parcial e total): peças ao estoque, parcelas, boletos no BB e reembolso.
+app.use('/api/devolucoes', require('./devolucoesController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.

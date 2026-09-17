@@ -98,6 +98,41 @@ async function registrar({ api, entrada, usuarioId = null, hoje, desde = null })
   return { ajuste, impacto: efeito, boleto_aberto: Boolean(boletoAberto) };
 }
 
+/**
+ * Os ajustes de uma DEVOLUÇÃO de pedido (backend/devolucoes): um por parcela
+ * paga que teve parte reembolsada ao cliente — `partes`: [{ numero, valor }].
+ * É o mesmo ajuste "Devolução" da tela, lançado de uma vez: a base da CMS e
+ * do Royalty cai, e a comissão já fechada é estornada na próxima competência.
+ * Cada parte é limitada ao valor líquido que resta na parcela.
+ */
+async function registrarDaDevolucao({ api, pedidoId, partes = [], data, motivo, usuarioId = null, hoje, desde = null }) {
+  const validas = partes.filter(p => Number(p?.numero) > 0 && c.centavos(p?.valor) > 0);
+  if (!validas.length) return [];
+  const dataAjuste = c.dataValida(String(data || '').slice(0, 10)) && String(data).slice(0, 10) <= hoje ? String(data).slice(0, 10) : hoje;
+  const { doPedido } = await parcela(api, { pedidoId, numero: validas[0].numero, hoje, desde });
+  const texto = c.texto(motivo, 200) || 'Devolução do cliente';
+  const saida = [];
+  for (const parte of validas) {
+    const alvo = doPedido.find(p => Number(p.numero_parcela) === Number(parte.numero));
+    if (!alvo) { saida.push({ numero: parte.numero, ajuste: null, motivo: 'a parcela não está nas contas do Financeiro' }); continue; }
+    const valor = Math.min(c.centavos(parte.valor), c.centavos(alvo.liquido));
+    if (!(valor > 0)) { saida.push({ numero: parte.numero, ajuste: null, motivo: 'a parcela não tem mais valor líquido' }); continue; }
+    const efeito = impacto(alvo, valor);
+    const ajuste = await c.inserir(api, 'ajustes_financeiros', {
+      pedido_id: Number(pedidoId), numero_parcela: Number(parte.numero), parcela_id: null, nota_fiscal_id: null,
+      tipo: 'devolucao', valor, data_ajuste: dataAjuste, competencia: c.competenciaDe(dataAjuste),
+      motivo: texto, observacao: null, status: 'ativo', criado_por: usuarioId, criado_em: c.agora()
+    });
+    await auditoria.registrar(api, {
+      tipo: 'ajuste_registrado', pedidoId: Number(pedidoId), numeroParcela: Number(parte.numero), referenciaId: ajuste.id, valor: -valor, usuarioId,
+      descricao: `${TIPOS.devolucao} de ${c.reais(valor)} na parcela ${alvo.parcela} do pedido ${alvo.pedido}: ${texto}${efeito.gera_estorno ? ' (comissão já fechada: estorno na próxima competência)' : ''}`,
+      dados: { impacto: efeito }
+    });
+    saida.push({ numero: Number(parte.numero), ajuste, gera_estorno: efeito.gera_estorno });
+  }
+  return saida;
+}
+
 async function cancelar({ api, id, motivo, usuarioId = null, hoje, desde = null }) {
   const texto = c.texto(motivo, 500);
   if (texto.length < 5) throw c.erro('Diga por que o ajuste está sendo cancelado.');
@@ -116,4 +151,4 @@ async function cancelar({ api, id, motivo, usuarioId = null, hoje, desde = null 
   return { ...ajuste, ...campos };
 }
 
-module.exports = { TIPOS, validar, parcela, impacto, registrar, cancelar };
+module.exports = { TIPOS, validar, parcela, impacto, registrar, registrarDaDevolucao, cancelar };

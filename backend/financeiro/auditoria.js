@@ -22,7 +22,9 @@ const TIPOS = {
   valor_producao: 'Valor de produção alterado',
   setor_alterado: 'Setor de produção alterado',
   feriado_alterado: 'Calendário alterado',
-  configuracao_alterada: 'Prazos alterados'
+  configuracao_alterada: 'Prazos alterados',
+  devolucao_registrada: 'Devolução registrada',
+  reembolso_confirmado: 'Reembolso confirmado'
 };
 
 async function registrar(api, { tipo, descricao, pedidoId = null, numeroParcela = null, referenciaId = null, valor = null, dados = null, usuarioId = null }) {

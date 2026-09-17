@@ -24,6 +24,10 @@
        texto. O --color-purple do tema é roxo saturado nos dois (#b36bff no
        escuro, #7300ba no claro); o teste de CSS confere matiz e saturação. */
     --dash-roxo: var(--color-purple);
+    /* Lilás da devolução PARCIAL: o mesmo roxo, mais perto do texto forte do
+       tema — no donut ele fica ao lado do "Devolvido" (roxo cheio) e precisa
+       se distinguir dele; o nome ao lado continua dizendo qual é qual. */
+    --dash-lilas: color-mix(in srgb, var(--color-purple) 55%, var(--menu-text-strong));
     /* Texto de apoio (subtítulo, detalhe, eixo, legenda, rótulo). Era o
        --menu-text-muted/tertiary, que no tema claro dá 1,7-2,7:1 sobre o
        cartão. No escuro é o --menu-text-secondary (mais claro que antes). */
@@ -77,6 +81,7 @@
 .dashboard-module [data-tom="vinho"] { --dash-tom: var(--dash-vinho); }
 .dashboard-module [data-tom="violeta"] { --dash-tom: var(--color-violet); }
 .dashboard-module [data-tom="roxo"] { --dash-tom: var(--dash-roxo); }
+.dashboard-module [data-tom="lilas"] { --dash-tom: var(--dash-lilas); }
 .dashboard-module [data-tom="neutro"] { --dash-tom: var(--neutral-500); }
 .dashboard-module [data-tom] {
     --dash-tom-texto: color-mix(in srgb, var(--dash-tom) 72%, var(--menu-text-strong));
@@ -621,6 +626,21 @@
     fill: var(--dash-verde-barra-forte);
 }
 
+/* O que SAIU — cancelado (vermelho) e devolvido (roxo) —, pendurado abaixo da
+   linha de base, sob a barra da série de que saiu. */
+.dash-barras__saida--cancelado {
+    fill: var(--color-red);
+}
+
+.dash-barras__saida--devolvido {
+    fill: var(--dash-roxo);
+}
+
+.dash-barras__item:hover .dash-barras__saida,
+.dash-barras__item:focus-visible .dash-barras__saida {
+    opacity: 0.8;
+}
+
 /* Faixa invisível da coluna até o pé do SVG: âncora do tooltip, que assim
    abre sempre abaixo dos rótulos de mês, com ou sem rótulo naquela coluna. */
 .dash-barras__faixa {
@@ -673,6 +693,14 @@
 
 .dash-grafico__legenda-cor--previsao {
     background: var(--dash-verde-barra);
+}
+
+.dash-grafico__legenda-cor--cancelado {
+    background: var(--color-red);
+}
+
+.dash-grafico__legenda-cor--devolvido {
+    background: var(--dash-roxo);
 }
 
 .dash-grafico__dado--previsao .dash-grafico__dado-valor {
@@ -1511,6 +1539,28 @@
     font-size: 0.74rem;
     color: var(--dash-balao-apoio);
     font-variant-numeric: tabular-nums;
+}
+
+/* O que saiu no mês (cancelado, devolvido): a bolinha antes do nome tem a cor
+   da barra pendurada — o nome ao lado é que diz qual é qual. O balão é
+   movido para o <body> pelo Popover, então as cores vêm dos tokens do tema
+   (o --dash-roxo só existe dentro do módulo). */
+.dash-balao__item--saida .dash-balao__nome::before {
+    content: "";
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    margin-right: 0.4rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.dash-balao__item--cancelado .dash-balao__nome::before {
+    background: var(--color-red);
+}
+
+.dash-balao__item--devolvido .dash-balao__nome::before {
+    background: var(--color-purple);
 }
 
 .dash-balao__item--estimada .dash-balao__detalhe {

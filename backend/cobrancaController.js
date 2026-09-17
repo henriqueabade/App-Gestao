@@ -558,6 +558,17 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
   }
   router.conciliarEmSegundoPlano = conciliarCom;
 
+  /**
+   * Para a devolução de pedidos (backend/devolucoes): o que uma operação de UM boleto precisa — o
+   * cliente do BB, a configuração e a conexão do ambiente dele —, com o cofre e o banco deste módulo.
+   */
+  router.contextoDoBoleto = async (api, boleto) => {
+    operacoes.exigirSql(boleto);
+    const cfg = await configuracao.carregar(api, { forcar: true });
+    const conexao = await conexaoDoAmbiente(api, cfg, boleto.ambiente);
+    return { bb: cliente, cfg, conexao };
+  };
+
   router.post('/conciliar', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
     try {
       const api = createApiClient(req);
@@ -605,3 +616,5 @@ module.exports.criarRouter = criarRouter;
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
 /** Para a agenda automática (fase F): a conciliação com o cofre, o banco e o cliente do BB deste módulo. */
 module.exports.conciliarEmSegundoPlano = opcoes => router.conciliarEmSegundoPlano(opcoes);
+/** Para a devolução de pedidos: o contexto do BB para operar um boleto (abatimento, baixa). */
+module.exports.contextoDoBoleto = (api, boleto) => router.contextoDoBoleto(api, boleto);

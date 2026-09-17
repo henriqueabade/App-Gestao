@@ -523,7 +523,7 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
     assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:recebimentos-alterados', aoAlterar\)\)/, 'o ouvinte sai quando a lista fecha');
     assert.match(SCRIPT, /'app-message-overlay fixed inset-0/, 'a caixa do motivo sobe para a top layer');
     assert.match(SCRIPT, /finRecebimentos: montarRecebimentos/);
-    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',\s*'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finRegras', 'finDetalhesParcela'\]\)/, 'fechar relê o painel');
+    assert.match(SCRIPT, /new Set\(\['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',\s*'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela'\]\)/, 'fechar relê o painel');
     assert.ok(!/window\.confirm\(/.test(SCRIPT));
 
     // O módulo: os cartões abrem a lista na visão certa; "Registrar recebimento" pede a permissão.

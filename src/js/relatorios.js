@@ -10,7 +10,30 @@ const BADGE_CLASS_MAP = {
     info: 'badge-info',
     neutral: 'badge-neutral',
     secondary: 'badge-secondary',
-    light: 'badge-light'
+    light: 'badge-light',
+    // Devolução de pedido (parcial e total): o roxo do tema.
+    purple: 'badge-purple'
+};
+
+/**
+ * A situação que o relatório mostra: a devolução (colunas de sql/devolucoes.sql)
+ * vence o Enviado/Entregue que continua gravado — igual à lista de Pedidos e
+ * ao Dashboard. "Devolvido" quando tudo voltou, "Parcial" quando voltou parte.
+ */
+function situacaoDoPedidoNoRelatorio(pedido) {
+    if (pedido?.devolucao === 'total') return 'Devolvido';
+    if (pedido?.devolucao === 'parcial') return 'Parcial';
+    return pedido?.situacao;
+}
+
+/** Cor de cada status no anel "Pedidos por Status": a mesma do Dashboard (cancelado vermelho, devolução roxa). */
+const CORES_DO_STATUS_DO_PEDIDO = {
+    producao: 'var(--color-primary)',
+    enviado: 'var(--color-blue)',
+    entregue: 'var(--color-green)',
+    parcial: '#c9a2ff',
+    devolvido: 'var(--color-purple, #a855f7)',
+    cancelado: 'var(--color-red)'
 };
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1669,6 +1692,7 @@ function getOrderStatusVariant(status) {
     if (!normalized) return 'neutral';
     if (['entregue', 'concluido'].includes(normalized)) return 'success';
     if (normalized === 'cancelado') return 'danger';
+    if (normalized === 'parcial' || normalized === 'devolvido') return 'purple';
     if (normalized === 'enviado') return 'info';
     if (normalized === 'producao') return 'warning';
     if (normalized === 'rascunho') return 'secondary';
@@ -1870,7 +1894,7 @@ const FILTER_OPTION_CONFIGS = {
         condicao: item => [...getPaymentConditionLabels(item), item?.condicao_pagamento, item?.condicao]
     },
     pedidos: {
-        status: item => item?.situacao,
+        status: item => situacaoDoPedidoNoRelatorio(item),
         dono: item => [item?.responsavel, item?.dono],
         cliente: item => nomeDoClienteDoDocumento(item),
         condicao: item => getPaymentConditionLabels(item)
@@ -2363,7 +2387,7 @@ const REPORT_FILTERS = {
         const condicaoFiltro = normalizeText(filters.condicao);
 
         return list.filter(pedido => {
-            if (status && !includesNormalized(pedido?.situacao, status)) return false;
+            if (status && !includesNormalized(situacaoDoPedidoNoRelatorio(pedido), status)) return false;
             if (cliente && !includesNormalized(pedido?.cliente, cliente)) return false;
             if (codigo && !includesNormalized(pedido?.numero, codigo)) return false;
 
@@ -3410,7 +3434,7 @@ function buildPedidosCharts(data = []) {
 
     const charts = [];
 
-    const statusSeries = countByLabel(list, pedido => pedido?.situacao ?? 'Sem status', {
+    const statusSeries = countByLabel(list, pedido => situacaoDoPedidoNoRelatorio(pedido) ?? 'Sem status', {
         fallback: 'Sem status',
         transform: toTitleCase
     });
@@ -3420,6 +3444,9 @@ function buildPedidosCharts(data = []) {
         valueFormatter: value => formatNumber(value, { fallback: '0' })
     });
     if (statusChart) {
+        // Cor pelo STATUS, não pela posição: cancelado é sempre vermelho e devolução sempre roxa,
+        // com o filtro que for. Status sem cor própria cai na paleta de sempre.
+        statusChart.colors = statusChart.series.map(fatia => CORES_DO_STATUS_DO_PEDIDO[normalizeText(fatia.label)] || null);
         charts.push(statusChart);
     }
 
@@ -5026,8 +5053,9 @@ REPORT_CONFIGS.pedidos = {
         const valor = formatCurrency(pedido?.valor_final);
         const parcelas = Number.parseInt(pedido?.parcelas, 10);
         const condicao = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
-        const statusLabel = pedido?.situacao ? pedido.situacao : '—';
-        const statusBadge = createBadge(statusLabel, getOrderStatusVariant(pedido?.situacao), { size: 'sm' });
+        const situacao = situacaoDoPedidoNoRelatorio(pedido);
+        const statusLabel = situacao || '—';
+        const statusBadge = createBadge(statusLabel, getOrderStatusVariant(situacao), { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
                 <td data-column-key="codigo" class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>

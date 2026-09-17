@@ -669,7 +669,7 @@
   let filhoAberto = false;
   // Ao fechar, a tela relê o painel fiscal: o que se fez aqui muda os números.
   const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',
-    'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finRegras', 'finDetalhesParcela']);
+    'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela']);
   const recarregarPainel = () => { if (RECARREGAM_O_PAINEL.has(overlayId)) window.FinanceiroRecarregar?.(); };
 
   const fechar = () => {
@@ -2128,6 +2128,81 @@
     radios.forEach(r => r.addEventListener('change', carregar));
     compSel.addEventListener('change', pintar);
     acionar(confirmarBtn, confirmarPagamento);
+    return carregar();
+  }
+
+  /**
+   * Confirmar reembolso: o que voltou para o cliente numa devolução de pedido
+   * (nasce pendente em Pedidos → Visualizar → Devolução). A pendência do painel
+   * já chega com o reembolso escolhido; pela ação rápida, escolhe-se na lista.
+   */
+  function montarConfirmarReembolso() {
+    const qualSel = el('finReembolsoQual');
+    const dataCampo = el('finReembolsoData');
+    const formaSel = el('finReembolsoForma');
+    const confirmarBtn = el('finReembolsoConfirmar');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    dataCampo.value = hoje;
+    let pendentes = [];
+    const atual = () => pendentes.find(r => String(r.id) === qualSel.value) || null;
+
+    function pintar() {
+      const r = atual();
+      el('finReembolsoValor').value = r ? formatarMoeda(r.valor) : '—';
+      pintarSituacao(el('finReembolsoSituacao'), r ? 'A pagar' : '—');
+      confirmarBtn.classList.toggle('hidden', !r);
+    }
+
+    async function carregar() {
+      try {
+        const r = await fetchApi('/api/devolucoes/reembolsos?status=pendente');
+        pendentes = Array.isArray(r?.reembolsos) ? r.reembolsos : [];
+        qualSel.replaceChildren(...(pendentes.length ? [] : [opcao('', 'Nenhum reembolso a pagar')]),
+          ...pendentes.map(x => opcao(String(x.id), [`Pedido ${x.pedido}`, x.cliente || '', formatarMoeda(x.valor)].filter(Boolean).join(' · '))));
+        formaSel.replaceChildren(opcao('', 'Selecione'), ...(Array.isArray(r?.formas) ? r.formas : []).map(x => opcao(x, x)));
+        if (contexto.reembolso_id && pendentes.some(x => String(x.id) === String(contexto.reembolso_id))) qualSel.value = String(contexto.reembolso_id);
+      } catch (e) {
+        mostrarMensagem('finReembolsoMensagem', e?.corpo?.sql_pendente
+          ? 'Falta ativar a devolução no banco: rode sql/devolucoes.sql e reinicie a API.'
+          : textoDoErro(e, 'Você não tem permissão para ver os reembolsos.'));
+      }
+      pintar();
+    }
+
+    async function confirmarReembolso() {
+      mostrarMensagem('finReembolsoMensagem', '');
+      const r = atual();
+      const erro = !r ? 'Escolha o reembolso.'
+        : !dataCampo.value ? 'Informe a data do reembolso.'
+          : dataCampo.value > hoje ? 'A data do reembolso não pode ser futura.'
+            : !formaSel.value ? 'Informe como foi pago.' : '';
+      if (erro) { mostrarMensagem('finReembolsoMensagem', erro); return; }
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Confirmar o reembolso?',
+        message: `Pedido ${r.pedido}${r.cliente ? ` (${r.cliente})` : ''}: ${formatarMoeda(r.valor)} devolvidos ao cliente em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
+        confirmText: 'Confirmar reembolso'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        await fetchApi(`/api/devolucoes/reembolsos/${encodeURIComponent(r.id)}/confirmar`, {
+          method: 'POST',
+          body: JSON.stringify({ data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finReembolsoObservacoes').value })
+        });
+        window.showToast?.('Reembolso confirmado.', 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finReembolsoMensagem', textoDoErro(e, 'Você não tem permissão para confirmar reembolsos.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    qualSel.addEventListener('change', pintar);
+    acionar(confirmarBtn, confirmarReembolso);
     return carregar();
   }
 
@@ -4039,6 +4114,7 @@
     finDetalhesParcela: montarDetalhesParcela,
     finDetalhesPedido: montarDetalhesPedido,
     finConfirmarPagamento: montarConfirmarPagamento,
+    finConfirmarReembolso: montarConfirmarReembolso,
     finVisualizarRelatorio: montarVisualizarRelatorio,
     finComissoesAtrasadas: montarComissoesAtrasadas,
     finProducaoCompetencia: montarProducaoCompetencia,

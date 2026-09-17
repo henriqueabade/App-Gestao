@@ -107,6 +107,40 @@ function tagCartaCorrecao(nota) {
 }
 
 /**
+ * A situação que a lista mostra: a devolução (colunas de sql/devolucoes.sql)
+ * vence o Enviado/Entregue que continua gravado por baixo — "Devolvido" quando
+ * tudo voltou, "Parcial" quando voltou uma parte. É este o texto que o filtro
+ * de status compara. Pura.
+ */
+function situacaoNaLista(p) {
+    if (p?.devolucao === 'total') return { rotulo: 'Devolvido', classe: 'badge-purple' };
+    if (p?.devolucao === 'parcial') return { rotulo: 'Parcial', classe: 'badge-purple' };
+    return { rotulo: p?.situacao || '', classe: null };
+}
+
+/**
+ * Tag roxa "NF dev." ao lado do número: a nota de devolução que o cliente
+ * emitiu e a devolução guardou. Pura; '' sem nota.
+ */
+function tagNotaDevolucao(notas) {
+    const lista = Array.isArray(notas) ? notas.filter(Boolean) : [];
+    if (!lista.length) return '';
+    const numeros = lista.map(n => `${Number(n.serie) || 0}/${Number(n.numero) || 0}`).join(', ');
+    const titulo = `${lista.length === 1 ? 'NF-e de devolução do cliente' : 'NF-e de devolução do cliente (várias)'}: ${numeros}`;
+    return ` <span class="badge-purple ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">NF dev.</span>`;
+}
+
+/** As notas de devolução por pedido. Pura. */
+function indexarNotasDevolucao(notas) {
+    const porPedido = {};
+    for (const n of Array.isArray(notas) ? notas : []) {
+        if (!n || n.pedido_id === null || n.pedido_id === undefined) continue;
+        (porPedido[String(n.pedido_id)] ||= []).push(n);
+    }
+    return porPedido;
+}
+
+/**
  * Tag ao lado do número do pedido, pela nota que ele tem: verde "DANFE"
  * (autorizada — o clique gera o PDF), vermelha "X/NF" (cancelada) ou a roxa
  * "S/NF" (enviado sem nota). Com carta de correção, a amarela "CC-e" vem
@@ -307,7 +341,8 @@ function showStatusTooltip(e) {
         { label: 'Previsão de Embarque', value: badge.dataset.previsaoEmbarque },
         { label: 'Data de Embarque', value: badge.dataset.embarque },
         { label: 'Data de Entrega', value: badge.dataset.entrega },
-        { label: 'Data de Cancelamento', value: badge.dataset.cancelamento }
+        { label: 'Data de Cancelamento', value: badge.dataset.cancelamento },
+        { label: 'Data da Devolução', value: badge.dataset.devolucao }
     ].filter(i => i.value);
     if (!items.length) return;
     statusTooltip = document.createElement('div');
@@ -392,13 +427,17 @@ async function carregarPedidos() {
         // As notas fiscais (sem XML) entram junto, para as tags DANFE / X/NF ao
         // lado do número. Quem não tem financeiro.nfe.view recebe 403 e fica sem
         // as tags — a lista não depende disso.
-        const [resp, respNotas] = await Promise.all([
+        // As notas de DEVOLUÇÃO (a do cliente, guardada pela devolução) vêm do
+        // mesmo jeito: sem a tabela ou sem permissão, a lista sai sem a tag.
+        const [resp, respNotas, respNotasDev] = await Promise.all([
             fetchApi('/api/pedidos'),
             fetchApi('/api/fiscal/notas').catch(() => null),
+            fetchApi('/api/devolucoes/notas').catch(() => null),
             cacheClientes.size ? Promise.resolve() : carregarClientes()
         ]);
         const data = await resp.json();
         const notasPorPedido = indexarNotas(respNotas?.ok ? await respNotas.json().catch(() => []) : []);
+        const notasDevPorPedido = indexarNotasDevolucao(respNotasDev?.ok ? await respNotasDev.json().catch(() => []) : []);
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -418,7 +457,10 @@ async function carregarPedidos() {
             tr.dataset.id = p.id;
             owners.add(p.dono);
             const condicao = p.parcelas > 1 ? `${p.parcelas}x` : 'À vista';
-            const badgeClass = statusClasses[p.situacao] || 'badge-neutral';
+            // A devolução vence a situação na etiqueta (e no filtro, que lê o texto dela).
+            const naLista = situacaoNaLista(p);
+            const badgeClass = naLista.classe || statusClasses[p.situacao] || 'badge-neutral';
+            const dataDevolucao = formatarDiaDate(p.data_devolucao);
             const valor = Number(p.valor_final || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const isDraft = p.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
@@ -443,12 +485,12 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td data-perm-col="col_ped_condicao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
+                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}" data-devolucao="${dataDevolucao}">${naLista.rotulo}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
                         <i data-perm="ped.payment.edit" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-pagamento ${pagamentoClass}" style="color: var(--color-primary)" title="${pagamentoTitle}"></i>
@@ -471,7 +513,8 @@ async function carregarPedidos() {
             });
             const checkIcon = tr.querySelector('.fa-check');
             const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };
-            const nextStatus = nextStatusMap[p.situacao];
+            // Devolvido por inteiro não tem mais o que avançar (o "Parcial" ainda pode ser dado como entregue).
+            const nextStatus = p.devolucao === 'total' ? null : nextStatusMap[p.situacao];
             if (!nextStatus) {
                 checkIcon.classList.add('icon-disabled');
             } else {

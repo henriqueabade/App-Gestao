@@ -22,7 +22,7 @@
   // o fuso local, virariam o dia 12. As demais (emissão, entrega...) são
   // instantes e seguem o fuso de quem olha.
   // ------------------------------------------------------------------
-  const COLUNAS_DATE = new Set(['data_aprovacao', 'embarcar_real', 'embarcar_previsao', 'inicio_faturamento']);
+  const COLUNAS_DATE = new Set(['data_aprovacao', 'embarcar_real', 'embarcar_previsao', 'inicio_faturamento', 'data_devolucao']);
 
   function diaDeColunaDate(valor) {
     if (valor === null || valor === undefined) return null;
@@ -80,7 +80,7 @@
   // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
   // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
   // ------------------------------------------------------------------
-  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null) {
+  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null, notasDevolucao = []) {
     const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
     const STATUS_NF = {
       autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
@@ -105,6 +105,12 @@
     }
     const totalCartas = Number(cartas) || 0;
     if (nota && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
+    // Devolução (roxo): o que voltou e a nota que o cliente emitiu.
+    const devolvido = Number(p.valor_devolvido);
+    if (p.devolucao && devolvido > 0) tags.push({ classe: 'badge-purple', texto: `${p.devolucao === 'total' ? 'Devolvido' : 'Devolução parcial'} · ${brl(devolvido)}` });
+    for (const nd of (Array.isArray(notasDevolucao) ? notasDevolucao : []).filter(Boolean)) {
+      tags.push({ classe: 'badge-purple', texto: `NF dev. ${nd.serie ?? ''}/${nd.numero ?? ''}` });
+    }
     // Boletos das parcelas (cobrança BB): quantas parcelas já têm boleto vivo, e quantos pagos.
     const parcelas = Number(boletos?.parcelas) || 0;
     const registrados = Number(boletos?.registrados) || 0;
@@ -145,6 +151,24 @@
     const rotulo = boleto.status === 'baixado' && MOTIVO[boleto.motivo_baixa] ? `${rotuloBase} (${MOTIVO[boleto.motivo_baixa]})` : rotuloBase;
     const numero = boleto.nosso_numero ? `${boleto.nosso_numero}${boleto.nosso_numero_dv ? `-${boleto.nosso_numero_dv}` : ''}` : '';
     return { classe, texto: `${rotulo}${numero ? ` · ${numero}` : ''}${boleto.ambiente === 'sandbox' ? ' · homologação' : ''}`, detalhe: boleto.status === 'erro' ? (boleto.erro || '') : (boleto.linha_digitavel || '') };
+  }
+
+  /**
+   * Pedido enviado, entregue ou com NF-e autorizada não se cancela: devolve-se.
+   * Cancelada a nota (na SEFAZ), o pedido em produção volta a ser cancelável. Pura.
+   */
+  function pedidoSeDevolve(pedido, notas) {
+    const situacao = String(pedido?.situacao || '').trim().toLowerCase();
+    if (situacao === 'cancelado') return false;
+    if (situacao === 'enviado' || situacao === 'entregue' || Boolean(pedido?.devolucao)) return true;
+    return (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
+  }
+
+  /** A etiqueta de status: a devolução (roxa) vence o Enviado/Entregue que está por baixo. Pura. */
+  function etiquetaDaDevolucao(pedido) {
+    if (pedido?.devolucao === 'total') return { rotulo: 'Devolvido', badge: 'badge-purple', dateKey: 'data_devolucao' };
+    if (pedido?.devolucao === 'parcial') return { rotulo: 'Parcial', badge: 'badge-purple', dateKey: 'data_devolucao' };
+    return null;
   }
 
   function pintarTags(tags) {
@@ -295,6 +319,19 @@
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
   };
+
+  /** O botão roxo "Devolução" toma o lugar do "Cancelar" (a permissão de cada um está escrita no HTML). */
+  function ligarDevolucao(pedido, notas) {
+    const devolver = overlay.querySelector('#devolucaoVisualizarPedido');
+    if (!devolver || !pedidoSeDevolve(pedido, notas)) return;
+    overlay.querySelector('#cancelarVisualizarPedido')?.classList.add('hidden');
+    devolver.classList.remove('hidden');
+    devolver.addEventListener('click', () => {
+      window.devolucaoPedidoContext = { pedidoId: window.selectedOrderId, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
+      close();
+      Modal.open('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');
+    });
+  }
   const esc = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', esc);
   overlay.querySelector('#voltarVisualizarPedido')?.addEventListener('click', close);
@@ -440,9 +477,11 @@
     };
     const statusTag = overlay.querySelector('#statusPedidoTag');
     const dateTag = overlay.querySelector('#dataStatusPedidoTag');
-    const statusInfo = statusConfig[data.situacao] || { badge: 'badge-neutral', dateKey: null };
+    const daDevolucao = etiquetaDaDevolucao(data);
+    const statusInfo = daDevolucao || statusConfig[data.situacao] || { badge: 'badge-neutral', dateKey: null };
     if (statusTag) {
-      statusTag.textContent = data.situacao || 'Sem status';
+      statusTag.textContent = daDevolucao ? daDevolucao.rotulo : (data.situacao || 'Sem status');
+      if (daDevolucao) statusTag.title = `Pedido ${String(data.situacao || '').toLowerCase()} com devolução ${data.devolucao === 'total' ? 'total' : 'parcial'}`;
       statusTag.className = `${statusInfo.badge} px-3 py-1 rounded-full text-xs font-medium`;
     }
     if (dateTag) {
@@ -480,7 +519,7 @@
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
         <td data-perm-col="col_ped_it_nome" class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
-        <td data-perm-col="col_ped_it_qtd" class="text-left text-white">${fmtNumber(qtd)}</td>
+        <td data-perm-col="col_ped_it_qtd" class="text-left text-white">${fmtNumber(qtd)}${Number(item.quantidade_devolvida) > 0 ? ` <span class="badge-purple ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" title="Peças devolvidas pelo cliente">${Number(item.quantidade_devolvida)} dev.</span>` : ''}</td>
         <td data-perm-col="col_ped_it_preco" class="text-left text-white">${fmtNumber(valorUnit)}</td>
         <td data-perm-col="col_ped_it_preco_desc" class="text-left text-white">${fmtNumber(valorUnitDesc)}</td>
         <td data-perm-col="col_ped_it_desc" class="text-left text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
@@ -503,9 +542,17 @@
     overlay.querySelector('#descontoPagPedido').textContent = fmtCurrency(descPag);
     overlay.querySelector('#descontoEspPedido').textContent = fmtCurrency(descEsp);
     overlay.querySelector('#descontoPedido').textContent = fmtCurrency(descontoTotal);
-    overlay.querySelector('#totalPedido').textContent = fmtCurrency(total);
+    // Devolução parcial: as linhas continuam como foram vendidas; o Total mostra o que restou.
+    const devolvido = data.devolucao ? safeNumber(data.valor_devolvido) : 0;
+    const totalAtual = data.devolucao === 'parcial' ? Math.max(0, total - devolvido) : total;
+    const chipDevolvido = overlay.querySelector('#devolvidoPedidoChip');
+    if (chipDevolvido) {
+      overlay.querySelector('#devolvidoPedido').textContent = fmtCurrency(devolvido);
+      chipDevolvido.classList.toggle('hidden', !(devolvido > 0));
+    }
+    overlay.querySelector('#totalPedido').textContent = fmtCurrency(totalAtual);
     const footerTotal = overlay.querySelector('#totalPedidoFooter');
-    if (footerTotal) footerTotal.textContent = fmtCurrency(total);
+    if (footerTotal) footerTotal.textContent = fmtCurrency(totalAtual);
 
     // Tags do rodapé. As notas exigem financeiro.nfe.view; sem ela (ou sem a
     // tabela) ficam só as do embarque.
@@ -522,7 +569,16 @@
       const respBoletos = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos`);
       if (respBoletos.ok) boletosEstado = await respBoletos.json();
     } catch (_) { /* sem boletos, sem coluna */ }
-    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado)));
+    // A nota de devolução do cliente (guardada pela devolução): sem a tabela ou sem permissão, sem tag.
+    let notasDevolucao = [];
+    if (data.devolucao) {
+      try {
+        const respDev = await fetchApi(`/api/devolucoes/notas?pedido_id=${encodeURIComponent(id)}`);
+        if (respDev.ok) notasDevolucao = await respDev.json();
+      } catch (_) { /* sem nota de devolução, sem tag */ }
+    }
+    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));
+    ligarDevolucao(data, notas);
     ligarDocumentosDaNota(notaDocs, data);
 
     if (pagamentoBox) {

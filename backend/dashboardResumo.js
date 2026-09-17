@@ -47,8 +47,15 @@ const ETAPAS = ['Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação',
 const ETAPAS_TERMINAIS = new Set(['ganho', 'perdido']);
 const ETAPAS_ABERTAS = ETAPAS.filter(e => !ETAPAS_TERMINAIS.has(normalizarTexto(e)));
 
-/** As cinco situações do pedido, na ordem em que o gráfico as mostra. */
-const SITUACOES_PEDIDO = ['Produção', 'Enviado', 'Entregue', 'Cancelado', 'Outros'];
+/**
+ * As situações do pedido, na ordem em que o gráfico as mostra. "Parcial" e
+ * "Devolvido" não são valores de `pedidos.situacao`: vêm de `pedidos.devolucao`
+ * (sql/devolucoes.sql) e, na tela, vencem o Enviado/Entregue que está por baixo.
+ */
+const SITUACOES_PEDIDO = ['Produção', 'Enviado', 'Entregue', 'Parcial', 'Devolvido', 'Cancelado', 'Outros'];
+
+/** O que a devolução tira da parcela sem mexer no valor gravado dela (o resto já baixou o `valor`). */
+const MODOS_QUE_NAO_BAIXAM_A_PARCELA = new Set(['abatimento_boleto', 'reembolso']);
 
 /**
  * Faixas de IDADE do pedido em produção: há quanto tempo ele está na fábrica.
@@ -317,6 +324,30 @@ function situacaoDoPedido(situacao) {
   return 'Outros';
 }
 
+/**
+ * A situação que o painel mostra: a devolução (parcial ou total) vence a
+ * situação gravada, menos a do cancelado — pedido cancelado não se devolve.
+ */
+function situacaoNoPainel(pedido) {
+  const situacao = situacaoDoPedido(pedido?.situacao);
+  if (situacao === 'Cancelado') return situacao;
+  const devolucao = normalizarTexto(pedido?.devolucao);
+  if (devolucao === 'total') return 'Devolvido';
+  if (devolucao === 'parcial') return 'Parcial';
+  return situacao;
+}
+
+/**
+ * O valor da VENDA como ela aconteceu. Numa devolução parcial o
+ * `valor_final` passa a ser o que restou; o que foi vendido fica em
+ * `valor_original`. O que voltou aparece à parte, na série roxa.
+ */
+function valorDaVenda(pedido) {
+  return temValor(pedido?.devolucao) && temValor(pedido?.valor_original)
+    ? dinheiro(pedido.valor_original)
+    : dinheiro(pedido?.valor_final);
+}
+
 function indiceDaFaixa(dias) {
   return FAIXAS_IDADE.findIndex(f => dias <= f.ate);
 }
@@ -418,8 +449,15 @@ function nomesDeDestinatario({ clientes, prospeccoes }, { nomeDeProspeccao, pode
  *
  * `serie12m` traz os meses vazios com zero. O gráfico de Relatórios pula mês
  * sem venda, e o eixo passa a mentir sobre a distância entre as barras.
+ *
+ * O QUE SAIU. Cada mês leva também `cancelado` (pedidos cancelados, pelo mês
+ * do CANCELAMENTO) e `devolvido` (devoluções, pelo mês da DEVOLUÇÃO — a
+ * tabela `devolucoes`, que pode nem existir ainda: sem ela, zero). A venda
+ * continua no mês em que aconteceu, pelo valor vendido (`valorDaVenda`): um
+ * pedido vendido em agosto e devolvido em setembro é venda de agosto e
+ * devolução de setembro. `devolvidosMes` é o irmão de `canceladosMes`.
  */
-function resumirVendas({ pedidos } = {}, { agora = new Date(), comValores = true } = {}) {
+function resumirVendas({ pedidos, devolucoes } = {}, { agora = new Date(), comValores = true } = {}) {
   const { hoje, mesAtual } = contextoDeTempo(agora);
   const mesAnterior = deslocarMes(mesAtual, -1);
   const diaLimite = Math.min(Number(hoje.slice(8, 10)), ultimoDiaDoMes(mesAnterior));
@@ -429,14 +467,27 @@ function resumirVendas({ pedidos } = {}, { agora = new Date(), comValores = true
   const mesmoPeriodo = acumulador();
   const anterior = acumulador();
   const cancelados = acumulador();
+  const devolvidos = acumulador();
   const porMes = new Map(meses.map(m => [m, acumulador()]));
+  const canceladoPorMes = new Map(meses.map(m => [m, acumulador()]));
+  const devolvidoPorMes = new Map(meses.map(m => [m, acumulador()]));
+
+  for (const d of lista(devolucoes)) {
+    const mes = diaDeColunaDate(d?.data_devolucao)?.slice(0, 7);
+    if (!mes) continue;
+    const valor = dinheiro(d?.valor);
+    if (mes === mesAtual) somar(devolvidos, valor);
+    if (devolvidoPorMes.has(mes)) somar(devolvidoPorMes.get(mes), valor);
+  }
 
   for (const p of lista(pedidos)) {
-    const valor = dinheiro(p?.valor_final);
+    const valor = valorDaVenda(p);
 
     if (situacaoDoPedido(p?.situacao) === 'Cancelado') {
       const diaCancelamento = diaLocal(p?.data_cancelamento);
-      if (diaCancelamento && diaCancelamento.slice(0, 7) === mesAtual) somar(cancelados, valor);
+      const mesCancelamento = diaCancelamento ? diaCancelamento.slice(0, 7) : null;
+      if (mesCancelamento === mesAtual) somar(cancelados, valor);
+      if (canceladoPorMes.has(mesCancelamento)) somar(canceladoPorMes.get(mesCancelamento), valor);
       continue;
     }
 
@@ -465,10 +516,22 @@ function resumirVendas({ pedidos } = {}, { agora = new Date(), comValores = true
       quantidade: cancelados.quantidade,
       valor: saidaDeValor(cancelados.valor, comValores)
     },
+    devolvidosMes: {
+      quantidade: devolvidos.quantidade,
+      valor: saidaDeValor(devolvidos.valor, comValores)
+    },
     serie12m: meses.map(mes => ({
       mes,
       quantidade: porMes.get(mes).quantidade,
-      valor: saidaDeValor(porMes.get(mes).valor, comValores)
+      valor: saidaDeValor(porMes.get(mes).valor, comValores),
+      cancelado: {
+        quantidade: canceladoPorMes.get(mes).quantidade,
+        valor: saidaDeValor(canceladoPorMes.get(mes).valor, comValores)
+      },
+      devolvido: {
+        quantidade: devolvidoPorMes.get(mes).quantidade,
+        valor: saidaDeValor(devolvidoPorMes.get(mes).valor, comValores)
+      }
     }))
   };
 }
@@ -549,9 +612,11 @@ function resumirProducao(
     const embarque = situacao === 'Produção' ? embarqueEmProducao(p, hoje) : null;
 
     if (diaEmissao && janela.has(diaEmissao.slice(0, 7))) {
-      const daSituacao = porSituacao.get(situacao);
+      // No donut a devolução vence o Enviado/Entregue; devolvido não tem prazo a cumprir.
+      const noPainel = situacaoNoPainel(p);
+      const daSituacao = porSituacao.get(noPainel);
       somar(daSituacao, valor);
-      const contador = contadorDePrazo(situacao, p, embarque);
+      const contador = contadorDePrazo(noPainel, p, embarque);
       if (contador) daSituacao[contador] += 1;
     }
     if (situacao !== 'Produção') continue;
@@ -1008,6 +1073,13 @@ function parcelasDoPedido(linhas) {
  *     as verdes ficam lado a lado) e vai até o último mês com parcela, no
  *     máximo HORIZONTE_PREVISAO_MESES à frente. O que passa disso vai para
  *     `alemDoHorizonte`; o que vence antes da janela é histórico e fica fora.
+ *   - O QUE SAIU da previsão aparece à parte, por mês de vencimento:
+ *     `cancelado` (as parcelas dos pedidos cancelados) e `devolvido` (o que a
+ *     devolução tirou das parcelas — `devolucao_parcelas`, que pode nem
+ *     existir ainda). A parcela que a devolução reduziu já vem com o `valor`
+ *     novo; a que ganhou abatimento no boleto ou teve parte reembolsada
+ *     continua com o valor cheio gravado, e o desconto é tirado aqui. Parcela
+ *     que zerou sai da previsão.
  *   - Nada é cortado calado: `semParcelas`, `orfas`, `semData` e
  *     `alemDoHorizonte` dizem o que ficou fora das barras, e `outros` diz
  *     quantos pedidos do mês não couberam na lista.
@@ -1017,7 +1089,7 @@ function parcelasDoPedido(linhas) {
  * de condição (ver SECOES no controller), então os R$ saem sempre.
  */
 function resumirPrevisao(
-  { pedidos, pedido_parcelas: parcelas, clientes } = {},
+  { pedidos, pedido_parcelas: parcelas, clientes, devolucao_parcelas: devolvidas } = {},
   { agora = new Date(), pode = LIBERA_TUDO } = {}
 ) {
   const { mesAtual } = contextoDeTempo(agora);
@@ -1034,7 +1106,23 @@ function resumirPrevisao(
     if (situacaoDoPedido(p.situacao) !== 'Cancelado') ativos.set(String(p.id), p);
   }
 
+  // O que a devolução tirou: por mês de vencimento (a série roxa) e, por
+  // parcela, o que ainda precisa sair do valor gravado dela.
+  const devolvidoPorMes = new Map();
+  const aTirarDaParcela = new Map();
+  for (const d of lista(devolvidas)) {
+    const desconto = dinheiro(d?.desconto);
+    if (!(desconto > 0)) continue;
+    const mes = diaDeVencimento(d?.data_vencimento)?.slice(0, 7);
+    if (mes) devolvidoPorMes.set(mes, (devolvidoPorMes.get(mes) || 0) + desconto);
+    if (MODOS_QUE_NAO_BAIXAM_A_PARCELA.has(texto(d?.modo))) {
+      const chave = `${d?.pedido_id}:${d?.numero_parcela}`;
+      aTirarDaParcela.set(chave, (aTirarDaParcela.get(chave) || 0) + desconto);
+    }
+  }
+
   const linhasPorPedido = new Map();
+  const canceladoPorMes = new Map();
   let orfas = 0;
   for (const linha of lista(parcelas)) {
     const pedidoId = temValor(linha?.pedido_id) ? String(linha.pedido_id) : null;
@@ -1042,7 +1130,13 @@ function resumirPrevisao(
       orfas += 1;
       continue;
     }
-    if (!ativos.has(pedidoId)) continue;
+    if (!ativos.has(pedidoId)) {
+      // Pedido cancelado: a parcela não será faturada — vai para a série vermelha.
+      const mes = diaDeVencimento(linha?.data_vencimento)?.slice(0, 7);
+      const valor = dinheiro(linha?.valor_original ?? linha?.valor);
+      if (mes && valor > 0) canceladoPorMes.set(mes, (canceladoPorMes.get(mes) || 0) + valor);
+      continue;
+    }
     if (!linhasPorPedido.has(pedidoId)) linhasPorPedido.set(pedidoId, []);
     linhasPorPedido.get(pedidoId).push(linha);
   }
@@ -1055,6 +1149,8 @@ function resumirPrevisao(
   for (const [pedidoId, pedido] of ativos) {
     const linhas = linhasPorPedido.get(pedidoId);
     if (!linhas) {
+      // Devolvido por inteiro e sem parcelas lançadas: não há o que programar.
+      if (normalizarTexto(pedido.devolucao) === 'total') continue;
       const valor = dinheiro(pedido.valor_final);
       somar(semParcelas, valor);
       const dia = diaLocal(pedido.data_emissao);
@@ -1067,7 +1163,11 @@ function resumirPrevisao(
         semData += 1;
         continue;
       }
-      lancamentos.push({ pedido, totalParcelas: linhas.length, ...parcela, estimada: false });
+      const tirar = aTirarDaParcela.get(`${pedidoId}:${parcela.numero}`) || 0;
+      const valor = Math.max(0, parcela.valor - tirar);
+      // Parcela que a devolução zerou não está mais programada.
+      if (!(valor > 0) && (tirar > 0 || temValor(pedido.devolucao))) continue;
+      lancamentos.push({ pedido, totalParcelas: linhas.length, ...parcela, valor, estimada: false });
     }
   }
 
@@ -1124,6 +1224,8 @@ function resumirPrevisao(
     return {
       mes,
       valor: arredondar(valor),
+      cancelado: arredondar(canceladoPorMes.get(mes) || 0),
+      devolvido: arredondar(devolvidoPorMes.get(mes) || 0),
       parcelas: itens.reduce((soma, item) => soma + item.parcelas.length, 0),
       pedidos: itens.length,
       outros: Math.max(0, itens.length - LIMITE_LISTA.previsao),
@@ -1158,6 +1260,8 @@ module.exports = {
   somarDias,
   deslocarMes,
   situacaoDoPedido,
+  situacaoNoPainel,
+  valorDaVenda,
   normalizarTexto,
   ETAPAS,
   FAIXAS_IDADE,

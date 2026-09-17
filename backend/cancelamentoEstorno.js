@@ -1543,4 +1543,8 @@ async function opcoesDeEstorno(api, pedidoId) {
   return { pedido_id: pedidoId, itens: saida };
 }
 
-module.exports = { estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos };
+module.exports = {
+  estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos,
+  // A devolução (backend/devolucoes/estoque.js) devolve peça pronta ao estoque pelo mesmo caminho.
+  carregarInsumos, carregarRota, lotePara, TABELA_LOTES
+};

@@ -48,6 +48,9 @@ const FIN_ACOES = {
     // Pendência "Pagamento de … de agosto": já com o tipo e a competência.
     'confirmar-pagamento': { rotulo: 'Confirmar pagamento', abrir: (m, extra) => finAbrirModal('confirmar-pagamento', m, finDoFiltro(extra)) },
     'regras': { rotulo: 'Regras de comissão e produção', abrir: m => finAbrirModal('regras', m) },
+    // Devolução de pedido: o reembolso que ficou a pagar, e a devolução que não terminou (estoque, BB).
+    'confirmar-reembolso': { rotulo: 'Confirmar reembolso', abrir: (m, extra) => finAbrirModal('confirmar-reembolso', m, { reembolso_id: extra?.filtro?.reembolso_id ?? null }) },
+    'reaplicar-devolucao': { rotulo: 'Tentar de novo', abrir: (m, extra) => finReaplicarDevolucao(m, extra?.filtro?.devolucao_id) },
     'configuracao-fiscal': { rotulo: 'Configuração fiscal', abrir: m => finAbrirModal('configuracao-fiscal', m) },
     'configuracao-cobranca': { rotulo: 'Configuração de cobrança', abrir: m => finAbrirModal('configuracao-cobranca', m) },
     'pendencias-todas': { rotulo: 'Todas as pendências', abrir: m => finMostrarTodasPendencias(m) },
@@ -85,7 +88,8 @@ const FIN_MODAIS = {
     'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' },
     'configuracao-cobranca': { html: 'modals/financeiro/configuracao-cobranca.html', overlay: 'finConfiguracaoCobranca' },
     'recebimentos': { html: 'modals/financeiro/recebimentos.html', overlay: 'finRecebimentos' },
-    'regras': { html: 'modals/financeiro/regras.html', overlay: 'finRegras' }
+    'regras': { html: 'modals/financeiro/regras.html', overlay: 'finRegras' },
+    'confirmar-reembolso': { html: 'modals/financeiro/confirmar-reembolso.html', overlay: 'finConfirmarReembolso' }
 };
 
 /** O tipo e a competência que uma pendência leva (fechar, pagar). */
@@ -476,6 +480,29 @@ async function finConciliar(moduleEl) {
         await finRecarregar(raiz);
     } finally {
         if (raiz) delete raiz.dataset.conciliando;
+    }
+}
+
+/**
+ * Devolução que ficou pela metade (estoque, abatimento ou baixa no BB): tenta
+ * de novo daqui mesmo, diz o que aconteceu e relê a tela.
+ */
+async function finReaplicarDevolucao(moduleEl, devolucaoId) {
+    const raiz = moduleEl || document.querySelector('.modulo-container.financeiro-module');
+    if (!devolucaoId || raiz?.dataset.reaplicando === '1') return;
+    if (raiz) raiz.dataset.reaplicando = '1';
+    try {
+        window.showToast?.('Refazendo o que ficou pendente na devolução…', 'info');
+        const { corpo, erro } = await finChamarApi(`/api/devolucoes/${encodeURIComponent(devolucaoId)}/reaplicar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const restam = Number(corpo?.pendencias) || 0;
+        const avisos = Array.isArray(corpo?.avisos) ? corpo.avisos.filter(Boolean) : [];
+        const mensagem = erro
+            ? (erro.status === 403 ? 'Você não tem permissão para registrar devoluções.' : erro.message)
+            : [restam ? `Ainda ${restam === 1 ? 'ficou 1 pendência' : `ficaram ${restam} pendências`}.` : 'Tudo resolvido: a devolução está concluída.', ...avisos].join('\n');
+        if (window.DialogPadrao?.info) await window.DialogPadrao.info({ title: erro || restam ? 'Devolução ainda pendente' : 'Devolução concluída', message: mensagem });
+        await finRecarregar(raiz);
+    } finally {
+        if (raiz) delete raiz.dataset.reaplicando;
     }
 }
 

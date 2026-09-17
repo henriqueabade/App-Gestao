@@ -1531,6 +1531,14 @@
                         </div>
                       </label>
 
+                      <label class="usuarios-permissoes-item" data-search="registrar devolucao devolver pecas nota de devolucao xml reembolso estoque">
+                        <input type="checkbox" name="ped.devolucao" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Registrar devolução</span>
+                          <p class="text-sm text-gray-400">Botão roxo "Devolução" no Visualizar (pedido enviado, entregue ou com NF-e): peças ao estoque, parcelas e reembolso</p>
+                        </div>
+                      </label>
+
                       <label class="usuarios-permissoes-item" data-search="alterar pagamento condicao prazo parcelas forma calendario">
                         <input type="checkbox" name="ped.payment.edit" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
@@ -4268,6 +4276,130 @@
                         <div>
                           <span class="font-medium">Ver configuração fiscal</span>
                           <p class="text-sm text-gray-400">Emitente, numeração, certificado e teste da SEFAZ (alterar é só o Sup Admin)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Boletos (Banco do Brasil)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver boletos cobranca bb pdf linha digitavel">
+                        <input type="checkbox" name="financeiro.boleto.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver boletos</span>
+                          <p class="text-sm text-gray-400">Boletos das parcelas do pedido: situação, linha digitável e PDF</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="gerar boletos registrar cobranca bb">
+                        <input type="checkbox" name="financeiro.boleto.emit" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Gerar boletos</span>
+                          <p class="text-sm text-gray-400">Registrar boletos das parcelas no Banco do Brasil (junto da NF-e ou à mão)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="baixar e alterar boletos prorrogar abatimento baixa cobranca bb">
+                        <input type="checkbox" name="financeiro.boleto.baixa" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Baixar e alterar boletos</span>
+                          <p class="text-sm text-gray-400">Baixar boleto registrado, prorrogar vencimento e conceder abatimento</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Recebimentos</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver recebimentos contas a receber conciliar">
+                        <input type="checkbox" name="financeiro.recebimento.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver recebimentos</span>
+                          <p class="text-sm text-gray-400">Contas a receber: recebidos, a receber e em atraso; conciliação com o BB</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar recebimentos pix transferencia parcela paga">
+                        <input type="checkbox" name="financeiro.recebimento.registrar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Registrar recebimentos</span>
+                          <p class="text-sm text-gray-400">Registrar o recebimento de uma parcela paga fora do boleto (Pix, transferência…)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="estornar recebimentos desfazer recebimento">
+                        <input type="checkbox" name="financeiro.recebimento.estornar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Estornar recebimentos</span>
+                          <p class="text-sm text-gray-400">Desfazer um recebimento registrado por engano</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Comissões e produção</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver comissoes e producao cms royalty relatorios">
+                        <input type="checkbox" name="financeiro.comissao.view" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver comissões e produção</span>
+                          <p class="text-sm text-gray-400">CMS, Royalty, produção, fechamentos, regras e relatórios (só leitura)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar regras de comissao e producao percentual valor por peca setores feriados prazos">
+                        <input type="checkbox" name="financeiro.regras.editar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar regras de comissão e produção</span>
+                          <p class="text-sm text-gray-400">Percentuais de CMS/Royalty, valores por peça, setores, feriados e prazos de pagamento</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar ajustes devolucao desconto abatimento">
+                        <input type="checkbox" name="financeiro.ajuste.registrar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Registrar ajustes</span>
+                          <p class="text-sm text-gray-400">Devolução, desconto, abatimento e cancelamento parcial de parcelas (e cancelar ajuste ainda não fechado)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar producao pecas finalizadas setor estorno">
+                        <input type="checkbox" name="financeiro.producao.registrar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Registrar produção</span>
+                          <p class="text-sm text-gray-400">Peças finalizadas por setor e estorno de registro</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="fechar competencia fechamento congelar mes">
+                        <input type="checkbox" name="financeiro.competencia.fechar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Fechar competência</span>
+                          <p class="text-sm text-gray-400">Congelar as comissões ou a produção do mês (não tem volta)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="confirmar pagamento pagar comissao producao">
+                        <input type="checkbox" name="financeiro.pagamento.confirmar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Confirmar pagamento</span>
+                          <p class="text-sm text-gray-400">Registrar que a competência fechada foi paga</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Devoluções</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="confirmar reembolso devolucao de pedido dinheiro devolvido ao cliente">
+                        <input type="checkbox" name="financeiro.reembolso.confirmar" data-role="item" data-group="acoes-financeiro" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Confirmar reembolso</span>
+                          <p class="text-sm text-gray-400">Registrar que o reembolso de uma devolução foi pago ao cliente</p>
                         </div>
                       </label>
                     </div>

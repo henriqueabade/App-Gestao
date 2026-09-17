@@ -774,6 +774,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botão \"Cancelar\" no Visualizar e \"Confirmar Cancelamento\""
       },
       {
+        "key": "ped.devolucao",
+        "column": "acao_devolucao",
+        "label": "Registrar devolução",
+        "desc": "Botão roxo \"Devolução\" no Visualizar (pedido enviado, entregue ou com NF-e): peças ao estoque, parcelas e reembolso"
+      },
+      {
         "key": "ped.payment.edit",
         "column": "acao_payment_edit",
         "label": "Alterar pagamento",
@@ -2290,6 +2296,12 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_pagamento_confirmar",
         "label": "Confirmar pagamento",
         "desc": "Registrar que a competência fechada foi paga"
+      },
+      {
+        "key": "financeiro.reembolso.confirmar",
+        "column": "acao_reembolso_confirmar",
+        "label": "Confirmar reembolso",
+        "desc": "Registrar que o reembolso de uma devolução foi pago ao cliente"
       }
     ],
     "columns": []

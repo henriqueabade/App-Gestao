@@ -101,6 +101,8 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
       else if (boleto && boleto.status === 'pago') estado = 'recebida';
       else if (boleto && boleto.status === 'baixado' && boleto.motivo_baixa === 'quitado_por_fora') estado = 'recebida';
       else if (boleto && boleto.status === 'baixado' && boleto.motivo_baixa === 'cancelado') estado = 'cancelada';
+      // Parcela zerada por devolução do pedido (sem boleto para baixar): nada a receber.
+      else if (!(valor > 0)) estado = 'cancelada';
 
       const atraso = estado === 'a_receber' && vencimento && hojeDia && vencimento < hojeDia ? diasEntre(hojeDia, vencimento) : 0;
       linhas.push({
