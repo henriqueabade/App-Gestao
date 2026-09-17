@@ -1,0 +1,54 @@
+<!--
+  Regra Produção da peça (aberto pelo "Regra Produção" de Novo e Editar produto).
+  Quanto cada processo que a peça usa paga pela peça inteira: o padrão do
+  processo (Regras do Financeiro) ou um valor próprio — R$ por peça ou % do
+  preço cheio da tabela fixa. O que se escolhe aqui é gravado junto com a peça.
+  Script: src/js/modals/produto-regra-producao.js.
+-->
+<div id="regraProducaoPecaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+  <div role="dialog" aria-modal="true" aria-labelledby="regraProducaoTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" id="regraProducaoVoltar" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="regraProducaoTitulo" class="text-lg font-semibold text-white truncate">REGRA PRODUÇÃO</h2>
+        <p id="regraProducaoPeca" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <div class="justify-self-end text-right">
+        <p class="text-xs text-gray-400">Base do %</p>
+        <p id="regraProducaoPreco" class="text-sm font-semibold text-white whitespace-nowrap">—</p>
+      </div>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll px-8 py-6 space-y-6">
+      <p class="text-sm text-gray-300">
+        Para cada processo que a peça usa, escolha o <strong>padrão do processo</strong> (definido nas Regras do Financeiro) ou um valor
+        <strong>só desta peça</strong>: em reais por peça ou em % do preço cheio da tabela fixa. O valor é o da peça inteira; o
+        Financeiro paga cada insumo do processo como uma parte igual dele — a peça que sai do estoque com parte do processo pronta
+        paga só o que faltava.
+      </p>
+      <div id="regraProducaoMensagem" class="hidden text-sm" role="alert"></div>
+
+      <div id="regraProducaoTabela" class="glass-surface rounded-xl border border-white/10 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-white/10">
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Processo</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Insumos</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Padrão do processo</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nesta peça</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Valor</th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Peça inteira</th>
+            </tr>
+          </thead>
+          <tbody id="regraProducaoCorpo" class="divide-y divide-white/10"></tbody>
+        </table>
+      </div>
+      <p id="regraProducaoVazio" class="hidden text-sm text-gray-400 text-center py-6">A peça ainda não tem insumos: inclua os processos pelo "+ Começar" antes de definir a regra.</p>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" id="regraProducaoCancelar" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button type="button" id="regraProducaoAplicar" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Aplicar</button>
+    </footer>
+  </div>
+</div>

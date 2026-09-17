@@ -254,8 +254,27 @@ async function ehSupAdmin(req) {
   }
 }
 
+/**
+ * Como exigirPermissao, mas basta UMA das chaves. Para o que várias telas
+ * leem (a parcela mínima serve a orçamentos, pedidos e financeiro; a regra de
+ * produção da peça, a quem cria ou edita peças e a quem edita as regras).
+ */
+function exigirAlgumaPermissao(chaves) {
+  const lista = (Array.isArray(chaves) ? chaves : [chaves]).filter(Boolean);
+  return async (req, res, next) => {
+    try {
+      const permissoes = await obterPermissoesEfetivas(req);
+      if (lista.some(c => permissoesRepo.can(permissoes, c))) return next();
+    } catch (err) {
+      console.error('[permissoes] falha ao verificar permissão:', err?.message || err);
+    }
+    return res.status(403).json({ error: 'Permissão negada', code: 'FORBIDDEN', permissao: lista.join(' ou ') });
+  };
+}
+
 module.exports = router;
 module.exports.exigirPermissao = exigirPermissao;
+module.exports.exigirAlgumaPermissao = exigirAlgumaPermissao;
 module.exports.exigirSupAdmin = exigirSupAdmin;
 module.exports.ehSupAdmin = ehSupAdmin;
 module.exports.obterPermissoesEfetivas = obterPermissoesEfetivas;

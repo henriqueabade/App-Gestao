@@ -35,6 +35,56 @@
   const MAX_PARCELAS = 10;
 
   /**
+   * PARCELA MÍNIMA (Configuração de cobrança; backend/cobranca/parcelaMinima.js).
+   * Nenhuma parcela abaixo dela, a não ser a parcela única ou a 1ª com prazo 0
+   * (entrada à vista). Aqui a tela BLOQUEIA: as quantidades que não cabem no
+   * total ficam desabilitadas, "Iguais" some quando as partes ficariam abaixo,
+   * e "Diferentes" com parcela abaixo trava o registrar. O backend confere de
+   * novo. Sem o SQL (ou sem acesso), o mínimo é zero e nada muda.
+   */
+  let minimoCentavos = 0;
+  let leituraDoMinimo = null;
+  function carregarMinimo(){
+    if(leituraDoMinimo) return leituraDoMinimo;
+    leituraDoMinimo = (async () => {
+      try{
+        const base = await window.apiConfig?.getApiBaseUrl?.();
+        if(!base) return 0;
+        const resp = await fetch(`${base}/api/cobranca/parcela-minima`);
+        if(!resp.ok) return 0;
+        const corpo = await resp.json();
+        minimoCentavos = Math.round((Number(corpo?.parcela_minima) || 0) * 100);
+      }catch(_){
+        minimoCentavos = 0;
+      }
+      return minimoCentavos;
+    })();
+    return leituraDoMinimo;
+  }
+  /** Até quantas parcelas o total comporta (iguais: todas no mínimo; diferentes: a 1ª pode ser a entrada). */
+  function maximoDeParcelas(total, iguais){
+    if(!(minimoCentavos > 0)) return MAX_PARCELAS;
+    if(!(total > 0)) return 1;
+    const maximo = iguais ? Math.floor(total / minimoCentavos) : Math.floor((total - 1) / minimoCentavos) + 1;
+    return Math.max(1, maximo);
+  }
+  /** A primeira parcela que não cabe, com a frase; ou null. Espelha parcelaMinima.conferir. */
+  function conferirMinimo(items){
+    const n = items.length;
+    if(!(minimoCentavos > 0) || n <= 1) return null;
+    for(let i = 0; i < n; i++){
+      if(i === 0 && items[0].dueInDays === 0) continue;
+      if((items[i].amount || 0) < minimoCentavos){
+        const total = items.reduce((a, it) => a + (it.amount || 0), 0);
+        return `A ${i + 1}ª parcela (${formatCentsBRL(items[i].amount || 0)}) fica abaixo da parcela mínima de ${formatCentsBRL(minimoCentavos)}.`
+          + (i === 0 ? ' Só a primeira com prazo 0 (à vista) pode ser menor.' : '')
+          + (total < minimoCentavos ? ' O total fica abaixo do mínimo: use uma parcela só.' : '');
+      }
+    }
+    return null;
+  }
+
+  /**
    * Garante que o número exista na lista antes de selecioná-lo.
    *
    * `select.value = 12` num seletor que só vai até 10 não erra: simplesmente
@@ -74,6 +124,7 @@
         </div>
       </div>
       <div id="${containerId}_rows" class="space-y-2"></div>
+      <p id="${containerId}_minimo" class="hidden mt-3 text-xs" role="status"></p>
       <div class="mt-4 text-right">
         <span id="${containerId}_summary" class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Faltante: R$ 0,00</span>
       </div>`;
@@ -81,7 +132,8 @@
       count: container.querySelector(`#${containerId}_count`),
       modeRadios: container.querySelectorAll(`input[name='${containerId}_mode']`),
       rows: container.querySelector(`#${containerId}_rows`),
-      summary: container.querySelector(`#${containerId}_summary`)
+      summary: container.querySelector(`#${containerId}_summary`),
+      minimo: container.querySelector(`#${containerId}_minimo`)
     };
     elements.count.addEventListener('change', ()=>onCountChange(containerId));
     elements.modeRadios.forEach(r=>r.addEventListener('change',()=>onModeChange(containerId)));
@@ -108,6 +160,8 @@
       }
       recompute(containerId);
     }
+    // O mínimo chega depois (uma leitura por tela): aí as opções e a conferência se refazem.
+    carregarMinimo().then(() => { if(instances.get(containerId)?.elements === elements) recompute(containerId); });
   }
   function onCountChange(id){
     const inst = instances.get(id); if(!inst) return;
@@ -182,7 +236,33 @@
     s.sum=s.items.reduce((a,it)=>a+(it.amount||0),0);
     s.remaining=s.total-s.sum;
     const allFilled = s.count && s.items.length===s.count && s.items.every(it=>it.amount>0 && it.dueInDays!==null);
-    s.canRegister=Boolean(allFilled && s.remaining===0);
+    // Parcela mínima: as quantidades que não cabem ficam desabilitadas; "Iguais" também.
+    const maxDiferentes = maximoDeParcelas(s.total, false);
+    const maxIguais = maximoDeParcelas(s.total, true);
+    Array.from(inst.elements.count.options).forEach(o => {
+      const n = parseInt(o.value, 10);
+      if(!Number.isFinite(n)) return;
+      o.disabled = n > maxDiferentes && String(n) !== inst.elements.count.value;
+    });
+    Array.from(inst.elements.modeRadios).forEach(r => {
+      if(r.value === 'equal') r.disabled = !s.count || (s.count > 1 && s.count > maxIguais);
+    });
+    s.minimo = minimoCentavos;
+    s.motivo = allFilled ? conferirMinimo(s.items) : null;
+    if(!s.motivo && s.count > 1 && s.count > maxDiferentes){
+      s.motivo = `O total não comporta ${s.count} parcelas de ao menos ${formatCentsBRL(minimoCentavos)} (a parcela mínima): escolha até ${maxDiferentes}.`;
+    }
+    const aviso = inst.elements.minimo;
+    if(aviso){
+      const dica = minimoCentavos > 0
+        ? `Parcela mínima: ${formatCentsBRL(minimoCentavos)} — só a parcela única ou a 1ª com prazo 0 (à vista) pode ser menor.`
+        : '';
+      aviso.textContent = s.motivo || dica;
+      aviso.classList.toggle('hidden', !(s.motivo || dica));
+      aviso.style.color = s.motivo ? 'var(--color-red)' : '';
+      aviso.classList.toggle('text-gray-400', !s.motivo);
+    }
+    s.canRegister=Boolean(allFilled && s.remaining===0 && !s.motivo);
     inst.elements.summary.textContent = s.remaining===0 ? 'Total ok' : `Faltante: ${formatCentsBRL(s.remaining)}`;
     inst.elements.summary.className = s.remaining===0 ? 'badge-success px-3 py-1 rounded-full text-xs font-medium' : 'badge-danger px-3 py-1 rounded-full text-xs font-medium';
   }
@@ -200,7 +280,8 @@
     const inst=instances.get(id); if(!inst) return null;
     return JSON.parse(JSON.stringify(inst.state));
   }
-  window.Parcelamento={init,updateTotal,getData,MAX_PARCELAS};
+  window.Parcelamento={init,updateTotal,getData,MAX_PARCELAS,carregarMinimo,maximoDeParcelas,conferirMinimo,
+    definirMinimo(centavos){ minimoCentavos = Math.max(0, Math.round(Number(centavos) || 0)); leituraDoMinimo = Promise.resolve(minimoCentavos); }};
   window.parseCurrencyToCents=parseCurrencyToCents;
   window.formatCentsBRL=formatCentsBRL;
   window.parseIntOnly=parseIntOnly;

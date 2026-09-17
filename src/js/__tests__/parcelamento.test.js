@@ -267,3 +267,55 @@ test('pedido dentro do teto não inventa opção repetida', () => {
   assert.strictEqual(count.options.length, Parcelamento.MAX_PARCELAS);
   assert.strictEqual(count.value, '3');
 });
+
+test('parcela mínima: o que não cabe fica desabilitado e a parcela abaixo trava o registrar; a entrada à vista é livre', () => {
+  const { Parcelamento, porId } = montar();
+  const container = criarElemento();
+  container.id = 'm';
+  porId.set('m', container);
+  const count = criarElemento('select');
+  count.id = 'm_count';
+  porId.set('m_count', count);
+  for (const sufixo of ['_rows', '_summary', '_minimo']) {
+    const el = criarElemento('div');
+    el.id = `m${sufixo}`;
+    porId.set(`m${sufixo}`, el);
+  }
+  for (let i = 0; i < 3; i++) {
+    for (const campo of ['amount', 'due']) {
+      const el = criarElemento('input');
+      el.id = `m_${campo}_${i}`;
+      porId.set(el.id, el);
+    }
+  }
+  const tres = primeiroPrazo => ({
+    getTotal: () => 400000,
+    prefill: { count: 3, mode: 'custom', items: [
+      { amount: 100000, dueInDays: primeiroPrazo }, { amount: 150000, dueInDays: 60 }, { amount: 150000, dueInDays: 90 }
+    ] }
+  });
+
+  Parcelamento.definirMinimo(150000);
+  // R$ 4.000 com mínimo de R$ 1.500: até 3 parcelas (a 1ª pode ser a entrada); iguais, só até 2.
+  assert.strictEqual(Parcelamento.maximoDeParcelas(400000, false), 3);
+  assert.strictEqual(Parcelamento.maximoDeParcelas(400000, true), 2);
+  Parcelamento.init('m', tres(30));
+  assert.deepStrictEqual(count.options.filter(o => o.disabled).map(o => Number(o.value)), [4, 5, 6, 7, 8, 9, 10]);
+  let dados = Parcelamento.getData('m');
+  assert.strictEqual(dados.canRegister, false, 'a 1ª a prazo não pode ser menor');
+  assert.match(dados.motivo, /A 1ª parcela \(R\$\s1\.000,00\) fica abaixo da parcela mínima de R\$\s1\.500,00\. Só a primeira com prazo 0/);
+  assert.match(porId.get('m_minimo').textContent, /1ª parcela/);
+
+  Parcelamento.init('m', tres(0));
+  dados = Parcelamento.getData('m');
+  assert.strictEqual(dados.motivo, null);
+  assert.strictEqual(dados.canRegister, true, 'entrada à vista menor que o mínimo');
+  assert.match(porId.get('m_minimo').textContent, /Parcela mínima: R\$\s1\.500,00/);
+
+  // Sem o mínimo (SQL não rodou), nada muda.
+  Parcelamento.definirMinimo(0);
+  Parcelamento.init('m', tres(30));
+  assert.strictEqual(Parcelamento.getData('m').canRegister, true);
+  assert.deepStrictEqual(count.options.filter(o => o.disabled), []);
+  assert.strictEqual(Parcelamento.maximoDeParcelas(400000, true), Parcelamento.MAX_PARCELAS);
+});

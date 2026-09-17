@@ -195,6 +195,17 @@
     return { acumulado, restante, status, excede: acumulado > Number(pedida || 0) };
   }
 
+  /**
+   * O valor das próximas `quantidade` peças num processo: o valor da peça
+   * inteira vezes a parte do processo que falta em cada uma (`proximas`, do
+   * backend — a do estoque adiantada vale menos que 1). null sem regra.
+   */
+  function valorDasProximas(doProcesso, quantidade) {
+    if (!doProcesso || doProcesso.valor_unitario === null || doProcesso.valor_unitario === undefined) return null;
+    const partes = (doProcesso.proximas || []).slice(0, Math.max(0, Number(quantidade) || 0));
+    return centavos(Number(doProcesso.valor_unitario) * partes.reduce((s, f) => s + (Number(f) || 0), 0));
+  }
+
   function faixaDeAtraso(dias) {
     const d = Number(dias) || 0;
     if (d <= 15) return '1–15';
@@ -495,6 +506,23 @@
    * e os totais são somados aqui. `pedido` abre os Detalhes do pedido;
    * `pedido-real`, o Visualizar pedido dos Pedidos.
    */
+  /**
+   * Pagamento de um processo: cada linha é um registro, com o valor da peça
+   * inteira e o total (a peça do estoque adiantada paga só a parte que faltava).
+   */
+  const pagamentoDoProcesso = nome => ({
+    titulo: `Pagamento ${nome.toLowerCase()}`,
+    colunas: [
+      { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
+      { chave: 'produto', rotulo: 'Produto' },
+      { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
+      { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
+      { chave: 'valor_peca', rotulo: 'Peça inteira', tipo: 'moeda' },
+      { chave: 'regra', rotulo: 'Regra' },
+      { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
+    ]
+  });
+
   const RELATORIOS = {
     'previsao-comissoes': {
       titulo: 'Previsão de comissões',
@@ -572,44 +600,28 @@
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
         { chave: 'produto', rotulo: 'Produto' },
-        { chave: 'setor', rotulo: 'Setor' },
+        { chave: 'setor', rotulo: 'Processo' },
         { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
-        { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
+        { chave: 'unitario', rotulo: 'Valor por peça (média)', tipo: 'moeda' },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true },
         { chave: 'status', rotulo: 'Status' }
       ]
     },
-    'pagamento-pintura': {
-      titulo: 'Pagamento pintura',
-      colunas: [
-        { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
-        { chave: 'produto', rotulo: 'Produto' },
-        { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
-        { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
-        { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
-        { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
-      ]
-    },
-    'pagamento-marcenaria': {
-      titulo: 'Pagamento marcenaria',
-      colunas: [
-        { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
-        { chave: 'produto', rotulo: 'Produto' },
-        { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
-        { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
-        { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
-        { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
-      ]
-    },
+    'pagamento-marcenaria': pagamentoDoProcesso('Marcenaria'),
+    'pagamento-acabamento': pagamentoDoProcesso('Acabamento'),
+    'pagamento-montagem': pagamentoDoProcesso('Montagem'),
+    'pagamento-embalagem': pagamentoDoProcesso('Embalagem'),
     'producao-por-pedido': {
       titulo: 'Produção por pedido',
       colunas: [
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'cliente', rotulo: 'Cliente' },
         { chave: 'pecas', rotulo: 'Peças', tipo: 'inteiro', total: true },
-        { chave: 'pintura', rotulo: 'Pintura', tipo: 'moeda', total: true },
         { chave: 'marcenaria', rotulo: 'Marcenaria', tipo: 'moeda', total: true },
-        { chave: 'outros', rotulo: 'Outros setores', tipo: 'moeda', total: true },
+        { chave: 'acabamento', rotulo: 'Acabamento', tipo: 'moeda', total: true },
+        { chave: 'montagem', rotulo: 'Montagem', tipo: 'moeda', total: true },
+        { chave: 'embalagem', rotulo: 'Embalagem', tipo: 'moeda', total: true },
+        { chave: 'outros', rotulo: 'Outros processos', tipo: 'moeda', total: true },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
       ]
     },
@@ -646,7 +658,7 @@
 
   window.FinanceiroModais = {
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
-    rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro,
+    rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
     faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
     filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
@@ -1380,7 +1392,7 @@
   const SQL_G = 'Comissões e produção ainda não estão ativadas: rode sql/financeiro_comissoes_producao.sql no banco e reinicie a API.';
   function textoDoErro(e, semPermissao) {
     if (e?.status === 403) return semPermissao;
-    if (e?.corpo?.sql_pendente) return SQL_G;
+    if (e?.corpo?.sql_pendente) return /\.sql\b/.test(String(e?.message || '')) ? e.message : SQL_G;
     return e?.message || 'Erro inesperado.';
   }
 
@@ -1717,13 +1729,24 @@
     const itemEscolhido = () => (dados?.itens || []).find(i => String(i.id) === produtoSel.value) || null;
     const setorDoItem = item => (item?.setores || []).find(s => String(s.setor_id) === setorSel.value) || null;
 
+    /** Só os processos por que a peça escolhida passa (com insumo e pagamento ligado). */
+    function montarSetores() {
+      const item = itemEscolhido();
+      const atual = setorSel.value;
+      const doItem = new Set((item?.setores || []).map(s => String(s.setor_id)));
+      const lista = (dados?.setores || []).filter(s => !item || doItem.has(String(s.id)));
+      setorSel.replaceChildren(opcao('', item && !lista.length ? 'A peça não tem processo a registrar' : 'Selecione'));
+      for (const s of lista) setorSel.appendChild(opcao(String(s.id), s.nome));
+      if (lista.some(s => String(s.id) === atual)) setorSel.value = atual;
+      else if (lista.length === 1) setorSel.value = String(lista[0].id);
+    }
+
     function montarItens() {
       const itens = dados?.itens || [];
       produtoSel.replaceChildren(opcao('', dados ? (itens.length ? 'Escolha a peça' : 'O pedido não tem itens') : 'Escolha o pedido primeiro'));
       for (const i of itens) produtoSel.appendChild(opcao(String(i.id), `${nomeDaPeca(i)} • ${i.quantidade} un.`));
       if (itens.length === 1) produtoSel.value = String(itens[0].id);
-      setorSel.replaceChildren(opcao('', 'Selecione'));
-      for (const s of dados?.setores || []) setorSel.appendChild(opcao(String(s.id), s.nome));
+      montarSetores();
     }
 
     function atualizar() {
@@ -1731,13 +1754,16 @@
       const s = setorDoItem(item);
       const agora = Number(qtdCampo.value) || 0;
       el('finProducaoContexto').textContent = dados ? [`Pedido ${dados.pedido.numero}`, dados.pedido.cliente].filter(Boolean).join(' • ') : '';
-      el('finProducaoPedida').textContent = item ? String(item.quantidade) : '—';
+      el('finProducaoPedida').textContent = s ? String(s.pedida) : (item ? String(item.quantidade) : '—');
       el('finProducaoFinalizada').textContent = s ? String(s.finalizada) : '—';
       el('finProducaoSaldo').textContent = s ? String(s.saldo) : '—';
       el('finProducaoUnitario').textContent = !s ? '—'
         : (s.valor_unitario === null ? 'sem valor' : `${formatarMoeda(s.valor_unitario)}${s.valor_origem === 'padrao' ? ' (padrão)' : ''}`);
+      el('finProducaoUnitario').title = s?.regra ? `Regra: ${s.regra}` : '';
       const estoque = Boolean(item && item.do_estoque > 0);
-      el('finProducaoEstoque').textContent = estoque ? `${item.do_estoque} das ${item.quantidade} peças do pedido saem do estoque (já prontas).` : '';
+      el('finProducaoEstoque').textContent = estoque
+        ? `${item.do_estoque} das ${item.quantidade} peças do pedido saem do estoque: pagam só os insumos que ainda faltavam em cada processo (e entram primeiro no registro).`
+        : '';
       el('finProducaoEstoque').classList.toggle('hidden', !estoque);
       el('finProducaoSemValor').classList.toggle('hidden', !(s && s.valor_unitario === null));
       if (!item || !s) {
@@ -1750,12 +1776,13 @@
           ? `O pedido está "${dados.pedido.situacao}": só se registra produção de pedido aprovado, em produção, enviado ou entregue.` : '');
         return;
       }
-      const r = statusAposRegistro(item.quantidade, s.finalizada, agora);
+      const r = statusAposRegistro(s.pedida, s.finalizada, agora);
       el('finProducaoStatus').value = r.status;
       el('finProducaoAcumulado').textContent = String(r.acumulado);
       el('finProducaoRestante').textContent = String(r.restante);
-      el('finProducaoTotal').textContent = s.valor_unitario === null ? '—' : formatarMoeda(centavos(s.valor_unitario * agora));
-      el('finProducaoConcluido').classList.toggle('hidden', !(r.restante === 0 && item.quantidade > 0));
+      const valorAgora = valorDasProximas(s, agora);
+      el('finProducaoTotal').textContent = valorAgora === null ? '—' : formatarMoeda(valorAgora);
+      el('finProducaoConcluido').classList.toggle('hidden', !(r.restante === 0 && s.pedida > 0));
       mostrarMensagem('finProducaoMensagem', r.excede ? `A quantidade passa do saldo (${s.saldo}).` : '');
     }
 
@@ -1843,17 +1870,19 @@
       const qtd = Number(qtdCampo.value);
       const erro = !dados ? 'Escolha o pedido.'
         : !item ? 'Escolha a peça do pedido.'
-          : !s ? 'Escolha o setor.'
+          : !s ? 'Escolha o processo.'
             : !(Number.isInteger(qtd) && qtd > 0) ? 'Informe quantas peças foram finalizadas (número inteiro).'
               : qtd > s.saldo ? `A quantidade passa do saldo (${s.saldo}).`
                 : !dataCampo.value ? 'Informe a data da finalização.'
                   : dataCampo.value > hoje ? 'A data da finalização não pode ser futura.' : '';
       if (erro) { mostrarMensagem('finProducaoMensagem', erro); return; }
       const setorNome = (dados.setores.find(x => String(x.id) === setorSel.value) || {}).nome || '';
+      const valorAgora = valorDasProximas(s, qtd);
+      const parcial = (s.proximas || []).slice(0, qtd).some(f => f < 1);
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Registrar a produção?',
         message: `${qtd} × ${nomeDaPeca(item)} finalizada(s) em ${setorNome} no dia ${formatarData(dataCampo.value)} (pedido ${dados.pedido.numero}).`
-          + (s.valor_unitario === null ? ' Esta peça ainda não tem valor por peça neste setor.' : ` Valor: ${formatarMoeda(centavos(s.valor_unitario * qtd))}.`),
+          + (valorAgora === null ? ' Esta peça ainda não tem regra de produção neste processo.' : ` Valor: ${formatarMoeda(valorAgora)}${parcial ? ' (parte das peças saiu do estoque com o processo adiantado)' : ''}.`),
         confirmText: 'Registrar'
       });
       if (!confirmado) return;
@@ -1862,11 +1891,11 @@
         const r = await fetchApi('/api/financeiro/producao', {
           method: 'POST',
           body: JSON.stringify({
-            pedido_id: dados.pedido.id, pedido_item_id: item.id, setor_id: Number(setorSel.value), quantidade: qtd,
+            pedido_id: dados.pedido.id, pedido_item_id: item.id, etapa_id: Number(setorSel.value), quantidade: qtd,
             data_finalizacao: dataCampo.value, observacao: el('finProducaoObservacoes').value
           })
         });
-        window.showToast?.(r?.item?.saldo === 0 ? 'Produção registrada: item finalizado neste setor.' : 'Produção registrada.', 'success');
+        window.showToast?.(r?.item?.saldo === 0 ? 'Produção registrada: item finalizado neste processo.' : 'Produção registrada.', 'success');
         avisarAlteracao();
         qtdCampo.value = '';
         el('finProducaoObservacoes').value = '';
@@ -1882,7 +1911,7 @@
     async function estornar(e, item) {
       const motivo = await pedirTexto({
         titulo: 'Estornar este registro?',
-        mensagem: `${e.quantidade} × ${item ? nomeDaPeca(item) : 'peça'} em ${e.setor || 'setor'} (${formatarData(e.data_finalizacao)}). Se a produção deste mês já foi fechada, o estorno entra como desconto no próximo fechamento.`,
+        mensagem: `${e.quantidade} × ${item ? nomeDaPeca(item) : 'peça'} em ${e.setor || 'processo'} (${formatarData(e.data_finalizacao)}). Se a produção deste mês já foi fechada, o estorno entra como desconto no próximo fechamento.`,
         placeholder: 'Motivo do estorno (obrigatório)',
         confirmar: 'Estornar'
       });
@@ -1900,7 +1929,7 @@
 
     buscaCampo.addEventListener('input', montarPedidos);
     pedidoSel.addEventListener('change', () => { mostrarMensagem('finProducaoMensagem', ''); carregarPedido(); });
-    produtoSel.addEventListener('change', atualizar);
+    produtoSel.addEventListener('change', () => { montarSetores(); atualizar(); });
     setorSel.addEventListener('change', atualizar);
     qtdCampo.addEventListener('input', atualizar);
     acionar(el('finProducaoRegistrar'), registrar);
@@ -2712,8 +2741,10 @@
   }
 
   /**
-   * Regras de comissão e produção: tabelas editáveis (CMS/Royalty, setores,
-   * valor por peça, feriados e prazos). Quem só vê tem tudo em leitura.
+   * Regras de comissão e produção: tabelas editáveis (CMS do dono do
+   * cliente, o % do Royalty dos desenhistas, os processos e o valor de cada
+   * um — em R$ ou em % da tabela fixa —, feriados e prazos). Quem só vê tem
+   * tudo em leitura.
    */
   function montarRegras() {
     ligarAbas();
@@ -2730,11 +2761,14 @@
         el('finRegrasSemSql').classList.add('hidden');
       } catch (e) {
         dados = null;
-        if (e?.corpo?.sql_pendente) el('finRegrasSemSql').classList.remove('hidden');
-        else avisar(textoDoErro(e, 'Você não tem permissão para ver as regras.'));
+        if (e?.corpo?.sql_pendente) {
+          el('finRegrasSemSqlTexto').textContent = textoDoErro(e, '');
+          el('finRegrasSemSql').classList.remove('hidden');
+        } else avisar(textoDoErro(e, 'Você não tem permissão para ver as regras.'));
       } finally {
         el('finRegrasCarregando').classList.add('hidden');
       }
+      pintarDonos();
       pintarRegras();
       pintarSetores();
       pintarValores();
@@ -2756,10 +2790,29 @@
     }
 
     // ------------------------------------------------ regras de comissão
+    const tipoSel = el('finRegraTipo');
+    const benefSel = el('finRegraBeneficiario');
     const escopoSel = el('finRegraEscopo');
     const alvoSel = el('finRegraAlvo');
     const alvoBusca = el('finRegraAlvoBusca');
     let editandoRegra = null;
+    const semAcento = t => String(t ?? '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+    const ehRoyalty = () => tipoSel.value === 'royalty';
+
+    /** Quem pode receber CMS: os donos de cliente. O nome de uma regra antiga que não é mais de um dono aparece marcado. */
+    function pintarDonos(atual = benefSel.value) {
+      const donos = dados?.donos || [];
+      benefSel.replaceChildren(opcao('', donos.length ? 'Escolha o dono do cliente' : 'Nenhum usuário é dono de cliente'));
+      for (const d of donos) benefSel.appendChild(opcao(d, d));
+      const doLista = donos.find(d => semAcento(d) === semAcento(atual));
+      if (atual && !doLista) benefSel.appendChild(opcao(atual, `${atual} (não é dono de cliente)`));
+      benefSel.value = doLista || atual || '';
+    }
+
+    function pintarQuemRecebe() {
+      benefSel.classList.toggle('hidden', ehRoyalty());
+      el('finRegraBeneficiarioRoyalty').classList.toggle('hidden', !ehRoyalty());
+    }
 
     async function montarAlvo(selecionado = null) {
       const escopo = escopoSel.value;
@@ -2767,13 +2820,20 @@
       if (escopo === 'todos') return;
       el('finRegraAlvoRotulo').firstChild.textContent = escopo === 'cliente' ? 'Cliente ' : 'Pedido ';
       const clientes = await lista('clientes');
+      // CMS: só os clientes do dono escolhido (e os pedidos deles). Royalty: todos.
+      const dono = ehRoyalty() ? null : benefSel.value;
+      const clientesValidos = ehRoyalty() ? clientes : clientes.filter(c => dono && semAcento(c.dono) === semAcento(dono));
+      const idsValidos = new Set(clientesValidos.map(x => String(x.id)));
       const nomeCliente = new Map(clientes.map(x => [String(x.id), x.nome]));
-      const itens = escopo === 'cliente' ? clientes : await lista('pedidos');
+      const itens = escopo === 'cliente' ? clientesValidos : (await lista('pedidos')).filter(p => idsValidos.has(String(p.cliente_id)));
       const rotulo = x => (escopo === 'cliente' ? x.nome : [x.numero, nomeCliente.get(String(x.cliente_id)), x.situacao].filter(Boolean).join(' • '));
       const atual = selecionado !== null && selecionado !== undefined ? String(selecionado) : alvoSel.value;
       const termo = alvoBusca.value.trim().toLowerCase();
       const visiveis = itens.filter(x => !termo || rotulo(x).toLowerCase().includes(termo) || String(x.id) === atual);
-      alvoSel.replaceChildren(opcao('', visiveis.length ? (escopo === 'cliente' ? 'Escolha o cliente' : 'Escolha o pedido') : 'Nada com esta busca'));
+      const semItens = !ehRoyalty() && !dono ? 'Escolha antes quem recebe'
+        : termo ? 'Nada com esta busca'
+          : escopo === 'cliente' ? (ehRoyalty() ? 'Nenhum cliente' : 'Este dono não tem clientes') : 'Nenhum pedido';
+      alvoSel.replaceChildren(opcao('', visiveis.length ? (escopo === 'cliente' ? 'Escolha o cliente' : 'Escolha o pedido') : semItens));
       for (const x of visiveis.slice(0, 500)) alvoSel.appendChild(opcao(String(x.id), rotulo(x)));
       alvoSel.value = visiveis.some(x => String(x.id) === atual) ? atual : '';
     }
@@ -2783,8 +2843,9 @@
       el('finRegraFormTitulo').textContent = 'Nova regra';
       el('finRegraSalvar').textContent = 'Incluir regra';
       el('finRegraCancelarEdicao').classList.add('hidden');
-      el('finRegraTipo').value = 'cms';
-      el('finRegraBeneficiario').value = '';
+      tipoSel.value = 'cms';
+      pintarDonos('');
+      pintarQuemRecebe();
       el('finRegraPercentual').value = '';
       el('finRegraObservacao').value = '';
       escopoSel.value = 'todos';
@@ -2794,23 +2855,25 @@
 
     function editarRegra(r) {
       editandoRegra = r;
-      el('finRegraFormTitulo').textContent = `Alterando: ${TIPOS_REGRA[r.tipo]} de ${r.beneficiario}`;
+      el('finRegraFormTitulo').textContent = r.tipo === 'royalty' ? 'Alterando: Royalty' : `Alterando: ${TIPOS_REGRA[r.tipo]} de ${r.beneficiario}`;
       el('finRegraSalvar').textContent = 'Salvar alteração';
       el('finRegraCancelarEdicao').classList.remove('hidden');
-      el('finRegraTipo').value = r.tipo;
-      el('finRegraBeneficiario').value = r.beneficiario;
+      tipoSel.value = r.tipo;
+      pintarDonos(r.tipo === 'royalty' ? '' : r.beneficiario);
+      pintarQuemRecebe();
       el('finRegraPercentual').value = String(r.percentual).replace('.', ',');
       el('finRegraObservacao').value = r.observacao || '';
       escopoSel.value = r.escopo;
       alvoBusca.value = '';
       montarAlvo(r.escopo === 'cliente' ? r.cliente_id : (r.escopo === 'pedido' ? r.pedido_id : null));
-      el('finRegraBeneficiario').focus();
+      el('finRegraPercentual').focus();
     }
 
     const corpoDaRegra = (r, mudancas = {}) => JSON.stringify({
-      tipo: r.tipo, beneficiario: r.beneficiario, percentual: r.percentual, escopo: r.escopo,
+      tipo: r.tipo, beneficiario: r.tipo === 'royalty' ? null : r.beneficiario, percentual: r.percentual, escopo: r.escopo,
       cliente_id: r.cliente_id ?? null, pedido_id: r.pedido_id ?? null, observacao: r.observacao ?? null, ativo: r.ativo, ...mudancas
     });
+    const quemRecebeDaRegra = r => (r.tipo === 'royalty' ? 'o desenhista de cada peça' : r.beneficiario);
 
     async function salvarRegra() {
       avisar('');
@@ -2818,8 +2881,8 @@
       const bruto = String(el('finRegraPercentual').value).replace(/[\s%]/g, '').replace(',', '.');
       const percentual = Number(bruto);
       const nova = {
-        tipo: el('finRegraTipo').value,
-        beneficiario: el('finRegraBeneficiario').value.trim(),
+        tipo: tipoSel.value,
+        beneficiario: ehRoyalty() ? null : benefSel.value,
         percentual,
         escopo,
         cliente_id: escopo === 'cliente' ? (Number(alvoSel.value) || null) : null,
@@ -2827,7 +2890,7 @@
         observacao: el('finRegraObservacao').value.trim() || null,
         ativo: editandoRegra ? editandoRegra.ativo : true
       };
-      const erro = nova.beneficiario.length < 2 ? 'Diga quem recebe.'
+      const erro = !ehRoyalty() && !nova.beneficiario ? 'Escolha o dono do cliente que recebe a CMS.'
         : (!bruto || !Number.isFinite(percentual) || percentual < 0 || percentual > 100) ? 'O percentual vai de 0 a 100.'
           : (escopo === 'cliente' && !nova.cliente_id) ? 'Escolha o cliente da regra.'
             : (escopo === 'pedido' && !nova.pedido_id) ? 'Escolha o pedido da regra.' : '';
@@ -2847,7 +2910,7 @@
     async function alternarRegra(r) {
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: r.ativo ? 'Desativar a regra?' : 'Reativar a regra?',
-        message: `${TIPOS_REGRA[r.tipo]} ${percentualTexto(r.percentual)} para ${r.beneficiario} (${alcanceDaRegra(r)}). `
+        message: `${TIPOS_REGRA[r.tipo]} ${percentualTexto(r.percentual)} para ${quemRecebeDaRegra(r)} (${alcanceDaRegra(r)}). `
           + (r.ativo ? 'O que ainda não foi fechado deixa de ter esta comissão.' : 'Volta a valer para o que ainda não foi fechado.'),
         confirmText: r.ativo ? 'Desativar' : 'Reativar'
       });
@@ -2890,69 +2953,137 @@
       }
     }
 
-    // ------------------------------------------------------- setores
-    let editandoSetor = null;
+    // ------------------------------------------------------ processos
+    // Os mesmos da peça e da matéria-prima (etapas_producao): + inclui, − exclui
+    // (só sem insumo), Renomear troca no banco, e o pagamento liga/desliga.
+    const processoSel = el('finProcessoSelect');
+    const processoAtual = () => (dados?.etapas || []).find(e => String(e.id) === processoSel.value) || null;
+    const nomeComSituacao = e => (e.producao_ativa ? e.nome : `${e.nome} (pagamento desligado)`);
 
     function pintarSetores() {
+      const etapas = dados?.etapas || [];
+      const escolhido = processoSel.value;
+      processoSel.replaceChildren();
+      if (!etapas.length) processoSel.appendChild(opcao('', 'Nenhum processo cadastrado'));
+      for (const e of etapas) processoSel.appendChild(opcao(String(e.id), nomeComSituacao(e)));
+      if (etapas.some(e => String(e.id) === escolhido)) processoSel.value = escolhido;
+      pintarProcessoEscolhido();
+
       const ul = el('finSetoresLista');
       ul.replaceChildren();
-      for (const s of dados?.setores || []) {
-        const li = criar('li', 'flex items-center justify-between gap-3 py-2');
-        li.appendChild(criar('span', `text-sm ${s.ativo ? 'text-white' : 'text-gray-400'}`, `${s.nome}${s.ativo ? '' : ' (desativado)'}`));
-        const acoes = criar('div', 'flex gap-2');
-        if (podeEditar) {
-          botaoG(acoes, 'Renomear', () => {
-            editandoSetor = s;
-            el('finSetorNome').value = s.nome;
-            el('finSetorSalvar').textContent = 'Salvar';
-            el('finSetorNome').focus();
-          }, { perm: 'financeiro.regras.editar' });
-          botaoG(acoes, s.ativo ? 'Desativar' : 'Reativar', () => salvarSetor(s, !s.ativo), { classe: s.ativo ? 'btn-danger text-white' : 'btn-success', perm: 'financeiro.regras.editar' });
-        }
-        li.appendChild(acoes);
+      for (const e of etapas) {
+        const li = criar('li', 'flex items-center justify-between gap-3 py-2 cursor-pointer');
+        li.appendChild(criar('span', `text-sm ${e.producao_ativa ? 'text-white' : 'text-gray-400'}`, e.nome));
+        li.appendChild(e.producao_ativa ? tagG('Paga', 'badge-success') : tagG('Pagamento desligado', 'badge-neutral'));
+        li.addEventListener('click', () => { processoSel.value = String(e.id); pintarProcessoEscolhido(); });
         ul.appendChild(li);
       }
-      if (!(dados?.setores || []).length) ul.appendChild(criar('li', 'fin-vazio', 'Nenhum setor cadastrado.'));
+
       const sel = el('finValorSetor');
       const atual = sel.value;
       sel.replaceChildren(opcao('', 'Selecione'));
-      for (const s of (dados?.setores || []).filter(x => x.ativo)) sel.appendChild(opcao(String(s.id), s.nome));
+      for (const e of etapas) sel.appendChild(opcao(String(e.id), nomeComSituacao(e)));
       sel.value = [...sel.options].some(o => o.value === atual) ? atual : '';
     }
 
-    /** Sem `setor`: inclui ou renomeia pelo campo. Com `setor` e `ativo`: liga/desliga. */
-    async function salvarSetor(setor = null, ativo = undefined) {
+    function pintarProcessoEscolhido() {
+      const e = processoAtual();
+      el('finProcessoNome').value = e ? e.nome : '';
+      const situacao = el('finProcessoSituacao');
+      situacao.className = `${!e ? 'badge-neutral' : (e.producao_ativa ? 'badge-success' : 'badge-warning')} px-3 py-1 rounded-full text-xs font-medium`;
+      situacao.textContent = !e ? '—' : (e.producao_ativa ? 'Pagamento ligado' : 'Pagamento desligado');
+      const botao = el('finProcessoPagamento');
+      const desligado = Boolean(e && !e.producao_ativa);
+      botao.textContent = desligado ? 'Ligar pagamento' : 'Desligar pagamento';
+      botao.classList.toggle('btn-danger', !desligado);
+      botao.classList.toggle('text-white', true);
+      botao.classList.toggle('btn-success', desligado);
+      [botao, el('finProcessoRenomear'), el('finProcessoExcluir'), el('finProcessoNome')].forEach(c => { c.disabled = !podeEditar || !e; });
+    }
+
+    function abrirNovoProcesso(abrir) {
+      el('finProcessoNovoBloco').classList.toggle('hidden', !abrir);
+      el('finProcessoNovoNome').value = '';
+      if (abrir) el('finProcessoNovoNome').focus();
+    }
+
+    /** Grava, relê e devolve a resposta (null se falhou — a mensagem já foi mostrada). */
+    async function gravarProcesso(caminho, metodo, corpo, sucesso) {
       avisar('');
-      const alvo = setor || editandoSetor;
-      const nome = setor ? setor.nome : el('finSetorNome').value.trim();
-      if (nome.length < 2) { avisar('Dê um nome ao setor.'); return; }
-      if (setor && ativo === false) {
-        const confirmado = await window.DialogPadrao?.confirm?.({
-          title: 'Desativar o setor?',
-          message: `${setor.nome} some do Registrar produção. O que já foi registrado continua valendo.`,
-          confirmText: 'Desativar'
-        });
-        if (!confirmado) return;
-      }
-      const corpo = { nome, ativo: ativo !== undefined ? ativo : (alvo ? alvo.ativo : true) };
       try {
-        await fetchApi(alvo ? `/api/financeiro/setores/${encodeURIComponent(alvo.id)}` : '/api/financeiro/setores', { method: alvo ? 'PUT' : 'POST', body: JSON.stringify(corpo) });
-        window.showToast?.(alvo ? 'Setor alterado.' : 'Setor incluído.', 'success');
-        if (!setor) {
-          editandoSetor = null;
-          el('finSetorNome').value = '';
-          el('finSetorSalvar').textContent = 'Incluir';
-        }
+        const r = await fetchApi(caminho, { method: metodo, body: corpo ? JSON.stringify(corpo) : undefined });
+        window.showToast?.(sucesso(r), 'success');
         avisarAlteracao();
         await carregar();
+        return r || {};
       } catch (e) {
         avisar(erroDe(e));
+        return null;
       }
     }
 
-    // ------------------------------------------------ valor por peça
+    async function incluirProcesso() {
+      const nome = el('finProcessoNovoNome').value.trim();
+      if (nome.length < 2) { avisar('Dê um nome ao processo.'); return; }
+      const r = await gravarProcesso('/api/financeiro/etapas', 'POST', { nome }, () => `Processo ${nome} incluído.`);
+      if (!r) return;
+      abrirNovoProcesso(false);
+      if (r.id !== null && r.id !== undefined) {
+        processoSel.value = String(r.id);
+        pintarProcessoEscolhido();
+      }
+    }
+
+    async function renomearProcesso() {
+      const e = processoAtual();
+      if (!e) return;
+      const nome = el('finProcessoNome').value.trim();
+      if (nome.length < 2) { avisar('Dê um nome ao processo.'); return; }
+      if (nome === e.nome) { avisar('O nome não mudou.'); return; }
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Renomear o processo?',
+        message: `${e.nome} passa a se chamar ${nome}. Os insumos da matéria-prima, os lotes do estoque e os itens faltantes que usam ${e.nome} acompanham a troca.`,
+        confirmText: 'Renomear'
+      });
+      if (!confirmado) return;
+      await gravarProcesso(`/api/financeiro/etapas/${encodeURIComponent(e.id)}`, 'PUT', { nome },
+        r => (r?.registros_renomeados ? `Processo renomeado: ${r.registros_renomeados} registro(s) acompanharam.` : 'Processo renomeado.'));
+    }
+
+    async function alternarPagamento() {
+      const e = processoAtual();
+      if (!e) return;
+      const ligar = !e.producao_ativa;
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: ligar ? 'Ligar o pagamento?' : 'Desligar o pagamento?',
+        message: ligar
+          ? `${e.nome} volta ao Registrar produção e volta a pagar o que ainda não foi fechado.`
+          : `${e.nome} some do Registrar produção e deixa de pagar o que ainda não foi fechado. O processo continua nas peças e na matéria-prima.`,
+        confirmText: ligar ? 'Ligar' : 'Desligar'
+      });
+      if (!confirmado) return;
+      await gravarProcesso(`/api/financeiro/etapas/${encodeURIComponent(e.id)}`, 'PUT', { producao_ativa: ligar },
+        () => (ligar ? `Pagamento de ${e.nome} ligado.` : `Pagamento de ${e.nome} desligado.`));
+    }
+
+    async function excluirProcesso() {
+      const e = processoAtual();
+      if (!e) return;
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Excluir o processo?',
+        message: `${e.nome} sai da lista de processos. Só é possível se nenhum insumo da matéria-prima usar este processo.`,
+        confirmText: 'Excluir'
+      });
+      if (!confirmado) return;
+      await gravarProcesso(`/api/financeiro/etapas/${encodeURIComponent(e.id)}`, 'DELETE', null, () => `Processo ${e.nome} excluído.`);
+    }
+
+    // ----------------------------------------- valor de cada processo
     const produtoSel = el('finValorProduto');
     const produtoBusca = el('finValorProdutoBusca');
+    const tipoValorSel = el('finValorTipo');
+    const valorCampo = el('finValorValor');
+    const PADRAO_DO_PROCESSO = 'Padrão do processo (toda peça sem valor próprio)';
 
     async function montarProdutos(selecionado) {
       const itens = await lista('produtos');
@@ -2960,43 +3091,58 @@
       const atual = selecionado !== undefined ? String(selecionado) : produtoSel.value;
       const termo = produtoBusca.value.trim().toLowerCase();
       const visiveis = itens.filter(p => !termo || rotulo(p).toLowerCase().includes(termo) || String(p.id) === atual);
-      produtoSel.replaceChildren(opcao('padrao', 'Padrão do setor (toda peça sem valor próprio)'));
+      produtoSel.replaceChildren(opcao('padrao', PADRAO_DO_PROCESSO));
       for (const p of visiveis.slice(0, 500)) produtoSel.appendChild(opcao(String(p.id), rotulo(p)));
       produtoSel.value = [...produtoSel.options].some(o => o.value === atual) ? atual : 'padrao';
     }
 
+    const emPercentual = () => tipoValorSel.value === 'percentual';
+    function pintarTipoValor() {
+      el('finValorValorRotulo').firstChild.textContent = emPercentual() ? 'Percentual da tabela fixa (%) ' : 'Valor por peça ';
+      valorCampo.placeholder = emPercentual() ? 'Ex.: 10 ou 7,5' : 'R$ 0,00';
+    }
+    const lerValorDoCampo = () => lerMoeda(String(valorCampo.value).replace(/%/g, ''));
+
     function editarValor(v) {
-      el('finValorSetor').value = String(v.setor_id);
+      el('finValorSetor').value = String(v.etapa_id);
       produtoBusca.value = '';
       montarProdutos(v.produto_id === null || v.produto_id === undefined ? 'padrao' : v.produto_id);
-      el('finValorValor').value = formatoMoeda.format(Number(v.valor_unitario) || 0);
-      el('finValorValor').focus();
+      tipoValorSel.value = v.tipo === 'percentual' ? 'percentual' : 'valor';
+      pintarTipoValor();
+      valorCampo.value = v.tipo === 'percentual'
+        ? String(v.percentual ?? '').replace('.', ',')
+        : formatoMoeda.format(Number(v.valor_unitario) || 0);
+      valorCampo.focus();
     }
 
     /** Sem `remover`: grava o valor do formulário. Com `remover`: desliga aquela linha. */
     async function salvarValor(remover = null) {
       avisar('');
-      const setorId = remover ? Number(remover.setor_id) : Number(el('finValorSetor').value);
+      const etapaId = remover ? Number(remover.etapa_id) : Number(el('finValorSetor').value);
       const escolha = remover ? (remover.produto_id === null || remover.produto_id === undefined ? 'padrao' : String(remover.produto_id)) : produtoSel.value;
-      const corpo = { setor_id: setorId, produto_id: !escolha || escolha === 'padrao' ? null : Number(escolha) };
-      if (!setorId) { avisar('Escolha o setor.'); return; }
+      const corpo = { etapa_id: etapaId, produto_id: !escolha || escolha === 'padrao' ? null : Number(escolha) };
+      if (!etapaId) { avisar('Escolha o processo.'); return; }
       if (remover) {
         const confirmado = await window.DialogPadrao?.confirm?.({
           title: 'Remover o valor?',
-          message: `${remover.setor}: ${remover.produto || 'padrão do setor'} (${formatarMoeda(remover.valor_unitario)} por peça). O que ainda não foi fechado passa a usar o padrão do setor, se houver.`,
+          message: `${remover.etapa}: ${remover.produto || 'padrão do processo'} (${remover.descricao}). O que ainda não foi fechado passa a usar o padrão do processo, se houver.`,
           confirmText: 'Remover'
         });
         if (!confirmado) return;
         corpo.remover = true;
       } else {
-        const valor = lerMoeda(el('finValorValor').value);
-        if (valor === null || valor < 0) { avisar('Informe o valor por peça.'); return; }
-        corpo.valor_unitario = valor;
+        const numero = lerValorDoCampo();
+        if (emPercentual() ? (numero === null || numero < 0 || numero > 100) : (numero === null || numero < 0)) {
+          avisar(emPercentual() ? 'O percentual vai de 0 a 100.' : 'Informe o valor por peça.');
+          return;
+        }
+        corpo.tipo = emPercentual() ? 'percentual' : 'valor';
+        corpo.valor = String(numero);
       }
       try {
         await fetchApi('/api/financeiro/valores', { method: 'POST', body: JSON.stringify(corpo) });
         window.showToast?.(remover ? 'Valor removido.' : 'Valor salvo.', 'success');
-        if (!remover) el('finValorValor').value = '';
+        if (!remover) valorCampo.value = '';
         avisarAlteracao();
         await carregar();
       } catch (e) {
@@ -3007,8 +3153,9 @@
     function pintarValores() {
       const corpo = el('finValoresCorpo');
       corpo.replaceChildren();
-      const valores = (dados?.valores || []).slice().sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR')
-        || (a.produto_id === null ? -1 : (b.produto_id === null ? 1 : String(a.produto).localeCompare(String(b.produto), 'pt-BR'))));
+      const semPeca = v => v.produto_id === null || v.produto_id === undefined;
+      const valores = (dados?.valores || []).slice().sort((a, b) => String(a.etapa).localeCompare(String(b.etapa), 'pt-BR')
+        || (semPeca(a) ? -1 : (semPeca(b) ? 1 : String(a.produto).localeCompare(String(b.produto), 'pt-BR'))));
       el('finValoresVazio').classList.toggle('hidden', !dados || valores.length > 0);
       corpo.closest('.fin-tabela').classList.toggle('hidden', valores.length === 0);
       for (const v of valores) {
@@ -3019,9 +3166,9 @@
         }
         const tr = document.createElement('tr');
         tr.append(
-          celulaG(v.setor || '—', 'px-4 py-3 text-white'),
-          celulaG(v.produto_id === null || v.produto_id === undefined ? tagG('Padrão do setor', 'badge-info') : v.produto),
-          celulaG(formatarMoeda(v.valor_unitario), 'px-4 py-3 text-right'), celulaG(acoes)
+          celulaG(v.etapa || '—', 'px-4 py-3 text-white'),
+          celulaG(semPeca(v) ? tagG('Padrão do processo', 'badge-info') : v.produto),
+          celulaG(v.descricao || '—'), celulaG(acoes)
         );
         corpo.appendChild(tr);
       }
@@ -3115,12 +3262,25 @@
       overlay.querySelectorAll('[data-fin-painel] input, [data-fin-painel] select, [data-fin-painel] textarea').forEach(c => { c.disabled = true; });
     }
     escopoSel.addEventListener('change', () => { alvoBusca.value = ''; alvoSel.value = ''; montarAlvo(); });
+    tipoSel.addEventListener('change', () => { pintarQuemRecebe(); alvoSel.value = ''; montarAlvo(); });
+    benefSel.addEventListener('change', () => { alvoBusca.value = ''; alvoSel.value = ''; montarAlvo(); });
     alvoBusca.addEventListener('input', () => montarAlvo());
     produtoBusca.addEventListener('input', () => montarProdutos());
     el('finRegraCancelarEdicao').addEventListener('click', limparFormRegra);
-    ligarCampoMoeda(el('finValorValor'));
+    processoSel.addEventListener('change', pintarProcessoEscolhido);
+    el('finProcessoIncluir').addEventListener('click', () => abrirNovoProcesso(true));
+    el('finProcessoNovoCancelar').addEventListener('click', () => abrirNovoProcesso(false));
+    el('finProcessoNovoNome').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el('finProcessoNovoSalvar').click(); } });
+    tipoValorSel.addEventListener('change', () => { pintarTipoValor(); valorCampo.value = ''; });
+    valorCampo.addEventListener('blur', () => {
+      const n = lerValorDoCampo();
+      valorCampo.value = n === null ? '' : (emPercentual() ? String(n).replace('.', ',') : formatoMoeda.format(n));
+    });
     acionar(el('finRegraSalvar'), salvarRegra);
-    acionar(el('finSetorSalvar'), () => salvarSetor());
+    acionar(el('finProcessoNovoSalvar'), incluirProcesso);
+    acionar(el('finProcessoRenomear'), renomearProcesso);
+    acionar(el('finProcessoPagamento'), alternarPagamento);
+    acionar(el('finProcessoExcluir'), excluirProcesso);
     acionar(el('finValorSalvar'), () => salvarValor());
     acionar(el('finCfgSalvar'), salvarPrazos);
     acionar(el('finFeriadoIncluir'), incluirFeriado);
@@ -3128,7 +3288,9 @@
     overlay.querySelector('[data-fin-aba="producao"]')?.addEventListener('click', () => {
       if (podeEditar && !listas.produtos) montarProdutos('padrao');
     });
-    produtoSel.replaceChildren(opcao('padrao', 'Padrão do setor (toda peça sem valor próprio)'));
+    produtoSel.replaceChildren(opcao('padrao', PADRAO_DO_PROCESSO));
+    pintarQuemRecebe();
+    pintarTipoValor();
     return carregar();
   }
 
@@ -3993,11 +4155,57 @@
       await carregarWebhook();
     }
 
+    // ------------------------------------------------ parcela mínima
+    // Grava por conta própria (PUT /api/cobranca/configuracao/parcela), com a
+    // permissão "Alterar parcela mínima" — não é o Salvar do Sup Admin.
+    const parcelaCampo = el('finCobParcelaMinima');
+    const parcelaBotao = el('finCobParcelaSalvar');
+    const avisoParcela = (txt, tipo = 'erro') => {
+      const alvo = el('finCobParcelaMensagem');
+      if (!alvo) return;
+      alvo.textContent = txt || '';
+      alvo.style.color = tipo === 'erro' ? 'var(--color-red)' : (tipo === 'ok' ? 'var(--color-green)' : '');
+      alvo.classList.toggle('hidden', !txt);
+    };
+    const SQL_PARCELA = 'Falta rodar sql/desenhistas_producao_parcela.sql no banco e reiniciar a API para usar a parcela mínima.';
+
+    async function carregarParcela() {
+      if (!parcelaCampo) return;
+      const podeParcela = pode('financeiro.parcela.editar');
+      try {
+        const r = await fetchApi('/api/cobranca/parcela-minima');
+        parcelaCampo.value = r?.sql_pronto ? formatoMoeda.format(Number(r.parcela_minima) || 0) : '';
+        parcelaCampo.disabled = !podeParcela || !r?.sql_pronto;
+        parcelaBotao?.classList.toggle('hidden', !podeParcela);
+        if (parcelaBotao) parcelaBotao.disabled = !r?.sql_pronto;
+        avisoParcela(!r?.sql_pronto ? SQL_PARCELA : (podeParcela ? '' : 'Só quem tem a permissão "Alterar parcela mínima" muda este valor.'), r?.sql_pronto ? 'info' : 'erro');
+      } catch (e) {
+        parcelaCampo.disabled = true;
+        parcelaBotao?.classList.add('hidden');
+        avisoParcela(e.status === 403 ? 'Você não tem permissão para ver a parcela mínima.' : e.message);
+      }
+    }
+
+    async function salvarParcela() {
+      avisoParcela('');
+      const valor = lerMoeda(parcelaCampo.value);
+      if (valor === null || valor < 0) { avisoParcela('Informe a parcela mínima em reais.'); return; }
+      try {
+        const r = await fetchApi('/api/cobranca/configuracao/parcela', { method: 'PUT', body: JSON.stringify({ parcela_minima: valor }) });
+        parcelaCampo.value = formatoMoeda.format(Number(r?.parcela_minima) || 0);
+        avisoParcela('Parcela mínima salva: vale para as próximas divisões, abatimentos e devoluções.', 'ok');
+        window.showToast?.('Parcela mínima salva.', 'success');
+      } catch (e) {
+        avisoParcela(e.status === 403 ? 'Você não tem a permissão "Alterar parcela mínima".' : (e?.corpo?.sql_pendente ? SQL_PARCELA : e.message));
+      }
+    }
+
     async function carregar() {
       try {
         pintar(await fetchApi('/api/cobranca/configuracao'));
         el('finCobConteudo').classList.remove('hidden');
         carregarWebhook();
+        carregarParcela();
       } catch (e) {
         const erroEl = el('finCobErroGeral');
         erroEl.querySelector('span').textContent = e.message;
@@ -4084,6 +4292,8 @@
       botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
     };
     ligar('finCobSalvar', salvar);
+    ligar('finCobParcelaSalvar', salvarParcela);
+    ligarCampoMoeda(parcelaCampo);
     ligar('finCobSecretGuardar', guardarSecret);
     ligar('finCobSecretRemover', removerSecret);
     ligar('finCobTestar', testar);

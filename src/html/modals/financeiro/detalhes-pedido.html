@@ -1,6 +1,6 @@
 <!--
   Detalhes do pedido: a visão consolidada do pedido dentro do módulo —
-  itens e produção por setor, notas, parcelas e comissões, histórico.
+  itens e produção por processo, notas, parcelas e comissões, histórico.
   Modal grande, só leitura. Dados: GET /api/financeiro/pedidos/:id.
   "Abrir pedido completo" abre o Visualizar pedido dos Pedidos por cima.
   Script: src/js/modals/financeiro-modais.js (montarDetalhesPedido).
@@ -68,14 +68,14 @@
                   <th class="px-4 py-3 text-right text-xs">Quantidade</th>
                   <th class="px-4 py-3 text-right text-xs">Produzida</th>
                   <th class="px-4 py-3 text-right text-xs">Saldo</th>
-                  <th class="px-4 py-3 text-left text-xs">Por setor</th>
+                  <th class="px-4 py-3 text-left text-xs">Por processo</th>
                   <th class="px-4 py-3 text-left text-xs">Status</th>
                 </tr>
               </thead>
               <tbody id="finPedidoItens" class="divide-y divide-white/10"></tbody>
             </table>
           </div>
-          <p class="text-xs text-gray-400 mt-2">"Produzida" é o que já passou por todos os setores em que o pedido teve produção registrada.</p>
+          <p class="text-xs text-gray-400 mt-2">"Produzida" é o que já passou por todos os processos em que o pedido teve produção registrada.</p>
         </div>
 
         <div data-fin-painel="notas" role="tabpanel" class="hidden">
@@ -102,7 +102,7 @@
                 <tr>
                   <th class="px-4 py-3 text-left text-xs">Data</th>
                   <th class="px-4 py-3 text-left text-xs">Peça</th>
-                  <th class="px-4 py-3 text-left text-xs">Setor</th>
+                  <th class="px-4 py-3 text-left text-xs">Processo</th>
                   <th class="px-4 py-3 text-right text-xs">Quantidade</th>
                   <th class="px-4 py-3 text-left text-xs">Situação</th>
                 </tr>

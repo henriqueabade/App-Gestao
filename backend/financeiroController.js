@@ -5,11 +5,14 @@
  *   GET    /painel?competencia=                 cartões, resumos, pendências e atividade
  *   GET    /regras                              regras de CMS/Royalty, setores, valores por peça, feriados, prazos
  *   POST   /regras, PUT /regras/:id             cria / altera (ativo: false desliga)
- *   POST   /setores, PUT /setores/:id
- *   POST   /valores                             { setor_id, produto_id|null, valor_unitario } ou { ..., remover: true }
+ *   POST   /setores, PUT /setores/:id           (fase G, sem uso na tela: os setores viraram os processos)
+ *   POST   /etapas, PUT /etapas/:id, DELETE /etapas/:id   processos: incluir, renomear, ligar/desligar o pagamento, excluir
+ *   POST   /valores                             { etapa_id, produto_id|null, tipo: valor|percentual, valor } ou { ..., remover: true }
+ *   GET    /regra-producao?produto_id=          a regra de produção de uma peça (o botão "Regra Produção" do cadastro)
+ *   PUT    /regra-producao/:produtoId           { valores: [{ etapa_id, modo: padrao|valor|percentual, valor }] }
  *   POST   /feriados, DELETE /feriados/:id
  *   PUT    /configuracao                        dia do pagamento das comissões, dia útil da produção, sábado
- *   GET    /buscas/clientes|pedidos|produtos    listas enxutas para escolher na tela de regras
+ *   GET    /buscas/clientes|pedidos|produtos|donos   listas enxutas para escolher na tela de regras
  *   GET    /parcelas?visao=atrasadas|previstas|ajustaveis
  *   GET    /parcelas/:pedidoId/:numero          detalhes da parcela (valores, ajustes, histórico)
  *   POST   /ajustes, POST /ajustes/:id/cancelar
@@ -31,7 +34,7 @@
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao } = require('./permissionsController');
+const { exigirPermissao, exigirAlgumaPermissao } = require('./permissionsController');
 const { usuarioDaRequisicao } = require('./cobrancaController');
 const configuracaoCobranca = require('./cobranca/configuracaoCobranca');
 const c = require('./financeiro/comum');
@@ -48,6 +51,9 @@ const base = require('./financeiro/base');
 const VER = 'financeiro.comissao.view';
 const EDITAR_REGRAS = 'financeiro.regras.editar';
 const REGISTRAR_AJUSTE = 'financeiro.ajuste.registrar';
+/** A regra de produção da peça é lida e gravada também pelo cadastro de peças. */
+const LEEM_REGRA_DA_PECA = ['prod.create', 'prod.edit', 'prod.clone', 'prod.details.view', VER];
+const GRAVAM_REGRA_DA_PECA = ['prod.create', 'prod.edit', 'prod.clone', 'financeiro.regras.editar'];
 const REGISTRAR_PRODUCAO = 'financeiro.producao.registrar';
 const FECHAR = 'financeiro.competencia.fechar';
 const PAGAR = 'financeiro.pagamento.confirmar';
@@ -117,6 +123,20 @@ function criarRouter() {
     regras.salvarSetor({ api, id: req.params.id, entrada: req.body, usuarioId })));
   router.post('/valores', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/valores', async ({ api, req, usuarioId }) =>
     ({ valor: await regras.salvarValor({ api, entrada: req.body, usuarioId }) })));
+
+  // Processos (etapas_producao): os mesmos da peça e da matéria-prima.
+  router.post('/etapas', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/etapas', ({ api, req, usuarioId }) =>
+    regras.salvarEtapa({ api, entrada: req.body, usuarioId })));
+  router.put('/etapas/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/etapas/:id', ({ api, req, usuarioId }) =>
+    regras.salvarEtapa({ api, id: req.params.id, entrada: req.body, usuarioId })));
+  router.delete('/etapas/:id', exigirPermissao(EDITAR_REGRAS), rota('DELETE /api/financeiro/etapas/:id', async ({ api, req, usuarioId }) =>
+    ({ removido: await regras.removerEtapa({ api, id: req.params.id, usuarioId }) })));
+
+  // A regra de produção de uma peça (cadastro de peças → "Regra Produção").
+  router.get('/regra-producao', exigirAlgumaPermissao(LEEM_REGRA_DA_PECA), rota('GET /api/financeiro/regra-producao', ({ api, req }) =>
+    regras.regraDaPeca(api, req.query?.produto_id || null)));
+  router.put('/regra-producao/:produtoId', exigirAlgumaPermissao(GRAVAM_REGRA_DA_PECA), rota('PUT /api/financeiro/regra-producao/:produtoId', ({ api, req, usuarioId }) =>
+    regras.salvarRegraDaPeca({ api, produtoId: req.params.produtoId, valores: req.body?.valores, usuarioId })));
   router.post('/feriados', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/feriados', ({ api, req, usuarioId }) =>
     regras.adicionarFeriado({ api, entrada: req.body, usuarioId })));
   router.delete('/feriados/:id', exigirPermissao(EDITAR_REGRAS), rota('DELETE /api/financeiro/feriados/:id', async ({ api, req, usuarioId }) =>
@@ -128,9 +148,11 @@ function criarRouter() {
   router.get('/buscas/:alvo', exigirPermissao(VER), rota('GET /api/financeiro/buscas/:alvo', async ({ api, req }) => {
     const alvo = String(req.params.alvo);
     if (alvo === 'clientes') {
-      const linhas = c.lista(await api.get('/api/clientes', { query: { select: 'id,nome_fantasia,razao_social' } }).catch(() => []));
-      return linhas.map(x => ({ id: x.id, nome: c.nomeDoCliente(x) || `Cliente ${x.id}` })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      const linhas = c.lista(await api.get('/api/clientes', { query: { select: 'id,nome_fantasia,razao_social,dono_cliente' } }).catch(() => []));
+      return linhas.map(x => ({ id: x.id, nome: c.nomeDoCliente(x) || `Cliente ${x.id}`, dono: String(x.dono_cliente || '').trim() || null }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     }
+    if (alvo === 'donos') return { donos: await regras.donosDeClientes(api) };
     if (alvo === 'pedidos') {
       const linhas = c.lista(await api.get('/api/pedidos', { query: { select: 'id,numero,cliente_id,situacao' } }).catch(() => [])).filter(p => String(p.situacao || '').toLowerCase() !== 'cancelado');
       return linhas.map(p => ({ id: p.id, numero: p.numero ?? String(p.id), cliente_id: p.cliente_id ?? null, situacao: p.situacao }))

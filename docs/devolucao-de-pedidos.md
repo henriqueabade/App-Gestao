@@ -29,6 +29,18 @@ estoque peças que já voltaram.
    reembolsa a diferença**.
 7. "Pago" é o que está pago **no momento do registro**.
 
+## Parcela mínima (17/09/2026)
+
+A devolução é o único lugar em que a parcela mínima **reajusta** sozinha (em
+orçamento e pedido ela só bloqueia — ver `docs/desenhistas-producao-parcela.md`).
+Se o desconto proporcional deixa alguma parcela em aberto abaixo do mínimo, as
+parcelas em aberto são **juntadas nas primeiras**, na ordem, em partes iguais:
+cabem tantas quanto o total comportar (ao menos uma). Ex.: 5 × R$ 100 viram
+1 × R$ 500 no primeiro vencimento; 30/60/90 vira 30/60. A 1ª parcela com
+prazo 0 (entrada à vista) fica de fora da junção. A parcela que **cresce** e
+tinha boleto a pagar ganha **baixa + reemissão** na mesma data (modo
+`reemissao_boleto`); se o boleto já tinha vencido, o novo vence hoje.
+
 ## As contas (`backend/devolucoes/calculo.js`, puro)
 
 - **Valor devolvido (D)**: quantidade × o que o cliente pagou pela peça (total

@@ -31,14 +31,21 @@ const boletos = require('../cobranca/boletos');
 const ajustes = require('../financeiro/ajustes');
 const auditoria = require('../financeiro/auditoria');
 const configuracaoFiscal = require('../fiscal/configuracaoFiscal');
+const configuracaoCobranca = require('../cobranca/configuracaoCobranca');
+const parcelaMinima = require('../cobranca/parcelaMinima');
 
 /** Depois disto, um cabeçalho "processando" é de um registro que morreu no meio. */
 const MINUTOS_EM_ANDAMENTO = 5;
 const ROTULO_DO_TIPO = { parcial: 'parcial', total: 'total' };
 const ROTULO_DO_MODO = {
   valor_parcela: 'valor da parcela reduzido', abatimento_boleto: 'abatimento no boleto', baixa_boleto: 'boleto baixado',
-  cancelada: 'parcela cancelada', reembolso: 'reembolso'
+  cancelada: 'parcela cancelada', reembolso: 'reembolso', reemissao_boleto: 'boleto reemitido com o valor novo'
 };
+
+/** A parcela mínima da configuração de cobrança (0 sem o SQL). */
+async function minimoDaParcela(api) {
+  return parcelaMinima.minimoDe(await configuracaoCobranca.carregar(api).catch(() => null));
+}
 
 function validarEntrada(entrada, hoje) {
   const data = String(entrada?.data_devolucao || '').slice(0, 10);
@@ -108,7 +115,7 @@ async function previa({ api, pedidoId, entrada, hoje }) {
   const b = await base.lerPedido(api, pedidoId, hoje);
   const bloqueio = base.bloqueioDaDevolucao(b.pedido, b.notaViva);
   if (bloqueio) throw c.erro(bloqueio, 409);
-  return calculo.planejar({ pedido: b.pedido, itens: b.itens, escolhas: entrada?.itens, parcelas: b.parcelas });
+  return calculo.planejar({ pedido: b.pedido, itens: b.itens, escolhas: entrada?.itens, parcelas: b.parcelas, minimo: await minimoDaParcela(api) });
 }
 
 async function documentoDaEmpresa(api) {
@@ -157,16 +164,45 @@ async function aplicarNaParcela({ api, linha, parcelasCruas, listaDeBoletos, con
     return [];
   }
 
-  // Daqui para baixo é BB: abatimento ou baixa do boleto que vale.
+  // Daqui para baixo é BB: abatimento, baixa ou reemissão do boleto que vale.
   let boleto = listaDeBoletos.find(bl => Number(bl.id) === Number(linha.boleto_id)) || await boletos.ler(api, linha.boleto_id);
   if (typeof contextoBB !== 'function') throw c.erro('a cobrança do BB não está disponível nesta máquina', 409);
-  const ctx = await contextoBB(api, boleto);
+  const ctx = await contextoBB(api, boleto, { usuarioId, hoje });
   const avisos = [];
   if (sincronizarAntes) {
     // Nova tentativa: o que vale é o que o BB diz agora (a anterior pode ter passado lá e falhado aqui).
     boleto = await operacoes.sincronizar({ api, ...ctx, boleto, hoje, usuarioId }).then(r => r.boleto).catch(() => boleto);
   }
   const aPagar = boletos.STATUS_A_PAGAR.has(String(boleto.status));
+
+  if (linha.modo === 'reemissao_boleto') {
+    // A parcela cresceu (junção pela parcela mínima): valor novo na parcela, e
+    // o boleto — que o BB não deixa aumentar — é baixado e reemitido na mesma data.
+    if (!crua) throw c.erro('a parcela não existe mais no pedido', 409);
+    await api.put(`/api/pedido_parcelas/${crua.id}`, { valor: c.centavos(linha.valor_depois), valor_original: crua.valor_original ?? crua.valor });
+    const vencimentoAtual = c.dia(boleto.data_vencimento) || c.dia(linha.data_vencimento) || hoje;
+    const vencimento = vencimentoAtual < hoje ? hoje : vencimentoAtual;
+    const avisosR = vencimento !== vencimentoAtual ? [`Parcela ${linha.numero_parcela}: o boleto já estava vencido; o novo vence hoje (${c.impressa(hoje)}).`] : [];
+    const conferirNovo = r => {
+      const falhas = (r?.resultados || []).filter(x => !x.ok);
+      if (r?.erro || falhas.length) throw c.erro(`o boleto antigo foi baixado, mas o novo não saiu: ${r?.erro || falhas.map(x => x.erro).join(' | ')}`, 409);
+    };
+    if (aPagar) {
+      const r = await operacoes.baixar({
+        api, ...ctx, boleto, hoje, usuarioId, registrarNovo: ctx.registrarNovo,
+        entrada: { motivo: 'reemissao', novo_vencimento: vencimento, observacao: rotulo }
+      });
+      conferirNovo(r.reemissao);
+      return [...avisosR, ...(r.avisos || []).filter(a => !/boleto novo não saiu/.test(a))];
+    }
+    // Tentativa anterior baixou o antigo e o novo não saiu: registra só o novo.
+    const dados = await boletos.lerPedidoCobranca(api, crua.pedido_id);
+    const vivo = boletos.boletoDaParcela(dados.boletos, crua);
+    if (vivo && boletos.STATUS_A_PAGAR.has(String(vivo.status)) && Number(vivo.id) !== Number(boleto.id)) return avisosR;
+    if (typeof ctx.registrarNovo !== 'function') throw c.erro('não foi possível registrar o boleto novo nesta máquina', 409);
+    conferirNovo(await ctx.registrarNovo({ vencimento, substitui: boleto }));
+    return avisosR;
+  }
 
   if (linha.modo === 'baixa_boleto') {
     if (aPagar) {
@@ -232,7 +268,7 @@ async function registrar({ api, pedidoId, entrada, usuarioId = null, hoje, desde
   }
 
   // Nada foi gravado até aqui: o plano recusa o que não fecha com o pedido.
-  const plano = calculo.planejar({ pedido: b.pedido, itens: b.itens, escolhas: v.itens, parcelas: b.parcelas });
+  const plano = calculo.planejar({ pedido: b.pedido, itens: b.itens, escolhas: v.itens, parcelas: b.parcelas, minimo: await minimoDaParcela(api) });
   const avisos = [...plano.avisos];
 
   // 1. cabeçalho

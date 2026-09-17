@@ -245,6 +245,18 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botão + ao lado de Coleção"
       },
       {
+        "key": "prod.designer.create",
+        "column": "acao_designer_create",
+        "label": "Incluir desenhista",
+        "desc": "Botão + do \"Desenhado por\" no cadastro da peça"
+      },
+      {
+        "key": "prod.designer.delete",
+        "column": "acao_designer_delete",
+        "label": "Excluir desenhista",
+        "desc": "Botão − do \"Desenhado por\" (recusa se alguma peça usa o nome)"
+      },
+      {
         "key": "prod.collection.delete",
         "column": "acao_collection_delete",
         "label": "Excluir coleção",
@@ -2296,6 +2308,12 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_pagamento_confirmar",
         "label": "Confirmar pagamento",
         "desc": "Registrar que a competência fechada foi paga"
+      },
+      {
+        "key": "financeiro.parcela.editar",
+        "column": "acao_parcela_editar",
+        "label": "Alterar parcela mínima",
+        "desc": "Configuração de cobrança → Parcela: o menor valor de parcela em orçamentos, pedidos, boletos e devoluções"
       },
       {
         "key": "financeiro.reembolso.confirmar",

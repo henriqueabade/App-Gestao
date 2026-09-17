@@ -850,6 +850,10 @@
       } else if (condicaoVal === 'prazo') {
         const pdata = Parcelamento.getData('novoParcelamento');
         if (!pdata || !pdata.canRegister) {
+          if (pdata?.motivo) {
+            window.DialogPadrao?.info({ title: 'Parcela mínima', message: pdata.motivo });
+            return;
+          }
           showMissingDialog(['Parcelamento']);
           return;
         }
@@ -945,7 +949,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-        if (!resp.ok) throw new Error('Erro ao salvar');
+        if (!resp.ok) {
+          // O motivo vem do backend (ex.: parcela abaixo da mínima).
+          const corpo = await resp.json().catch(() => null);
+          const erro = new Error(corpo?.error || 'Erro ao salvar');
+          erro.motivo = corpo?.error || '';
+          throw erro;
+        }
         const result = await resp.json();
         if (window.reloadOrcamentos) await window.reloadOrcamentos();
         // A ficha da prospecção fica ABERTA por baixo: sem repintar, o
@@ -964,7 +974,7 @@
         window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: overlayId } }));
       } catch (err) {
         console.error(err);
-        showToast('Erro ao salvar orçamento', 'error');
+        showToast(err?.motivo ? `Erro ao salvar orçamento: ${err.motivo}` : 'Erro ao salvar orçamento', 'error');
       } finally {
         // Solta também quando deu erro: senão o botão fica em carregando para
         // sempre e a pessoa não consegue nem tentar de novo.

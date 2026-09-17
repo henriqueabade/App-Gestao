@@ -160,6 +160,7 @@ async function montar({ linhas = [JSON.parse(JSON.stringify(LINHA))], env = {}, 
         const chaves = Array.isArray(bruto) ? bruto : [bruto];
         return estado.supAdmin || chaves.every(c => estado.chaves.has(c)) ? next() : res.status(403).json({ error: 'Sem permissão', permissao: chaves.find(c => !estado.chaves.has(c)) });
       },
+      exigirAlgumaPermissao: chaves => (req, res, next) => (estado.supAdmin || [].concat(chaves).some(c => estado.chaves.has(c)) ? next() : res.status(403).json({ error: 'Sem permissão' })),
       exigirSupAdmin: (req, res, next) => (estado.supAdmin ? next() : res.status(403).json({ error: 'Somente Sup Admin' })),
       ehSupAdmin: async () => estado.supAdmin
     }
@@ -730,6 +731,61 @@ test('fase D: boleto de produção com a cobrança em homologação não é mexi
     assert.equal(r.status, 409);
     assert.match(r.corpo.error, /é de produção, mas a cobrança está em homologação/);
     assert.equal(t.chamadasBB.length, 0, 'nada saiu para o BB');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('parcela mínima: quem lê e quem grava; sem o SQL avisa; o abatimento não deixa o boleto abaixo dela (a entrada à vista é livre)', async () => {
+  const sem = await montar();
+  try {
+    sem.estado.chaves.clear();
+    assert.equal((await sem.chamar('GET', '/api/cobranca/parcela-minima')).status, 403);
+    sem.estado.chaves.add('orc.create');
+    assert.deepEqual((await sem.chamar('GET', '/api/cobranca/parcela-minima')).corpo, { parcela_minima: 0, sql_pronto: false }, 'sem a coluna, nada muda');
+    assert.equal((await sem.chamar('PUT', '/api/cobranca/configuracao/parcela', { parcela_minima: 1500 })).status, 403, 'ler não é gravar');
+    sem.estado.chaves.add('financeiro.parcela.editar');
+    const pendente = await sem.chamar('PUT', '/api/cobranca/configuracao/parcela', { parcela_minima: 1500 });
+    assert.equal(pendente.status, 409);
+    assert.equal(pendente.corpo.sql_pendente, true);
+    assert.match(pendente.corpo.error, /desenhistas_producao_parcela\.sql/);
+  } finally {
+    await sem.fechar();
+  }
+
+  // Entrada à vista de R$ 1.000 e duas de R$ 2.000.
+  const tabelas = tabelasDoPedido();
+  Object.assign(tabelas.pedidos[0], { prazo: '0/30/60', valor_final: 5000 });
+  [1000, 2000, 2000].forEach((v, i) => { tabelas.pedido_parcelas[i].valor = v; });
+  const linha = { ...JSON.parse(JSON.stringify(LINHA)), parcela_minima: '1500.00' };
+  const t = await montar({ linhas: [linha], tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    t.estado.chaves.clear();
+    t.estado.chaves.add('ped.payment.edit');
+    assert.deepEqual((await t.chamar('GET', '/api/cobranca/parcela-minima')).corpo, { parcela_minima: 1500, sql_pronto: true });
+    t.estado.chaves.add('financeiro.parcela.editar');
+    for (const ruim of ['-1', 'abc', '', 2000000]) {
+      assert.equal((await t.chamar('PUT', '/api/cobranca/configuracao/parcela', { parcela_minima: ruim })).status, 400, String(ruim));
+    }
+    const gravada = await t.chamar('PUT', '/api/cobranca/configuracao/parcela', { parcela_minima: 'R$ 1.500,00' });
+    assert.equal(gravada.status, 200, JSON.stringify(gravada.corpo));
+    assert.deepEqual(gravada.corpo, { parcela_minima: 1500 });
+    assert.equal(tabelas.configuracao_cobranca[0].parcela_minima, 1500);
+    assert.equal(tabelas.configuracao_cobranca[0].atualizado_por, 1);
+
+    for (const chave of ['financeiro.boleto.view', 'financeiro.boleto.emit', 'financeiro.boleto.baixa']) t.estado.chaves.add(chave);
+    assert.equal((await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', {})).corpo.registrados, 3);
+    for (const b of tabelas.boletos) Object.assign(b, { valor_abatimento: 0, vencimento_original: null, motivo_baixa: null, observacao_baixa: null, data_baixa: null, baixado_por: null, substitui_boleto_id: null, sincronizado_em: null });
+    const [b1, b2] = tabelas.boletos;
+
+    const abaixo = await t.chamar('POST', `/api/cobranca/boletos/${b2.id}/abatimento`, { valor: 500.01 });
+    assert.equal(abaixo.status, 409);
+    assert.match(abaixo.corpo.error, /passa a cobrar R\$\s1\.499,99, abaixo da parcela mínima/);
+    assert.ok(!t.chamadasBB.some(c => c.opcoes.method === 'PATCH'), 'a recusa não chega ao BB');
+    const noLimite = await t.chamar('POST', `/api/cobranca/boletos/${b2.id}/abatimento`, { valor: 500 });
+    assert.equal(noLimite.status, 200, JSON.stringify(noLimite.corpo));
+    const entrada = await t.chamar('POST', `/api/cobranca/boletos/${b1.id}/abatimento`, { valor: 900 });
+    assert.equal(entrada.status, 200, 'a 1ª parcela com prazo 0 é livre');
   } finally {
     await t.fechar();
   }

@@ -550,7 +550,7 @@
 
     const dados = window.Parcelamento?.getData('pagamentoPedidoParcelamento');
     if (!dados || !dados.canRegister) {
-      return { erro: 'Complete o parcelamento: as parcelas precisam somar o total.' };
+      return { erro: dados?.motivo || 'Complete o parcelamento: as parcelas precisam somar o total.' };
     }
     return {
       prazo: dados.items.map(it => it.dueInDays).join('/'),

@@ -1,7 +1,8 @@
 <!--
   Regras de comissão e produção (fase G). Modal extra grande, três abas:
-  Comissões (quem recebe CMS/Royalty e o %), Produção (setores e valor por
-  peça) e Calendário e prazos (dia do pagamento, dia útil, feriados).
+  Comissões (CMS do dono do cliente e o % do Royalty dos desenhistas),
+  Produção (os processos e quanto cada um paga por peça, em R$ ou em % da
+  tabela fixa) e Calendário e prazos (dia do pagamento, dia útil, feriados).
   Ver é financeiro.comissao.view; gravar é financeiro.regras.editar.
   Script: src/js/modals/financeiro-modais.js (montarRegras).
 -->
@@ -20,7 +21,7 @@
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
       <div class="flex gap-8 overflow-x-auto scrollbar-hide">
         <button type="button" role="tab" aria-selected="true" data-fin-aba="comissoes" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Comissões (CMS e Royalty)</button>
-        <button type="button" role="tab" aria-selected="false" data-fin-aba="producao" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Produção (valor por peça)</button>
+        <button type="button" role="tab" aria-selected="false" data-fin-aba="producao" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Produção (processos)</button>
         <button type="button" role="tab" aria-selected="false" data-fin-aba="calendario" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Calendário e prazos</button>
       </div>
     </nav>
@@ -30,17 +31,20 @@
         <p id="finRegrasCarregando" class="fin-vazio">Carregando dados...</p>
         <div id="finRegrasSemSql" class="hidden fin-aviso" role="alert">
           <i class="fas fa-database" aria-hidden="true"></i>
-          <span>As regras ainda não estão ativadas: rode <strong>sql/financeiro_comissoes_producao.sql</strong> no banco e reinicie a API.</span>
+          <span id="finRegrasSemSqlTexto">As regras ainda não estão ativadas: rode <strong>sql/financeiro_comissoes_producao.sql</strong> no banco e reinicie a API.</span>
         </div>
         <div id="finRegrasMensagem" class="hidden text-sm" role="alert"></div>
 
         <!-- ============================================================ COMISSÕES -->
         <div data-fin-painel="comissoes" role="tabpanel" class="space-y-6">
           <p class="text-sm text-gray-300">
-            CMS é a comissão do arquiteto; Royalty, a de quem detém a marca. O percentual incide sobre o <strong>valor líquido da parcela</strong>
+            A <strong>CMS</strong> vai para o <strong>dono do cliente</strong> do pedido (o dono cadastrado no cliente), mesmo que ele não seja o dono do pedido:
+            por isso só aparecem aqui os usuários que são donos de algum cliente. O <strong>Royalty</strong> vai para o <strong>desenhista de cada peça</strong>
+            (o "Desenhado por" do cadastro): a regra diz só o percentual, e a parcela é repartida na proporção do valor vendido das peças de cada desenhista
+            (com o desconto do pedido, sem as peças devolvidas). O percentual incide sobre o <strong>valor líquido da parcela</strong>
             (valor − abatimento do boleto − ajustes) e a comissão entra na competência do mês em que o cliente pagou.
             Vale a regra mais específica: <strong>pedido</strong>, depois <strong>cliente</strong>, depois <strong>todos os pedidos</strong>;
-            regras do mesmo nível somam (dois arquitetos no mesmo pedido). Mudar uma regra muda o que ainda não foi fechado — o fechado mantém o percentual com que foi fechado.
+            regras de CMS do mesmo nível somam, e de Royalty vale uma por alcance. Mudar uma regra muda o que ainda não foi fechado — o fechado mantém o percentual com que foi fechado.
           </p>
 
           <div class="glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
@@ -49,14 +53,16 @@
               <div>
                 <label for="finRegraTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="fin-obrigatorio">*</span></label>
                 <select id="finRegraTipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
-                  <option value="cms">CMS (arquiteto)</option>
-                  <option value="royalty">Royalty</option>
+                  <option value="cms">CMS (dono do cliente)</option>
+                  <option value="royalty">Royalty (desenhista da peça)</option>
                 </select>
               </div>
               <div>
                 <label for="finRegraBeneficiario" class="block text-sm font-medium text-gray-300 mb-2">Quem recebe <span class="fin-obrigatorio">*</span></label>
-                <input id="finRegraBeneficiario" type="text" maxlength="120" placeholder="Nome do arquiteto ou de quem recebe o royalty" autocomplete="off"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <select id="finRegraBeneficiario" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <option value="">Escolha o dono do cliente</option>
+                </select>
+                <p id="finRegraBeneficiarioRoyalty" class="hidden w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-gray-300 fin-somente-leitura">Desenhista de cada peça</p>
               </div>
               <div>
                 <label for="finRegraPercentual" class="block text-sm font-medium text-gray-300 mb-2">Percentual (%) <span class="fin-obrigatorio">*</span></label>
@@ -111,27 +117,54 @@
         <!-- ============================================================ PRODUÇÃO -->
         <div data-fin-painel="producao" role="tabpanel" class="hidden space-y-6">
           <p class="text-sm text-gray-300">
-            Cada peça finalizada num setor gera o valor por peça daquele setor: o <strong>valor da peça</strong>, se houver, senão o
-            <strong>padrão do setor</strong>. A competência é o mês da finalização; o pagamento, até o dia útil configurado do mês seguinte.
-            Registro de produção sem valor bloqueia o fechamento até o valor ser cadastrado.
+            Os processos são os mesmos da peça e da matéria-prima. Cada processo paga, pela <strong>peça inteira</strong>, o valor da peça (se houver)
+            ou o <strong>padrão do processo</strong> — em reais ou em <strong>% do preço cheio da tabela fixa</strong>. Cada insumo do processo é uma parte
+            igual desse valor: a peça que sai do estoque com parte do processo pronta paga só os insumos que faltavam, e a que sai com o processo completo não paga.
+            A competência é o mês da finalização; o pagamento, até o dia útil configurado do mês seguinte. Registro sem valor bloqueia o fechamento.
           </p>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
-              <p class="text-sm font-semibold text-white">Setores</p>
-              <div class="flex gap-3">
-                <input id="finSetorNome" type="text" maxlength="60" placeholder="Novo setor (ex.: Montagem)" autocomplete="off"
-                       class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                <button id="finSetorSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-4 py-2 rounded-lg font-medium whitespace-nowrap">Incluir</button>
+              <p class="text-sm font-semibold text-white">Processos</p>
+              <p class="text-xs text-gray-400">Renomear troca o nome no banco (insumos e estoque acompanham). Desligar interrompe só o pagamento do processo: ele some do Registrar produção.</p>
+              <div class="relative">
+                <select id="finProcessoSelect" aria-label="Processo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-16 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                <button id="finProcessoExcluir" type="button" data-perm="financeiro.regras.editar" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir processo" title="Excluir processo">
+                  <i class="fas fa-minus" aria-hidden="true"></i>
+                </button>
+                <button id="finProcessoIncluir" type="button" data-perm="financeiro.regras.editar" class="absolute right-2 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Incluir processo" title="Incluir processo">
+                  <i class="fas fa-plus" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div id="finProcessoNovoBloco" class="hidden space-y-2">
+                <label for="finProcessoNovoNome" class="block text-xs text-gray-400">Novo processo</label>
+                <div class="flex gap-3">
+                  <input id="finProcessoNovoNome" type="text" maxlength="60" placeholder="Ex.: Pintura" autocomplete="off"
+                         class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <button id="finProcessoNovoSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-4 py-2 rounded-lg font-medium whitespace-nowrap">Incluir</button>
+                  <button id="finProcessoNovoCancelar" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Cancelar</button>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label for="finProcessoNome" class="block text-xs text-gray-400">Nome do processo escolhido</label>
+                <div class="flex gap-3">
+                  <input id="finProcessoNome" type="text" maxlength="60" autocomplete="off"
+                         class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <button id="finProcessoRenomear" type="button" data-perm="financeiro.regras.editar" class="btn-primary px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Renomear</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <span id="finProcessoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
+                <button id="finProcessoPagamento" type="button" data-perm="financeiro.regras.editar" class="btn-danger px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Desligar pagamento</button>
               </div>
               <ul id="finSetoresLista" class="divide-y divide-white/10"></ul>
             </div>
 
             <div class="lg:col-span-2 glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
               <p id="finValorFormTitulo" class="text-sm font-semibold text-white">Valor por peça</p>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label for="finValorSetor" class="block text-sm font-medium text-gray-300 mb-2">Setor <span class="fin-obrigatorio">*</span></label>
+                  <label for="finValorSetor" class="block text-sm font-medium text-gray-300 mb-2">Processo <span class="fin-obrigatorio">*</span></label>
                   <select id="finValorSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
                 </div>
                 <div>
@@ -141,7 +174,14 @@
                   <select id="finValorProduto" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
                 </div>
                 <div>
-                  <label for="finValorValor" class="block text-sm font-medium text-gray-300 mb-2">Valor por peça <span class="fin-obrigatorio">*</span></label>
+                  <label for="finValorTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="fin-obrigatorio">*</span></label>
+                  <select id="finValorTipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                    <option value="valor">R$ por peça</option>
+                    <option value="percentual">% do preço da tabela fixa</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="finValorValor" id="finValorValorRotulo" class="block text-sm font-medium text-gray-300 mb-2">Valor por peça <span class="fin-obrigatorio">*</span></label>
                   <input id="finValorValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off"
                          class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
@@ -153,16 +193,16 @@
                 <table class="w-full text-sm">
                   <thead>
                     <tr>
-                      <th class="px-4 py-3 text-left text-xs">Setor</th>
+                      <th class="px-4 py-3 text-left text-xs">Processo</th>
                       <th class="px-4 py-3 text-left text-xs">Peça</th>
-                      <th class="px-4 py-3 text-right text-xs">Valor por peça</th>
+                      <th class="px-4 py-3 text-left text-xs">Regra (peça inteira)</th>
                       <th class="px-4 py-3 text-left text-xs">Ações</th>
                     </tr>
                   </thead>
                   <tbody id="finValoresCorpo" class="divide-y divide-white/10"></tbody>
                 </table>
               </div>
-              <p id="finValoresVazio" class="hidden fin-vazio">Nenhum valor por peça cadastrado.</p>
+              <p id="finValoresVazio" class="hidden fin-vazio">Nenhum valor de processo cadastrado.</p>
             </div>
           </div>
         </div>

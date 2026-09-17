@@ -11,8 +11,23 @@ const {
   calcularVencimentos,
   prazosDoTexto
 } = require('./faturamentoPedido');
+const parcelaMinima = require('./cobranca/parcelaMinima');
 
 const router = express.Router();
+
+/** A divisão com parcela abaixo da mínima (Configuração de cobrança) não é gravada. */
+function erroDaParcelaMinima(mensagem) {
+  const error = new Error(mensagem);
+  error.status = 422;
+  error.code = 'PARCELA_MINIMA';
+  return error;
+}
+
+async function parcelasGravadas(api, orcamentoId) {
+  const r = await api.get('/api/orcamento_parcelas', { query: { orcamento_id: orcamentoId, order: 'numero_parcela' } }).catch(() => []);
+  // Confere a resposta: a API pode ignorar o filtro recebido.
+  return (Array.isArray(r) ? r : []).filter(p => String(p?.orcamento_id) === String(orcamentoId));
+}
 
 /**
  * Id do usuário que está fazendo a requisição, lido do JWT.
@@ -522,6 +537,19 @@ async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = n
     throw error;
   }
 
+  const [itens, parcelas] = await Promise.all([
+    api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
+    api.get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } }).catch(() => [])
+  ]);
+
+  // A parcela mínima vale para a divisão que vira pedido — conferida antes da
+  // primeira escrita (a promoção da prospecção).
+  const recusaParcela = await parcelaMinima.recusaDaDivisao(api, {
+    parcelas: (Array.isArray(parcelas) ? parcelas : []).filter(p => String(p?.orcamento_id ?? id) === String(id)),
+    prazo: orcamento.prazo
+  });
+  if (recusaParcela) throw erroDaParcelaMinima(recusaParcela);
+
   // Um OCRP ainda não tem cliente. É AQUI que a prospecção vira cliente: o
   // momento em que o negócio fecha de fato. Fazer isso antes obrigaria a
   // cadastrar como cliente quem ainda era só uma oportunidade.
@@ -533,11 +561,6 @@ async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = n
     }
     Object.assign(orcamento, await promoverProspeccao(api, orcamento, conversao));
   }
-
-  const [itens, parcelas] = await Promise.all([
-    api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
-    api.get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } }).catch(() => [])
-  ]);
 
   // Índice das decisões de estoque por produto_id (vindas do modal).
   const decisaoPorProduto = new Map();
@@ -740,6 +763,9 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
   try {
     const api = createApiClient(req);
 
+    const recusaParcela = await parcelaMinima.recusaDaDivisao(api, { parcelas: parcelasDetalhes, prazo: body.prazo });
+    if (recusaParcela) return res.status(422).json({ error: recusaParcela, code: 'PARCELA_MINIMA' });
+
     // Prospecção precisa existir: FK inválida só estouraria depois de já ter
     // gravado itens e parcelas, deixando lixo pela metade.
     let prospeccao = null;
@@ -829,6 +855,11 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
 
   try {
     const api = createApiClient(req);
+
+    // Antes de qualquer escrita, como as datas.
+    const recusaParcela = await parcelaMinima.recusaDaDivisao(api, { parcelas: parcelasDetalhes, prazo: body.prazo });
+    if (recusaParcela) return res.status(422).json({ error: recusaParcela, code: 'PARCELA_MINIMA' });
+
     const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
     const dataAprovacaoValor = situacoesComData.includes(body.situacao)
       ? agora.toISOString()
@@ -952,6 +983,12 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
       data_aprovacao: situacoesComData.includes(situacao) ? agora.toISOString() : null
     };
     const antes = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+    if (situacao === 'Aprovado') {
+      // Aprovar converte: a divisão gravada precisa respeitar a parcela mínima
+      // antes de o orçamento virar Aprovado.
+      const recusaParcela = await parcelaMinima.recusaDaDivisao(api, { parcelas: await parcelasGravadas(api, id), prazo: antes?.prazo });
+      if (recusaParcela) return res.status(422).json({ error: `${recusaParcela} Ajuste as parcelas do orçamento antes de aprovar.`, code: 'PARCELA_MINIMA' });
+    }
     await api.put(`/api/orcamentos/${id}`, payload);
 
     await anotarNaProspeccao(api, req, antes, {

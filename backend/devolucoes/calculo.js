@@ -17,15 +17,25 @@
  *   parcial, D <= P       D vira desconto em TODAS as parcelas em aberto, na
  *                         proporção do saldo de cada uma (os centavos que
  *                         sobram vão para a última). Nenhum reembolso;
- *   parcial, D > P        as parcelas em aberto zeram e a diferença (D − P) é
+ *   parcial, D > P        as parcelas em aberto zeram e a diferença (D - P) é
  *                         reembolsada, repartida entre as parcelas pagas na
  *                         proporção do que cada uma pagou.
  *
  * Os PRAZOS nunca mudam: a devolução só mexe em valor.
  *
+ * PARCELA MÍNIMA (cobranca/parcelaMinima.js). Se o desconto deixa alguma
+ * parcela em aberto abaixo do mínimo, as parcelas em aberto são JUNTADAS nas
+ * primeiras, na ordem (os vencimentos das primeiras ficam): cabem tantas
+ * quanto o total comportar (ao menos uma), em partes iguais. Ex.: 5 × R$ 100
+ * viram 1 × R$ 500 no primeiro vencimento. A parcela que cresce e tinha boleto
+ * ganha boleto novo (baixa e reemissão no BB, mesma data). A 1ª parcela com
+ * prazo 0 (entrada à vista) fica de fora da junção.
+ *
  * "Pago" é o que está pago no momento do registro (recebimento confirmado ou
  * boleto pago), e o reembolso é do principal — juros e multa ficam de fora.
  */
+
+const parcelaMinima = require('../cobranca/parcelaMinima');
 
 const centavos = v => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const emCentavos = v => Math.round((Number(v || 0) + Number.EPSILON) * 100);
@@ -146,6 +156,8 @@ function conferirEscolhas(itens, escolhas) {
 
 const modoDaZerada = p => (p.boleto?.a_pagar ? 'baixa_boleto' : 'cancelada');
 const modoDoDesconto = p => (p.boleto?.a_pagar ? 'abatimento_boleto' : 'valor_parcela');
+/** A parcela que CRESCE na junção: o boleto não aumenta de valor, então é baixado e reemitido. */
+const modoDoAumento = p => (p.boleto?.a_pagar ? 'reemissao_boleto' : 'valor_parcela');
 
 function linhaDaParcela(p, { situacao, modo, antes, desconto }) {
   return {
@@ -161,9 +173,10 @@ function linhaDaParcela(p, { situacao, modo, antes, desconto }) {
  * `parcelas`: [{ numero, parcela_id, vencimento, estado: 'aberta' | 'paga' |
  * 'cancelada', saldo (aberta: o que falta pagar), pago (paga: o principal
  * pago), reembolsado (paga: o que devoluções anteriores já reembolsaram),
- * boleto: { id, nosso_numero, status, a_pagar } | null, recebimento_id }].
+ * boleto: { id, nosso_numero, status, a_pagar } | null, recebimento_id,
+ * isenta (a 1ª com prazo 0) }]. `minimo` é a parcela mínima (0 = sem).
  */
-function planejar({ pedido, itens, escolhas, parcelas = [] }) {
+function planejar({ pedido, itens, escolhas, parcelas = [], minimo = 0 }) {
   const { linhas, completa } = conferirEscolhas(itens, escolhas);
   const valor = centavos(linhas.reduce((s, l) => s + l.valor_total, 0));
   const tipo = completa ? 'total' : 'parcial';
@@ -196,10 +209,29 @@ function planejar({ pedido, itens, escolhas, parcelas = [] }) {
   }
   const reembolsos = repartir(reembolso, pagas.map(p => p.restante));
 
+  // Parcela mínima: o que ficaria abaixo dela é juntado nas primeiras em aberto.
+  let juntadas = false;
+  if (tipo === 'parcial' && valor <= emAberto) {
+    const junta = parcelaMinima.juntarParcelas(
+      abertas.map((p, i) => ({ numero: p.numero, valor: centavos(centavos(p.saldo) - centavos(descontos[i])), isenta: Boolean(p.isenta) })),
+      minimo
+    );
+    if (junta) {
+      descontos = abertas.map((p, i) => centavos(centavos(p.saldo) - junta[i].valor));
+      juntadas = true;
+      const ficam = junta.filter(p => p.valor > 0 && !p.isenta).length;
+      avisos.push(`Parcela mínima de ${reais(minimo)}: as parcelas em aberto foram juntadas em ${ficam === 1 ? '1 parcela' : `${ficam} parcelas`}, nos primeiros vencimentos.`);
+    }
+  }
+
   const linhasDasParcelas = [];
   abertas.forEach((p, i) => {
     const desconto = centavos(descontos[i]);
-    if (!(desconto > 0)) return;
+    if (!desconto) return;
+    if (desconto < 0) {
+      linhasDasParcelas.push(linhaDaParcela(p, { situacao: 'aberta', modo: modoDoAumento(p), antes: p.saldo, desconto }));
+      return;
+    }
     const zera = desconto >= centavos(p.saldo);
     linhasDasParcelas.push(linhaDaParcela(p, { situacao: 'aberta', modo: zera ? modoDaZerada(p) : modoDoDesconto(p), antes: p.saldo, desconto: zera ? p.saldo : desconto }));
     if (p.boleto?.a_pagar && p.boleto.status === 'protestado') avisos.push(`A parcela ${p.numero} tem boleto protestado: o BB pode recusar a alteração.`);
@@ -216,7 +248,7 @@ function planejar({ pedido, itens, escolhas, parcelas = [] }) {
   const devolvido = tipo === 'total' ? original : Math.min(original, centavos(devolvidoAntes + valor));
   return {
     tipo, valor, itens: linhas, parcelas: linhasDasParcelas,
-    em_aberto: emAberto, pago,
+    em_aberto: emAberto, pago, juntadas,
     valor_parcelas: centavos(linhasDasParcelas.filter(l => l.situacao === 'aberta').reduce((s, l) => s + l.desconto, 0)),
     valor_reembolso: centavos(linhasDasParcelas.filter(l => l.situacao === 'paga').reduce((s, l) => s + l.desconto, 0)),
     // Devolvido por inteiro, o pedido volta a mostrar o valor da venda (como o

@@ -1182,3 +1182,63 @@ test('o pedido que já existe ignora as datas', async () => {
     await ctx.encerrar();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Parcela mínima (Configuração de cobrança)
+// ---------------------------------------------------------------------------
+
+test('parcela mínima: salvar, editar e aprovar recusam a divisão com parcela abaixo dela, antes de gravar', async () => {
+  const dados = baseDados([{ id: 1, numero: 'ORC1', cliente_id: 50, situacao: 'Enviado', prazo: '30/60' }]);
+  dados.orcamento_parcelas = [
+    { id: 1, orcamento_id: 1, numero_parcela: 1, valor: 50, data_vencimento: '2026-05-05' },
+    { id: 2, orcamento_id: 1, numero_parcela: 2, valor: 50, data_vencimento: '2026-06-04' }
+  ];
+  dados.configuracao_cobranca = [{ id: 1, parcela_minima: '60.00' }];
+  const ctx = await montar(dados);
+  const configuracao = require('./cobranca/configuracaoCobranca');
+  const editar = (prazo, valores) => chamar(ctx.porta, '/api/orcamentos/1', {
+    method: 'PUT',
+    body: JSON.stringify({
+      cliente_id: 50, situacao: 'Enviado', prazo, valor_final: 100, itens: [ITEM],
+      parcelas_detalhes: valores.map((valor, i) => ({ valor, numero_parcela: i + 1 }))
+    })
+  });
+  const aprovar = () => chamar(ctx.porta, '/api/orcamentos/1/status', { method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' }) });
+  try {
+    const novo = await chamar(ctx.porta, '/api/orcamentos', {
+      method: 'POST',
+      body: JSON.stringify({
+        cliente_id: 50, prazo: '30/60', valor_final: 100, itens: [ITEM],
+        parcelas_detalhes: [{ valor: 50, numero_parcela: 1 }, { valor: 50, numero_parcela: 2 }]
+      })
+    });
+    assert.strictEqual(novo.status, 422);
+    const corpo = await novo.json();
+    assert.strictEqual(corpo.code, 'PARCELA_MINIMA');
+    assert.match(corpo.error, /A 1ª parcela \(R\$\s50,00\) fica abaixo da parcela mínima de R\$\s60,00\. Só a primeira parcela com prazo 0/);
+
+    assert.strictEqual((await editar('0/30', [45, 55])).status, 422, 'a 2ª parcela nunca é livre');
+    const recusada = await aprovar();
+    assert.strictEqual(recusada.status, 422, 'a divisão gravada (antiga) não vira pedido');
+    assert.match((await recusada.json()).error, /Ajuste as parcelas do orçamento antes de aprovar\./);
+    assert.deepStrictEqual(escritas(ctx), [], 'nada pode ter sido escrito');
+    assert.strictEqual(ctx.tabelas.orcamentos[0].situacao, 'Enviado');
+
+    // Com a entrada à vista a divisão cabe, e o pedido nasce com ela.
+    assert.strictEqual((await editar('0/30', [40, 60])).status, 200);
+    const aprovado = await aprovar();
+    assert.strictEqual(aprovado.status, 200);
+    assert.strictEqual((await aprovado.json()).convertido, true);
+    assert.deepStrictEqual(parcelasDoPedido(ctx).map(p => p[1]), [40, 60]);
+
+    // Parcela única é sempre livre.
+    const unica = await chamar(ctx.porta, '/api/orcamentos', {
+      method: 'POST',
+      body: JSON.stringify({ cliente_id: 50, prazo: '30', valor_final: 10, itens: [ITEM], parcelas_detalhes: [{ valor: 10, numero_parcela: 1 }] })
+    });
+    assert.strictEqual(unica.status, 200);
+  } finally {
+    configuracao.limparCache();
+    await ctx.encerrar();
+  }
+});

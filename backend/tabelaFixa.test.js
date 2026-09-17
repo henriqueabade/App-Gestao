@@ -387,7 +387,8 @@ test('a flag de decisão não vaza para a tabela produtos', async () => {
 });
 
 test('produto novo já nasce na tabela fixa e pode ser orçado', async () => {
-  const pool = montarPool({ produtos: [], tabela_fixa: [] });
+  // O desenhista é obrigatório na peça nova (e tem de estar na lista).
+  const pool = montarPool({ produtos: [], tabela_fixa: [], desenhistas: [{ id: 1, nome: 'Barral & Lamounier' }] });
   // O upstream devolve a linha criada com o id atribuído.
   const postOriginal = pool.post.bind(pool);
   pool.post = async (caminho, payload) => {
@@ -406,9 +407,11 @@ test('produto novo já nasce na tabela fixa e pode ser orçado', async () => {
     nome: 'Peça Nova',
     preco_venda: 250,
     pct_markup: 10,
-    status: 'Em linha'
+    status: 'Em linha',
+    desenhado_por: 'barral & lamounier'
   });
 
+  assert.strictEqual(pool.dados.produtos[0].desenhado_por, 'Barral & Lamounier', 'grava com a grafia da lista');
   const linha = pool.dados.tabela_fixa.find(l => l.id_prod === 501);
   assert.ok(linha, 'sem linha na tabela fixa a peça nasceria invendável');
   assert.strictEqual(linha.vlr_prod, 250);

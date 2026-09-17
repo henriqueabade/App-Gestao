@@ -3,6 +3,7 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
+const parcelaMinima = require('./cobranca/parcelaMinima');
 const {
   hojeEmSaoPaulo,
   diaEmSaoPaulo,
@@ -464,6 +465,13 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
         code: 'PARCELAS_NAO_FECHAM',
         detalhe: { soma_parcelas: somaParcelas, valor_final: totais.valor_final }
       });
+    }
+
+    // A parcela mínima (Configuração de cobrança): só a parcela única e a 1ª
+    // à vista ficam abaixo dela. Nada foi gravado ainda.
+    const recusaParcela = await parcelaMinima.recusaDaDivisao(api, { parcelas: parcelasDetalhes, prazo });
+    if (recusaParcela) {
+      return res.status(422).json({ error: recusaParcela, code: 'PARCELA_MINIMA' });
     }
 
     // Os vencimentos são calculados AQUI: início do faturamento + prazo de

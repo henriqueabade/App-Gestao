@@ -50,6 +50,18 @@
               Atualizando coleções...
             </span>
           </div>
+          <!-- Desenhado por: um nome da lista de desenhistas (é para ele que vai o Royalty). Obrigatório. -->
+          <div class="relative">
+            <select id="desenhistaSelect" name="desenhado_por" required title="Desenhado por" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Desenhado por (selecionar)</option>
+            </select>
+            <button type="button" id="delDesenhistaNovo" data-perm="prod.designer.delete" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir desenhista">
+              <i class="fas fa-minus"></i>
+            </button>
+            <button type="button" id="addDesenhistaNovo" data-perm="prod.designer.create" class="absolute right-2 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Adicionar desenhista">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
           <!-- Dados fiscais da peça (NF-e). Vazio usa o padrão da configuração fiscal. -->
           <div class="md:col-span-3 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
             <div>
@@ -91,17 +103,21 @@
               <input id="csosnInput" name="csosn" type="text" inputmode="numeric" maxlength="3" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
           </div>
-          <div class="flex gap-4">
-            <select id="etapaSelect" class="flex-1 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+          <!-- Linha do processo: a mesma do Editar produto (mesmos tamanhos). -->
+          <div class="md:col-span-3 flex flex-wrap items-center gap-3">
+            <select id="etapaSelect" class="flex-1 min-w-[200px] bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option>Selecionar Processo</option>
-              <option>Marcenaria</option>
-              <option>Montagem</option>
-              <option>Acabamento</option>
             </select>
-            <button id="comecarNovoProduto" data-perm="prod.item.add" type="button" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">
-              + Começar
-            </button>
+            <button id="comecarNovoProduto" data-perm="prod.item.add" type="button" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Começar</button>
+            <button id="regraProducaoNovo" type="button" class="btn-regra-producao px-6 py-3 rounded-lg font-medium" title="Quanto cada processo paga por esta peça">Regra Produção</button>
+            <!-- O (i) aparece quando a regra está completa. A caixa é quem some: o .icon-only força display:flex. -->
+            <span id="regraProducaoInfoCaixaNovo" class="hidden">
+              <button id="regraProducaoInfoNovo" type="button" class="btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Resumo da regra de produção" title="Resumo da regra de produção">
+                <i class="fas fa-info-circle"></i>
+              </button>
+            </span>
           </div>
+          <p id="regraProducaoStatusNovo" class="md:col-span-3 hidden text-xs" role="status"></p>
         </div>
       </div>
       <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-8">

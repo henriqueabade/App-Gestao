@@ -45,6 +45,48 @@ function camposFiscaisDaPeca(dados = {}) {
   return saida;
 }
 
+const SQL_DESENHISTAS = 'Falta rodar sql/desenhistas_producao_parcela.sql no banco e reiniciar a API.';
+const chaveDoDesenhista = nome => String(nome ?? '').replace(/\s+/g, ' ').trim()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/**
+ * O desenhista da peça (produtos.desenhado_por; sql/desenhistas_producao_parcela.sql):
+ * um nome da tabela `desenhistas`, obrigatório para salvar a peça — é para ele
+ * que vai o Royalty. Chave ausente não mexe no que está gravado (salvo
+ * `obrigatorio`, na criação). Devolve { desenhado_por } com a grafia do
+ * cadastro, ou {}.
+ */
+async function desenhistaDaPeca(dados = {}, { obrigatorio = false } = {}) {
+  const informado = Object.prototype.hasOwnProperty.call(dados || {}, 'desenhado_por');
+  if (!informado && !obrigatorio) return {};
+  const chave = chaveDoDesenhista(dados?.desenhado_por);
+  if (!chave) {
+    const err = new Error('Desenhado por é obrigatório');
+    err.code = 'CAMPO_OBRIGATORIO';
+    err.field = 'desenhado_por';
+    throw err;
+  }
+  let lista;
+  try {
+    lista = await pool.get('/desenhistas', { query: { select: 'id,nome' } });
+  } catch (e) {
+    if (e?.status === 404) {
+      const err = new Error(SQL_DESENHISTAS);
+      err.code = 'SQL_PENDENTE';
+      throw err;
+    }
+    throw e;
+  }
+  const cadastrado = (Array.isArray(lista) ? lista : []).find(d => chaveDoDesenhista(d?.nome) === chave);
+  if (!cadastrado) {
+    const err = new Error(`${String(dados.desenhado_por).trim()} não está na lista de desenhistas: inclua pelo + antes de salvar.`);
+    err.code = 'DESENHISTA_DESCONHECIDO';
+    err.field = 'desenhado_por';
+    throw err;
+  }
+  return { desenhado_por: String(cadastrado.nome).replace(/\s+/g, ' ').trim() };
+}
+
 function extrairListaIn(valor) {
   if (typeof valor !== 'string') return null;
   const match = valor.trim().match(/^in\.\((.*)\)$/i);
@@ -862,6 +904,7 @@ async function adicionarProduto(dados) {
       throw err;
     }
   }
+  const desenhista = await desenhistaDaPeca(dados, { obrigatorio: true });
   const codigoDup = await fetchSingle('produtos', { codigo });
   if (codigoDup) {
     const err = new Error('Código já existe');
@@ -884,7 +927,8 @@ async function adicionarProduto(dados) {
     preco_venda,
     pct_markup,
     status,
-    ...camposFiscaisDaPeca(dados)
+    ...camposFiscaisDaPeca(dados),
+    ...desenhista
   });
 
   // Peça nova nasce com preço praticado igual ao calculado. Sem esta linha o
@@ -928,6 +972,7 @@ async function atualizarProduto(id, dados) {
       throw err;
     }
   }
+  const desenhista = await desenhistaDaPeca(dados);
   const payload = montarPayloadProduto(atuais, {
     codigo,
     nome,
@@ -936,7 +981,8 @@ async function atualizarProduto(id, dados) {
     pct_markup,
     status,
     ncm: ncmSanitizado,
-    ...camposFiscaisDaPeca(dados)
+    ...camposFiscaisDaPeca(dados),
+    ...desenhista
   });
   const atualizado = await pool.put(`/produtos/${id}`, payload);
   // O catálogo mudou: o cache de produtos/rotas não vale mais.
@@ -1476,6 +1522,11 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     }
   }
 
+  // Peça sem desenhista (a coluna existe e está vazia) precisa ganhar um ao salvar.
+  const semDesenhista = Object.prototype.hasOwnProperty.call(produtoAtual, 'desenhado_por')
+    && !String(produtoAtual.desenhado_por ?? '').trim();
+  const desenhista = await desenhistaDaPeca(produto, { obrigatorio: semDesenhista });
+
   const insumosInseridos = itens?.inseridos || [];
   const insumoIds = new Set();
   for (const ins of insumosInseridos) {
@@ -1502,7 +1553,8 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     ncm: ncmSanitizado,
     categoria,
     status,
-    ...camposFiscaisDaPeca(produto)
+    ...camposFiscaisDaPeca(produto),
+    ...desenhista
   });
   try {
     await pool.put(`/produtos/${produtoAtual.id}`, payload);

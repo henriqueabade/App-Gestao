@@ -17,12 +17,20 @@ const TITULOS = {
   'ajustes-anteriores': 'Ajustes de períodos anteriores',
   'comissoes-nao-realizadas': 'Comissões não realizadas',
   'producao-competencia': 'Produção da competência',
-  'pagamento-pintura': 'Pagamento pintura',
   'pagamento-marcenaria': 'Pagamento marcenaria',
+  'pagamento-acabamento': 'Pagamento acabamento',
+  'pagamento-montagem': 'Pagamento montagem',
+  'pagamento-embalagem': 'Pagamento embalagem',
   'producao-por-pedido': 'Produção por pedido'
 };
 
-const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+/** Os relatórios de pagamento por processo (o nome do processo, sem acento). */
+const PROCESSOS_DO_RELATORIO = {
+  'pagamento-marcenaria': 'marcenaria', 'pagamento-acabamento': 'acabamento',
+  'pagamento-montagem': 'montagem', 'pagamento-embalagem': 'embalagem'
+};
+
+const semAcento = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
 /** Critério de data: competência (mês da data) ou período. Puro. */
 function criterio({ competencia, inicio, fim }) {
@@ -112,16 +120,16 @@ async function producaoDe(api, { hoje, competencia, inicio, fim, chave }) {
     ...l, cliente: nomes.get(String(p.pedidosPor.get(String(l.pedido_id))?.cliente_id)) || null,
     unitario: l.valor_unitario, status: l.status_item || (l.tipo_item === 'saldo' ? 'Saldo' : ''), produtoCompleto: l.produto
   }));
-  if (chave === 'pagamento-pintura' || chave === 'pagamento-marcenaria') {
-    const alvo = chave === 'pagamento-pintura' ? 'pintura' : 'marcenaria';
+  if (PROCESSOS_DO_RELATORIO[chave]) {
+    const alvo = PROCESSOS_DO_RELATORIO[chave];
     return { filtro: crit.texto, linhas: comCliente.filter(l => semAcento(l.setor) === alvo) };
   }
   if (chave === 'producao-por-pedido') {
     const porPedido = new Map();
     for (const l of comCliente.filter(x => x.pedido_id)) {
-      const g = porPedido.get(String(l.pedido_id)) || { pedido_id: l.pedido_id, pedido: l.pedido, cliente: l.cliente, pecas: 0, pintura: 0, marcenaria: 0, outros: 0, total: 0 };
+      const g = porPedido.get(String(l.pedido_id)) || { pedido_id: l.pedido_id, pedido: l.pedido, cliente: l.cliente, pecas: 0, marcenaria: 0, acabamento: 0, montagem: 0, embalagem: 0, outros: 0, total: 0 };
       const setor = semAcento(l.setor);
-      const campo = setor === 'pintura' || setor === 'marcenaria' ? setor : 'outros';
+      const campo = Object.values(PROCESSOS_DO_RELATORIO).includes(setor) ? setor : 'outros';
       g.pecas += Number(l.quantidade) || 0;
       g[campo] = c.centavos(g[campo] + Number(l.total || 0));
       g.total = c.centavos(g.total + Number(l.total || 0));

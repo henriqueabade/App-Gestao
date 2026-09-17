@@ -101,8 +101,11 @@ const competenciaAlvo = (natural, proxima) => (proxima && natural && natural < p
  * A situação de comissão de todas as parcelas. `linhas` vem de
  * contasReceber.parcelasDosPedidos; `recebimentos` são todos (com os
  * estornados); `ajustes`, todos; `estado`, de estadoDosFechamentos.
+ * `contexto` (base.contextoDosPedidos): o dono do cliente e os desenhistas de
+ * cada pedido — é com ele que a CMS vai para o dono do cliente e o Royalty
+ * para os desenhistas. Sem ele, a conta antiga (quem recebe vem da regra).
  */
-function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], ajustes = [], regrasLista = [], estado, hoje }) {
+function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], ajustes = [], regrasLista = [], estado, hoje, contexto = null }) {
   const pedidosPor = new Map(pedidos.filter(Boolean).map(p => [String(p.id), p]));
   const recPor = new Map(recebimentos.filter(Boolean).map(r => [String(r.id), r]));
   const confirmadoPor = new Map(recebimentos.filter(r => r && r.status === 'confirmado').map(r => [chaveDe(r.pedido_id, r.numero_parcela), r]));
@@ -150,7 +153,11 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
     // Percentuais: os do fechamento, se a parcela já foi fechada; senão, as regras de hoje.
     const taxas = ultimoParcela?.detalhes?.taxas
       ? { ...ultimoParcela.detalhes.taxas, congeladas: true }
-      : { ...regras.taxasDoPedido(regrasLista, pedido || { id: pedidoId, cliente_id: linha.cliente_id }), congeladas: false };
+      : {
+        ...regras.taxasDoPedido(regrasLista, pedido || { id: pedidoId, cliente_id: linha.cliente_id },
+          contexto ? (contexto.get(String(pedidoId)) || { dono_cliente: null, desenhistas: [] }) : undefined),
+        congeladas: false
+      };
 
     const valorOriginal = c.centavos(confirmado ? (confirmado.valor_parcela ?? linha.valor) : linha.valor);
     const abatimentoBoleto = c.centavos(confirmado ? (confirmado.valor_abatimento || 0) : (linha.abatimento || 0));

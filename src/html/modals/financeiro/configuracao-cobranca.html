@@ -307,6 +307,23 @@
             </div>
           </div>
 
+          <!-- Parcela mínima (sql/desenhistas_producao_parcela.sql). Grava sozinha, com a permissão
+               "Alterar parcela mínima" (financeiro.parcela.editar); não vai no Salvar do Sup Admin. -->
+          <div id="finCobParcelaSecao" class="fin-cfg-secao">
+            <h3 class="fin-cfg-secao__titulo"><i class="fas fa-coins" aria-hidden="true"></i>Parcela</h3>
+            <p class="text-xs text-gray-400 mb-4">Nenhuma parcela fica abaixo do valor mínimo, a não ser a parcela única ou a primeira com prazo 0 (entrada à vista). Orçamentos e pedidos não deixam dividir abaixo dele; a devolução junta nas primeiras as parcelas em aberto que ficariam abaixo; o abatimento que deixaria o boleto abaixo é recusado. Pedidos que já existem ficam como estão.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+              <div>
+                <label for="finCobParcelaMinima" class="block text-sm font-medium text-gray-300 mb-2">Valor mínimo da parcela</label>
+                <input id="finCobParcelaMinima" type="text" inputmode="decimal" autocomplete="off" placeholder="R$ 1.500,00" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <button id="finCobParcelaSalvar" type="button" data-perm="financeiro.parcela.editar" class="btn-success px-6 py-3 rounded-lg font-medium min-w-[160px]">Salvar parcela mínima</button>
+              </div>
+            </div>
+            <p id="finCobParcelaMensagem" class="hidden mt-3 text-xs" role="status"></p>
+          </div>
+
           <!-- Padrões do boleto -->
           <div class="fin-cfg-secao">
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-sliders-h" aria-hidden="true"></i>Padrões do boleto</h3>

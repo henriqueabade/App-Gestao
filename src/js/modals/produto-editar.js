@@ -48,9 +48,13 @@
       return;
     }
     let handleColecaoAtualizada = null;
+    let handleDesenhistaAtualizado = null;
     const close = () => {
       if (handleColecaoAtualizada) {
         window.removeEventListener('colecaoAtualizada', handleColecaoAtualizada);
+      }
+      if (handleDesenhistaAtualizado) {
+        window.removeEventListener('desenhistaAtualizado', handleDesenhistaAtualizado);
       }
       Modal.close('editarProduto');
     };
@@ -121,6 +125,15 @@
     const addColecaoBtn = document.getElementById('addColecaoEditar');
     const delColecaoBtn = document.getElementById('delColecaoEditar');
     const colecaoLoadingIndicator = document.getElementById('colecaoLoadingIndicatorEditar');
+    // Desenhado por (a lista de desenhistas) e a Regra Produção da peça.
+    const desenhistaSelect = document.getElementById('desenhistaSelect');
+    const addDesenhistaBtn = document.getElementById('addDesenhistaEditar');
+    const delDesenhistaBtn = document.getElementById('delDesenhistaEditar');
+    const regraBtn = document.getElementById('regraProducaoEditar');
+    const regraInfoBtn = document.getElementById('regraProducaoInfoEditar');
+    const regraStatusEl = document.getElementById('regraProducaoStatusEditar');
+    const regraInfoCaixa = document.getElementById('regraProducaoInfoCaixaEditar');
+    let regra = null;
     const updateRadios = Array.from(document.querySelectorAll('input[name="updateOption"]'));
     const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
@@ -372,9 +385,18 @@
 
     function updateRegistroEditState(){
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
+      // A peça de antes do campo, sem desenhista, precisa ganhar um para salvar:
+      // o "Desenhado por" fica livre para ela mesmo com o botão desligado.
+      const desenhistaLivre = editable || !String(registroOriginal.desenhado_por || '').trim();
       [nomeInput, codigoInput, ncmInput, colecaoSelect, addColecaoBtn, delColecaoBtn].forEach(el => {
         if (el){
           el.disabled = !editable;
+          el.style.pointerEvents = el.disabled ? 'none' : 'auto';
+        }
+      });
+      [desenhistaSelect, addDesenhistaBtn, delDesenhistaBtn].forEach(el => {
+        if (el){
+          el.disabled = !desenhistaLivre;
           el.style.pointerEvents = el.disabled ? 'none' : 'auto';
         }
       });
@@ -387,6 +409,7 @@
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
         if (ncmInput)    ncmInput.value    = registroOriginal.ncm;
         if (colecaoSelect) colecaoSelect.value = registroOriginal.categoria || '';
+        if (desenhistaSelect && registroOriginal.desenhado_por) desenhistaSelect.value = registroOriginal.desenhado_por;
         statusRadios.forEach(r => { r.checked = (r.value.toLowerCase() === (registroOriginal.status || '').toLowerCase()); });
       }
     }
@@ -394,7 +417,7 @@
       editarRegistroToggle.addEventListener('change', updateRegistroEditState);
     }
 
-    const blockedWrappers = [nomeInput, codigoInput, ncmInput, colecaoSelect]
+    const blockedWrappers = [nomeInput, codigoInput, ncmInput, colecaoSelect, desenhistaSelect]
       .map(el => el ? el.parentElement : null)
       .filter(Boolean);
     blockedWrappers.forEach(wrapper => {
@@ -407,7 +430,7 @@
       });
     });
 
-    [addColecaoBtn, delColecaoBtn].forEach(btn => {
+    [addColecaoBtn, delColecaoBtn, addDesenhistaBtn, delDesenhistaBtn].forEach(btn => {
       if(btn){
         btn.addEventListener('click', e => {
           if(btn.disabled){
@@ -593,6 +616,171 @@
       });
     }
 
+    /** Carrega um utilitário de src/js/utils uma vez só (o modal também abre fora de Produtos). */
+    function carregarUtil(arquivo, global) {
+      if (window[global]) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = `../js/utils/${arquivo}`;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error(`Não foi possível carregar ${arquivo}.`));
+        document.head.appendChild(s);
+      });
+    }
+
+    // ------- Desenhado por -------
+    const desenhistaValido = () => (window.Desenhistas?.escolhaValida
+      ? window.Desenhistas.escolhaValida(desenhistaSelect)
+      : Boolean(desenhistaSelect?.value));
+
+    async function carregarDesenhistas(selecionado) {
+      if (!desenhistaSelect) return;
+      try {
+        await carregarUtil('desenhistas.js', 'Desenhistas');
+        const lista = await window.Desenhistas.listar();
+        window.Desenhistas.preencher(desenhistaSelect, lista, selecionado ?? desenhistaSelect.value);
+      } catch (err) {
+        console.error('Erro ao carregar desenhistas:', err);
+        showToast(err?.corpo?.sql_pendente ? err.message : 'Não foi possível carregar os desenhistas.', 'error');
+      }
+    }
+
+    if (desenhistaSelect) {
+      handleDesenhistaAtualizado = (event) => {
+        const detalhe = event?.detail || {};
+        let selecionado = detalhe.selecionado ?? desenhistaSelect.value;
+        if (detalhe.removido && window.Desenhistas?.chave(selecionado) === window.Desenhistas?.chave(detalhe.removido)) selecionado = '';
+        carregarDesenhistas(selecionado);
+      };
+      window.addEventListener('desenhistaAtualizado', handleDesenhistaAtualizado);
+      addDesenhistaBtn?.addEventListener('click', () => {
+        if (addDesenhistaBtn.disabled) return;
+        Modal.open('modals/produtos/desenhista-novo.html', '../js/modals/produto-desenhista-novo.js', 'novoDesenhista', true);
+      });
+      delDesenhistaBtn?.addEventListener('click', () => {
+        if (delDesenhistaBtn.disabled) return;
+        Modal.open('modals/produtos/desenhista-excluir.html', '../js/modals/produto-desenhista-excluir.js', 'excluirDesenhista', true);
+      });
+    }
+
+    // ------- Regra Produção -------
+    // Base do %: o preço da tabela fixa — o novo, se "Atualizar Tabela Fixa" estiver marcado.
+    function precoDaPeca() {
+      if (updateRadios.some(r => r.checked && r.value === 'update') && totals.valorVenda > 0) {
+        return Math.round(totals.valorVenda * 100) / 100;
+      }
+      const daTela = Number(produtoSelecionado?.preco_tabela);
+      if (daTela > 0) return daTela;
+      const doBanco = Number(regra?.base()?.preco_tabela);
+      return doBanco > 0 ? doBanco : null;
+    }
+
+    async function prepararRegra() {
+      await carregarUtil('produto-regra-producao.js', 'RegraProducaoPeca');
+      if (!regra) {
+        regra = window.RegraProducaoPeca.criar({
+          produtoId: produtoSelecionado.id,
+          obterItens: () => itens,
+          obterPreco: precoDaPeca,
+          aoMudar: pintarRegra
+        });
+      }
+      if (!regra.base()) await regra.carregar();
+      return regra;
+    }
+
+    function pintarRegra() {
+      if (!regra || !regraStatusEl) return;
+      const semInsumos = regra.linhas().length === 0;
+      const faltam = regra.pendencias();
+      regraInfoCaixa?.classList.toggle('hidden', semInsumos || faltam.length > 0);
+      if (semInsumos && !regra.erro()) {
+        regraStatusEl.classList.add('hidden');
+        return;
+      }
+      regraStatusEl.classList.remove('hidden');
+      regraStatusEl.classList.toggle('text-yellow-400', faltam.length > 0);
+      regraStatusEl.style.color = faltam.length ? '' : 'var(--color-green)';
+      regraStatusEl.textContent = faltam.length
+        ? `Regra Produção pendente: ${faltam.map(x => `${x.nome} (${x.falta})`).join('; ')}.`
+        : 'Regra Produção completa: confira no (i).';
+    }
+
+    /** O que falta preencher antes de abrir a Regra Produção. */
+    function faltaParaARegra() {
+      const faltam = [];
+      if (!nomeInput?.value.trim()) faltam.push('nome');
+      if (!codigoInput?.value.trim()) faltam.push('código');
+      if (!ncmInput?.value.trim()) faltam.push('NCM');
+      if (!colecaoSelect?.value) faltam.push('coleção');
+      if (!desenhistaValido()) faltam.push('desenhado por');
+      if (!itens.some(i => i.status !== 'deleted')) faltam.push('os insumos (+ Começar)');
+      return faltam;
+    }
+
+    regraBtn?.addEventListener('click', async () => {
+      const faltam = faltaParaARegra();
+      if (faltam.length) {
+        showToast(`Antes da Regra Produção, preencha: ${faltam.join(', ')}.`, 'warning');
+        return;
+      }
+      let controle;
+      try {
+        controle = await prepararRegra();
+      } catch (err) {
+        console.error(err);
+        showToast(err?.message || 'Não foi possível abrir a Regra Produção.', 'error');
+        return;
+      }
+      if (controle.erro()) {
+        showToast(controle.erro().message || 'Não foi possível ler as regras de produção.', 'error');
+        return;
+      }
+      window.regraProducaoContexto = {
+        controle,
+        peca: { codigo: codigoInput?.value.trim() || produtoSelecionado.codigo, nome: nomeInput?.value.trim() || produtoSelecionado.nome },
+        aoFechar: () => {
+          overlay.classList.remove('pointer-events-none', 'blur-sm');
+          pintarRegra();
+        }
+      };
+      overlay.classList.add('pointer-events-none', 'blur-sm');
+      Modal.open('modals/produtos/regra-producao.html', '../js/modals/produto-regra-producao.js', 'regraProducaoPeca', true);
+    });
+
+    regraInfoBtn?.addEventListener('click', () => {
+      if (!regra) return;
+      window.DialogPadrao?.info({
+        title: 'Regra Produção',
+        message: regra.resumo({ codigo: codigoInput?.value.trim() || produtoSelecionado.codigo, nome: nomeInput?.value.trim() || produtoSelecionado.nome })
+      });
+    });
+
+    /** Antes de salvar ou clonar: desenhista e regra de produção completos. */
+    async function conferirDesenhistaERegra() {
+      if (!desenhistaValido()) throw new Error('Escolha quem desenhou a peça (Desenhado por).');
+      const controle = await prepararRegra();
+      const faltam = controle.pendencias();
+      if (faltam.length) {
+        throw new Error(`Regra Produção pendente: ${faltam.map(x => `${x.nome} (${x.falta})`).join('; ')}. Abra "Regra Produção" antes de salvar.`);
+      }
+      return controle;
+    }
+
+    /** Grava a regra depois da peça; devolve o aviso para a tela (ou ''). */
+    async function gravarRegra(controle, idDaPeca, oQue) {
+      try {
+        const gravada = await controle.gravar(idDaPeca);
+        if (gravada && gravada.completa === false) {
+          return `A Regra Produção ficou incompleta (${(gravada.faltam || []).map(x => x.nome).join(', ')}).`;
+        }
+        return '';
+      } catch (erroRegra) {
+        console.error('Erro ao gravar a Regra Produção', erroRegra);
+        return `${oQue}, mas a Regra Produção não foi gravada (${erroRegra?.message || 'erro'}). Abra a peça e salve de novo.`;
+      }
+    }
+
     function formatCurrency(val){
       const frac = Number.isInteger(val) ? 0 : 2;
       return (val || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
@@ -671,6 +859,7 @@
       if (precoVendaEl)          precoVendaEl.textContent         = formatCurrency(valorVenda);
       if (precoVendaTagEl)       precoVendaTagEl.textContent      = formatCurrency(valorVenda);
       renderTotalBadges();
+      pintarRegra();
     }
 
     function renderTotalBadges(){
@@ -970,6 +1159,8 @@
         // Coleção e Etapa são preenchidas por `fetch`: atribuir `value` antes
         // das <option> chegarem não faz nada.
         colecao: colecaoSelect?.value || '',
+        desenhista: desenhistaSelect?.value || '',
+        regra: regra ? [...regra.rascunho()] : [],
         etapa: etapaSelect?.value || ''
       }),
       restaurar: async (dados) => {
@@ -983,8 +1174,14 @@
         if (repor) {
           await Promise.all([
             repor(colecaoSelect, dados?.colecao),
+            repor(desenhistaSelect, dados?.desenhista),
             repor(etapaSelect, dados?.etapa)
           ]);
+        }
+        if (Array.isArray(dados?.regra) && dados.regra.length) {
+          prepararRegra()
+            .then(controle => controle.definirRascunho(new Map(dados.regra)))
+            .catch(err => console.error('Erro ao repor a Regra Produção', err));
         }
       }
     });
@@ -1176,6 +1373,8 @@
             if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
             return;
           }
+          const controleRegra = await conferirDesenhistaERegra();
+          const desenhadoPor = desenhistaSelect ? desenhistaSelect.value.trim() : '';
           const nomeBase = (nomeInput?.value || '').trim();
           const codigoBase = (codigoInput?.value || '').trim();
           const cloneNome = `${nomeBase} - Copiado`;
@@ -1184,6 +1383,7 @@
           const produtoCriado = await window.electronAPI.adicionarProduto({
             codigo: cloneCodigo,
             nome: cloneNome,
+            desenhado_por: desenhadoPor,
             ncm: ncmInput?.value?.slice(0, 8) || '',
             preco_venda: totals.valorVenda || 0,
             pct_markup: parseFloat(markupInput?.value) || 0,
@@ -1215,8 +1415,10 @@
             codigo: cloneCodigo,
             ncm: ncmInput?.value?.slice(0,8) || '',
             categoria: colecaoSelect ? colecaoSelect.value.trim() : '',
+            desenhado_por: desenhadoPor,
             status: 'Em linha'
           }, { produto_id: produtoCriado?.id, inseridos: itensPayload, atualizados: [], deletados: [] }, produtoCriado?.id);
+          const avisoRegraClone = await gravarRegra(controleRegra, produtoCriado?.id, 'A cópia foi criada');
 
           if (typeof atualizarProdutoLocal === 'function') {
             atualizarProdutoLocal({
@@ -1233,6 +1435,7 @@
           }
           await recarregarListaDePecas();
           showToast('Peça clonada com sucesso!', 'success');
+          if (avisoRegraClone) showToast(avisoRegraClone, 'warning');
           close();
           const novoProduto = {
             id: produtoCriado?.id,
@@ -1249,7 +1452,7 @@
           if (err?.code === 'CODIGO_EXISTE' || err?.code === 'NOME_EXISTE') {
             showToast('Já existe uma cópia idêntica desta peça', 'error');
           } else {
-            showToast('Erro ao clonar peça', 'error');
+            showToast(err?.message || 'Erro ao clonar peça', 'error');
           }
         } finally {
           isCloning = false;
@@ -1305,6 +1508,8 @@
           const statusSelecionado = statusRadios.find(r => r.checked);
           if (statusSelecionado) produto.status = statusSelecionado.value;
         }
+        // Liberado pelo botão ou porque a peça ainda não tinha desenhista.
+        if (desenhistaSelect && !desenhistaSelect.disabled) produto.desenhado_por = desenhistaSelect.value.trim();
         const itensPayload = {
           produto_id: produtoSelecionado.id,
           inseridos: itens
@@ -1323,6 +1528,8 @@
         try{
           isSubmitting = true;
           setModalLoadingState(true, { submitText: 'Salvando...', cloneText: 'Aguarde...' });
+          // Como os dados fiscais: sem desenhista e sem regra de produção completa, não salva.
+          const controleRegra = await conferirDesenhistaERegra();
           const resultado = await window.electronAPI.salvarProdutoDetalhado(
             null,
             produto,
@@ -1338,6 +1545,7 @@
             throw new Error(resultado.message || 'Você não tem permissão para esta ação.');
           }
 
+          const avisoRegra = await gravarRegra(controleRegra, produtoSelecionado.id, 'A peça foi salva');
           deletedItens = [];
           const now = new Date();
           if (ultimaDataEl) ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
@@ -1347,7 +1555,8 @@
             codigo: codigoInput ? codigoInput.value : '',
             ncm:    ncmInput ? ncmInput.value    : '',
             status: produto.status,
-            categoria: colecaoSelect ? colecaoSelect.value : ''
+            categoria: colecaoSelect ? colecaoSelect.value : '',
+            desenhado_por: desenhistaSelect ? desenhistaSelect.value : ''
           };
           if (typeof atualizarProdutoLocal === 'function') {
             atualizarProdutoLocal({
@@ -1366,6 +1575,7 @@
           // vezes, e onde não existia a segunda derrubava tudo.
           await recarregarListaDePecas();
           showToast('Peça alterada com sucesso!', 'success');
+          if (avisoRegra) showToast(avisoRegra, 'warning');
           // Avisa quem abriu este formulário que a gravação passou. Quem abre daqui
           // (a revisão da IA, ao apontar para um registro que já existe) não tem
           // como saber sozinho: ela não gravou nada e não fica olhando o banco.
@@ -1404,7 +1614,10 @@
           produtoOk: !!dados
         });
 
-        await carregarColecoes({ selecionada: dados && dados.categoria });
+        await Promise.all([
+          carregarColecoes({ selecionada: dados && dados.categoria }),
+          carregarDesenhistas(dados?.desenhado_por || '')
+        ]);
 
         const itensData = Array.isArray(itens)
           ? itens.map((item = {}) => ({
@@ -1454,7 +1667,8 @@
             codigo: codigoInput ? codigoInput.value : '',
             ncm:    ncmInput ? ncmInput.value    : '',
             status: dados.status || '',
-            categoria: colecaoSelect ? colecaoSelect.value : ''
+            categoria: colecaoSelect ? colecaoSelect.value : '',
+            desenhado_por: String(dados.desenhado_por || '').trim()
           };
           updateRegistroEditState();
         }
@@ -1511,6 +1725,7 @@
 
         // recalcula totais após primeira renderização
         updateTotals();
+        prepararRegra().then(pintarRegra).catch(err => console.error('Erro ao preparar a Regra Produção', err));
 
       } catch(err){
         console.error('[editar-produto][catch load]', err);

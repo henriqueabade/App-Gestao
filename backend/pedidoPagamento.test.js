@@ -383,6 +383,36 @@ test('recusa quando a soma das parcelas não fecha com o total', async () => {
   }
 });
 
+test('parcela mínima: divisão com parcela abaixo dela é recusada antes de gravar; a 1ª à vista é livre', async () => {
+  const dados = cenario();
+  dados.configuracao_cobranca = [{ id: 1, parcela_minima: '130.00' }];
+  const ctx = await montar(dados);
+  const configuracao = require('./cobranca/configuracaoCobranca');
+  const aPrazo = (prazo, valores) => alterarPagamento(ctx.porta, 1, {
+    condicao: 'prazo', forma_pagamento: 'boleto', prazo, tipo_parcela: 'diferente',
+    parcelas_detalhes: valores.map((valor, i) => ({ valor, numero_parcela: i + 1 }))
+  });
+  try {
+    // Total 384 (a prazo). Três de 128 ficam abaixo de 130.
+    const recusada = await aPrazo('30/60/90', [128, 128, 128]);
+    assert.strictEqual(recusada.status, 422);
+    const corpo = await recusada.json();
+    assert.strictEqual(corpo.code, 'PARCELA_MINIMA');
+    assert.match(corpo.error, /1ª parcela \(R\$\s128,00\) fica abaixo da parcela mínima de R\$\s130,00/);
+    assert.ok(!ctx.chamadas.some(c => c.metodo !== 'GET'), 'nada pode ter sido escrito');
+
+    // A 1ª só é livre com prazo 0.
+    assert.strictEqual((await aPrazo('30/60', [100, 284])).status, 422);
+    assert.strictEqual((await aPrazo('0/30/60', [100, 129.99, 154.01])).status, 422, 'a 2ª nunca é livre');
+    const comEntrada = await aPrazo('0/30/60', [100, 142, 142]);
+    assert.strictEqual(comEntrada.status, 200);
+    assert.deepStrictEqual(ctx.tabelas.pedido_parcelas.map(p => p.valor), [100, 142, 142]);
+  } finally {
+    configuracao.limparCache();
+    await ctx.encerrar();
+  }
+});
+
 // ------------------------------------------------------------------ travas
 
 for (const situacao of ['Enviado', 'Entregue', 'Cancelado', 'Rascunho']) {

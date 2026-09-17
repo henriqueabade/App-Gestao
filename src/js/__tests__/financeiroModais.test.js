@@ -171,7 +171,7 @@ test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé
     assert.match(fechamento, /class="fin-aviso"/, 'aviso bordô do bloqueio');
     assert.match(fechamento, /value="comissao" checked/, 'o tipo vai como o backend espera');
     const regras = fs.readFileSync(path.join(PASTA_HTML, 'regras.html'), 'utf8');
-    for (const id of ['finRegraSalvar', 'finSetorSalvar', 'finValorSalvar', 'finCfgSalvar', 'finFeriadoIncluir']) {
+    for (const id of ['finRegraSalvar', 'finProcessoIncluir', 'finProcessoExcluir', 'finProcessoNovoSalvar', 'finProcessoRenomear', 'finProcessoPagamento', 'finValorSalvar', 'finCfgSalvar', 'finFeriadoIncluir']) {
         assert.match(regras, new RegExp(`id="${id}" type="button" data-perm="financeiro\\.regras\\.editar"`), `regras: ${id} pede financeiro.regras.editar`);
     }
     const relatorios = fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8');
@@ -248,7 +248,9 @@ test('produção da competência: um cartão por setor, total em destaque e o qu
 test('todo relatório da central tem folha: colunas e totais; planilha CSV para o Excel', () => {
     const f = puro();
     const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
-    assert.strictEqual(chavesDaCentral.length, 9);
+    assert.strictEqual(chavesDaCentral.length, 11);
+    assert.ok(!chavesDaCentral.includes('pagamento-pintura'), 'Pintura não é processo');
+    for (const processo of ['marcenaria', 'acabamento', 'montagem', 'embalagem']) assert.ok(chavesDaCentral.includes(`pagamento-${processo}`));
     for (const chave of chavesDaCentral) {
         const r = plano(f.montarRelatorio(chave, { linhas: [] }));
         assert.ok(r && Array.isArray(r.linhas), `relatório "${chave}" sem folha`);
@@ -618,4 +620,45 @@ test('configuração de cobrança (fase F): avisos do BB e conciliação automá
     assert.strictEqual(f.textoDaConciliacao(r, true).texto, '3 aviso(s) do BB lido(s) · 1 pagamento(s) · 2 ignorado(s).', 'só a fila não fala da consulta');
     assert.match(f.textoDaConciliacao({ sql_pendente: true }).texto, /sql\/cobranca_recebimentos\.sql/);
     assert.deepStrictEqual(plano(f.BADGE_DO_AVISO), { 'conciliado': 'badge-success', 'na fila': 'badge-warning', 'na fila (erro)': 'badge-danger', 'alerta': 'badge-danger', 'ignorado': 'badge-neutral' });
+});
+
+test('regras: CMS só para dono de cliente, Royalty para o desenhista, processos com + e −, valor em R$ ou % da tabela fixa', () => {
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'regras.html'), 'utf8');
+    assert.match(html, /<select id="finRegraBeneficiario"/, 'quem recebe a CMS é escolhido entre os donos');
+    assert.match(html, /id="finRegraBeneficiarioRoyalty"[^>]*>Desenhista de cada peça</);
+    assert.match(html, /<option value="cms">CMS \(dono do cliente\)<\/option>/);
+    assert.match(html, /<option value="royalty">Royalty \(desenhista da peça\)<\/option>/);
+    assert.match(html, /<select id="finProcessoSelect"/);
+    assert.match(html, /<select id="finValorTipo"[\s\S]*?<option value="valor">R\$ por peça<\/option>[\s\S]*?<option value="percentual">% do preço da tabela fixa<\/option>/);
+    assert.ok(!/finSetorNome|finSetorSalvar/.test(html), 'os setores da fase G saíram da tela');
+
+    assert.match(SCRIPT, /gravarProcesso\('\/api\/financeiro\/etapas', 'POST', \{ nome \}/);
+    assert.match(SCRIPT, /gravarProcesso\(`\/api\/financeiro\/etapas\/\$\{encodeURIComponent\(e\.id\)\}`, 'PUT', \{ nome \}/);
+    assert.match(SCRIPT, /'PUT', \{ producao_ativa: ligar \}/);
+    assert.match(SCRIPT, /'DELETE', null/);
+    assert.match(SCRIPT, /beneficiario: ehRoyalty\(\) \? null : benefSel\.value/);
+    assert.match(SCRIPT, /clientes\.filter\(c => dono && semAcento\(c\.dono\) === semAcento\(dono\)\)/, 'no cliente/pedido, só os do dono');
+    assert.match(SCRIPT, /corpo\.tipo = emPercentual\(\) \? 'percentual' : 'valor';/);
+
+    // Registrar produção grava o processo (etapa) e a prévia usa a parte que falta de cada peça.
+    const producao = fs.readFileSync(path.join(PASTA_HTML, 'registrar-producao.html'), 'utf8');
+    assert.match(producao, />Processo <span class="fin-obrigatorio">\*<\/span><\/label>/);
+    assert.match(SCRIPT, /pedido_item_id: item\.id, etapa_id: Number\(setorSel\.value\)/);
+    const f = puro();
+    assert.strictEqual(f.valorDasProximas({ valor_unitario: 25, proximas: [0.5, 1, 1, 1] }, 3), 62.5, 'a do estoque adiantada vale meia peça');
+    assert.strictEqual(f.valorDasProximas({ valor_unitario: 100, proximas: [0.1] }, 5), 10, 'só as peças que ainda precisam contam');
+    assert.strictEqual(f.valorDasProximas({ valor_unitario: null, proximas: [1] }, 1), null);
+    assert.strictEqual(f.valorDasProximas(null, 1), null);
+});
+
+test('configuração de cobrança: a seção Parcela vem antes de Padrões do boleto e grava com a própria permissão', () => {
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'configuracao-cobranca.html'), 'utf8');
+    const parcela = html.indexOf('id="finCobParcelaSecao"');
+    const padroes = html.indexOf('Padrões do boleto</h3>');
+    assert.ok(parcela > 0 && padroes > parcela, 'Parcela acima de Padrões do boleto');
+    assert.match(html, /id="finCobParcelaSalvar" type="button" data-perm="financeiro\.parcela\.editar"/);
+    assert.ok(!/id="finCobParcelaMinima"[^>]*data-fin-cob=/.test(html), 'não vai no Salvar do Sup Admin');
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/parcela-minima'\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/configuracao\/parcela', \{ method: 'PUT', body: JSON\.stringify\(\{ parcela_minima: valor \}\) \}\)/);
+    assert.match(SCRIPT, /ligar\('finCobParcelaSalvar', salvarParcela\)/);
 });

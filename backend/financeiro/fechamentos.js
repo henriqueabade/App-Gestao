@@ -60,7 +60,7 @@ function conferir({ tipo, competencia, estado, hoje, extra = {} }) {
     if (extra.sqlRecebimentos) bloqueios.push('Os recebimentos ainda não estão ativados (sql/cobranca_recebimentos.sql).');
   } else if (extra.semValor?.length) {
     const nomes = [...new Set(extra.semValor.map(l => `${l.produto} (${l.setor})`))].slice(0, 5);
-    bloqueios.push(`Sem valor por peça cadastrado: ${nomes.join('; ')}${extra.semValor.length > 5 ? '…' : ''}. Cadastre em "Regras".`);
+    bloqueios.push(`Produção sem valor (sem regra do processo, ou regra em % numa peça sem preço na tabela fixa): ${nomes.join('; ')}${extra.semValor.length > 5 ? '…' : ''}. Acerte em "Regras" ou no cadastro da peça.`);
   }
   return { bloqueios, avisos };
 }
@@ -71,7 +71,7 @@ async function dadosComissao(api, { competencia, hoje, desde }) {
   const estado = comissoes.estadoDosFechamentos({ ...b, tipo: 'comissao' });
   const apuradas = comissoes.apurar({
     linhas: b.linhas, pedidos: b.receber.pedidos, parcelas: b.receber.parcelas, recebimentos: b.receber.recebimentos,
-    ajustes: b.ajustes, regrasLista: b.regras.regras, estado, hoje
+    ajustes: b.ajustes, regrasLista: b.regras.regras, estado, hoje, contexto: b.contexto
   });
   const resumo = comissoes.montarFechamento({ apuradas, estado, competencia });
   return { b, estado, apuradas, resumo };
@@ -137,6 +137,7 @@ const linhaItemProducao = (fechamentoId, l) => ({
   detalhes: JSON.stringify({
     pedido: l.pedido ?? null, pedido_item_id: l.pedido_item_id ?? null, produto_id: l.produto_id ?? null, setor_id: l.setor_id ?? null,
     estorno_de: l.estorno_de ?? null, valor_origem: l.valor_origem ?? null, status_item: l.status_item ?? null, motivo: l.motivo || null,
+    valor_peca: l.valor_peca ?? null, fracao: l.fracao ?? null, regra: l.regra ?? null,
     fechamento_origem: l.fechamento_origem ?? null
   }),
   criado_em: c.agora()

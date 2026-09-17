@@ -1642,6 +1642,29 @@ header.glass-surface {
 .btn-danger,
 .btn-warning,
 .btn-neutral,
-.btn-preco-tabela {
+.btn-preco-tabela,
+.btn-regra-producao {
     white-space: nowrap;
+}
+
+/**
+ * "Regra Produção" no cadastro da peça (Novo e Editar produto). Azul escuro,
+ * ao lado do "+ Começar". Global porque o modal da peça também abre fora do
+ * módulo de Produtos (revisão da IA).
+ */
+.btn-regra-producao {
+    background: #1e3a8a;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-regra-producao:hover:not(:disabled) {
+    background: #1e40af;
+    transform: scale(1.05);
+}
+
+.btn-regra-producao:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
 }

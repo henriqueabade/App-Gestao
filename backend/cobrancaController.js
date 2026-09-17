@@ -35,6 +35,11 @@
  *
  * Fase F — webhook e conciliação automática:
  *   GET    /webhook/estado    URL a cadastrar (sem o token), avisos recebidos, agenda e execuções
+ *
+ * Parcela mínima (sql/desenhistas_producao_parcela.sql):
+ *   GET    /parcela-minima          o valor (orçamentos, pedidos e financeiro leem)
+ *   PUT    /configuracao/parcela    { parcela_minima } — financeiro.parcela.editar
+ *   O abatimento que deixaria o boleto abaixo do mínimo é recusado.
  *   (a agenda roda sozinha: backend/cobranca/agendaConciliacao.js, ligada pelo server.js no app)
  *
  * O secret nunca volta numa resposta e nunca chega ao renderer: entra pela
@@ -43,7 +48,7 @@
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
+const { exigirPermissao, exigirAlgumaPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
 const segredoLocal = require('./fiscal/segredoLocal');
 const segredoBanco = require('./fiscal/segredoBanco');
 const configuracao = require('./cobranca/configuracaoCobranca');
@@ -58,6 +63,11 @@ const contasReceber = require('./cobranca/contasReceber');
 const conciliacao = require('./cobranca/conciliacao');
 const execucoes = require('./cobranca/execucoes');
 const webhookEstado = require('./cobranca/webhookEstado');
+const parcelaMinima = require('./cobranca/parcelaMinima');
+
+/** Quem lê a parcela mínima: quem monta orçamento, mexe em pedido ou está no financeiro. */
+const LEEM_A_PARCELA_MINIMA = ['orc.view', 'orc.create', 'orc.edit', 'ped.view', 'ped.payment.edit', 'financeiro.view', 'financeiro.config.view'];
+const SQL_PARCELA = 'Falta rodar sql/desenhistas_producao_parcela.sql no banco e reiniciar a API.';
 const os = require('os');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -196,6 +206,35 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       res.json(await montarEstado(req, api));
     } catch (err) {
       responder(res, err, 'PUT /api/cobranca/configuracao');
+    }
+  });
+
+  router.get('/parcela-minima', exigirAlgumaPermissao(LEEM_A_PARCELA_MINIMA), async (req, res) => {
+    try {
+      const cfg = await configuracao.carregar(createApiClient(req));
+      res.json({
+        parcela_minima: parcelaMinima.minimoDe(cfg),
+        sql_pronto: Boolean(cfg && Object.prototype.hasOwnProperty.call(cfg, 'parcela_minima'))
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/parcela-minima');
+    }
+  });
+
+  router.put('/configuracao/parcela', exigirPermissao('financeiro.parcela.editar'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const bruto = String(req.body?.parcela_minima ?? '').trim().replace(/\s|R\$/g, '');
+      const numero = Number(bruto.includes(',') ? bruto.replace(/\./g, '').replace(',', '.') : bruto);
+      if (!bruto || !Number.isFinite(numero) || numero < 0 || numero > 1000000) throw erro('Informe a parcela mínima em reais (de 0 a 1.000.000).');
+      const atual = await configuracao.carregar(api, { forcar: true });
+      if (!atual) throw erro('Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).', 409);
+      if (!Object.prototype.hasOwnProperty.call(atual, 'parcela_minima')) throw erro(SQL_PARCELA, 409, { sql_pendente: true });
+      const valor = Math.round(numero * 100) / 100;
+      await configuracao.gravar(api, { parcela_minima: valor }, usuarioDaRequisicao(req));
+      res.json({ parcela_minima: valor });
+    } catch (err) {
+      responder(res, err, 'PUT /api/cobranca/configuracao/parcela');
     }
   });
 
@@ -395,6 +434,41 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     return { ambiente, appKey: c.appKey, credenciais: { clientId: c.clientId, clientSecret: f.secret } };
   }
 
+  /**
+   * O abatimento não pode deixar o boleto abaixo da parcela mínima — salvo a
+   * parcela única ou a primeira à vista (prazo 0).
+   */
+  async function conferirParcelaMinimaDoAbatimento({ api, boleto, cfg }, valor) {
+    const minimo = parcelaMinima.minimoDe(cfg);
+    if (!(minimo > 0)) return;
+    const dados = await boletos.lerPedidoCobranca(api, boleto.pedido_id);
+    const vivas = dados.parcelas.filter(p => Number(p.valor) > 0);
+    const recusa = parcelaMinima.recusaDoAbatimento({
+      valorBoleto: boleto.valor, abatimento: valor, numeroParcela: boleto.numero_parcela,
+      totalParcelas: vivas.length, prazoDaPrimeira: parcelaMinima.prazosDoTexto(dados.pedido.prazo)[0] ?? null, minimo
+    });
+    if (recusa) throw erro(recusa, 409);
+  }
+
+  /**
+   * O boleto novo de uma reemissão: no ambiente que vale agora, para a mesma
+   * parcela, com o vencimento escolhido (e o valor que a parcela tem hoje).
+   */
+  function registrarNovoCom({ api, cfg, usuarioId, hoje }) {
+    return async ({ vencimento, substitui }) => {
+      const dados = await boletos.lerPedidoCobranca(api, substitui.pedido_id);
+      const parcela = dados.parcelas.find(p => Number(p.id) === Number(substitui.parcela_id))
+        || dados.parcelas.find(p => Number(p.numero_parcela) === Number(substitui.numero_parcela));
+      if (!parcela) throw erro('a parcela deste boleto não existe mais no pedido', 409);
+      const nova = await conexaoDoAmbiente(api, cfg, configuracao.ambienteEfetivo(cfg, env));
+      return boletos.registrar({
+        api, pedidoId: substitui.pedido_id, parcelaIds: [parcela.id], notaFiscalId: substitui.nota_fiscal_id ?? null,
+        vencimentos: { [parcela.id]: vencimento }, substituiBoletoId: substitui.id,
+        bb: cliente, credenciais: nova.credenciais, appKey: nova.appKey, ambiente: nova.ambiente, cfg, usuarioId, hoje
+      });
+    };
+  }
+
   /** Lê o boleto e a configuração, confere o SQL da fase e o ambiente, roda `fn` e devolve o boleto enxuto com as ações. */
   async function operar(req, res, contexto, fn) {
     try {
@@ -435,7 +509,10 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     ctx => operacoes.prorrogar({ ...ctx, novaData: String(req.body?.data_vencimento || '').slice(0, 10) })));
 
   router.post('/boletos/:id/abatimento', exigirPermissao('financeiro.boleto.baixa'), (req, res) => operar(req, res, 'POST /api/cobranca/boletos/:id/abatimento',
-    ctx => operacoes.concederAbatimento({ ...ctx, valor: req.body?.valor })));
+    async ctx => {
+      await conferirParcelaMinimaDoAbatimento(ctx, req.body?.valor);
+      return operacoes.concederAbatimento({ ...ctx, valor: req.body?.valor });
+    }));
 
   /** Baixa; a reemissão também registra um boleto novo, então pede as duas permissões. */
   const permissaoDaBaixa = req => (req.body?.motivo === 'reemissao' ? ['financeiro.boleto.baixa', 'financeiro.boleto.emit'] : 'financeiro.boleto.baixa');
@@ -444,18 +521,7 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       ...ctx,
       entrada: req.body || {},
       // O boleto novo sai no ambiente que vale agora, para a mesma parcela, com o vencimento escolhido.
-      registrarNovo: async ({ vencimento, substitui }) => {
-        const dados = await boletos.lerPedidoCobranca(ctx.api, substitui.pedido_id);
-        const parcela = dados.parcelas.find(p => Number(p.id) === Number(substitui.parcela_id))
-          || dados.parcelas.find(p => Number(p.numero_parcela) === Number(substitui.numero_parcela));
-        if (!parcela) throw erro('a parcela deste boleto não existe mais no pedido', 409);
-        const nova = await conexaoDoAmbiente(ctx.api, ctx.cfg, configuracao.ambienteEfetivo(ctx.cfg, env));
-        return boletos.registrar({
-          api: ctx.api, pedidoId: substitui.pedido_id, parcelaIds: [parcela.id], notaFiscalId: substitui.nota_fiscal_id ?? null,
-          vencimentos: { [parcela.id]: vencimento }, substituiBoletoId: substitui.id,
-          bb: cliente, credenciais: nova.credenciais, appKey: nova.appKey, ambiente: nova.ambiente, cfg: ctx.cfg, usuarioId: ctx.usuarioId, hoje: ctx.hoje
-        });
-      }
+      registrarNovo: registrarNovoCom(ctx)
     })));
 
   router.post('/pedidos/:id/boletos/sincronizar', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
@@ -562,11 +628,12 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
    * Para a devolução de pedidos (backend/devolucoes): o que uma operação de UM boleto precisa — o
    * cliente do BB, a configuração e a conexão do ambiente dele —, com o cofre e o banco deste módulo.
    */
-  router.contextoDoBoleto = async (api, boleto) => {
+  router.contextoDoBoleto = async (api, boleto, { usuarioId = null, hoje = hojeEmBrasilia() } = {}) => {
     operacoes.exigirSql(boleto);
     const cfg = await configuracao.carregar(api, { forcar: true });
     const conexao = await conexaoDoAmbiente(api, cfg, boleto.ambiente);
-    return { bb: cliente, cfg, conexao };
+    // A reemissão da devolução (parcela que cresceu) registra o boleto novo por aqui.
+    return { bb: cliente, cfg, conexao, registrarNovo: registrarNovoCom({ api, cfg, usuarioId, hoje }) };
   };
 
   router.post('/conciliar', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
@@ -617,4 +684,4 @@ module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
 /** Para a agenda automática (fase F): a conciliação com o cofre, o banco e o cliente do BB deste módulo. */
 module.exports.conciliarEmSegundoPlano = opcoes => router.conciliarEmSegundoPlano(opcoes);
 /** Para a devolução de pedidos: o contexto do BB para operar um boleto (abatimento, baixa). */
-module.exports.contextoDoBoleto = (api, boleto) => router.contextoDoBoleto(api, boleto);
+module.exports.contextoDoBoleto = (api, boleto, opcoes) => router.contextoDoBoleto(api, boleto, opcoes);

@@ -53,11 +53,11 @@ function pendencias({ hoje, regrasTudo, apuradas, estadoC, estadoP, pend, fecham
   const ativas = regrasTudo.regras.filter(r => regras.ativo(r.ativo));
 
   if (!ativas.length) {
-    lista.push({ nivel: 'normal', chave: 'sem_regras', titulo: 'Regras de CMS e Royalty não cadastradas', descricao: 'Cadastre quem recebe e o percentual em "Regras": sem regra, a comissão fica zero.', data: hoje, acao: 'Cadastrar', destino: 'regras' });
+    lista.push({ nivel: 'normal', chave: 'sem_regras', titulo: 'Regras de CMS e Royalty não cadastradas', descricao: 'Cadastre em "Regras" a CMS de cada dono de cliente e o % do Royalty dos desenhistas: sem regra, a comissão fica zero.', data: hoje, acao: 'Cadastrar', destino: 'regras' });
   } else {
     const semRegra = apuradas.filter(p => p.sem_regra && p.pendentes.some(i => i.tipo_item === 'parcela'));
     if (semRegra.length) {
-      lista.push({ nivel: 'normal', chave: 'parcelas_sem_regra', titulo: `${c.plural(semRegra.length, 'parcela recebida', 'parcelas recebidas')} sem regra de comissão`, descricao: `Pedido ${semRegra[0].pedido}${semRegra.length > 1 ? ' e outros' : ''}: cadastre a regra do cliente ou do pedido (ou uma para todos).`, data: hoje, acao: 'Regras', destino: 'regras' });
+      lista.push({ nivel: 'normal', chave: 'parcelas_sem_regra', titulo: `${c.plural(semRegra.length, 'parcela recebida', 'parcelas recebidas')} sem regra de comissão`, descricao: `Pedido ${semRegra[0].pedido}${semRegra.length > 1 ? ' e outros' : ''}: cadastre a CMS do dono do cliente e o % do Royalty (para todos, o cliente ou o pedido).`, data: hoje, acao: 'Regras', destino: 'regras' });
     }
   }
 
@@ -96,8 +96,8 @@ function pendencias({ hoje, regrasTudo, apuradas, estadoC, estadoP, pend, fecham
   if (semValor.length) {
     lista.push({
       nivel: 'critico', chave: 'producao_sem_valor',
-      titulo: `${c.plural(semValor.length, 'registro de produção', 'registros de produção')} sem valor por peça`,
-      descricao: `${semValor[0].produto} (${semValor[0].setor})${semValor.length > 1 ? ' e outros' : ''}: cadastre o valor em "Regras".`,
+      titulo: `${c.plural(semValor.length, 'registro de produção', 'registros de produção')} sem valor`,
+      descricao: `${semValor[0].produto} (${semValor[0].setor})${semValor.length > 1 ? ' e outros' : ''}: cadastre a regra do processo em "Regras" (ou o preço da peça na tabela fixa, se a regra é em %).`,
       data: semValor[0].data, acao: 'Regras', destino: 'regras'
     });
   }

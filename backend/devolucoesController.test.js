@@ -140,6 +140,7 @@ async function montar(tabelas) {
         const falta = chaves.find(k => !estado.chaves.has(k));
         return falta ? res.status(403).json({ error: 'Permissão negada', permissao: falta }) : next();
       },
+      exigirAlgumaPermissao: chaves => (req, res, next) => ([].concat(chaves).some(k => estado.chaves.has(k)) ? next() : res.status(403).json({ error: 'Permissão negada' })),
       exigirSupAdmin: (req, res) => res.status(403).json({ error: 'Somente Sup Admin' }),
       ehSupAdmin: async () => false
     }

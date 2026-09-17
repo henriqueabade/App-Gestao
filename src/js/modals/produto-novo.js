@@ -2,9 +2,13 @@
 (function(){
   const overlay = document.getElementById('novoProdutoOverlay');
   let handleColecaoAtualizada = null;
+  let handleDesenhistaAtualizado = null;
   const close = () => {
     if (handleColecaoAtualizada) {
       window.removeEventListener('colecaoAtualizada', handleColecaoAtualizada);
+    }
+    if (handleDesenhistaAtualizado) {
+      window.removeEventListener('desenhistaAtualizado', handleDesenhistaAtualizado);
     }
     Modal.close('novoProduto');
   };
@@ -55,6 +59,14 @@
   const addColecaoBtn   = document.getElementById('addColecaoNovo');
   const delColecaoBtn   = document.getElementById('delColecaoNovo');
   const colecaoLoadingIndicator = document.getElementById('colecaoLoadingIndicatorNovo');
+  // Desenhado por (a lista de desenhistas) e a Regra Produção da peça.
+  const desenhistaSelect = document.getElementById('desenhistaSelect');
+  const addDesenhistaBtn = document.getElementById('addDesenhistaNovo');
+  const delDesenhistaBtn = document.getElementById('delDesenhistaNovo');
+  const regraBtn        = document.getElementById('regraProducaoNovo');
+  const regraInfoBtn    = document.getElementById('regraProducaoInfoNovo');
+  const regraStatusEl   = document.getElementById('regraProducaoStatusNovo');
+  const regraInfoCaixa  = document.getElementById('regraProducaoInfoCaixaNovo');
   const precoVendaEl    = document.getElementById('precoVenda');
   
   const precoVendaTagEl = document.getElementById('precoVendaTag');
@@ -272,6 +284,142 @@
     });
   }
 
+  /** Carrega um utilitário de src/js/utils uma vez só (o modal também abre fora de Produtos). */
+  function carregarUtil(arquivo, global) {
+    if (window[global]) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `../js/utils/${arquivo}`;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error(`Não foi possível carregar ${arquivo}.`));
+      document.head.appendChild(s);
+    });
+  }
+
+  // ------- Desenhado por -------
+  const desenhistaValido = () => (window.Desenhistas?.escolhaValida
+    ? window.Desenhistas.escolhaValida(desenhistaSelect)
+    : Boolean(desenhistaSelect?.value));
+
+  async function carregarDesenhistas(selecionado) {
+    if (!desenhistaSelect) return;
+    try {
+      await carregarUtil('desenhistas.js', 'Desenhistas');
+      const lista = await window.Desenhistas.listar();
+      window.Desenhistas.preencher(desenhistaSelect, lista, selecionado ?? desenhistaSelect.value);
+    } catch (err) {
+      console.error('Erro ao carregar desenhistas:', err);
+      if (typeof showToast === 'function') {
+        showToast(err?.corpo?.sql_pendente ? err.message : 'Não foi possível carregar os desenhistas.', 'error');
+      }
+    }
+  }
+
+  if (desenhistaSelect) {
+    carregarDesenhistas('');
+    handleDesenhistaAtualizado = (event) => {
+      const detalhe = event?.detail || {};
+      let selecionado = detalhe.selecionado ?? desenhistaSelect.value;
+      if (detalhe.removido && window.Desenhistas?.chave(selecionado) === window.Desenhistas?.chave(detalhe.removido)) selecionado = '';
+      carregarDesenhistas(selecionado);
+    };
+    window.addEventListener('desenhistaAtualizado', handleDesenhistaAtualizado);
+    addDesenhistaBtn?.addEventListener('click', () => {
+      Modal.open('modals/produtos/desenhista-novo.html', '../js/modals/produto-desenhista-novo.js', 'novoDesenhista', true);
+    });
+    delDesenhistaBtn?.addEventListener('click', () => {
+      Modal.open('modals/produtos/desenhista-excluir.html', '../js/modals/produto-desenhista-excluir.js', 'excluirDesenhista', true);
+    });
+  }
+
+  // ------- Regra Produção -------
+  // A peça nova nasce na tabela fixa com o preço de venda calculado: é ele a base do %.
+  let regra = null;
+  const precoDaPeca = () => (totals.valorVenda > 0 ? Math.round(totals.valorVenda * 100) / 100 : null);
+
+  async function prepararRegra() {
+    await carregarUtil('produto-regra-producao.js', 'RegraProducaoPeca');
+    if (!regra) {
+      regra = window.RegraProducaoPeca.criar({
+        produtoId: null,
+        obterItens: () => itens,
+        obterPreco: precoDaPeca,
+        aoMudar: pintarRegra
+      });
+    }
+    if (!regra.base()) await regra.carregar();
+    return regra;
+  }
+
+  function pintarRegra() {
+    if (!regra || !regraStatusEl) return;
+    const semInsumos = regra.linhas().length === 0;
+    const faltam = regra.pendencias();
+    regraInfoCaixa?.classList.toggle('hidden', semInsumos || faltam.length > 0);
+    if (semInsumos && !regra.erro()) {
+      regraStatusEl.classList.add('hidden');
+      return;
+    }
+    regraStatusEl.classList.remove('hidden');
+    regraStatusEl.classList.toggle('text-yellow-400', faltam.length > 0);
+    regraStatusEl.style.color = faltam.length ? '' : 'var(--color-green)';
+    regraStatusEl.textContent = faltam.length
+      ? `Regra Produção pendente: ${faltam.map(f => `${f.nome} (${f.falta})`).join('; ')}.`
+      : 'Regra Produção completa: confira no (i).';
+  }
+
+  /** O que falta preencher antes de abrir a Regra Produção. */
+  function faltaParaARegra() {
+    const faltam = [];
+    if (!nomeInput?.value.trim()) faltam.push('nome');
+    if (!codigoInput?.value.trim()) faltam.push('código');
+    if (!ncmInput?.value.trim()) faltam.push('NCM');
+    if (!colecaoSelect?.value) faltam.push('coleção');
+    if (!desenhistaValido()) faltam.push('desenhado por');
+    if (!itens.length) faltam.push('os insumos (+ Começar)');
+    return faltam;
+  }
+
+  regraBtn?.addEventListener('click', async () => {
+    const faltam = faltaParaARegra();
+    if (faltam.length) {
+      if (typeof showToast === 'function') showToast(`Antes da Regra Produção, preencha: ${faltam.join(', ')}.`, 'warning');
+      return;
+    }
+    let controle;
+    try {
+      controle = await prepararRegra();
+    } catch (err) {
+      console.error(err);
+      showToast(err?.message || 'Não foi possível abrir a Regra Produção.', 'error');
+      return;
+    }
+    if (controle.erro()) {
+      showToast(controle.erro().message || 'Não foi possível ler as regras de produção.', 'error');
+      return;
+    }
+    window.regraProducaoContexto = {
+      controle,
+      peca: { codigo: codigoInput.value.trim(), nome: nomeInput.value.trim() },
+      aoFechar: () => {
+        overlay.classList.remove('pointer-events-none', 'blur-sm');
+        pintarRegra();
+      }
+    };
+    overlay.classList.add('pointer-events-none', 'blur-sm');
+    Modal.open('modals/produtos/regra-producao.html', '../js/modals/produto-regra-producao.js', 'regraProducaoPeca', true);
+  });
+
+  regraInfoBtn?.addEventListener('click', () => {
+    if (!regra) return;
+    window.DialogPadrao?.info({
+      title: 'Regra Produção',
+      message: regra.resumo({ codigo: codigoInput.value.trim(), nome: nomeInput.value.trim() })
+    });
+  });
+
+  prepararRegra().then(pintarRegra).catch(err => console.error('Erro ao preparar a Regra Produção', err));
+
   const tableBody = document.querySelector('#itensTabela tbody');
   const ordemContainer = document.getElementById('confirmarOrdemContainer');
   const ordemBtn = document.getElementById('confirmarOrdemBtn');
@@ -413,6 +561,7 @@
     sincronizarOrdemComTabela();
     setupDragAndDrop();
     atualizaTotal();
+    pintarRegra();
 
     // Os campos que nascem em zero — os sete percentuais da ficha e a
     // quantidade de cada insumo — mostram o zero sem exigir que ele seja
@@ -544,6 +693,7 @@
     limparBtn.addEventListener('click', () => {
       form.reset();
       itens = [];
+      regra?.definirRascunho(new Map());
       renderItens();
       updateTotals();
     });
@@ -563,15 +713,27 @@
     const nome = nomeInput.value.trim();
     const codigo = codigoInput.value.trim();
     const ncm = ncmInput.value.trim().slice(0,8);
+    const desenhadoPor = desenhistaSelect ? desenhistaSelect.value.trim() : '';
     try{
       isSubmitting = true;
       setLoadingState(true);
+
+      // Como os dados fiscais: sem desenhista e sem regra de produção completa, a peça não entra.
+      if (!desenhistaValido()) {
+        throw new Error('Escolha quem desenhou a peça (Desenhado por).');
+      }
+      const controleRegra = await prepararRegra();
+      const faltamRegra = controleRegra.pendencias();
+      if (faltamRegra.length) {
+        throw new Error(`Regra Produção pendente: ${faltamRegra.map(f => `${f.nome} (${f.falta})`).join('; ')}. Abra "Regra Produção" antes de registrar.`);
+      }
 
       const produtoCriado = await window.electronAPI.adicionarProduto({
         codigo,
         nome,
         ncm,
         categoria: colecaoSelect.value.trim(),
+        desenhado_por: desenhadoPor,
         preco_venda: totals.valorVenda || 0,
         pct_markup: parseFloat(markupInput?.value) || 0,
         status: 'Em linha',
@@ -618,9 +780,22 @@
         codigo,
         ncm,
         categoria: colecaoSelect.value.trim(),
+        desenhado_por: desenhadoPor,
         status: 'Em linha',
         ...camposFiscais()
       }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoId);
+
+      // A regra de produção vai depois da peça: ela precisa do id.
+      let avisoRegra = '';
+      try {
+        const gravada = await controleRegra.gravar(produtoId);
+        if (gravada && gravada.completa === false) {
+          avisoRegra = `A Regra Produção ficou incompleta (${(gravada.faltam || []).map(x => x.nome).join(', ')}): confira em Editar peça.`;
+        }
+      } catch (erroRegra) {
+        console.error('Erro ao gravar a Regra Produção', erroRegra);
+        avisoRegra = `A peça foi criada, mas a Regra Produção não foi gravada (${erroRegra?.message || 'erro'}). Abra a peça em Editar e salve a regra.`;
+      }
 
       if (typeof atualizarProdutoLocal === 'function') {
         atualizarProdutoLocal({
@@ -641,6 +816,7 @@
       // nada e não fica olhando o banco. Quem não escuta, ignora.
       window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'novoProduto' } }));
       showToast('Peça criada com sucesso!', 'success');
+      if (avisoRegra) showToast(avisoRegra, 'warning');
       close();
       const novoProduto = {
         id: produtoCriado?.id,
@@ -678,6 +854,8 @@
       // Coleção e Etapa são preenchidas por `fetch`: atribuir `value` antes das
       // <option> chegarem não faz nada, então a varredura genérica as perde.
       colecao: colecaoSelect?.value || '',
+      desenhista: desenhistaSelect?.value || '',
+      regra: regra ? [...regra.rascunho()] : [],
       etapa: etapaSelect?.value || ''
     }),
     restaurar: async (dados) => {
@@ -692,8 +870,14 @@
       if (repor) {
         await Promise.all([
           repor(colecaoSelect, dados?.colecao),
+          repor(desenhistaSelect, dados?.desenhista),
           repor(etapaSelect, dados?.etapa)
         ]);
+      }
+      if (Array.isArray(dados?.regra) && dados.regra.length) {
+        prepararRegra()
+          .then(controle => controle.definirRascunho(new Map(dados.regra)))
+          .catch(err => console.error('Erro ao repor a Regra Produção', err));
       }
     }
   });

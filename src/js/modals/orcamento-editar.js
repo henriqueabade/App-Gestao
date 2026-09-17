@@ -959,7 +959,7 @@
         }
         } else if(condicaoVal === 'prazo') {
           const pdata = Parcelamento.getData('editarParcelamento');
-          if(!pdata || !pdata.canRegister) missing.push('Parcelamento');
+          if(!pdata || !pdata.canRegister) missing.push(pdata?.motivo ? `Parcelamento (${pdata.motivo})` : 'Parcelamento');
           else {
             parcelas = pdata.count;
             prazo = pdata.items.map(it => it.dueInDays).join('/');

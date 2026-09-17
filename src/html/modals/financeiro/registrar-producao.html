@@ -1,7 +1,8 @@
 <!--
-  Registrar produção: peças de um item do pedido finalizadas num setor.
-  Modal médio. Pedidos: GET /api/financeiro/producao/pedidos; itens, saldo
-  por setor, valor por peça e registros: GET /api/financeiro/producao/pedidos/:id.
+  Registrar produção: peças de um item do pedido finalizadas num PROCESSO
+  (os de etapas_producao com o pagamento ligado). Modal médio. Pedidos:
+  GET /api/financeiro/producao/pedidos; itens, saldo por processo, valor da
+  peça inteira e a parte que falta de cada peça: GET /api/financeiro/producao/pedidos/:id.
   Grava por POST /api/financeiro/producao; "Estornar" por
   POST /api/financeiro/producao/:id/estornar (financeiro.producao.registrar).
   Script: src/js/modals/financeiro-modais.js (montarProducao).
@@ -36,7 +37,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finProducaoSetor" class="block text-sm font-medium text-gray-300 mb-2">Setor <span class="fin-obrigatorio">*</span></label>
+            <label for="finProducaoSetor" class="block text-sm font-medium text-gray-300 mb-2">Processo <span class="fin-obrigatorio">*</span></label>
             <select id="finProducaoSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
             </select>
@@ -48,14 +49,14 @@
           </div>
         </div>
 
-        <!-- Resumo do item no setor escolhido -->
+        <!-- Resumo do item no processo escolhido -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Quantidade pedida</p>
+            <p class="text-xs text-gray-400 mb-1">Peças que passam pelo processo</p>
             <p id="finProducaoPedida" class="text-lg font-semibold text-white">—</p>
           </div>
           <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Já finalizada no setor</p>
+            <p class="text-xs text-gray-400 mb-1">Já finalizadas no processo</p>
             <p id="finProducaoFinalizada" class="text-lg font-semibold text-white">—</p>
           </div>
           <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
@@ -63,7 +64,7 @@
             <p id="finProducaoSaldo" class="text-lg font-semibold" style="color: var(--color-primary-light)">—</p>
           </div>
           <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Valor por peça</p>
+            <p class="text-xs text-gray-400 mb-1">Valor da peça inteira</p>
             <p id="finProducaoUnitario" class="text-lg font-semibold text-white">—</p>
           </div>
         </div>
@@ -101,12 +102,12 @@
             <span id="finProducaoTotal" class="text-sm text-white">—</span>
           </div>
           <div id="finProducaoConcluido" class="hidden flex items-center gap-2 px-4 py-3 text-sm" style="color: var(--color-green)">
-            <i class="fas fa-check-circle" aria-hidden="true"></i><span>Item totalmente finalizado neste setor</span>
+            <i class="fas fa-check-circle" aria-hidden="true"></i><span>Item totalmente finalizado neste processo</span>
           </div>
         </div>
         <div id="finProducaoSemValor" class="hidden fin-aviso" role="status">
           <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
-          <span>Esta peça não tem valor por peça neste setor. O registro entra, mas a produção da competência só fecha depois de cadastrar o valor em "Regras de comissão e produção".</span>
+          <span>Esta peça não tem regra de produção neste processo (ou a regra é em % e a peça não tem preço na tabela fixa). O registro entra, mas a produção da competência só fecha depois de acertar a regra — em "Regras de comissão e produção" ou no cadastro da peça.</span>
         </div>
 
         <div id="finProducaoMensagem" class="hidden text-sm" role="alert"></div>
@@ -119,7 +120,7 @@
                 <tr>
                   <th class="px-4 py-3 text-left text-xs">Data</th>
                   <th class="px-4 py-3 text-left text-xs">Peça</th>
-                  <th class="px-4 py-3 text-left text-xs">Setor</th>
+                  <th class="px-4 py-3 text-left text-xs">Processo</th>
                   <th class="px-4 py-3 text-right text-xs">Quantidade</th>
                   <th class="px-4 py-3 text-left text-xs">Situação</th>
                   <th class="px-4 py-3 text-left text-xs">Ações</th>

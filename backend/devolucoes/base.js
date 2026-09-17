@@ -11,6 +11,7 @@ const calculo = require('./calculo');
 const contasReceber = require('../cobranca/contasReceber');
 const boletos = require('../cobranca/boletos');
 const recebimentos = require('../cobranca/recebimentos');
+const parcelaMinima = require('../cobranca/parcelaMinima');
 
 const SITUACOES_ENTREGUES = new Set(['enviado', 'entregue']);
 const situacaoDe = p => String(p?.situacao || '').trim().toLowerCase();
@@ -29,8 +30,11 @@ function bloqueioDaDevolucao(pedido, notaViva) {
   return null;
 }
 
-/** As parcelas no formato de `calculo.planejar`. Pura. */
-function parcelasParaOPlano({ linhas = [], recebimentos: recs = [], boletos: bols = [], reembolsadas = new Map() }) {
+/**
+ * As parcelas no formato de `calculo.planejar`. Pura. `prazoDaPrimeira` (dias)
+ * marca a entrada à vista: a 1ª parcela com prazo 0 fica fora da parcela mínima.
+ */
+function parcelasParaOPlano({ linhas = [], recebimentos: recs = [], boletos: bols = [], reembolsadas = new Map(), prazoDaPrimeira = null }) {
   const recebimentoDe = numero => recs.find(r => r && r.status === 'confirmado' && Number(r.numero_parcela) === Number(numero)) || null;
   return linhas.map(l => {
     const numero = Number(l.numero_parcela);
@@ -48,6 +52,7 @@ function parcelasParaOPlano({ linhas = [], recebimentos: recs = [], boletos: bol
       pago: estado === 'paga' ? pago : 0,
       reembolsado: c.centavos(reembolsadas.get(numero) || 0),
       recebimento_id: rec?.id ?? null,
+      isenta: numero === 1 && prazoDaPrimeira !== null && Number(prazoDaPrimeira) === 0,
       boleto: boleto ? {
         id: boleto.id, nosso_numero: boleto.nosso_numero || null, status: boleto.status,
         a_pagar: boletos.STATUS_A_PAGAR.has(String(boleto.status))
@@ -94,7 +99,7 @@ async function lerPedido(api, pedidoId, hoje) {
     notaViva: notaViva ? { id: notaViva.id, serie: notaViva.serie, numero: notaViva.numero, chave_acesso: notaViva.chave_acesso } : null,
     devolucoes: devolucoes.slice().sort((a, b) => Number(a.sequencia) - Number(b.sequencia)),
     devolucaoParcelas: devParcelas,
-    parcelas: parcelasParaOPlano({ linhas, recebimentos: recs, boletos: bols, reembolsadas }),
+    parcelas: parcelasParaOPlano({ linhas, recebimentos: recs, boletos: bols, reembolsadas, prazoDaPrimeira: parcelaMinima.prazosDoTexto(pedido.prazo)[0] ?? null }),
     pecas: calculo.itensParaDevolver(itens)
   };
 }

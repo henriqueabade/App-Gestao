@@ -356,8 +356,9 @@ const FIN_SITUACAO = { aberta: 'em aberto', fechada: 'fechada', paga: 'paga' };
 function finMapearComissoes(painel, erro) {
     if (!painel) {
         const sqlPendente = Boolean(erro?.corpo?.sql_pendente);
+        // O backend diz qual SQL falta (o da fase G ou o dos processos/desenhistas).
         const motivo = erro?.status === 403 ? 'Sem permissão para ver comissões e produção.'
-            : sqlPendente ? 'Falta ativar: rode sql/financeiro_comissoes_producao.sql e reinicie a API.'
+            : sqlPendente ? (/\.sql\b/.test(String(erro?.message || '')) ? erro.message : 'Falta ativar: rode sql/financeiro_comissoes_producao.sql e reinicie a API.')
                 : (erro ? 'Não foi possível carregar comissões e produção.' : 'Sem dados de comissões e produção.');
         const vazio = { valor: null, auxiliar: '', rodape: motivo };
         return {

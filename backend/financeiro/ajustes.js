@@ -50,7 +50,8 @@ async function parcela(api, { pedidoId, numero, hoje, desde }) {
     pedidos: b.receber.pedidos, parcelas: b.receber.parcelas.filter(p => Number(p.pedido_id) === Number(pedidoId)),
     recebimentos: b.receber.recebimentos.filter(r => Number(r.pedido_id) === Number(pedidoId)),
     ajustes: b.ajustes.filter(a => Number(a.pedido_id) === Number(pedidoId)),
-    regrasLista: b.regras.regras, estado: { ...estado, congelados: estado.congelados.filter(i => Number(i.pedido_id) === Number(pedidoId)) }, hoje
+    regrasLista: b.regras.regras, estado: { ...estado, congelados: estado.congelados.filter(i => Number(i.pedido_id) === Number(pedidoId)) }, hoje,
+    contexto: b.contexto
   });
   return { alvo: todas.find(p => Number(p.numero_parcela) === Number(numero)) || null, doPedido: todas, base: b, estado };
 }
