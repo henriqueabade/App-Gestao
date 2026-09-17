@@ -178,6 +178,30 @@ input[type="date"]:valid::-webkit-datetime-edit {
     color: var(--color-red);
 }
 
+/* Devolução (parcial e total): o roxo do tema. A etiqueta vence a situação do
+   pedido na lista e no Visualizar; o botão toma o lugar do "Cancelar". */
+.badge-purple {
+    background: rgba(179, 107, 255, 0.2);
+    color: var(--color-purple, #b36bff);
+}
+
+.btn-devolucao {
+    background: #7c3aed;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-devolucao:hover {
+    background: #6d28d9;
+    transform: scale(1.05);
+}
+
+.btn-devolucao:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .badge-neutral {
     background: rgba(163, 148, 167, 0.2);
     color: var(--color-violet);

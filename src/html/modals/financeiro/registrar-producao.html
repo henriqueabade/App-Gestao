@@ -1,10 +1,13 @@
 <!--
-  Registrar produção (quantidade finalizada de um item do pedido). Modal médio.
-  Etapa visual: saldo, status e acumulado são calculados na tela; "Registrar
-  produção" ainda avisa que está em implementação. Script: src/js/modals/financeiro-modais.js.
+  Registrar produção: peças de um item do pedido finalizadas num setor.
+  Modal médio. Pedidos: GET /api/financeiro/producao/pedidos; itens, saldo
+  por setor, valor por peça e registros: GET /api/financeiro/producao/pedidos/:id.
+  Grava por POST /api/financeiro/producao; "Estornar" por
+  POST /api/financeiro/producao/:id/estornar (financeiro.producao.registrar).
+  Script: src/js/modals/financeiro-modais.js (montarProducao).
 -->
 <div id="finRegistrarProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
-  <div role="dialog" aria-modal="true" aria-labelledby="finProducaoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" aria-labelledby="finProducaoTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
@@ -15,45 +18,27 @@
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
         <div>
-          <label for="finProducaoProduto" class="block text-sm font-medium text-gray-300 mb-2">Produto <span class="fin-obrigatorio">*</span></label>
-          <input id="finProducaoProduto" type="text" list="finProducaoProdutosLista" placeholder="Digite para pesquisar a peça do pedido" autocomplete="off"
+          <label for="finProducaoPedidoBusca" class="block text-sm font-medium text-gray-300 mb-2">Buscar pedido</label>
+          <input id="finProducaoPedidoBusca" type="text" placeholder="Número do pedido ou cliente" autocomplete="off"
                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-          <datalist id="finProducaoProdutosLista"></datalist>
         </div>
-
-        <!-- Resumo do item escolhido -->
-        <div class="grid grid-cols-3 gap-4">
-          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Quantidade pedida</p>
-            <p id="finProducaoPedida" class="text-lg font-semibold text-white">—</p>
-          </div>
-          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Já finalizada</p>
-            <p id="finProducaoFinalizada" class="text-lg font-semibold text-white">—</p>
-          </div>
-          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
-            <p class="text-xs text-gray-400 mb-1">Saldo</p>
-            <p id="finProducaoSaldo" class="text-lg font-semibold" style="color: var(--color-primary-light)">—</p>
-          </div>
-        </div>
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finProducaoQuantidade" class="block text-sm font-medium text-gray-300 mb-2">Quantidade finalizada agora <span class="fin-obrigatorio">*</span></label>
-            <input id="finProducaoQuantidade" type="number" min="0" step="1" placeholder="0" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label for="finProducaoPedido" class="block text-sm font-medium text-gray-300 mb-2">Pedido <span class="fin-obrigatorio">*</span></label>
+            <select id="finProducaoPedido" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
           <div>
-            <label for="finProducaoData" class="block text-sm font-medium text-gray-300 mb-2">Data da finalização <span class="fin-obrigatorio">*</span></label>
-            <input id="finProducaoData" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label for="finProducaoProduto" class="block text-sm font-medium text-gray-300 mb-2">Peça do pedido <span class="fin-obrigatorio">*</span></label>
+            <select id="finProducaoProduto" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
+        </div>
+        <p id="finProducaoCarregando" class="hidden text-xs text-gray-400">Carregando dados...</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label for="finProducaoSetor" class="block text-sm font-medium text-gray-300 mb-2">Setor <span class="fin-obrigatorio">*</span></label>
             <select id="finProducaoSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
-              <option value="marcenaria">Marcenaria</option>
-              <option value="pintura">Pintura</option>
             </select>
           </div>
           <div>
@@ -61,9 +46,43 @@
             <input id="finProducaoStatus" type="text" readonly value="—"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white fin-somente-leitura" />
           </div>
+        </div>
+
+        <!-- Resumo do item no setor escolhido -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Quantidade pedida</p>
+            <p id="finProducaoPedida" class="text-lg font-semibold text-white">—</p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Já finalizada no setor</p>
+            <p id="finProducaoFinalizada" class="text-lg font-semibold text-white">—</p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Saldo</p>
+            <p id="finProducaoSaldo" class="text-lg font-semibold" style="color: var(--color-primary-light)">—</p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Valor por peça</p>
+            <p id="finProducaoUnitario" class="text-lg font-semibold text-white">—</p>
+          </div>
+        </div>
+        <p id="finProducaoEstoque" class="hidden text-xs text-gray-400"></p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="finProducaoQuantidade" class="block text-sm font-medium text-gray-300 mb-2">Quantidade finalizada agora <span class="fin-obrigatorio">*</span></label>
+            <input id="finProducaoQuantidade" type="number" min="1" step="1" placeholder="0" autocomplete="off"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="finProducaoData" class="block text-sm font-medium text-gray-300 mb-2">Data da finalização <span class="fin-obrigatorio">*</span></label>
+            <input id="finProducaoData" type="date"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
           <div class="md:col-span-2">
             <label for="finProducaoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-            <textarea id="finProducaoObservacoes" rows="3" placeholder="Opcional"
+            <textarea id="finProducaoObservacoes" rows="2" maxlength="500" placeholder="Opcional"
                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
@@ -77,18 +96,46 @@
             <span class="text-sm text-gray-400">Saldo restante</span>
             <span id="finProducaoRestante" class="text-sm text-white">—</span>
           </div>
-          <div id="finProducaoConcluido" class="hidden flex items-center gap-2 px-4 py-3 text-sm" style="color: var(--color-green)">
-            <i class="fas fa-check-circle" aria-hidden="true"></i><span>Item totalmente finalizado</span>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Valor deste lançamento</span>
+            <span id="finProducaoTotal" class="text-sm text-white">—</span>
           </div>
+          <div id="finProducaoConcluido" class="hidden flex items-center gap-2 px-4 py-3 text-sm" style="color: var(--color-green)">
+            <i class="fas fa-check-circle" aria-hidden="true"></i><span>Item totalmente finalizado neste setor</span>
+          </div>
+        </div>
+        <div id="finProducaoSemValor" class="hidden fin-aviso" role="status">
+          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+          <span>Esta peça não tem valor por peça neste setor. O registro entra, mas a produção da competência só fecha depois de cadastrar o valor em "Regras de comissão e produção".</span>
         </div>
 
         <div id="finProducaoMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div class="space-y-2">
+          <p class="text-xs text-gray-400 uppercase tracking-wider">Registros deste pedido</p>
+          <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Peça</th>
+                  <th class="px-4 py-3 text-left text-xs">Setor</th>
+                  <th class="px-4 py-3 text-right text-xs">Quantidade</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-left text-xs">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="finProducaoRegistros" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+          <p id="finProducaoSemRegistros" class="fin-vazio">Escolha um pedido para ver os registros.</p>
+        </div>
       </section>
     </div>
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" data-fin-principal="Registrar produção" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar produção</button>
+      <button id="finProducaoRegistrar" type="button" data-perm="financeiro.producao.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar produção</button>
     </footer>
   </div>
 </div>

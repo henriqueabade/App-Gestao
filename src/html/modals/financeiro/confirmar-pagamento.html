@@ -1,15 +1,16 @@
 <!--
-  Confirmar pagamento de uma competência (comissão ou produção). Modal pequeno.
-  Etapa visual: "Confirmar pagamento" ainda avisa que está em implementação.
-  Script: src/js/modals/financeiro-modais.js.
+  Confirmar pagamento de uma competência fechada (comissão ou produção).
+  Modal pequeno. Os fechamentos vêm de GET /api/financeiro/fechamentos?tipo=;
+  grava por POST /api/financeiro/pagamentos (financeiro.pagamento.confirmar).
+  Script: src/js/modals/financeiro-modais.js (montarConfirmarPagamento).
 -->
 <div id="finConfirmarPagamentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
-  <div role="dialog" aria-modal="true" aria-labelledby="finPagamentoTitulo" class="w-full max-w-xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" aria-labelledby="finPagamentoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
       <h2 id="finPagamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-check-circle mr-2" aria-hidden="true"></i>Confirmar pagamento</h2>
-      <span></span>
+      <span id="finPagamentoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
@@ -38,23 +39,29 @@
             <input id="finPagamentoValor" type="text" readonly value="—"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white fin-somente-leitura" />
           </div>
+          <div class="md:col-span-2">
+            <p id="finPagamentoInfo" class="text-xs text-gray-400"></p>
+          </div>
           <div>
             <label for="finPagamentoData" class="block text-sm font-medium text-gray-300 mb-2">Data do pagamento <span class="fin-obrigatorio">*</span></label>
             <input id="finPagamentoData" type="date"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finPagamentoForma" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento</label>
+            <label for="finPagamentoForma" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento <span class="fin-obrigatorio">*</span></label>
             <select id="finPagamentoForma" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
-              <option value="pix">Pix</option>
-              <option value="transferencia">Transferência</option>
-              <option value="dinheiro">Dinheiro</option>
+              <option value="Pix">Pix</option>
+              <option value="Transferência">Transferência</option>
+              <option value="Depósito">Depósito</option>
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Outro">Outro</option>
             </select>
           </div>
           <div class="md:col-span-2">
             <label for="finPagamentoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-            <textarea id="finPagamentoObservacoes" rows="3" placeholder="Opcional"
+            <textarea id="finPagamentoObservacoes" rows="3" maxlength="500" placeholder="Opcional"
                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
@@ -65,7 +72,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" data-fin-principal="Confirmar pagamento" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Confirmar pagamento</button>
+      <button id="finPagamentoConfirmar" type="button" data-perm="financeiro.pagamento.confirmar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Confirmar pagamento</button>
     </footer>
   </div>
 </div>

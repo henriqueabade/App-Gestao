@@ -1845,6 +1845,8 @@ const LEITURA_DO_MOVIMENTO = {
   // entrada o movimento aparecia com o nome cru e efeito "—", como se não
   // tivesse mexido no estoque — e ele mexeu.
   descarte_cancelamento: { rotulo: 'Descartada — lote de origem restaurado', sinal: 1 },
+  // Pedido já enviado que o cliente devolveu: a peça volta pronta ao estoque.
+  retorno_devolucao: { rotulo: 'Devolvida pelo cliente', sinal: 1 },
   reserva: { rotulo: 'Reservada para produção', sinal: 0 },
   transferencia: { rotulo: 'Transferida entre pedidos', sinal: 0 },
   cancelamento: { rotulo: 'Cancelamento', sinal: 0 },

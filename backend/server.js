@@ -80,6 +80,12 @@ app.use('/api/ia', iaRouter);
 // Fiscal (NF-e): configuração do emitente, certificado e SEFAZ. Antes do
 // proxy genérico, que não confere permissão.
 app.use('/api/fiscal', require('./fiscalController'));
+// Cobrança (boletos BB): configuração, credenciais e teste de conexão.
+app.use('/api/cobranca', require('./cobrancaController'));
+// Financeiro completo (fase G): comissões, ajustes, produção, fechamentos e pagamentos.
+app.use('/api/financeiro', require('./financeiroController'));
+// Devolução de pedidos (parcial e total): peças ao estoque, parcelas, boletos no BB e reembolso.
+app.use('/api/devolucoes', require('./devolucoesController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.
@@ -345,6 +351,16 @@ if (require.main === module) {
     if (process.env.DEBUG === 'true') {
       console.warn('[server] unable to adjust keep-alive timeouts:', err);
     }
+  }
+}
+
+// Conciliação automática com o Banco do Brasil (boletos, fase F): só no
+// processo principal do app. Nos testes e no servidor solto não liga.
+if (process.versions && process.versions.electron && process.env.NODE_ENV !== 'test') {
+  try {
+    require('./cobranca/agendaConciliacao').iniciarNoApp();
+  } catch (err) {
+    console.error('[cobranca] a conciliação automática não iniciou:', err?.message || err);
   }
 }
 

@@ -1,0 +1,127 @@
+<!--
+  Boleto (Pedidos → Visualizar → Boletos → Detalhes). Abre por cima do modal
+  dos boletos do pedido: a situação no Banco do Brasil, o histórico e, para
+  quem tem financeiro.boleto.baixa, prorrogar o vencimento, conceder
+  abatimento e baixar (quitado por fora, cancelado ou reemissão). Nada é
+  enviado ao cliente. Não fecha clicando fora (docs/padroes-de-interface.md).
+  Contexto: window.boletoDetalheContext = { boletoId, pedidoId, numero, parcela }.
+  Script: src/js/modals/pedido-boleto-detalhe.js.
+-->
+<div id="boletoDetalheOverlay" class="hidden fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="boletoDetalheTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarBoletoDetalhe" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="boletoDetalheTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i><span id="boletoDetalheTituloTexto">Boleto</span></h2>
+        <p id="boletoDetalheSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="boletoDetalheAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="p-6 space-y-5">
+        <div id="boletoDetalheCarregando" class="text-sm text-gray-400">Lendo o boleto…</div>
+
+        <div id="boletoDetalheSemSql" class="hidden" role="status" style="display: none; gap: .75rem; align-items: flex-start; border: 1px solid var(--color-primary); border-radius: .75rem; padding: .75rem 1rem;">
+          <i class="fas fa-exclamation-triangle mt-0.5" style="color: var(--color-primary-light)" aria-hidden="true"></i>
+          <span class="text-sm text-gray-200">Para consultar, alterar ou baixar boletos, rode sql/cobranca_alteracoes.sql no banco e reinicie a API.</span>
+        </div>
+
+        <!-- Situação: o que vale no app e no BB (montado por createElement). -->
+        <section id="boletoDetalheSituacao" class="hidden glass-surface rounded-xl border border-white/10 p-4">
+          <div class="flex items-center gap-3 flex-wrap mb-3">
+            <span id="boletoDetalheStatus" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">—</span>
+            <span id="boletoDetalheSituacaoBB" class="text-xs text-gray-400"></span>
+          </div>
+          <dl id="boletoDetalheDados" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm"></dl>
+        </section>
+
+        <!-- Prorrogar vencimento. -->
+        <section id="boletoDetalheProrrogar" class="hidden rounded-xl border border-white/10 p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-white">Prorrogar vencimento</h3>
+          <p class="text-xs text-gray-400">A data muda no Banco do Brasil; juros, multa e protesto passam a contar da nova data. O código de barras continua o mesmo.</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[180px]">
+              <label for="boletoDetalheNovaData" class="block text-sm font-medium text-gray-300 mb-2">Novo vencimento <span style="color: var(--color-red)">*</span></label>
+              <input id="boletoDetalheNovaData" type="date" data-no-restore="true" style="color-scheme: dark" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <button id="boletoDetalheProrrogarBtn" type="button" data-perm="financeiro.boleto.baixa" class="btn-primary text-white px-6 py-3 rounded-lg font-medium min-w-[140px]">Prorrogar</button>
+          </div>
+        </section>
+
+        <!-- Abatimento. -->
+        <section id="boletoDetalheAbatimento" class="hidden rounded-xl border border-white/10 p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-white">Abatimento</h3>
+          <p id="boletoDetalheAbatimentoInfo" class="text-xs text-gray-400">Reduz o valor a pagar no Banco do Brasil. Juros e multa continuam sobre o valor original.</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[180px]">
+              <label for="boletoDetalheValorAbatimento" class="block text-sm font-medium text-gray-300 mb-2">Valor do abatimento (R$) <span style="color: var(--color-red)">*</span></label>
+              <input id="boletoDetalheValorAbatimento" type="text" inputmode="decimal" data-numeric="true" data-numeric-decimals="2" data-no-restore="true" placeholder="0.00" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <button id="boletoDetalheAbatimentoBtn" type="button" data-perm="financeiro.boleto.baixa" class="btn-primary text-white px-6 py-3 rounded-lg font-medium min-w-[140px]">Conceder</button>
+          </div>
+        </section>
+
+        <!-- Baixa. -->
+        <section id="boletoDetalheBaixar" class="hidden rounded-xl border border-white/10 p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-white">Baixar boleto</h3>
+          <p class="text-xs text-gray-400">Tira o boleto de cobrança no Banco do Brasil: depois da baixa ele não pode mais ser pago. Não tem volta.</p>
+          <div>
+            <label for="boletoDetalheMotivo" class="block text-sm font-medium text-gray-300 mb-2">Motivo <span style="color: var(--color-red)">*</span></label>
+            <select id="boletoDetalheMotivo" data-no-restore="true" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Escolha…</option>
+              <option value="quitado_por_fora">Quitado por fora (o cliente pagou de outro jeito)</option>
+              <option value="cancelado">Cancelado (a parcela não será cobrada)</option>
+              <option value="reemissao">Reemissão (baixa e gera um boleto novo para a parcela)</option>
+            </select>
+          </div>
+
+          <div id="boletoDetalheQuitado" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label for="boletoDetalheDataRecebimento" class="block text-sm font-medium text-gray-300 mb-2">Recebido em <span style="color: var(--color-red)">*</span></label>
+              <input id="boletoDetalheDataRecebimento" type="date" data-no-restore="true" style="color-scheme: dark" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="boletoDetalheValorRecebido" class="block text-sm font-medium text-gray-300 mb-2">Valor recebido (R$) <span style="color: var(--color-red)">*</span></label>
+              <input id="boletoDetalheValorRecebido" type="text" inputmode="decimal" data-numeric="true" data-numeric-decimals="2" data-no-restore="true" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="boletoDetalheForma" class="block text-sm font-medium text-gray-300 mb-2">Como <span style="color: var(--color-red)">*</span></label>
+              <select id="boletoDetalheForma" data-no-restore="true" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+          </div>
+
+          <div id="boletoDetalheReemissao" class="hidden">
+            <label for="boletoDetalheNovoVencimento" class="block text-sm font-medium text-gray-300 mb-2">Vencimento do boleto novo <span style="color: var(--color-red)">*</span></label>
+            <input id="boletoDetalheNovoVencimento" type="date" data-no-restore="true" style="color-scheme: dark" class="w-full sm:w-1/2 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <p class="mt-2 text-xs text-gray-400">O boleto novo sai com o valor da parcela, um nosso número novo e os encargos da configuração.</p>
+          </div>
+
+          <div>
+            <label for="boletoDetalheObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observação <span id="boletoDetalheObservacaoObrigatoria" class="hidden" style="color: var(--color-red)">*</span></label>
+            <textarea id="boletoDetalheObservacao" rows="2" maxlength="500" data-no-restore="true" placeholder="O que aconteceu (obrigatório no cancelamento)." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          </div>
+          <div class="flex justify-end">
+            <button id="boletoDetalheBaixarBtn" type="button" data-perm="financeiro.boleto.baixa" class="btn-danger text-white px-6 py-3 rounded-lg font-medium min-w-[160px]">Baixar boleto</button>
+          </div>
+        </section>
+
+        <div id="boletoDetalheMensagem" class="hidden text-sm" role="alert"></div>
+        <ul id="boletoDetalheAvisos" class="hidden space-y-1 text-sm" style="color: var(--color-primary-light)"></ul>
+
+        <!-- Histórico: app, consultas e webhook do BB. -->
+        <section id="boletoDetalheHistorico" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Histórico (mais novo primeiro)</p>
+          <ul id="boletoDetalheEventos" class="divide-y divide-white/10 text-sm"></ul>
+        </section>
+      </div>
+    </div>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="fecharBoletoDetalhe" type="button" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button id="boletoDetalhePdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">PDF</button>
+      <button id="boletoDetalheSincronizar" type="button" data-perm="financeiro.boleto.view" class="hidden btn-primary text-white px-6 py-2 rounded-lg font-medium min-w-[160px]">Consultar no BB</button>
+    </footer>
+  </div>
+</div>

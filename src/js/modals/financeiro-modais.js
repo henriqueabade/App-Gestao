@@ -13,20 +13,19 @@
  * (painel + emissão pelo modal dos Pedidos, aberto por cima) e Notas fiscais
  * (lista com DANFE, XML, e-mail, carta de correção, cancelamento e consulta).
  * O relatório "Pedidos aguardando NF" também lê o painel. Comissões e
- * produção seguem na etapa visual: as ações principais abrem o aviso "em
- * implementação", já com a trava de clique duplo do BotaoAcao, e as contas
- * (parcelas, impacto do ajuste, saldo da produção, aging e totais) são reais
- * e ficam em funções puras, expostas em `window.FinanceiroModais` para os
- * testes e para o backend reaproveitar.
+ * produção (fase G) são reais e falam com /api/financeiro: Registrar ajuste,
+ * Registrar produção, Fechar competência, Confirmar pagamento, Relatórios
+ * (visualizar, PDF e planilha), Detalhes da parcela e do pedido, Comissões
+ * atrasadas, Produção da competência e Regras de comissão e produção. As
+ * contas de tela (impacto do ajuste, saldo da produção, aging, totais, CSV)
+ * ficam em funções puras, expostas em `window.FinanceiroModais` para os testes.
  *
  * Datas são texto 'YYYY-MM-DD' somadas por Date.UTC: passar pelo relógio local
- * volta um dia em São Paulo. Taxas de CMS e Royalty são as de exemplo da etapa.
+ * volta um dia em São Paulo. Percentuais de CMS e Royalty vêm das regras (backend).
  */
 (() => {
   const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  const TAXA_CMS = 0.10;
-  const TAXA_ROYALTY = 0.10;
   const FAIXAS_ATRASO = ['1–15', '16–30', '31–60', '61–90', '+90'];
 
   const formatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -158,16 +157,31 @@
     return dias.every(d => Number.isFinite(d) && d >= 0) ? dias : null;
   }
 
-  /** Impacto de um ajuste numa parcela (valores em R$; ajustes anteriores negativos). */
-  function impactoDoAjuste(original, anteriores, novo) {
-    const liquido = centavos(Number(original || 0) + Number(anteriores || 0) - Number(novo || 0));
+  /**
+   * Impacto de um ajuste numa parcela (a linha de GET /api/financeiro/parcelas):
+   * valor líquido e comissão antes e depois, com os percentuais da parcela
+   * (os do fechamento, se ela já foi fechada). Espelho de
+   * backend/financeiro/ajustes.js: cada beneficiário arredondado, depois somado.
+   */
+  function impactoDoAjuste(parcela, valor) {
+    const p = parcela || {};
+    const novo = Number(valor || 0);
+    const liquidoAntes = centavos(p.liquido);
+    const liquido = centavos(Math.max(0, liquidoAntes - novo));
+    const taxas = p.taxas || {};
+    const parte = regras => centavos((regras || []).reduce((s, r) => s + centavos(liquido * (Number(r.percentual) || 0) / 100), 0));
     return {
-      original: Number(original || 0),
-      anteriores: Number(anteriores || 0),
-      novo: -Number(novo || 0),
+      original: centavos(p.valor_original),
+      anteriores: centavos(-(Number(p.ajustes_total || 0) + Number(p.abatimento_boleto || 0))),
+      novo: centavos(-novo),
+      liquido_antes: liquidoAntes,
       liquido,
-      cms: centavos(liquido * TAXA_CMS),
-      royalty: centavos(liquido * TAXA_ROYALTY)
+      cms: parte(taxas.cms),
+      royalty: parte(taxas.royalty),
+      pct_cms: Number(taxas.pct_cms) || 0,
+      pct_royalty: Number(taxas.pct_royalty) || 0,
+      excede: novo > liquidoAntes,
+      gera_estorno: Boolean(p.comissao_fechada) && p.estado_parcela === 'recebida'
     };
   }
 
@@ -190,46 +204,105 @@
     return '+90';
   }
 
-  /** Enriquece as parcelas atrasadas com dias, faixa e comissão (CMS + Royalty). */
-  function calcularAtrasadas(linhas, hoje) {
-    return (linhas || []).map(l => {
-      const dias = Math.max(0, diferencaDias(hoje, l.vencimento) ?? 0);
-      const cms = centavos(l.liquido * TAXA_CMS);
-      const royalty = centavos(l.liquido * TAXA_ROYALTY);
-      return { ...l, dias, faixa: faixaDeAtraso(dias), cms, royalty, comissao: centavos(cms + royalty) };
-    });
-  }
-
+  /** Totais das parcelas atrasadas (linhas com `liquido` e `comissao`). */
   function resumoAtrasadas(linhas) {
-    return linhas.reduce((r, l) => ({
+    return (linhas || []).reduce((r, l) => ({
       quantidade: r.quantidade + 1,
-      liquido: centavos(r.liquido + l.liquido),
-      comissao: centavos(r.comissao + l.comissao)
+      liquido: centavos(r.liquido + Number(l.liquido || 0)),
+      comissao: centavos(r.comissao + Number(l.comissao || 0))
     }), { quantidade: 0, liquido: 0, comissao: 0 });
   }
 
   /** Aging sempre com as 5 faixas, mesmo vazias. */
   function agingDe(linhas) {
     return FAIXAS_ATRASO.map(faixa => {
-      const da = linhas.filter(l => l.faixa === faixa);
+      const da = (linhas || []).filter(l => (l.faixa || faixaDeAtraso(l.dias)) === faixa);
       return {
         faixa,
         parcelas: da.length,
-        liquido: centavos(da.reduce((s, l) => s + l.liquido, 0)),
-        comissao: centavos(da.reduce((s, l) => s + l.comissao, 0))
+        liquido: centavos(da.reduce((s, l) => s + Number(l.liquido || 0), 0)),
+        comissao: centavos(da.reduce((s, l) => s + Number(l.comissao || 0), 0))
       };
     });
   }
 
-  function resumoProducao(linhas) {
-    const soma = (setor) => centavos(linhas.filter(l => l.setor === setor).reduce((s, l) => s + l.total, 0));
-    return {
-      pecas: linhas.reduce((s, l) => s + l.quantidade, 0),
-      pedidos: new Set(linhas.map(l => l.pedido)).size,
-      pintura: soma('Pintura'),
-      marcenaria: soma('Marcenaria'),
-      total: centavos(linhas.reduce((s, l) => s + l.total, 0))
-    };
+  /** Os cartões do topo da Produção da competência: peças, pedidos, um por setor, total (e o que fica a compensar). */
+  function indicadoresDaProducao(d) {
+    const lista = [
+      { rotulo: 'Peças finalizadas', valor: String(Number(d?.pecas) || 0) },
+      { rotulo: 'Pedidos envolvidos', valor: String(Number(d?.pedidos) || 0) },
+      ...((d?.setores) || []).map(s => ({ rotulo: s.setor, valor: formatarMoeda(s.total) })),
+      { rotulo: d?.fechado ? 'Total a pagar (fechado)' : 'Total a pagar', valor: formatarMoeda(d?.a_pagar ?? 0), destaque: true }
+    ];
+    if (Number(d?.a_compensar) < 0) lista.push({ rotulo: 'A compensar', valor: formatarMoeda(d.a_compensar), atencao: true });
+    return lista;
+  }
+
+  /** '10' -> '10%', '7.5' -> '7,5%'. */
+  function percentualTexto(valor) {
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return '—';
+    return `${String(Math.round(n * 10000) / 10000).replace('.', ',')}%`;
+  }
+
+  const SITUACOES_PARCELA = {
+    prevista: 'Aberta', atrasada: 'Atrasada', apurada: 'Liquidada', fechada: 'Fechada', paga: 'Paga',
+    nao_realizada: 'Cancelada', a_lancar: 'A lançar'
+  };
+  const TIPOS_AJUSTE = { devolucao: 'Devolução', desconto: 'Desconto comercial', abatimento: 'Abatimento', cancelamento: 'Cancelamento parcial', outros: 'Outros' };
+  const TIPOS_REGRA = { cms: 'CMS', royalty: 'Royalty' };
+
+  /** Parcelas para o ajuste: pedido, cliente ou NF contendo o texto. */
+  function filtrarParcelasAjuste(linhas, busca = '') {
+    const termo = String(busca || '').trim().toLowerCase();
+    return (linhas || []).filter(l => !termo
+      || String(l.pedido ?? '').toLowerCase().includes(termo)
+      || String(l.cliente ?? '').toLowerCase().includes(termo)
+      || String(l.nf ?? '').toLowerCase().includes(termo));
+  }
+
+  function rotuloDaParcelaAjuste(l) {
+    return [
+      `Pedido ${l.pedido}`,
+      `parcela ${l.parcela || l.numero_parcela}`,
+      l.cliente || null,
+      `venc. ${formatarData(l.vencimento)}`,
+      `líquido ${formatarMoeda(l.liquido)}`,
+      SITUACOES_PARCELA[l.situacao] || null
+    ].filter(Boolean).join(' • ');
+  }
+
+  /** "Vale para" de uma regra de comissão. */
+  function alcanceDaRegra(r) {
+    if (r?.escopo === 'cliente') return `Cliente: ${r.alvo || r.cliente_id}`;
+    if (r?.escopo === 'pedido') return r.alvo || `Pedido ${r.pedido_id}`;
+    return 'Todos os pedidos';
+  }
+
+  /** O valor de uma célula como texto de planilha (número com vírgula, sem R$). */
+  function valorParaPlanilha(valor, tipo) {
+    if (valor === null || valor === undefined || valor === '') return '';
+    if (tipo === 'moeda') return Number(valor).toFixed(2).replace('.', ',');
+    if (tipo === 'inteiro') return String(Number(valor) || 0);
+    if (tipo === 'data') return formatarData(valor);
+    return String(valor);
+  }
+
+  /**
+   * O relatório como planilha CSV para o Excel: ponto e vírgula, BOM UTF-8,
+   * aspas quando precisa, e a linha de totais no fim.
+   */
+  function relatorioEmCsv(relatorio) {
+    const campo = t => (/[;"\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t);
+    const linhas = [relatorio.colunas.map(c => campo(c.rotulo)).join(';')];
+    for (const l of relatorio.linhas) {
+      linhas.push(relatorio.colunas.map(c => campo(valorParaPlanilha(l[c.chave], c.tipo === 'pedido' || c.tipo === 'pedido-real' ? 'texto' : c.tipo))).join(';'));
+    }
+    linhas.push(relatorio.colunas.map((c, i) => {
+      if (i === 0) return campo(`Total (${relatorio.linhas.length})`);
+      return c.total ? campo(valorParaPlanilha(relatorio.totais[c.chave], c.tipo)) : '';
+    }).join(';'));
+    return `\uFEFF${linhas.join('\r\n')}\r\n`;
   }
 
   // ------------------------------------------------ NF-e (funções puras)
@@ -297,6 +370,28 @@
       && (!termo || [l.numero, l.cliente].some(v => String(v ?? '').toLowerCase().includes(termo))));
   }
 
+  /**
+   * Prévia dos encargos de um boleto de `valor` pela configuração da tela —
+   * a mesma conta do backend (juros por dia = taxa mensal ÷ 30 sobre o
+   * bruto; multa sobre o bruto). Pura: os campos chegam como texto.
+   */
+  function previaDeEncargos(valor, cfg = {}) {
+    const bruto = centavos(valor);
+    const numero = v => Number(String(v ?? '').replace(',', '.'));
+    const partes = [];
+    const taxa = numero(cfg.juros_percentual_mes) || 0;
+    if (cfg.juros_tipo === 'valor_dia' && taxa > 0) partes.push(`juros de ${formatarMoeda(centavos(bruto * taxa / 100 / 30))} por dia de atraso (${String(taxa).replace('.', ',')}% ao mês)`);
+    else if (cfg.juros_tipo === 'percentual_mes' && taxa > 0) partes.push(`juros de ${String(taxa).replace('.', ',')}% ao mês`);
+    else partes.push('sem juros');
+    const multa = numero(cfg.multa_percentual) || 0;
+    partes.push(multa > 0 ? `multa de ${formatarMoeda(centavos(bruto * multa / 100))} (${String(multa).replace('.', ',')}%)` : 'sem multa');
+    const protesto = cfg.protesto_dias === '' || cfg.protesto_dias === null || cfg.protesto_dias === undefined ? NaN : Number(cfg.protesto_dias);
+    partes.push(Number.isFinite(protesto) ? `protesto ${protesto} dias após o vencimento` : 'sem protesto');
+    const limite = Number(cfg.dias_limite_recebimento) || 0;
+    partes.push(limite > 0 ? `pagável até ${limite} dias depois de vencido` : 'não aceita pagamento depois de vencido');
+    return `Num boleto de ${formatarMoeda(bruto)}: ${partes.join(' · ')}.`;
+  }
+
   /** O relatório "Pedidos aguardando NF" a partir do painel (só os que contam). */
   function linhasDoRelatorioAguardando(painel) {
     return linhasAguardando(painel).map(l => ({
@@ -305,151 +400,115 @@
     }));
   }
 
-  // ------------------------------------------------- dados de exemplo
+  // ------------------------------------------ contas a receber (reais)
 
-  const EXEMPLO = {
-    recebimento: {
-      pedido: '2521', nf: '18790', cliente: 'Marcenaria Serrana',
-      parcelas: [
-        { numero: '1/3', vencimento: '2026-09-24', valor: 17560, liquidada: true },
-        { numero: '2/3', vencimento: '2026-10-24', valor: 17560, liquidada: false },
-        { numero: '3/3', vencimento: '2026-11-23', valor: 17560, liquidada: false }
-      ]
-    },
-    ajuste: {
-      pedido: '2501', nf: '18345',
-      parcelas: [
-        { numero: '1/3', vencimento: '2026-09-24', original: 20000, anteriores: -1000, comissaoPaga: true },
-        { numero: '2/3', vencimento: '2026-10-24', original: 20000, anteriores: 0, comissaoPaga: false },
-        { numero: '3/3', vencimento: '2026-11-23', original: 20000, anteriores: 0, comissaoPaga: false }
-      ]
-    },
-    producao: {
-      pedido: '2537', cliente: 'Cliente Exemplo',
-      itens: [
-        { codigo: 'MES-120', nome: 'Mesa de jantar 1,20 m', pedida: 10, finalizada: 6 },
-        { codigo: 'CAD-04', nome: 'Cadeira estofada', pedida: 40, finalizada: 40 },
-        { codigo: 'APA-02', nome: 'Aparador 2 portas', pedida: 4, finalizada: 0 }
-      ]
-    },
-    fechamento: {
-      comissoes: { parcelas: 28, base: 92250, comissao: 18450, ajustes: -840, total: 17610 },
-      producao: { pecas: 327, pintura: 4230, marcenaria: 5640, total: 9870 }
-    },
-    // 11 parcelas vencidas: líquido 36.600 -> comissão potencial 7.320 (20%).
-    // As três com mais de 30 dias somam 21.400 -> 4.280, a pendência da tela.
-    atrasadas: [
-      { pedido: '2498', cliente: 'Marcenaria Serrana', nf: '18210', parcela: '2/3', vencimento: '2026-09-05', liquido: 2400 },
-      { pedido: '2503', cliente: 'Casa Vicenzo', nf: '18240', parcela: '1/2', vencimento: '2026-09-08', liquido: 1600 },
-      { pedido: '2490', cliente: 'Decorações Silvia', nf: '18190', parcela: '3/3', vencimento: '2026-08-28', liquido: 1900 },
-      { pedido: '2487', cliente: 'Hotel Serra Verde', nf: '18170', parcela: '2/2', vencimento: '2026-08-22', liquido: 2100 },
-      { pedido: '2511', cliente: 'Restaurante Oliva & Sal', nf: '18260', parcela: '1/3', vencimento: '2026-09-12', liquido: 1800 },
-      { pedido: '2493', cliente: 'Pousada Mar Azul', nf: '18200', parcela: '2/2', vencimento: '2026-09-01', liquido: 1700 },
-      { pedido: '2481', cliente: 'Café Grão Nobre', nf: '18150', parcela: '1/1', vencimento: '2026-08-18', liquido: 2000 },
-      { pedido: '2506', cliente: 'Clínica Sorriso Pleno', nf: '18250', parcela: '1/2', vencimento: '2026-09-10', liquido: 1700 },
-      { pedido: '2476', cliente: 'Cliente Exemplo LTDA', nf: '18120', parcela: '3/3', vencimento: '2026-08-05', liquido: 9000 },
-      { pedido: '2469', cliente: 'Studio Ateliê Lúmen', nf: '18090', parcela: '2/2', vencimento: '2026-07-20', liquido: 7400 },
-      { pedido: '2455', cliente: 'Móveis Aurora', nf: '18040', parcela: '1/1', vencimento: '2026-06-30', liquido: 5000 }
-    ],
-    // Produção da competência: 327 peças, pintura 4.230 + marcenaria 5.640 = 9.870.
-    producaoCompetencia: [
-      { pedido: '2548', cliente: 'Cliente Exemplo LTDA', codigo: 'CAD-04', produto: 'Cadeira estofada', setor: 'Marcenaria', quantidade: 100, unitario: 18, total: 1800, status: 'Finalizado', data: '2026-09-04' },
-      { pedido: '2548', cliente: 'Cliente Exemplo LTDA', codigo: 'CAD-04', produto: 'Cadeira estofada', setor: 'Pintura', quantidade: 100, unitario: 12, total: 1200, status: 'Finalizado', data: '2026-09-09' },
-      { pedido: '2521', cliente: 'Marcenaria Serrana', codigo: 'EST-02', produto: 'Estante 4 prateleiras', setor: 'Marcenaria', quantidade: 24, unitario: 60, total: 1440, status: 'Finalizado', data: '2026-09-05' },
-      { pedido: '2521', cliente: 'Marcenaria Serrana', codigo: 'EST-02', produto: 'Estante 4 prateleiras', setor: 'Pintura', quantidade: 24, unitario: 35, total: 840, status: 'Finalizado', data: '2026-09-11' },
-      { pedido: '2537', cliente: 'Casa Vicenzo', codigo: 'MES-120', produto: 'Mesa de jantar 1,20 m', setor: 'Marcenaria', quantidade: 6, unitario: 180, total: 1080, status: 'Parcial', data: '2026-09-08' },
-      { pedido: '2537', cliente: 'Casa Vicenzo', codigo: 'MES-120', produto: 'Mesa de jantar 1,20 m', setor: 'Pintura', quantidade: 10, unitario: 57, total: 570, status: 'Parcial', data: '2026-09-12' },
-      { pedido: '2540', cliente: 'Hotel Serra Verde', codigo: 'APA-02', produto: 'Aparador 2 portas', setor: 'Marcenaria', quantidade: 8, unitario: 165, total: 1320, status: 'Parcial', data: '2026-09-10' },
-      { pedido: '2540', cliente: 'Hotel Serra Verde', codigo: 'APA-02', produto: 'Aparador 2 portas', setor: 'Pintura', quantidade: 8, unitario: 85, total: 680, status: 'Parcial', data: '2026-09-13' },
-      { pedido: '2529', cliente: 'Pousada Mar Azul', codigo: 'BAN-01', produto: 'Banqueta alta', setor: 'Pintura', quantidade: 47, unitario: 20, total: 940, status: 'Finalizado', data: '2026-09-06' }
-    ],
-    // Previsão: líquido 162.500 -> comissão prevista 32.500.
-    previsao: [
-      { pedido: '2548', cliente: 'Cliente Exemplo LTDA', parcela: '1/3', vencimento: '2026-10-14', liquido: 21500 },
-      { pedido: '2521', cliente: 'Marcenaria Serrana', parcela: '2/3', vencimento: '2026-10-24', liquido: 17560 },
-      { pedido: '2521', cliente: 'Marcenaria Serrana', parcela: '3/3', vencimento: '2026-11-23', liquido: 17560 },
-      { pedido: '2537', cliente: 'Casa Vicenzo', parcela: '1/1', vencimento: '2026-10-02', liquido: 17560 },
-      { pedido: '2540', cliente: 'Hotel Serra Verde', parcela: '1/2', vencimento: '2026-10-10', liquido: 24000 },
-      { pedido: '2540', cliente: 'Hotel Serra Verde', parcela: '2/2', vencimento: '2026-11-09', liquido: 24000 },
-      { pedido: '2529', cliente: 'Pousada Mar Azul', parcela: '1/2', vencimento: '2026-10-05', liquido: 20160 },
-      { pedido: '2529', cliente: 'Pousada Mar Azul', parcela: '2/2', vencimento: '2026-11-04', liquido: 20160 }
-    ],
-    // Apuradas no mês: base 92.250 -> comissão 18.450.
-    apuradas: [
-      { pedido: '2510', cliente: 'Café Grão Nobre', nf: '18255', parcela: '1/1', liquidacao: '2026-09-03', liquido: 21000 },
-      { pedido: '2498', cliente: 'Marcenaria Serrana', nf: '18210', parcela: '1/3', liquidacao: '2026-09-05', liquido: 17750 },
-      { pedido: '2488', cliente: 'Escritório Lima & Rocha', nf: '18175', parcela: '2/2', liquidacao: '2026-09-08', liquido: 14000 },
-      { pedido: '2505', cliente: 'Clínica Sorriso Pleno', nf: '18245', parcela: '1/2', liquidacao: '2026-09-10', liquido: 15500 },
-      { pedido: '2495', cliente: 'Loja Vila Madeira', nf: '18205', parcela: '1/1', liquidacao: '2026-09-12', liquido: 13000 },
-      { pedido: '2515', cliente: 'Restaurante Oliva & Sal', nf: '18265', parcela: '1/2', liquidacao: '2026-09-14', liquido: 11000 }
-    ],
-    // Aguardando NF: 8 pedidos, 124.680.
-    aguardandoNf: [
-      { pedido: '2548', cliente: 'Cliente Exemplo LTDA', entrega: '2026-09-02', valor: 21500, condicao: '30 / 60 / 90' },
-      { pedido: '2544', cliente: 'Arquiteta Júlia Mendes', entrega: '2026-09-04', valor: 9800, condicao: 'À vista' },
-      { pedido: '2542', cliente: 'Studio Ateliê Lúmen', entrega: '2026-09-05', valor: 15320, condicao: '30 / 60' },
-      { pedido: '2539', cliente: 'Hotel Serra Verde', entrega: '2026-09-08', valor: 24000, condicao: '30 / 60 / 90' },
-      { pedido: '2536', cliente: 'Pousada Mar Azul', entrega: '2026-09-09', valor: 12400, condicao: '30 dias' },
-      { pedido: '2533', cliente: 'Construtora Horizonte', entrega: '2026-09-10', valor: 18900, condicao: '30 / 60 / 90' },
-      { pedido: '2531', cliente: 'Clínica Sorriso Pleno', entrega: '2026-09-11', valor: 11760, condicao: 'À vista' },
-      { pedido: '2528', cliente: 'Loja Vila Madeira', entrega: '2026-09-12', valor: 11000, condicao: '30 / 60' }
-    ],
-    ajustesAnteriores: [
-      { data: '2026-09-10', pedido: '2501', cliente: 'Decorações Silvia', tipo: 'Devolução', motivo: 'Peça devolvida com avaria', valor: -840, origem: 'Agosto/2026' },
-      { data: '2026-08-22', pedido: '2476', cliente: 'Cliente Exemplo LTDA', tipo: 'Desconto comercial', motivo: 'Negociação de atraso na entrega', valor: -350, origem: 'Julho/2026' },
-      { data: '2026-08-15', pedido: '2469', cliente: 'Studio Ateliê Lúmen', tipo: 'Abatimento', motivo: 'Diferença de acabamento', valor: -220, origem: 'Julho/2026' }
-    ],
-    naoRealizadas: [
-      { pedido: '2462', cliente: 'Construtora Horizonte', nf: '18060', parcela: '2/2', motivo: 'Cancelamento parcial', liquido: 6500 },
-      { pedido: '2449', cliente: 'Loja Vila Madeira', nf: '18010', parcela: '1/1', motivo: 'Pedido cancelado', liquido: 4200 }
-    ],
-    detalhesPedido: {
-      '2548': { cliente: 'Cliente Exemplo LTDA', data: '2026-09-02', valor: 21500, condicao: '30 / 60 / 90', status: 'Entregue',
-        observacoes: 'Entrega feita em duas etapas; cliente pediu NF única.',
-        itens: [
-          { codigo: 'CAD-04', descricao: 'Cadeira estofada', quantidade: 100, produzida: 100 },
-          { codigo: 'MES-160', descricao: 'Mesa de jantar 1,60 m', quantidade: 2, produzida: 2 }
-        ],
-        notas: [{ nf: '18842', data: '2026-09-15', valor: 21500, parcelas: 3, status: 'Aberta' }] },
-      '2521': { cliente: 'Marcenaria Serrana', data: '2026-08-20', valor: 52680, condicao: '30 / 60 / 90', status: 'Entregue',
-        observacoes: '—',
-        itens: [
-          { codigo: 'EST-02', descricao: 'Estante 4 prateleiras', quantidade: 24, produzida: 24 },
-          { codigo: 'RAC-01', descricao: 'Rack para TV', quantidade: 12, produzida: 12 }
-        ],
-        notas: [{ nf: '18790', data: '2026-08-25', valor: 52680, parcelas: 3, status: 'Parcial' }] },
-      '2537': { cliente: 'Casa Vicenzo', data: '2026-09-01', valor: 17560, condicao: 'À vista', status: 'Produção',
-        observacoes: 'Pintura em tom especial (ver amostra aprovada).',
-        itens: [
-          { codigo: 'MES-120', descricao: 'Mesa de jantar 1,20 m', quantidade: 10, produzida: 6 },
-          { codigo: 'CAD-04', descricao: 'Cadeira estofada', quantidade: 40, produzida: 40 },
-          { codigo: 'APA-02', descricao: 'Aparador 2 portas', quantidade: 4, produzida: 0 }
-        ],
-        notas: [] },
-      '2501': { cliente: 'Decorações Silvia', data: '2026-08-10', valor: 60000, condicao: '30 / 60 / 90', status: 'Entregue',
-        observacoes: 'Devolução de uma peça registrada em 10/09.',
-        itens: [{ codigo: 'SOF-03', descricao: 'Sofá 3 lugares', quantidade: 6, produzida: 6 }],
-        notas: [{ nf: '18345', data: '2026-08-25', valor: 60000, parcelas: 3, status: 'Parcial' }] }
-    },
-    parcelaPadrao: {
-      pedido: '2501', cliente: 'Decorações Silvia', nf: '18345', parcela: '1/3', status: 'Liquidada',
-      original: 20000, devolucoes: 2000, descontos: 1000, vencimento: '2026-09-24', liquidacao: '2026-09-20'
+  const ORIGENS_RECEBIMENTO = { boleto: 'Boleto pago', quitado_por_fora: 'Quitado por fora', manual: 'À mão' };
+  const BOLETO_A_PAGAR = ['registrado', 'vencido', 'protestado'];
+  const MOTIVOS_BAIXA_BOLETO = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'pelo banco', quitacao_estornada: 'quitação estornada' };
+  const semAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  /** A tag do boleto de uma parcela a receber. */
+  function rotuloBoletoDaParcela(boleto) {
+    if (!boleto) return { texto: 'Sem boleto', badge: 'badge-neutral' };
+    const s = String(boleto.status || '');
+    if (s === 'registrado') return { texto: 'Boleto registrado', badge: 'badge-success' };
+    if (s === 'vencido') return { texto: 'Boleto vencido', badge: 'badge-warning' };
+    if (s === 'protestado') return { texto: 'Boleto em protesto', badge: 'badge-danger' };
+    if (s === 'erro') return { texto: 'Boleto recusado', badge: 'badge-danger' };
+    if (s === 'pago') return { texto: 'Boleto pago', badge: 'badge-success' };
+    if (s === 'baixado') return { texto: `Boleto baixado${MOTIVOS_BAIXA_BOLETO[boleto.motivo_baixa] ? ` (${MOTIVOS_BAIXA_BOLETO[boleto.motivo_baixa]})` : ''}`, badge: 'badge-neutral' };
+    return { texto: `Boleto ${s}`, badge: 'badge-neutral' };
+  }
+
+  const boletoEmAberto = boleto => Boolean(boleto && BOLETO_A_PAGAR.includes(String(boleto.status)));
+
+  /** Filtra as linhas de uma visão: busca por pedido, cliente ou NF; nas de parcela, pelo boleto. */
+  function filtrarRecebimentos(linhas, { visao = 'recebidos', boleto = '', busca = '' } = {}) {
+    const termo = semAcento(busca).trim();
+    return (Array.isArray(linhas) ? linhas : []).filter(l => {
+      if (termo && ![l.pedido, l.cliente, l.nf].some(v => semAcento(v).includes(termo))) return false;
+      if (visao === 'recebidos' || !boleto) return true;
+      if (boleto === 'aberto') return boletoEmAberto(l.boleto);
+      if (boleto === 'sem') return !boletoEmAberto(l.boleto);
+      if (boleto === 'erro') return l.boleto?.status === 'erro';
+      return true;
+    });
+  }
+
+  /** O total da lista: o recebido (só confirmados) ou o que falta receber. */
+  function totalDaVisao(linhas, visao) {
+    const lista = Array.isArray(linhas) ? linhas : [];
+    if (visao === 'recebidos') return centavos(lista.filter(l => l.status === 'confirmado').reduce((s, l) => s + Number(l.valor || 0), 0));
+    return centavos(lista.reduce((s, l) => s + Number(l.a_receber || 0), 0));
+  }
+
+  /** O texto de cada parcela no seletor de "Registrar recebimento". */
+  function rotuloDaParcelaAberta(l) {
+    const partes = [`Pedido ${l.pedido}`, l.cliente || 'sem cliente', `parcela ${l.parcela || l.numero_parcela}`, `vence ${formatarData(l.vencimento)}`, formatarMoeda(l.a_receber)];
+    if (Number(l.dias_atraso) > 0) partes.push(`${l.dias_atraso} dias em atraso`);
+    if (boletoEmAberto(l.boleto)) partes.push('boleto em aberto');
+    if (l.controlada === false) partes.push('antes do controle');
+    return partes.join(' · ');
+  }
+
+  /** O quadro de "Registrar recebimento": devido, recebido, diferença (juros/multa ou desconto) e competência. */
+  function resumoDoRecebimento({ devido, recebido, data }) {
+    const d = devido === null || devido === undefined ? null : centavos(devido);
+    const r = recebido === null || recebido === undefined ? null : centavos(recebido);
+    const diferenca = d === null || r === null ? null : centavos(r - d);
+    return {
+      devido: d,
+      recebido: r,
+      diferenca,
+      rotuloDiferenca: diferenca === null || diferenca === 0 ? 'Diferença' : (diferenca > 0 ? 'Recebido a mais (juros, multa)' : 'Recebido a menos (desconto)'),
+      competencia: competenciaDe(data)
+    };
+  }
+
+  /** A tag de cada situação de aviso do BB (webhook). */
+  const BADGE_DO_AVISO = { 'conciliado': 'badge-success', 'na fila': 'badge-warning', 'na fila (erro)': 'badge-danger', 'alerta': 'badge-danger', 'ignorado': 'badge-neutral' };
+
+  /** O resultado de POST /api/cobranca/conciliar em uma frase, e os erros à parte. */
+  function textoDaConciliacao(r, soFila = false) {
+    if (r?.sql_pendente) return { texto: 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.', erros: [] };
+    const f = r?.fila || {};
+    const c = r?.consultas || {};
+    const a = r?.acerto || {};
+    const partes = [`${Number(f.lidos) || 0} aviso(s) do BB lido(s)`];
+    if (Number(f.pagos)) partes.push(`${f.pagos} pagamento(s)`);
+    if (Number(f.cancelados)) partes.push(`${f.cancelados} cancelamento(s)`);
+    if (Number(f.ignorados)) partes.push(`${f.ignorados} ignorado(s)`);
+    if (Number(f.alertas)) partes.push(`${f.alertas} alerta(s)`);
+    if (!soFila) {
+      partes.push(`${Number(c.consultados) || 0} boleto(s) consultado(s)`);
+      if (Number(c.pagos)) partes.push(`${c.pagos} pago(s) na consulta`);
+      if (Number(a.lancados)) partes.push(`${a.lancados} recebimento(s) lançado(s)`);
     }
-  };
+    return { texto: `${partes.join(' · ')}.`, erros: [...(f.mensagens || []), ...(c.mensagens || []), ...(a.mensagens || [])] };
+  }
 
-  /** Relatórios disponíveis para "Visualizar": colunas, linhas e totais. */
+  // --------------------------------------------------------- relatórios
+
+  /**
+   * Colunas de cada relatório. As linhas vêm do backend
+   * (GET /api/financeiro/relatorios/:chave; "aguardando-nf", do painel fiscal)
+   * e os totais são somados aqui. `pedido` abre os Detalhes do pedido;
+   * `pedido-real`, o Visualizar pedido dos Pedidos.
+   */
   const RELATORIOS = {
     'previsao-comissoes': {
       titulo: 'Previsão de comissões',
       colunas: [
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'cliente', rotulo: 'Cliente' },
+        { chave: 'nf', rotulo: 'NF' },
         { chave: 'parcela', rotulo: 'Parcela' },
         { chave: 'vencimento', rotulo: 'Vencimento', tipo: 'data' },
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
+        { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
+        { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
         { chave: 'comissao', rotulo: 'Comissão prevista', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.previsao.map(l => ({ ...l, comissao: centavos(l.liquido * (TAXA_CMS + TAXA_ROYALTY)) }))
+      ]
     },
     'comissoes-atrasadas': {
       titulo: 'Comissões atrasadas',
@@ -461,9 +520,10 @@
         { chave: 'vencimento', rotulo: 'Vencimento', tipo: 'data' },
         { chave: 'dias', rotulo: 'Dias em atraso', tipo: 'inteiro' },
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
+        { chave: 'cms', rotulo: 'CMS potencial', tipo: 'moeda', total: true },
+        { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
         { chave: 'comissao', rotulo: 'Comissão potencial', tipo: 'moeda', total: true }
-      ],
-      linhas: () => calcularAtrasadas(EXEMPLO.atrasadas, hojeLocal())
+      ]
     },
     'comissoes-apuradas': {
       titulo: 'Comissões apuradas',
@@ -477,12 +537,7 @@
         { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
         { chave: 'comissao', rotulo: 'Total comissão', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.apuradas.map(l => {
-        const cms = centavos(l.liquido * TAXA_CMS);
-        const royalty = centavos(l.liquido * TAXA_ROYALTY);
-        return { ...l, cms, royalty, comissao: centavos(cms + royalty) };
-      })
+      ]
     },
     'ajustes-anteriores': {
       titulo: 'Ajustes de períodos anteriores',
@@ -490,38 +545,39 @@
         { chave: 'data', rotulo: 'Data', tipo: 'data' },
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'cliente', rotulo: 'Cliente' },
-        { chave: 'tipo', rotulo: 'Tipo' },
+        { chave: 'parcela', rotulo: 'Parcela' },
         { chave: 'motivo', rotulo: 'Motivo' },
         { chave: 'origem', rotulo: 'Competência de origem' },
+        { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
+        { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
         { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.ajustesAnteriores
+      ]
     },
     'comissoes-nao-realizadas': {
       titulo: 'Comissões não realizadas',
       colunas: [
+        { chave: 'data', rotulo: 'Data', tipo: 'data' },
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'cliente', rotulo: 'Cliente' },
         { chave: 'nf', rotulo: 'NF' },
         { chave: 'parcela', rotulo: 'Parcela' },
         { chave: 'motivo', rotulo: 'Motivo' },
-        { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
+        { chave: 'liquido', rotulo: 'Valor que saiu da base', tipo: 'moeda', total: true },
         { chave: 'comissao', rotulo: 'Comissão não realizada', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.naoRealizadas.map(l => ({ ...l, comissao: centavos(l.liquido * (TAXA_CMS + TAXA_ROYALTY)) }))
+      ]
     },
     'producao-competencia': {
       titulo: 'Produção da competência',
       colunas: [
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
+        { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
         { chave: 'produto', rotulo: 'Produto' },
         { chave: 'setor', rotulo: 'Setor' },
         { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
         { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true },
         { chave: 'status', rotulo: 'Status' }
-      ],
-      linhas: () => EXEMPLO.producaoCompetencia
+      ]
     },
     'pagamento-pintura': {
       titulo: 'Pagamento pintura',
@@ -532,8 +588,7 @@
         { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
         { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.producaoCompetencia.filter(l => l.setor === 'Pintura')
+      ]
     },
     'pagamento-marcenaria': {
       titulo: 'Pagamento marcenaria',
@@ -544,8 +599,7 @@
         { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
         { chave: 'unitario', rotulo: 'Valor unitário', tipo: 'moeda' },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
-      ],
-      linhas: () => EXEMPLO.producaoCompetencia.filter(l => l.setor === 'Marcenaria')
+      ]
     },
     'producao-por-pedido': {
       titulo: 'Produção por pedido',
@@ -555,22 +609,11 @@
         { chave: 'pecas', rotulo: 'Peças', tipo: 'inteiro', total: true },
         { chave: 'pintura', rotulo: 'Pintura', tipo: 'moeda', total: true },
         { chave: 'marcenaria', rotulo: 'Marcenaria', tipo: 'moeda', total: true },
+        { chave: 'outros', rotulo: 'Outros setores', tipo: 'moeda', total: true },
         { chave: 'total', rotulo: 'Total', tipo: 'moeda', total: true }
-      ],
-      linhas: () => {
-        const porPedido = new Map();
-        for (const l of EXEMPLO.producaoCompetencia) {
-          const g = porPedido.get(l.pedido) || { pedido: l.pedido, cliente: l.cliente, pecas: 0, pintura: 0, marcenaria: 0, total: 0 };
-          g.pecas += l.quantidade;
-          g[l.setor === 'Pintura' ? 'pintura' : 'marcenaria'] = centavos(g[l.setor === 'Pintura' ? 'pintura' : 'marcenaria'] + l.total);
-          g.total = centavos(g.total + l.total);
-          porPedido.set(l.pedido, g);
-        }
-        return [...porPedido.values()];
-      }
+      ]
     },
-    // REAL: as linhas vêm do painel fiscal (montarVisualizarRelatorio passa
-    // `linhas`); o número do pedido abre o Visualizar pedido de verdade.
+    // Fiscal: as linhas vêm do painel fiscal; o número abre o Visualizar pedido de verdade.
     'aguardando-nf': {
       titulo: 'Pedidos aguardando NF-e',
       colunas: [
@@ -580,16 +623,18 @@
         { chave: 'condicao', rotulo: 'Condição' },
         { chave: 'dias', rotulo: 'Dias sem NF-e', tipo: 'inteiro' },
         { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
-      ],
-      linhas: () => []
+      ]
     }
   };
 
-  /** Monta o relatório pronto para a tela: linhas e a linha de totais. `extra.linhas` substitui as do exemplo. */
+  /** Relatórios de comissão: a linha leva à parcela. */
+  const RELATORIOS_DE_PARCELA = new Set(['previsao-comissoes', 'comissoes-atrasadas', 'comissoes-apuradas', 'ajustes-anteriores', 'comissoes-nao-realizadas']);
+
+  /** O relatório pronto para a tela: as linhas dadas e a linha de totais. */
   function montarRelatorio(chave, extra = {}) {
     const def = RELATORIOS[chave];
     if (!def) return null;
-    const linhas = Array.isArray(extra.linhas) ? extra.linhas : def.linhas();
+    const linhas = Array.isArray(extra.linhas) ? extra.linhas : [];
     const totais = {};
     for (const c of def.colunas) {
       if (c.total) totais[c.chave] = c.tipo === 'inteiro'
@@ -602,9 +647,12 @@
   window.FinanceiroModais = {
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro,
-    faixaDeAtraso, calcularAtrasadas, resumoAtrasadas, agingDe, resumoProducao, montarRelatorio,
-    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando,
-    RELATORIOS: Object.keys(RELATORIOS), EXEMPLO, TAXA_CMS, TAXA_ROYALTY, FAIXAS_ATRASO
+    faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
+    filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
+    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
+    rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
+    textoDaConciliacao, BADGE_DO_AVISO,
+    RELATORIOS: Object.keys(RELATORIOS), RELATORIOS_DE_PARCELA: [...RELATORIOS_DE_PARCELA], FAIXAS_ATRASO
   };
 
   // ------------------------------------------------------------ base
@@ -620,7 +668,8 @@
   // cancelar, e-mail, carta): enquanto ele está aberto, o Esc é dele.
   let filhoAberto = false;
   // Ao fechar, a tela relê o painel fiscal: o que se fez aqui muda os números.
-  const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal']);
+  const RECARREGAM_O_PAINEL = new Set(['finAguardandoNfe', 'finNotasFiscais', 'finConfiguracaoFiscal', 'finConfiguracaoCobranca', 'finRecebimentos', 'finRegistrarRecebimento',
+    'finRegistrarAjuste', 'finRegistrarProducao', 'finFecharCompetencia', 'finConfirmarPagamento', 'finConfirmarReembolso', 'finRegras', 'finDetalhesParcela']);
   const recarregarPainel = () => { if (RECARREGAM_O_PAINEL.has(overlayId)) window.FinanceiroRecarregar?.(); };
 
   const fechar = () => {
@@ -641,9 +690,12 @@
     fechar();
   };
   const aoFecharPorFora = e => { if (e?.detail === overlayId) { desligar(); recarregarPainel(); } };
+  // Ouvintes globais que um montador liga (a lista que se relê quando outro modal grava): saem junto.
+  const aoDesligar = [];
   function desligar() {
     document.removeEventListener('keydown', aoEsc);
     window.removeEventListener('modalFechado', aoFecharPorFora);
+    aoDesligar.splice(0).forEach(fn => fn());
   }
   document.addEventListener('keydown', aoEsc);
   window.addEventListener('modalFechado', aoFecharPorFora);
@@ -658,7 +710,19 @@
     return Promise.resolve(true);
   }
 
+  /**
+   * Botão que chama `BotaoAcao.run` no próprio clique precisa da marca
+   * `data-acao-gerida`: sem ela a rede automática do BotaoAcao (captura no
+   * document) o marca como ocupado antes deste handler, e o `run` desiste
+   * achando que é um segundo clique — o botão não faria nada.
+   */
+  function acionar(botao, fn) {
+    botao.dataset.acaoGerida = 'true';
+    botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+  }
+
   overlay.querySelectorAll('[data-fin-principal]').forEach(botao => {
+    botao.dataset.acaoGerida = 'true';
     botao.addEventListener('click', () => {
       const executar = async () => {
         if (botao.dataset.finSensivel === 'true') processando = true;
@@ -677,7 +741,7 @@
   const dadosDaLinha = new WeakMap();
   function abrirOutro(chave, extra = {}) {
     if (typeof window.FinanceiroAbrirModal === 'function') {
-      window.FinanceiroAbrirModal(chave, null, { ...extra, empilhar: true, competencia: contexto.competencia });
+      window.FinanceiroAbrirModal(chave, null, { ...extra, empilhar: true, competencia: extra.competencia || contexto.competencia });
     } else {
       avisarEmImplementacao(chave);
     }
@@ -813,7 +877,9 @@
   const BADGES = {
     Liquidada: 'badge-success', Paga: 'badge-success', Finalizada: 'badge-success', Finalizado: 'badge-success',
     Entregue: 'badge-success', Atrasada: 'badge-danger', Aberta: 'badge-info', Parcial: 'badge-warning',
-    Produção: 'badge-warning', Fechada: 'badge-neutral', Cancelado: 'badge-danger'
+    Produção: 'badge-warning', Fechada: 'badge-neutral', Cancelado: 'badge-danger',
+    Cancelada: 'badge-danger', 'A lançar': 'badge-warning', 'Não iniciado': 'badge-neutral', Autorizada: 'badge-success',
+    Enviado: 'badge-info', Aprovado: 'badge-info', Pendente: 'badge-warning', Saldo: 'badge-neutral'
   };
 
   function badge(status) {
@@ -831,10 +897,15 @@
     const td = criar('td', `px-4 py-3 ${['moeda', 'inteiro'].includes(coluna.tipo) ? 'text-right' : 'text-left'} ${coluna.classe || ''}`);
     const bruto = linha[coluna.chave];
     if (coluna.tipo === 'pedido') {
+      // Linha sem pedido (saldo de fechamento): só o texto.
+      if (linha.pedido_id === null || linha.pedido_id === undefined) {
+        td.textContent = bruto === null || bruto === undefined || bruto === '' ? '—' : String(bruto);
+        return td;
+      }
       const botao = criar('button', 'fin-link-celula', String(bruto ?? '—'));
       botao.type = 'button';
       botao.dataset.finAbrir = 'detalhes-pedido';
-      botao.dataset.finPedido = String(bruto ?? '');
+      botao.dataset.finPedido = String(linha.pedido_id);
       td.appendChild(botao);
       return td;
     }
@@ -863,8 +934,10 @@
     tbody.replaceChildren();
     for (const l of linhas) {
       const tr = document.createElement('tr');
-      if (abrir) {
-        tr.dataset.finAbrir = abrir;
+      // `abrir` pode ser o modal ou uma função da linha (null = a linha não abre nada).
+      const destino = typeof abrir === 'function' ? abrir(l) : abrir;
+      if (destino) {
+        tr.dataset.finAbrir = destino;
         tr.tabIndex = 0;
         dadosDaLinha.set(tr, l);
       }
@@ -902,149 +975,1235 @@
 
   // ------------------------------------------------------- montadores
 
-  function montarRecebimento() {
-    const dados = EXEMPLO.recebimento;
-    el('finRecebimentoContexto').textContent = `Pedido ${dados.pedido} • NF ${dados.nf}`;
-    el('finRecebimentoCliente').textContent = dados.cliente;
-    el('finRecebimentoPedido').textContent = dados.pedido;
-    el('finRecebimentoNf').textContent = dados.nf;
+  // ------------------------------------------------ recebimentos (reais)
+  //
+  // "Registrar recebimento": GET /api/cobranca/recebimentos?visao=abertas e
+  // POST /api/cobranca/recebimentos. "Recebimentos": as quatro visões, com
+  // estorno, o boleto (modal dos Pedidos) e o registro por cima.
 
+  function montarRecebimento() {
+    const buscaCampo = el('finRecebimentoBusca');
     const parcelaSel = el('finRecebimentoParcela');
     const valorCampo = el('finRecebimentoValor');
     const dataCampo = el('finRecebimentoData');
-    parcelaSel.replaceChildren();
-    dados.parcelas.forEach((p, i) => {
-      const opcao = document.createElement('option');
-      opcao.value = String(i);
-      opcao.textContent = `${p.numero} • vencimento ${formatarData(p.vencimento)} • ${formatarMoeda(p.valor)}${p.liquidada ? ' • liquidada' : ''}`;
-      opcao.disabled = p.liquidada;
-      parcelaSel.appendChild(opcao);
-    });
-    const primeiraAberta = dados.parcelas.findIndex(p => !p.liquidada);
-    parcelaSel.value = String(primeiraAberta >= 0 ? primeiraAberta : 0);
+    const formaSel = el('finRecebimentoForma');
+    const registrarBtn = el('finRecebimentoRegistrar');
+    const aviso = el('finRecebimentoAvisoBoleto');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    let abertas = [];
+    let sqlPendente = false;
+    // Fase G: base e percentuais de cada parcela, para mostrar a comissão que o recebimento gera.
+    let comissoesPor = new Map();
+    // Vinda de uma linha da lista de recebimentos: já escolhida.
+    const pedida = contexto.parcela && contexto.parcela.pedido_id ? contexto.parcela : null;
 
-    function atualizarResumo() {
-      const parcela = dados.parcelas[Number(parcelaSel.value)];
-      const recebido = lerMoeda(valorCampo.value);
-      const liquido = recebido ?? parcela?.valor ?? null;
-      el('finRecebimentoLiquido').textContent = formatarMoeda(liquido);
-      el('finRecebimentoCms').textContent = formatarMoeda(liquido === null ? null : liquido * TAXA_CMS);
-      el('finRecebimentoRoyalty').textContent = formatarMoeda(liquido === null ? null : liquido * TAXA_ROYALTY);
-      el('finRecebimentoCompetencia').textContent = competenciaDe(dataCampo.value);
+    const chaveDe = l => `${l.pedido_id}:${l.numero_parcela}`;
+    const escolhida = () => abertas.find(l => chaveDe(l) === parcelaSel.value) || null;
+
+    function montarOpcoes() {
+      const selecionada = parcelaSel.value;
+      const visiveis = filtrarRecebimentos(abertas, { visao: 'abertas', busca: buscaCampo.value });
+      parcelaSel.replaceChildren();
+      const vazio = document.createElement('option');
+      vazio.value = '';
+      vazio.textContent = visiveis.length ? 'Escolha a parcela' : 'Nenhuma parcela em aberto com esta busca';
+      parcelaSel.appendChild(vazio);
+      for (const l of visiveis.slice(0, 300)) {
+        const opcao = document.createElement('option');
+        opcao.value = chaveDe(l);
+        opcao.textContent = rotuloDaParcelaAberta(l);
+        parcelaSel.appendChild(opcao);
+      }
+      if (visiveis.some(l => chaveDe(l) === selecionada)) parcelaSel.value = selecionada;
     }
 
-    parcelaSel.addEventListener('change', () => {
-      const parcela = dados.parcelas[Number(parcelaSel.value)];
-      if (parcela) valorCampo.value = formatoMoeda.format(parcela.valor);
+    function pintarEscolhida({ trocouParcela = false } = {}) {
+      const l = escolhida();
+      el('finRecebimentoCliente').textContent = l?.cliente || '—';
+      el('finRecebimentoPedido').textContent = l ? `${l.pedido} · parcela ${l.parcela || l.numero_parcela}` : '—';
+      el('finRecebimentoNf').textContent = l?.nf || '—';
+      el('finRecebimentoContexto').textContent = l ? `Pedido ${l.pedido}${l.nf ? ` • NF ${l.nf}` : ''}` : '';
+      if (trocouParcela && l) valorCampo.value = formatoMoeda.format(Number(l.a_receber) || 0);
+      const aberto = l && ['registrado', 'vencido', 'protestado'].includes(String(l.boleto?.status || ''));
+      aviso.textContent = aberto
+        ? `Esta parcela tem boleto em aberto no Banco do Brasil (${l.boleto.nosso_numero}). Ao registrar, o boleto será BAIXADO no banco como quitado por fora e não poderá mais ser pago.`
+        : '';
+      aviso.classList.toggle('hidden', !aberto);
       atualizarResumo();
-    });
+    }
+
+    function atualizarResumo() {
+      const l = escolhida();
+      const r = resumoDoRecebimento({ devido: l ? l.a_receber : null, recebido: lerMoeda(valorCampo.value), data: dataCampo.value });
+      el('finRecebimentoDevido').textContent = formatarMoeda(r.devido);
+      el('finRecebimentoLiquido').textContent = formatarMoeda(r.recebido);
+      el('finRecebimentoDiferencaRotulo').textContent = r.rotuloDiferenca;
+      el('finRecebimentoDiferenca').textContent = r.diferenca === null ? '—' : formatarMoeda(Math.abs(r.diferenca));
+      el('finRecebimentoCompetencia').textContent = r.competencia;
+      const c = l ? comissoesPor.get(chaveDe(l)) : null;
+      const i = c ? impactoDoAjuste(c, 0) : null;
+      el('finRecebimentoBase').textContent = i ? formatarMoeda(i.liquido) : '—';
+      el('finRecebimentoCms').textContent = i ? `${formatarMoeda(i.cms)} (${percentualTexto(i.pct_cms)})` : '—';
+      el('finRecebimentoRoyalty').textContent = i ? `${formatarMoeda(i.royalty)} (${percentualTexto(i.pct_royalty)})` : '—';
+    }
+
+    async function carregar() {
+      mostrarMensagem('finRecebimentoMensagem', '');
+      el('finRecebimentoCarregando').classList.remove('hidden');
+      try {
+        const corpo = await fetchApi(`/api/cobranca/recebimentos?visao=abertas&competencia=${encodeURIComponent(contexto.competencia || competenciaAtual())}`);
+        abertas = Array.isArray(corpo?.linhas) ? corpo.linhas : [];
+        sqlPendente = Boolean(corpo?.sql_pendente);
+        if (sqlPendente) mostrarMensagem('finRecebimentoMensagem', 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql no banco e reinicie a API.');
+      } catch (e) {
+        abertas = [];
+        mostrarMensagem('finRecebimentoMensagem', e.status === 403 ? 'Você não tem permissão para ver as parcelas a receber.' : e.message);
+      } finally {
+        el('finRecebimentoCarregando').classList.add('hidden');
+      }
+      montarOpcoes();
+      if (pedida) {
+        parcelaSel.value = `${pedida.pedido_id}:${pedida.numero_parcela}`;
+        if (!escolhida()) mostrarMensagem('finRecebimentoMensagem', `A parcela ${pedida.numero_parcela} do pedido ${pedida.pedido || pedida.pedido_id} não está mais em aberto.`);
+      }
+      pintarEscolhida({ trocouParcela: true });
+      if (pode('financeiro.comissao.view')) {
+        // Em segundo plano: sem as regras (ou sem o SQL da fase G), a prévia só fica em branco.
+        fetchApi('/api/financeiro/parcelas?visao=ajustaveis')
+          .then(corpo => {
+            comissoesPor = new Map((corpo?.linhas || []).map(x => [chaveDe(x), x]));
+            atualizarResumo();
+          })
+          .catch(() => {});
+      }
+    }
+
+    async function registrar() {
+      mostrarMensagem('finRecebimentoMensagem', '');
+      const l = escolhida();
+      if (sqlPendente) { mostrarMensagem('finRecebimentoMensagem', 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql no banco e reinicie a API.'); return; }
+      if (!l) { mostrarMensagem('finRecebimentoMensagem', 'Escolha a parcela.'); return; }
+      const valor = lerMoeda(valorCampo.value);
+      if (!dataCampo.value) { mostrarMensagem('finRecebimentoMensagem', 'Informe a data do recebimento.'); return; }
+      if (dataCampo.value > hoje) { mostrarMensagem('finRecebimentoMensagem', 'A data do recebimento não pode ser futura.'); return; }
+      if (!(valor > 0)) { mostrarMensagem('finRecebimentoMensagem', 'Informe o valor recebido.'); return; }
+      if (!formaSel.value) { mostrarMensagem('finRecebimentoMensagem', 'Informe como o valor foi recebido.'); return; }
+      const aberto = ['registrado', 'vencido', 'protestado'].includes(String(l.boleto?.status || ''));
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: aberto ? 'Baixar o boleto e registrar?' : 'Registrar o recebimento?',
+        message: `${formatarMoeda(valor)} recebidos em ${formatarData(dataCampo.value)} (${formaSel.value}) na parcela ${l.parcela || l.numero_parcela} do pedido ${l.pedido}. Competência ${competenciaDe(dataCampo.value)}.`
+          + (aberto ? ` O boleto ${l.boleto.nosso_numero} será BAIXADO no Banco do Brasil e não poderá mais ser pago. Não tem volta.` : ''),
+        confirmText: aberto ? 'Baixar e registrar' : 'Registrar'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/cobranca/recebimentos', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, data_recebimento: dataCampo.value, valor_recebido: valor,
+            forma: formaSel.value, observacao: el('finRecebimentoObservacoes').value, ...(aberto ? { baixar_boleto: true } : {})
+          })
+        });
+        const avisos = Array.isArray(r?.avisos) ? r.avisos : [];
+        window.showToast?.(aberto ? 'Boleto baixado e recebimento registrado.' : 'Recebimento registrado.', avisos.length ? 'info' : 'success');
+        if (avisos.length && window.DialogPadrao?.info) await window.DialogPadrao.info({ title: 'Recebimento registrado com aviso', message: avisos.join('\n') });
+        window.dispatchEvent(new CustomEvent('financeiro:recebimentos-alterados'));
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finRecebimentoMensagem', e.status === 403 ? 'Você não tem permissão para esta ação.' : e.message);
+      } finally {
+        processando = false;
+      }
+    }
+
+    buscaCampo.addEventListener('input', () => { montarOpcoes(); pintarEscolhida({ trocouParcela: true }); });
+    parcelaSel.addEventListener('change', () => pintarEscolhida({ trocouParcela: true }));
     ligarCampoMoeda(valorCampo, atualizarResumo);
     dataCampo.addEventListener('change', atualizarResumo);
+    if (registrarBtn) {
+      registrarBtn.dataset.acaoGerida = 'true';
+      registrarBtn.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(registrarBtn, registrar) : registrar()));
+    }
+    return carregar();
+  }
 
-    const inicial = dados.parcelas[Number(parcelaSel.value)];
-    if (inicial) valorCampo.value = formatoMoeda.format(inicial.valor);
-    atualizarResumo();
+  function montarRecebimentos() {
+    const visaoSel = el('finRecebimentosVisao');
+    const competenciaSel = el('finRecebimentosCompetencia');
+    const boletoSel = el('finRecebimentosBoleto');
+    const busca = el('finRecebimentosBusca');
+    const cabeca = el('finRecebimentosCabeca');
+    const corpo = el('finRecebimentosCorpo');
+    const tabela = corpo.closest('.fin-tabela');
+    montarCompetencias(competenciaSel, contexto.competencia);
+    if (['recebidos', 'a_receber', 'em_atraso', 'abertas'].includes(contexto.visao)) visaoSel.value = contexto.visao;
+    if (contexto.filtro?.boleto) boletoSel.value = contexto.filtro.boleto;
+    let dados = null;
+
+    const COLUNAS = {
+      recebidos: ['Recebido em', 'Pedido', 'Cliente', 'NF', 'Parcela', 'Origem', 'Forma', 'Valor', 'Situação', 'Ações'],
+      parcelas: ['Vencimento', 'Pedido', 'Cliente', 'NF', 'Parcela', 'A receber', 'Atraso', 'Boleto', 'Ações']
+    };
+    const DIREITA = new Set(['Valor', 'A receber', 'Atraso']);
+
+    function pintarCabeca(visao) {
+      const tr = document.createElement('tr');
+      for (const rotulo of COLUNAS[visao === 'recebidos' ? 'recebidos' : 'parcelas']) {
+        tr.appendChild(criar('th', `px-4 py-3 text-xs ${DIREITA.has(rotulo) ? 'text-right' : 'text-left'}`, rotulo));
+      }
+      cabeca.replaceChildren(tr);
+    }
+
+    async function carregarLista() {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      el('finRecebimentosCarregando').classList.remove('hidden');
+      try {
+        dados = await fetchApi(`/api/cobranca/recebimentos?visao=${encodeURIComponent(visaoSel.value)}&competencia=${encodeURIComponent(competenciaSel.value || '')}`);
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para ver os recebimentos.' : e.message);
+      } finally {
+        el('finRecebimentosCarregando').classList.add('hidden');
+      }
+      desenhar();
+    }
+
+    function desenhar() {
+      const visao = visaoSel.value;
+      const resumo = dados?.resumo || {};
+      el('finRecebimentosRecebido').textContent = formatarMoeda(resumo.recebido?.total ?? null);
+      el('finRecebimentosAReceber').textContent = formatarMoeda(resumo.a_receber?.total ?? null);
+      el('finRecebimentosAtraso').textContent = formatarMoeda(resumo.em_atraso?.total ?? null);
+      el('finRecebimentosBoletos').textContent = formatarMoeda(resumo.boletos_abertos?.total ?? null);
+      el('finRecebimentosDesde').textContent = dados?.desde ? `Parcelas controladas a partir de ${formatarData(dados.desde)}` : 'Contas a receber dos pedidos faturados';
+      el('finRecebimentosSemSql').classList.toggle('hidden', !dados?.sql_pendente);
+      // Competência não muda "em atraso" nem "todas em aberto"; o filtro de boleto não vale para recebidos.
+      competenciaSel.disabled = ['em_atraso', 'abertas'].includes(visao);
+      boletoSel.disabled = visao === 'recebidos';
+
+      pintarCabeca(visao);
+      const linhas = filtrarRecebimentos(dados?.linhas || [], { visao, boleto: boletoSel.value, busca: busca.value });
+      corpo.replaceChildren();
+      for (const l of linhas) corpo.appendChild(visao === 'recebidos' ? linhaRecebido(l) : linhaParcela(l));
+      el('finRecebimentosVazio').classList.toggle('hidden', linhas.length > 0 || !dados);
+      tabela?.classList.toggle('hidden', linhas.length === 0);
+      const total = totalDaVisao(linhas, visao);
+      el('finRecebimentosTotal').textContent = linhas.length ? `${linhas.length} ${linhas.length === 1 ? 'linha' : 'linhas'} · ${visao === 'recebidos' ? 'recebido' : 'a receber'}: ${formatarMoeda(total)}` : '';
+    }
+
+    const celula = (conteudo, classe = 'px-4 py-3') => {
+      const td = criar('td', classe);
+      if (conteudo && typeof conteudo === 'object') td.appendChild(conteudo);
+      else td.textContent = conteudo == null || conteudo === '' ? '—' : String(conteudo);
+      return td;
+    };
+    const linkDoPedido = l => {
+      const b = criar('button', 'fin-link-celula', String(l.pedido || l.pedido_id || '—'));
+      b.type = 'button';
+      b.dataset.finPedidoId = String(l.pedido_id ?? '');
+      return b;
+    };
+    const tag = (texto, classe, titulo = '') => {
+      const s = criar('span', `${classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`, texto);
+      if (titulo) s.title = titulo;
+      return s;
+    };
+    const botaoEm = (caixa, texto, fn, { classe = 'btn-neutral text-white', perm = null, titulo = '' } = {}) => {
+      const b = criar('button', `${classe} px-3 py-1 rounded-md text-xs font-medium`, texto);
+      b.type = 'button';
+      if (perm) b.dataset.perm = perm;
+      if (titulo) b.title = titulo;
+      acionar(b, fn);
+      caixa.appendChild(b);
+    };
+
+    function linhaRecebido(l) {
+      const tr = document.createElement('tr');
+      const estornado = l.status !== 'confirmado';
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      if (!estornado && l.origem !== 'boleto') {
+        botaoEm(acoes, 'Estornar', () => estornar(l), { classe: 'btn-danger text-white', perm: 'financeiro.recebimento.estornar', titulo: 'Desfazer este recebimento' });
+      }
+      if (l.boleto_id) botaoEm(acoes, 'Boleto', () => abrirBoleto({ id: l.boleto_id }, l), { perm: 'financeiro.boleto.view', titulo: 'Ver o boleto' });
+      const forma = [l.forma, l.canal && l.canal !== l.forma ? l.canal : ''].filter(Boolean).join(' · ');
+      tr.append(
+        celula(formatarData(l.data), 'px-4 py-3 text-white'), celula(linkDoPedido(l)), celula(l.cliente), celula(l.nf),
+        celula(String(l.numero_parcela ?? '—')), celula(tag(ORIGENS_RECEBIMENTO[l.origem] || l.origem, l.origem === 'boleto' ? 'badge-success' : 'badge-info')),
+        celula(forma), celula(formatarMoeda(l.valor), 'px-4 py-3 text-right'),
+        celula(estornado ? tag('Estornado', 'badge-danger', l.motivo_estorno || '') : tag('Confirmado', 'badge-success', l.data_credito ? `Crédito em ${formatarData(l.data_credito)}` : '')),
+        celula(acoes)
+      );
+      return tr;
+    }
+
+    function linhaParcela(l) {
+      const tr = document.createElement('tr');
+      const acoes = criar('div', 'flex flex-wrap gap-2');
+      botaoEm(acoes, 'Registrar', () => abrirOutro('registrar-recebimento', { parcela: { pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, pedido: l.pedido } }),
+        { classe: 'btn-success', perm: 'financeiro.recebimento.registrar', titulo: 'Registrar o recebimento desta parcela' });
+      if (l.boleto?.id) botaoEm(acoes, 'Boleto', () => abrirBoleto(l.boleto, l), { perm: 'financeiro.boleto.view', titulo: 'Situação no BB, prorrogar, abatimento e baixa' });
+      const b = rotuloBoletoDaParcela(l.boleto);
+      const boletoCelula = criar('div', 'flex flex-col gap-1');
+      boletoCelula.appendChild(tag(b.texto, b.badge, l.boleto?.erro || l.boleto?.nosso_numero || ''));
+      if (l.controlada === false) boletoCelula.appendChild(tag('antes do controle', 'badge-neutral', 'Venceu antes da data em que o app passou a controlar os recebimentos'));
+      const atraso = celula(Number(l.dias_atraso) > 0 ? `${l.dias_atraso} dias` : '—', 'px-4 py-3 text-right');
+      if (Number(l.dias_atraso) > 60) atraso.classList.add('fin-dias--critico');
+      else if (Number(l.dias_atraso) > 15) atraso.classList.add('fin-dias--alto');
+      tr.append(
+        celula(formatarData(l.vencimento), 'px-4 py-3 text-white'), celula(linkDoPedido(l)), celula(l.cliente), celula(l.nf),
+        celula(l.parcela), celula(formatarMoeda(l.a_receber), 'px-4 py-3 text-right'), atraso, celula(boletoCelula), celula(acoes)
+      );
+      return tr;
+    }
+
+    /** O modal "Boleto" dos Pedidos, por cima deste; ao fechar, a lista se relê. */
+    function abrirBoleto(boleto, l) {
+      window.boletoDetalheContext = { boletoId: boleto.id, pedidoId: l.pedido_id, numero: l.pedido || '', parcela: l.numero_parcela };
+      abrirModalDePedido('modals/pedidos/boleto-detalhe.html', '../js/modals/pedido-boleto-detalhe.js', 'boletoDetalhe', { aoFechar: carregarLista });
+    }
+
+    async function estornar(l) {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      const motivo = await pedirMotivo(l);
+      if (motivo === null) return;
+      try {
+        await fetchApi(`/api/cobranca/recebimentos/${encodeURIComponent(l.id)}/estornar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        window.showToast?.('Recebimento estornado.', 'success');
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para estornar recebimentos.' : e.message);
+      }
+      await carregarLista();
+    }
+
+    /**
+     * O motivo do estorno, numa caixa montada aqui (o DialogPadrao não tem
+     * campo de texto). null = desistiu.
+     */
+    function pedirMotivo(l) {
+      return new Promise(resolver => {
+        // .app-message-overlay: a caixa sobe para a top layer (src/utils/dialogTopLayer.js), acima dos modais.
+        const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+        const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
+        caixa.setAttribute('role', 'dialog');
+        caixa.setAttribute('aria-modal', 'true');
+        caixa.appendChild(criar('h3', 'text-lg font-semibold text-white', 'Estornar o recebimento?'));
+        caixa.appendChild(criar('p', 'text-sm text-gray-300', `${formatarMoeda(l.valor)} de ${formatarData(l.data)} — pedido ${l.pedido}, parcela ${l.numero_parcela}. A parcela volta a ficar em aberto${l.origem === 'quitado_por_fora' ? ' e pode ganhar um boleto novo (o boleto baixado continua baixado)' : ''}.`));
+        const campo = criar('textarea', 'w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+        campo.rows = 3;
+        campo.maxLength = 500;
+        campo.placeholder = 'Motivo do estorno (obrigatório)';
+        caixa.appendChild(campo);
+        const erroEl = criar('p', 'hidden text-sm', 'Diga o motivo (ao menos 5 letras).');
+        erroEl.style.color = 'var(--color-red)';
+        caixa.appendChild(erroEl);
+        const rodape = criar('div', 'flex justify-end gap-3');
+        const voltar = criar('button', 'btn-neutral px-5 py-2 rounded-lg text-white font-medium', 'Voltar');
+        const confirmar = criar('button', 'btn-danger px-5 py-2 rounded-lg text-white font-medium', 'Estornar');
+        voltar.type = 'button';
+        confirmar.type = 'button';
+        rodape.append(voltar, confirmar);
+        caixa.appendChild(rodape);
+        fundo.appendChild(caixa);
+        const sair = valor => {
+          document.removeEventListener('keydown', aoTecla, true);
+          filhoAberto = false;
+          fundo.remove();
+          resolver(valor);
+        };
+        const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+        voltar.addEventListener('click', () => sair(null));
+        confirmar.addEventListener('click', () => {
+          const texto = campo.value.trim();
+          if (texto.length < 5) { erroEl.classList.remove('hidden'); campo.focus(); return; }
+          sair(texto);
+        });
+        document.addEventListener('keydown', aoTecla, true);
+        filhoAberto = true;
+        document.body.appendChild(fundo);
+        campo.focus();
+      });
+    }
+
+    async function conciliar() {
+      mostrarMensagem('finRecebimentosMensagem', '');
+      try {
+        const r = await fetchApi('/api/cobranca/conciliar', { method: 'POST', body: '{}' });
+        const t = textoDaConciliacao(r);
+        mostrarMensagem('finRecebimentosMensagem', `Conciliação: ${t.texto}${t.erros.length ? ` ${t.erros.slice(0, 3).join(' | ')}` : ''}`, t.erros.length ? 'erro' : 'ok');
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para conciliar.' : e.message);
+      }
+      await carregarLista();
+    }
+
+    // Um recebimento registrado por cima relê a lista.
+    const aoAlterar = () => carregarLista();
+    window.addEventListener('financeiro:recebimentos-alterados', aoAlterar);
+    aoDesligar.push(() => window.removeEventListener('financeiro:recebimentos-alterados', aoAlterar));
+
+    visaoSel.addEventListener('change', carregarLista);
+    competenciaSel.addEventListener('change', carregarLista);
+    boletoSel.addEventListener('change', desenhar);
+    busca.addEventListener('input', desenhar);
+    const ligarBotao = (id, fn) => {
+      const botao = el(id);
+      if (!botao) return;
+      botao.dataset.acaoGerida = 'true';
+      botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+    };
+    ligarBotao('finRecebimentosConciliar', conciliar);
+    ligarBotao('finRecebimentosRegistrar', () => abrirOutro('registrar-recebimento'));
+    return carregarLista();
+  }
+
+  // ------------------------------------------ comissões e produção (fase G)
+  //
+  // Tudo lê e grava em /api/financeiro. Depois de gravar, o evento
+  // `financeiro:alterado` faz as listas abertas por baixo se relerem.
+
+  const avisarAlteracao = () => window.dispatchEvent(new CustomEvent('financeiro:alterado'));
+
+  /** Relê quando outro modal gravar algo (o ouvinte sai junto com o modal). */
+  function aoAlterar(fn) {
+    const ouvinte = () => fn();
+    window.addEventListener('financeiro:alterado', ouvinte);
+    aoDesligar.push(() => window.removeEventListener('financeiro:alterado', ouvinte));
+  }
+
+  const pode = chave => (typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode(chave) : true);
+
+  const SQL_G = 'Comissões e produção ainda não estão ativadas: rode sql/financeiro_comissoes_producao.sql no banco e reinicie a API.';
+  function textoDoErro(e, semPermissao) {
+    if (e?.status === 403) return semPermissao;
+    if (e?.corpo?.sql_pendente) return SQL_G;
+    return e?.message || 'Erro inesperado.';
+  }
+
+  function opcao(valor, texto) {
+    const o = document.createElement('option');
+    o.value = valor;
+    o.textContent = texto;
+    return o;
+  }
+
+  function celulaG(conteudo, classe = 'px-4 py-3') {
+    const td = criar('td', classe);
+    if (conteudo && typeof conteudo === 'object') td.appendChild(conteudo);
+    else td.textContent = conteudo === null || conteudo === undefined || conteudo === '' ? '—' : String(conteudo);
+    return td;
+  }
+
+  function tagG(texto, classe, titulo = '') {
+    const s = criar('span', `${classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`, texto);
+    if (titulo) s.title = titulo;
+    return s;
+  }
+
+  function botaoG(caixa, texto, fn, { classe = 'btn-neutral text-white', perm = null, titulo = '' } = {}) {
+    const b = criar('button', `${classe} px-3 py-1 rounded-md text-xs font-medium`, texto);
+    b.type = 'button';
+    if (perm) b.dataset.perm = perm;
+    if (titulo) b.title = titulo;
+    acionar(b, fn);
+    caixa.appendChild(b);
+    return b;
+  }
+
+  function linhaVazia(tbody, colunas, texto) {
+    const tr = document.createElement('tr');
+    const td = criar('td', 'px-4 py-6 text-center text-sm text-gray-400', texto);
+    td.colSpan = colunas;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  /**
+   * Uma caixa com campo de texto (o motivo), acima dos modais. null = desistiu.
+   * Mesma caixa do estorno de recebimento.
+   */
+  function pedirTexto({ titulo, mensagem, placeholder = 'Motivo (obrigatório)', confirmar = 'Confirmar', minimo = 5 }) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'text-lg font-semibold text-white', titulo));
+      if (mensagem) caixa.appendChild(criar('p', 'text-sm text-gray-300', mensagem));
+      const campo = criar('textarea', 'w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      campo.rows = 3;
+      campo.maxLength = 500;
+      campo.placeholder = placeholder;
+      caixa.appendChild(campo);
+      const erroEl = criar('p', 'hidden text-sm', `Escreva o motivo (ao menos ${minimo} letras).`);
+      erroEl.style.color = 'var(--color-red)';
+      caixa.appendChild(erroEl);
+      const rodape = criar('div', 'flex justify-end gap-3');
+      const voltar = criar('button', 'btn-neutral px-5 py-2 rounded-lg text-white font-medium', 'Voltar');
+      const ok = criar('button', 'btn-danger px-5 py-2 rounded-lg text-white font-medium', confirmar);
+      voltar.type = 'button';
+      ok.type = 'button';
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => {
+        const texto = campo.value.trim();
+        if (texto.length < minimo) { erroEl.classList.remove('hidden'); campo.focus(); return; }
+        sair(texto);
+      });
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      campo.focus();
+    });
+  }
+
+  const nomeDaPeca = item => (item ? ([item.codigo, item.nome].filter(Boolean).join(' — ') || `item ${item.id}`) : '—');
+
+  // ------------------------------------------ relatórios: busca e exportação
+
+  /** As linhas de um relatório: do backend (ou do painel fiscal, no de NF-e). */
+  async function buscarRelatorio(chave, { competencia, periodo }) {
+    let linhas;
+    let filtro;
+    if (chave === 'aguardando-nf') {
+      const painel = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competencia)}`);
+      linhas = linhasDoRelatorioAguardando(painel);
+      filtro = `Enviados desde ${formatarData(painel.desde)} sem NF-e`;
+    } else {
+      const consulta = periodo?.inicio
+        ? `inicio=${encodeURIComponent(periodo.inicio)}&fim=${encodeURIComponent(periodo.fim)}`
+        : `competencia=${encodeURIComponent(competencia)}`;
+      const r = await fetchApi(`/api/financeiro/relatorios/${encodeURIComponent(chave)}?${consulta}`);
+      linhas = Array.isArray(r?.linhas) ? r.linhas : [];
+      filtro = r?.filtro || '';
+    }
+    return { ...montarRelatorio(chave, { linhas }), filtro, competencia, periodo: periodo?.inicio ? periodo : null };
+  }
+
+  const tituloDoRelatorio = r => (r.periodo ? r.titulo : `${r.titulo} — ${rotuloCompetenciaCurto(r.competencia)}`);
+
+  function textoDaCelula(valor, tipo) {
+    if (tipo === 'moeda') return formatarMoeda(valor);
+    if (tipo === 'data') return formatarData(valor);
+    if (tipo === 'inteiro') return valor === null || valor === undefined ? '—' : String(valor);
+    return valor === null || valor === undefined || valor === '' ? '—' : String(valor);
+  }
+
+  /** A folha do relatório como documento para o PDF, montada com DOM (dado nenhum vira HTML). */
+  function documentoDoRelatorio(r) {
+    const doc = document.implementation.createHTMLDocument(tituloDoRelatorio(r));
+    const estilo = doc.createElement('style');
+    estilo.textContent = [
+      '@page { size: A4 landscape; margin: 12mm; }',
+      'body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 10px; }',
+      'h1 { font-size: 15px; margin: 0 0 2px; }',
+      'p { margin: 0 0 8px; color: #555; }',
+      'table { width: 100%; border-collapse: collapse; }',
+      'th, td { border-bottom: 1px solid #ddd; padding: 4px 6px; text-align: left; white-space: nowrap; }',
+      'th { background: #f1ede0; }',
+      '.num { text-align: right; }',
+      'tfoot td { font-weight: bold; border-top: 2px solid #b6a03e; }'
+    ].join('\n');
+    doc.head.appendChild(estilo);
+    const add = (pai, tag, texto = null, classe = null) => {
+      const e = doc.createElement(tag);
+      if (texto !== null) e.textContent = texto;
+      if (classe) e.className = classe;
+      pai.appendChild(e);
+      return e;
+    };
+    const num = c => (['moeda', 'inteiro'].includes(c.tipo) ? 'num' : null);
+    add(doc.body, 'h1', tituloDoRelatorio(r));
+    add(doc.body, 'p', `Santíssimo Decor • Comissões e Produção • ${r.filtro || ''} • gerado em ${formatarData(hojeLocal())}`);
+    const tabela = add(doc.body, 'table');
+    const cabeca = add(add(tabela, 'thead'), 'tr');
+    for (const c of r.colunas) add(cabeca, 'th', c.rotulo, num(c));
+    const corpo = add(tabela, 'tbody');
+    for (const l of r.linhas) {
+      const tr = add(corpo, 'tr');
+      for (const c of r.colunas) add(tr, 'td', textoDaCelula(l[c.chave], c.tipo), num(c));
+    }
+    const pe = add(add(tabela, 'tfoot'), 'tr');
+    r.colunas.forEach((c, i) => add(pe, 'td', i === 0 ? `Total (${r.linhas.length})` : (c.total ? textoDaCelula(r.totais[c.chave], c.tipo) : ''), num(c)));
+    return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
+  }
+
+  function tratarSalvamento(resultado, mensagemOk) {
+    if (!resultado) throw new Error('Exportação indisponível neste ambiente.');
+    if (resultado.canceled) { window.showToast?.('Exportação cancelada.', 'info'); return; }
+    if (!resultado.success) throw new Error(resultado.message || 'Não foi possível salvar o arquivo.');
+    window.showToast?.(mensagemOk, 'success');
+  }
+
+  /** PDF pelo Electron; "Excel" é uma planilha CSV (ponto e vírgula), que o Excel abre. */
+  async function exportarRelatorio(formato, r) {
+    const nome = `${r.chave}-${r.periodo ? `${r.periodo.inicio}_${r.periodo.fim}` : r.competencia}`;
+    if (formato === 'excel') {
+      const res = await window.electronAPI?.salvarTextoComoArquivo?.({
+        conteudo: relatorioEmCsv(r), nomeSugerido: nome, extensao: 'csv', titulo: 'Salvar planilha do relatório', descricao: 'Planilha (Excel)'
+      });
+      return tratarSalvamento(res, 'Planilha salva.');
+    }
+    const res = await window.electronAPI?.salvarHtmlComoPdf?.({ html: documentoDoRelatorio(r), nomeSugerido: nome, titulo: 'Salvar relatório em PDF' });
+    return tratarSalvamento(res, 'Relatório salvo em PDF.');
   }
 
   function montarAjuste() {
-    const dados = EXEMPLO.ajuste;
-    el('finAjusteContexto').textContent = `Pedido ${dados.pedido} • NF ${dados.nf}`;
+    const buscaCampo = el('finAjusteBusca');
     const parcelaSel = el('finAjusteParcela');
+    const tipoSel = el('finAjusteTipo');
     const valorCampo = el('finAjusteValor');
-    parcelaSel.replaceChildren();
-    dados.parcelas.forEach((p, i) => {
-      const opcao = document.createElement('option');
-      opcao.value = String(i);
-      opcao.textContent = `${p.numero} • vencimento ${formatarData(p.vencimento)} • ${formatarMoeda(p.original + p.anteriores)}`;
-      parcelaSel.appendChild(opcao);
-    });
+    const dataCampo = el('finAjusteData');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    let linhas = [];
+    // Vinda dos Detalhes da parcela: já escolhida.
+    const pedida = contexto.parcela && contexto.parcela.pedido_id ? contexto.parcela : null;
+    const chaveDe = l => `${l.pedido_id}:${l.numero_parcela}`;
+    const escolhida = () => linhas.find(l => chaveDe(l) === parcelaSel.value) || null;
+    const boletoAberto = l => BOLETO_A_PAGAR.includes(String(l?.boleto?.status || ''));
 
-    function atualizarImpacto() {
-      const parcela = dados.parcelas[Number(parcelaSel.value)] || dados.parcelas[0];
-      const novo = lerMoeda(valorCampo.value) || 0;
-      const impacto = impactoDoAjuste(parcela.original, parcela.anteriores, novo);
-      el('finAjusteOriginal').textContent = formatarMoeda(impacto.original);
-      el('finAjusteAnteriores').textContent = formatarMoeda(impacto.anteriores);
-      el('finAjusteNovo').textContent = formatarMoeda(impacto.novo);
-      el('finAjusteLiquido').textContent = formatarMoeda(impacto.liquido);
-      el('finAjusteCms').textContent = formatarMoeda(impacto.cms);
-      el('finAjusteRoyalty').textContent = formatarMoeda(impacto.royalty);
-      el('finAjusteEstorno').classList.toggle('hidden', !(parcela.comissaoPaga && novo > 0));
-      mostrarMensagem('finAjusteMensagem', impacto.liquido < 0 ? 'O ajuste é maior que o valor que resta na parcela.' : '');
+    function montarOpcoes() {
+      const selecionada = parcelaSel.value;
+      const visiveis = filtrarParcelasAjuste(linhas, buscaCampo.value);
+      parcelaSel.replaceChildren(opcao('', visiveis.length ? 'Escolha a parcela' : 'Nenhuma parcela com esta busca'));
+      for (const l of visiveis.slice(0, 300)) parcelaSel.appendChild(opcao(chaveDe(l), rotuloDaParcelaAjuste(l)));
+      if (visiveis.some(l => chaveDe(l) === selecionada)) parcelaSel.value = selecionada;
     }
 
-    parcelaSel.addEventListener('change', atualizarImpacto);
-    ligarCampoMoeda(valorCampo, atualizarImpacto);
-    atualizarImpacto();
+    function atualizar() {
+      const l = escolhida();
+      const valor = lerMoeda(valorCampo.value) || 0;
+      el('finAjusteContexto').textContent = l ? `Pedido ${l.pedido}${l.nf ? ` • NF ${l.nf}` : ''} • Parcela ${l.parcela}` : '';
+      if (!l) {
+        ['finAjusteOriginal', 'finAjusteAnteriores', 'finAjusteNovo', 'finAjusteLiquido', 'finAjusteCms', 'finAjusteRoyalty'].forEach(id => { el(id).textContent = '—'; });
+        el('finAjustePctCms').textContent = '';
+        el('finAjustePctRoyalty').textContent = '';
+        ['finAjusteEstorno', 'finAjusteBoleto', 'finAjusteSemRegra'].forEach(id => el(id).classList.add('hidden'));
+        return;
+      }
+      const i = impactoDoAjuste(l, valor);
+      el('finAjusteOriginal').textContent = formatarMoeda(i.original);
+      el('finAjusteAnteriores').textContent = formatarMoeda(i.anteriores);
+      el('finAjusteNovo').textContent = formatarMoeda(i.novo);
+      el('finAjusteLiquido').textContent = formatarMoeda(i.liquido);
+      el('finAjusteCms').textContent = formatarMoeda(i.cms);
+      el('finAjusteRoyalty').textContent = formatarMoeda(i.royalty);
+      el('finAjustePctCms').textContent = `(${percentualTexto(i.pct_cms)})`;
+      el('finAjustePctRoyalty').textContent = `(${percentualTexto(i.pct_royalty)})`;
+      el('finAjusteEstorno').classList.toggle('hidden', !(i.gera_estorno && valor > 0));
+      el('finAjusteSemRegra').classList.toggle('hidden', !l.sem_regra);
+      let aviso = '';
+      if (boletoAberto(l)) {
+        aviso = tipoSel.value === 'abatimento'
+          ? `Esta parcela tem boleto em aberto no BB (${l.boleto.nosso_numero}): o abatimento é feito no próprio boleto (Recebimentos → Boleto), e ele já reduz a base da comissão.`
+          : `Esta parcela tem boleto em aberto no BB (${l.boleto.nosso_numero}), que continua cobrando o valor cheio. Se o cliente vai pagar menos, conceda o abatimento no boleto em vez de registrar aqui — os dois juntos descontariam em dobro.`;
+      }
+      el('finAjusteBoletoTexto').textContent = aviso;
+      el('finAjusteBoleto').classList.toggle('hidden', !aviso);
+      mostrarMensagem('finAjusteMensagem', i.excede ? `O ajuste passa do valor líquido que resta na parcela (${formatarMoeda(i.liquido_antes)}).` : '');
+    }
+
+    async function carregar() {
+      mostrarMensagem('finAjusteMensagem', '');
+      el('finAjusteCarregando').classList.remove('hidden');
+      try {
+        const corpo = await fetchApi('/api/financeiro/parcelas?visao=ajustaveis');
+        linhas = Array.isArray(corpo?.linhas) ? corpo.linhas : [];
+      } catch (e) {
+        linhas = [];
+        mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para ver as parcelas.'));
+      } finally {
+        el('finAjusteCarregando').classList.add('hidden');
+      }
+      montarOpcoes();
+      if (pedida) {
+        parcelaSel.value = `${pedida.pedido_id}:${pedida.numero_parcela}`;
+        if (!escolhida()) mostrarMensagem('finAjusteMensagem', `A parcela ${pedida.numero_parcela} do pedido ${pedida.pedido || pedida.pedido_id} não aceita ajuste (cancelada ou fora das contas).`);
+      }
+      atualizar();
+    }
+
+    async function registrar() {
+      mostrarMensagem('finAjusteMensagem', '');
+      const l = escolhida();
+      const valor = lerMoeda(valorCampo.value);
+      const motivo = el('finAjusteMotivo').value.trim();
+      const erro = !l ? 'Escolha a parcela.'
+        : !tipoSel.value ? 'Escolha o tipo de ajuste.'
+          : !(valor > 0) ? 'Informe o valor do ajuste.'
+            : !dataCampo.value ? 'Informe a data do ajuste.'
+              : dataCampo.value > hoje ? 'A data do ajuste não pode ser futura.'
+                : motivo.length < 3 ? 'Diga o motivo do ajuste.' : '';
+      if (erro) { mostrarMensagem('finAjusteMensagem', erro); return; }
+      const i = impactoDoAjuste(l, valor);
+      if (i.excede) { mostrarMensagem('finAjusteMensagem', `O ajuste passa do valor líquido que resta na parcela (${formatarMoeda(i.liquido_antes)}).`); return; }
+      if (tipoSel.value === 'abatimento' && boletoAberto(l)) { mostrarMensagem('finAjusteMensagem', 'Parcela com boleto em aberto: conceda o abatimento no próprio boleto.'); return; }
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Registrar o ajuste?',
+        message: `${TIPOS_AJUSTE[tipoSel.value]} de ${formatarMoeda(valor)} na parcela ${l.parcela} do pedido ${l.pedido}. Novo valor líquido: ${formatarMoeda(i.liquido)}; comissão: ${formatarMoeda(centavos(i.cms + i.royalty))}.`
+          + (i.gera_estorno ? ' A comissão desta parcela já foi fechada: a diferença entra como estorno na próxima competência.' : ''),
+        confirmText: 'Registrar'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        await fetchApi('/api/financeiro/ajustes', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, tipo: tipoSel.value, valor,
+            data_ajuste: dataCampo.value, motivo, observacao: el('finAjusteObservacoes').value
+          })
+        });
+        window.showToast?.('Ajuste registrado.', 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para registrar ajustes.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    buscaCampo.addEventListener('input', () => { montarOpcoes(); atualizar(); });
+    parcelaSel.addEventListener('change', atualizar);
+    tipoSel.addEventListener('change', atualizar);
+    ligarCampoMoeda(valorCampo, atualizar);
+    acionar(el('finAjusteRegistrar'), registrar);
+    return carregar();
   }
 
+  /**
+   * Registrar produção. Depois de gravar, o modal continua aberto no mesmo
+   * pedido (várias peças costumam ser lançadas em sequência) e a lista de
+   * registros mostra o que entrou; o painel se relê ao fechar.
+   */
   function montarProducao() {
-    const dados = EXEMPLO.producao;
-    el('finProducaoContexto').textContent = `Pedido ${dados.pedido} • ${dados.cliente}`;
-    const produtoCampo = el('finProducaoProduto');
-    const quantidadeCampo = el('finProducaoQuantidade');
-    montarDatalist(el('finProducaoProdutosLista'),
-      dados.itens.map(i => ({ valor: `${i.codigo} — ${i.nome}`, rotulo: `${i.pedida - i.finalizada} em aberto` })));
+    const buscaCampo = el('finProducaoPedidoBusca');
+    const pedidoSel = el('finProducaoPedido');
+    const produtoSel = el('finProducaoProduto');
+    const setorSel = el('finProducaoSetor');
+    const qtdCampo = el('finProducaoQuantidade');
+    const dataCampo = el('finProducaoData');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    let pedidos = [];
+    let dados = null;
+    let pedidoAtual = 0;
 
-    const itemEscolhido = () => {
-      const texto = String(produtoCampo.value).trim().toLowerCase();
-      return dados.itens.find(i => `${i.codigo} — ${i.nome}`.toLowerCase() === texto || i.codigo.toLowerCase() === texto) || null;
-    };
+    function montarPedidos() {
+      const termo = buscaCampo.value.trim().toLowerCase();
+      const atual = pedidoSel.value;
+      const visiveis = pedidos.filter(p => !termo || String(p.numero).toLowerCase().includes(termo) || String(p.cliente || '').toLowerCase().includes(termo) || String(p.id) === atual);
+      pedidoSel.replaceChildren(opcao('', visiveis.length ? 'Escolha o pedido' : 'Nenhum pedido com esta busca'));
+      for (const p of visiveis.slice(0, 300)) pedidoSel.appendChild(opcao(String(p.id), [p.numero, p.cliente, p.situacao].filter(Boolean).join(' • ')));
+      if (visiveis.some(p => String(p.id) === atual)) pedidoSel.value = atual;
+    }
+
+    const itemEscolhido = () => (dados?.itens || []).find(i => String(i.id) === produtoSel.value) || null;
+    const setorDoItem = item => (item?.setores || []).find(s => String(s.setor_id) === setorSel.value) || null;
+
+    function montarItens() {
+      const itens = dados?.itens || [];
+      produtoSel.replaceChildren(opcao('', dados ? (itens.length ? 'Escolha a peça' : 'O pedido não tem itens') : 'Escolha o pedido primeiro'));
+      for (const i of itens) produtoSel.appendChild(opcao(String(i.id), `${nomeDaPeca(i)} • ${i.quantidade} un.`));
+      if (itens.length === 1) produtoSel.value = String(itens[0].id);
+      setorSel.replaceChildren(opcao('', 'Selecione'));
+      for (const s of dados?.setores || []) setorSel.appendChild(opcao(String(s.id), s.nome));
+    }
 
     function atualizar() {
       const item = itemEscolhido();
-      const agora = Number(quantidadeCampo.value) || 0;
-      el('finProducaoPedida').textContent = item ? String(item.pedida) : '—';
-      el('finProducaoFinalizada').textContent = item ? String(item.finalizada) : '—';
-      el('finProducaoSaldo').textContent = item ? String(item.pedida - item.finalizada) : '—';
-      if (!item) {
+      const s = setorDoItem(item);
+      const agora = Number(qtdCampo.value) || 0;
+      el('finProducaoContexto').textContent = dados ? [`Pedido ${dados.pedido.numero}`, dados.pedido.cliente].filter(Boolean).join(' • ') : '';
+      el('finProducaoPedida').textContent = item ? String(item.quantidade) : '—';
+      el('finProducaoFinalizada').textContent = s ? String(s.finalizada) : '—';
+      el('finProducaoSaldo').textContent = s ? String(s.saldo) : '—';
+      el('finProducaoUnitario').textContent = !s ? '—'
+        : (s.valor_unitario === null ? 'sem valor' : `${formatarMoeda(s.valor_unitario)}${s.valor_origem === 'padrao' ? ' (padrão)' : ''}`);
+      const estoque = Boolean(item && item.do_estoque > 0);
+      el('finProducaoEstoque').textContent = estoque ? `${item.do_estoque} das ${item.quantidade} peças do pedido saem do estoque (já prontas).` : '';
+      el('finProducaoEstoque').classList.toggle('hidden', !estoque);
+      el('finProducaoSemValor').classList.toggle('hidden', !(s && s.valor_unitario === null));
+      if (!item || !s) {
         el('finProducaoStatus').value = '—';
         el('finProducaoAcumulado').textContent = '—';
         el('finProducaoRestante').textContent = '—';
+        el('finProducaoTotal').textContent = '—';
         el('finProducaoConcluido').classList.add('hidden');
-        mostrarMensagem('finProducaoMensagem', '');
+        mostrarMensagem('finProducaoMensagem', dados && !dados.pedido.pode_produzir
+          ? `O pedido está "${dados.pedido.situacao}": só se registra produção de pedido aprovado, em produção, enviado ou entregue.` : '');
         return;
       }
-      const r = statusAposRegistro(item.pedida, item.finalizada, agora);
+      const r = statusAposRegistro(item.quantidade, s.finalizada, agora);
       el('finProducaoStatus').value = r.status;
       el('finProducaoAcumulado').textContent = String(r.acumulado);
       el('finProducaoRestante').textContent = String(r.restante);
-      el('finProducaoConcluido').classList.toggle('hidden', !(r.restante === 0 && item.pedida > 0));
-      mostrarMensagem('finProducaoMensagem', r.excede ? `A quantidade informada passa do saldo (${item.pedida - item.finalizada}).` : '');
+      el('finProducaoTotal').textContent = s.valor_unitario === null ? '—' : formatarMoeda(centavos(s.valor_unitario * agora));
+      el('finProducaoConcluido').classList.toggle('hidden', !(r.restante === 0 && item.quantidade > 0));
+      mostrarMensagem('finProducaoMensagem', r.excede ? `A quantidade passa do saldo (${s.saldo}).` : '');
     }
 
-    produtoCampo.addEventListener('input', atualizar);
-    produtoCampo.addEventListener('change', atualizar);
-    quantidadeCampo.addEventListener('input', atualizar);
-    atualizar();
+    function desenharRegistros() {
+      const corpo = el('finProducaoRegistros');
+      corpo.replaceChildren();
+      const eventos = dados?.eventos || [];
+      const vazio = el('finProducaoSemRegistros');
+      vazio.textContent = dados ? 'Nenhuma produção registrada neste pedido.' : 'Escolha um pedido para ver os registros.';
+      vazio.classList.toggle('hidden', eventos.length > 0);
+      corpo.closest('.fin-tabela').classList.toggle('hidden', eventos.length === 0);
+      for (const e of eventos) {
+        const item = (dados.itens || []).find(i => String(i.id) === String(e.pedido_item_id));
+        const acoes = criar('div', 'flex flex-wrap gap-2');
+        const estornavel = e.status === 'ativo' && !e.estornado_em && !e.estorno_de && Number(e.quantidade) > 0;
+        if (estornavel) botaoG(acoes, 'Estornar', () => estornar(e, item), { classe: 'btn-danger text-white', perm: 'financeiro.producao.registrar', titulo: 'Desfazer este registro' });
+        let situacao;
+        if (e.status === 'estornado') situacao = tagG('Estornado', 'badge-danger', e.motivo_estorno || '');
+        else if (e.estorno_de) situacao = tagG('Estorno', 'badge-warning', e.observacao || '');
+        else if (e.estornado_em) situacao = tagG('Estornado depois de fechar', 'badge-warning', e.motivo_estorno || '');
+        else situacao = tagG('Registrado', 'badge-success', e.observacao || '');
+        const tr = document.createElement('tr');
+        tr.append(
+          celulaG(formatarData(e.data_finalizacao), 'px-4 py-3 text-white'), celulaG(item ? nomeDaPeca(item) : `item ${e.pedido_item_id}`),
+          celulaG(e.setor || '—'), celulaG(String(e.quantidade), 'px-4 py-3 text-right'), celulaG(situacao), celulaG(acoes)
+        );
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function carregarPedido({ manterEscolha = false } = {}) {
+      const id = pedidoSel.value;
+      const itemAntes = produtoSel.value;
+      const setorAntes = setorSel.value;
+      const meu = ++pedidoAtual;
+      dados = null;
+      if (id) {
+        el('finProducaoCarregando').classList.remove('hidden');
+        try {
+          const lido = await fetchApi(`/api/financeiro/producao/pedidos/${encodeURIComponent(id)}`);
+          if (meu !== pedidoAtual) return;
+          dados = lido;
+        } catch (e) {
+          if (meu !== pedidoAtual) return;
+          mostrarMensagem('finProducaoMensagem', textoDoErro(e, 'Você não tem permissão para registrar produção.'));
+        } finally {
+          if (meu === pedidoAtual) el('finProducaoCarregando').classList.add('hidden');
+        }
+      }
+      montarItens();
+      if (manterEscolha) {
+        produtoSel.value = itemAntes;
+        setorSel.value = setorAntes;
+      }
+      desenharRegistros();
+      atualizar();
+    }
+
+    async function carregar() {
+      el('finProducaoCarregando').classList.remove('hidden');
+      try {
+        const corpo = await fetchApi('/api/financeiro/producao/pedidos');
+        pedidos = Array.isArray(corpo?.pedidos) ? corpo.pedidos : [];
+      } catch (e) {
+        pedidos = [];
+        mostrarMensagem('finProducaoMensagem', textoDoErro(e, 'Você não tem permissão para registrar produção.'));
+      } finally {
+        el('finProducaoCarregando').classList.add('hidden');
+      }
+      montarPedidos();
+      if (contexto.pedidoId) {
+        pedidoSel.value = String(contexto.pedidoId);
+        await carregarPedido();
+        return;
+      }
+      montarItens();
+      desenharRegistros();
+      atualizar();
+    }
+
+    async function registrar() {
+      mostrarMensagem('finProducaoMensagem', '');
+      const item = itemEscolhido();
+      const s = setorDoItem(item);
+      const qtd = Number(qtdCampo.value);
+      const erro = !dados ? 'Escolha o pedido.'
+        : !item ? 'Escolha a peça do pedido.'
+          : !s ? 'Escolha o setor.'
+            : !(Number.isInteger(qtd) && qtd > 0) ? 'Informe quantas peças foram finalizadas (número inteiro).'
+              : qtd > s.saldo ? `A quantidade passa do saldo (${s.saldo}).`
+                : !dataCampo.value ? 'Informe a data da finalização.'
+                  : dataCampo.value > hoje ? 'A data da finalização não pode ser futura.' : '';
+      if (erro) { mostrarMensagem('finProducaoMensagem', erro); return; }
+      const setorNome = (dados.setores.find(x => String(x.id) === setorSel.value) || {}).nome || '';
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Registrar a produção?',
+        message: `${qtd} × ${nomeDaPeca(item)} finalizada(s) em ${setorNome} no dia ${formatarData(dataCampo.value)} (pedido ${dados.pedido.numero}).`
+          + (s.valor_unitario === null ? ' Esta peça ainda não tem valor por peça neste setor.' : ` Valor: ${formatarMoeda(centavos(s.valor_unitario * qtd))}.`),
+        confirmText: 'Registrar'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/financeiro/producao', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: dados.pedido.id, pedido_item_id: item.id, setor_id: Number(setorSel.value), quantidade: qtd,
+            data_finalizacao: dataCampo.value, observacao: el('finProducaoObservacoes').value
+          })
+        });
+        window.showToast?.(r?.item?.saldo === 0 ? 'Produção registrada: item finalizado neste setor.' : 'Produção registrada.', 'success');
+        avisarAlteracao();
+        qtdCampo.value = '';
+        el('finProducaoObservacoes').value = '';
+        processando = false;
+        await carregarPedido({ manterEscolha: true });
+      } catch (e) {
+        mostrarMensagem('finProducaoMensagem', textoDoErro(e, 'Você não tem permissão para registrar produção.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    async function estornar(e, item) {
+      const motivo = await pedirTexto({
+        titulo: 'Estornar este registro?',
+        mensagem: `${e.quantidade} × ${item ? nomeDaPeca(item) : 'peça'} em ${e.setor || 'setor'} (${formatarData(e.data_finalizacao)}). Se a produção deste mês já foi fechada, o estorno entra como desconto no próximo fechamento.`,
+        placeholder: 'Motivo do estorno (obrigatório)',
+        confirmar: 'Estornar'
+      });
+      if (motivo === null) return;
+      mostrarMensagem('finProducaoMensagem', '');
+      try {
+        const r = await fetchApi(`/api/financeiro/producao/${encodeURIComponent(e.id)}/estornar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        window.showToast?.(r?.ja_fechado ? 'Estornado: o desconto entra no próximo fechamento.' : 'Registro estornado.', 'success');
+        avisarAlteracao();
+      } catch (err) {
+        mostrarMensagem('finProducaoMensagem', textoDoErro(err, 'Você não tem permissão para estornar produção.'));
+      }
+      await carregarPedido({ manterEscolha: true });
+    }
+
+    buscaCampo.addEventListener('input', montarPedidos);
+    pedidoSel.addEventListener('change', () => { mostrarMensagem('finProducaoMensagem', ''); carregarPedido(); });
+    produtoSel.addEventListener('change', atualizar);
+    setorSel.addEventListener('change', atualizar);
+    qtdCampo.addEventListener('input', atualizar);
+    acionar(el('finProducaoRegistrar'), registrar);
+    return carregar();
+  }
+
+  function pintarSituacao(alvo, texto) {
+    if (!alvo) return;
+    const classe = texto === 'Paga' ? 'badge-success'
+      : (texto === 'Fechada' ? 'badge-info' : (texto === 'Em aberto' || texto === 'A pagar' ? 'badge-warning' : 'badge-neutral'));
+    alvo.className = `${classe} px-3 py-1 rounded-full text-xs font-medium justify-self-end`;
+    alvo.textContent = texto;
   }
 
   function montarFechamento() {
-    montarCompetencias(el('finFechamentoCompetencia'), contexto.competencia);
-    const dados = EXEMPLO.fechamento;
+    const compSel = el('finFechamentoCompetencia');
+    montarCompetencias(compSel, contexto.competencia);
+    const radios = overlay.querySelectorAll('input[name="finFechamentoTipo"]');
+    if (contexto.tipo) radios.forEach(r => { r.checked = r.value === contexto.tipo; });
+    const confirmarBtn = el('finFechamentoConfirmar');
+    let previa = null;
+    let leitura = 0;
+    const tipoAtual = () => overlay.querySelector('input[name="finFechamentoTipo"]:checked')?.value || 'comissao';
     const preencher = (chave, texto) => {
       const alvo = overlay.querySelector(`[data-fin-valor="${chave}"]`);
       if (alvo) alvo.textContent = texto;
     };
-    preencher('comissoes.parcelas', String(dados.comissoes.parcelas));
-    preencher('comissoes.base', formatarMoeda(dados.comissoes.base));
-    preencher('comissoes.comissao', formatarMoeda(dados.comissoes.comissao));
-    preencher('comissoes.ajustes', formatarMoeda(dados.comissoes.ajustes));
-    preencher('comissoes.total', formatarMoeda(dados.comissoes.total));
-    preencher('producao.pecas', String(dados.producao.pecas));
-    preencher('producao.pintura', formatarMoeda(dados.producao.pintura));
-    preencher('producao.marcenaria', formatarMoeda(dados.producao.marcenaria));
-    preencher('producao.total', formatarMoeda(dados.producao.total));
 
-    const radios = overlay.querySelectorAll('input[name="finFechamentoTipo"]');
-    if (contexto.tipo) radios.forEach(r => { r.checked = r.value === contexto.tipo; });
-    const alternar = () => {
-      const tipo = overlay.querySelector('input[name="finFechamentoTipo"]:checked')?.value || 'comissoes';
-      el('finFechamentoResumoComissoes').classList.toggle('hidden', tipo !== 'comissoes');
+    function pintar() {
+      const tipo = tipoAtual();
+      const p = previa;
+      el('finFechamentoResumoComissoes').classList.toggle('hidden', tipo !== 'comissao');
       el('finFechamentoResumoProducao').classList.toggle('hidden', tipo !== 'producao');
-    };
-    radios.forEach(r => r.addEventListener('change', alternar));
-    alternar();
+      el('finFechamentoBeneficiariosBloco').classList.toggle('hidden', tipo !== 'comissao' || !(p?.beneficiarios || []).length);
+      pintarSituacao(el('finFechamentoSituacao'), !p ? '—' : (p.fechamento?.pagamento ? 'Paga' : (p.fechado ? 'Fechada' : 'Em aberto')));
+      const info = [];
+      if (p) {
+        info.push(`Pagamento até ${formatarData(p.pagar_ate)}`);
+        if (p.fechamento?.pagamento) info.push(`paga em ${formatarData(p.fechamento.pagamento.data_pagamento)}`);
+        if (!p.fechado && p.proxima) info.push(`próxima a fechar: ${rotuloCompetenciaCurto(p.proxima)}`);
+      }
+      el('finFechamentoInfo').textContent = info.join(' · ');
+
+      const moeda = v => (p ? formatarMoeda(v) : '—');
+      if (tipo === 'comissao') {
+        preencher('comissoes.parcelas', p ? String(p.parcelas) : '—');
+        preencher('comissoes.base', moeda(p?.base));
+        preencher('comissoes.comissao', moeda(p?.comissao));
+        preencher('comissoes.ajustes', moeda(p?.ajustes));
+        preencher('comissoes.compensar', moeda(p?.a_compensar));
+        preencher('comissoes.total', moeda(p?.a_pagar));
+        const corpo = el('finFechamentoBeneficiarios');
+        corpo.replaceChildren();
+        for (const b of p?.beneficiarios || []) {
+          const tr = document.createElement('tr');
+          tr.append(celulaG(TIPOS_REGRA[b.tipo] || b.tipo), celulaG(b.beneficiario, 'px-4 py-3 text-white'), celulaG(formatarMoeda(b.valor), 'px-4 py-3 text-right'));
+          corpo.appendChild(tr);
+        }
+      } else {
+        preencher('producao.pecas', p ? String(p.pecas) : '—');
+        preencher('producao.compensar', moeda(p?.a_compensar));
+        preencher('producao.total', moeda(p?.a_pagar));
+        const setores = el('finFechamentoSetores');
+        setores.replaceChildren();
+        for (const s of p?.setores || []) {
+          const linha = criar('div', 'flex items-center justify-between px-4 py-3');
+          linha.append(
+            criar('span', 'text-sm text-gray-400', `${s.setor} (${s.pecas} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
+            criar('span', 'text-sm text-white', formatarMoeda(s.total))
+          );
+          setores.appendChild(linha);
+        }
+      }
+      overlay.querySelectorAll('[data-fin-compensar]').forEach(x => x.classList.toggle('hidden', !(p && Number(p.a_compensar) < 0)));
+
+      const aberta = Boolean(p) && !p.fechado;
+      const bloqueios = aberta ? (p.bloqueios || []) : [];
+      el('finFechamentoBloqueiosLista').replaceChildren(...bloqueios.map(b => criar('li', null, b)));
+      el('finFechamentoBloqueios').classList.toggle('hidden', !bloqueios.length);
+      const avisos = aberta ? (p.avisos || []) : [];
+      el('finFechamentoAvisos').replaceChildren(...avisos.map(a => criar('li', null, a)));
+      el('finFechamentoAvisos').classList.toggle('hidden', !avisos.length);
+      el('finFechamentoAvisoFixo').classList.toggle('hidden', Boolean(p?.fechado));
+      confirmarBtn.classList.toggle('hidden', Boolean(p?.fechado));
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      previa = null;
+      mostrarMensagem('finFechamentoMensagem', '');
+      el('finFechamentoCarregando').classList.remove('hidden');
+      pintar();
+      try {
+        const lida = await fetchApi(`/api/financeiro/fechamentos/previa?tipo=${tipoAtual()}&competencia=${encodeURIComponent(compSel.value)}`);
+        if (minha !== leitura) return;
+        previa = lida;
+      } catch (e) {
+        if (minha !== leitura) return;
+        mostrarMensagem('finFechamentoMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões e produção.'));
+      } finally {
+        if (minha === leitura) el('finFechamentoCarregando').classList.add('hidden');
+      }
+      pintar();
+    }
+
+    async function confirmarFechamento() {
+      mostrarMensagem('finFechamentoMensagem', '');
+      if (!previa) return;
+      if (!previa.pode_fechar) {
+        mostrarMensagem('finFechamentoMensagem', (previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
+        return;
+      }
+      const tipo = tipoAtual();
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Fechar a competência?',
+        message: `Fechar ${tipo === 'comissao' ? 'as comissões' : 'a produção'} de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(previa.a_pagar)} a pagar até ${formatarData(previa.pagar_ate)}.`
+          + ' Depois disso nada desta competência muda; correções entram como ajustes no mês seguinte. Não tem volta.',
+        confirmText: 'Fechar competência'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/financeiro/fechamentos', { method: 'POST', body: JSON.stringify({ tipo, competencia: compSel.value }) });
+        window.showToast?.(`Competência fechada: ${formatarMoeda(r?.total ?? 0)} a pagar até ${formatarData(r?.pagar_ate)}.`, 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        processando = false;
+        // Relê (outra máquina pode ter fechado) e mantém o motivo à vista.
+        await carregar();
+        mostrarMensagem('finFechamentoMensagem', textoDoErro(e, 'Você não tem permissão para fechar competência.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    radios.forEach(r => r.addEventListener('change', carregar));
+    compSel.addEventListener('change', carregar);
+    acionar(el('finFechamentoVerItens'), () => abrirOutro('visualizar-relatorio', {
+      relatorio: tipoAtual() === 'comissao' ? 'comissoes-apuradas' : 'producao-competencia', competencia: compSel.value
+    }));
+    acionar(confirmarBtn, confirmarFechamento);
+    return carregar();
+  }
+
+  function montarConfirmarPagamento() {
+    const compSel = el('finPagamentoCompetencia');
+    montarCompetencias(compSel, contexto.competencia);
+    const radios = overlay.querySelectorAll('input[name="finPagamentoTipo"]');
+    if (contexto.tipo) radios.forEach(r => { r.checked = r.value === contexto.tipo; });
+    const dataCampo = el('finPagamentoData');
+    const formaSel = el('finPagamentoForma');
+    const confirmarBtn = el('finPagamentoConfirmar');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    const listas = {};
+    const tipoAtual = () => overlay.querySelector('input[name="finPagamentoTipo"]:checked')?.value || 'comissao';
+    const atual = () => (listas[tipoAtual()] || []).find(f => f.competencia === compSel.value) || null;
+
+    function pintar() {
+      const lida = Boolean(listas[tipoAtual()]);
+      const f = atual();
+      el('finPagamentoValor').value = f ? formatarMoeda(f.total) : '—';
+      pintarSituacao(el('finPagamentoSituacao'), !lida ? '—' : (!f ? 'Não fechada' : (f.pagamento ? 'Paga' : 'A pagar')));
+      let info = '';
+      if (lida) {
+        const nome = tipoAtual() === 'comissao' ? 'As comissões' : 'A produção';
+        if (!f) info = `${nome} de ${rotuloCompetenciaCurto(compSel.value)} ainda não foi fechada: feche a competência antes de confirmar o pagamento.`;
+        else if (f.pagamento) info = `Paga em ${formatarData(f.pagamento.data)} (${f.pagamento.forma || '—'}): ${formatarMoeda(f.pagamento.valor)}.`;
+        else if (!(Number(f.total) > 0)) info = 'Não há valor a pagar nesta competência (o saldo ficou para compensar no mês seguinte).';
+        else info = `Fechada; pagamento até ${formatarData(f.pagar_ate)}${f.pagar_ate && hoje > f.pagar_ate ? ' — prazo vencido' : ''}.`;
+      }
+      el('finPagamentoInfo').textContent = info;
+      confirmarBtn.classList.toggle('hidden', Boolean(f?.pagamento));
+    }
+
+    async function carregar() {
+      const tipo = tipoAtual();
+      if (!listas[tipo]) {
+        try {
+          const r = await fetchApi(`/api/financeiro/fechamentos?tipo=${tipo}`);
+          listas[tipo] = Array.isArray(r?.fechamentos) ? r.fechamentos : [];
+        } catch (e) {
+          mostrarMensagem('finPagamentoMensagem', textoDoErro(e, 'Você não tem permissão para ver os fechamentos.'));
+        }
+      }
+      pintar();
+    }
+
+    async function confirmarPagamento() {
+      mostrarMensagem('finPagamentoMensagem', '');
+      const f = atual();
+      const erro = !f ? 'Esta competência ainda não foi fechada.'
+        : f.pagamento ? 'O pagamento desta competência já foi confirmado.'
+          : !(Number(f.total) > 0) ? 'Não há valor a pagar nesta competência.'
+            : !dataCampo.value ? 'Informe a data do pagamento.'
+              : dataCampo.value > hoje ? 'A data do pagamento não pode ser futura.'
+                : !formaSel.value ? 'Informe como foi pago.' : '';
+      if (erro) { mostrarMensagem('finPagamentoMensagem', erro); return; }
+      const tipo = tipoAtual();
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Confirmar o pagamento?',
+        message: `${tipo === 'comissao' ? 'Comissões' : 'Produção'} de ${rotuloCompetenciaCurto(compSel.value)}: ${formatarMoeda(f.total)} pagos em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
+        confirmText: 'Confirmar pagamento'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await fetchApi('/api/financeiro/pagamentos', {
+          method: 'POST',
+          body: JSON.stringify({ tipo, competencia: compSel.value, data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finPagamentoObservacoes').value })
+        });
+        window.showToast?.(r?.atrasado ? 'Pagamento confirmado (depois do prazo).' : 'Pagamento confirmado.', 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finPagamentoMensagem', textoDoErro(e, 'Você não tem permissão para confirmar pagamentos.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    radios.forEach(r => r.addEventListener('change', carregar));
+    compSel.addEventListener('change', pintar);
+    acionar(confirmarBtn, confirmarPagamento);
+    return carregar();
+  }
+
+  /**
+   * Confirmar reembolso: o que voltou para o cliente numa devolução de pedido
+   * (nasce pendente em Pedidos → Visualizar → Devolução). A pendência do painel
+   * já chega com o reembolso escolhido; pela ação rápida, escolhe-se na lista.
+   */
+  function montarConfirmarReembolso() {
+    const qualSel = el('finReembolsoQual');
+    const dataCampo = el('finReembolsoData');
+    const formaSel = el('finReembolsoForma');
+    const confirmarBtn = el('finReembolsoConfirmar');
+    const hoje = hojeLocal();
+    dataCampo.max = hoje;
+    dataCampo.value = hoje;
+    let pendentes = [];
+    const atual = () => pendentes.find(r => String(r.id) === qualSel.value) || null;
+
+    function pintar() {
+      const r = atual();
+      el('finReembolsoValor').value = r ? formatarMoeda(r.valor) : '—';
+      pintarSituacao(el('finReembolsoSituacao'), r ? 'A pagar' : '—');
+      confirmarBtn.classList.toggle('hidden', !r);
+    }
+
+    async function carregar() {
+      try {
+        const r = await fetchApi('/api/devolucoes/reembolsos?status=pendente');
+        pendentes = Array.isArray(r?.reembolsos) ? r.reembolsos : [];
+        qualSel.replaceChildren(...(pendentes.length ? [] : [opcao('', 'Nenhum reembolso a pagar')]),
+          ...pendentes.map(x => opcao(String(x.id), [`Pedido ${x.pedido}`, x.cliente || '', formatarMoeda(x.valor)].filter(Boolean).join(' · '))));
+        formaSel.replaceChildren(opcao('', 'Selecione'), ...(Array.isArray(r?.formas) ? r.formas : []).map(x => opcao(x, x)));
+        if (contexto.reembolso_id && pendentes.some(x => String(x.id) === String(contexto.reembolso_id))) qualSel.value = String(contexto.reembolso_id);
+      } catch (e) {
+        mostrarMensagem('finReembolsoMensagem', e?.corpo?.sql_pendente
+          ? 'Falta ativar a devolução no banco: rode sql/devolucoes.sql e reinicie a API.'
+          : textoDoErro(e, 'Você não tem permissão para ver os reembolsos.'));
+      }
+      pintar();
+    }
+
+    async function confirmarReembolso() {
+      mostrarMensagem('finReembolsoMensagem', '');
+      const r = atual();
+      const erro = !r ? 'Escolha o reembolso.'
+        : !dataCampo.value ? 'Informe a data do reembolso.'
+          : dataCampo.value > hoje ? 'A data do reembolso não pode ser futura.'
+            : !formaSel.value ? 'Informe como foi pago.' : '';
+      if (erro) { mostrarMensagem('finReembolsoMensagem', erro); return; }
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Confirmar o reembolso?',
+        message: `Pedido ${r.pedido}${r.cliente ? ` (${r.cliente})` : ''}: ${formatarMoeda(r.valor)} devolvidos ao cliente em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
+        confirmText: 'Confirmar reembolso'
+      });
+      if (!confirmado) return;
+      processando = true;
+      try {
+        await fetchApi(`/api/devolucoes/reembolsos/${encodeURIComponent(r.id)}/confirmar`, {
+          method: 'POST',
+          body: JSON.stringify({ data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finReembolsoObservacoes').value })
+        });
+        window.showToast?.('Reembolso confirmado.', 'success');
+        avisarAlteracao();
+        processando = false;
+        fechar();
+      } catch (e) {
+        mostrarMensagem('finReembolsoMensagem', textoDoErro(e, 'Você não tem permissão para confirmar reembolsos.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    qualSel.addEventListener('change', pintar);
+    acionar(confirmarBtn, confirmarReembolso);
+    return carregar();
   }
 
   function montarRelatorios() {
@@ -1058,208 +2217,323 @@
     };
     filtro.addEventListener('change', alternarFiltro);
     alternarFiltro();
+    if (contexto.relatorio) {
+      const radio = [...overlay.querySelectorAll('input[name="finRelatorio"]')].find(r => r.value === contexto.relatorio);
+      if (radio) {
+        radio.checked = true;
+        const aba = radio.closest('[data-fin-painel]')?.dataset.finPainel;
+        if (aba) overlay.querySelector(`[data-fin-aba="${aba}"]`)?.click();
+      }
+    }
 
-    // "Visualizar" abre a folha de conferência de verdade; PDF e Excel ainda
-    // são o aviso do botão principal.
-    const gerar = overlay.querySelector('[data-fin-principal]');
-    gerar.addEventListener('click', evento => {
-      const formato = overlay.querySelector('input[name="finRelFormato"]:checked')?.value;
-      if (formato !== 'visualizar') return;
-      evento.stopImmediatePropagation();
+    async function gerar() {
+      mostrarMensagem('finRelatoriosMensagem', '');
+      const formato = overlay.querySelector('input[name="finRelFormato"]:checked')?.value || 'visualizar';
       const relatorio = overlay.querySelector('input[name="finRelatorio"]:checked')?.value;
-      const competencia = filtro.value === 'competencia' ? el('finRelCompetencia').value : null;
-      const periodo = filtro.value === 'periodo' ? { inicio: el('finRelPeriodoInicio').value, fim: el('finRelPeriodoFim').value } : null;
-      abrirOutro('visualizar-relatorio', { relatorio, competencia, periodo });
-    }, true);
-  }
-
-  function montarDetalhesParcela() {
-    const p = contexto.parcela || EXEMPLO.parcelaPadrao;
-    const original = Number(p.original ?? p.liquido ?? 0);
-    const devolucoes = Number(p.devolucoes || 0);
-    const descontos = Number(p.descontos || 0);
-    const liquido = centavos(original - devolucoes - descontos);
-    const cms = centavos(liquido * TAXA_CMS);
-    const royalty = centavos(liquido * TAXA_ROYALTY);
-    const status = p.status || (p.liquidacao ? 'Liquidada' : (diferencaDias(hojeLocal(), p.vencimento) > 0 ? 'Atrasada' : 'Aberta'));
-
-    el('finParcelaContexto').textContent = `Pedido ${p.pedido} • NF ${p.nf} • Parcela ${p.parcela}`;
-    aplicarBadge(el('finParcelaStatus'), status);
-    montarDl(el('finParcelaResumo'), [
-      ['Valor original', formatarMoeda(original)],
-      ['(-) Devoluções', formatarMoeda(devolucoes)],
-      ['(-) Descontos', formatarMoeda(descontos)],
-      ['Valor líquido', formatarMoeda(liquido), true],
-      ['Vencimento', formatarData(p.vencimento)],
-      ['Liquidação', p.liquidacao ? formatarData(p.liquidacao) : 'Não liquidada'],
-      ['CMS', formatarMoeda(cms)],
-      ['Royalty', formatarMoeda(royalty)],
-      ['Total comissão', formatarMoeda(cms + royalty), true]
-    ]);
-
-    const ajustes = [];
-    if (devolucoes) ajustes.push({ data: '2026-09-10', tipo: 'Devolução', motivo: 'Peça devolvida com avaria', valor: -devolucoes, usuario: 'Ana Paula' });
-    if (descontos) ajustes.push({ data: '2026-09-12', tipo: 'Desconto comercial', motivo: 'Negociação com o cliente', valor: -descontos, usuario: 'Marcos' });
-    montarLinhas(el('finParcelaAjustes'), ajustes, [
-      { chave: 'data', tipo: 'data' }, { chave: 'tipo' }, { chave: 'motivo' },
-      { chave: 'valor', tipo: 'moeda' }, { chave: 'usuario' }
-    ]);
-    if (!ajustes.length) {
-      const tr = document.createElement('tr');
-      const td = criar('td', 'px-4 py-6 text-center text-sm text-gray-400', 'Nenhum ajuste nesta parcela.');
-      td.colSpan = 5;
-      tr.appendChild(td);
-      el('finParcelaAjustes').appendChild(tr);
+      if (!relatorio) { mostrarMensagem('finRelatoriosMensagem', 'Escolha o relatório.'); return; }
+      const porPeriodo = filtro.value === 'periodo';
+      const competencia = porPeriodo ? (contexto.competencia || competenciaAtual()) : el('finRelCompetencia').value;
+      const periodo = porPeriodo ? { inicio: el('finRelPeriodoInicio').value, fim: el('finRelPeriodoFim').value } : null;
+      if (periodo && (!periodo.inicio || !periodo.fim)) { mostrarMensagem('finRelatoriosMensagem', 'Informe o período (de e até).'); return; }
+      if (periodo && periodo.inicio > periodo.fim) { mostrarMensagem('finRelatoriosMensagem', 'O período está invertido.'); return; }
+      if (formato === 'visualizar') {
+        abrirOutro('visualizar-relatorio', { relatorio, competencia, periodo });
+        return;
+      }
+      try {
+        const dados = await buscarRelatorio(relatorio, { competencia, periodo });
+        if (!dados.linhas.length) { mostrarMensagem('finRelatoriosMensagem', 'Nenhum registro para este relatório com esse filtro.'); return; }
+        await exportarRelatorio(formato, dados);
+      } catch (e) {
+        mostrarMensagem('finRelatoriosMensagem', textoDoErro(e, 'Você não tem permissão para ver este relatório.'));
+      }
     }
 
-    const emissao = somarDias(p.vencimento, -30);
-    const historico = [
-      { quando: formatarDataCurta(emissao), titulo: `NF ${p.nf} emitida`, detalhe: formatarMoeda(original * 3) },
-      { quando: formatarDataCurta(emissao), titulo: `Parcela ${p.parcela} gerada`, detalhe: `Vencimento ${formatarData(p.vencimento)}` }
-    ];
-    for (const a of ajustes) historico.push({ quando: formatarDataCurta(a.data), titulo: `${a.tipo} lançada`, detalhe: `${formatarMoeda(a.valor)} • ${a.usuario}` });
-    if (p.liquidacao) {
-      historico.push({ quando: formatarDataCurta(p.liquidacao), titulo: 'Liquidação registrada', detalhe: formatarMoeda(liquido) });
-      historico.push({ quando: formatarDataCurta(p.liquidacao), titulo: 'Comissão apurada', detalhe: `${formatarMoeda(cms + royalty)} • ${competenciaDe(p.liquidacao)}` });
-      historico.push({ quando: '15/10', titulo: 'Pagamento programado', detalhe: 'Competência de setembro' });
-    } else {
-      historico.push({ quando: formatarDataCurta(hojeLocal()), titulo: 'Aguardando recebimento', detalhe: `${Math.max(0, diferencaDias(hojeLocal(), p.vencimento) ?? 0)} dias em atraso` });
-    }
-    montarLinhaDoTempo(el('finParcelaHistorico'), historico);
-    ligarAbas();
-  }
-
-  function montarDetalhesPedido() {
-    const numero = String(contexto.pedido || '2548');
-    const base = EXEMPLO.detalhesPedido[numero];
-    const linhasProducao = EXEMPLO.producaoCompetencia.filter(l => l.pedido === numero);
-    const atrasadas = calcularAtrasadas(EXEMPLO.atrasadas.filter(l => l.pedido === numero), hojeLocal());
-    const cliente = base?.cliente || linhasProducao[0]?.cliente || atrasadas[0]?.cliente
-      || EXEMPLO.previsao.find(l => l.pedido === numero)?.cliente || EXEMPLO.aguardandoNf.find(l => l.pedido === numero)?.cliente || '—';
-    const dados = base || {
-      cliente, data: null, valor: EXEMPLO.aguardandoNf.find(l => l.pedido === numero)?.valor ?? null,
-      condicao: EXEMPLO.aguardandoNf.find(l => l.pedido === numero)?.condicao || '—',
-      status: linhasProducao.some(l => l.status === 'Parcial') ? 'Produção' : 'Entregue', observacoes: '—',
-      itens: [...new Map(linhasProducao.map(l => [l.codigo, { codigo: l.codigo, descricao: l.produto, quantidade: l.quantidade, produzida: l.quantidade }])).values()],
-      notas: atrasadas.map(a => ({ nf: a.nf, data: somarDias(a.vencimento, -30), valor: a.liquido, parcelas: Number(a.parcela.split('/')[1]) || 1, status: 'Atrasada' }))
-    };
-
-    el('finPedidoTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-box mr-2' }), document.createTextNode(`Pedido ${numero}`));
-    el('finPedidoCliente').textContent = dados.cliente;
-    aplicarBadge(el('finPedidoStatus'), dados.status);
-    el('finPedidoData').textContent = dados.data ? formatarData(dados.data) : '—';
-    el('finPedidoValor').textContent = formatarMoeda(dados.valor);
-    el('finPedidoCondicao').textContent = dados.condicao || '—';
-    el('finPedidoStatusTexto').textContent = dados.status;
-    el('finPedidoObservacoes').textContent = dados.observacoes || '—';
-
-    montarLinhas(el('finPedidoItens'), dados.itens.map(i => ({
-      ...i, saldo: i.quantidade - i.produzida,
-      situacao: i.produzida >= i.quantidade ? 'Finalizado' : (i.produzida > 0 ? 'Parcial' : 'Aberta')
-    })), [
-      { chave: 'codigo' }, { chave: 'descricao' }, { chave: 'quantidade', tipo: 'inteiro' },
-      { chave: 'produzida', tipo: 'inteiro' }, { chave: 'saldo', tipo: 'inteiro' }, { chave: 'situacao', tipo: 'badge' }
-    ]);
-
-    montarLinhas(el('finPedidoNotas'), dados.notas, [
-      { chave: 'nf' }, { chave: 'data', tipo: 'data' }, { chave: 'valor', tipo: 'moeda' },
-      { chave: 'parcelas', tipo: 'inteiro' }, { chave: 'status', tipo: 'badge' }
-    ]);
-    if (!dados.notas.length) {
-      const tr = document.createElement('tr');
-      const td = criar('td', 'px-4 py-6 text-center text-sm text-gray-400', 'Nenhuma NF registrada para este pedido.');
-      td.colSpan = 5;
-      tr.appendChild(td);
-      el('finPedidoNotas').appendChild(tr);
-    }
-
-    montarLinhaDoTempo(el('finPedidoProducao'), linhasProducao
-      .slice().sort((a, b) => String(a.data).localeCompare(String(b.data)))
-      .map(l => ({ quando: formatarDataCurta(l.data), titulo: `${l.quantidade} × ${l.produto} finalizadas`, detalhe: `${l.setor} • ${formatarMoeda(l.total)}` })));
-
-    const previsto = centavos(Number(dados.valor || 0) * (TAXA_CMS + TAXA_ROYALTY));
-    const realizado = centavos(EXEMPLO.apuradas.filter(l => l.pedido === numero).reduce((s, l) => s + l.liquido * (TAXA_CMS + TAXA_ROYALTY), 0));
-    const atrasado = resumoAtrasadas(atrasadas).comissao;
-    const ajustes = centavos(EXEMPLO.ajustesAnteriores.filter(l => l.pedido === numero).reduce((s, l) => s + l.valor, 0) * (TAXA_CMS + TAXA_ROYALTY));
-    montarDl(el('finPedidoComissoes'), [
-      ['Comissão prevista', formatarMoeda(previsto)],
-      ['Realizada', formatarMoeda(realizado)],
-      ['Atrasada', formatarMoeda(atrasado)],
-      ['Ajustes', formatarMoeda(ajustes)],
-      ['Saldo previsto', formatarMoeda(centavos(previsto - realizado + ajustes)), true]
-    ]);
-    ligarAbas();
-  }
-
-  function montarConfirmarPagamento() {
-    montarCompetencias(el('finPagamentoCompetencia'), contexto.competencia);
-    const radios = overlay.querySelectorAll('input[name="finPagamentoTipo"]');
-    if (contexto.tipo) radios.forEach(r => { r.checked = r.value === contexto.tipo; });
-    const atualizar = () => {
-      const tipo = overlay.querySelector('input[name="finPagamentoTipo"]:checked')?.value || 'comissao';
-      el('finPagamentoValor').value = formatarMoeda(tipo === 'producao' ? EXEMPLO.fechamento.producao.total : EXEMPLO.fechamento.comissoes.total);
-    };
-    radios.forEach(r => r.addEventListener('change', atualizar));
-    atualizar();
+    acionar(el('finRelGerar'), gerar);
   }
 
   async function montarVisualizarRelatorio() {
     const chave = RELATORIOS[contexto.relatorio] ? contexto.relatorio : 'comissoes-apuradas';
     const competencia = contexto.competencia || competenciaAtual();
-    let filtro = contexto.periodo?.inicio
-      ? `Período: ${formatarData(contexto.periodo.inicio)} a ${formatarData(contexto.periodo.fim)}`
-      : `Competência: ${rotuloCompetenciaCurto(competencia)}`;
-    // "Pedidos aguardando NF-e" é real: as linhas vêm do painel fiscal.
-    let extra = {};
-    if (chave === 'aguardando-nf') {
+    const periodo = contexto.periodo?.inicio ? contexto.periodo : null;
+    let relatorio = { ...montarRelatorio(chave, { linhas: [] }), competencia, periodo, filtro: '' };
+    let carregado = false;
+    // Relatório de comissão: a linha abre os Detalhes da parcela.
+    const destinoDaLinha = l => (RELATORIOS_DE_PARCELA.has(chave) && l.pedido_id && l.numero_parcela ? 'detalhes-parcela' : null);
+
+    function pintar() {
+      el('finRelatorioTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-chart-line mr-2' }),
+        document.createTextNode(tituloDoRelatorio(relatorio)));
+      el('finRelatorioSubtitulo').textContent = 'Conferência antes da exportação';
+      el('finRelatorioGeradoEm').textContent = `Gerado em ${formatarData(hojeLocal())}`;
+      el('finRelatorioNome').textContent = relatorio.titulo;
+      el('finRelatorioFiltro').textContent = relatorio.filtro || (periodo ? `Período: ${formatarData(periodo.inicio)} a ${formatarData(periodo.fim)}` : `Competência: ${rotuloCompetenciaCurto(competencia)}`);
+      const cabecalho = el('finRelatorioCabecalho');
+      cabecalho.replaceChildren();
+      for (const c of relatorio.colunas) {
+        cabecalho.appendChild(criar('th', `px-4 py-3 text-xs ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`, c.rotulo));
+      }
+      montarLinhas(el('finRelatorioCorpo'), relatorio.linhas, relatorio.colunas.map(c => (c.chave === 'dias' ? { ...c, enfase: true } : c)), { abrir: destinoDaLinha });
+      const totais = el('finRelatorioTotais');
+      totais.replaceChildren();
+      relatorio.colunas.forEach((c, i) => {
+        const td = criar('td', `px-4 py-3 ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`);
+        if (i === 0) td.textContent = `Total (${relatorio.linhas.length} ${relatorio.linhas.length === 1 ? 'registro' : 'registros'})`;
+        else if (c.total) td.textContent = c.tipo === 'inteiro' ? String(relatorio.totais[c.chave]) : formatarMoeda(relatorio.totais[c.chave]);
+        totais.appendChild(td);
+      });
+      el('finRelatorioVazio').classList.toggle('hidden', !carregado || relatorio.linhas.length > 0);
+    }
+
+    async function carregar() {
+      el('finRelatorioCarregando').classList.remove('hidden');
       try {
-        const painel = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competencia)}`);
-        extra = { linhas: linhasDoRelatorioAguardando(painel) };
-        filtro = `Enviados desde ${formatarData(painel.desde)} sem NF-e`;
+        relatorio = await buscarRelatorio(chave, { competencia, periodo });
       } catch (e) {
-        extra = { linhas: [] };
-        filtro = e.status === 403 ? 'Sem permissão para ver as notas fiscais.' : `Não foi possível ler o painel fiscal: ${e.message}`;
+        relatorio = { ...montarRelatorio(chave, { linhas: [] }), competencia, periodo, filtro: textoDoErro(e, 'Sem permissão para ver este relatório.') };
+      } finally {
+        carregado = true;
+        el('finRelatorioCarregando').classList.add('hidden');
+      }
+      pintar();
+    }
+
+    const exportar = formato => async () => {
+      if (!relatorio.linhas.length) { window.showToast?.('Nada para exportar.', 'info'); return; }
+      try {
+        await exportarRelatorio(formato, relatorio);
+      } catch (e) {
+        window.showToast?.(e.message || 'Não foi possível exportar.', 'error');
+      }
+    };
+    acionar(el('finRelatorioPdf'), exportar('pdf'));
+    acionar(el('finRelatorioExcel'), exportar('excel'));
+    aoAlterar(carregar);
+    pintar();
+    return carregar();
+  }
+
+  function montarDetalhesParcela() {
+    const alvo = contexto.parcela || {};
+    ligarAbas();
+    const registrarBtn = el('finParcelaRegistrarAjuste');
+    let dados = null;
+
+    function pintar() {
+      const d = dados;
+      el('finParcelaContexto').textContent = d ? [`Pedido ${d.pedido}`, d.cliente, d.nf ? `NF ${d.nf}` : null, `Parcela ${d.parcela}`].filter(Boolean).join(' • ') : '';
+      aplicarBadge(el('finParcelaStatus'), d ? d.situacao_rotulo : '—');
+      const corpoB = el('finParcelaBeneficiarios');
+      const corpoF = el('finParcelaFechamentos');
+      const corpoA = el('finParcelaAjustes');
+      [corpoB, corpoF, corpoA].forEach(c => c.replaceChildren());
+      if (!d) {
+        el('finParcelaResumo').replaceChildren();
+        el('finParcelaHistorico').replaceChildren();
+        return;
+      }
+
+      const pares = [['Valor original', formatarMoeda(d.valor_original)]];
+      if (Number(d.abatimento_boleto)) pares.push(['(-) Abatimento no boleto', formatarMoeda(d.abatimento_boleto)]);
+      pares.push(
+        ['(-) Devoluções', formatarMoeda(d.devolucoes)],
+        ['(-) Descontos, abatimentos e outros', formatarMoeda(d.descontos)],
+        ['Valor líquido', formatarMoeda(d.liquido), true],
+        ['Vencimento', formatarData(d.vencimento)],
+        ['Liquidação', d.recebimento
+          ? `${formatarData(d.recebimento.data)}${d.recebimento.forma ? ` (${d.recebimento.forma})` : ''}`
+          : (Number(d.dias_atraso) > 0 ? `Não liquidada — ${d.dias_atraso} dias em atraso` : 'Não liquidada')],
+        [`CMS (${percentualTexto(d.taxas?.pct_cms)})`, formatarMoeda(d.potencial?.cms)],
+        [`Royalty (${percentualTexto(d.taxas?.pct_royalty)})`, formatarMoeda(d.potencial?.royalty)],
+        ['Total comissão', formatarMoeda(d.potencial?.total), true]
+      );
+      if (d.comissao_fechada) pares.push(['Já fechado (somando ajustes fechados)', formatarMoeda(d.congelado?.total)]);
+      if ((d.pendentes || []).length) {
+        const aFechar = centavos(d.pendentes.reduce((s, i) => s + Number(i.total || 0), 0));
+        pares.push([`A fechar em ${[...new Set(d.pendentes.map(i => rotuloCompetenciaCurto(i.competencia)))].join(', ')}`, formatarMoeda(aFechar)]);
+      }
+      if (d.sem_regra) pares.push(['Regra de comissão', 'Nenhuma cadastrada para este pedido']);
+      if (d.taxas?.congeladas) pares.push(['Percentuais', 'Os do fechamento (mudar a regra não altera esta parcela)']);
+      montarDl(el('finParcelaResumo'), pares);
+
+      const bens = d.potencial?.beneficiarios || [];
+      if (!bens.length) linhaVazia(corpoB, 4, 'Sem regra de CMS/Royalty para esta parcela.');
+      for (const b of bens) {
+        const tr = document.createElement('tr');
+        tr.append(celulaG(TIPOS_REGRA[b.tipo] || b.tipo), celulaG(b.beneficiario, 'px-4 py-3 text-white'),
+          celulaG(percentualTexto(b.percentual), 'px-4 py-3 text-right'), celulaG(formatarMoeda(b.valor), 'px-4 py-3 text-right'));
+        corpoB.appendChild(tr);
+      }
+
+      if (!(d.fechamentos || []).length) linhaVazia(corpoF, 5, 'A comissão desta parcela ainda não entrou em fechamento.');
+      for (const f of d.fechamentos || []) {
+        const tr = document.createElement('tr');
+        tr.append(
+          celulaG(rotuloCompetenciaCurto(f.competencia), 'px-4 py-3 text-white'),
+          celulaG(f.tipo_item === 'parcela' ? 'Comissão' : `Ajuste${f.motivo ? `: ${f.motivo}` : ''}`),
+          celulaG(formatarMoeda(f.total), 'px-4 py-3 text-right'),
+          celulaG(formatarData(f.pagar_ate)),
+          celulaG(f.pagamento ? tagG(`Paga em ${formatarData(f.pagamento.data)}`, 'badge-success', f.pagamento.forma || '') : tagG('A pagar', 'badge-warning'))
+        );
+        corpoF.appendChild(tr);
+      }
+
+      if (!(d.ajustes || []).length) linhaVazia(corpoA, 7, 'Nenhum ajuste nesta parcela.');
+      for (const a of d.ajustes || []) {
+        const acoes = criar('div', 'flex flex-wrap gap-2');
+        if (a.status === 'ativo' && !a.no_fechamento) {
+          botaoG(acoes, 'Cancelar', () => cancelarAjuste(a), { classe: 'btn-danger text-white', perm: 'financeiro.ajuste.registrar', titulo: 'Desfazer este ajuste (ainda não entrou em fechamento)' });
+        }
+        const situacao = a.status !== 'ativo' ? tagG('Cancelado', 'badge-danger', a.motivo_cancelamento || '')
+          : (a.no_fechamento ? tagG('Fechado', 'badge-neutral', 'Já entrou num fechamento de comissões') : tagG('Ativo', 'badge-success'));
+        const tr = document.createElement('tr');
+        tr.append(
+          celulaG(formatarData(a.data), 'px-4 py-3 text-white'), celulaG(a.rotulo),
+          celulaG([a.motivo, a.observacao].filter(Boolean).join(' — ')), celulaG(formatarMoeda(-a.valor), 'px-4 py-3 text-right'),
+          celulaG(a.usuario || '—'), celulaG(situacao), celulaG(acoes)
+        );
+        corpoA.appendChild(tr);
+      }
+
+      montarLinhaDoTempo(el('finParcelaHistorico'), (d.historico || []).map(h => ({ quando: h.quando, titulo: h.titulo, detalhe: h.detalhe })));
+      registrarBtn.classList.toggle('hidden', d.situacao === 'nao_realizada');
+    }
+
+    async function carregar() {
+      if (!alvo.pedido_id || !alvo.numero_parcela) {
+        el('finParcelaCarregando').classList.add('hidden');
+        mostrarMensagem('finParcelaMensagem', 'Parcela não informada.');
+        registrarBtn.classList.add('hidden');
+        return;
+      }
+      mostrarMensagem('finParcelaMensagem', '');
+      try {
+        dados = await fetchApi(`/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}`);
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('finParcelaMensagem', textoDoErro(e, 'Você não tem permissão para ver as comissões.'));
+      } finally {
+        el('finParcelaCarregando').classList.add('hidden');
+      }
+      pintar();
+    }
+
+    async function cancelarAjuste(a) {
+      const motivo = await pedirTexto({
+        titulo: 'Cancelar este ajuste?',
+        mensagem: `${a.rotulo} de ${formatarMoeda(a.valor)} (${formatarData(a.data)}): o valor volta para a base da comissão.`,
+        placeholder: 'Por que está sendo cancelado (obrigatório)',
+        confirmar: 'Cancelar ajuste'
+      });
+      if (motivo === null) return;
+      try {
+        await fetchApi(`/api/financeiro/ajustes/${encodeURIComponent(a.id)}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        window.showToast?.('Ajuste cancelado.', 'success');
+        avisarAlteracao();
+      } catch (e) {
+        mostrarMensagem('finParcelaMensagem', textoDoErro(e, 'Você não tem permissão para cancelar ajustes.'));
       }
     }
-    const relatorio = montarRelatorio(chave, extra);
 
-    el('finRelatorioTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-chart-line mr-2' }),
-      document.createTextNode(`${relatorio.titulo} — ${rotuloCompetenciaCurto(competencia)}`));
-    el('finRelatorioSubtitulo').textContent = 'Conferência antes da exportação';
-    el('finRelatorioGeradoEm').textContent = `Gerado em ${formatarData(hojeLocal())}`;
-    el('finRelatorioNome').textContent = relatorio.titulo;
-    el('finRelatorioFiltro').textContent = filtro;
+    aoAlterar(carregar);
+    acionar(registrarBtn, () => abrirOutro('registrar-ajuste', { parcela: { pedido_id: alvo.pedido_id, numero_parcela: alvo.numero_parcela, pedido: dados?.pedido } }));
+    return carregar();
+  }
 
-    const cabecalho = el('finRelatorioCabecalho');
-    cabecalho.replaceChildren();
-    for (const c of relatorio.colunas) {
-      cabecalho.appendChild(criar('th', `px-4 py-3 text-xs ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`, c.rotulo));
+  function montarDetalhesPedido() {
+    const pedidoId = Number(contexto.pedido || contexto.pedidoId) || null;
+    ligarAbas();
+    let dados = null;
+
+    function pintar() {
+      const d = dados;
+      el('finPedidoTitulo').replaceChildren(Object.assign(document.createElement('i'), { className: 'fas fa-box mr-2' }),
+        document.createTextNode(`Pedido ${d?.pedido.numero || pedidoId || '—'}`));
+      el('finPedidoCliente').textContent = d?.pedido.cliente || '';
+      aplicarBadge(el('finPedidoStatus'), d?.pedido.situacao || '—');
+      ['finPedidoItens', 'finPedidoNotas', 'finPedidoProducao', 'finPedidoParcelas'].forEach(id => el(id).replaceChildren());
+      if (!d) return;
+      el('finPedidoData').textContent = formatarData(d.pedido.data);
+      el('finPedidoValor').textContent = formatarMoeda(d.pedido.valor);
+      el('finPedidoCondicao').textContent = d.pedido.condicao || '—';
+      el('finPedidoStatusTexto').textContent = d.pedido.situacao || '—';
+      el('finPedidoObservacoes').textContent = d.pedido.observacoes || '—';
+
+      montarLinhas(el('finPedidoItens'), (d.itens || []).map(i => ({
+        ...i, por_setor_texto: (i.por_setor || []).map(s => `${s.setor} ${s.finalizada}`).join(' · ') || '—'
+      })), [
+        { chave: 'codigo' }, { chave: 'descricao' }, { chave: 'quantidade', tipo: 'inteiro' }, { chave: 'produzida', tipo: 'inteiro' },
+        { chave: 'saldo', tipo: 'inteiro' }, { chave: 'por_setor_texto' }, { chave: 'situacao', tipo: 'badge' }
+      ]);
+      if (!(d.itens || []).length) linhaVazia(el('finPedidoItens'), 7, 'O pedido não tem itens.');
+
+      montarLinhas(el('finPedidoNotas'), (d.notas || []).map(n => ({ ...n, situacao: rotuloStatusNota(n.status).rotulo })), [
+        { chave: 'nf' }, { chave: 'data', tipo: 'data' }, { chave: 'valor', tipo: 'moeda' }, { chave: 'parcelas', tipo: 'inteiro' }, { chave: 'situacao', tipo: 'badge' }
+      ]);
+      if (!(d.notas || []).length) linhaVazia(el('finPedidoNotas'), 5, 'Nenhuma NF-e emitida para este pedido.');
+
+      const corpoP = el('finPedidoProducao');
+      for (const e of d.producao || []) {
+        const situacao = e.status === 'estornado' ? tagG('Estornado', 'badge-danger')
+          : (e.quantidade < 0 ? tagG('Estorno', 'badge-warning') : (e.estornado ? tagG('Estornado depois de fechar', 'badge-warning') : tagG('Registrado', 'badge-success')));
+        const tr = document.createElement('tr');
+        tr.append(celulaG(formatarData(e.data), 'px-4 py-3 text-white'), celulaG(e.produto), celulaG(e.setor || '—'),
+          celulaG(String(e.quantidade), 'px-4 py-3 text-right'), celulaG(situacao));
+        corpoP.appendChild(tr);
+      }
+      if (!(d.producao || []).length) linhaVazia(corpoP, 5, 'Nenhuma produção registrada neste pedido.');
+
+      const c = d.comissoes || {};
+      const taxas = c.taxas ? `CMS ${percentualTexto(c.taxas.pct_cms)} · Royalty ${percentualTexto(c.taxas.pct_royalty)}` : '—';
+      montarDl(el('finPedidoComissoes'), [
+        ['Percentuais', c.sem_regra ? 'Sem regra de CMS/Royalty cadastrada' : taxas],
+        ['Prevista (parcelas a receber)', formatarMoeda(c.prevista)],
+        ['Das quais atrasada', formatarMoeda(c.atrasada)],
+        ['Realizada (parcelas recebidas)', formatarMoeda(c.realizada)],
+        ['Já fechada', formatarMoeda(c.fechada)],
+        ['Paga', formatarMoeda(c.paga)],
+        ['Reduzida por ajustes', formatarMoeda(c.ajustes)],
+        ['Saldo a pagar', formatarMoeda(centavos(Number(c.prevista || 0) + Number(c.realizada || 0) - Number(c.paga || 0))), true]
+      ]);
+      montarLinhas(el('finPedidoParcelas'), (d.parcelas || []).map(p => ({ ...p, situacao_texto: p.situacao_rotulo })), [
+        { chave: 'parcela' }, { chave: 'vencimento', tipo: 'data' }, { chave: 'liquido', tipo: 'moeda' }, { chave: 'comissao', tipo: 'moeda' }, { chave: 'situacao_texto', tipo: 'badge' }
+      ], { abrir: 'detalhes-parcela' });
+      if (!(d.parcelas || []).length) linhaVazia(el('finPedidoParcelas'), 5, 'O pedido ainda não tem parcelas faturadas.');
+
+      montarLinhaDoTempo(el('finPedidoHistorico'), (d.historico || []).map(h => ({ quando: formatarDataCurta(h.quando), titulo: h.titulo, detalhe: h.detalhe })));
     }
-    montarLinhas(el('finRelatorioCorpo'), relatorio.linhas, relatorio.colunas.map(c => c.chave === 'dias' ? { ...c, enfase: true } : c));
 
-    const totais = el('finRelatorioTotais');
-    totais.replaceChildren();
-    relatorio.colunas.forEach((c, i) => {
-      const td = criar('td', `px-4 py-3 ${['moeda', 'inteiro'].includes(c.tipo) ? 'text-right' : 'text-left'}`);
-      if (i === 0) td.textContent = `Total (${relatorio.linhas.length} ${relatorio.linhas.length === 1 ? 'registro' : 'registros'})`;
-      else if (c.total) td.textContent = c.tipo === 'inteiro' ? String(relatorio.totais[c.chave]) : formatarMoeda(relatorio.totais[c.chave]);
-      totais.appendChild(td);
-    });
-    el('finRelatorioVazio').classList.toggle('hidden', relatorio.linhas.length > 0);
+    async function carregar() {
+      if (!pedidoId) {
+        el('finPedidoCarregando').classList.add('hidden');
+        mostrarMensagem('finPedidoMensagem', 'Pedido não informado.');
+        pintar();
+        return;
+      }
+      mostrarMensagem('finPedidoMensagem', '');
+      try {
+        dados = await fetchApi(`/api/financeiro/pedidos/${encodeURIComponent(pedidoId)}`);
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('finPedidoMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões e produção.'));
+      } finally {
+        el('finPedidoCarregando').classList.add('hidden');
+      }
+      pintar();
+    }
+
+    acionar(el('finPedidoAbrirCompleto'), () => abrirVisualizarPedido(pedidoId));
+    aoAlterar(carregar);
+    return carregar();
   }
 
   function montarComissoesAtrasadas() {
-    const todas = calcularAtrasadas(EXEMPLO.atrasadas, hojeLocal());
     const clienteSel = el('finAtrasadasCliente');
-    for (const nome of [...new Set(todas.map(l => l.cliente))].sort((a, b) => a.localeCompare(b, 'pt-BR'))) {
-      const opcao = document.createElement('option');
-      opcao.value = nome;
-      opcao.textContent = nome;
-      clienteSel.appendChild(opcao);
-    }
     // Os campos de data começam vazios: sem filtro de período.
     el('finAtrasadasInicio').value = '';
     el('finAtrasadasFim').value = '';
+    let todas = [];
+    let carregado = false;
 
     const colunas = [
       { chave: 'pedido', tipo: 'pedido' }, { chave: 'cliente' }, { chave: 'nf' }, { chave: 'parcela' },
@@ -1267,6 +2541,15 @@
       { chave: 'liquido', tipo: 'moeda' }, { chave: 'cms', tipo: 'moeda' }, { chave: 'royalty', tipo: 'moeda' },
       { chave: 'comissao', tipo: 'moeda', classe: 'font-semibold' }
     ];
+
+    function montarClientes() {
+      const atual = clienteSel.value;
+      clienteSel.replaceChildren(opcao('', 'Todos'));
+      for (const nome of [...new Set(todas.map(l => l.cliente).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))) {
+        clienteSel.appendChild(opcao(nome, nome));
+      }
+      clienteSel.value = [...clienteSel.options].some(o => o.value === atual) ? atual : '';
+    }
 
     function filtrar() {
       const cliente = clienteSel.value;
@@ -1276,26 +2559,27 @@
       const fim = el('finAtrasadasFim').value;
       return todas.filter(l =>
         (!cliente || l.cliente === cliente)
-        && (!pedido || l.pedido.includes(pedido))
+        && (!pedido || String(l.pedido).includes(pedido))
         && (!faixa || l.faixa === faixa)
-        && (!inicio || l.vencimento >= inicio)
-        && (!fim || l.vencimento <= fim));
+        && (!inicio || String(l.vencimento) >= inicio)
+        && (!fim || String(l.vencimento) <= fim));
     }
 
     function desenhar() {
       const linhas = filtrar();
       const resumo = resumoAtrasadas(linhas);
-      el('finAtrasadasQuantidade').textContent = String(resumo.quantidade);
-      el('finAtrasadasLiquido').textContent = formatarMoeda(resumo.liquido);
-      el('finAtrasadasComissao').textContent = formatarMoeda(resumo.comissao);
+      el('finAtrasadasQuantidade').textContent = carregado ? String(resumo.quantidade) : '—';
+      el('finAtrasadasLiquido').textContent = carregado ? formatarMoeda(resumo.liquido) : '—';
+      el('finAtrasadasComissao').textContent = carregado ? formatarMoeda(resumo.comissao) : '—';
       montarLinhas(el('finAtrasadasCorpo'), linhas, colunas, { abrir: 'detalhes-parcela' });
-      el('finAtrasadasVazio').classList.toggle('hidden', linhas.length > 0);
-      overlay.querySelector('#finAtrasadasCorpo').closest('.fin-tabela').classList.toggle('hidden', linhas.length === 0);
+      el('finAtrasadasVazio').classList.toggle('hidden', !carregado || linhas.length > 0);
+      el('finAtrasadasCorpo').closest('.fin-tabela').classList.toggle('hidden', linhas.length === 0);
 
       const aging = el('finAtrasadasAging');
       aging.replaceChildren();
-      const maior = Math.max(1, ...agingDe(linhas).map(f => f.liquido));
-      for (const f of agingDe(linhas)) {
+      const faixas = agingDe(linhas);
+      const maior = Math.max(1, ...faixas.map(f => f.liquido));
+      for (const f of faixas) {
         const linha = criar('div', 'fin-aging__linha');
         linha.appendChild(criar('span', 'fin-aging__faixa', `${f.faixa} dias`));
         const barra = criar('div', 'fin-aging__barra');
@@ -1309,6 +2593,23 @@
       }
     }
 
+    async function carregar() {
+      mostrarMensagem('finAtrasadasMensagem', '');
+      try {
+        const corpo = await fetchApi('/api/financeiro/parcelas?visao=atrasadas');
+        todas = (Array.isArray(corpo?.linhas) ? corpo.linhas : []).map(l => ({ ...l, dias: l.dias_atraso, faixa: l.faixa || faixaDeAtraso(l.dias_atraso) }));
+        el('finAtrasadasSemRegras').classList.toggle('hidden', corpo?.tem_regras !== false);
+      } catch (e) {
+        todas = [];
+        mostrarMensagem('finAtrasadasMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões.'));
+      } finally {
+        carregado = true;
+        el('finAtrasadasCarregando').classList.add('hidden');
+      }
+      montarClientes();
+      desenhar();
+    }
+
     ['finAtrasadasCliente', 'finAtrasadasFaixa', 'finAtrasadasInicio', 'finAtrasadasFim'].forEach(id => el(id).addEventListener('change', desenhar));
     el('finAtrasadasPedido').addEventListener('input', desenhar);
     // Enter numa linha abre os detalhes, como o clique.
@@ -1317,45 +2618,518 @@
       const tr = e.target.closest('tr[data-fin-abrir]');
       if (tr) { e.preventDefault(); tr.click(); }
     });
+    aoAlterar(carregar);
     desenhar();
+    return carregar();
   }
 
   function montarProducaoCompetencia() {
-    const todas = EXEMPLO.producaoCompetencia;
-    const competencia = contexto.competencia || competenciaAtual();
-    el('finProdCompCompetencia').textContent = rotuloCompetenciaCurto(competencia);
-    const resumo = resumoProducao(todas);
-    el('finProdCompPecas').textContent = String(resumo.pecas);
-    el('finProdCompPedidos').textContent = String(resumo.pedidos);
-    el('finProdCompPintura').textContent = formatarMoeda(resumo.pintura);
-    el('finProdCompMarcenaria').textContent = formatarMoeda(resumo.marcenaria);
-    el('finProdCompTotal').textContent = formatarMoeda(resumo.total);
-    el('finProdCompRodape').textContent = formatarMoeda(resumo.total);
+    const mesSel = el('finProdCompMes');
+    montarCompetencias(mesSel, contexto.competencia);
+    const setorSel = el('finProdCompSetor');
+    const fecharBtn = el('finProdCompFechar');
+    let dados = null;
+    let leitura = 0;
 
     const colunas = [
-      { chave: 'pedido', tipo: 'pedido' }, { chave: 'produtoCompleto' }, { chave: 'setor' },
-      { chave: 'quantidade', tipo: 'inteiro' }, { chave: 'unitario', tipo: 'moeda' },
-      { chave: 'total', tipo: 'moeda', classe: 'font-semibold' }, { chave: 'status', tipo: 'badge' }
+      { chave: 'pedido', tipo: 'pedido' }, { chave: 'data', tipo: 'data' }, { chave: 'produto' }, { chave: 'setor' },
+      { chave: 'quantidade', tipo: 'inteiro' }, { chave: 'valor_unitario', tipo: 'moeda' },
+      { chave: 'total', tipo: 'moeda', classe: 'font-semibold' }, { chave: 'status_item', tipo: 'badge' }
     ];
 
+    function pintarTopo() {
+      el('finProdCompCompetencia').textContent = rotuloCompetenciaCurto(mesSel.value);
+      const d = dados;
+      pintarSituacao(el('finProdCompStatus'), !d ? '—' : (d.fechamento?.pagamento ? 'Paga' : (d.fechado ? 'Fechada' : 'Em aberto')));
+      el('finProdCompSubtitulo').textContent = d?.fechado ? 'Peças congeladas no fechamento produtivo' : 'Peças finalizadas que entram no fechamento produtivo';
+      el('finProdCompInfo').textContent = d ? `Pagamento até ${formatarData(d.pagar_ate)}${d.fechamento?.pagamento ? ` · paga em ${formatarData(d.fechamento.pagamento.data_pagamento)}` : ''}` : '';
+
+      const caixa = el('finProdCompIndicadores');
+      const indicadores = d ? indicadoresDaProducao(d) : [];
+      caixa.replaceChildren();
+      caixa.className = `fin-indicadores${indicadores.length >= 5 ? ' fin-indicadores--5' : (indicadores.length === 4 ? ' fin-indicadores--4' : '')}`;
+      for (const i of indicadores) {
+        const cartao = criar('div', `fin-indicador${i.destaque ? ' fin-indicador--destaque' : ''}${i.atencao ? ' fin-indicador--atencao' : ''}`);
+        cartao.append(criar('span', 'fin-indicador__rotulo', i.rotulo), criar('strong', 'fin-indicador__valor', i.valor));
+        caixa.appendChild(cartao);
+      }
+
+      const atual = setorSel.value;
+      setorSel.replaceChildren(opcao('', 'Todos'));
+      for (const nome of [...new Set((d?.linhas || []).map(l => l.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))) {
+        setorSel.appendChild(opcao(nome, nome));
+      }
+      setorSel.value = [...setorSel.options].some(o => o.value === atual) ? atual : '';
+
+      const bloqueios = d && !d.fechado ? (d.bloqueios || []).filter(b => !/já foram fechadas/.test(b)) : [];
+      el('finProdCompBloqueiosTexto').textContent = bloqueios.join(' ');
+      el('finProdCompBloqueios').classList.toggle('hidden', !bloqueios.length);
+      fecharBtn.classList.toggle('hidden', !d || Boolean(d.fechado));
+    }
+
     function desenhar() {
-      const setor = el('finProdCompSetor').value;
+      const setor = setorSel.value;
       const pedido = String(el('finProdCompPedido').value).trim();
       const produto = String(el('finProdCompProduto').value).trim().toLowerCase();
       const status = el('finProdCompItemStatus').value;
-      const linhas = todas.filter(l =>
+      const linhas = (dados?.linhas || []).filter(l =>
         (!setor || l.setor === setor)
-        && (!pedido || l.pedido.includes(pedido))
-        && (!produto || `${l.codigo} ${l.produto}`.toLowerCase().includes(produto))
-        && (!status || l.status === status))
-        .map(l => ({ ...l, produtoCompleto: `${l.codigo} — ${l.produto}` }));
+        && (!pedido || String(l.pedido).includes(pedido))
+        && (!produto || String(l.produto || '').toLowerCase().includes(produto))
+        && (!status || l.status_item === status));
       montarLinhas(el('finProdCompCorpo'), linhas, colunas);
-      el('finProdCompVazio').classList.toggle('hidden', linhas.length > 0);
+      el('finProdCompRodape').textContent = formatarMoeda(centavos(linhas.reduce((s, l) => s + Number(l.total || 0), 0)));
+      el('finProdCompVazio').classList.toggle('hidden', !dados || linhas.length > 0);
     }
 
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('finProdCompMensagem', '');
+      el('finProdCompCarregando').classList.remove('hidden');
+      try {
+        const lido = await fetchApi(`/api/financeiro/producao?competencia=${encodeURIComponent(mesSel.value)}`);
+        if (minha !== leitura) return;
+        dados = lido;
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('finProdCompMensagem', textoDoErro(e, 'Você não tem permissão para ver a produção.'));
+      } finally {
+        if (minha === leitura) el('finProdCompCarregando').classList.add('hidden');
+      }
+      pintarTopo();
+      desenhar();
+    }
+
+    mesSel.addEventListener('change', carregar);
     ['finProdCompSetor', 'finProdCompItemStatus'].forEach(id => el(id).addEventListener('change', desenhar));
     ['finProdCompPedido', 'finProdCompProduto'].forEach(id => el(id).addEventListener('input', desenhar));
-    desenhar();
+    acionar(fecharBtn, () => abrirOutro('fechar-competencia', { tipo: 'producao', competencia: mesSel.value }));
+    acionar(el('finProdCompRelatorio'), () => abrirOutro('visualizar-relatorio', { relatorio: 'producao-competencia', competencia: mesSel.value }));
+    aoAlterar(carregar);
+    pintarTopo();
+    return carregar();
+  }
+
+  /**
+   * Regras de comissão e produção: tabelas editáveis (CMS/Royalty, setores,
+   * valor por peça, feriados e prazos). Quem só vê tem tudo em leitura.
+   */
+  function montarRegras() {
+    ligarAbas();
+    const podeEditar = pode('financeiro.regras.editar');
+    el('finRegrasSomenteLeitura').classList.toggle('hidden', podeEditar);
+    let dados = null;
+    const listas = {};
+    const erroDe = e => textoDoErro(e, 'Você não tem permissão para editar as regras.');
+    const avisar = texto => mostrarMensagem('finRegrasMensagem', texto);
+
+    async function carregar() {
+      try {
+        dados = await fetchApi('/api/financeiro/regras');
+        el('finRegrasSemSql').classList.add('hidden');
+      } catch (e) {
+        dados = null;
+        if (e?.corpo?.sql_pendente) el('finRegrasSemSql').classList.remove('hidden');
+        else avisar(textoDoErro(e, 'Você não tem permissão para ver as regras.'));
+      } finally {
+        el('finRegrasCarregando').classList.add('hidden');
+      }
+      pintarRegras();
+      pintarSetores();
+      pintarValores();
+      pintarCalendario();
+    }
+
+    /** Clientes, pedidos e peças para escolher (lidos uma vez, quando precisa). */
+    async function lista(alvo) {
+      if (!listas[alvo]) {
+        try {
+          const r = await fetchApi(`/api/financeiro/buscas/${alvo}`);
+          listas[alvo] = Array.isArray(r) ? r : [];
+        } catch (e) {
+          avisar(textoDoErro(e, 'Sem permissão para listar.'));
+          return [];
+        }
+      }
+      return listas[alvo];
+    }
+
+    // ------------------------------------------------ regras de comissão
+    const escopoSel = el('finRegraEscopo');
+    const alvoSel = el('finRegraAlvo');
+    const alvoBusca = el('finRegraAlvoBusca');
+    let editandoRegra = null;
+
+    async function montarAlvo(selecionado = null) {
+      const escopo = escopoSel.value;
+      el('finRegraAlvoBloco').classList.toggle('hidden', escopo === 'todos');
+      if (escopo === 'todos') return;
+      el('finRegraAlvoRotulo').firstChild.textContent = escopo === 'cliente' ? 'Cliente ' : 'Pedido ';
+      const clientes = await lista('clientes');
+      const nomeCliente = new Map(clientes.map(x => [String(x.id), x.nome]));
+      const itens = escopo === 'cliente' ? clientes : await lista('pedidos');
+      const rotulo = x => (escopo === 'cliente' ? x.nome : [x.numero, nomeCliente.get(String(x.cliente_id)), x.situacao].filter(Boolean).join(' • '));
+      const atual = selecionado !== null && selecionado !== undefined ? String(selecionado) : alvoSel.value;
+      const termo = alvoBusca.value.trim().toLowerCase();
+      const visiveis = itens.filter(x => !termo || rotulo(x).toLowerCase().includes(termo) || String(x.id) === atual);
+      alvoSel.replaceChildren(opcao('', visiveis.length ? (escopo === 'cliente' ? 'Escolha o cliente' : 'Escolha o pedido') : 'Nada com esta busca'));
+      for (const x of visiveis.slice(0, 500)) alvoSel.appendChild(opcao(String(x.id), rotulo(x)));
+      alvoSel.value = visiveis.some(x => String(x.id) === atual) ? atual : '';
+    }
+
+    function limparFormRegra() {
+      editandoRegra = null;
+      el('finRegraFormTitulo').textContent = 'Nova regra';
+      el('finRegraSalvar').textContent = 'Incluir regra';
+      el('finRegraCancelarEdicao').classList.add('hidden');
+      el('finRegraTipo').value = 'cms';
+      el('finRegraBeneficiario').value = '';
+      el('finRegraPercentual').value = '';
+      el('finRegraObservacao').value = '';
+      escopoSel.value = 'todos';
+      alvoBusca.value = '';
+      montarAlvo();
+    }
+
+    function editarRegra(r) {
+      editandoRegra = r;
+      el('finRegraFormTitulo').textContent = `Alterando: ${TIPOS_REGRA[r.tipo]} de ${r.beneficiario}`;
+      el('finRegraSalvar').textContent = 'Salvar alteração';
+      el('finRegraCancelarEdicao').classList.remove('hidden');
+      el('finRegraTipo').value = r.tipo;
+      el('finRegraBeneficiario').value = r.beneficiario;
+      el('finRegraPercentual').value = String(r.percentual).replace('.', ',');
+      el('finRegraObservacao').value = r.observacao || '';
+      escopoSel.value = r.escopo;
+      alvoBusca.value = '';
+      montarAlvo(r.escopo === 'cliente' ? r.cliente_id : (r.escopo === 'pedido' ? r.pedido_id : null));
+      el('finRegraBeneficiario').focus();
+    }
+
+    const corpoDaRegra = (r, mudancas = {}) => JSON.stringify({
+      tipo: r.tipo, beneficiario: r.beneficiario, percentual: r.percentual, escopo: r.escopo,
+      cliente_id: r.cliente_id ?? null, pedido_id: r.pedido_id ?? null, observacao: r.observacao ?? null, ativo: r.ativo, ...mudancas
+    });
+
+    async function salvarRegra() {
+      avisar('');
+      const escopo = escopoSel.value;
+      const bruto = String(el('finRegraPercentual').value).replace(/[\s%]/g, '').replace(',', '.');
+      const percentual = Number(bruto);
+      const nova = {
+        tipo: el('finRegraTipo').value,
+        beneficiario: el('finRegraBeneficiario').value.trim(),
+        percentual,
+        escopo,
+        cliente_id: escopo === 'cliente' ? (Number(alvoSel.value) || null) : null,
+        pedido_id: escopo === 'pedido' ? (Number(alvoSel.value) || null) : null,
+        observacao: el('finRegraObservacao').value.trim() || null,
+        ativo: editandoRegra ? editandoRegra.ativo : true
+      };
+      const erro = nova.beneficiario.length < 2 ? 'Diga quem recebe.'
+        : (!bruto || !Number.isFinite(percentual) || percentual < 0 || percentual > 100) ? 'O percentual vai de 0 a 100.'
+          : (escopo === 'cliente' && !nova.cliente_id) ? 'Escolha o cliente da regra.'
+            : (escopo === 'pedido' && !nova.pedido_id) ? 'Escolha o pedido da regra.' : '';
+      if (erro) { avisar(erro); return; }
+      try {
+        if (editandoRegra) await fetchApi(`/api/financeiro/regras/${encodeURIComponent(editandoRegra.id)}`, { method: 'PUT', body: JSON.stringify(nova) });
+        else await fetchApi('/api/financeiro/regras', { method: 'POST', body: JSON.stringify(nova) });
+        window.showToast?.(editandoRegra ? 'Regra alterada.' : 'Regra incluída.', 'success');
+        limparFormRegra();
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function alternarRegra(r) {
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: r.ativo ? 'Desativar a regra?' : 'Reativar a regra?',
+        message: `${TIPOS_REGRA[r.tipo]} ${percentualTexto(r.percentual)} para ${r.beneficiario} (${alcanceDaRegra(r)}). `
+          + (r.ativo ? 'O que ainda não foi fechado deixa de ter esta comissão.' : 'Volta a valer para o que ainda não foi fechado.'),
+        confirmText: r.ativo ? 'Desativar' : 'Reativar'
+      });
+      if (!confirmado) return;
+      avisar('');
+      try {
+        await fetchApi(`/api/financeiro/regras/${encodeURIComponent(r.id)}`, { method: 'PUT', body: corpoDaRegra(r, { ativo: !r.ativo }) });
+        window.showToast?.(r.ativo ? 'Regra desativada.' : 'Regra reativada.', 'success');
+        if (editandoRegra?.id === r.id) limparFormRegra();
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    function pintarRegras() {
+      const corpo = el('finRegrasCorpo');
+      corpo.replaceChildren();
+      const regras = (dados?.regras || []).slice().sort((a, b) => Number(b.ativo) - Number(a.ativo)
+        || String(a.tipo).localeCompare(String(b.tipo))
+        || ['todos', 'cliente', 'pedido'].indexOf(a.escopo) - ['todos', 'cliente', 'pedido'].indexOf(b.escopo)
+        || String(a.beneficiario).localeCompare(String(b.beneficiario), 'pt-BR'));
+      el('finRegrasVazio').classList.toggle('hidden', !dados || regras.length > 0);
+      corpo.closest('.fin-tabela').classList.toggle('hidden', regras.length === 0);
+      for (const r of regras) {
+        const acoes = criar('div', 'flex flex-wrap gap-2');
+        if (podeEditar) {
+          botaoG(acoes, 'Alterar', () => editarRegra(r), { perm: 'financeiro.regras.editar' });
+          botaoG(acoes, r.ativo ? 'Desativar' : 'Reativar', () => alternarRegra(r), { classe: r.ativo ? 'btn-danger text-white' : 'btn-success', perm: 'financeiro.regras.editar' });
+        }
+        const tr = document.createElement('tr');
+        if (!r.ativo) tr.classList.add('opacity-60');
+        tr.append(
+          celulaG(TIPOS_REGRA[r.tipo] || r.tipo), celulaG(r.beneficiario, 'px-4 py-3 text-white'),
+          celulaG(percentualTexto(r.percentual), 'px-4 py-3 text-right'), celulaG(alcanceDaRegra(r)),
+          celulaG(r.observacao || '—'), celulaG(r.ativo ? tagG('Ativa', 'badge-success') : tagG('Desativada', 'badge-neutral')), celulaG(acoes)
+        );
+        corpo.appendChild(tr);
+      }
+    }
+
+    // ------------------------------------------------------- setores
+    let editandoSetor = null;
+
+    function pintarSetores() {
+      const ul = el('finSetoresLista');
+      ul.replaceChildren();
+      for (const s of dados?.setores || []) {
+        const li = criar('li', 'flex items-center justify-between gap-3 py-2');
+        li.appendChild(criar('span', `text-sm ${s.ativo ? 'text-white' : 'text-gray-400'}`, `${s.nome}${s.ativo ? '' : ' (desativado)'}`));
+        const acoes = criar('div', 'flex gap-2');
+        if (podeEditar) {
+          botaoG(acoes, 'Renomear', () => {
+            editandoSetor = s;
+            el('finSetorNome').value = s.nome;
+            el('finSetorSalvar').textContent = 'Salvar';
+            el('finSetorNome').focus();
+          }, { perm: 'financeiro.regras.editar' });
+          botaoG(acoes, s.ativo ? 'Desativar' : 'Reativar', () => salvarSetor(s, !s.ativo), { classe: s.ativo ? 'btn-danger text-white' : 'btn-success', perm: 'financeiro.regras.editar' });
+        }
+        li.appendChild(acoes);
+        ul.appendChild(li);
+      }
+      if (!(dados?.setores || []).length) ul.appendChild(criar('li', 'fin-vazio', 'Nenhum setor cadastrado.'));
+      const sel = el('finValorSetor');
+      const atual = sel.value;
+      sel.replaceChildren(opcao('', 'Selecione'));
+      for (const s of (dados?.setores || []).filter(x => x.ativo)) sel.appendChild(opcao(String(s.id), s.nome));
+      sel.value = [...sel.options].some(o => o.value === atual) ? atual : '';
+    }
+
+    /** Sem `setor`: inclui ou renomeia pelo campo. Com `setor` e `ativo`: liga/desliga. */
+    async function salvarSetor(setor = null, ativo = undefined) {
+      avisar('');
+      const alvo = setor || editandoSetor;
+      const nome = setor ? setor.nome : el('finSetorNome').value.trim();
+      if (nome.length < 2) { avisar('Dê um nome ao setor.'); return; }
+      if (setor && ativo === false) {
+        const confirmado = await window.DialogPadrao?.confirm?.({
+          title: 'Desativar o setor?',
+          message: `${setor.nome} some do Registrar produção. O que já foi registrado continua valendo.`,
+          confirmText: 'Desativar'
+        });
+        if (!confirmado) return;
+      }
+      const corpo = { nome, ativo: ativo !== undefined ? ativo : (alvo ? alvo.ativo : true) };
+      try {
+        await fetchApi(alvo ? `/api/financeiro/setores/${encodeURIComponent(alvo.id)}` : '/api/financeiro/setores', { method: alvo ? 'PUT' : 'POST', body: JSON.stringify(corpo) });
+        window.showToast?.(alvo ? 'Setor alterado.' : 'Setor incluído.', 'success');
+        if (!setor) {
+          editandoSetor = null;
+          el('finSetorNome').value = '';
+          el('finSetorSalvar').textContent = 'Incluir';
+        }
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    // ------------------------------------------------ valor por peça
+    const produtoSel = el('finValorProduto');
+    const produtoBusca = el('finValorProdutoBusca');
+
+    async function montarProdutos(selecionado) {
+      const itens = await lista('produtos');
+      const rotulo = p => [p.codigo, p.nome].filter(Boolean).join(' — ') || `Peça ${p.id}`;
+      const atual = selecionado !== undefined ? String(selecionado) : produtoSel.value;
+      const termo = produtoBusca.value.trim().toLowerCase();
+      const visiveis = itens.filter(p => !termo || rotulo(p).toLowerCase().includes(termo) || String(p.id) === atual);
+      produtoSel.replaceChildren(opcao('padrao', 'Padrão do setor (toda peça sem valor próprio)'));
+      for (const p of visiveis.slice(0, 500)) produtoSel.appendChild(opcao(String(p.id), rotulo(p)));
+      produtoSel.value = [...produtoSel.options].some(o => o.value === atual) ? atual : 'padrao';
+    }
+
+    function editarValor(v) {
+      el('finValorSetor').value = String(v.setor_id);
+      produtoBusca.value = '';
+      montarProdutos(v.produto_id === null || v.produto_id === undefined ? 'padrao' : v.produto_id);
+      el('finValorValor').value = formatoMoeda.format(Number(v.valor_unitario) || 0);
+      el('finValorValor').focus();
+    }
+
+    /** Sem `remover`: grava o valor do formulário. Com `remover`: desliga aquela linha. */
+    async function salvarValor(remover = null) {
+      avisar('');
+      const setorId = remover ? Number(remover.setor_id) : Number(el('finValorSetor').value);
+      const escolha = remover ? (remover.produto_id === null || remover.produto_id === undefined ? 'padrao' : String(remover.produto_id)) : produtoSel.value;
+      const corpo = { setor_id: setorId, produto_id: !escolha || escolha === 'padrao' ? null : Number(escolha) };
+      if (!setorId) { avisar('Escolha o setor.'); return; }
+      if (remover) {
+        const confirmado = await window.DialogPadrao?.confirm?.({
+          title: 'Remover o valor?',
+          message: `${remover.setor}: ${remover.produto || 'padrão do setor'} (${formatarMoeda(remover.valor_unitario)} por peça). O que ainda não foi fechado passa a usar o padrão do setor, se houver.`,
+          confirmText: 'Remover'
+        });
+        if (!confirmado) return;
+        corpo.remover = true;
+      } else {
+        const valor = lerMoeda(el('finValorValor').value);
+        if (valor === null || valor < 0) { avisar('Informe o valor por peça.'); return; }
+        corpo.valor_unitario = valor;
+      }
+      try {
+        await fetchApi('/api/financeiro/valores', { method: 'POST', body: JSON.stringify(corpo) });
+        window.showToast?.(remover ? 'Valor removido.' : 'Valor salvo.', 'success');
+        if (!remover) el('finValorValor').value = '';
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    function pintarValores() {
+      const corpo = el('finValoresCorpo');
+      corpo.replaceChildren();
+      const valores = (dados?.valores || []).slice().sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR')
+        || (a.produto_id === null ? -1 : (b.produto_id === null ? 1 : String(a.produto).localeCompare(String(b.produto), 'pt-BR'))));
+      el('finValoresVazio').classList.toggle('hidden', !dados || valores.length > 0);
+      corpo.closest('.fin-tabela').classList.toggle('hidden', valores.length === 0);
+      for (const v of valores) {
+        const acoes = criar('div', 'flex flex-wrap gap-2');
+        if (podeEditar) {
+          botaoG(acoes, 'Alterar', () => editarValor(v), { perm: 'financeiro.regras.editar' });
+          botaoG(acoes, 'Remover', () => salvarValor(v), { classe: 'btn-danger text-white', perm: 'financeiro.regras.editar' });
+        }
+        const tr = document.createElement('tr');
+        tr.append(
+          celulaG(v.setor || '—', 'px-4 py-3 text-white'),
+          celulaG(v.produto_id === null || v.produto_id === undefined ? tagG('Padrão do setor', 'badge-info') : v.produto),
+          celulaG(formatarMoeda(v.valor_unitario), 'px-4 py-3 text-right'), celulaG(acoes)
+        );
+        corpo.appendChild(tr);
+      }
+    }
+
+    // ------------------------------------------- calendário e prazos
+    function pintarCalendario() {
+      const cfg = dados?.configuracao || {};
+      el('finCfgDiaComissao').value = String(cfg.comissao_dia_pagamento ?? 15);
+      el('finCfgDiaUtil').value = String(cfg.producao_dia_util ?? 5);
+      el('finCfgSabado').checked = Boolean(cfg.sabado_dia_util);
+
+      const corpo = el('finFeriadosCorpo');
+      corpo.replaceChildren();
+      const feriados = dados?.feriados || [];
+      el('finFeriadosVazio').classList.toggle('hidden', !dados || feriados.length > 0);
+      corpo.closest('.fin-tabela').classList.toggle('hidden', feriados.length === 0);
+      for (const f of feriados) {
+        const acoes = criar('div', 'flex gap-2');
+        if (podeEditar) botaoG(acoes, 'Retirar', () => retirarFeriado(f), { classe: 'btn-danger text-white', perm: 'financeiro.regras.editar' });
+        const tr = document.createElement('tr');
+        tr.append(celulaG(formatarData(f.data), 'px-4 py-3 text-white'), celulaG(f.descricao), celulaG(acoes));
+        corpo.appendChild(tr);
+      }
+
+      const nacionais = el('finFeriadosNacionais');
+      nacionais.replaceChildren();
+      for (const f of dados?.feriados_nacionais || []) {
+        const tr = document.createElement('tr');
+        tr.append(celulaG(formatarData(f.data), 'px-4 py-3 text-white'), celulaG(f.descricao));
+        nacionais.appendChild(tr);
+      }
+    }
+
+    async function salvarPrazos() {
+      avisar('');
+      const corpo = {
+        comissao_dia_pagamento: Number(el('finCfgDiaComissao').value),
+        producao_dia_util: Number(el('finCfgDiaUtil').value),
+        sabado_dia_util: el('finCfgSabado').checked
+      };
+      if (!Number.isInteger(corpo.comissao_dia_pagamento) || corpo.comissao_dia_pagamento < 1 || corpo.comissao_dia_pagamento > 28) { avisar('O dia do pagamento das comissões vai de 1 a 28.'); return; }
+      if (!Number.isInteger(corpo.producao_dia_util) || corpo.producao_dia_util < 1 || corpo.producao_dia_util > 20) { avisar('O dia útil do pagamento da produção vai de 1 a 20.'); return; }
+      try {
+        await fetchApi('/api/financeiro/configuracao', { method: 'PUT', body: JSON.stringify(corpo) });
+        window.showToast?.('Prazos salvos.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function incluirFeriado() {
+      avisar('');
+      const data = el('finFeriadoData').value;
+      const descricao = el('finFeriadoDescricao').value.trim();
+      if (!data) { avisar('Informe a data do feriado.'); return; }
+      if (descricao.length < 3) { avisar('Diga que feriado é.'); return; }
+      try {
+        await fetchApi('/api/financeiro/feriados', { method: 'POST', body: JSON.stringify({ data, descricao }) });
+        window.showToast?.('Feriado incluído.', 'success');
+        el('finFeriadoDescricao').value = '';
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function retirarFeriado(f) {
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Retirar o feriado?',
+        message: `${formatarData(f.data)} (${f.descricao}) volta a contar como dia útil.`,
+        confirmText: 'Retirar'
+      });
+      if (!confirmado) return;
+      avisar('');
+      try {
+        await fetchApi(`/api/financeiro/feriados/${encodeURIComponent(f.id)}`, { method: 'DELETE' });
+        window.showToast?.('Feriado retirado.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    // ------------------------------------------------------- ligações
+    if (!podeEditar) {
+      overlay.querySelectorAll('[data-fin-painel] input, [data-fin-painel] select, [data-fin-painel] textarea').forEach(c => { c.disabled = true; });
+    }
+    escopoSel.addEventListener('change', () => { alvoBusca.value = ''; alvoSel.value = ''; montarAlvo(); });
+    alvoBusca.addEventListener('input', () => montarAlvo());
+    produtoBusca.addEventListener('input', () => montarProdutos());
+    el('finRegraCancelarEdicao').addEventListener('click', limparFormRegra);
+    ligarCampoMoeda(el('finValorValor'));
+    acionar(el('finRegraSalvar'), salvarRegra);
+    acionar(el('finSetorSalvar'), () => salvarSetor());
+    acionar(el('finValorSalvar'), () => salvarValor());
+    acionar(el('finCfgSalvar'), salvarPrazos);
+    acionar(el('finFeriadoIncluir'), incluirFeriado);
+    // A lista de peças é grande: só é lida quando a aba Produção abre (e só para quem edita).
+    overlay.querySelector('[data-fin-aba="producao"]')?.addEventListener('click', () => {
+      if (podeEditar && !listas.produtos) montarProdutos('padrao');
+    });
+    produtoSel.replaceChildren(opcao('padrao', 'Padrão do setor (toda peça sem valor próprio)'));
+    return carregar();
   }
 
   // ------------------------------------------------ configuração fiscal
@@ -1842,7 +3616,7 @@
         semNf.type = 'button';
         semNf.dataset.perm = 'ped.status.ship';
         semNf.title = 'Marcar como enviado sem nota fiscal (S/NF)';
-        semNf.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(semNf, () => marcarSemNfe(l)) : marcarSemNfe(l)));
+        acionar(semNf, () => marcarSemNfe(l));
         acoes.appendChild(semNf);
       }
 
@@ -1980,7 +3754,7 @@
         b.type = 'button';
         if (perm) b.dataset.perm = perm;
         if (titulo) b.title = titulo;
-        b.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(b, fn) : fn()));
+        acionar(b, fn);
         acoes.appendChild(b);
       };
       const documentos = ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
@@ -2028,15 +3802,311 @@
     [competenciaSel, statusSel, ambienteSel].forEach(campo => campo.addEventListener('change', desenhar));
     busca.addEventListener('input', desenhar);
     const atualizar = el('finNotasAtualizar');
-    if (atualizar) atualizar.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(atualizar, carregarLista) : carregarLista()));
+    if (atualizar) acionar(atualizar, carregarLista);
     return carregarLista();
+  }
+
+  // ------------------------------------------- configuração de cobrança
+  //
+  // REAL: GET/PUT /api/cobranca/configuracao, o client_secret por
+  // POST/DELETE /api/cobranca/credenciais e o teste POST /api/cobranca/testar.
+  // Mesma anatomia da configuração fiscal.
+
+  function montarConfiguracaoCobranca() {
+    const campos = overlay.querySelectorAll('[data-fin-cob]');
+    let podeEditar = false;
+    let ambienteNoBanco = 'sandbox';
+    let bancoChaveMestra = false;
+
+    const texto = (id, valor) => { const e = el(id); if (e) e.textContent = valor ?? '—'; };
+    const mensagem = (txt, tipo = 'erro') => mostrarMensagem('finCobMensagem', txt, tipo);
+    const marcarTag = (id, classe, rotulo, extra = '') => {
+      const e = el(id);
+      if (!e) return;
+      e.className = `${classe} px-3 py-1 rounded-full text-xs font-medium ${extra}`.trim();
+      e.textContent = rotulo;
+    };
+
+    // Coluna que só existe depois do SQL da fase: sem ela o campo some e não vai no PUT.
+    let colunasAusentes = new Set();
+    function valoresDaTela() {
+      const corpo = {};
+      for (const campo of campos) {
+        if (colunasAusentes.has(campo.dataset.finCob)) continue;
+        corpo[campo.dataset.finCob] = campo.value;
+      }
+      return corpo;
+    }
+
+    function pintarPrevia() {
+      const previa = el('finCobPrevia');
+      if (previa) previa.textContent = previaDeEncargos(3327, valoresDaTela());
+    }
+
+    function pintarCredenciais(credenciais) {
+      for (const ambiente of ['sandbox', 'producao']) {
+        const c = credenciais?.[ambiente] || {};
+        const onde = c.origem === 'banco' ? 'no banco (todas as máquinas)' : (c.origem === 'env' ? 'no .env (DEV)' : 'só neste computador');
+        marcarTag(`finCobSecretTag_${ambiente}`, c.secret_guardado ? 'badge-success' : 'badge-danger', c.secret_guardado ? 'Secret guardado' : 'Sem secret');
+        const partes = [];
+        if (c.secret_guardado) partes.push(`Client secret guardado ${onde}${c.guardado_em ? ` em ${formatarData(String(c.guardado_em).slice(0, 10))}` : ''}.`);
+        else partes.push('Sem client secret: o BB não dá o token sem ele.');
+        if (c.erro) partes.push(c.erro);
+        if (Array.isArray(c.pendencias) && c.pendencias.length) partes.push(`Falta: ${c.pendencias.join('; ')}.`);
+        const estado = el(`finCobSecretEstado_${ambiente}`);
+        if (estado) {
+          estado.textContent = partes.join(' ');
+          estado.style.color = c.secret_guardado && !c.pendencias?.length ? 'var(--color-green)' : '';
+        }
+      }
+    }
+
+    function pintarDestinos(temChave) {
+      bancoChaveMestra = temChave;
+      const radios = overlay.querySelectorAll('input[name="finCobSecretDestino"]');
+      radios.forEach(r => { if (r.value === 'banco') r.disabled = !temChave; });
+      const marcado = Array.from(radios).some(r => r.checked && !r.disabled);
+      if (!marcado) radios.forEach(r => { r.checked = r.value === (temChave ? 'banco' : 'computador'); });
+      el('finCobSecretDestinoAviso')?.classList.toggle('hidden', temChave);
+    }
+    const destinoEscolhido = () => overlay.querySelector('input[name="finCobSecretDestino"]:checked')?.value || (bancoChaveMestra ? 'banco' : 'computador');
+
+    function alternarConfirmacao() {
+      const escolhido = el('finCob_ambiente')?.value;
+      el('finCobConfirmacaoProducao')?.classList.toggle('hidden', !(escolhido === 'producao' && ambienteNoBanco !== 'producao'));
+    }
+
+    function pintar(estado) {
+      podeEditar = Boolean(estado?.pode_editar);
+      ambienteNoBanco = estado?.ambiente_no_banco || 'sandbox';
+      const cfg = estado?.configuracao || {};
+      colunasAusentes = new Set(Array.from(campos)
+        .filter(c => c.dataset.finCobColunaNova === 'true' && !Object.prototype.hasOwnProperty.call(cfg, c.dataset.finCob))
+        .map(c => c.dataset.finCob));
+      overlay.querySelectorAll('[data-fin-cob-bloco]').forEach(bloco => bloco.classList.toggle('hidden', colunasAusentes.has(bloco.dataset.finCobBloco)));
+      for (const campo of campos) {
+        const valor = cfg[campo.dataset.finCob];
+        // DATE chega como '2026-09-16' ou '2026-09-16T00:00:00.000Z': o campo de data quer só o dia.
+        campo.value = valor === null || valor === undefined ? '' : (campo.type === 'date' ? String(valor).slice(0, 10) : String(valor));
+        campo.disabled = !podeEditar;
+      }
+      el('finCobSalvar')?.classList.toggle('hidden', !podeEditar);
+      el('finCobSecretBloco')?.classList.toggle('hidden', !podeEditar);
+      el('finCobRodapeAviso').textContent = podeEditar
+        ? 'Alterações valem para todos os usuários.'
+        : 'Só o Sup Admin altera a configuração. Você vê o que está valendo.';
+
+      const producao = estado?.ambiente === 'producao';
+      marcarTag('finCobAmbienteTag', producao ? 'badge-danger' : 'badge-warning', producao ? 'PRODUÇÃO' : 'Homologação (testes)', 'justify-self-end');
+      el('finCobTravaMaquina')?.classList.toggle('hidden', !estado?.travado_em_sandbox_nesta_maquina);
+      const teste = el('finCobTesteAmbiente');
+      if (teste) teste.value = producao ? 'producao' : 'sandbox';
+      const secretAmb = el('finCobSecretAmbiente');
+      if (secretAmb) secretAmb.value = producao ? 'producao' : 'sandbox';
+
+      const pend = el('finCobPendencias');
+      const lista = estado?.credenciais?.[estado?.ambiente || 'sandbox']?.pendencias || [];
+      if (pend) {
+        pend.classList.toggle('hidden', !lista.length);
+        pend.querySelector('span').textContent = `${producao ? 'Produção' : 'Homologação'}: ${lista.join(' • ')}`;
+      }
+
+      pintarCredenciais(estado?.credenciais);
+      pintarDestinos(Boolean(estado?.banco_chave_mestra));
+      texto('finCobNossoNumeroSandbox', estado?.nosso_numero?.sandbox || '—');
+      texto('finCobNossoNumeroProducao', estado?.nosso_numero?.producao || '—');
+      alternarConfirmacao();
+      pintarPrevia();
+    }
+
+    // ------------------------------- webhook e conciliação automática (fase F)
+    function pintarWebhook(w) {
+      texto('finCobWebhookUrl', w?.url_modelo || '—');
+      const a = w?.avisos || {};
+      texto('finCobWebhookUltimo', a.ultimo_em || 'nenhum aviso recebido ainda');
+      texto('finCobWebhookFila', `${Number(a.na_fila) || 0}${Number(a.com_erro) ? ` (${a.com_erro} com erro)` : ''}`);
+      texto('finCobWebhookContagens', `${Number(a.conciliados) || 0} / ${Number(a.ignorados) || 0} / ${Number(a.alertas) || 0}`);
+      const ag = w?.agenda || {};
+      const u = ag.ultima_automatica;
+      texto('finCobAgendaUltima', u ? `${u.quando}${u.maquina ? ` · ${u.maquina}` : ''}${u.erro ? ` · falhou: ${u.erro}` : (u.resumo ? ` · ${u.resumo}` : '')}` : 'ainda não rodou');
+      texto('finCobAgendaProxima', ag.ligada === false ? 'desligada' : (ag.proxima_por_volta ? `${ag.proxima_por_volta} (com o app aberto em alguma máquina)` : '—'));
+      el('finCobWebhookSemSql')?.classList.toggle('hidden', Boolean(ag.sql_pronto));
+
+      const avisos = el('finCobWebhookAvisos');
+      avisos.replaceChildren();
+      for (const r of w?.recentes || []) {
+        const tr = document.createElement('tr');
+        const situacao = criar('span', `${BADGE_DO_AVISO[r.situacao] || 'badge-neutral'} px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap`, r.situacao);
+        if (r.detalhe || r.mensagem) situacao.title = [r.mensagem, r.detalhe].filter(Boolean).join(' — ');
+        const tdSit = criar('td', 'px-3 py-2');
+        tdSit.appendChild(situacao);
+        tr.append(criar('td', 'px-3 py-2 text-white whitespace-nowrap', r.quando || '—'), criar('td', 'px-3 py-2 break-all', r.nosso_numero || '—'), tdSit);
+        avisos.appendChild(tr);
+      }
+      if (!(w?.recentes || []).length) {
+        const tr = document.createElement('tr');
+        const td = criar('td', 'px-3 py-3 text-gray-400', 'Nenhum aviso do BB chegou ainda.');
+        td.colSpan = 3;
+        tr.appendChild(td);
+        avisos.appendChild(tr);
+      }
+
+      const execs = el('finCobExecucoes');
+      execs.replaceChildren();
+      for (const x of w?.execucoes || []) {
+        const tr = document.createElement('tr');
+        const resultado = x.erro ? `Falhou: ${x.erro}` : (x.terminou ? (x.resumo || '—') : 'não terminou');
+        tr.append(criar('td', 'px-3 py-2 text-white whitespace-nowrap', x.quando || '—'), criar('td', 'px-3 py-2', `${x.como}${x.maquina ? ` · ${x.maquina}` : ''}`), criar('td', 'px-3 py-2', resultado));
+        execs.appendChild(tr);
+      }
+      if (!(w?.execucoes || []).length) {
+        const tr = document.createElement('tr');
+        const td = criar('td', 'px-3 py-3 text-gray-400', ag.sql_pronto ? 'Nenhuma conciliação registrada ainda.' : 'O registro começa depois do SQL da fase F.');
+        td.colSpan = 3;
+        tr.appendChild(td);
+        execs.appendChild(tr);
+      }
+    }
+
+    async function carregarWebhook() {
+      try {
+        pintarWebhook(await fetchApi('/api/cobranca/webhook/estado'));
+      } catch (e) {
+        texto('finCobWebhookResultado', e.message);
+      }
+    }
+
+    async function conciliarDaConfiguracao(soFila) {
+      const saida = el('finCobWebhookResultado');
+      saida.textContent = soFila ? 'Processando os avisos…' : 'Conciliando com o Banco do Brasil…';
+      saida.style.color = '';
+      try {
+        const r = await fetchApi('/api/cobranca/conciliar', { method: 'POST', body: JSON.stringify(soFila ? { so_fila: true } : {}) });
+        const t = textoDaConciliacao(r, soFila);
+        saida.textContent = `${t.texto}${t.erros.length ? ` ${t.erros.slice(0, 3).join(' | ')}` : ''}`;
+        saida.style.color = t.erros.length ? 'var(--color-red)' : 'var(--color-green)';
+        window.FinanceiroRecarregar?.();
+      } catch (e) {
+        saida.textContent = e.status === 403 ? 'Você não tem permissão para conciliar.' : e.message;
+        saida.style.color = 'var(--color-red)';
+      }
+      await carregarWebhook();
+    }
+
+    async function carregar() {
+      try {
+        pintar(await fetchApi('/api/cobranca/configuracao'));
+        el('finCobConteudo').classList.remove('hidden');
+        carregarWebhook();
+      } catch (e) {
+        const erroEl = el('finCobErroGeral');
+        erroEl.querySelector('span').textContent = e.message;
+        erroEl.classList.remove('hidden');
+      } finally {
+        el('finCobCarregando').classList.add('hidden');
+      }
+    }
+
+    async function salvar() {
+      mensagem('');
+      const corpo = valoresDaTela();
+      const confirmacao = el('finCobConfirmacao')?.value || '';
+      if (confirmacao) corpo.confirmacao = confirmacao;
+      try {
+        pintar(await fetchApi('/api/cobranca/configuracao', { method: 'PUT', body: JSON.stringify(corpo) }));
+        if (el('finCobConfirmacao')) el('finCobConfirmacao').value = '';
+        window.showToast?.('Configuração de cobrança salva.', 'success');
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function guardarSecret() {
+      mensagem('');
+      const secret = el('finCobSecret').value;
+      const ambiente = el('finCobSecretAmbiente').value;
+      if (!secret) { mensagem('Informe o client secret.'); return; }
+      try {
+        const destino = destinoEscolhido();
+        await fetchApi('/api/cobranca/credenciais', { method: 'POST', body: JSON.stringify({ ambiente, client_secret: secret, destino }) });
+        el('finCobSecret').value = '';
+        const nomeAmb = ambiente === 'producao' ? 'produção' : 'homologação';
+        window.showToast?.(destino === 'banco' ? `Client secret de ${nomeAmb} guardado no banco, para todas as máquinas.` : `Client secret de ${nomeAmb} guardado neste computador.`, 'success');
+        await carregar();
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function removerSecret() {
+      const ambiente = el('finCobSecretAmbiente').value;
+      const ok = await (window.DialogPadrao?.confirm?.({
+        title: `Remover o client secret de ${ambiente === 'producao' ? 'produção' : 'homologação'}?`,
+        message: 'O secret sai do banco e deste computador. Os boletos desse ambiente param até guardá-lo de novo.',
+        confirmText: 'Remover'
+      }) ?? Promise.resolve(true));
+      if (!ok) return;
+      try {
+        await fetchApi(`/api/cobranca/credenciais?ambiente=${encodeURIComponent(ambiente)}`, { method: 'DELETE' });
+        await carregar();
+      } catch (e) {
+        mensagem(e.message);
+      }
+    }
+
+    async function testar() {
+      const resultado = el('finCobTesteResultado');
+      const detalhe = el('finCobTesteDetalhe');
+      resultado.textContent = 'Pedindo o token ao BB…';
+      resultado.style.color = '';
+      detalhe.classList.add('hidden');
+      try {
+        const r = await fetchApi('/api/cobranca/testar', { method: 'POST', body: JSON.stringify({ ambiente: el('finCobTesteAmbiente').value }) });
+        const contaTestada = r.conta ? ` · agência ${r.conta.agencia} / conta ${r.conta.conta}${r.conta.teste ? ' (conta de teste do BB)' : ''}` : '';
+        resultado.textContent = `Conectado ao BB (${r.ambiente === 'producao' ? 'produção' : 'homologação'})${contaTestada}.${r.observacao ? ` ${r.observacao}` : ''}`;
+        resultado.style.color = 'var(--color-green)';
+        texto('finCobTesteAmbienteTestado', `${r.ambiente === 'producao' ? 'Produção' : 'Homologação'}${r.hosts?.oauth ? ` · ${new URL(r.hosts.oauth).host}` : ''}`);
+        texto('finCobTesteEscopos', (r.escopos || []).join(', ') || '—');
+        texto('finCobTesteBoletos', r.boletosAbertos === null || r.boletosAbertos === undefined ? '—' : String(r.boletosAbertos));
+        texto('finCobTesteOrigem', r.origem_secret === 'banco' ? 'banco' : (r.origem_secret === 'env' ? '.env (DEV)' : 'este computador'));
+        texto('finCobTesteTempo', `${r.tempoMs} ms`);
+        detalhe.classList.remove('hidden');
+      } catch (e) {
+        resultado.textContent = e.message;
+        resultado.style.color = 'var(--color-red)';
+      }
+    }
+
+    const ligar = (id, fn) => {
+      const botao = el(id);
+      if (!botao) return;
+      botao.dataset.acaoGerida = 'true';
+      botao.addEventListener('click', () => (window.BotaoAcao?.run ? window.BotaoAcao.run(botao, fn) : fn()));
+    };
+    ligar('finCobSalvar', salvar);
+    ligar('finCobSecretGuardar', guardarSecret);
+    ligar('finCobSecretRemover', removerSecret);
+    ligar('finCobTestar', testar);
+    ligar('finCobWebhookAtualizar', carregarWebhook);
+    ligar('finCobWebhookProcessar', () => conciliarDaConfiguracao(true));
+    ligar('finCobWebhookConciliar', () => conciliarDaConfiguracao(false));
+    el('finCob_ambiente')?.addEventListener('change', alternarConfirmacao);
+    for (const chave of ['juros_tipo', 'juros_percentual_mes', 'multa_percentual', 'protesto_dias', 'dias_limite_recebimento']) {
+      const campo = overlay.querySelector(`[data-fin-cob="${chave}"]`);
+      campo?.addEventListener('input', pintarPrevia);
+      campo?.addEventListener('change', pintarPrevia);
+    }
+
+    return carregar();
   }
 
   const montadores = {
     finConfiguracaoFiscal: montarConfiguracaoFiscal,
+    finConfiguracaoCobranca: montarConfiguracaoCobranca,
     finAguardandoNfe: montarAguardandoNfe,
     finNotasFiscais: montarNotasFiscais,
     finRegistrarRecebimento: montarRecebimento,
+    finRecebimentos: montarRecebimentos,
     finRegistrarAjuste: montarAjuste,
     finRegistrarProducao: montarProducao,
     finFecharCompetencia: montarFechamento,
@@ -2044,9 +4114,11 @@
     finDetalhesParcela: montarDetalhesParcela,
     finDetalhesPedido: montarDetalhesPedido,
     finConfirmarPagamento: montarConfirmarPagamento,
+    finConfirmarReembolso: montarConfirmarReembolso,
     finVisualizarRelatorio: montarVisualizarRelatorio,
     finComissoesAtrasadas: montarComissoesAtrasadas,
-    finProducaoCompetencia: montarProducaoCompetencia
+    finProducaoCompetencia: montarProducaoCompetencia,
+    finRegras: montarRegras
   };
 
   // Os montadores fiscais são assíncronos (leem o backend): o erro deles cai no mesmo lugar.

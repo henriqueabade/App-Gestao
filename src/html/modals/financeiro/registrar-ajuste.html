@@ -1,7 +1,10 @@
 <!--
-  Registrar ajuste (devolução, desconto, abatimento…). Modal médio.
-  Etapa visual: o painel de impacto é recalculado na tela; "Registrar ajuste"
-  ainda avisa que está em implementação. Script: src/js/modals/financeiro-modais.js.
+  Registrar ajuste (devolução, desconto, abatimento, cancelamento parcial,
+  outros) de uma parcela. Modal médio. As parcelas vêm de
+  GET /api/financeiro/parcelas?visao=ajustaveis; o painel de impacto
+  recalcula o valor líquido e a comissão na tela; "Registrar ajuste" grava
+  por POST /api/financeiro/ajustes (financeiro.ajuste.registrar).
+  Script: src/js/modals/financeiro-modais.js (montarAjuste).
 -->
 <div id="finRegistrarAjusteOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finAjusteTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -15,8 +18,14 @@
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
         <div>
+          <label for="finAjusteBusca" class="block text-sm font-medium text-gray-300 mb-2">Buscar parcela</label>
+          <input id="finAjusteBusca" type="text" placeholder="Pedido, cliente ou NF" autocomplete="off"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
           <label for="finAjusteParcela" class="block text-sm font-medium text-gray-300 mb-2">Parcela <span class="fin-obrigatorio">*</span></label>
           <select id="finAjusteParcela" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          <p id="finAjusteCarregando" class="hidden text-xs text-gray-400 mt-2">Carregando dados...</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -43,12 +52,12 @@
           </div>
           <div>
             <label for="finAjusteMotivo" class="block text-sm font-medium text-gray-300 mb-2">Motivo <span class="fin-obrigatorio">*</span></label>
-            <input id="finAjusteMotivo" type="text" placeholder="Ex.: peça devolvida com avaria" autocomplete="off"
+            <input id="finAjusteMotivo" type="text" maxlength="200" placeholder="Ex.: peça devolvida com avaria" autocomplete="off"
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="md:col-span-2">
             <label for="finAjusteObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-            <textarea id="finAjusteObservacoes" rows="3" placeholder="Opcional"
+            <textarea id="finAjusteObservacoes" rows="3" maxlength="500" placeholder="Opcional"
                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
@@ -62,7 +71,7 @@
               <span id="finAjusteOriginal" class="text-sm text-white">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Ajustes anteriores</span>
+              <span class="text-sm text-gray-400">Ajustes anteriores (inclui abatimento do boleto)</span>
               <span id="finAjusteAnteriores" class="text-sm text-white">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
@@ -74,21 +83,26 @@
               <span id="finAjusteLiquido" class="text-xl font-bold" style="color: var(--color-green)">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">CMS recalculada</span>
+              <span class="text-sm text-gray-400">CMS recalculada <span id="finAjustePctCms" class="text-xs"></span></span>
               <span id="finAjusteCms" class="text-sm text-white">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Royalty</span>
+              <span class="text-sm text-gray-400">Royalty <span id="finAjustePctRoyalty" class="text-xs"></span></span>
               <span id="finAjusteRoyalty" class="text-sm text-white">—</span>
             </div>
           </div>
         </div>
 
-        <!-- Só quando a comissão daquela parcela já foi paga. -->
+        <!-- Só quando a comissão daquela parcela já foi fechada. -->
         <div id="finAjusteEstorno" class="hidden fin-aviso" role="status">
           <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
-          <span>Este ajuste gerará um estorno na próxima competência.</span>
+          <span>A comissão desta parcela já foi fechada: este ajuste gerará um estorno na próxima competência (o fechamento anterior não muda).</span>
         </div>
+        <div id="finAjusteBoleto" class="hidden fin-aviso" role="status">
+          <i class="fas fa-barcode" aria-hidden="true"></i>
+          <span id="finAjusteBoletoTexto"></span>
+        </div>
+        <p id="finAjusteSemRegra" class="hidden text-xs text-gray-400">Este pedido ainda não tem regra de CMS/Royalty: a comissão fica zero até ela ser cadastrada.</p>
 
         <div id="finAjusteMensagem" class="hidden text-sm" role="alert"></div>
       </section>
@@ -96,7 +110,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" data-fin-principal="Registrar ajuste" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar ajuste</button>
+      <button id="finAjusteRegistrar" type="button" data-perm="financeiro.ajuste.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar ajuste</button>
     </footer>
   </div>
 </div>

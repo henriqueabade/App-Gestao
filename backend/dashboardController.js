@@ -67,6 +67,10 @@ const TEMPO_ESGOTADO = 'TEMPO_ESGOTADO';
  *             para quem tem `pros.view`.
  *   `falha`   mensagem própria da seção quando QUALQUER fonte dela falha. Sem
  *             ela, vale a mensagem da tabela (FALHAS_DE_LEITURA).
+ *   `extras`  tabelas que só ACRESCENTAM à seção e podem nem existir ainda (as
+ *             da devolução nascem em sql/devolucoes.sql): se a leitura falhar,
+ *             a seção sai sem elas — o que foi devolvido fica em zero, e as
+ *             vendas e a previsão continuam.
  *
  * Previsão pede, além da view, as colunas Valor Total E Condição de Pedidos: o
  * cronograma de parcelas é valor + condição de pagamento, e quem não vê essas
@@ -84,11 +88,12 @@ const TEMPO_ESGOTADO = 'TEMPO_ESGOTADO';
  * grade. As chaves estão em COLUNAS_DE_TEXTO, em dashboardResumo.js.
  */
 const SECOES = [
-  { nome: 'vendas', exige: ['ped.view'], valores: 'col_ped_total', tabelas: ['pedidos'], montar: resumo.resumirVendas },
+  { nome: 'vendas', exige: ['ped.view'], valores: 'col_ped_total', tabelas: ['pedidos'], extras: ['devolucoes'], montar: resumo.resumirVendas },
   {
     nome: 'previsao',
     exige: ['ped.view', 'col_ped_total', 'col_ped_condicao'],
     tabelas: ['pedidos', 'pedido_parcelas'],
+    extras: ['devolucao_parcelas'],
     nomes: ['clientes'],
     falha: 'Não foi possível ler as parcelas dos pedidos agora.',
     montar: resumo.resumirPrevisao
@@ -194,7 +199,7 @@ function varrerVencidos(agora) {
  * do que tem. Entradas vencidas saem a cada leitura — cada login gera chaves
  * novas, e sem a varredura o Map só cresceria.
  */
-function lerTabela(api, identidade, tabela) {
+function lerTabela(api, identidade, tabela, { opcional = false } = {}) {
   const agora = Date.now();
   varrerVencidos(agora);
 
@@ -205,6 +210,10 @@ function lerTabela(api, identidade, tabela) {
   const promessa = comTempoLimite(api.get(`/api/${tabela}`), TEMPO_LIMITE_MS, tabela)
     .then(dados => ({ linhas: extrairLinhas(dados, tabela), lidoEm: agora }))
     .catch(err => {
+      // Tabela OPCIONAL que não veio (as da devolução, antes de sql/devolucoes.sql):
+      // vale como vazia, e a ausência fica guardada pelo prazo do cache — sem isso
+      // cada recarga do painel bateria de novo numa tabela que não existe.
+      if (opcional) return { linhas: [], lidoEm: agora };
       // Falha (ou estouro de tempo) não fica em cache: a próxima tentativa
       // tem de ir ao upstream. Só apaga se a entrada ainda for ESTA promessa —
       // um `?atualizar=1` no meio pode já ter posto outra no lugar.
@@ -248,7 +257,7 @@ async function permissoesOuNada(req) {
 
 function tabelasDaSecao(secao, nomeDeProspeccao) {
   const nomes = (secao.nomes || []).filter(t => t !== 'prospeccoes' || nomeDeProspeccao);
-  return [...secao.tabelas, ...nomes];
+  return [...secao.tabelas, ...(secao.extras || []), ...nomes];
 }
 
 function mensagemDeFalha(tabela, erro) {
@@ -281,13 +290,14 @@ router.get('/', async (req, res) => {
 
     const nomeDeProspeccao = pode('pros.view');
     const necessarias = [...new Set(visiveis.flatMap(secao => tabelasDaSecao(secao, nomeDeProspeccao)))];
+    const extras = new Set(visiveis.flatMap(secao => secao.extras || []));
 
     if (String(req.query?.atualizar ?? '') === '1') invalidar();
 
     const api = createApiClient(req);
     const identidade = identidadeDe(req);
     // allSettled: uma tabela fora do ar derruba SÓ as seções que dependem dela.
-    const leituras = await Promise.allSettled(necessarias.map(t => lerTabela(api, identidade, t)));
+    const leituras = await Promise.allSettled(necessarias.map(t => lerTabela(api, identidade, t, { opcional: extras.has(t) })));
 
     const linhas = {};
     const lidoEm = {};

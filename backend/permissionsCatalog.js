@@ -774,6 +774,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botão \"Cancelar\" no Visualizar e \"Confirmar Cancelamento\""
       },
       {
+        "key": "ped.devolucao",
+        "column": "acao_devolucao",
+        "label": "Registrar devolução",
+        "desc": "Botão roxo \"Devolução\" no Visualizar (pedido enviado, entregue ou com NF-e): peças ao estoque, parcelas e reembolso"
+      },
+      {
         "key": "ped.payment.edit",
         "column": "acao_payment_edit",
         "label": "Alterar pagamento",
@@ -2218,6 +2224,84 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_config_view",
         "label": "Ver configuração fiscal",
         "desc": "Emitente, numeração, certificado e teste da SEFAZ (alterar é só o Sup Admin)"
+      },
+      {
+        "key": "financeiro.boleto.view",
+        "column": "acao_boleto_view",
+        "label": "Ver boletos",
+        "desc": "Boletos das parcelas do pedido: situação, linha digitável e PDF"
+      },
+      {
+        "key": "financeiro.boleto.emit",
+        "column": "acao_boleto_emit",
+        "label": "Gerar boletos",
+        "desc": "Registrar boletos das parcelas no Banco do Brasil (junto da NF-e ou à mão)"
+      },
+      {
+        "key": "financeiro.boleto.baixa",
+        "column": "acao_boleto_baixa",
+        "label": "Baixar e alterar boletos",
+        "desc": "Baixar boleto registrado, prorrogar vencimento e conceder abatimento"
+      },
+      {
+        "key": "financeiro.recebimento.view",
+        "column": "acao_recebimento_view",
+        "label": "Ver recebimentos",
+        "desc": "Contas a receber: recebidos, a receber e em atraso; conciliação com o BB"
+      },
+      {
+        "key": "financeiro.recebimento.registrar",
+        "column": "acao_recebimento_registrar",
+        "label": "Registrar recebimentos",
+        "desc": "Registrar o recebimento de uma parcela paga fora do boleto (Pix, transferência…)"
+      },
+      {
+        "key": "financeiro.recebimento.estornar",
+        "column": "acao_recebimento_estornar",
+        "label": "Estornar recebimentos",
+        "desc": "Desfazer um recebimento registrado por engano"
+      },
+      {
+        "key": "financeiro.comissao.view",
+        "column": "acao_comissao_view",
+        "label": "Ver comissões e produção",
+        "desc": "CMS, Royalty, produção, fechamentos, regras e relatórios (só leitura)"
+      },
+      {
+        "key": "financeiro.regras.editar",
+        "column": "acao_regras_editar",
+        "label": "Editar regras de comissão e produção",
+        "desc": "Percentuais de CMS/Royalty, valores por peça, setores, feriados e prazos de pagamento"
+      },
+      {
+        "key": "financeiro.ajuste.registrar",
+        "column": "acao_ajuste_registrar",
+        "label": "Registrar ajustes",
+        "desc": "Devolução, desconto, abatimento e cancelamento parcial de parcelas (e cancelar ajuste ainda não fechado)"
+      },
+      {
+        "key": "financeiro.producao.registrar",
+        "column": "acao_producao_registrar",
+        "label": "Registrar produção",
+        "desc": "Peças finalizadas por setor e estorno de registro"
+      },
+      {
+        "key": "financeiro.competencia.fechar",
+        "column": "acao_competencia_fechar",
+        "label": "Fechar competência",
+        "desc": "Congelar as comissões ou a produção do mês (não tem volta)"
+      },
+      {
+        "key": "financeiro.pagamento.confirmar",
+        "column": "acao_pagamento_confirmar",
+        "label": "Confirmar pagamento",
+        "desc": "Registrar que a competência fechada foi paga"
+      },
+      {
+        "key": "financeiro.reembolso.confirmar",
+        "column": "acao_reembolso_confirmar",
+        "label": "Confirmar reembolso",
+        "desc": "Registrar que o reembolso de uma devolução foi pago ao cliente"
       }
     ],
     "columns": []

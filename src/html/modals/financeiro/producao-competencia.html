@@ -1,7 +1,10 @@
 <!--
-  Produção da competência: tudo que entra no fechamento produtivo. Modal extra
-  grande; filtros funcionam sobre a lista. "Fechar competência" abre o modal
-  de fechamento por cima. Script: src/js/modals/financeiro-modais.js.
+  Produção da competência: tudo que entra (ou entrou) no fechamento
+  produtivo. Modal extra grande. Dados: GET /api/financeiro/producao?competencia=
+  (prévia enquanto aberta; o congelado depois de fechada). Os indicadores
+  por setor são montados na hora (setores são editáveis). "Fechar
+  competência" abre o fechamento por cima.
+  Script: src/js/modals/financeiro-modais.js (montarProducaoCompetencia).
 -->
 <div id="finProducaoCompetenciaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finProdCompTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -10,28 +13,31 @@
       <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
         <h2 id="finProdCompTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Produção — <span id="finProdCompCompetencia">—</span></h2>
-        <p class="text-xs text-gray-300 truncate">Peças finalizadas que entram no fechamento produtivo</p>
+        <p id="finProdCompSubtitulo" class="text-xs text-gray-300 truncate">Peças finalizadas que entram no fechamento produtivo</p>
       </div>
       <span id="finProdCompStatus" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">Em aberto</span>
     </header>
 
     <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
-        <div class="fin-indicadores fin-indicadores--5">
-          <div class="fin-indicador"><span class="fin-indicador__rotulo">Peças finalizadas</span><strong class="fin-indicador__valor" id="finProdCompPecas">—</strong></div>
-          <div class="fin-indicador"><span class="fin-indicador__rotulo">Pedidos envolvidos</span><strong class="fin-indicador__valor" id="finProdCompPedidos">—</strong></div>
-          <div class="fin-indicador"><span class="fin-indicador__rotulo">Pintura</span><strong class="fin-indicador__valor" id="finProdCompPintura">—</strong></div>
-          <div class="fin-indicador"><span class="fin-indicador__rotulo">Marcenaria</span><strong class="fin-indicador__valor" id="finProdCompMarcenaria">—</strong></div>
-          <div class="fin-indicador fin-indicador--destaque"><span class="fin-indicador__rotulo">Total</span><strong class="fin-indicador__valor" id="finProdCompTotal">—</strong></div>
+        <div class="flex flex-wrap items-end gap-4">
+          <div>
+            <label for="finProdCompMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <select id="finProdCompMes" class="appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <p id="finProdCompInfo" class="text-xs text-gray-400 pb-3"></p>
         </div>
+
+        <p id="finProdCompCarregando" class="hidden fin-vazio">Carregando dados...</p>
+        <div id="finProdCompMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div id="finProdCompIndicadores" class="fin-indicadores fin-indicadores--5"></div>
 
         <div class="fin-filtros fin-filtros--4">
           <div>
             <label for="finProdCompSetor" class="block text-sm font-medium text-gray-300 mb-2">Setor</label>
             <select id="finProdCompSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
-              <option value="Marcenaria">Marcenaria</option>
-              <option value="Pintura">Pintura</option>
             </select>
           </div>
           <div>
@@ -45,7 +51,7 @@
                    class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finProdCompItemStatus" class="block text-sm font-medium text-gray-300 mb-2">Status</label>
+            <label for="finProdCompItemStatus" class="block text-sm font-medium text-gray-300 mb-2">Status do item</label>
             <select id="finProdCompItemStatus" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
               <option value="Finalizado">Finalizado</option>
@@ -59,9 +65,10 @@
             <thead>
               <tr>
                 <th class="px-4 py-3 text-left text-xs">Pedido</th>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
                 <th class="px-4 py-3 text-left text-xs">Produto</th>
                 <th class="px-4 py-3 text-left text-xs">Setor</th>
-                <th class="px-4 py-3 text-right text-xs">Quantidade no mês</th>
+                <th class="px-4 py-3 text-right text-xs">Quantidade</th>
                 <th class="px-4 py-3 text-right text-xs">Valor unitário</th>
                 <th class="px-4 py-3 text-right text-xs">Total</th>
                 <th class="px-4 py-3 text-left text-xs">Status do item</th>
@@ -70,20 +77,25 @@
             <tbody id="finProdCompCorpo" class="divide-y divide-white/10"></tbody>
             <tfoot>
               <tr class="fin-totais">
-                <td class="px-4 py-3" colspan="5">Total da competência</td>
+                <td class="px-4 py-3" colspan="6">Total da competência</td>
                 <td class="px-4 py-3 text-right" id="finProdCompRodape">—</td>
                 <td></td>
               </tr>
             </tfoot>
           </table>
         </div>
-        <p id="finProdCompVazio" class="hidden fin-vazio">Nenhum lançamento com esses filtros.</p>
+        <p id="finProdCompVazio" class="hidden fin-vazio">Nenhuma peça finalizada nesta competência.</p>
+        <div id="finProdCompBloqueios" class="hidden fin-aviso" role="status">
+          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+          <span id="finProdCompBloqueiosTexto"></span>
+        </div>
       </section>
     </div>
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button type="button" id="finProdCompFechar" data-fin-abrir="fechar-competencia" data-fin-tipo="producao" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência</button>
+      <button type="button" id="finProdCompRelatorio" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[140px]">Ver relatório</button>
+      <button type="button" id="finProdCompFechar" data-perm="financeiro.competencia.fechar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Fechar competência</button>
     </footer>
   </div>
 </div>

@@ -1,7 +1,9 @@
 <!--
-  Comissões atrasadas: parcelas vencidas e ainda não liquidadas. Modal extra
-  grande. Filtros funcionam sobre a lista; clicar numa linha abre Detalhes da
-  parcela por cima. Script: src/js/modals/financeiro-modais.js.
+  Comissões atrasadas: parcelas vencidas e ainda não liquidadas, com a
+  comissão que está parada. Modal extra grande. Dados:
+  GET /api/financeiro/parcelas?visao=atrasadas. Filtros funcionam sobre a
+  lista; clicar numa linha abre Detalhes da parcela por cima.
+  Script: src/js/modals/financeiro-modais.js (montarComissoesAtrasadas).
 -->
 <div id="finComissoesAtrasadasOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finAtrasadasTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -17,6 +19,9 @@
 
     <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
+        <p id="finAtrasadasCarregando" class="fin-vazio">Carregando dados...</p>
+        <div id="finAtrasadasMensagem" class="hidden text-sm" role="alert"></div>
+        <p id="finAtrasadasSemRegras" class="hidden text-xs text-gray-400">Sem regras de CMS/Royalty cadastradas: a comissão potencial fica zero até elas existirem.</p>
         <div class="fin-indicadores">
           <div class="fin-indicador">
             <span class="fin-indicador__rotulo">Parcelas vencidas</span>
@@ -96,7 +101,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button type="button" data-fin-abrir="visualizar-relatorio" data-fin-relatorio="comissoes-atrasadas" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Ver relatório</button>
+      <button type="button" data-fin-abrir="visualizar-relatorio" data-fin-relatorio="comissoes-atrasadas" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Ver relatório</button>
     </footer>
   </div>
 </div>

@@ -1970,3 +1970,113 @@ test('CSS do prazo: etiquetas lado a lado, símbolo e anel na cor do tom, botão
     assert.match(declaracoesDo('.dash-donut__prazo'), /stroke:\s*var\(--dash-tom\)/);
     assert.match(declaracoesDo('.dash-mais__botao:focus-visible'), /outline:\s*2px solid/);
 });
+
+// ------------------------------------------------- cancelado e devolvido
+
+const ZERO_SAIDA = { quantidade: 0, valor: 0 };
+// O que sai do vm é de outro 'realm': sem isto o deepStrictEqual recusa vetores iguais.
+const daqui = valor => JSON.parse(JSON.stringify(valor));
+const serieComSaidas = () => Array.from({ length: 12 }, (_, i) => ({
+    mes: `2026-${String(i + 1).padStart(2, '0')}`,
+    quantidade: 2,
+    valor: 40000,
+    cancelado: i === 7 ? { quantidade: 1, valor: 20000 } : ZERO_SAIDA,
+    devolvido: i === 7 ? { quantidade: 2, valor: 10000 } : (i === 8 ? { quantidade: 1, valor: 1500 } : ZERO_SAIDA)
+}));
+
+test('cancelado e devolvido penduram abaixo da linha de base, na mesma escala, sem mexer nas barras de cima', () => {
+    const geometria = avaliar('geometriaGrafico');
+    const opcoes = { largura: 720, altura: 240, chave: 'valor', mesAtual: '2026-12' };
+    const semNada = geometria(soVendas(serieComSaidas().map(m => ({ ...m, cancelado: ZERO_SAIDA, devolvido: ZERO_SAIDA }))), opcoes);
+    const geo = geometria(soVendas(serieComSaidas()), opcoes);
+
+    // Sem o que mostrar a geometria é a de sempre: base no pé, nenhuma marca negativa.
+    assert.strictEqual(semNada.fundo, 0);
+    assert.strictEqual(semNada.baseY, semNada.topoY + semNada.areaAltura);
+    assert.ok(semNada.grade.every(linha => linha.valor >= 0));
+    assert.ok(semNada.colunas.every(coluna => coluna.saidasVendas.length === 0 && coluna.saidasPrevisao.length === 0));
+
+    // Com saídas a linha de base sobe e as barras de cima continuam nascendo nela.
+    assert.ok(geo.fundo >= 30000, 'o fundo cobre o mês em que mais saiu (20 mil + 10 mil)');
+    assert.ok(geo.baseY < semNada.baseY);
+    geo.colunas.forEach((coluna, i) => {
+        assert.ok(Math.abs(coluna.vendas.y + coluna.vendas.altura - geo.baseY) < 1e-9, `a barra ${i} não nasce na base`);
+        assert.strictEqual(coluna.vendas.x, semNada.colunas[i].vendas.x, 'o que saiu não rouba largura da barra');
+        assert.strictEqual(coluna.vendas.largura, semNada.colunas[i].vendas.largura);
+    });
+    const agosto = geo.colunas[7];
+    assert.deepStrictEqual(daqui(agosto.saidasVendas.map(s => s.tipo)), ['cancelado', 'devolvido'], 'o vermelho vem antes do roxo');
+    const [vermelha, roxa] = agosto.saidasVendas;
+    assert.ok(vermelha.y >= geo.baseY && roxa.y >= vermelha.y + vermelha.altura, 'empilhadas para baixo, sem se sobrepor');
+    // Os 2 px de vão saem de dentro do trecho de cada uma: o trecho é que segue a escala.
+    assert.ok(Math.abs((vermelha.altura + 2) / (roxa.altura + 2) - 2) < 1e-9, '20 mil é o dobro de 10 mil: mesma escala');
+    assert.ok(Math.abs((vermelha.altura + 2) / agosto.vendas.altura - 0.5) < 1e-9, 'e a mesma escala das barras de cima');
+    assert.ok(roxa.y + roxa.altura <= geo.topoY + geo.areaAltura + 1e-9, 'nada passa do pé do gráfico');
+    assert.strictEqual(vermelha.x, agosto.vendas.x);
+    assert.strictEqual(geo.colunas[8].saidasVendas.length, 1);
+    assert.ok(geo.colunas[8].saidasVendas[0].altura >= 3, 'devolução pequena ainda aparece');
+    assert.deepStrictEqual(daqui(geo.colunas[0].saidasVendas), []);
+    // A grade ganha as marcas abaixo de zero, no mesmo passo do eixo.
+    const negativas = geo.grade.filter(linha => linha.valor < 0);
+    assert.ok(negativas.length >= 1 && negativas.length <= 4);
+    negativas.forEach(linha => assert.ok(linha.y > geo.baseY && linha.valor % geo.escala.passo === 0));
+});
+
+test('na previsão o que saiu é em R$ (pelo vencimento) e fica sob a barra verde; saída maior que tudo não estoura a grade', () => {
+    const geometria = avaliar('geometriaGrafico');
+    const colunas = avaliar('colunasDoGrafico')(
+        [{ mes: '2026-09', quantidade: 1, valor: 1000, cancelado: ZERO_SAIDA, devolvido: ZERO_SAIDA }],
+        [{ mes: '2026-09', valor: 500, cancelado: 0, devolvido: 0 }, { mes: '2026-10', valor: 800, cancelado: 90000, devolvido: 250 }]
+    );
+    const geo = geometria(colunas, { largura: 400, altura: 240, chave: 'valor', mesAtual: '2026-09' });
+    const outubro = geo.colunas[1];
+    assert.strictEqual(outubro.vendas, null);
+    assert.deepStrictEqual(daqui(outubro.saidasVendas), []);
+    assert.deepStrictEqual(daqui(outubro.saidasPrevisao.map(s => [s.tipo, s.valor])), [['cancelado', 90000], ['devolvido', 250]]);
+    assert.strictEqual(outubro.saidasPrevisao[0].x, outubro.previsao.x, 'sob a barra verde');
+    assert.ok(geo.grade.length <= 9, 'saiu muito mais do que entrou: a escala vira a do que saiu, sem dezenas de linhas');
+    assert.ok(geo.escala.topo >= 90000);
+
+    // Eixo em contagem: nas vendas o que saiu também é contagem.
+    const contagem = geometria(soVendas(serieComSaidas()), { largura: 720, chave: 'quantidade' });
+    assert.deepStrictEqual(daqui(contagem.colunas[7].saidasVendas.map(s => s.valor)), [1, 2]);
+});
+
+test('tooltip e aria-label dizem o que saiu no mês; sem nada, continuam como eram', () => {
+    const vendas = avaliar('conteudoDicaVendas');
+    const limpo = vendas({ mes: '2026-09', quantidade: 7, valor: 58900, cancelado: ZERO_SAIDA, devolvido: ZERO_SAIDA });
+    assert.deepStrictEqual([...limpo.saidas], []);
+    const conteudo = vendas({ mes: '2026-09', quantidade: 7, valor: 58900, cancelado: { quantidade: 1, valor: 20000 }, devolvido: { quantidade: 2, valor: 1500 } });
+    assert.deepStrictEqual(daqui(conteudo.saidas.map(s => [s.tipo, s.nome, semEspacoFixo(s.valor), s.detalhe])), [
+        ['cancelado', 'Cancelado no mês', 'R$ 20 mil', '1 pedido'],
+        ['devolvido', 'Devolvido no mês', 'R$ 1,5 mil', '2 devoluções']
+    ]);
+    assert.strictEqual(semEspacoFixo(avaliar('rotuloAcessivelDica')(conteudo)),
+        'Vendas fechadas em setembro de 2026: R$ 58,9 mil · 7 pedidos. Cancelado no mês: R$ 20 mil, 1 pedido. Devolvido no mês: R$ 1,5 mil, 2 devoluções');
+    // Sem a coluna de valor fica só a contagem.
+    const semValor = vendas({ mes: '2026-09', quantidade: 1, valor: null, cancelado: { quantidade: 1, valor: null }, devolvido: ZERO_SAIDA }, { emDinheiro: false });
+    assert.deepStrictEqual(daqui(semValor.saidas.map(s => [s.valor, s.detalhe])), [['', '1 pedido']]);
+
+    const previsao = avaliar('conteudoDicaPrevisao')({ mes: '2026-10', valor: 800, parcelas: 1, pedidos: 1, outros: 0, itens: [], cancelado: 3200, devolvido: 0 });
+    assert.deepStrictEqual(daqui(previsao.saidas.map(s => [s.tipo, s.nome, semEspacoFixo(s.valor)])), [['cancelado', 'Parcelas de pedidos cancelados', 'R$ 3.200,00']]);
+});
+
+test('legenda: cancelado e devolvido só entram quando o gráfico tem a barra; o donut pinta Parcial e Devolvido de roxo', () => {
+    const legenda = avaliar('montarLegendaGrafico');
+    assert.strictEqual(typeof legenda, 'function');
+    const tons = avaliar('DASH_TONS_SITUACAO');
+    assert.strictEqual(tons.Devolvido, 'roxo');
+    assert.strictEqual(tons.Parcial, 'lilas');
+    assert.strictEqual(tons.Cancelado, 'vermelho');
+    assert.deepStrictEqual([...avaliar('DASH_SAIDAS')], ['cancelado', 'devolvido']);
+});
+
+test('CSS: as barras penduradas e a legenda têm cor (vermelho e roxo), e o tom lilás existe', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'dashboard.css'), 'utf8');
+    assert.match(css, /\.dash-barras__saida--cancelado\s*\{[^}]*fill:\s*var\(--color-red\)/);
+    assert.match(css, /\.dash-barras__saida--devolvido\s*\{[^}]*fill:\s*var\(--dash-roxo\)/);
+    assert.match(css, /\.dash-grafico__legenda-cor--cancelado\s*\{[^}]*var\(--color-red\)/);
+    assert.match(css, /\.dash-grafico__legenda-cor--devolvido\s*\{[^}]*var\(--dash-roxo\)/);
+    assert.match(css, /\[data-tom="lilas"\]\s*\{\s*--dash-tom:\s*var\(--dash-lilas\)/);
+    assert.match(css, /--dash-lilas:\s*color-mix\(in srgb, var\(--color-purple\)/);
+});

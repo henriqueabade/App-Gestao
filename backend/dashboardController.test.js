@@ -33,7 +33,7 @@ const TOKEN = 'x.eyJpZCI6MX0.assinatura-do-login-a';
 const OUTRO_TOKEN = 'x.eyJpZCI6Mn0.assinatura-do-login-b';
 
 // Em ordem alfabética: o teste das leituras compara com a lista ordenada.
-const TODAS_AS_TABELAS = ['clientes', 'ia_extracoes', 'materia_prima', 'orcamentos', 'pedido_parcelas', 'pedidos', 'prospeccoes'];
+const TODAS_AS_TABELAS = ['clientes', 'devolucao_parcelas', 'devolucoes', 'ia_extracoes', 'materia_prima', 'orcamentos', 'pedido_parcelas', 'pedidos', 'prospeccoes'];
 
 // ---------------------------------------------------------------------------
 // Permissões de verdade (estrutura do permissionsRepository), montadas por chave
@@ -202,6 +202,9 @@ function cenario() {
       { id: 104, numero: 'PED104', orcamento_id: 104, cliente_id: 52, situacao: 'Cancelado', data_emissao: meioDia(-20), data_aprovacao: dia(-20), data_cancelamento: meioDia(0), valor_final: 3200, embarcar_previsao: dia(-10) },
       { id: 105, numero: 'PED105', orcamento_id: 105, cliente_id: 51, situacao: 'Enviado', data_emissao: meioDia(0), data_aprovacao: dia(0), valor_final: '1234.50', embarcar_previsao: dia(2), embarcar_real: dia(0) }
     ],
+    // As tabelas da devolução existem e estão vazias: nada foi devolvido.
+    devolucoes: [],
+    devolucao_parcelas: [],
     // O 101 em 2x, a 2ª daqui a 400 dias — sempre além do horizonte de 12
     // meses; o 103 em 3x, uma delas no formato em que o upstream serializa um
     // DATE. O 104 é cancelado (some), o 105 não tem parcela (vira estimado) e
@@ -341,11 +344,12 @@ const FORMA_DO_CONTRATO = {
     mesAnteriorMesmoPeriodo: FORMA_TICKET,
     mesAnterior: FORMA_TICKET,
     canceladosMes: FORMA_SOMA,
-    serie12m: [{ mes: 'mes', quantidade: 'contagem', valor: 'dinheiro' }]
+    devolvidosMes: FORMA_SOMA,
+    serie12m: [{ mes: 'mes', quantidade: 'contagem', valor: 'dinheiro', cancelado: FORMA_SOMA, devolvido: FORMA_SOMA }]
   },
   previsao: {
     meses: [{
-      mes: 'mes', valor: 'dinheiro', parcelas: 'contagem', pedidos: 'contagem', outros: 'contagem',
+      mes: 'mes', valor: 'dinheiro', cancelado: 'dinheiro', devolvido: 'dinheiro', parcelas: 'contagem', pedidos: 'contagem', outros: 'contagem',
       itens: podeVirVazia([{
         pedidoId: 'id', numero: 'texto|null', cliente: 'texto', totalParcelas: 'contagem',
         valor: 'dinheiro', estimada: 'booleano',
@@ -521,6 +525,8 @@ test('produção traz o prazo de embarque: por pedido, no resumo e por situaçã
       ['Produção', 0, 1, 1],
       ['Enviado', 1, 0, 0],
       ['Entregue', 0, 1, 0],
+      ['Parcial', 0, 0, 0],
+      ['Devolvido', 0, 0, 0],
       ['Cancelado', 0, 0, 0],
       ['Outros', 0, 0, 0]
     ]);
@@ -1116,4 +1122,50 @@ test('server.js monta /api/dashboard antes da rota genérica /api/:table', () =>
   assert.ok(montagem > -1, 'a rota do painel precisa estar montada');
   assert.ok(generica > -1);
   assert.ok(montagem < generica);
+});
+
+// ------------------------------------------------------------------ devolução
+
+test('sem as tabelas da devolução (sql/devolucoes.sql por rodar) o painel sai inteiro, e a ausência fica no cache', async () => {
+  const dados = cenario();
+  delete dados.devolucoes;
+  delete dados.devolucao_parcelas;
+  const ctx = await montar(dados);
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(corpo.falhas, {});
+    assert.deepEqual(corpo.secoes.vendas.devolvidosMes, { quantidade: 0, valor: 0 });
+    assert.ok(corpo.secoes.previsao.meses.every(m => m.devolvido === 0));
+    await ctx.chamar();
+    assert.equal(ctx.lidas('devolucoes'), 1, 'tabela que não existe não é relida a cada recarga');
+    assert.equal(ctx.lidas('devolucao_parcelas'), 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a devolução chega ao painel: devolvido no mês, Parcial no donut e o desconto fora da previsão', async () => {
+  const dados = cenario();
+  const { hoje } = contextoDeTempo(new Date());
+  // O 103 (Entregue, 3x de R$ 4.000) devolveu R$ 1.000 hoje: a 3ª parcela, com boleto, ganhou abatimento.
+  Object.assign(dados.pedidos.find(p => p.id === 103), { devolucao: 'parcial', valor_original: 12000, valor_devolvido: 1000, valor_final: 11000 });
+  dados.devolucoes.push({ id: 1, pedido_id: 103, data_devolucao: hoje, valor: '1000.00' });
+  dados.devolucao_parcelas.push({ id: 1, pedido_id: 103, numero_parcela: 3, modo: 'abatimento_boleto', desconto: '1000.00', data_vencimento: somarDias(hoje, 20) });
+  const ctx = await montar(dados);
+  try {
+    const { secoes } = (await ctx.chamar()).corpo;
+    assert.deepEqual(secoes.vendas.devolvidosMes, { quantidade: 1, valor: 1000 });
+    assert.deepEqual(secoes.vendas.serie12m.at(-1).devolvido, { quantidade: 1, valor: 1000 });
+    assert.deepEqual(secoes.vendas.serie12m.at(-1).cancelado, { quantidade: 1, valor: 3200 }, 'o 104 foi cancelado hoje');
+    const porSituacao = Object.fromEntries(secoes.producao.porSituacao12m.map(s => [s.situacao, s.quantidade]));
+    assert.deepEqual([porSituacao.Parcial, porSituacao.Entregue], [1, 0]);
+    const mesDaParcela = secoes.previsao.meses.find(m => m.mes === somarDias(hoje, 20).slice(0, 7));
+    assert.equal(mesDaParcela.devolvido, 1000);
+    const parcela = mesDaParcela.itens.find(i => i.numero === 'PED103').parcelas.find(p => p.numero === 3);
+    assert.equal(parcela.valor, 3000, 'a parcela com abatimento entra pelo que ainda será cobrado');
+    const mesDoCancelado = secoes.previsao.meses.find(m => m.mes === somarDias(hoje, 5).slice(0, 7));
+    assert.ok(mesDoCancelado.cancelado >= 3200, 'a parcela do 104, cancelado, está na série vermelha');
+  } finally {
+    await ctx.encerrar();
+  }
 });

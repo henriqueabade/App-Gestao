@@ -183,6 +183,32 @@
     if (status === 504) return corpo?.error || 'A SEFAZ demorou a responder. A nota ficou em processamento: use "Consultar na SEFAZ".';
     return corpo?.error || (contexto === 'enviar' ? 'Não foi possível marcar o pedido como enviado.' : 'Não foi possível emitir a NF-e.');
   }
+  /** O que a caixa "Gerar boleto" diz, pelo estado da cobrança do pedido (GET /api/cobranca/pedidos/:id/boletos). */
+  function textoDoBoleto(estado) {
+    const parcelas = Array.isArray(estado?.parcelas) ? estado.parcelas : [];
+    const semBoleto = parcelas.filter(l => !l?.tem_boleto_vivo).length;
+    const ambiente = estado?.ambiente === 'producao' ? 'produção' : 'homologação (teste, sem valor)';
+    if (parcelas.length && semBoleto === 0) return `As ${parcelas.length} parcelas já têm boleto registrado.`;
+    if (Array.isArray(estado?.pendencias) && estado.pendencias.length) return `Não dá para gerar agora: ${estado.pendencias.join(' ')}`;
+    if (!parcelas.length) return 'O pedido não tem parcelas cadastradas.';
+    return `${semBoleto === 1 ? '1 parcela' : `${semBoleto} parcelas`} sem boleto · ambiente ${ambiente}. Nada é enviado ao cliente.`;
+  }
+
+  /** O aviso depois de gerar: quantos saíram, quantos já existiam, quantos deram erro (e por quê). */
+  function resumoDosBoletos(corpo) {
+    const registrados = Number(corpo?.registrados) || 0;
+    const erros = Number(corpo?.erros) || 0;
+    const jaExistiam = (corpo?.resultados || []).filter(r => r?.ja_existia).length;
+    const partes = [];
+    if (registrados) partes.push(registrados === 1 ? '1 boleto registrado no BB' : `${registrados} boletos registrados no BB`);
+    if (jaExistiam) partes.push(jaExistiam === 1 ? '1 já existia' : `${jaExistiam} já existiam`);
+    if (erros) {
+      const motivos = (corpo?.resultados || []).filter(r => r && !r.ok).map(r => `parcela ${r.numero_parcela}: ${r.erro}`);
+      partes.push(`${erros === 1 ? '1 com erro' : `${erros} com erro`} (${motivos.join('; ')})`);
+    }
+    if (!partes.length) partes.push('Nenhum boleto para gerar');
+    return { texto: `${partes.join(' · ')}.`, tipo: erros ? 'error' : (registrados ? 'success' : 'info') };
+  }
   // ==================================================================
   // fim das funções puras
   // ==================================================================
@@ -526,7 +552,11 @@
     if (corpo?.nota) estado.notas = [corpo.nota, ...estado.notas.filter(n => Number(n.id) !== Number(corpo.nota.id))];
     (corpo?.avisos || []).forEach(a => window.showToast?.(a, 'info'));
     // Só com a nota autorizada a situação muda (embarque); pedido que já saiu só conclui.
-    if (corpo?.autorizada) return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);
+    // Antes, os boletos das parcelas (se a caixa estiver marcada): a nota já é fato.
+    if (corpo?.autorizada) {
+      await gerarBoletosSeMarcado(corpo.nota);
+      return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);
+    }
     pintarNota();
     pintarBotoes();
     exibirMensagem('info', `A SEFAZ ainda está processando a nota (${corpo?.sefaz?.cStat || ''} ${corpo?.sefaz?.xMotivo || ''}). Clique em "Consultar na SEFAZ" em instantes${estado.jaEnviado ? '.' : '; o pedido continua em produção até a autorização.'}`);
@@ -569,8 +599,11 @@
     emAndamento = true;
     try {
       const acao = confirmarBtn.dataset.acao;
-      if (acao === 'marcar') await marcarEnviado(notaQueVale(estado.notas));
-      else if (acao === 'emitir') await emitir();
+      if (acao === 'marcar') {
+        // Nota já autorizada numa tentativa anterior: os boletos podem ter ficado para trás.
+        await gerarBoletosSeMarcado(notaQueVale(estado.notas));
+        await marcarEnviado(notaQueVale(estado.notas));
+      } else if (acao === 'emitir') await emitir();
     } finally {
       emAndamento = false;
     }
@@ -602,6 +635,55 @@
   campos.volumes_quantidade.addEventListener('input', renderizarVolumes);
   campos.volumes_quantidade.addEventListener('change', renderizarVolumes);
 
+  // ----------------------------------------------------------- boleto
+  // A caixa "Gerar boleto" nasce marcada quando a configuração de cobrança
+  // manda (gerar_ao_emitir_nfe) e a cobrança está pronta. Sem permissão de
+  // ver boletos (403), sem SQL da cobrança ou sem rede, ela nem aparece — a
+  // NF-e não depende disso. Nada vai para o cliente: só registra no BB.
+  let boletoEstado = null;
+
+  async function carregarBoleto() {
+    const bloco = el('emitirNfeBoletoBloco');
+    const caixa = el('emitirNfeGerarBoleto');
+    const aviso = el('emitirNfeBoletoAviso');
+    if (!bloco || !caixa) return;
+    try {
+      const resp = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(pedidoId)}/boletos`);
+      if (!resp.ok) return;
+      boletoEstado = await resp.json();
+    } catch (_) {
+      return;
+    }
+    if (!boletoEstado || typeof boletoEstado !== 'object') return;
+    caixa.checked = Boolean(boletoEstado.gerar_ao_emitir_nfe) && Boolean(boletoEstado.pode_gerar);
+    caixa.disabled = !boletoEstado.pode_gerar;
+    if (aviso) aviso.textContent = textoDoBoleto(boletoEstado);
+    bloco.classList.remove('hidden');
+  }
+
+  /** Com a caixa marcada, registra os boletos das parcelas que faltam. Erro aqui não desfaz a nota: avisa e segue. */
+  async function gerarBoletosSeMarcado(nota) {
+    const caixa = el('emitirNfeGerarBoleto');
+    if (!caixa || caixa.disabled || !caixa.checked) return null;
+    let resp;
+    try {
+      resp = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(pedidoId)}/boletos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parcelas: [], nota_fiscal_id: nota?.id ?? null })
+      });
+    } catch (err) {
+      window.showToast?.('NF-e autorizada, mas não foi possível falar com o servidor para gerar os boletos. Gere pelo pedido (Gerar boletos).', 'error');
+      return null;
+    }
+    const corpo = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      window.showToast?.(`NF-e autorizada; boletos não gerados: ${corpo?.error || `erro ${resp.status}`}. Gere pelo pedido (Gerar boletos).`, 'error');
+      return null;
+    }
+    const r = resumoDosBoletos(corpo);
+    window.showToast?.(r.texto, r.tipo);
+    return corpo;
+  }
+
   // ------------------------------------------------------------ carga
   try {
     if (!pedidoId) throw new Error('Pedido não informado.');
@@ -613,6 +695,7 @@
       ambiente: corpo.ambiente === 'producao' ? 'producao' : 'homologacao', notas: Array.isArray(corpo.notas) ? corpo.notas : [],
       jaEnviado: pedidoJaEnviado(corpo.resumo?.situacao)
     };
+    await carregarBoleto();
     preencherCampos();
     renderizarVolumes();
     pintar();

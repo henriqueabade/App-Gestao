@@ -142,6 +142,31 @@ function payloadDeStatus(status, agora = new Date(), pedido = null) {
   return payload;
 }
 
+/**
+ * Pedido que se DEVOLVE não se cancela. Depois de enviado (ou com NF-e
+ * autorizada) o caminho é a devolução — /api/devolucoes, o botão roxo do
+ * Visualizar —, que devolve só as peças que voltaram e acerta parcelas,
+ * boletos e reembolso. E pedido que JÁ teve devolução nunca pode passar pelo
+ * estorno do cancelamento: as peças devolvidas entrariam no estoque de novo.
+ *
+ * A tela já troca o botão; a trava é aqui porque esconder botão não impede
+ * uma tela velha nem outra aba. Devolve a frase da recusa, ou null.
+ */
+async function motivoParaDevolverEmVezDeCancelar(api, pedido, id) {
+  if (!pedido) return null;
+  if (pedido.devolucao) return 'Este pedido já teve devolução registrada: não pode mais ser cancelado. Use "Devolução" para o que ainda voltar.';
+  const situacao = String(pedido.situacao || '').trim().toLowerCase();
+  if (situacao === 'enviado' || situacao === 'entregue') {
+    return `Pedido ${situacao} não se cancela: registre a devolução (botão "Devolução" no Visualizar).`;
+  }
+  const notas = await api.get('/api/notas_fiscais', { query: { pedido_id: id } }).catch(() => []);
+  const autorizada = (Array.isArray(notas) ? notas : [])
+    .some(n => n && String(n.pedido_id) === String(id) && String(n.status_fiscal) === 'autorizada');
+  return autorizada
+    ? 'O pedido tem NF-e autorizada: cancele a nota na SEFAZ (dentro do prazo) ou registre a devolução.'
+    : null;
+}
+
 router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
@@ -164,6 +189,11 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         error: 'Este pedido já está cancelado.',
         code: 'JA_CANCELADO'
       });
+    }
+
+    if (status === 'Cancelado') {
+      const recusa = await motivoParaDevolverEmVezDeCancelar(api, atual, id);
+      if (recusa) return res.status(409).json({ error: recusa, code: 'USE_DEVOLUCAO' });
     }
 
     // Enviar DE NOVO moveria o embarque real para hoje — e, num pedido "ao
@@ -1137,3 +1167,4 @@ module.exports = router;
 // Exposto para teste: a regra "cada status grava a sua data" precisa de guarda
 // própria, sem depender de subir banco.
 module.exports.payloadDeStatus = payloadDeStatus;
+module.exports.motivoParaDevolverEmVezDeCancelar = motivoParaDevolverEmVezDeCancelar;

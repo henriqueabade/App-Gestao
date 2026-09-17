@@ -1,7 +1,9 @@
 <!--
   Detalhes da parcela: como o valor líquido e a comissão foram formados.
-  Modal grande, só leitura; abre por cima de Comissões atrasadas (Voltar
-  retorna para ela). Script: src/js/modals/financeiro-modais.js.
+  Modal grande; abre por cima de Comissões atrasadas, do relatório e do
+  pedido (Voltar retorna). Dados: GET /api/financeiro/parcelas/:pedido/:numero.
+  Ajuste ainda não fechado pode ser cancelado aqui (financeiro.ajuste.registrar).
+  Script: src/js/modals/financeiro-modais.js (montarDetalhesParcela).
 -->
 <div id="finDetalhesParcelaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finParcelaTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -24,9 +26,30 @@
     </nav>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
-      <section class="px-8 py-6">
-        <div data-fin-painel="resumo" role="tabpanel">
+      <section class="px-8 py-6 space-y-6">
+        <p id="finParcelaCarregando" class="fin-vazio">Carregando dados...</p>
+        <div id="finParcelaMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div data-fin-painel="resumo" role="tabpanel" class="space-y-6">
           <dl id="finParcelaResumo" class="fin-dl"></dl>
+          <div class="space-y-2">
+            <p class="text-xs text-gray-400 uppercase tracking-wider">Quem recebe</p>
+            <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+              <table class="w-full text-sm">
+                <thead><tr><th class="px-4 py-3 text-left text-xs">Tipo</th><th class="px-4 py-3 text-left text-xs">Quem recebe</th><th class="px-4 py-3 text-right text-xs">Percentual</th><th class="px-4 py-3 text-right text-xs">Valor</th></tr></thead>
+                <tbody id="finParcelaBeneficiarios" class="divide-y divide-white/10"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <p class="text-xs text-gray-400 uppercase tracking-wider">Fechamentos e pagamentos</p>
+            <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+              <table class="w-full text-sm">
+                <thead><tr><th class="px-4 py-3 text-left text-xs">Competência</th><th class="px-4 py-3 text-left text-xs">Item</th><th class="px-4 py-3 text-right text-xs">Valor</th><th class="px-4 py-3 text-left text-xs">Pagar até</th><th class="px-4 py-3 text-left text-xs">Pagamento</th></tr></thead>
+                <tbody id="finParcelaFechamentos" class="divide-y divide-white/10"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div data-fin-painel="ajustes" role="tabpanel" class="hidden">
@@ -39,6 +62,8 @@
                   <th class="px-4 py-3 text-left text-xs">Motivo</th>
                   <th class="px-4 py-3 text-right text-xs">Valor</th>
                   <th class="px-4 py-3 text-left text-xs">Usuário</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-left text-xs">Ações</th>
                 </tr>
               </thead>
               <tbody id="finParcelaAjustes" class="divide-y divide-white/10"></tbody>
@@ -54,6 +79,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button id="finParcelaRegistrarAjuste" type="button" data-perm="financeiro.ajuste.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Registrar ajuste</button>
     </footer>
   </div>
 </div>

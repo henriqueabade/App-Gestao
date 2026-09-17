@@ -55,6 +55,12 @@ const MOV = {
    * `retorno_cancelamento` — ver `tipoAlternativo` em `registrarMovimento`.
    */
   DESCARTE: 'descarte_cancelamento',
+  /**
+   * Peça que o CLIENTE devolveu (pedido já enviado) e voltou pronta ao
+   * estoque. Valor novo do enum (sql/devolucoes.sql); sem o SQL, cai em
+   * `retorno_cancelamento` pelo mesmo `tipoAlternativo`.
+   */
+  RETORNO_DEVOLUCAO: 'retorno_devolucao',
   RESERVA: 'reserva',
   TRANSFERENCIA: 'transferencia',
   CANCELAMENTO: 'cancelamento',
@@ -82,7 +88,9 @@ const EVENTO = {
   REALOCACAO: 'realocacao',
   CANCELAMENTO: 'cancelamento',
   EDICAO: 'edicao',
-  TRANSFERENCIA: 'transferencia'
+  TRANSFERENCIA: 'transferencia',
+  /** Devolução do cliente (sql/devolucoes.sql). Sem o SQL, o evento sai como `edicao`. */
+  DEVOLUCAO: 'devolucao'
 };
 
 function paraNumero(valor) {
@@ -341,20 +349,33 @@ async function registrarEventoDoPedido(api, {
   tipoEvento,
   descricao = null,
   movimentoId = null,
-  usuarioId = null
+  usuarioId = null,
+  /** Tipo a usar se o banco recusar o primeiro (valor novo do enum, SQL ainda não rodado). */
+  tipoAlternativo = null
 } = {}, avisos = []) {
   if (!pedidoId || !tipoEvento) return null;
-  try {
+  const gravar = async tipo => {
     const criado = await api.post('/api/pedido_historico_eventos', {
       pedido_id: pedidoId,
-      tipo_evento: tipoEvento,
+      tipo_evento: tipo,
       movimento_id: movimentoId,
       descricao,
       created_at: new Date().toISOString(),
       created_by: usuarioId
     });
     return criado?.id ?? criado?.[0]?.id ?? null;
+  };
+  try {
+    return await gravar(tipoEvento);
   } catch (err) {
+    if (tipoAlternativo && tipoAlternativo !== tipoEvento) {
+      try {
+        return await gravar(tipoAlternativo);
+      } catch (err2) {
+        avisos.push(`Falha ao registrar o evento do pedido (${tipoAlternativo}): ${err2?.message || err2}`);
+        return null;
+      }
+    }
     avisos.push(`Falha ao registrar o evento do pedido (${tipoEvento}): ${err?.message || err}`);
     return null;
   }

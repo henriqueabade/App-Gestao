@@ -192,6 +192,11 @@ body {
     color: var(--color-primary);
 }
 
+.relatorios-module .badge-purple {
+    background: rgba(179, 107, 255, 0.2);
+    color: var(--color-purple, #b36bff);
+}
+
 .relatorios-module .badge-info {
     background: rgba(138, 167, 243, 0.2);
     color: var(--color-blue);

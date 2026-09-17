@@ -25,7 +25,7 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const trecho = FONTE.slice(inicio, fim);
   const contexto = vm.createContext({});
-  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado })`, contexto);
+  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos })`, contexto);
 }
 
 test('mais de um volume: uma linha por volume, guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
@@ -89,7 +89,7 @@ test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/N
   assert.match(tagNota({ nfe_dispensada: true }, null), />S\/NF<\/span>/);
   assert.match(tagNota({ nfe_dispensada: true }, { status_fiscal: 'rejeitada' }), />S\/NF<\/span>/, 'rejeitada não é nota: vale a marca do pedido');
   assert.strictEqual(tagNota({}, null), '');
-  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>'));
+  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>'));
   assert.ok(PEDIDOS.includes("fetchApi('/api/fiscal/notas').catch(() => null)"), 'as notas entram junto com os pedidos');
   assert.ok(PEDIDOS.includes("tr.querySelector('.tag-danfe')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId))'));
 
@@ -175,6 +175,18 @@ test('acaoPrincipal, classificarPendencias, rotuloAmbiente e mensagemDeErro', ()
   assert.strictEqual(f.pedidoJaEnviado('Produção'), false);
   assert.strictEqual(f.pedidoJaEnviado(null), false);
 
+  // A caixa "Gerar boleto": o que ela diz e o aviso depois de gerar.
+  const tresSem = { ambiente: 'sandbox', pendencias: [], parcelas: [{ tem_boleto_vivo: false }, { tem_boleto_vivo: false }, { tem_boleto_vivo: true }] };
+  assert.strictEqual(f.textoDoBoleto(tresSem), '2 parcelas sem boleto · ambiente homologação (teste, sem valor). Nada é enviado ao cliente.');
+  assert.strictEqual(f.textoDoBoleto({ ambiente: 'producao', pendencias: [], parcelas: [{ tem_boleto_vivo: false }] }), '1 parcela sem boleto · ambiente produção. Nada é enviado ao cliente.');
+  assert.strictEqual(f.textoDoBoleto({ parcelas: [{ tem_boleto_vivo: true }, { tem_boleto_vivo: true }] }), 'As 2 parcelas já têm boleto registrado.');
+  assert.strictEqual(f.textoDoBoleto({ pendencias: ['Sem client_secret de homologação guardado (banco ou este computador)'], parcelas: [{ tem_boleto_vivo: false }] }), 'Não dá para gerar agora: Sem client_secret de homologação guardado (banco ou este computador)');
+  assert.strictEqual(f.textoDoBoleto({ parcelas: [] }), 'O pedido não tem parcelas cadastradas.');
+  assert.deepStrictEqual(plano(f.resumoDosBoletos({ registrados: 3, erros: 0, resultados: [] })), { texto: '3 boletos registrados no BB.', tipo: 'success' });
+  assert.deepStrictEqual(plano(f.resumoDosBoletos({ registrados: 1, erros: 1, resultados: [{ ok: true }, { ok: false, numero_parcela: 2, erro: 'Valor inválido' }, { ok: true, ja_existia: true }] })),
+    { texto: '1 boleto registrado no BB · 1 já existia · 1 com erro (parcela 2: Valor inválido).', tipo: 'error' });
+  assert.deepStrictEqual(plano(f.resumoDosBoletos({ registrados: 0, erros: 0, resultados: [] })), { texto: 'Nenhum boleto para gerar.', tipo: 'info' });
+
   const c = f.classificarPendencias([{ chave: 'a' }, { chave: 'b', automatico: true }]);
   assert.deepStrictEqual(plano(c.bloqueiam), [{ chave: 'a' }]);
   assert.deepStrictEqual(plano(c.automaticas), [{ chave: 'b', automatico: true }]);
@@ -213,7 +225,19 @@ test('script: carrega a prontidão, emite antes de mudar a situação, solta os 
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/prontidao'));
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/emitir'));
   assert.ok(FONTE.includes("body: JSON.stringify({ status: 'Enviado' })"));
-  assert.ok(FONTE.indexOf('async function emitir()') < FONTE.indexOf('if (corpo?.autorizada) return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);'), 'só marca enviado com a nota autorizada; pedido que já saiu só conclui');
+  // Linha a linha (o arquivo pode ter CRLF): emitir → autorizada → boletos (se marcado) → situação.
+  const emitirEm = FONTE.indexOf('async function emitir()');
+  const boletosEm = FONTE.indexOf('await gerarBoletosSeMarcado(corpo.nota);', emitirEm);
+  const situacaoEm = FONTE.indexOf('return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);', boletosEm);
+  assert.ok(emitirEm > 0 && boletosEm > emitirEm && situacaoEm > boletosEm, 'só marca enviado com a nota autorizada; antes, os boletos se a caixa estiver marcada; pedido que já saiu só conclui');
+  const marcarEm = FONTE.indexOf("if (acao === 'marcar') {");
+  assert.ok(marcarEm > 0 && FONTE.indexOf('await gerarBoletosSeMarcado(notaQueVale(estado.notas));', marcarEm) > marcarEm
+    && FONTE.indexOf('await marcarEnviado(notaQueVale(estado.notas));', marcarEm) > FONTE.indexOf('await gerarBoletosSeMarcado(notaQueVale(estado.notas));', marcarEm), 'marcar como enviado também gera os boletos que faltam, antes de mudar a situação');
+  assert.ok(FONTE.includes('/api/cobranca/pedidos/${encodeURIComponent(pedidoId)}/boletos') && FONTE.includes("body: JSON.stringify({ parcelas: [], nota_fiscal_id: nota?.id ?? null })"), 'gera pelo POST da cobrança, ligando a NF-e');
+  assert.ok(FONTE.includes('if (!caixa || caixa.disabled || !caixa.checked) return null;'), 'caixa desmarcada = nada é gerado');
+  assert.ok(FONTE.includes('caixa.checked = Boolean(boletoEstado.gerar_ao_emitir_nfe) && Boolean(boletoEstado.pode_gerar);'), 'a caixa nasce marcada pela configuração, só quando dá para gerar');
+  assert.ok(FONTE.includes('await carregarBoleto();'), 'o estado da cobrança é lido antes de pintar');
+  assert.ok(HTML.includes('id="emitirNfeGerarBoleto" type="checkbox"') && HTML.includes('id="emitirNfeBoletoBloco" class="hidden'), 'a caixa existe e começa escondida');
   assert.ok(FONTE.includes('jaEnviado: pedidoJaEnviado(corpo.resumo?.situacao)'), 'a situação vem da prontidão');
   assert.ok(FONTE.includes('semNfeBtn.classList.toggle(\'hidden\', Boolean(viva) || estado.jaEnviado)'), 'pedido que já saiu não tem "enviar sem NF-e"');
   assert.ok(FONTE.includes("window.dispatchEvent(new CustomEvent('nfe:emitida'"), 'quem abriu (Financeiro) fica sabendo');
@@ -253,7 +277,7 @@ test('lista de pedidos: tag roxa "S/NF" ao lado do número quando o pedido foi e
   assert.match(tag, />S\/NF<\/span>/);
   assert.match(tag, /title="Sem nota fiscal — enviado sem NF-e em 15\/09\/2026"/);
   assert.match(tagSemNota({ nfe_dispensada: 'true' }), /title="Sem nota fiscal — enviado sem NF-e"/);
-  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}</td>'), 'a tag fica na célula do número');
+  assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>'), 'a tag fica na célula do número');
 });
 
 test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), frete, volumes e pesos', () => {
@@ -280,10 +304,32 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(f({ nfe_dispensada: true }, [])), [{ classe: 'badge-neutral', texto: 'Sem nota fiscal' }]);
   assert.strictEqual(plano(f({ nfe_dispensada: true }, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }]))[0].texto, 'NF-e 1/1 · autorizada', 'com nota autorizada a marca "sem nota" não aparece');
   assert.strictEqual(plano(f({}, [{ id: 1, serie: 1, numero: 2, status_fiscal: 'processando' }]))[0].classe, 'badge-warning');
-  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, cartas.length))'));
+  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));'));
   assert.deepStrictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 2)).map(t => t.texto), ['NF-e 1/1 · autorizada', 'CC-e ×2'], 'as cartas de correção viram tag');
   assert.strictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 1)).at(-1).texto, 'CC-e 1');
   assert.strictEqual(plano(f({}, [], 3)).length, 0, 'sem nota, sem tag de carta');
+  // Boletos das parcelas: quantas têm boleto vivo, e os pagos; sem nenhum registrado, sem tag.
+  assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 2, pagos: 0 })), [{ classe: 'badge-warning', texto: 'Boletos 2/3' }]);
+  assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 3, pagos: 1 })), [{ classe: 'badge-success', texto: 'Boletos 3/3 · 1 pago' }]);
+  assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 0 })), []);
+  assert.deepStrictEqual(plano(f({}, [], 0, null)), []);
+  assert.ok(VISUALIZAR.includes('/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));'));
+  assert.ok(VISUALIZAR.includes('pintarColunaDeBoletos(pagamentoBox, detalhes, boletosEstado);') && VISUALIZAR.includes("th.textContent = 'BOLETO';"), 'a coluna BOLETO entra na tabela de parcelas, por createElement');
+  assert.ok(VISUALIZAR.includes("Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos')"));
+  assert.ok(/id="visualizarPedidoGerarBoletos"[^>]*data-perm="financeiro\.boleto\.emit"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Gerar boletos" nasce escondido, com a guarda escrita');
+  assert.ok(/id="visualizarPedidoBoletosPdf"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Boletos (PDF)" nasce escondido, com a guarda escrita');
+  assert.ok(VISUALIZAR.includes('ligarBoletosPdf(boletosEstado);') && VISUALIZAR.includes('window.BoletoDocumentos.gerarBoletosDoPedidoPdf(id)'), 'PDF de todos os boletos do pedido');
+  assert.ok(VISUALIZAR.includes('window.BoletoDocumentos.gerarBoletoPdf(linha.boleto.id)'), 'a tag da parcela gera o PDF daquele boleto');
+  const contexto2 = vm.createContext({});
+  vm.runInContext([recortarFuncao(VISUALIZAR, 'resumoDeBoletos'), recortarFuncao(VISUALIZAR, 'rotuloDoBoleto'), recortarFuncao(VISUALIZAR, 'boletoImprimivel')].join('\n'), contexto2);
+  assert.deepStrictEqual(['registrado', 'vencido', 'protestado', 'pago', 'baixado', 'erro', 'reservado'].map(s => contexto2.boletoImprimivel({ status: s })), [true, true, true, false, false, false, false]);
+  assert.strictEqual(contexto2.boletoImprimivel(null), false);
+  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos({ parcelas: [{ tem_boleto_vivo: true, boleto: { status: 'pago' } }, { tem_boleto_vivo: false, boleto: { status: 'erro' } }, { tem_boleto_vivo: false, boleto: null }] })), { parcelas: 3, registrados: 1, pagos: 1, com_erro: 1 });
+  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos(null)), { parcelas: 0, registrados: 0, pagos: 0, com_erro: 0 });
+  assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'registrado', nosso_numero: '00034534810000000393', nosso_numero_dv: '4', ambiente: 'sandbox', linha_digitavel: '001…' })),
+    { classe: 'badge-success', texto: 'registrado · 00034534810000000393-4 · homologação', detalhe: '001…' });
+  assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'erro', erro: 'Valor inválido' })), { classe: 'badge-danger', texto: 'erro', detalhe: 'Valor inválido' });
+  assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto(null)), { classe: 'badge-neutral', texto: 'sem boleto' });
 });
 
 test('pedidos.js: o ✓ de Produção → Enviado abre o modal da NF-e; Enviado → Entregue continua na pergunta', () => {

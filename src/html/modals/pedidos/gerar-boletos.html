@@ -1,0 +1,63 @@
+<!--
+  Gerar boletos (Pedidos → Visualizar → Gerar boletos). Modal médio: as
+  parcelas do pedido com o boleto de cada uma; marca-se as que ainda não têm
+  e o app registra no Banco do Brasil (API Cobranças). Nada é enviado ao
+  cliente. Com boleto registrado, "PDF" por parcela e "Boletos (PDF)" no rodapé. Não fecha clicando fora (docs/padroes-de-interface.md).
+  Fase D: "Detalhes" por parcela abre o boleto (boleto-detalhe.html) por cima;
+  "Consultar no BB" atualiza os boletos a pagar do pedido.
+  Contexto: window.gerarBoletosContext = { pedidoId, numero, cliente }.
+  Script: src/js/modals/pedido-gerar-boletos.js.
+-->
+<div id="gerarBoletosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="gerarBoletosTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarGerarBoletos" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="gerarBoletosTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i><span id="gerarBoletosTituloTexto">Gerar boletos</span></h2>
+        <p id="gerarBoletosSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="gerarBoletosAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="p-6 space-y-5">
+        <div id="gerarBoletosCarregando" class="text-sm text-gray-400">Lendo as parcelas…</div>
+
+        <div id="gerarBoletosPendencias" class="hidden" role="status" style="display: none; gap: .75rem; align-items: flex-start; border: 1px solid var(--color-primary); border-radius: .75rem; padding: .75rem 1rem;">
+          <i class="fas fa-exclamation-triangle mt-0.5" style="color: var(--color-primary-light)" aria-hidden="true"></i>
+          <span class="text-sm text-gray-200"></span>
+        </div>
+
+        <div id="gerarBoletosTabela" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs"></th>
+                  <th class="px-4 py-3 text-left text-xs">Parcela</th>
+                  <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                  <th class="px-4 py-3 text-right text-xs">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Boleto</th>
+                </tr>
+              </thead>
+              <tbody id="gerarBoletosLinhas" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <p id="gerarBoletosAviso" class="text-xs text-gray-400">Os boletos são registrados no Banco do Brasil com juros, multa, protesto e Pix da configuração de cobrança. Nada é enviado ao cliente: o PDF sai pelo pedido.</p>
+        <p id="gerarBoletosCompleto" class="hidden text-sm" style="color: var(--color-green)" role="status"></p>
+        <div id="gerarBoletosMensagem" class="hidden text-sm" role="alert"></div>
+        <ul id="gerarBoletosResultado" class="hidden space-y-1 text-sm"></ul>
+      </div>
+    </div>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="desistirGerarBoletos" type="button" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+      <button id="consultarBoletosBB" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[160px]" title="Atualiza a situação dos boletos a pagar com o Banco do Brasil">Consultar no BB</button>
+      <button id="baixarBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-primary text-white px-6 py-2 rounded-lg font-medium min-w-[160px]">Boletos (PDF)</button>
+      <button id="confirmarGerarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Gerar boletos</button>
+    </footer>
+  </div>
+</div>

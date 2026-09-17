@@ -58,7 +58,7 @@ test('vendas do mês não contam pedido cancelado', () => {
 
   assert.deepEqual(vendas.mesAtual, { quantidade: 2, valor: 4000, ticketMedio: 2000 });
   // Nem na série: o gráfico e o KPI têm de bater.
-  assert.deepEqual(vendas.serie12m.at(-1), { mes: '2026-09', quantidade: 2, valor: 4000 });
+  assert.deepEqual(vendas.serie12m.at(-1), { mes: '2026-09', quantidade: 2, valor: 4000, cancelado: { quantidade: 0, valor: 0 }, devolvido: { quantidade: 0, valor: 0 } });
 });
 
 test('pedido emitido às 02:30Z do dia 1 é venda do mês anterior', () => {
@@ -83,7 +83,7 @@ test('a série tem sempre 12 meses, com zero nos meses sem venda', () => {
   assert.equal(vendas.serie12m.length, 12);
   assert.equal(vendas.serie12m[0].mes, '2025-10');
   assert.equal(vendas.serie12m.at(-1).mes, '2026-09');
-  assert.deepEqual(vendas.serie12m.find(m => m.mes === '2026-03'), { mes: '2026-03', quantidade: 1, valor: 100 });
+  assert.deepEqual(vendas.serie12m.find(m => m.mes === '2026-03'), { mes: '2026-03', quantidade: 1, valor: 100, cancelado: { quantidade: 0, valor: 0 }, devolvido: { quantidade: 0, valor: 0 } });
   assert.equal(vendas.serie12m.filter(m => m.quantidade === 0).length, 11, 'mês vazio aparece com zero, não some');
 });
 
@@ -255,7 +255,7 @@ test('a lista de produção só corta no teto de segurança, e o total continua 
   assert.equal(producao.maisAntigos.at(-1).dias, 6);
 });
 
-test('pedidos por situação trazem as cinco chaves em ordem, só dos últimos 12 meses', () => {
+test('pedidos por situação trazem as sete chaves em ordem, só dos últimos 12 meses', () => {
   const producao = r.resumirProducao({
     pedidos: [
       { id: 1, situacao: 'Produção', data_emissao: meioDia('2026-09-01'), valor_final: 100 },
@@ -274,6 +274,8 @@ test('pedidos por situação trazem as cinco chaves em ordem, só dos últimos 1
     { situacao: 'Produção', quantidade: 1, valor: 100, emDia: 0, atrasados: 0, semPrevisao: 1 },
     { situacao: 'Enviado', quantidade: 0, valor: 0, emDia: 0, atrasados: 0, semPrevisao: 0 },
     { situacao: 'Entregue', quantidade: 1, valor: 200, emDia: 0, atrasados: 0, semPrevisao: 1 },
+    { situacao: 'Parcial', quantidade: 0, valor: 0, emDia: 0, atrasados: 0, semPrevisao: 0 },
+    { situacao: 'Devolvido', quantidade: 0, valor: 0, emDia: 0, atrasados: 0, semPrevisao: 0 },
     { situacao: 'Cancelado', quantidade: 1, valor: 50, emDia: 0, atrasados: 0, semPrevisao: 0 },
     { situacao: 'Outros', quantidade: 1, valor: 300, emDia: 0, atrasados: 0, semPrevisao: 0 }
   ]);
@@ -360,6 +362,8 @@ test('Enviado e Entregue: em dia se embarcou até a previsão, atrasado se depoi
     'Produção': [2, 1, 1, 0],
     'Enviado': [2, 1, 0, 1],
     'Entregue': [3, 1, 1, 1],
+    'Parcial': [0, 0, 0, 0],
+    'Devolvido': [0, 0, 0, 0],
     'Cancelado': [1, 0, 0, 0],
     'Outros': [1, 0, 0, 0]
   });
@@ -845,7 +849,7 @@ test('previsão da amostra real: cada parcela no mês do seu vencimento, com as 
   assert.equal(previsao.meses.length, 16);
   assert.equal(previsao.meses[0].mes, '2025-10');
   assert.equal(previsao.meses.at(-1).mes, '2027-01');
-  assert.deepEqual(doMes(previsao, '2026-07'), { mes: '2026-07', valor: 0, parcelas: 0, pedidos: 0, outros: 0, itens: [] });
+  assert.deepEqual(doMes(previsao, '2026-07'), { mes: '2026-07', valor: 0, cancelado: 0, devolvido: 0, parcelas: 0, pedidos: 0, outros: 0, itens: [] });
 
   // De set/26 em diante: 78.857,90 (tudo) − 6.653,52 (agosto, já passou) = 72.204,38.
   assert.equal(previsao.programadoDesteMes, 72204.38);
@@ -1076,4 +1080,92 @@ test('sem pedido nenhum, a previsão traz os 12 meses zerados e nada fora deles'
     orfas: 0,
     semData: 0
   });
+});
+
+// ---------------------------------------------------- cancelado e devolvido
+
+test('vendas: o cancelado entra no mês do cancelamento e o devolvido no mês da devolução; a venda fica onde aconteceu, pelo valor vendido', () => {
+  const vendas = r.resumirVendas({
+    pedidos: [
+      // Vendido em agosto por 4.000 e devolvido em parte em setembro: o valor_final já é o que restou.
+      { id: 1, situacao: 'Entregue', devolucao: 'parcial', valor_original: 4000, valor_devolvido: 1500, valor_final: 2500, data_emissao: meioDia('2026-08-05') },
+      // Devolvido por inteiro: continua venda de agosto.
+      { id: 2, situacao: 'Enviado', devolucao: 'total', valor_original: 1000, valor_devolvido: 1000, valor_final: 1000, data_emissao: meioDia('2026-08-20') },
+      // Vendido em julho e cancelado em agosto.
+      { id: 3, situacao: 'Cancelado', valor_final: 700, data_emissao: meioDia('2026-07-10'), data_cancelamento: meioDia('2026-08-02') },
+      { id: 4, situacao: 'Produção', valor_final: 300, data_emissao: meioDia('2026-09-03') }
+    ],
+    devolucoes: [
+      // DATE como o upstream serializa: corte de texto, senão o dia 1 viraria agosto.
+      { id: 1, pedido_id: 1, data_devolucao: '2026-09-01T00:00:00.000Z', valor: '1500.00' },
+      { id: 2, pedido_id: 2, data_devolucao: '2026-09-10', valor: 1000 },
+      // Fora da janela de 12 meses: não entra em barra nenhuma.
+      { id: 3, pedido_id: 9, data_devolucao: '2025-01-10', valor: 50 }
+    ]
+  }, { agora: AGORA });
+
+  const mes = m => vendas.serie12m.find(x => x.mes === m);
+  assert.deepEqual([mes('2026-08').quantidade, mes('2026-08').valor], [2, 5000], 'a venda pelo valor vendido, no mês dela');
+  assert.deepEqual(mes('2026-08').cancelado, { quantidade: 1, valor: 700 });
+  assert.deepEqual(mes('2026-07').cancelado, { quantidade: 0, valor: 0 }, 'o cancelado não fica no mês da emissão');
+  assert.deepEqual(mes('2026-09').devolvido, { quantidade: 2, valor: 2500 });
+  assert.deepEqual(vendas.devolvidosMes, { quantidade: 2, valor: 2500 });
+  assert.deepEqual(vendas.canceladosMes, { quantidade: 0, valor: 0 });
+
+  // Sem a tabela da devolução (SQL por rodar) nada quebra, e sem a coluna de valor o R$ sai null.
+  assert.deepEqual(r.resumirVendas({ pedidos: [] }, { agora: AGORA }).devolvidosMes, { quantidade: 0, valor: 0 });
+  const semValor = r.resumirVendas({ pedidos: [], devolucoes: [{ data_devolucao: '2026-09-10', valor: 10 }] }, { agora: AGORA, comValores: false });
+  assert.deepEqual(semValor.serie12m.at(-1).devolvido, { quantidade: 1, valor: null });
+});
+
+test('donut: a devolução vence o Enviado/Entregue (Parcial e Devolvido), sem prazo a cumprir; o cancelado continua cancelado', () => {
+  const emissao = meioDia('2026-09-01');
+  const producao = r.resumirProducao({
+    pedidos: [
+      { id: 1, situacao: 'Entregue', devolucao: 'parcial', valor_final: 2500, data_emissao: emissao, embarcar_previsao: '2026-09-10', embarcar_real: '2026-09-12' },
+      { id: 2, situacao: 'Enviado', devolucao: 'total', valor_final: 1000, data_emissao: emissao },
+      { id: 3, situacao: 'Cancelado', devolucao: 'total', valor_final: 10, data_emissao: emissao },
+      { id: 4, situacao: 'Entregue', devolucao: null, valor_final: 5, data_emissao: emissao }
+    ]
+  }, { agora: AGORA });
+  const porSituacao = Object.fromEntries(producao.porSituacao12m.map(s => [s.situacao, [s.quantidade, s.valor, s.emDia + s.atrasados + s.semPrevisao]]));
+  assert.deepEqual(porSituacao.Parcial, [1, 2500, 0]);
+  assert.deepEqual(porSituacao.Devolvido, [1, 1000, 0]);
+  assert.deepEqual(porSituacao.Cancelado, [1, 10, 0]);
+  assert.deepEqual(porSituacao.Entregue, [1, 5, 1]);
+  assert.equal(r.situacaoNoPainel({ situacao: 'Enviado', devolucao: 'Parcial' }), 'Parcial');
+});
+
+test('previsão: a parcela cancelada vai para a série vermelha, o que a devolução tirou para a roxa, e a verde fica com o que ainda entra', () => {
+  const previsao = r.resumirPrevisao({
+    pedidos: [
+      { id: 1, numero: 'PED1', situacao: 'Entregue', devolucao: 'parcial', valor_final: 2250, data_emissao: meioDia('2026-08-05') },
+      { id: 2, numero: 'PED2', situacao: 'Cancelado', valor_final: 900, data_emissao: meioDia('2026-08-05') },
+      { id: 3, numero: 'PED3', situacao: 'Enviado', devolucao: 'total', valor_final: 600, data_emissao: meioDia('2026-08-05') }
+    ],
+    pedido_parcelas: [
+      // PED1: a 1ª foi paga e teve R$ 100 reembolsados; a 2ª baixou de 1.000 para 750; a 3ª tem boleto com abatimento de 400.
+      { id: 1, pedido_id: 1, numero_parcela: 1, valor: 1000, data_vencimento: '2026-09-10' },
+      { id: 2, pedido_id: 1, numero_parcela: 2, valor: 750, valor_original: 1000, data_vencimento: '2026-10-10' },
+      { id: 3, pedido_id: 1, numero_parcela: 3, valor: 1000, data_vencimento: '2026-11-10' },
+      { id: 4, pedido_id: 2, numero_parcela: 1, valor: 900, data_vencimento: '2026-10-15' },
+      // PED3 devolvido por inteiro: a parcela zerou.
+      { id: 5, pedido_id: 3, numero_parcela: 1, valor: 0, valor_original: 600, data_vencimento: '2026-10-20' }
+    ],
+    devolucao_parcelas: [
+      { pedido_id: 1, numero_parcela: 1, modo: 'reembolso', desconto: 100, data_vencimento: '2026-09-10' },
+      { pedido_id: 1, numero_parcela: 2, modo: 'valor_parcela', desconto: 250, data_vencimento: '2026-10-10T00:00:00.000Z' },
+      { pedido_id: 1, numero_parcela: 3, modo: 'abatimento_boleto', desconto: 400, data_vencimento: '2026-11-10' },
+      { pedido_id: 3, numero_parcela: 1, modo: 'cancelada', desconto: 600, data_vencimento: '2026-10-20' }
+    ]
+  }, { agora: AGORA });
+
+  const linha = m => { const x = doMes(previsao, m); return [x.valor, x.cancelado, x.devolvido, x.parcelas]; };
+  assert.deepEqual(linha('2026-09'), [900, 0, 100, 1]);
+  assert.deepEqual(linha('2026-10'), [750, 900, 850, 1], 'a parcela zerada do PED3 saiu da verde e está na roxa');
+  assert.deepEqual(linha('2026-11'), [600, 0, 400, 1]);
+  assert.equal(previsao.programadoDesteMes, 2250);
+  // Sem a tabela da devolução a previsão é a de sempre.
+  const semTabela = r.resumirPrevisao({ pedidos: [{ id: 1, situacao: 'Enviado', data_emissao: meioDia('2026-08-05') }], pedido_parcelas: [{ id: 1, pedido_id: 1, numero_parcela: 1, valor: 10, data_vencimento: '2026-09-10' }] }, { agora: AGORA });
+  assert.deepEqual([doMes(semTabela, '2026-09').valor, doMes(semTabela, '2026-09').devolvido], [10, 0]);
 });

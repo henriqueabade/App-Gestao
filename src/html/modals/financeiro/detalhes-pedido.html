@@ -1,6 +1,9 @@
 <!--
-  Detalhes do pedido: a visão consolidada do pedido dentro do módulo.
-  Modal grande, só leitura. Script: src/js/modals/financeiro-modais.js.
+  Detalhes do pedido: a visão consolidada do pedido dentro do módulo —
+  itens e produção por setor, notas, parcelas e comissões, histórico.
+  Modal grande, só leitura. Dados: GET /api/financeiro/pedidos/:id.
+  "Abrir pedido completo" abre o Visualizar pedido dos Pedidos por cima.
+  Script: src/js/modals/financeiro-modais.js (montarDetalhesPedido).
 -->
 <div id="finDetalhesPedidoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finPedidoTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
@@ -21,13 +24,17 @@
         <button type="button" role="tab" aria-selected="false" data-fin-aba="notas" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas fiscais</button>
         <button type="button" role="tab" aria-selected="false" data-fin-aba="producao" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Produção</button>
         <button type="button" role="tab" aria-selected="false" data-fin-aba="comissoes" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Comissões</button>
+        <button type="button" role="tab" aria-selected="false" data-fin-aba="historico" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Histórico</button>
       </div>
     </nav>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
-      <section class="px-8 py-6">
+      <section class="px-8 py-6 space-y-6">
+        <p id="finPedidoCarregando" class="fin-vazio">Carregando dados...</p>
+        <div id="finPedidoMensagem" class="hidden text-sm" role="alert"></div>
+
         <div data-fin-painel="resumo" role="tabpanel">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
               <p class="text-xs text-gray-400 mb-1">Data do pedido</p>
               <p id="finPedidoData" class="text-sm text-white">—</p>
@@ -61,12 +68,14 @@
                   <th class="px-4 py-3 text-right text-xs">Quantidade</th>
                   <th class="px-4 py-3 text-right text-xs">Produzida</th>
                   <th class="px-4 py-3 text-right text-xs">Saldo</th>
+                  <th class="px-4 py-3 text-left text-xs">Por setor</th>
                   <th class="px-4 py-3 text-left text-xs">Status</th>
                 </tr>
               </thead>
               <tbody id="finPedidoItens" class="divide-y divide-white/10"></tbody>
             </table>
           </div>
+          <p class="text-xs text-gray-400 mt-2">"Produzida" é o que já passou por todos os setores em que o pedido teve produção registrada.</p>
         </div>
 
         <div data-fin-painel="notas" role="tabpanel" class="hidden">
@@ -87,18 +96,49 @@
         </div>
 
         <div data-fin-painel="producao" role="tabpanel" class="hidden">
-          <ol id="finPedidoProducao" class="fin-atividade"></ol>
+          <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Peça</th>
+                  <th class="px-4 py-3 text-left text-xs">Setor</th>
+                  <th class="px-4 py-3 text-right text-xs">Quantidade</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                </tr>
+              </thead>
+              <tbody id="finPedidoProducao" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
         </div>
 
-        <div data-fin-painel="comissoes" role="tabpanel" class="hidden">
+        <div data-fin-painel="comissoes" role="tabpanel" class="hidden space-y-6">
           <dl id="finPedidoComissoes" class="fin-dl"></dl>
+          <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Parcela</th>
+                  <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                  <th class="px-4 py-3 text-right text-xs">Valor líquido</th>
+                  <th class="px-4 py-3 text-right text-xs">Comissão</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                </tr>
+              </thead>
+              <tbody id="finPedidoParcelas" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div data-fin-painel="historico" role="tabpanel" class="hidden">
+          <ol id="finPedidoHistorico" class="fin-atividade"></ol>
         </div>
       </section>
     </div>
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button type="button" data-fin-principal="Abrir pedido completo" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]"><i class="fas fa-up-right-from-square mr-2" aria-hidden="true"></i>Abrir pedido completo</button>
+      <button id="finPedidoAbrirCompleto" type="button" data-perm="ped.view.details" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Abrir pedido completo</button>
     </footer>
   </div>
 </div>
