@@ -67,6 +67,10 @@
     // onde mostrar "Salvando...", e o segundo clique parecia legítimo.
     const submitBtn = window.BotaoAcao?.localizarBotaoEnvio?.(form) || null;
     const submitBtnText = submitBtn?.textContent || '';
+    // Os dados fiscais (NF-e) moram numa seção retraída: ela abre na setinha e
+    // sozinha, ao salvar, se faltar preencher algo lá dentro (o NCM).
+    const secaoFiscal = overlay?.querySelector('[data-secao-retratil]') || null;
+    window.SecaoRetratil?.ligar(overlay || document);
     const clonarBtn = document.getElementById('clonarProduto');
     const clonarBtnText = clonarBtn?.textContent || '';
     let isSubmitting = false;
@@ -121,6 +125,9 @@
         const valor = dados?.[chave];
         el.value = valor === null || valor === undefined ? (chave === 'origem_mercadoria' ? '0' : '') : String(valor);
       }
+      // Fechada, a barra diz quantos campos estão preenchidos.
+      const secao = document.getElementById('dadosFiscaisEditar')?.closest('[data-secao-retratil]');
+      if (secao) window.SecaoRetratil?.resumir(secao);
     };
     const addColecaoBtn = document.getElementById('addColecaoEditar');
     const delColecaoBtn = document.getElementById('delColecaoEditar');
@@ -1471,6 +1478,13 @@
             ordemContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
           }
           if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
+          return;
+        }
+        // Falta dado fiscal: abre a seção e mostra onde, em vez de recusar calado.
+        if (!ncmInput?.value.trim() && secaoFiscal) {
+          window.SecaoRetratil?.abrir(secaoFiscal, { foco: ncmInput });
+          window.SecaoRetratil?.avisar(secaoFiscal, 'falta o NCM', true);
+          if (typeof showToast === 'function') showToast('Preencha o NCM em "Dados fiscais (NF-e)".', 'error');
           return;
         }
         const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();

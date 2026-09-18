@@ -31,6 +31,9 @@
          conversão em lote de Pedidos, então não pode morar na folha de um
          módulo só. -->
     <link rel="stylesheet" href="../styles/conversao-orcamento.css">
+
+    <!-- Seções retráteis dos modais (a parte fiscal da peça, por enquanto). -->
+    <link rel="stylesheet" href="../styles/secao-retratil.css">
 </head>
 <body class="text-white">
     <!-- Topbar -->
@@ -358,6 +361,10 @@
     <script src="../js/utils/boleto-documentos.js"></script>
     <!-- Cores e etiquetas de quem recebe comissão (CMS/Royalty): o módulo Financeiro e os modais dele usam as mesmas. -->
     <script src="../js/utils/beneficiarios.js"></script>
+    <!-- Seletor de competência (mês, ano e lupa) do Financeiro: o mesmo no módulo e nos modais. -->
+    <script src="../js/utils/competencia.js"></script>
+    <!-- Seções retráteis dos modais: abrem sozinhas quando falta preencher algo ao salvar. -->
+    <script src="../js/utils/secao-retratil.js"></script>
     <!-- O seletor de transportadora do orçamento. Aqui e não no HTML do modal
          porque `menu.js` só executa `../js/{pagina}.js`: todo `<script>` dentro
          de um módulo é ignorado, e o utilitário nunca rodaria. -->

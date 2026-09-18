@@ -32,9 +32,6 @@
             <div>
               <input id="codigoInput" name="codigo" type="text" placeholder="Código" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
-            <div>
-              <input id="ncmInput" name="ncm" type="text" placeholder="00000000" maxlength="8" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
           <div class="relative">
             <select id="colecaoSelect" name="categoria" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecionar Coleção</option>
@@ -62,47 +59,65 @@
               <i class="fas fa-plus"></i>
             </button>
           </div>
-          <!-- Dados fiscais da peça (NF-e). Vazio usa o padrão da configuração fiscal. -->
-          <div class="md:col-span-3 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">Origem (NF-e)</label>
-              <select id="origemMercadoriaInput" name="origem_mercadoria" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-                <option value="0">0 — Nacional</option>
-                <option value="1">1 — Estrangeira, importação direta</option>
-                <option value="2">2 — Estrangeira, mercado interno</option>
-                <option value="3">3 — Nacional, importado &gt; 40%</option>
-                <option value="4">4 — Nacional, processo produtivo básico</option>
-                <option value="5">5 — Nacional, importado ≤ 40%</option>
-                <option value="6">6 — Estrangeira, importação direta, sem similar</option>
-                <option value="7">7 — Estrangeira, mercado interno, sem similar</option>
-                <option value="8">8 — Nacional, importado &gt; 70%</option>
-              </select>
+          <!--
+            Dados fiscais da peça (NF-e) numa seção só, retraída: o NCM (obrigatório)
+            e o resto, que vazio usa o padrão da configuração fiscal. Abre na setinha
+            e sozinha, ao salvar, quando falta preencher algo dentro
+            (src/js/utils/secao-retratil.js).
+          -->
+          <section class="secao-retratil md:col-span-3" data-secao-retratil>
+            <button type="button" id="dadosFiscaisBarraNovo" data-secao-barra class="secao-retratil__barra" aria-expanded="false" aria-controls="dadosFiscaisNovo">
+              <span class="secao-retratil__titulo"><i class="fas fa-file-invoice" aria-hidden="true"></i>Dados fiscais (NF-e)</span>
+              <span class="secao-retratil__nota" data-secao-nota></span>
+              <i class="fas fa-chevron-down secao-retratil__seta" aria-hidden="true"></i>
+            </button>
+            <div id="dadosFiscaisNovo" data-secao-corpo class="secao-retratil__corpo" role="region" aria-labelledby="dadosFiscaisBarraNovo" hidden>
+              <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-3 pt-4">
+                <div>
+                  <label for="ncmInput" class="block text-xs text-gray-400 mb-1">NCM <span class="text-red-400">*</span></label>
+                  <input id="ncmInput" name="ncm" type="text" placeholder="00000000" maxlength="8" required class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="origemMercadoriaInput" class="block text-xs text-gray-400 mb-1">Origem (NF-e)</label>
+                  <select id="origemMercadoriaInput" name="origem_mercadoria" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                    <option value="0">0 — Nacional</option>
+                    <option value="1">1 — Estrangeira, importação direta</option>
+                    <option value="2">2 — Estrangeira, mercado interno</option>
+                    <option value="3">3 — Nacional, importado &gt; 40%</option>
+                    <option value="4">4 — Nacional, processo produtivo básico</option>
+                    <option value="5">5 — Nacional, importado ≤ 40%</option>
+                    <option value="6">6 — Estrangeira, importação direta, sem similar</option>
+                    <option value="7">7 — Estrangeira, mercado interno, sem similar</option>
+                    <option value="8">8 — Nacional, importado &gt; 70%</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="unidadeComercialInput" class="block text-xs text-gray-400 mb-1">Unidade (NF-e)</label>
+                  <input id="unidadeComercialInput" name="unidade_comercial" type="text" maxlength="6" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="cestInput" class="block text-xs text-gray-400 mb-1">CEST</label>
+                  <input id="cestInput" name="cest" type="text" inputmode="numeric" maxlength="7" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="gtinInput" class="block text-xs text-gray-400 mb-1">GTIN/EAN</label>
+                  <input id="gtinInput" name="gtin" type="text" maxlength="14" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="cfopDentroInput" class="block text-xs text-gray-400 mb-1">CFOP dentro de MG</label>
+                  <input id="cfopDentroInput" name="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="cfopForaInput" class="block text-xs text-gray-400 mb-1">CFOP fora de MG</label>
+                  <input id="cfopForaInput" name="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+                <div>
+                  <label for="csosnInput" class="block text-xs text-gray-400 mb-1">CSOSN</label>
+                  <input id="csosnInput" name="csosn" type="text" inputmode="numeric" maxlength="3" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">Unidade (NF-e)</label>
-              <input id="unidadeComercialInput" name="unidade_comercial" type="text" maxlength="6" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">CEST</label>
-              <input id="cestInput" name="cest" type="text" inputmode="numeric" maxlength="7" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">GTIN/EAN</label>
-              <input id="gtinInput" name="gtin" type="text" maxlength="14" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">CFOP dentro de MG</label>
-              <input id="cfopDentroInput" name="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">CFOP fora de MG</label>
-              <input id="cfopForaInput" name="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-400 mb-1">CSOSN</label>
-              <input id="csosnInput" name="csosn" type="text" inputmode="numeric" maxlength="3" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-          </div>
+          </section>
           <!-- Linha do processo: a mesma do Editar produto (mesmos tamanhos). -->
           <div class="md:col-span-3 flex flex-wrap items-center gap-3">
             <select id="etapaSelect" class="flex-1 min-w-[200px] bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">

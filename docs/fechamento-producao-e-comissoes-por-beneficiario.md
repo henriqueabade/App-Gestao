@@ -138,6 +138,14 @@ No **Confirmar pagamento** (comissões):
 
 ---
 
+## Correções depois dos testes
+
+O seletor de competência (mês, ano e lupa), o "falta / total" dos cartões, os
+ajustes à mão no resumo, o carregamento dos modais e a seção fiscal da peça
+estão em
+[financeiro-competencia-cartoes-e-secao-fiscal.md](financeiro-competencia-cartoes-e-secao-fiscal.md)
+(sem SQL novo).
+
 ## Depois de puxar o código
 
 1. Rodar **`sql/fechamento_producao_e_pagamentos.sql`** no banco.

@@ -6,7 +6,7 @@
   Script: src/js/modals/financeiro-modais.js (montarRelatorios).
 -->
 <div id="finRelatoriosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
-  <div role="dialog" aria-modal="true" aria-labelledby="finRelatoriosTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" aria-labelledby="finRelatoriosTitulo" class="w-full max-w-3xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
@@ -50,8 +50,14 @@
             </select>
           </div>
           <div id="finRelCompetenciaBloco">
-            <label for="finRelCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
-            <select id="finRelCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finRelCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+            <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
+              <select id="finRelCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finRelCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finRelCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="finRelCompetencia" />
+            </div>
           </div>
           <div id="finRelPeriodoBloco" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>

@@ -36,6 +36,21 @@ const situacaoDe = r => {
   return Number(f.pago) > 0 ? 'parcial' : 'fechada';
 };
 
+/** O que já foi pago da competência (nada, se ela nem fechou). */
+const pagoDe = r => c.centavos(r.fechamento?.pago ?? 0);
+
+/**
+ * O que ainda falta pagar. Sem fechamento é tudo; com fechamento é o que o
+ * pagamento (ou os pagamentos por beneficiário) ainda não cobriu.
+ */
+const faltaDe = (r) => {
+  const total = c.centavos(r.a_pagar);
+  const f = r.fechamento;
+  if (!f) return total;
+  if (f.falta_pagar !== undefined && f.falta_pagar !== null) return c.centavos(f.falta_pagar);
+  return f.pagamento ? 0 : total;
+};
+
 /** Pedidos com produção começada e algum item/setor ainda por terminar. Pura. */
 function pedidosParciais({ eventos, itensPor }) {
   const acum = producao.acumulados(eventos);
@@ -147,13 +162,17 @@ async function carregar({ api, competencia, hoje, desde }) {
     competencia: comp,
     configuracao: cfg,
     tem_regras: b.regras.regras.some(r => regras.ativo(r.ativo)),
+    // `valor` é o que AINDA FALTA pagar; `total` é o da competência inteira.
+    // O card mostra os dois ("R$ 0,00 / R$ 5.400,00" quando já se pagou tudo).
     comissoes: {
-      situacao: situacaoDe(resumo), valor: resumo.a_pagar, parcelas: resumo.parcelas, pagar_ate: pagarComissao,
+      situacao: situacaoDe(resumo), valor: faltaDe(resumo), total: c.centavos(resumo.a_pagar), pago: pagoDe(resumo),
+      parcelas: resumo.parcelas, pagar_ate: pagarComissao,
       pago_em: resumo.fechamento?.pagamento ? c.dia(resumo.fechamento.pagamento.data_pagamento) : null
     },
     atrasadas: { valor: comissoes.soma(v.atrasadas, p => p.potencial.total), parcelas: v.atrasadas.length },
     producao: {
-      situacao: situacaoDe(prodComp), valor: prodComp.a_pagar, pecas: prodComp.pecas, pagar_ate: pagarProducao,
+      situacao: situacaoDe(prodComp), valor: faltaDe(prodComp), total: c.centavos(prodComp.a_pagar), pago: pagoDe(prodComp),
+      pecas: prodComp.pecas, pagar_ate: pagarProducao,
       dia_util: cfg.producao_dia_util,
       pago_em: prodComp.fechamento?.pagamento ? c.dia(prodComp.fechamento.pagamento.data_pagamento) : null
     },
@@ -162,6 +181,9 @@ async function carregar({ api, competencia, hoje, desde }) {
       apuradas: resumo.comissao,
       atrasadas: comissoes.soma(v.atrasadas, p => p.potencial.total),
       ajustes: resumo.ajustes,
+      // Ajustes à mão do mês: quantos, quanto saiu da base e quanta comissão
+      // isso tirou (o card mostra para o número não mudar sozinho).
+      ajustes_manuais: resumo.ajustes_manuais || { quantidade: 0, valor: 0, comissao: 0 },
       proximo_pagamento: pagarComissao,
       situacao: situacaoDe(resumo),
       // Quem recebe o quê (CMS e Royalty, por pessoa): a tela mostra com

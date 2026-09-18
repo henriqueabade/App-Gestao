@@ -24,8 +24,14 @@
         </p>
 
         <div>
-          <label for="finFechamentoCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
-          <select id="finFechamentoCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          <label for="finFechamentoCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+          <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+          <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
+            <select id="finFechamentoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <input id="finFechamentoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <button id="finFechamentoCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+            <input type="hidden" id="finFechamentoCompetencia" />
+          </div>
           <p id="finFechamentoInfo" class="text-xs text-gray-400 mt-2"></p>
         </div>
 

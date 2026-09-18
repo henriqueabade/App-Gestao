@@ -425,7 +425,9 @@ test('os modais fiscais são REAIS: aguardando NF-e e notas fiscais leem /api/fi
     }
     for (const v of ['autorizada', 'cancelada', 'processando', 'rejeitada']) assert.ok(notas.includes(`<option value="${v}">`), `filtro de situação ${v}`);
     assert.ok(!/data-fin-principal/.test(notas), 'nada aqui é "em implementação"');
-    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(notas) && !/<button[^>]*>\s*<i class="fas/.test(aguardando), 'botões só com texto, sem ícone');
+    // A lupa do seletor de competência é filtro, não ação: ícone com aria-label.
+    const semLupa = t => t.replace(/<button[^>]*data-competencia-ir[\s\S]*?<\/button>/g, '');
+    assert.ok(!/<button[^>]*>\s*<i class="fas/.test(semLupa(notas)) && !/<button[^>]*>\s*<i class="fas/.test(semLupa(aguardando)), 'botões só com texto, sem ícone');
 
     // O que o script faz com o backend.
     assert.match(SCRIPT, /fetchApi\(`\/api\/fiscal\/painel\?competencia=\$\{encodeURIComponent\(competenciaSel\.value \|\| ''\)\}`\)/, 'aguardando lê o painel da competência');
@@ -520,7 +522,7 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
     for (const v of ['recebidos', 'a_receber', 'em_atraso', 'abertas']) assert.ok(lista.includes(`<option value="${v}">`), `visão ${v}`);
     assert.match(lista, /id="finRecebimentosConciliar" type="button" data-perm="financeiro\.recebimento\.view"/);
     assert.match(lista, /id="finRecebimentosRegistrar" type="button" data-perm="financeiro\.recebimento\.registrar"/);
-    assert.ok(!/data-fin-principal/.test(lista) && !/<button[^>]*>\s*<i class="fas/.test(lista));
+    assert.ok(!/data-fin-principal/.test(lista) && !/<button[^>]*>\s*<i class="fas/.test(lista.replace(/<button[^>]*data-competencia-ir[\s\S]*?<\/button>/g, '')));
 
     assert.match(SCRIPT, /fetchApi\(`\/api\/cobranca\/recebimentos\?visao=abertas&competencia=/);
     assert.match(SCRIPT, /fetchApi\('\/api\/cobranca\/recebimentos', \{\s*method: 'POST'/);

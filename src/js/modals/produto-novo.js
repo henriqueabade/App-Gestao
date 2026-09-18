@@ -24,6 +24,11 @@
   const submitBtnText = submitBtn?.textContent || '';
   let isSubmitting = false;
 
+  // Os dados fiscais (NF-e) moram numa seção retraída: ela abre na setinha e
+  // sozinha, ao salvar, se faltar preencher algo lá dentro (o NCM).
+  const secaoFiscal = overlay?.querySelector('[data-secao-retratil]') || null;
+  window.SecaoRetratil?.ligar(overlay || document);
+
   function setLoadingState(isLoading) {
     if (!submitBtn) return;
     submitBtn.disabled = isLoading;
@@ -713,6 +718,13 @@
     const nome = nomeInput.value.trim();
     const codigo = codigoInput.value.trim();
     const ncm = ncmInput.value.trim().slice(0,8);
+    // Falta dado fiscal: abre a seção e mostra onde, em vez de recusar calado.
+    if (!ncm && secaoFiscal) {
+      window.SecaoRetratil?.abrir(secaoFiscal, { foco: ncmInput });
+      window.SecaoRetratil?.avisar(secaoFiscal, 'falta o NCM', true);
+      if (typeof showToast === 'function') showToast('Preencha o NCM em "Dados fiscais (NF-e)".', 'error');
+      return;
+    }
     const desenhadoPor = desenhistaSelect ? desenhistaSelect.value.trim() : '';
     try{
       isSubmitting = true;

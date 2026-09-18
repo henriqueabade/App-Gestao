@@ -41,8 +41,14 @@
 
         <div class="fin-filtros fin-filtros--4">
           <div>
-            <label for="finNotasCompetencia" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
-            <select id="finNotasCompetencia" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finNotasCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+            <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
+              <select id="finNotasCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finNotasCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finNotasCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="finNotasCompetencia" />
+            </div>
           </div>
           <div>
             <label for="finNotasStatus" class="block text-sm font-medium text-gray-300 mb-2">Situação</label>

@@ -108,20 +108,28 @@
   }
 
   /** Competências de 12 meses atrás a 3 à frente; `selecionada` é 'YYYY-MM'. */
-  function montarCompetencias(select, selecionada) {
-    if (!select) return;
-    const hoje = new Date();
+  /**
+   * O seletor de competência do modal: mês (nomes), ano (2025–2100, também
+   * digitável) e a lupa que entra no mês (src/js/utils/competencia.js). Só a
+   * lupa (ou Enter no ano) muda o valor e dispara o `change` — escolher não
+   * relê nada. `vazio` cria a opção "Todas" nas listas que filtram por mês.
+   */
+  function montarCompetencias(campo, selecionada, { vazio = '' } = {}) {
+    if (!campo) return;
     const alvo = /^\d{4}-\d{2}$/.test(String(selecionada || '')) ? selecionada : competenciaAtual();
-    select.replaceChildren();
-    for (let desloca = -12; desloca <= 3; desloca++) {
-      const total = hoje.getFullYear() * 12 + hoje.getMonth() + desloca;
-      const valor = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
-      const opcao = document.createElement('option');
-      opcao.value = valor;
-      opcao.textContent = rotuloCompetencia(valor);
-      if (valor === alvo) opcao.selected = true;
-      select.appendChild(opcao);
+    if (window.Competencia) {
+      window.Competencia.montar(campo, { valor: alvo, vazio });
+      return;
     }
+    // Sem o utilitário (HTML antigo): o valor ainda vale, e a leitura funciona.
+    campo.value = alvo;
+  }
+
+  /** Muda a competência do modal por fora (pendência, "Hoje", filtro "Todas"). */
+  function definirCompetencia(campo, valor) {
+    if (!campo) return;
+    if (window.Competencia) window.Competencia.definir(campo, valor);
+    else campo.value = valor;
   }
 
   /**
@@ -1057,6 +1065,76 @@
     }
   }
 
+  // ------------------------------------------------------- carregamento
+
+  /**
+   * O carregamento padrão das listas do Financeiro.
+   *
+   * Enquanto o servidor responde, a tabela mostra linhas de esqueleto (o
+   * brilho de `.fin-esqueleto`) e a caixa fica `aria-busy`. Sem isso, aplicar
+   * um filtro parecia travar: a lista antiga continuava na tela, sem sinal
+   * nenhum de que algo estava acontecendo.
+   *
+   * O contador também resolve a corrida: trocar o filtro duas vezes seguidas
+   * fazia a resposta mais LENTA (a do filtro antigo) chegar por último e
+   * apagar a certa.
+   */
+  function esqueletoNaTabela(tbody, colunas = 4, linhas = 5) {
+    if (!tbody) return;
+    tbody.replaceChildren();
+    for (let i = 0; i < linhas; i += 1) {
+      const tr = document.createElement('tr');
+      tr.className = 'fin-linha-esqueleto';
+      for (let c = 0; c < colunas; c += 1) {
+        const td = criar('td', 'px-4 py-3');
+        const marca = criar('span', 'fin-esqueleto');
+        // Larguras diferentes: parece uma lista de verdade, não um gabarito.
+        marca.style.width = `${[70, 45, 60, 35, 55][(i + c) % 5]}%`;
+        td.appendChild(marca);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+  }
+
+  function marcarOcupado(alvo, ocupado) {
+    if (!alvo) return;
+    alvo.classList.toggle('fin-carregando', Boolean(ocupado));
+    alvo.setAttribute('aria-busy', ocupado ? 'true' : 'false');
+  }
+
+  /**
+   * Uma leitura de lista: `comecar()` liga o esqueleto e devolve o número da
+   * leitura; `terminar(n)` devolve false quando a resposta chegou atrasada
+   * (outro filtro já foi aplicado) — nesse caso a tela não é mexida.
+   */
+  function criarCarregamento({ tbody = null, colunas = 4, linhas = 5, caixas = [], aviso = null, vazio = null } = {}) {
+    let leitura = 0;
+    const tabela = () => tbody?.closest?.('.fin-tabela') || null;
+    const alvos = () => [...caixas, tabela()].filter(Boolean);
+    return {
+      comecar() {
+        const minha = ++leitura;
+        alvos().forEach(a => marcarOcupado(a, true));
+        if (aviso) aviso.classList.remove('hidden');
+        // A lista pode ter ficado escondida no filtro anterior (nenhuma linha):
+        // sem isto o esqueleto nasceria dentro de uma tabela invisível e a tela
+        // parecia travada.
+        tabela()?.classList.remove('hidden');
+        vazio?.classList.add('hidden');
+        esqueletoNaTabela(tbody, colunas, linhas);
+        return minha;
+      },
+      atual: () => leitura,
+      terminar(minha) {
+        if (minha !== leitura) return false;
+        alvos().forEach(a => marcarOcupado(a, false));
+        if (aviso) aviso.classList.add('hidden');
+        return true;
+      }
+    };
+  }
+
   function montarDl(dl, pares) {
     dl.replaceChildren();
     for (const [rotulo, valor, destaque] of pares) {
@@ -1268,17 +1346,22 @@
       cabeca.replaceChildren(tr);
     }
 
+    const carregamento = criarCarregamento({ tbody: corpo, colunas: 9, aviso: el('finRecebimentosCarregando'), vazio: el('finRecebimentosVazio') });
+
     async function carregarLista() {
       mostrarMensagem('finRecebimentosMensagem', '');
-      el('finRecebimentosCarregando').classList.remove('hidden');
+      const minha = carregamento.comecar();
+      let lido = null;
+      let erro = null;
       try {
-        dados = await fetchApi(`/api/cobranca/recebimentos?visao=${encodeURIComponent(visaoSel.value)}&competencia=${encodeURIComponent(competenciaSel.value || '')}`);
+        lido = await fetchApi(`/api/cobranca/recebimentos?visao=${encodeURIComponent(visaoSel.value)}&competencia=${encodeURIComponent(competenciaSel.value || '')}`);
       } catch (e) {
-        dados = null;
-        mostrarMensagem('finRecebimentosMensagem', e.status === 403 ? 'Você não tem permissão para ver os recebimentos.' : e.message);
-      } finally {
-        el('finRecebimentosCarregando').classList.add('hidden');
+        erro = e;
       }
+      // Resposta atrasada (o filtro já mudou de novo): não mexe na tela.
+      if (!carregamento.terminar(minha)) return;
+      dados = erro ? null : lido;
+      if (erro) mostrarMensagem('finRecebimentosMensagem', erro.status === 403 ? 'Você não tem permissão para ver os recebimentos.' : erro.message);
       desenhar();
     }
 
@@ -1292,7 +1375,9 @@
       el('finRecebimentosDesde').textContent = dados?.desde ? `Parcelas controladas a partir de ${formatarData(dados.desde)}` : 'Contas a receber dos pedidos faturados';
       el('finRecebimentosSemSql').classList.toggle('hidden', !dados?.sql_pendente);
       // Competência não muda "em atraso" nem "todas em aberto"; o filtro de boleto não vale para recebidos.
-      competenciaSel.disabled = ['em_atraso', 'abertas'].includes(visao);
+      const semCompetencia = ['em_atraso', 'abertas'].includes(visao);
+      competenciaSel.disabled = semCompetencia;
+      if (window.Competencia) window.Competencia.desabilitar(competenciaSel, semCompetencia);
       boletoSel.disabled = visao === 'recebidos';
 
       pintarCabeca(visao);
@@ -2844,16 +2929,21 @@
       el('finRelatorioVazio').classList.toggle('hidden', !carregado || mostrado.linhas.length > 0);
     }
 
+    const carregamento = criarCarregamento({
+      tbody: el('finRelatorioCorpo'), colunas: (RELATORIOS[chave]?.colunas || []).length || 6, aviso: el('finRelatorioCarregando'), vazio: el('finRelatorioVazio')
+    });
+
     async function carregar() {
-      el('finRelatorioCarregando').classList.remove('hidden');
+      const minha = carregamento.comecar();
+      let lido = null;
       try {
-        relatorio = await buscarRelatorio(chave, { competencia, periodo });
+        lido = await buscarRelatorio(chave, { competencia, periodo });
       } catch (e) {
-        relatorio = { ...montarRelatorio(chave, { linhas: [] }), competencia, periodo, filtro: textoDoErro(e, 'Sem permissão para ver este relatório.') };
-      } finally {
-        carregado = true;
-        el('finRelatorioCarregando').classList.add('hidden');
+        lido = { ...montarRelatorio(chave, { linhas: [] }), competencia, periodo, filtro: textoDoErro(e, 'Sem permissão para ver este relatório.') };
       }
+      if (!carregamento.terminar(minha)) return;
+      relatorio = lido;
+      carregado = true;
       pintar();
     }
 
@@ -2880,6 +2970,7 @@
     ligarAbas();
     const registrarBtn = el('finParcelaRegistrarAjuste');
     let dados = null;
+    const carregamento = criarCarregamento({ tbody: el('finParcelaBeneficiarios'), colunas: 4, linhas: 3, aviso: el('finParcelaCarregando') });
 
     function pintar() {
       const d = dados;
@@ -2970,14 +3061,17 @@
         return;
       }
       mostrarMensagem('finParcelaMensagem', '');
+      const minha = carregamento.comecar();
+      let lido = null;
+      let erro = null;
       try {
-        dados = await fetchApi(`/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}`);
+        lido = await fetchApi(`/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}`);
       } catch (e) {
-        dados = null;
-        mostrarMensagem('finParcelaMensagem', textoDoErro(e, 'Você não tem permissão para ver as comissões.'));
-      } finally {
-        el('finParcelaCarregando').classList.add('hidden');
+        erro = e;
       }
+      if (!carregamento.terminar(minha)) return;
+      dados = erro ? null : lido;
+      if (erro) mostrarMensagem('finParcelaMensagem', textoDoErro(erro, 'Você não tem permissão para ver as comissões.'));
       pintar();
     }
 
@@ -3007,6 +3101,7 @@
     const pedidoId = Number(contexto.pedido || contexto.pedidoId) || null;
     ligarAbas();
     let dados = null;
+    const carregamento = criarCarregamento({ tbody: el('finPedidoParcelas'), colunas: 6, linhas: 3, aviso: el('finPedidoCarregando') });
 
     function pintar() {
       const d = dados;
@@ -3076,14 +3171,17 @@
         return;
       }
       mostrarMensagem('finPedidoMensagem', '');
+      const minha = carregamento.comecar();
+      let lido = null;
+      let erro = null;
       try {
-        dados = await fetchApi(`/api/financeiro/pedidos/${encodeURIComponent(pedidoId)}`);
+        lido = await fetchApi(`/api/financeiro/pedidos/${encodeURIComponent(pedidoId)}`);
       } catch (e) {
-        dados = null;
-        mostrarMensagem('finPedidoMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões e produção.'));
-      } finally {
-        el('finPedidoCarregando').classList.add('hidden');
+        erro = e;
       }
+      if (!carregamento.terminar(minha)) return;
+      dados = erro ? null : lido;
+      if (erro) mostrarMensagem('finPedidoMensagem', textoDoErro(erro, 'Você não tem permissão para ver comissões e produção.'));
       pintar();
     }
 
@@ -3101,6 +3199,7 @@
     let carregado = false;
 
     const quemSel = el('finAtrasadasQuemRecebe');
+    const carregamento = criarCarregamento({ tbody: el('finAtrasadasCorpo'), colunas: 11, aviso: el('finAtrasadasCarregando'), vazio: el('finAtrasadasVazio') });
 
     const colunas = [
       { chave: 'pedido', tipo: 'pedido' }, { chave: 'cliente' }, { chave: 'nf' }, { chave: 'parcela' },
@@ -3188,6 +3287,7 @@
 
     async function carregar() {
       mostrarMensagem('finAtrasadasMensagem', '');
+      const minha = carregamento.comecar();
       try {
         const corpo = await fetchApi('/api/financeiro/parcelas?visao=atrasadas');
         todas = (Array.isArray(corpo?.linhas) ? corpo.linhas : []).map(l => ({ ...l, dias: l.dias_atraso, faixa: l.faixa || faixaDeAtraso(l.dias_atraso) }));
@@ -3197,7 +3297,7 @@
         mostrarMensagem('finAtrasadasMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões.'));
       } finally {
         carregado = true;
-        el('finAtrasadasCarregando').classList.add('hidden');
+        carregamento.terminar(minha);
       }
       montarClientes();
       montarQuemRecebe();
@@ -3223,7 +3323,7 @@
     const setorSel = el('finProdCompSetor');
     const fecharBtn = el('finProdCompFechar');
     let dados = null;
-    let leitura = 0;
+    const carregamento = criarCarregamento({ tbody: el('finProdCompCorpo'), colunas: 8, aviso: el('finProdCompCarregando'), vazio: el('finProdCompVazio') });
 
     const colunas = [
       { chave: 'pedido', tipo: 'pedido' }, { chave: 'data', tipo: 'data' }, { chave: 'produto' }, { chave: 'setor' },
@@ -3277,20 +3377,18 @@
     }
 
     async function carregar() {
-      const minha = ++leitura;
+      const minha = carregamento.comecar();
       mostrarMensagem('finProdCompMensagem', '');
-      el('finProdCompCarregando').classList.remove('hidden');
+      let lido = null;
+      let erro = null;
       try {
-        const lido = await fetchApi(`/api/financeiro/producao?competencia=${encodeURIComponent(mesSel.value)}`);
-        if (minha !== leitura) return;
-        dados = lido;
+        lido = await fetchApi(`/api/financeiro/producao?competencia=${encodeURIComponent(mesSel.value)}`);
       } catch (e) {
-        if (minha !== leitura) return;
-        dados = null;
-        mostrarMensagem('finProdCompMensagem', textoDoErro(e, 'Você não tem permissão para ver a produção.'));
-      } finally {
-        if (minha === leitura) el('finProdCompCarregando').classList.add('hidden');
+        erro = e;
       }
+      if (!carregamento.terminar(minha)) return;
+      dados = erro ? null : lido;
+      if (erro) mostrarMensagem('finProdCompMensagem', textoDoErro(erro, 'Você não tem permissão para ver a produção.'));
       pintarTopo();
       desenhar();
     }
@@ -3319,8 +3417,10 @@
     const listas = {};
     const erroDe = e => textoDoErro(e, 'Você não tem permissão para editar as regras.');
     const avisar = texto => mostrarMensagem('finRegrasMensagem', texto);
+    const carregamento = criarCarregamento({ tbody: el('finRegrasCorpo'), colunas: 6, linhas: 3, aviso: el('finRegrasCarregando'), vazio: el('finRegrasVazio') });
 
     async function carregar() {
+      const minha = carregamento.comecar();
       try {
         dados = await fetchApi('/api/financeiro/regras');
         el('finRegrasSemSql').classList.add('hidden');
@@ -3331,7 +3431,7 @@
           el('finRegrasSemSql').classList.remove('hidden');
         } else avisar(textoDoErro(e, 'Você não tem permissão para ver as regras.'));
       } finally {
-        el('finRegrasCarregando').classList.add('hidden');
+        carregamento.terminar(minha);
       }
       pintarDonos();
       pintarRegras();
@@ -4295,6 +4395,7 @@
     const corpo = el('finAguardNfeCorpo');
     const tabela = corpo.closest('.fin-tabela');
     montarCompetencias(competenciaSel, contexto.competencia);
+    const carregamento = criarCarregamento({ tbody: corpo, colunas: 7, aviso: el('finAguardNfeCarregando'), vazio: el('finAguardNfeVazio') });
     let painel = null;
 
     function pintarAmbiente(ambiente) {
@@ -4307,15 +4408,17 @@
 
     async function carregarLista() {
       mostrarMensagem('finAguardNfeMensagem', '');
-      el('finAguardNfeCarregando').classList.remove('hidden');
+      const minha = carregamento.comecar();
+      let lido = null;
+      let erro = null;
       try {
-        painel = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competenciaSel.value || '')}`);
+        lido = await fetchApi(`/api/fiscal/painel?competencia=${encodeURIComponent(competenciaSel.value || '')}`);
       } catch (e) {
-        painel = null;
-        mostrarMensagem('finAguardNfeMensagem', e.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : e.message);
-      } finally {
-        el('finAguardNfeCarregando').classList.add('hidden');
+        erro = e;
       }
+      if (!carregamento.terminar(minha)) return;
+      painel = erro ? null : lido;
+      if (erro) mostrarMensagem('finAguardNfeMensagem', erro.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : erro.message);
       desenhar();
     }
 
@@ -4422,21 +4525,22 @@
     const busca = el('finNotasBusca');
     const corpo = el('finNotasCorpo');
     const tabela = corpo.closest('.fin-tabela');
-    montarCompetencias(competenciaSel, contexto.competencia);
-    const todas = document.createElement('option');
-    todas.value = '';
-    todas.textContent = 'Todas';
-    competenciaSel.insertBefore(todas, competenciaSel.firstChild);
+    // "Todas" é o mês vazio: a lista sai do filtro de competência.
+    montarCompetencias(competenciaSel, contexto.competencia, { vazio: 'Todas' });
     // Uma pendência ("nota parada", "nota recusada") abre já filtrada, em todas as competências.
     if (contexto.filtro?.status) {
       statusSel.value = contexto.filtro.status;
-      competenciaSel.value = '';
+      definirCompetencia(competenciaSel, '');
     }
     let notas = [];
 
+    const carregamento = criarCarregamento({ tbody: corpo, colunas: 8, aviso: el('finNotasCarregando'), vazio: el('finNotasVazio') });
+
     async function carregarLista() {
       mostrarMensagem('finNotasMensagem', '');
-      el('finNotasCarregando').classList.remove('hidden');
+      const minha = carregamento.comecar();
+      let lidas = [];
+      let erro = null;
       try {
         const [lista, pedidos, clientes] = await Promise.all([
           fetchApi('/api/fiscal/notas'),
@@ -4445,16 +4549,16 @@
         ]);
         const nomes = new Map((Array.isArray(clientes) ? clientes : []).map(c => [String(c.id), c.nome_fantasia || c.razao_social || c.nome || '']));
         const porId = new Map((Array.isArray(pedidos) ? pedidos : []).map(p => [String(p.id), p]));
-        notas = (Array.isArray(lista) ? lista : []).map(n => {
+        lidas = (Array.isArray(lista) ? lista : []).map(n => {
           const p = porId.get(String(n.pedido_id));
           return { ...n, pedido_numero: p?.numero ?? String(n.pedido_id ?? ''), cliente: nomes.get(String(p?.cliente_id)) || n.destinatario?.nome || '' };
         });
       } catch (e) {
-        notas = [];
-        mostrarMensagem('finNotasMensagem', e.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : e.message);
-      } finally {
-        el('finNotasCarregando').classList.add('hidden');
+        erro = e;
       }
+      if (!carregamento.terminar(minha)) return;
+      notas = erro ? [] : lidas;
+      if (erro) mostrarMensagem('finNotasMensagem', erro.status === 403 ? 'Você não tem permissão para ver as notas fiscais.' : erro.message);
       desenhar();
     }
 

@@ -34,10 +34,18 @@
         <p class="module-header__description">Acompanhamento financeiro e produtivo dos pedidos</p>
       </div>
       <div class="fin-cabecalho__controles">
-        <label class="fin-competencia" for="finCompetencia">
-          <span class="fin-competencia__rotulo">Competência</span>
-          <select id="finCompetencia" class="input-glass text-white rounded-md px-4 py-3 select-arrow appearance-none"></select>
-        </label>
+        <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+        <div class="fin-competencia">
+          <span class="fin-competencia__rotulo" id="finCompetenciaRotulo">Competência</span>
+          <div class="fin-competencia-campo" data-competencia role="group" aria-labelledby="finCompetenciaRotulo">
+            <select id="finCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes input-glass text-white rounded-md px-4 py-3 select-arrow appearance-none"></select>
+            <input id="finCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano input-glass text-white rounded-md px-3 py-3" />
+            <button id="finCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium" title="Ver esta competência" aria-label="Ver esta competência">
+              <i class="fas fa-search" aria-hidden="true"></i>
+            </button>
+            <input type="hidden" id="finCompetencia" />
+          </div>
+        </div>
         <button id="finHoje" type="button" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium">Hoje</button>
         <button type="button" data-perm="financeiro.config.view" data-fin-acao="configuracao-fiscal" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium" title="Configuração fiscal (NF-e)" aria-label="Configuração fiscal">
           <i class="fas fa-cog" aria-hidden="true"></i>
@@ -75,6 +83,8 @@
         </div>
         <div class="fin-kpi__linha">
           <span class="fin-kpi__valor" data-fin="comissoes.valor">—</span>
+          <!-- Falta pagar / total da competência: pago tudo vira "R$ 0,00 / R$ x". -->
+          <span class="fin-kpi__total" data-fin="comissoes.total"></span>
           <span class="fin-kpi__auxiliar" data-fin="comissoes.auxiliar"></span>
         </div>
         <p class="fin-kpi__rodape" data-fin="comissoes.rodape"></p>
@@ -102,6 +112,7 @@
         </div>
         <div class="fin-kpi__linha">
           <span class="fin-kpi__valor" data-fin="producao.valor">—</span>
+          <span class="fin-kpi__total" data-fin="producao.total"></span>
           <span class="fin-kpi__auxiliar" data-fin="producao.auxiliar"></span>
         </div>
         <p class="fin-kpi__rodape" data-fin="producao.rodape"></p>
@@ -234,7 +245,8 @@
           <div class="fin-resumo__linha"><dt>Previstas</dt><dd data-fin="resumoComissoes.previstas">—</dd></div>
           <div class="fin-resumo__linha"><dt>Apuradas</dt><dd data-fin="resumoComissoes.apuradas">—</dd></div>
           <div class="fin-resumo__linha"><dt>Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
-          <div class="fin-resumo__linha"><dt>Ajustes</dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
+          <!-- Ajustes à mão: o quanto eles tiraram da comissão do mês (e quantos são). -->
+          <div class="fin-resumo__linha"><dt title="Ajustes à mão: quantos são, quanto saiu da base e a comissão que isso tirou do mês">Ajustes <span class="fin-resumo__nota" data-fin="resumoComissoes.ajustesQuantidade"></span></dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
         </dl>
         <!-- Quem recebe: CMS (dono do cliente) e Royalty (desenhista da peça), por pessoa,
              com a cor de cada um e a legenda. Some quando não há regra nenhuma. -->

@@ -1,0 +1,82 @@
+/* ---------------------------------------------------------------------------
+   Seção retrátil dos modais (src/js/utils/secao-retratil.js).
+
+   Uma barra com título, um resumo do que há dentro e a setinha que abre. Nasce
+   fechada; abre sozinha quando falta preencher algo ao salvar — e nesse caso a
+   barra fica em vermelho.
+   --------------------------------------------------------------------------- */
+
+.secao-retratil {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+}
+
+.secao-retratil__barra {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.secao-retratil__barra:hover { background: rgba(255, 255, 255, 0.05); }
+
+.secao-retratil__barra:focus-visible {
+    outline: 2px solid var(--color-primary, #b6a03e);
+    outline-offset: -2px;
+}
+
+.secao-retratil__titulo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--menu-text-strong, #fff);
+}
+
+.secao-retratil__titulo i { opacity: 0.8; }
+
+/* O resumo ("3 de 7 preenchidos") empurra a setinha para a direita. */
+.secao-retratil__nota {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--color-pen, #a394a7);
+}
+
+.secao-retratil__seta {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    color: var(--color-pen, #a394a7);
+    transition: transform 0.2s ease;
+}
+
+.secao-retratil--aberta .secao-retratil__seta { transform: rotate(180deg); }
+
+.secao-retratil__corpo {
+    padding: 0 1rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.secao-retratil__corpo[hidden] { display: none; }
+
+/* Falta preencher: a barra avisa mesmo fechada. */
+.secao-retratil--atencao {
+    border-color: color-mix(in srgb, var(--color-red, #b34b4b) 60%, transparent);
+    background: color-mix(in srgb, var(--color-red, #b34b4b) 12%, transparent);
+}
+
+.secao-retratil--atencao .secao-retratil__nota { color: var(--color-red, #b34b4b); }
+
+@media (prefers-reduced-motion: reduce) {
+    .secao-retratil__seta { transition: none; }
+}

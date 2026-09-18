@@ -237,7 +237,10 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
         competencia_natural: natural, competencia: competenciaAlvo(natural, estado.proxima),
         valor_parcela: valorOriginal, ajustes: c.centavos(abatimentoBoleto + ajustesTotal), base: liquido, pct_cms: taxas.pct_cms, pct_royalty: taxas.pct_royalty,
         cms: potencial.cms, royalty: potencial.royalty, total: potencial.total, motivo: null,
-        detalhes: { beneficiarios: potencial.beneficiarios, ajustes: ativos.map(a => a.id), abatimento_boleto: abatimentoBoleto, taxas: { cms: taxas.cms, royalty: taxas.royalty, pct_cms: taxas.pct_cms, pct_royalty: taxas.pct_royalty } }
+        // `ajuste_manual` é o que os ajustes à mão tiraram da base desta
+        // parcela: é com ele que o card mostra que houve ajuste (sem ele,
+        // a comissão só aparece menor, sem dizer por quê).
+        detalhes: { beneficiarios: potencial.beneficiarios, ajustes: ativos.map(a => a.id), ajuste_manual: ajustesTotal, abatimento_boleto: abatimentoBoleto, taxas: { cms: taxas.cms, royalty: taxas.royalty, pct_cms: taxas.pct_cms, pct_royalty: taxas.pct_royalty } }
       });
     } else if (congelados.length) {
       // Já fechada: o que mudou depois vira ajuste.
@@ -350,6 +353,15 @@ function resumirItens(itens, { fechado = null, competencia }) {
     .sort((a, b) => a.tipo.localeCompare(b.tipo) || String(a.beneficiario).localeCompare(String(b.beneficiario), 'pt-BR'));
   const aPagar = num(porBenef.filter(b => b.valor > 0).reduce((s, b) => s + b.valor, 0));
   const aCompensar = num(porBenef.filter(b => b.valor < 0).reduce((s, b) => s + b.valor, 0));
+  // Ajustes à mão: quantos são, quanto saiu da base e quanta comissão isso
+  // tirou das parcelas apuradas no mês. Sem isso o card só mostrava a
+  // comissão menor, sem dizer que houve ajuste.
+  const pctDe = i => (Number(i.pct_cms) || 0) + (Number(i.pct_royalty) || 0);
+  const ajustesManuais = {
+    quantidade: new Set(itens.flatMap(i => (i.detalhes?.ajustes || []).map(String))).size,
+    valor: num(parcelasI.reduce((s, i) => s + Number(i.detalhes?.ajuste_manual || 0), 0)),
+    comissao: num(parcelasI.reduce((s, i) => s + (Number(i.detalhes?.ajuste_manual || 0) * pctDe(i)) / 100, 0))
+  };
   return {
     competencia,
     fechado: Boolean(fechado),
@@ -364,6 +376,7 @@ function resumirItens(itens, { fechado = null, competencia }) {
     royalty: num(parcelasI.reduce((s, i) => s + Number(i.royalty || 0), 0)),
     comissao: num(parcelasI.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
     ajustes: num(ajustesI.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
+    ajustes_manuais: ajustesManuais,
     liquido: num(itens.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
     a_pagar: fechado ? num(fechado.total) : aPagar,
     a_compensar: aCompensar,

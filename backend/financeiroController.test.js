@@ -557,3 +557,56 @@ test('pagamento por beneficiário: dá para pagar só a CMS, só uma pessoa, e o
     await t.fechar();
   }
 });
+
+test('ajuste manual aparece no painel: o cartão mostra o que falta pagar e o resumo diz quanto os ajustes tiraram', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar', 'financeiro.ajuste.registrar',
+      'financeiro.competencia.fechar', 'financeiro.pagamento.confirmar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'royalty', percentual: 10, escopo: 'todos' });
+
+    // Sem ajuste: 20% de 20.000 = 4.000, tudo a pagar.
+    const antes = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.deepEqual(
+      [antes.corpo.comissoes.valor, antes.corpo.comissoes.total, antes.corpo.comissoes.pago],
+      [4000, 4000, 0], 'nada pago: falta o total inteiro'
+    );
+    assert.deepEqual(antes.corpo.resumo_comissoes.ajustes_manuais, { quantidade: 0, valor: 0, comissao: 0 });
+
+    // Ajuste à mão de R$ 3.000 na parcela: tira R$ 600 de comissão (20%).
+    const ajuste = await t.chamar('POST', '/api/financeiro/ajustes', {
+      pedido_id: 55, numero_parcela: 1, tipo: 'desconto', valor: 3000, data_ajuste: `${ant}-12`, motivo: 'Negociação com o cliente'
+    });
+    assert.equal(ajuste.status, 200);
+
+    const comAjuste = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.equal(comAjuste.corpo.comissoes.valor, 3400, 'a comissão já sai menor');
+    assert.deepEqual(comAjuste.corpo.resumo_comissoes.ajustes_manuais, { quantidade: 1, valor: 3000, comissao: 600 },
+      'o card diz que houve 1 ajuste, quanto saiu da base e quanta comissão isso tirou');
+    assert.equal(comAjuste.corpo.resumo_comissoes.apuradas + comAjuste.corpo.resumo_comissoes.ajustes_manuais.comissao, 4000,
+      'apurado + o que o ajuste tirou = o que seria sem ajuste');
+
+    // Fechar e pagar metade: o cartão passa a mostrar só o que falta.
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'comissao', competencia: ant })).corpo.total, 3400);
+    const pagou = await t.chamar('POST', '/api/financeiro/pagamentos', { tipo: 'comissao', competencia: ant, data_pagamento: hoje, forma: 'Pix', tipo_comissao: 'cms' });
+    assert.equal(pagou.status, 200, JSON.stringify(pagou.corpo));
+    const parcial = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.deepEqual(
+      [parcial.corpo.comissoes.situacao, parcial.corpo.comissoes.valor, parcial.corpo.comissoes.total, parcial.corpo.comissoes.pago],
+      ['parcial', 1700, 3400, 1700], 'pago metade: falta a outra metade, e o total continua o da competência'
+    );
+
+    // Pagar o resto: falta zero, total igual.
+    await t.chamar('POST', '/api/financeiro/pagamentos', { tipo: 'comissao', competencia: ant, data_pagamento: hoje, forma: 'Pix', tipo_comissao: 'royalty' });
+    const paga = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.deepEqual(
+      [paga.corpo.comissoes.situacao, paga.corpo.comissoes.valor, paga.corpo.comissoes.total, paga.corpo.comissoes.pago],
+      ['paga', 0, 3400, 3400], 'pago tudo: 0 de 3.400'
+    );
+  } finally {
+    await t.fechar();
+  }
+});

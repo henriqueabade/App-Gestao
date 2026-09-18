@@ -200,7 +200,48 @@ body {
     color: var(--fin-texto-2);
 }
 
-#finCompetencia { min-width: 13rem; }
+/* ------------------------------------------------- seletor de competência
+   Mês (nomes) à esquerda, ano (digitável, 2025–2100) e a lupa que entra no
+   mês. Só a lupa (ou Enter no ano) muda a competência: escolher não recarrega.
+   O valor 'AAAA-MM' fica no <input type="hidden"> ao lado
+   (src/js/utils/competencia.js). */
+.fin-competencia-campo {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+}
+
+.fin-competencia-campo__mes { min-width: 8.5rem; }
+
+/* O ano é digitado (e a lista sugere 2025–2100): sem as setinhas de número,
+   que roubavam o espaço dos quatro dígitos. */
+.fin-competencia-campo__ano {
+    width: 6.75rem;
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.fin-competencia-campo__ano::-webkit-outer-spin-button,
+.fin-competencia-campo__ano::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.fin-competencia-campo__ir {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+}
+
+.fin-competencia-campo--desligado { opacity: 0.55; }
+
+/* Dentro dos modais os campos seguem a altura dos outros (px-4 py-3). */
+.fin-competencia-campo--modal .fin-competencia-campo__mes,
+.fin-competencia-campo--modal .fin-competencia-campo__ano { flex: 0 1 auto; }
+.fin-competencia-campo--modal .fin-competencia-campo__mes { flex: 1 1 auto; }
 
 /* ---------------------------------------------------------- indicadores */
 
@@ -299,6 +340,18 @@ body {
 }
 
 .fin-kpi__auxiliar { font-size: 0.9rem; color: var(--fin-texto-2); }
+
+/* "falta / total" do cartão: o número grande é o que falta pagar, e este diz
+   de quanto era a competência (pago tudo vira "R$ 0,00 / R$ 5.400,00"). */
+.fin-kpi__total {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--fin-texto-2);
+    white-space: nowrap;
+}
+
+/* Nota ao lado do rótulo de uma linha do resumo (ex.: "2 manuais"). */
+.fin-resumo__nota { font-size: 0.75rem; color: var(--fin-texto-2); opacity: 0.85; }
 
 .fin-kpi__rodape {
     margin: 0;
@@ -795,6 +848,13 @@ label.fin-benef__nome { cursor: pointer; }
 }
 
 @keyframes finBrilho { to { background-position: -200% 0; } }
+
+/* Lista carregando: as linhas de esqueleto ocupam a tabela e nada ali é
+   clicável enquanto o servidor responde (o filtro segue livre). */
+.fin-linha-esqueleto { pointer-events: none; }
+.fin-linha-esqueleto .fin-esqueleto { min-width: 2rem; }
+.fin-carregando { position: relative; }
+.fin-carregando .fin-vazio { display: none; }
 
 .fin-vazio {
     padding: 1.5rem 0;

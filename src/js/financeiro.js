@@ -177,24 +177,31 @@ function finRotuloCompetencia(ano, mes) {
     return `${FIN_MESES[mes - 1]} / ${ano}`;
 }
 
-/** Competências de 12 meses atrás até 3 à frente, com a atual selecionada. */
-function finMontarCompetencias(select, hoje) {
-    if (!select) return;
-    select.replaceChildren();
-    const ano = hoje.getFullYear();
-    const mes = hoje.getMonth() + 1;
-    for (let desloca = -12; desloca <= 3; desloca++) {
-        const total = ano * 12 + (mes - 1) + desloca;
-        const a = Math.floor(total / 12);
-        const m = (total % 12) + 1;
-        const opcao = document.createElement('option');
-        opcao.value = `${a}-${String(m).padStart(2, '0')}`;
-        opcao.textContent = finRotuloCompetencia(a, m);
-        if (desloca === 0) opcao.selected = true;
-        select.appendChild(opcao);
+/**
+ * O seletor de competência: mês (nomes), ano (2025–2100, também digitável) e a
+ * lupa que entra no mês (src/js/utils/competencia.js). Escolher não recarrega
+ * nada — só a lupa (ou Enter no ano) muda o valor e dispara o `change`.
+ */
+function finMontarCompetencias(campo, hoje) {
+    if (!campo) return;
+    const inicial = finCompetenciaAtual(hoje);
+    if (window.Competencia) {
+        window.Competencia.montar(campo, { valor: inicial });
+        return;
     }
-    // Explícito: é este valor que a leitura do painel usa.
-    select.value = finCompetenciaAtual(hoje);
+    // Sem o utilitário (HTML antigo ou carregamento parcial): o valor ainda vale.
+    campo.value = inicial;
+}
+
+/**
+ * O "de quanto" do cartão: "/ R$ 5.400,00". O valor grande é o que FALTA
+ * pagar, então sem o total o número parecia mudar sozinho depois do pagamento.
+ * Fica vazio enquanto não há competência (nada a comparar).
+ */
+function finTotalDoCartao(x) {
+    const total = Number(x?.total);
+    if (!Number.isFinite(total)) return '';
+    return `/ ${finFormatarMoeda(total)}`;
 }
 
 function finCompetenciaAtual(hoje) {
@@ -289,6 +296,8 @@ async function finBuscarPainel(competencia) {
 }
 
 const finPlural = (n, um, varios) => `${finFormatarInteiro(n)} ${Number(n) === 1 ? um : varios}`;
+/** Dinheiro sem sobra de ponto flutuante (as contas da tela são em reais). */
+const finCentavos = v => Math.round((Number(v) || 0) * 100) / 100;
 
 /**
  * As contas a receber da tela, a partir do painel de recebimentos (ou da
@@ -374,7 +383,7 @@ function finMapearComissoes(painel, erro) {
         const vazio = { valor: null, auxiliar: '', rodape: motivo };
         return {
             kpis: { comissoes: vazio, atrasadas: vazio, producao: vazio },
-            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, ajustes: null, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
+            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
             resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, proximoPagamento: '—' },
             pendencias: sqlPendente
                 ? [{ nivel: 'critico', titulo: 'Comissões e produção ainda não ativadas', descricao: motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
@@ -390,20 +399,38 @@ function finMapearComissoes(painel, erro) {
     const rc = painel.resumo_comissoes || {};
     const rp = painel.resumo_producao || {};
     const diaUtil = `${Number(p.dia_util || rp.dia_util) || 5}º dia útil`;
-    const rodapeDe = (x, sufixo = '') => (x.situacao === 'paga'
-        ? `Paga em ${finFormatarData(x.pago_em)}`
-        : `${x.situacao === 'fechada' ? 'Fechada · pagar' : 'Pagamento'} até ${finFormatarData(x.pagar_ate)}${sufixo}`);
+    const rodapeDe = (x, sufixo = '') => {
+        if (x.situacao === 'paga') return `Paga em ${finFormatarData(x.pago_em)}`;
+        const abertura = x.situacao === 'parcial'
+            ? `Paga em parte (${finFormatarMoeda(Number(x.pago) || 0)}) · pagar`
+            : (x.situacao === 'fechada' ? 'Fechada · pagar' : 'Pagamento');
+        return `${abertura} até ${finFormatarData(x.pagar_ate)}${sufixo}`;
+    };
     return {
         kpis: {
-            comissoes: { valor: Number(c.valor) || 0, auxiliar: finPlural(Number(c.parcelas) || 0, 'parcela', 'parcelas'), rodape: rodapeDe(c) },
+            // `valor` é o que FALTA pagar e `total` é a competência inteira:
+            // nada pago mostra "x / x", pago pela metade "y / x" e pago tudo "0 / x".
+            comissoes: {
+                valor: Number(c.valor) || 0, total: finTotalDoCartao(c),
+                auxiliar: finPlural(Number(c.parcelas) || 0, 'parcela', 'parcelas'), rodape: rodapeDe(c)
+            },
             atrasadas: {
                 valor: Number(a.valor) || 0, auxiliar: finPlural(Number(a.parcelas) || 0, 'parcela', 'parcelas'),
                 rodape: painel.tem_regras === false ? 'Sem regras de CMS/Royalty cadastradas' : 'Aguardando recebimento'
             },
-            producao: { valor: Number(p.valor) || 0, auxiliar: `${finPlural(Number(p.pecas) || 0, 'peça finalizada', 'peças finalizadas')}`, rodape: rodapeDe(p, ` (${diaUtil})`) }
+            producao: {
+                valor: Number(p.valor) || 0, total: finTotalDoCartao(p),
+                auxiliar: `${finPlural(Number(p.pecas) || 0, 'peça finalizada', 'peças finalizadas')}`, rodape: rodapeDe(p, ` (${diaUtil})`)
+            }
         },
         resumoComissoes: {
-            previstas: Number(rc.previstas) || 0, apuradas: Number(rc.apuradas) || 0, atrasadas: Number(rc.atrasadas) || 0, ajustes: Number(rc.ajustes) || 0,
+            previstas: Number(rc.previstas) || 0, apuradas: Number(rc.apuradas) || 0, atrasadas: Number(rc.atrasadas) || 0,
+            // O efeito TOTAL dos ajustes no mês: o estorno do que já estava
+            // fechado (rc.ajustes) mais a comissão que os ajustes à mão
+            // tiraram das parcelas apuradas agora.
+            ajustes: finCentavos((Number(rc.ajustes) || 0) - (Number(rc.ajustes_manuais?.comissao) || 0)),
+            ajustesQuantidade: Number(rc.ajustes_manuais?.quantidade) || 0,
+            ajustesBase: Number(rc.ajustes_manuais?.valor) || 0,
             proximoPagamento: `${finFormatarData(rc.proximo_pagamento)}${rc.situacao && rc.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rc.situacao]}` : ''}`,
             // Quem recebe: o apurado do mês; sem apuração, a previsão (para o card nunca ficar vazio à toa).
             beneficiarios: Array.isArray(rc.beneficiarios) ? rc.beneficiarios : [],
@@ -561,9 +588,12 @@ function finRenderizarKpis(moduleEl, kpis) {
     finPreencher(moduleEl, 'nf.auxiliar', nf.quantidade === null || nf.quantidade === undefined ? '' : (nf.quantidade === 1 ? 'pedido' : 'pedidos'));
     finPreencher(moduleEl, 'nf.rodape', nf.rodape || `Total: ${finFormatarMoeda(nf.total)}`);
 
-    // Comissões e produção: { valor, auxiliar, rodape } já prontos (finMapearComissoes).
+    // Comissões e produção: { valor, total, auxiliar, rodape } já prontos
+    // (finMapearComissoes). `valor` é o que falta pagar e `total` é o "de
+    // quanto era" — os dois juntos são o "x/x" do cartão.
     for (const [chave, cartao] of [['comissoes', comissoes], ['atrasadas', atrasadas], ['producao', producao]]) {
         finPreencher(moduleEl, `${chave}.valor`, finFormatarMoeda(cartao?.valor));
+        if (chave !== 'atrasadas') finPreencher(moduleEl, `${chave}.total`, cartao?.total || '');
         finPreencher(moduleEl, `${chave}.auxiliar`, cartao?.auxiliar || '');
         finPreencher(moduleEl, `${chave}.rodape`, cartao?.rodape || '');
     }
@@ -623,7 +653,13 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoComissoes.previstas', finFormatarMoeda(c.previstas));
     finPreencher(moduleEl, 'resumoComissoes.apuradas', finFormatarMoeda(c.apuradas));
     finPreencher(moduleEl, 'resumoComissoes.atrasadas', finFormatarMoeda(c.atrasadas));
+    // Ajustes: o que os ajustes à mão tiraram da comissão do mês mais os
+    // estornos de competências já fechadas. Sem isto o card ficava em zero e a
+    // comissão apenas aparecia menor, sem dizer por quê.
     finPreencher(moduleEl, 'resumoComissoes.ajustes', finFormatarMoeda(c.ajustes));
+    finPreencher(moduleEl, 'resumoComissoes.ajustesQuantidade', c.ajustesQuantidade
+        ? `(${finPlural(c.ajustesQuantidade, 'manual', 'manuais')}${c.ajustesBase ? ` · ${finFormatarMoeda(c.ajustesBase)}` : ''})`
+        : '');
     finPreencher(moduleEl, 'resumoComissoes.proximoPagamento', c.proximoPagamento);
     finRenderizarBeneficiarios(moduleEl, c);
 
@@ -781,7 +817,8 @@ function finIniciar(moduleEl) {
     select?.addEventListener('change', () => finRecarregar(moduleEl));
     moduleEl.querySelector('#finHoje')?.addEventListener('click', () => {
         if (!select) return;
-        select.value = finCompetenciaAtual(hoje);
+        if (window.Competencia) window.Competencia.definir(select, finCompetenciaAtual(hoje));
+        else select.value = finCompetenciaAtual(hoje);
         finRecarregar(moduleEl);
     });
 

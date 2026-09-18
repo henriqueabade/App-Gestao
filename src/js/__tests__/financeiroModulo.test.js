@@ -148,10 +148,10 @@ function comissoesFalso(extra = {}) {
     return {
         competencia: '2026-09', tem_regras: true,
         configuracao: { comissao_dia_pagamento: 15, producao_dia_util: 5, sabado_dia_util: false },
-        comissoes: { situacao: 'aberta', valor: 18450, parcelas: 12, pagar_ate: '2026-10-15', pago_em: null },
+        comissoes: { situacao: 'aberta', valor: 18450, total: 18450, pago: 0, parcelas: 12, pagar_ate: '2026-10-15', pago_em: null },
         atrasadas: { valor: 7320, parcelas: 11 },
-        producao: { situacao: 'fechada', valor: 9870, pecas: 327, pagar_ate: '2026-10-07', dia_util: 5, pago_em: null },
-        resumo_comissoes: { previstas: 32500, apuradas: 18450, atrasadas: 7320, ajustes: -840, proximo_pagamento: '2026-10-15', situacao: 'aberta' },
+        producao: { situacao: 'fechada', valor: 9870, total: 9870, pago: 0, pecas: 327, pagar_ate: '2026-10-07', dia_util: 5, pago_em: null },
+        resumo_comissoes: { previstas: 32500, apuradas: 18450, atrasadas: 7320, ajustes: -840, ajustes_manuais: { quantidade: 2, valor: 3000, comissao: 600 }, proximo_pagamento: '2026-10-15', situacao: 'aberta' },
         resumo_producao: { em_producao: 21, parciais: 8, pecas_mes: 327, valor: 9870, proximo_pagamento: '2026-10-07', dia_util: 5, situacao: 'fechada' },
         pendencias: [],
         atividade: [],
@@ -210,8 +210,13 @@ function carregar({ modulo = null, painel = undefined, receber = undefined, comi
 
 /** Expõe as funções de nível superior sem depender do embrulho do menu. */
 function funcoes() {
+    return funcoesCom({});
+}
+
+/** O mesmo, com pedaços do `window` trocados (ex.: o utilitário de competência). */
+function funcoesCom(extra = {}) {
     const contexto = {
-        window: { DialogPadrao: { info: () => Promise.resolve(true) } },
+        window: { DialogPadrao: { info: () => Promise.resolve(true) }, ...(extra.window || {}) },
         document: { createElement: criarElemento, querySelector: () => null },
         console: { log() {}, warn() {}, error() {}, info() {} },
         Intl, Number, Date, String, Math, Promise
@@ -240,16 +245,31 @@ test('data DATE vira dd/mm/aaaa por corte de texto, sem passar por new Date', ()
         'só o relógio do módulo pode usar new Date');
 });
 
-test('competências vão de 12 meses atrás a 3 à frente, com a atual selecionada e virada de ano certa', () => {
+test('competência: o seletor é mês + ano + lupa (utilitário compartilhado), e o mês atual já vem escolhido', () => {
     const f = funcoes();
-    const select = criarElemento('select');
-    f('finMontarCompetencias')(select, new Date(2026, 0, 15));
-    assert.strictEqual(select.children.length, 16);
-    assert.strictEqual(select.children[0].value, '2025-01');
-    assert.strictEqual(select.children[0].textContent, 'Janeiro / 2025');
-    const atual = select.children.find(o => o.selected);
-    assert.strictEqual(atual.value, '2026-01');
-    assert.strictEqual(select.children[15].textContent, 'Abril / 2026');
+    // Sem o utilitário carregado, o campo ainda guarda a competência de hoje.
+    const campo = criarElemento('input');
+    f('finMontarCompetencias')(campo, new Date(2026, 0, 15));
+    assert.strictEqual(campo.value, '2026-01');
+
+    // Com ele, quem monta o seletor é o utilitário (mesma casa do módulo e dos modais).
+    const chamadas = [];
+    const contexto = { window: { Competencia: { montar: (c, o) => chamadas.push([c, o]), definir: (c, v) => { c.value = v; } } } };
+    const comUtil = funcoesCom(contexto);
+    const campo2 = criarElemento('input');
+    comUtil('finMontarCompetencias')(campo2, new Date(2026, 0, 15));
+    assert.strictEqual(chamadas.length, 1, 'o módulo delega para window.Competencia');
+    assert.strictEqual(chamadas[0][1].valor, '2026-01');
+
+    // O HTML tem os três controles e o valor continua no id de sempre.
+    assert.match(FONTE_HTML, /<select id="finCompetenciaMes" data-competencia-mes/);
+    assert.match(FONTE_HTML, /<input id="finCompetenciaAno" data-competencia-ano/);
+    assert.match(FONTE_HTML, /<button id="finCompetenciaIr" data-competencia-ir/);
+    assert.match(FONTE_HTML, /<input type="hidden" id="finCompetencia" \/>/);
+    const mes = FONTE_HTML.indexOf('id="finCompetenciaMes"');
+    const ano = FONTE_HTML.indexOf('id="finCompetenciaAno"');
+    const lupa = FONTE_HTML.indexOf('id="finCompetenciaIr"');
+    assert.ok(mes < ano && ano < lupa, 'mês à esquerda do ano, e a lupa depois dos dois');
 });
 
 test('a tela preenche TODOS os campos data-fin: fiscal, contas a receber, comissões e produção vêm dos painéis reais', async () => {
@@ -277,7 +297,13 @@ test('a tela preenche TODOS os campos data-fin: fiscal, contas a receber, comiss
     assert.strictEqual(valores['atrasadas.rodape'], 'Aguardando recebimento');
     assert.strictEqual(valores['producao.auxiliar'], '327 peças finalizadas');
     assert.strictEqual(valores['producao.rodape'], 'Fechada · pagar até 07/10/2026 (5º dia útil)');
-    assert.strictEqual(valores['resumoComissoes.ajustes'], '- R$ 840,00');
+    // O cartão diz o que FALTA pagar e de quanto era a competência.
+    assert.strictEqual(valores['comissoes.total'], '/ R$ 18.450,00');
+    assert.strictEqual(valores['producao.total'], '/ R$ 9.870,00');
+    // Ajustes: o estorno do que já estava fechado (-840) mais a comissão que os
+    // ajustes à mão tiraram das parcelas do mês (-600), com quantos são.
+    assert.strictEqual(valores['resumoComissoes.ajustes'], '- R$ 1.440,00');
+    assert.strictEqual(valores['resumoComissoes.ajustesQuantidade'], '(2 manuais · R$ 3.000,00)');
     assert.strictEqual(valores['resumoComissoes.proximoPagamento'], '15/10/2026');
     assert.strictEqual(valores['resumoProducao.emProducao'], '21');
     assert.strictEqual(valores['resumoProducao.proximoPagamento'], '07/10/2026 (5º dia útil) · fechada');
@@ -581,4 +607,41 @@ test('o CSS traz a base da casa (só uma folha de módulo carrega por vez) e as 
     assert.doesNotMatch(modulo, /color: #fff;/, 'texto fixo branco some no tema claro: usar --fin-texto-1');
     assert.match(modulo, /--fin-texto-1: var\(--menu-text-strong, #fff\)/);
     assert.match(modulo, /\.fin-kpi--atencao[^{]*\{[^}]*bordo/, 'o cartão de atenção usa o bordô da identidade');
+});
+
+test('cartões de comissão e produção mostram o que FALTA pagar sobre o total (x/x, y/x, 0/x)', async () => {
+    const cenario = async comissoes => {
+        const modulo = montarModuloDoHtml();
+        carregar({ modulo, painel: painelFalso(), comissoes });
+        await modulo.moduleReadyPromise;
+        const valores = Object.fromEntries(modulo.querySelectorAll('[data-fin]').map(el => [el.dataset.fin, el.textContent.replace(/ /g, ' ')]));
+        return valores;
+    };
+
+    // Nada pago: falta tudo.
+    const aberta = await cenario(comissoesFalso());
+    assert.deepStrictEqual([aberta['comissoes.valor'], aberta['comissoes.total']], ['R$ 18.450,00', '/ R$ 18.450,00']);
+
+    // Pago em parte (um beneficiário): sobra o resto, e o rodapé diz quanto já saiu.
+    const parcial = await cenario(comissoesFalso({
+        comissoes: { situacao: 'parcial', valor: 12450, total: 18450, pago: 6000, parcelas: 12, pagar_ate: '2026-10-15', pago_em: null }
+    }));
+    assert.deepStrictEqual([parcial['comissoes.valor'], parcial['comissoes.total']], ['R$ 12.450,00', '/ R$ 18.450,00']);
+    assert.strictEqual(parcial['comissoes.rodape'], 'Paga em parte (R$ 6.000,00) · pagar até 15/10/2026');
+
+    // Pago tudo: zero a pagar, e o total continua à vista.
+    const paga = await cenario(comissoesFalso({
+        comissoes: { situacao: 'paga', valor: 0, total: 18450, pago: 18450, parcelas: 12, pagar_ate: '2026-10-15', pago_em: '2026-10-14' },
+        producao: { situacao: 'paga', valor: 0, total: 9870, pago: 9870, pecas: 327, pagar_ate: '2026-10-07', dia_util: 5, pago_em: '2026-10-06' }
+    }));
+    assert.deepStrictEqual([paga['comissoes.valor'], paga['comissoes.total']], ['R$ 0,00', '/ R$ 18.450,00']);
+    assert.strictEqual(paga['comissoes.rodape'], 'Paga em 14/10/2026');
+    assert.deepStrictEqual([paga['producao.valor'], paga['producao.total']], ['R$ 0,00', '/ R$ 9.870,00']);
+
+    // Sem ajuste manual nenhum, a nota do resumo some (nada de "(0 manuais)").
+    const semAjuste = await cenario(comissoesFalso({
+        resumo_comissoes: { previstas: 32500, apuradas: 18450, atrasadas: 7320, ajustes: 0, ajustes_manuais: { quantidade: 0, valor: 0, comissao: 0 }, proximo_pagamento: '2026-10-15', situacao: 'aberta' }
+    }));
+    assert.strictEqual(semAjuste['resumoComissoes.ajustesQuantidade'], '');
+    assert.strictEqual(semAjuste['resumoComissoes.ajustes'], 'R$ 0,00');
 });
