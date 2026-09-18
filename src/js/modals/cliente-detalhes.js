@@ -267,7 +267,8 @@ async function carregarContatos(idCliente) {
       return b;
     }));
     pintarTipos();
-    const quando = h('input', { class: 'tui-campo', type: 'datetime-local', value: paraCampoLocal(editando?.data) });
+    // Atividade é o que JÁ aconteceu: o campo não passa de agora (e o backend confere).
+    const quando = h('input', { class: 'tui-campo', type: 'datetime-local', value: paraCampoLocal(editando?.data), max: paraCampoLocal() });
     const contato = h('select', { class: 'tui-campo' }, h('option', { value: '', text: 'Com quem? (opcional)' }),
       contatosDoCliente.map(c => h('option', { value: c.id, text: [c.nome, c.cargo].filter(Boolean).join(' — '), selected: Number(editando?.contato_id) === Number(c.id) })));
     const resumo = h('input', { class: 'tui-campo', type: 'text', maxLength: 300, value: editando?.resumo || '', placeholder: 'Resumo em uma linha — ex.: Liguei, pediu catálogo novo' });
@@ -278,6 +279,11 @@ async function carregarContatos(idCliente) {
     const cancelar = h('button', { type: 'button', class: 'btn-neutral tui-botao', text: 'Cancelar', on: { click: () => pintarAtividades() } });
     salvar.addEventListener('click', async () => {
       if (!resumo.value.trim()) { resumo.focus(); window.showToast?.('Descreva a atividade em uma linha.', 'error'); return; }
+      if (quando.value && new Date(quando.value).getTime() > Date.now() + 60000) {
+        quando.focus();
+        window.showToast?.('A atividade registra o que já aconteceu: escolha uma data e hora até agora. Para algo futuro, use "Agendar tarefa".', 'error');
+        return;
+      }
       const corpo = {
         tipo, resumo: resumo.value.trim(), detalhe: detalhe.value.trim() || null,
         contato_id: contato.value ? Number(contato.value) : null,
@@ -299,8 +305,11 @@ async function carregarContatos(idCliente) {
       }
     });
     const formulario = h('div', { class: 'cat__formulario', hidden: !formularioAberto },
+      h('p', { class: 'cat__explica' }, icone('fa-circle-check'), h('span', {},
+        'Registre o que ', h('strong', { text: 'já aconteceu' }), ' — a ligação feita, a visita realizada, o e-mail enviado. A atividade entra como ',
+        h('strong', { text: 'concluída' }), ', com data e hora até agora. Para algo que ainda vai acontecer, use ', h('strong', { text: 'Agendar tarefa' }), '.')),
       chips,
-      h('div', { class: 'cat__linha' }, h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Quando' }), quando), h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Com quem' }), contato), h('label', { class: 'cat__campo cat__campo--curto' }, h('span', { class: 'tui-rotulo', text: 'Duração' }), duracao)),
+      h('div', { class: 'cat__linha' }, h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Quando aconteceu' }), quando), h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Com quem' }), contato), h('label', { class: 'cat__campo cat__campo--curto' }, h('span', { class: 'tui-rotulo', text: 'Duração' }), duracao)),
       resumo, detalhe,
       h('div', { class: 'cat__rodape' },
         editando ? h('span') : h('label', { class: 'tui-check' }, agendar, ' Agendar o próximo passo em seguida'),
@@ -327,7 +336,7 @@ async function carregarContatos(idCliente) {
       const item = h('article', { class: 'cat__item' },
         h('span', { class: 'cat__icone' }, icone(iconeDoTipo(a.tipo))),
         h('div', { class: 'cat__conteudo' },
-          h('div', { class: 'cat__meta' }, h('strong', { text: a.tipo }), h('span', { text: quandoLegivel(a.data) }), a.usuario ? h('span', { text: a.usuario }) : null),
+          h('div', { class: 'cat__meta' }, h('strong', { text: a.tipo }), T.chip('Concluída', { icone: 'fa-circle-check', classe: 'tui-chip--sucesso', titulo: 'Atividade é sempre algo já feito' }), h('span', { text: quandoLegivel(a.data) }), a.usuario ? h('span', { text: a.usuario }) : null),
           h('p', { class: 'cat__resumo', text: a.resumo }),
           a.detalhe ? h('p', { class: 'cat__detalhe', text: a.detalhe }) : null,
           h('div', { class: 'cat__chips' },
@@ -475,6 +484,7 @@ async function carregarContatos(idCliente) {
     }
     contatos.forEach(c => {
       const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td data-perm-col="col_ctt_nome" class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td data-perm-col="col_ctt_cargo" class="py-4 px-4 text-white">${c.cargo || ''}</td>
@@ -611,6 +621,7 @@ async function carregarContatos(idCliente) {
     const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
     ordens.forEach(o => {
       const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td data-perm-col="col_ord_numero" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
         <td data-perm-col="col_ord_tipo" class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.tipo}</td>

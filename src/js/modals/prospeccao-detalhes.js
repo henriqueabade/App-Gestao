@@ -372,7 +372,7 @@
                    data-rotulo="${esc(i.resumo || i.tipo)}" title="Excluir atividade"></i>
               </div>
             </div>
-            <p class="text-sm text-gray-400 mb-2">${esc(formatarDataHora(i.data))} <span class="text-white/40">(${esc(tempoRelativo(i.data))})</span>${duracao}${autor}</p>
+            <p class="text-sm text-gray-400 mb-2"><span class="ativ-feita" title="Atividade é sempre algo já feito"><i class="fas fa-circle-check" aria-hidden="true"></i> Concluída</span> ${esc(formatarDataHora(i.data))} <span class="text-white/40">(${esc(tempoRelativo(i.data))})</span>${duracao}${autor}</p>
             ${texto(i.detalhe) ? `<p class="text-gray-300 whitespace-pre-wrap">${esc(i.detalhe)}</p>` : ''}
           </div>
         </div>`;
@@ -1068,15 +1068,19 @@
     abrir(registro);
   });
 
-  aoClicar('detProspExcluir', e => {
-    if (e.currentTarget.disabled) return;
-    const abrir = window.ProspeccoesModulo?.abrirExcluir;
-    if (!abrir) {
-      showToast('Não foi possível abrir a exclusão', 'error');
-      return;
-    }
+  // O aoClicar entrega o PRÓPRIO botão, não o evento: o antigo
+  // `e.currentTarget.disabled` dava erro (currentTarget de um botão é
+  // undefined) e o Excluir simplesmente não fazia nada.
+  aoClicar('detProspExcluir', botao => {
+    if (botao.disabled) return;
     const registro = alvo();
     close();
+    // Fora do módulo (ficha aberta de uma tarefa, do sino…) o
+    // ProspeccoesModulo não existe: abre o mesmo modal direto.
+    const abrir = window.ProspeccoesModulo?.abrirExcluir || (p => {
+      window.prospeccaoExcluir = p;
+      return Modal.open('modals/prospeccoes/excluir.html', '../js/modals/prospeccao-excluir.js', 'excluirProspeccao');
+    });
     abrir(registro);
   });
 

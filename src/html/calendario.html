@@ -36,6 +36,11 @@
             <h2 id="calTitulo" class="cal-titulo" aria-live="polite"></h2>
         </div>
         <div class="cal-barra__direita">
+            <div id="calZoom" class="cal-zoom" role="group" aria-label="Zoom da grade de horas" hidden>
+                <button id="calZoomMenos" type="button" class="cal-icone-botao" title="Afastar (Ctrl + rolar para baixo)" aria-label="Afastar"><i class="fas fa-magnifying-glass-minus" aria-hidden="true"></i></button>
+                <span id="calZoomRotulo" class="cal-zoom__rotulo" title="De quanto em quanto aparece o horário">1 h</span>
+                <button id="calZoomMais" type="button" class="cal-icone-botao" title="Aproximar (Ctrl + rolar para cima)" aria-label="Aproximar"><i class="fas fa-magnifying-glass-plus" aria-hidden="true"></i></button>
+            </div>
             <select id="calPessoa" class="cal-select" aria-label="De quem" hidden></select>
             <button id="calAjuda" type="button" class="cal-icone-botao" title="Atalhos ( ? )" aria-label="Atalhos de teclado"><i class="fas fa-keyboard" aria-hidden="true"></i></button>
         </div>
@@ -46,7 +51,7 @@
         <aside class="cal-lado" aria-label="Filtros do calendário">
             <section id="calMini" class="cal-mini" aria-label="Mini calendário"></section>
             <section class="cal-lado__grupo">
-                <h3 class="cal-lado__titulo">O que mostrar</h3>
+                <h3 class="cal-lado__titulo">O que mostrar <span id="calContagemRotulo" class="cal-lado__periodo"></span></h3>
                 <div id="calCamadas"></div>
                 <label class="cal-opcao"><input id="calConcluidas" type="checkbox" checked> Mostrar concluídas</label>
             </section>

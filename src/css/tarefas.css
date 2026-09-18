@@ -116,7 +116,6 @@ body {
 .tarefas-busca:focus-within { border-color: var(--color-primary); }
 .tarefas-busca input { width: 11rem; background: transparent; border: 0; outline: none; color: #fff; font-size: 0.85rem; }
 .tarefas-select { padding: 0.4rem 0.6rem; border-radius: 0.6rem; font-size: 0.82rem; color: #fff; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); }
-.tarefas-select option { background: #2a0613; }
 .tarefas-select[hidden] { display: none; }
 .tarefas-visao { display: inline-flex; padding: 0.2rem; border-radius: 0.65rem; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.1); }
 .tarefas-visao button { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.7rem; border-radius: 0.5rem; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
@@ -212,9 +211,14 @@ dialog.tarefas-dialogo-automacoes { width: min(52rem, calc(100vw - 2rem)); }
 .tarefas-hbarras__trilho { height: 0.55rem; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .tarefas-hbarras__trilho > span { display: block; height: 100%; border-radius: inherit; }
 .tarefas-hbarras__linha strong { text-align: right; color: #fff; }
+/* A tabela segue o padrão das tabelas dos modais (src/styles/tabelas-modais.css):
+   faixa clara no cabeçalho, título em cinza médio, corpo escuro próprio. */
+.tarefas-tabela-moldura { border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); overflow: hidden; }
 .tarefas-tabela { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
-.tarefas-tabela th { text-align: left; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-.tarefas-tabela td { padding: 0.45rem 0.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.85); }
+.tarefas-tabela th { text-align: left; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280; background: #f9fafb; padding: 0.65rem 0.9rem; border-bottom: 1px solid #e5e7eb; }
+.tarefas-tabela tbody { background: rgba(42, 6, 22, 0.72); }
+.tarefas-tabela td { padding: 0.6rem 0.9rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.85); }
+.tarefas-tabela tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
 .tarefas-tabela--perigo { color: #ff9a9a !important; font-weight: 700; }
 
 .tarefas-regra { display: flex; flex-direction: column; gap: 0.7rem; padding: 0.9rem 1rem; border-radius: 0.9rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); transition: opacity 150ms ease; }
@@ -243,12 +247,12 @@ dialog.tarefas-dialogo-automacoes { width: min(52rem, calc(100vw - 2rem)); }
 [data-menu-theme="light"] .tarefas-rapida { background: #fff; }
 [data-menu-theme="light"] .tarefas-rapida input, [data-menu-theme="light"] .tarefas-busca input, [data-menu-theme="light"] .tarefas-select { color: #0f172a; }
 [data-menu-theme="light"] .tarefas-busca, [data-menu-theme="light"] .tarefas-select, [data-menu-theme="light"] .tarefas-visao { background: #f8fafc; border-color: #cbd5e1; }
-[data-menu-theme="light"] .tarefas-select option { background: #fff; }
 [data-menu-theme="light"] .tarefas-coluna { background: #f8fafc; border-color: rgba(15, 23, 42, 0.08); }
 [data-menu-theme="light"] .tarefas-grupo__cabeca { color: #475569; }
 [data-menu-theme="light"] .tarefas-kpi, [data-menu-theme="light"] .tarefas-regra { background: #f8fafc; border-color: rgba(15, 23, 42, 0.08); }
 [data-menu-theme="light"] .tarefas-kpi__valor, [data-menu-theme="light"] .tarefas-regra__topo strong, [data-menu-theme="light"] .tarefas-hbarras__linha strong { color: #0f172a; }
 [data-menu-theme="light"] .tarefas-tabela td, [data-menu-theme="light"] .tarefas-hbarras__rotulo { color: #334155; }
+[data-menu-theme="light"] .tarefas-tabela tbody { background: #fff; }
 /* o .module-header__title global tem cor clara fixa (ver dashboard.css) */
 [data-menu-theme="light"] .tarefas-cabecalho .module-header__title { color: #0f172a; }
 [data-menu-theme="light"] .tarefas-cabecalho .module-header__description { color: #475569; }
@@ -264,5 +268,5 @@ dialog.tarefas-dialogo-automacoes { width: min(52rem, calc(100vw - 2rem)); }
 [data-menu-theme="light"] .tarefas-icone-botao { background: #f1f5f9; color: #334155; }
 [data-menu-theme="light"] .tarefas-grupo__cabeca:hover { color: #0f172a; }
 [data-menu-theme="light"] .tarefas-coluna__cabeca { border-bottom-color: rgba(15, 23, 42, 0.08); }
-[data-menu-theme="light"] .tarefas-kpi__rotulo, [data-menu-theme="light"] .tarefas-kpi__dica, [data-menu-theme="light"] .tarefas-tabela th, [data-menu-theme="light"] .tarefas-barras__rotulo { color: #64748b; }
+[data-menu-theme="light"] .tarefas-kpi__rotulo, [data-menu-theme="light"] .tarefas-kpi__dica, [data-menu-theme="light"] .tarefas-barras__rotulo { color: #64748b; }
 [data-menu-theme="light"] .tarefas-barras__n { color: #334155; }

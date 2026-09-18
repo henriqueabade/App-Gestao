@@ -87,8 +87,26 @@ function textoValido(bruto, { rotulo = 'O comentário' } = {}) {
 }
 
 /** Um pedaço do texto para o aviso ("Muito bom, vamos…"). */
+/**
+ * Marcas que a tela grava no texto do comentário:
+ *   @[Ana Souza](u:12)            menção a um usuário (avisa quem foi mencionado)
+ *   *[15:50 Próximo passo](e:345) citação de um registro do grupo
+ * Para ler (aviso do sino, trecho), viram "@Ana Souza" e "“15:50 Próximo passo”".
+ */
+const MARCA_MENCAO = /@\[([^\]\n]{1,120})\]\(u:(\d{1,10})\)/g;
+const MARCA_CITACAO = /\*\[([^\]\n]{1,200})\]\(e:(\d{1,12})\)/g;
+function textoSimples(t) {
+  return texto(t).replace(MARCA_MENCAO, '@$1').replace(MARCA_CITACAO, '“$1”');
+}
+/** Os ids mencionados num texto, sem repetir. */
+function mencionadosNoTexto(t) {
+  const ids = new Set();
+  for (const m of texto(t).matchAll(MARCA_MENCAO)) ids.add(Number(m[2]));
+  return [...ids].filter(id => Number.isInteger(id) && id > 0);
+}
+
 function trecho(t, max = 90) {
-  const s = texto(t).replace(/\s+/g, ' ');
+  const s = textoSimples(t).replace(/\s+/g, ' ');
   return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
 }
 
@@ -137,6 +155,7 @@ function textoDoAviso(tipo, { autor = 'Alguém', registro = '', conteudo = '', a
     case 'resposta': return { titulo: 'Resposta ao seu comentário', mensagem: `${autor} respondeu${onde}${citado}` };
     case 'observacao': return { titulo: 'Nova observação', mensagem: `${autor} publicou uma observação${onde}${citado}` };
     case 'curtida': return { titulo: 'Curtida', mensagem: `${autor} curtiu ${alvo === 'comentario' ? 'seu comentário' : 'seu registro'}${onde}` };
+    case 'mencao': return { titulo: 'Você foi mencionado', mensagem: `${autor} mencionou você${onde}${citado}` };
     default: return { titulo: 'Histórico', mensagem: `${autor} mexeu no histórico${onde}` };
   }
 }
@@ -370,10 +389,11 @@ async function publicarObservacao(api, { origem, registroId, texto: bruto, usuar
     observacao: conteudo, usuario_id: usuarioId ?? null
   }));
   const autor = nomes?.get(Number(usuarioId)) || 'Alguém';
-  await notificar(api, destinatarios([criadorId, ...interessados], usuarioId), {
-    tipo: 'observacao', ...textoDoAviso('observacao', { autor, registro: nome, conteudo }),
-    origem, registro_id: Number(registroId), item_id: criado?.id ?? null, autor_id: usuarioId ?? null
-  });
+  const base = { origem, registro_id: Number(registroId), item_id: criado?.id ?? null, autor_id: usuarioId ?? null };
+  const mencionados = destinatarios(mencionadosNoTexto(conteudo).filter(id => !nomes || nomes.has(id)), usuarioId);
+  if (mencionados.length) await notificar(api, mencionados, { tipo: 'mencao', ...textoDoAviso('mencao', { autor, registro: nome, conteudo }), ...base });
+  const demais = destinatarios([criadorId, ...interessados], usuarioId).filter(id => !mencionados.includes(id));
+  await notificar(api, demais, { tipo: 'observacao', ...textoDoAviso('observacao', { autor, registro: nome, conteudo }), ...base });
   return criado;
 }
 
@@ -395,9 +415,12 @@ async function comentar(api, { origem, registroId, itemId, respostaDe = null, te
   const { nome, criadorId, interessados = [] } = await lerRegistro(api, origem, registroId, { nomes });
   const autor = nomes?.get(Number(usuarioId)) || 'Alguém';
   const base = { origem, registro_id: Number(registroId), item_id: Number(itemId), comentario_id: criado?.id ?? null, autor_id: usuarioId ?? null };
-  const paraPai = pai ? destinatarios([pai.usuario_id], usuarioId) : [];
+  // @menção: quem foi citado recebe "mencionou você" — e só esse aviso.
+  const mencionados = destinatarios(mencionadosNoTexto(conteudo).filter(id => !nomes || nomes.has(id)), usuarioId);
+  if (mencionados.length) await notificar(api, mencionados, { tipo: 'mencao', ...textoDoAviso('mencao', { autor, registro: nome, conteudo }), ...base });
+  const paraPai = pai ? destinatarios([pai.usuario_id], usuarioId).filter(id => !mencionados.includes(id)) : [];
   if (paraPai.length) await notificar(api, paraPai, { tipo: 'resposta', ...textoDoAviso('resposta', { autor, registro: nome, conteudo }), ...base });
-  const demais = destinatarios([criadorId, item.usuario_id, ...interessados], usuarioId).filter(id => !paraPai.includes(id));
+  const demais = destinatarios([criadorId, item.usuario_id, ...interessados], usuarioId).filter(id => !paraPai.includes(id) && !mencionados.includes(id));
   if (demais.length) await notificar(api, demais, { tipo: 'comentario', ...textoDoAviso('comentario', { autor, registro: nome, conteudo }), ...base });
   return criado;
 }
@@ -522,7 +545,7 @@ async function lerAnexo(api, anexoId) {
 
 module.exports = {
   ORIGENS, LIMITE_ANEXO_BYTES, TAMANHO_PARTE, LIMITE_TEXTO,
-  erro, semTabela, origemValida, textoValido, trecho, agruparCurtidas, destinatarios, textoDoAviso,
+  erro, semTabela, origemValida, textoValido, trecho, textoSimples, mencionadosNoTexto, agruparCurtidas, destinatarios, textoDoAviso,
   partesDoArquivo, nomeDeArquivo, montarLinhaDoTempo,
   nomesDosUsuarios, lerRegistro, carregarLinhaDoTempo, registrarEventos, notificar,
   publicarObservacao, comentar, editarComentario, alternarCurtida, excluirEvento, excluirComentario,

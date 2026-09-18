@@ -5,6 +5,7 @@ const { usuarioDaRequisicao } = require('./usuarioAtual');
 const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
 const social = require('./historicoSocial');
+const { quandoAconteceu } = require('./tarefasRegras');
 
 const router = express.Router();
 
@@ -356,9 +357,9 @@ async function dadosDaAtividade(api, clienteId, corpo = {}) {
   }
   const duracao = corpo.duracao_min === null || corpo.duracao_min === undefined || corpo.duracao_min === '' ? null : Number(corpo.duracao_min);
   if (duracao !== null && (!Number.isInteger(duracao) || duracao < 0 || duracao > 1440)) throw erroHttp(400, 'Duração inválida.');
-  const data = corpo.data ? new Date(corpo.data) : new Date();
-  if (Number.isNaN(data.getTime())) throw erroHttp(400, 'Data inválida.');
-  return { tipo, resumo, detalhe: textoLimpo(corpo.detalhe) || null, contato_id: contatoId, duracao_min: duracao, data: data.toISOString() };
+  // Atividade é o que já aconteceu: sempre concluída, nunca no futuro.
+  const data = quandoAconteceu(corpo.data);
+  return { tipo, resumo, detalhe: textoLimpo(corpo.detalhe) || null, contato_id: contatoId, duracao_min: duracao, data };
 }
 
 const retratoDaAtividade = a => [

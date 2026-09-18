@@ -464,7 +464,8 @@ const CAMPOS_DA_TAREFA = {
   titulo: 'Título', descricao: 'Descrição', tipo: 'Tipo', prioridade: 'Prioridade', status: 'Situação',
   data: 'Data', hora: 'Hora', duracao_min: 'Duração', lembrete_min: 'Lembrete', local: 'Local',
   responsavel_id: 'Responsável', lista_id: 'Lista', marcadores: 'Marcadores', recorrencia: 'Repetição',
-  cliente_id: 'Cliente', prospeccao_id: 'Prospecção', orcamento_id: 'Orçamento', pedido_id: 'Pedido'
+  cliente_id: 'Cliente', prospeccao_id: 'Prospecção', orcamento_id: 'Orçamento', pedido_id: 'Pedido',
+  acao_chave: 'Ação no sistema', acao_rotulo: 'Registro da ação'
 };
 
 /** Valor legível de um campo (nomes: { usuarios, listas, marcadores, vinculos } em Map). */
@@ -481,6 +482,7 @@ function legivelDaTarefa(campo, valor, nomes = {}) {
     case 'lista_id': return nomes.listas?.get(Number(valor)) || `#${valor}`;
     case 'marcadores': return valor.map(v => nomes.marcadores?.get(Number(v)) || `#${v}`).join(', ');
     case 'recorrencia': return descreverRecorrencia(valor) || null;
+    case 'acao_chave': return require('./tarefasAcoes').descreverAcao(valor)?.rotulo || String(valor);
     case 'cliente_id': case 'prospeccao_id': case 'orcamento_id': case 'pedido_id':
       return nomes.vinculos?.get(`${campo}:${valor}`) || `#${valor}`;
     default: return String(valor);
@@ -667,7 +669,29 @@ function tituloDaAutomacao(modelo, valores = {}) {
     .slice(0, LIMITE_TITULO);
 }
 
+// ------------------------------------------------------------ atividade
+
+/** Folga para o relógio da máquina de quem registra. */
+const FOLGA_DO_RELOGIO_MS = 5 * 60 * 1000;
+
+/**
+ * Atividade (cliente ou prospecção) é o que JÁ aconteceu — e por isso é
+ * sempre concluída. A data não pode estar no futuro: algo que ainda vai
+ * acontecer é tarefa (ou o próximo passo). Devolve o instante em ISO (agora,
+ * se não veio) ou lança 400.
+ */
+function quandoAconteceu(valor, agora = new Date()) {
+  if (valor === undefined || valor === null || valor === '') return agora.toISOString();
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) throw erro(400, 'Data da atividade inválida.');
+  if (d.getTime() > agora.getTime() + FOLGA_DO_RELOGIO_MS) {
+    throw erro(400, 'A atividade registra o que já aconteceu: a data e a hora não podem estar no futuro. Para algo que ainda vai acontecer, agende uma tarefa ou o próximo passo.');
+  }
+  return d.toISOString();
+}
+
 module.exports = {
+  quandoAconteceu,
   STATUS, ABERTOS, PRIORIDADES, TIPOS, RESULTADOS, ROTULO_STATUS, ROTULO_PRIORIDADE, FREQUENCIAS, CAMPOS_DA_TAREFA,
   erro, diaISO, horaHHMM, agoraEmBrasilia, somarDias, diaDaSemana, diasEntre,
   ehGestor, tipoDaAtividade,

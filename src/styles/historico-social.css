@@ -83,7 +83,113 @@
     border: 1px solid rgba(182, 160, 62, 0.35);
 }
 
+/* Cada dia é uma seção: a data gruda no topo só enquanto o dia dela está na
+   tela (antes todas grudavam juntas e se sobrepunham). */
+.hs-dia-bloco { display: flex; flex-direction: column; gap: 0.9rem; }
+.hs-dia__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+
 .hs-item { display: flex; gap: 0.75rem; align-items: flex-start; }
+.hs-coluna { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.hs-item--grupo > .hs-coluna > .hs-cartao { box-shadow: 4px 4px 0 -1px rgba(255, 255, 255, 0.04), 8px 8px 0 -2px rgba(255, 255, 255, 0.025); }
+.hs-conta {
+    font-size: 0.68rem; font-weight: 700; padding: 0.08rem 0.5rem; border-radius: 999px;
+    color: var(--color-primary-light, #d4c169); background: rgba(182, 160, 62, 0.14); border: 1px solid rgba(182, 160, 62, 0.3);
+}
+.hs-cartao__dia {
+    align-self: flex-start; padding: 0.1rem 0.6rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-primary-light, #d4c169);
+    background: rgba(40, 6, 22, 0.7); border: 1px solid rgba(182, 160, 62, 0.35);
+}
+
+/* Os outros registros do dia: linhas curtas com a hora. */
+.hs-grupo__alternar, .hs-cascata__alternar {
+    display: inline-flex; align-items: center; gap: 0.45rem; align-self: flex-start;
+    padding: 0.25rem 0.6rem; border-radius: 0.55rem; font-size: 0.76rem; font-weight: 600;
+    color: var(--color-primary-light, #d4c169); transition: background 150ms ease;
+}
+.hs-grupo__alternar:hover, .hs-cascata__alternar:hover { background: rgba(182, 160, 62, 0.12); }
+.hs-grupo__alternar i { font-size: 0.65rem; transition: transform 150ms ease; }
+.hs-grupo__alternar--aberto i { transform: rotate(90deg); }
+.hs-cascata__alternar { margin-left: auto; }
+.hs-cascata__alternar small { font-weight: 500; color: var(--menu-text-muted, rgba(255, 255, 255, 0.55)); }
+.hs-cascata__alternar .fa-chevron-down { font-size: 0.6rem; transition: transform 150ms ease; }
+.hs-cascata__alternar--aberto .fa-chevron-down { transform: rotate(180deg); }
+.hs-registros {
+    list-style: none; margin: 0; padding: 0.35rem 0 0.1rem 0.9rem; display: flex; flex-direction: column; gap: 0.15rem;
+    border-left: 2px solid rgba(182, 160, 62, 0.3);
+}
+.hs-registro {
+    display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.45rem; border-radius: 0.5rem; font-size: 0.8rem;
+    transition: background 150ms ease, box-shadow 250ms ease;
+}
+.hs-registro:hover { background: rgba(255, 255, 255, 0.05); }
+.hs-registro.hs-destaque { box-shadow: 0 0 0 2px var(--color-primary, #b6a03e); }
+.hs-registro--excluido { opacity: 0.55; text-decoration: line-through; }
+.hs-registro__hora {
+    flex-shrink: 0; min-width: 2.9rem; padding: 0.05rem 0.35rem; border-radius: 0.35rem; text-align: center;
+    font-size: 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--color-primary-light, #d4c169); background: rgba(182, 160, 62, 0.12);
+}
+.hs-registro .hs-avatar--p { width: 1.4rem; height: 1.4rem; font-size: 0.55rem; border-width: 1px; }
+.hs-registro__texto { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.4rem; overflow: hidden; white-space: nowrap; }
+.hs-registro__texto strong { flex-shrink: 0; font-weight: 600; color: var(--menu-text-strong, #fff); }
+.hs-registro__texto .hs-mudanca__antes, .hs-registro__texto .hs-mudanca__depois { overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.hs-registro__nota { overflow: hidden; text-overflow: ellipsis; color: var(--menu-text-muted, rgba(255, 255, 255, 0.55)); }
+.hs-registro__acoes { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; opacity: 0.55; transition: opacity 150ms ease; }
+.hs-registro:hover .hs-registro__acoes, .hs-registro:focus-within .hs-registro__acoes { opacity: 1; }
+.hs-registro__conta { font-size: 0.68rem; color: var(--menu-text-muted, rgba(255, 255, 255, 0.55)); margin-right: 0.2rem; }
+.hs-registro__botao { width: 1.55rem; height: 1.55rem; display: grid; place-items: center; border-radius: 0.4rem; font-size: 0.68rem; color: var(--menu-text-secondary, rgba(255, 255, 255, 0.7)); }
+.hs-registro__botao:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.hs-registro__botao--perigo:hover { color: #ff9c9c; background: rgba(255, 88, 88, 0.12); }
+
+/* Dias anteriores da mesma etiqueta: logo abaixo, recuados, cada um com a data. */
+.hs-cascata {
+    list-style: none; margin: 0 0 0 0.4rem; padding: 0 0 0 0.9rem; display: flex; flex-direction: column; gap: 0.6rem;
+    border-left: 2px dashed rgba(182, 160, 62, 0.3);
+}
+.hs-cascata .hs-avatar { width: 2rem; height: 2rem; font-size: 0.7rem; }
+
+/* Menção (@) e citação (*) dentro do texto. */
+.hs-mencao { font-weight: 700; color: var(--color-primary-light, #d4c169); }
+.hs-citacao {
+    display: inline-flex; align-items: center; gap: 0.3rem; margin: 0 0.1rem; padding: 0 0.45rem; border-radius: 0.4rem;
+    font-size: 0.78rem; font-weight: 600; vertical-align: baseline; white-space: normal;
+    color: #5eead4; background: rgba(45, 212, 191, 0.12); border: 1px solid rgba(45, 212, 191, 0.3);
+}
+.hs-citacao i { font-size: 0.6rem; }
+.hs-citacao:hover { background: rgba(45, 212, 191, 0.2); }
+.hs-sobre {
+    display: inline-flex; align-items: center; gap: 0.3rem; padding: 0 0.45rem; border-radius: 0.4rem; font-size: 0.68rem; font-weight: 600;
+    color: #5eead4; background: rgba(45, 212, 191, 0.1);
+}
+.hs-sobre i { font-size: 0.58rem; }
+
+/* Sugestões do @ e do * (abaixo da caixa de texto). */
+.hs-compor__area { position: relative; }
+.hs-sugestoes {
+    position: absolute; left: 0; right: 0; top: calc(100% + 0.3rem); z-index: 20; max-height: 15rem; overflow-y: auto;
+    padding: 0.35rem; border-radius: 0.8rem; background: #3a0b1f; border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+.hs-sugestoes[hidden] { display: none; }
+.hs-sugestoes__titulo { padding: 0.25rem 0.5rem 0.35rem; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--menu-text-muted, rgba(255, 255, 255, 0.55)); }
+.hs-sugestao { display: flex; align-items: center; gap: 0.55rem; width: 100%; padding: 0.4rem 0.55rem; border-radius: 0.55rem; text-align: left; font-size: 0.82rem; color: #fff; }
+.hs-sugestao:hover, .hs-sugestao--ativa { background: rgba(182, 160, 62, 0.2); }
+.hs-sugestao .hs-avatar--p { width: 1.6rem; height: 1.6rem; font-size: 0.6rem; }
+.hs-sugestao__hora { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: var(--color-primary-light, #d4c169); }
+.hs-sugestao__texto { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-sugestao__detalhe { font-size: 0.7rem; color: var(--menu-text-muted, rgba(255, 255, 255, 0.55)); }
+.hs-botao--icone { padding: 0.45rem 0.6rem; }
+
+/* Ao vivo: o selo da barra e o piscar do que acabou de chegar. */
+.hs-ao-vivo {
+    display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: #4ade80;
+}
+.hs-ao-vivo::before { content: ''; width: 0.45rem; height: 0.45rem; border-radius: 999px; background: #4ade80; animation: hsAoVivo 2s ease-in-out infinite; }
+@keyframes hsAoVivo { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.hs-novo .hs-cartao, .hs-com.hs-novo > .hs-com__linha .hs-balao { box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.75); }
+@media (prefers-reduced-motion: reduce) { .hs-ao-vivo::before { animation: none; } }
 .hs-cartao {
     flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.7rem;
     padding: 0.9rem 1.1rem; border-radius: 1rem;
@@ -214,6 +320,14 @@
 [data-menu-theme="light"] .hs-tag--perigo { color: #b91c1c; }
 [data-menu-theme="light"] .hs-anexo { color: #1e3a8a; }
 [data-menu-theme="light"] .hs-aviso { color: #92400e; }
+[data-menu-theme="light"] .hs-cartao__dia { background: #fff; color: #7a5c12; }
+[data-menu-theme="light"] .hs-registro__texto strong, [data-menu-theme="light"] .hs-sugestao { color: #0f172a; }
+[data-menu-theme="light"] .hs-registro__hora, [data-menu-theme="light"] .hs-conta,
+[data-menu-theme="light"] .hs-grupo__alternar, [data-menu-theme="light"] .hs-cascata__alternar,
+[data-menu-theme="light"] .hs-mencao, [data-menu-theme="light"] .hs-sugestao__hora { color: #7a5c12; }
+[data-menu-theme="light"] .hs-citacao, [data-menu-theme="light"] .hs-sobre { color: #0f766e; }
+[data-menu-theme="light"] .hs-sugestoes { background: #fff; border-color: #cbd5e1; }
+[data-menu-theme="light"] .hs-ao-vivo { color: #047857; }
 
 /* ---------------------------------------------------------------------------
    O sino do topo (src/js/notifications.js): contador e painel dos avisos

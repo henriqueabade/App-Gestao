@@ -7,13 +7,17 @@
     </header>
 
     <form id="interacaoProspeccaoForm" class="modal-prospeccao__corpo modal-scroll px-8 py-6 space-y-4">
+      <p class="ativ-explica">
+        <i class="fas fa-circle-check" aria-hidden="true"></i>
+        <span>Registre aqui o que <strong>já aconteceu</strong> — a ligação feita, a reunião realizada, o e-mail enviado. A atividade entra como <strong>concluída</strong>, com data e hora até agora. Para algo que ainda vai acontecer, use o <strong>próximo passo</strong> abaixo ou agende uma tarefa.</span>
+      </p>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="interacaoTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="text-[var(--color-red)]">*</span></label>
           <select id="interacaoTipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
         </div>
         <div>
-          <label for="interacaoData" class="block text-sm font-medium text-gray-300 mb-2">Quando</label>
+          <label for="interacaoData" class="block text-sm font-medium text-gray-300 mb-2">Quando aconteceu</label>
           <input id="interacaoData" type="datetime-local"
                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
         </div>

@@ -41,6 +41,7 @@ const csv = require('./importacaoCsv');
 // O próximo passo é espelhado numa tarefa (Tarefas/Calendário). Sem o SQL de
 // tarefas, a sincronia simplesmente não faz nada.
 const tarefas = require('./tarefasServico');
+const { quandoAconteceu } = require('./tarefasRegras');
 const passoNaTarefa = (api, id, usuarioId, extra = {}) => tarefas.sincronizarPassoDaProspeccao(api, id, { usuarioId, ...extra });
 
 const router = express.Router();
@@ -351,8 +352,24 @@ const CAMPOS_AUDITADOS = {
 
 /** Campos monetários/percentuais: comparar como número, não como texto. */
 const CAMPOS_NUMERICOS = new Set(['valor_estimado', 'probabilidade', 'responsavel_id']);
-/** Colunas DATE: comparar só o dia, senão "2026-09-20" e o ISO completo diferem. */
-const CAMPOS_DATA = new Set(['proximo_passo_data']);
+/** Colunas DATE: comparar só o dia, senão "2026-09-20" e o ISO completo diferem.
+ *  (data_envio da campanha faltava: toda edição da campanha registrava uma
+ *  "Data de envio 2026-08-14T03:00:00.000Z → 2026-08-14" que ninguém fez.) */
+const CAMPOS_DATA = new Set(['proximo_passo_data', 'data_envio']);
+/** Data e hora (a da atividade): comparar no minuto, no horário de Brasília. */
+const CAMPOS_DATA_HORA = new Set(['data']);
+
+/** "2026-08-14T15:54" (sem fuso = já é Brasília) ou ISO com fuso → "2026-08-14 15:54". */
+function dataHoraDeBrasilia(valor) {
+  const s = String(valor).trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) return s.slice(0, 16).replace('T', ' ');
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
 
 /**
  * Deixa o valor comparável.
@@ -368,6 +385,7 @@ function paraComparacao(campo, valor) {
     return Number.isFinite(n) ? String(n) : String(valor);
   }
   if (CAMPOS_DATA.has(campo)) return String(valor).slice(0, 10);
+  if (CAMPOS_DATA_HORA.has(campo)) return dataHoraDeBrasilia(valor);
   return String(valor).trim() || null;
 }
 
@@ -1272,7 +1290,7 @@ async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contato
   const passo = texto(prospeccao.proximo_passo);
   if (!passo) return [];
 
-  const quando = data || new Date().toISOString();
+  const quando = quandoAconteceu(data);
   const criada = await api.post('/api/prospeccao_interacoes', {
     prospeccao_id: Number(id),
     contato_id: contatoId ?? null,
@@ -1507,7 +1525,8 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
       prospeccao_id: Number(id),
       contato_id: contatoId,
       tipo,
-      data: req.body?.data || new Date().toISOString(),
+      // Atividade é o que já aconteceu: sempre concluída, nunca no futuro.
+      data: quandoAconteceu(req.body?.data),
       resumo,
       detalhe: texto(req.body?.detalhe),
       duracao_min: req.body?.duracao_min ?? null,
@@ -1571,7 +1590,7 @@ router.put('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add
     const depois = {
       contato_id: contatoId,
       tipo,
-      data: req.body?.data || antes.data,
+      data: req.body?.data ? quandoAconteceu(req.body.data) : antes.data,
       resumo,
       detalhe: texto(req.body?.detalhe),
       duracao_min: req.body?.duracao_min ?? null

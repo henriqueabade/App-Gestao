@@ -469,6 +469,158 @@
     await window.loadPage?.(pagina);
     if (v.tipo === 'cliente') window.ClientesModulo?.abrirDetalhes?.({ id: v.id });
     else if (v.tipo === 'prospeccao') window.ProspeccoesModulo?.abrirDetalhes?.({ id: v.id });
+    else if (v.tipo === 'pedido') window.PedidosModulo?.abrirVisualizar?.(v.id);
+    else if (v.tipo === 'orcamento') window.OrcamentosModulo?.abrirVisualizar?.(v.id);
+  }
+
+  // ------------------------------------------------------------ ação de outro módulo
+
+  /** "2026-09" → "09/2026". */
+  const competenciaLegivel = c => (/^\d{4}-\d{2}$/.test(String(c || '')) ? `${c.slice(5, 7)}/${c.slice(0, 4)}` : String(c || ''));
+
+  /** "Fazer agora": abre o registro no módulo onde a ação acontece. */
+  async function abrirAcao(acao) {
+    if (!acao) return;
+    if (acao.registroTipo === 'competencia') { await window.loadPage?.('financeiro'); return; }
+    await abrirVinculo({ tipo: acao.registroTipo, id: Number(acao.registro) });
+  }
+
+  const cacheAcoes = new Map();
+  /** O catálogo, marcando o que o responsável pode (60 s de cache por pessoa). */
+  async function catalogoDeAcoes(responsavelId) {
+    const chave = String(responsavelId || '');
+    const guardado = cacheAcoes.get(chave);
+    if (guardado && Date.now() - guardado.em < 60000) return guardado.valor;
+    const valor = await api(`/acoes${responsavelId ? `?responsavel=${encodeURIComponent(responsavelId)}` : ''}`);
+    cacheAcoes.set(chave, { valor, em: Date.now() });
+    return valor;
+  }
+
+  /**
+   * "Ação no sistema": módulo → registro (busca, ou o mês no Financeiro) →
+   * ação. A lista só libera o que o RESPONSÁVEL pode fazer (o servidor confere
+   * de novo). Quando a ação acontecer no módulo, a tarefa conclui sozinha.
+   */
+  function seletorDeAcao({ inicial = null, responsavelId, somenteLeitura = false, aoMudar }) {
+    let atual = inicial ? { ...inicial } : null;    // { chave, registro, rotulo, registroTipo, modulo }
+    let catalogo = null;
+    let modulo = inicial?.modulo || '';
+    const caixa = h('div', { class: 'tui-acao' });
+    const resumo = h('div', { class: 'tui-acao__resumo' });
+    const editor = h('div', { class: 'tui-acao__editor' });
+    const selModulo = h('select', { class: 'tui-campo', attrs: { 'aria-label': 'Módulo' } });
+    const selAcao = h('select', { class: 'tui-campo', attrs: { 'aria-label': 'Ação' } });
+    const registroCaixa = h('div', { class: 'tui-acao__registro' });
+    const aviso = h('p', { class: 'tui-dica tui-dica--aviso' });
+    const emitir = () => aoMudar?.(atual && (atual.chave || atual.registro) ? atual : null);
+
+    function pintarResumo() {
+      resumo.replaceChildren();
+      if (!atual?.chave) { resumo.hidden = true; return; }
+      const acao = catalogo?.acoes.find(a => a.chave === atual.chave);
+      const rotuloAcao = acao?.rotulo || atual.rotuloAcao || atual.chave;
+      const registroTexto = atual.registroTipo === 'competencia' ? `Competência ${competenciaLegivel(atual.registro)}` : (atual.rotulo || `#${atual.registro}`);
+      resumo.hidden = false;
+      resumo.append(...[
+        h('span', { class: 'tui-acao__icone' }, icone('fa-bolt')),
+        h('div', { class: 'tui-acao__texto' }, h('strong', { text: rotuloAcao }), h('span', { text: atual.registro ? registroTexto : 'Escolha o registro' })),
+        atual.registro && inicial?.chave === atual.chave && String(inicial?.registro) === String(atual.registro)
+          ? h('button', { type: 'button', class: 'tui-link', on: { click: () => abrirAcao(atual) } }, icone('fa-arrow-up-right-from-square'), ' Fazer agora') : null,
+        somenteLeitura ? null : h('button', { type: 'button', class: 'tui-icone-botao', title: 'Tirar a ação', attrs: { 'aria-label': 'Tirar a ação' }, on: { click: () => { atual = null; modulo = ''; montarEditor(); pintarResumo(); emitir(); } } }, icone('fa-xmark'))].filter(Boolean));
+      if (acao && !acao.pode) aviso.textContent = 'O responsável não tem permissão para esta ação — troque a ação ou o responsável.';
+      else aviso.textContent = '';
+    }
+
+    function montarRegistro() {
+      registroCaixa.replaceChildren();
+      const info = catalogo?.modulos.find(m => m.chave === modulo);
+      if (!info) return;
+      if (info.registro === 'competencia') {
+        const hojeMes = hoje().slice(0, 7);
+        const mes = h('input', { class: 'tui-campo', type: 'month', value: atual?.registroTipo === 'competencia' && atual.registro ? atual.registro : hojeMes, attrs: { 'aria-label': 'Competência' } });
+        const aplicar = () => { atual = { ...(atual || {}), modulo, registroTipo: 'competencia', registro: mes.value || null, rotulo: mes.value ? `Competência ${competenciaLegivel(mes.value)}` : null }; pintarResumo(); emitir(); };
+        mes.addEventListener('change', aplicar);
+        registroCaixa.append(mes);
+        if (!(atual?.registroTipo === 'competencia' && atual.registro)) aplicar();
+        return;
+      }
+      const busca = h('input', { class: 'tui-campo', type: 'search', placeholder: `Buscar ${{ pedido: 'o pedido (número ou cliente)', orcamento: 'o orçamento (número ou cliente)', prospeccao: 'a prospecção', cliente: 'o cliente' }[info.registro]}…`, attrs: { 'aria-label': 'Registro da ação' } });
+      const resultados = h('div', { class: 'tui-vinculos__resultados', attrs: { role: 'listbox' }, hidden: true });
+      let espera = null;
+      busca.addEventListener('input', () => {
+        clearTimeout(espera);
+        const q = busca.value.trim();
+        if (q.length < 2) { resultados.hidden = true; return; }
+        espera = setTimeout(async () => {
+          try {
+            const { resultados: achados } = await api(`/buscar-vinculos?q=${encodeURIComponent(q)}&tipo=${info.registro}`);
+            resultados.replaceChildren();
+            if (!achados.length) resultados.append(h('div', { class: 'tui-vinculos__vazio', text: 'Nada encontrado.' }));
+            for (const r of achados) {
+              resultados.append(h('button', {
+                type: 'button', class: 'tui-vinculos__opcao', attrs: { role: 'option' },
+                on: { click: () => {
+                  atual = { ...(atual || {}), modulo, registroTipo: info.registro, registro: String(r.id), rotulo: [r.nome, r.detalhe].filter(Boolean).join(' — ').slice(0, 200) };
+                  busca.value = '';
+                  resultados.hidden = true;
+                  pintarResumo();
+                  emitir();
+                } }
+              }, icone(VINCULO[r.tipo]?.icone || info.icone), h('span', { class: 'tui-vinculos__nome', text: r.nome }), h('span', { class: 'tui-vinculos__tipo', text: r.detalhe || '' })));
+            }
+            resultados.hidden = false;
+          } catch (err) { avisar(err.message, 'error'); }
+        }, 250);
+      });
+      busca.addEventListener('keydown', e => { if (e.key === 'Escape' && !resultados.hidden) { e.stopPropagation(); e.preventDefault(); resultados.hidden = true; } });
+      registroCaixa.append(h('div', { class: 'tui-vinculos' }, busca, resultados));
+    }
+
+    function montarEditor() {
+      editor.replaceChildren();
+      if (somenteLeitura || !catalogo) { editor.hidden = true; return; }
+      editor.hidden = false;
+      const comAlguma = new Set(catalogo.acoes.filter(a => a.pode).map(a => a.modulo));
+      selModulo.replaceChildren(h('option', { value: '', text: 'Módulo…' }), ...catalogo.modulos.map(m => h('option', {
+        value: m.chave, text: comAlguma.has(m.chave) ? m.rotulo : `${m.rotulo} (sem permissão)`, disabled: !comAlguma.has(m.chave), selected: m.chave === modulo
+      })));
+      const doModulo = catalogo.acoes.filter(a => a.modulo === modulo);
+      selAcao.replaceChildren(h('option', { value: '', text: modulo ? 'Qual ação?' : 'Escolha o módulo' }), ...doModulo.map(a => h('option', {
+        value: a.chave, text: a.pode ? a.rotulo : `${a.rotulo} — sem permissão`, disabled: !a.pode, selected: a.chave === atual?.chave
+      })));
+      selAcao.disabled = !modulo;
+      montarRegistro();
+      editor.append(h('div', { class: 'tui-acao__linha' }, selModulo, selAcao), registroCaixa);
+    }
+
+    selModulo.addEventListener('change', () => {
+      modulo = selModulo.value;
+      const tipo = catalogo.modulos.find(m => m.chave === modulo)?.registro;
+      // Trocar de módulo zera a ação e o registro (a menos que o tipo seja o mesmo).
+      atual = modulo ? { modulo, registroTipo: tipo, chave: null, registro: atual?.registroTipo === tipo ? atual.registro : null, rotulo: atual?.registroTipo === tipo ? atual.rotulo : null } : null;
+      montarEditor();
+      pintarResumo();
+      emitir();
+    });
+    selAcao.addEventListener('change', () => {
+      atual = { ...(atual || {}), modulo, chave: selAcao.value || null };
+      pintarResumo();
+      emitir();
+    });
+
+    caixa.append(resumo, editor, aviso);
+    caixa.trocarResponsavel = async id => {
+      try {
+        catalogo = await catalogoDeAcoes(id);
+        montarEditor();
+        pintarResumo();
+      } catch (err) {
+        editor.replaceChildren(h('p', { class: 'tui-dica tui-dica--aviso', text: err.sql_pendente ? 'Rode sql/tarefas_acoes.sql e reinicie a API para ligar ações do sistema.' : `Não foi possível carregar as ações: ${err.message}` }));
+      }
+    };
+    pintarResumo();
+    caixa.trocarResponsavel(responsavelId);
+    return caixa;
   }
 
   function seletorDeVinculo({ inicial = [], aoMudar }) {
@@ -687,7 +839,8 @@
       lista_id: original?.lista_id ?? preset.lista_id ?? null,
       marcadores: [...(original?.marcadores ?? preset.marcadores ?? [])],
       recorrencia: original?.recorrencia ?? preset.recorrencia ?? null,
-      vinculos: original?.vinculos ?? preset.vinculos ?? []
+      vinculos: original?.vinculos ?? preset.vinculos ?? [],
+      acao: original?.acao ? { ...original.acao, rotulo: original.acao.registroRotulo, rotuloAcao: original.acao.rotulo } : null
     };
     const checklistNovo = [...(preset.checklist || [])];
     let participantesNovos = [...(preset.participantes || [])];
@@ -725,7 +878,7 @@
         const st = STATUS[original.status];
         selos.append(chip(st.rotulo, { icone: st.icone, classe: `tui-chip--status tui-chip--${original.status}` }));
         if (original.atrasada) selos.append(chip('Atrasada', { icone: 'fa-triangle-exclamation', classe: 'tui-chip--perigo' }));
-        if (original.origem === 'proximo_passo') selos.append(chip('Próximo passo da prospecção', { icone: 'fa-link', classe: 'tui-chip--info', titulo: 'Mudar o título ou a data muda o próximo passo lá' }));
+        if (original.origem === 'proximo_passo') selos.append(chip('Próximo passo da prospecção', { icone: 'fa-forward-step', classe: 'tui-chip--passo', titulo: 'Mudar o título ou a data muda o próximo passo lá; concluir abre o "Concluir passo planejado"' }));
         if (original.origem === 'automacao') selos.append(chip('Criada automaticamente', { icone: 'fa-robot', classe: 'tui-chip--info' }));
         if (original.recorrencia_texto) selos.append(chip(original.recorrencia_texto, { icone: 'fa-repeat' }));
         selos.append(h('span', { class: 'tui-selos__quem', text: `Criada por ${original.criado_por_nome || '—'}` }));
@@ -842,6 +995,16 @@
       principal.append(h('div', { class: 'tui-rotulo' }, icone('fa-link'), ' Ligada a'), vinculos, abrirLigados);
       if (original?.origem === 'proximo_passo') vinculos.querySelector('input').hidden = true;
 
+      // ação de outro módulo (o próximo passo da prospecção não cobra ação)
+      let seletorAcao = null;
+      if (original?.origem !== 'proximo_passo' && (!somenteLeitura || estado.acao)) {
+        seletorAcao = seletorDeAcao({ inicial: estado.acao, responsavelId: estado.responsavel_id, somenteLeitura, aoMudar: a => { estado.acao = a; marcar(); } });
+        principal.append(
+          h('div', { class: 'tui-rotulo' }, icone('fa-bolt'), ' Ação no sistema', h('span', { class: 'tui-rotulo__extra', text: 'opcional' })),
+          h('p', { class: 'tui-dica' }, 'Ligue a tarefa a algo que se faz em outro módulo — despachar um pedido, fechar uma competência. Quando isso for feito lá, por qualquer pessoa, a tarefa conclui sozinha.'),
+          seletorAcao);
+      }
+
       // ---- corpo: coluna de propriedades
       const lado = h('aside', { class: 'tui-lado' });
       const campo = (rotulo, ic, ...conteudo) => h('div', { class: 'tui-prop' }, h('span', { class: 'tui-prop__rotulo' }, icone(ic), ` ${rotulo}`), ...conteudo);
@@ -899,7 +1062,7 @@
       const nomeDe = uid => usuarios.find(u => Number(u.id) === Number(uid))?.nome || (Number(uid) === Number(eu.id) ? eu.nome : `#${uid}`);
       if (pode.atribuir && !somenteLeitura) {
         const resp = h('select', { class: 'tui-campo' }, usuarios.map(u => h('option', { value: u.id, text: Number(u.id) === Number(eu.id) ? `${u.nome} (você)` : u.nome, selected: Number(u.id) === Number(estado.responsavel_id) })));
-        resp.addEventListener('change', () => { estado.responsavel_id = Number(resp.value); marcar(); });
+        resp.addEventListener('change', () => { estado.responsavel_id = Number(resp.value); marcar(); seletorAcao?.trocarResponsavel?.(estado.responsavel_id); });
         lado.append(campo('Responsável', 'fa-user-check', resp));
       } else {
         lado.append(campo('Responsável', 'fa-user-check', h('div', { class: 'tui-pessoa' }, avatar(estado.responsavel_id, nomeDe(estado.responsavel_id), { tamanho: 'p' }), h('span', { text: Number(estado.responsavel_id) === Number(eu.id) ? `${nomeDe(estado.responsavel_id)} (você)` : nomeDe(estado.responsavel_id) }))));
@@ -1041,6 +1204,10 @@
           cliente_id: idDe('cliente'), prospeccao_id: idDe('prospeccao'), orcamento_id: idDe('orcamento'), pedido_id: idDe('pedido')
         };
         if (pode.atribuir) corpo.responsavel_id = estado.responsavel_id;
+        if (estado.acao?.chave && !estado.acao.registro) { avisar('Escolha o registro da ação (ou tire a ação).', 'error'); return false; }
+        if (estado.acao && !estado.acao.chave && estado.acao.registro) { avisar('Escolha qual ação a tarefa cobra (ou tire a ação).', 'error'); return false; }
+        if (estado.acao?.chave) Object.assign(corpo, { acao_chave: estado.acao.chave, acao_registro: estado.acao.registro, acao_rotulo: estado.acao.rotulo || null });
+        else if (original?.acao) Object.assign(corpo, { acao_chave: null, acao_registro: null, acao_rotulo: null });
         try {
           let tarefaId = original?.id;
           if (nova) {
@@ -1074,8 +1241,58 @@
 
   // ------------------------------------------------------------ concluir
 
+  const ehPassoDaProspeccao = t => t?.origem === 'proximo_passo' && Boolean(idDaProspeccao(t));
+  const idDaProspeccao = t => t?.prospeccao_id || (t?.vinculos || []).find(v => v.tipo === 'prospeccao')?.id || null;
+  const OVERLAYS_DO_PASSO = ['concluirPassoOverlay', 'converterProspeccaoOverlay'];
+
+  /**
+   * Tarefa de próximo passo: concluir É o "Concluir passo planejado" da
+   * prospecção — o que aconteceu, com quem, o rumo no funil e o próximo passo,
+   * tudo obrigatório lá. O backend conclui esta tarefa junto (passoNaTarefa,
+   * em backend/prospeccoesController.js), então aqui só se abre o modal dela,
+   * por cima da tela onde a pessoa está.
+   */
+  async function concluirPassoNaProspeccao(t) {
+    const prospeccaoId = idDaProspeccao(t);
+    try {
+      const r = await chamar(`/api/prospeccoes/${prospeccaoId}`);
+      const ficha = r?.prospeccao || r;
+      if (!ficha?.id) throw new Error('Prospecção não encontrada.');
+      if (!String(ficha.proximo_passo || '').trim()) throw new Error('Esta prospecção já não tem passo em aberto — atualize a lista.');
+      window.prospeccaoAcaoAlvo = ficha;
+      window.prospeccaoAcaoContatos = Array.isArray(r?.contatos) ? r.contatos : [];
+      // O modal usa a folha do módulo Prospecções (botões, selos). Fora dele,
+      // a folha entra só enquanto o modal (ou a conversão que ele abre) existir.
+      const naPagina = document.querySelector('link#page-style[data-page="prospeccoes"]');
+      let folha = null;
+      if (!naPagina) {
+        folha = document.createElement('link');
+        folha.rel = 'stylesheet';
+        folha.href = '../css/prospeccoes.css';
+        folha.dataset.tuiFolha = 'prospeccoes';
+        document.head.appendChild(folha);
+      }
+      await window.Modal.open('modals/prospeccoes/concluir-passo.html', '../js/modals/prospeccao-concluir-passo.js', 'concluirPasso', true);
+      // Quando o modal (e a conversão, se escolhida) fechar: tira a folha e
+      // atualiza as listas — concluído ou não, o passo pode ter mudado.
+      const vigiar = setInterval(() => {
+        if (OVERLAYS_DO_PASSO.some(id => document.getElementById(id))) return;
+        clearInterval(vigiar);
+        folha?.remove();
+        mudou({ id: t.id, prospeccao_id: prospeccaoId });
+      }, 500);
+      return true;
+    } catch (err) {
+      avisar(`Não foi possível abrir o passo da prospecção: ${err.message}`, 'error');
+      return false;
+    }
+  }
+
   /** Concluir com resultado e nota; opcionalmente já agenda a próxima. */
   function concluir(t, { rapido = false } = {}) {
+    // Próximo passo da prospecção: sempre pelo modal dela (nem o Shift+clique
+    // pula — o passo exige dizer o que aconteceu e o que vem depois).
+    if (ehPassoDaProspeccao(t) && ['a_fazer', 'em_andamento', 'aguardando'].includes(t.status)) return concluirPassoNaProspeccao(t);
     if (rapido) {
       return api(`/${t.id}/concluir`, { method: 'POST', corpo: { resultado: 'feito' } })
         .then(r => { avisar(r.serie_data ? `Concluída. A próxima da série ficou para ${dataBr(r.serie_data)}.` : 'Tarefa concluída.', 'success'); mudou({ id: t.id }); return true; })
@@ -1130,6 +1347,7 @@
           h('span', { class: 'tui-rotulo', text: 'Como foi?' }), opcoes, nota,
           ligada ? h('p', { class: 'tui-dica' }, icone('fa-circle-info'), ` Vira uma atividade em ${VINCULO[ligada.tipo].rotulo.toLowerCase()} · ${ligada.nome} e aparece no histórico.`) : null,
           t.recorrencia_texto ? h('p', { class: 'tui-dica' }, icone('fa-repeat'), ` ${t.recorrencia_texto}: a próxima da série nasce sozinha.`) : null,
+          t.acao ? h('p', { class: 'tui-dica tui-dica--aviso' }, icone('fa-bolt'), ` Esta tarefa conclui sozinha quando "${t.acao.rotulo}" for feito no módulo ${t.acao.moduloRotulo}. Concluir aqui não faz a ação por você.`) : null,
           h('label', { class: 'tui-check tui-check--destaque' }, agendar, t.origem === 'proximo_passo' ? ' Definir o próximo passo da prospecção' : ' Agendar a próxima'), proxima),
         h('footer', { class: 'tui-rodape' }, h('div', { class: 'tui-rodape__lado' }), h('div', { class: 'tui-rodape__lado' }, cancelar, botaoConcluir))
       ));
@@ -1228,14 +1446,14 @@
     const aberta = ['a_fazer', 'em_andamento', 'aguardando'].includes(t.status);
     const atrasadaAgora = aberta && atrasada(t, agora);
     const el = h('article', {
-      class: `tui-tarefa${atrasadaAgora ? ' tui-tarefa--atrasada' : ''}${!aberta ? ' tui-tarefa--concluida' : ''}${convite ? ' tui-tarefa--convite' : ''}`,
+      class: `tui-tarefa${atrasadaAgora ? ' tui-tarefa--atrasada' : ''}${!aberta ? ' tui-tarefa--concluida' : ''}${convite ? ' tui-tarefa--convite' : ''}${t.origem === 'proximo_passo' ? ' tui-tarefa--passo' : ''}`,
       attrs: { tabindex: '0', 'aria-label': t.titulo }, dataset: { tarefaId: t.id }
     });
     el.style.setProperty('--tui-prioridade-cor', PRIORIDADES[t.prioridade]?.cor || '#8aa7f3');
 
     const check = h('button', {
       type: 'button', class: 'tui-tarefa__check',
-      title: !aberta ? 'Concluída — clique para abrir' : 'Concluir (Shift+clique conclui direto)',
+      title: !aberta ? 'Concluída — clique para abrir' : t.origem === 'proximo_passo' ? 'Concluir o passo (abre o "Concluir passo planejado")' : 'Concluir (Shift+clique conclui direto)',
       attrs: { 'aria-label': aberta ? 'Concluir' : 'Concluída' }
     }, icone('fa-check'));
     check.addEventListener('click', e => {
@@ -1247,6 +1465,9 @@
     });
 
     const meta = h('div', { class: 'tui-tarefa__meta' });
+    // O próximo passo combinado na prospecção tem selo próprio: é o compromisso
+    // do funil, e concluí-lo abre o "Concluir passo planejado".
+    if (t.origem === 'proximo_passo') meta.append(chip('Próximo passo', { icone: 'fa-forward-step', classe: 'tui-chip--passo', titulo: 'Próximo passo combinado na prospecção — concluir abre o "Concluir passo planejado"' }));
     if (t.data || !compacta) {
       const hojeDia = agora.dia;
       const classe = atrasadaAgora ? 'tui-chip--perigo' : t.data === hojeDia ? 'tui-chip--ouro' : '';
@@ -1261,6 +1482,9 @@
       if (m) meta.append(chip(`#${m.nome}`, { cor: m.cor }));
     }
     if (t.recorrencia) meta.append(chip(t.recorrencia_texto || 'Repete', { icone: 'fa-repeat' }));
+    if (t.acao) meta.append(chip(t.acao.registroTipo === 'competencia' ? `${t.acao.rotulo} · ${competenciaLegivel(t.acao.registro)}` : t.acao.rotulo, {
+      icone: 'fa-bolt', classe: 'tui-chip--acao', titulo: `Ação no sistema (${t.acao.moduloRotulo}): conclui sozinha quando isso for feito lá${t.acao.registroRotulo ? ` — ${t.acao.registroRotulo}` : ''}`
+    }));
     if (t.checklist?.total) meta.append(h('span', { class: 'tui-tarefa__contador', title: 'Checklist' }, icone('fa-list-check'), ` ${t.checklist.feitos}/${t.checklist.total}`));
     if (t.comentarios) meta.append(h('span', { class: 'tui-tarefa__contador', title: 'Comentários' }, icone('fa-comment'), ` ${t.comentarios}`));
     if (t.anexos) meta.append(h('span', { class: 'tui-tarefa__contador', title: 'Anexos' }, icone('fa-paperclip'), ` ${t.anexos}`));
@@ -1353,7 +1577,7 @@
 
   window.TarefasUI = {
     // telas
-    abrirEditor, concluir, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, linhaDeTarefa, mover, montarTarefasDaFicha,
+    abrirEditor, concluir, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha,
     carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo,
     limparContexto: () => { contexto = null; },
     // puras

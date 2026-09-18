@@ -77,6 +77,9 @@ if (isDev) {
   });
 }
 
+// Tarefas que cobram uma ação de outro módulo concluem sozinhas quando a ação
+// acontece: o vigia olha as escritas que deram certo (backend/tarefasAcoes.js).
+app.use('/api', require('./tarefasAcoes').observar);
 app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);

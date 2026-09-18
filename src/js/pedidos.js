@@ -770,6 +770,10 @@ function initPedidos() {
     carregarPedidos();
 }
 
+// De fora do módulo (tarefa, calendário): abrir um pedido direto. O script é
+// embrulhado numa IIFE pelo menu.js, então só o que vai para window é visível.
+window.PedidosModulo = { abrirVisualizar: openVisualizarPedidoModal };
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initPedidos);
 } else {

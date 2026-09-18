@@ -304,6 +304,38 @@ Visualizar pedido isso fica em `abrirPorCima()`, que também relê o pedido
 quando o filho muda alguma coisa (nota cancelada, boleto gerado…). O Esc só
 fecha o modal de cima.
 
+### Barra de rolagem: uma só, em todo lugar
+
+Toda área que rola usa a barra fina e dourada (6 px, sem trilho): a regra
+`:where(*)::-webkit-scrollbar` de `src/styles/scroll.css` (seção 3d) vale
+para o programa inteiro com especificidade zero — qualquer regra de uma tela
+(`.scrollbar-hide`…) continua valendo por cima. Área que rola uma tabela
+ganha o dourado cheio. **Não escreva barra de rolagem nova numa tela.**
+
+### Caixas de seleção
+
+A lista aberta de um `<select>` é a padrão do programa: fundo branco, texto
+preto (`select option` em scroll.css). **Não pinte `option`** numa folha de
+módulo — fundo escuro com o texto preto do padrão deixa a lista ilegível.
+
+### Tabelas em modal (só modal — as telas principais não mudam)
+
+Toda tabela de modal tem **o mesmo formato**, de uma regra só
+(`src/styles/tabelas-modais.css`, alcançada por `[id$="Overlay"]`, inclusive
+tabela montada em JavaScript): **a própria tabela é a moldura** — cantos de
+12 px, borda fina, corpo escuro —, cabeçalho na faixa clara com título cinza
+em caixa alta, divisória entre as linhas e realce ao passar o mouse. As
+medidas (letra e espaçamento, que acompanham a largura da tela) são as de
+`.table-scroll`, em `src/styles/scroll.css` seção 3e. O que só embrulhava a
+tabela (vidro, borda, sombra, legenda "Itens da nota" dentro da moldura)
+fica neutro; seções com título e totais ("Peças", "ITENS") continuam.
+
+Ficam de fora: as **telas principais** (as listas dos módulos têm o padrão
+delas) e as **folhas de relatório** (`.rp-tabela`, que imitam o papel
+impresso). As grades de edição (itens de orçamento/pedido, revisão da IA)
+uniformizam o cabeçalho e a moldura; as células, que são campos, mantêm a
+medida própria. **Não desenhe moldura nem cabeçalho de tabela num modal.**
+
 ### Rolagem das tabelas
 
 `src/js/utils/rolagem-encadeada.js` (um ouvinte só, instalado pelo menu):

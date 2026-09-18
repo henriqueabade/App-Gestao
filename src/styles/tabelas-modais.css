@@ -75,3 +75,68 @@
        — ver src/js/utils/popover.js). */
     z-index: 3;
 }
+
+/* ---------------------------------------------------------------------------
+ * A TABELA É A MOLDURA — em todo modal, igual (pedido do dono em 18/09/2026:
+ * "mesma cor de cabeçalho e shape/formato todo da tabela, só nos modais").
+ *
+ * Cada modal embrulhava a tabela do seu jeito: cantos de 12 ou de 16 px, com
+ * borda ou sem, com vidro, com sombra, ou sem moldura nenhuma (Cancelar
+ * pedido, Devolução). Agora a moldura é da própria tabela: cantos de 12 px,
+ * borda fina e corpo escuro. O corpo escuro também é o que impede o vidro do
+ * modal de mostrar, como um clarão nas linhas, o que está atrás dele (o
+ * cabeçalho claro da lista do módulo).
+ *
+ * As telas principais NÃO entram (`[id$="Overlay"]` é só modal). As folhas
+ * de relatório (`.rp-tabela`), que imitam o papel impresso, também não.
+ * As medidas das células (letra e espaçamento) são de scroll.css, seção 3e.
+ * --------------------------------------------------------------------------- */
+[id$="Overlay"] table:not(.rp-tabela) {
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    background: rgba(42, 6, 22, 0.72);
+}
+
+/* O fundo de uma célula não é cortado pelo raio da tabela: as de canto
+   acompanham a curva. */
+[id$="Overlay"] table:not(.rp-tabela) thead tr:first-child th:first-child { border-top-left-radius: calc(0.75rem - 1px); }
+[id$="Overlay"] table:not(.rp-tabela) thead tr:first-child th:last-child { border-top-right-radius: calc(0.75rem - 1px); }
+[id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td:first-child { border-bottom-left-radius: calc(0.75rem - 1px); }
+[id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td:last-child { border-bottom-right-radius: calc(0.75rem - 1px); }
+
+/* Linhas: a divisória na CÉLULA (com a borda separada, a do <tr> não aparece)
+   e o realce ao passar o mouse, os mesmos de Produtos. */
+[id$="Overlay"] table:not(.rp-tabela) tbody td { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+[id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td { border-bottom-color: transparent; }
+[id$="Overlay"] table:not(.rp-tabela) tbody tr:hover > td { background-color: rgba(255, 255, 255, 0.04); }
+
+/* O que só embrulha a tabela deixa de desenhar moldura própria — senão fica
+   moldura dentro de moldura, e o vidro claro do embrulho aparece nos cantos
+   arredondados. A rolagem dele continua. */
+[id$="Overlay"] div:has(> table:not(.rp-tabela):only-child),
+[id$="Overlay"] div:has(> div:only-child > table:not(.rp-tabela):only-child),
+[id$="Overlay"] div:has(> div:first-child > table:not(.rp-tabela):only-child),
+[id$="Overlay"] div:has(> p:first-child + div > table:not(.rp-tabela):only-child) {
+    border-color: transparent;
+    border-radius: 0.75rem;
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+/* A legenda que ficava dentro da moldura ("Itens da nota") vira um rótulo
+   logo acima da tabela. */
+[id$="Overlay"] div:has(> p:first-child + div > table:not(.rp-tabela):only-child) > p:first-child {
+    padding: 0 0.25rem 0.5rem;
+    border-bottom: 0;
+}
+
+[data-menu-theme="light"] [id$="Overlay"] table:not(.rp-tabela) {
+    border-color: #e2e8f0;
+    background: #fff;
+}
+
+[data-menu-theme="light"] [id$="Overlay"] table:not(.rp-tabela) tbody td { border-bottom-color: #f1f5f9; }

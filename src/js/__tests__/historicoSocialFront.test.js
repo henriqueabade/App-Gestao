@@ -115,3 +115,82 @@ test('decodificar: UTF-8, e o CSV do Excel em Windows-1252', () => {
   const ansi = Uint8Array.from([0x52, 0x61, 0x7a, 0xe3, 0x6f]); // "Razão" em Windows-1252
   assert.strictEqual(acoes.decodificar(ansi), 'Razão');
 });
+
+// ---------------------------------------------------------------------------
+// Agrupamento do feed (pedido do dono em 18/09/2026)
+// ---------------------------------------------------------------------------
+
+const ev = (id, quando, etiqueta, extra = {}) => ({ id, criado_em: quando, tipo: extra.tipo || 'campo', etiqueta, ...extra });
+const etiquetaDe = it => (it.tipo === 'observacao' ? null : it.etiqueta);
+const chaves = dias => daqui(dias.map(d => ({ dia: d.dia, grupos: d.grupos.map(g => ({ etiqueta: g.etiqueta, itens: g.itens.map(i => i.id), anteriores: g.anteriores.map(a => ({ dia: a.dia, itens: a.itens.map(i => i.id) })) })) })));
+
+test('agrupar: no mesmo dia, a mesma etiqueta vira um cartão só', () => {
+  const dias = hs.agrupar([
+    ev(1, new Date(2026, 8, 18, 15, 10), 'Edição'),
+    ev(2, new Date(2026, 8, 18, 15, 56), 'Campanha'),
+    ev(3, new Date(2026, 8, 18, 15, 54), 'Edição'),
+    ev(4, new Date(2026, 8, 18, 15, 20), 'Edição')
+  ], etiquetaDe);
+  assert.deepStrictEqual(chaves(dias), [{ dia: '2026-09-18', grupos: [
+    { etiqueta: 'Campanha', itens: [2], anteriores: [] },
+    { etiqueta: 'Edição', itens: [3, 4, 1], anteriores: [] }
+  ] }], 'o grupo fica na posição do mais recente, e dentro dele do mais novo ao mais velho');
+});
+
+test('agrupar: dias seguidos da mesma etiqueta viram cascata; outro cartão no meio quebra', () => {
+  const dias = hs.agrupar([
+    ev(1, new Date(2026, 8, 18, 10, 0), 'Edição'),
+    ev(2, new Date(2026, 8, 17, 10, 0), 'Edição'),
+    ev(3, new Date(2026, 8, 16, 18, 0), 'Edição'),
+    ev(4, new Date(2026, 8, 16, 9, 0), 'Interação'),
+    ev(5, new Date(2026, 8, 15, 9, 0), 'Edição')
+  ], etiquetaDe);
+  assert.deepStrictEqual(chaves(dias), [
+    { dia: '2026-09-18', grupos: [{ etiqueta: 'Edição', itens: [1], anteriores: [{ dia: '2026-09-17', itens: [2] }, { dia: '2026-09-16', itens: [3] }] }] },
+    { dia: '2026-09-16', grupos: [{ etiqueta: 'Interação', itens: [4], anteriores: [] }] },
+    { dia: '2026-09-15', grupos: [{ etiqueta: 'Edição', itens: [5], anteriores: [] }] }
+  ], 'o dia 17 some do feed (só tinha a edição, que foi para a cascata)');
+});
+
+test('agrupar: observação nunca agrupa, e a chave do grupo não muda quando chega registro novo', () => {
+  const antes = hs.agrupar([ev(1, new Date(2026, 8, 18, 9, 0), 'Edição'), ev(2, new Date(2026, 8, 18, 8, 0), 'Edição')], etiquetaDe);
+  const depois = hs.agrupar([ev(9, new Date(2026, 8, 18, 11, 0), 'Edição'), ev(1, new Date(2026, 8, 18, 9, 0), 'Edição'), ev(2, new Date(2026, 8, 18, 8, 0), 'Edição')], etiquetaDe);
+  assert.strictEqual(antes[0].grupos[0].chave, depois[0].grupos[0].chave, 'a lista aberta e o rascunho seguem no mesmo grupo');
+  const obs = hs.agrupar([
+    ev(1, new Date(2026, 8, 18, 9, 0), 'Observação', { tipo: 'observacao' }),
+    ev(2, new Date(2026, 8, 18, 8, 0), 'Observação', { tipo: 'observacao' })
+  ], etiquetaDe);
+  assert.strictEqual(obs[0].grupos.length, 2);
+});
+
+test('menção e citação: marcas no texto, texto simples, referências e edição', () => {
+  const texto = 'Veja *[15:50 Próximo passo](e:345), @[Ana Souza](u:2)!';
+  assert.deepStrictEqual(daqui(hs.pedacosDoTexto(texto)), [
+    { tipo: 'texto', texto: 'Veja ' },
+    { tipo: 'citacao', rotulo: '15:50 Próximo passo', id: 345 },
+    { tipo: 'texto', texto: ', ' },
+    { tipo: 'mencao', nome: 'Ana Souza', id: 2 },
+    { tipo: 'texto', texto: '!' }
+  ]);
+  assert.strictEqual(hs.textoSimples(texto), 'Veja *15:50 Próximo passo, @Ana Souza!');
+  assert.deepStrictEqual(daqui(hs.citadosNoTexto(texto)), [345]);
+  const { texto: visivel, refs } = hs.paraEdicao(texto);
+  assert.strictEqual(visivel, 'Veja *15:50 Próximo passo, @Ana Souza!');
+  assert.strictEqual(hs.aplicarReferencias(visivel, refs), texto, 'ida e volta sem perder as marcas');
+  assert.strictEqual(hs.aplicarReferencias('@Ana e @Ana Souza', [{ rotulo: '@Ana', marca: '@[Ana](u:1)' }, { rotulo: '@Ana Souza', marca: '@[Ana Souza](u:2)' }]),
+    '@[Ana](u:1) e @[Ana Souza](u:2)', 'o rótulo maior não é engolido pelo menor');
+  assert.strictEqual(hs.aplicarReferencias('sem nada', [{ rotulo: '@Ana', marca: '@[Ana](u:1)' }]), 'sem nada', 'rótulo apagado não vira marca');
+});
+
+test('gatilho do @ e do *: só no começo de palavra', () => {
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor('oi @an', 6)), { simbolo: '@', busca: 'an', inicio: 3 });
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor('*', 1)), { simbolo: '*', busca: '', inicio: 0 });
+  assert.strictEqual(hs.gatilhoNoCursor('fulano@empresa.com', 18), null, 'e-mail não chama a lista');
+  assert.strictEqual(hs.gatilhoNoCursor('texto normal', 12), null);
+});
+
+test('valorLegivel: datas cruas viram data brasileira', () => {
+  assert.strictEqual(hs.valorLegivel('2026-08-14'), '14/08/2026');
+  assert.strictEqual(hs.valorLegivel('2026-08-14T15:54'), '14/08/2026 15:54');
+  assert.strictEqual(hs.valorLegivel('Cobrar retorno'), 'Cobrar retorno');
+});

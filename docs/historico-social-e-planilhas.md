@@ -34,6 +34,31 @@ partes de 512 KB (`historico_anexo_partes`), cada uma abaixo do limite de
 (`completo`); se falhar no meio, é apagado. O servidor local aceita até 30 MB
 de corpo só nessas rotas (e nas de planilha); o resto continua em 3 MB.
 
+### Agrupamento, citação, menção e ao vivo (2ª rodada, 18/09)
+
+- **Um cartão por etiqueta por dia**: no mesmo dia, tudo o que tem a mesma
+  etiqueta (Edição, Campanha, Interação…) vira um cartão — o mais recente em
+  destaque e "Ver mais N registros de hoje (15:10 – 15:50)", uma linha curta
+  por registro, com a hora, quem (se foi outra pessoa) e antes → depois.
+- **Cascata entre dias**: dias seguidos da mesma etiqueta (sem outro cartão no
+  meio) entram no cartão do dia mais recente: "Edição em 2 dias anteriores
+  (17/09, 16/09)" abre os cartões de antes, cada um com a sua data. O feed
+  nunca muda de ordem. **Observação nunca agrupa.**
+- **Comentários do grupo** ficam juntos. `*` na caixa cita um registro do
+  grupo (o comentário vai para ele; aparece como etiqueta turquesa clicável que
+  leva ao registro) e cada linha tem o botão de citar. `@` menciona um usuário
+  (lista com foto), que recebe o aviso "mencionou você" — e só esse, sem
+  duplicar com o de comentário. Marcas gravadas no texto: `@[Nome](u:id)` e
+  `*[rótulo](e:id)`; o backend as lê (`mencionadosNoTexto`, `textoSimples`).
+- **Curtir** o cartão soma as curtidas dos registros; descurtir tira as suas.
+- **Ao vivo**: com a ficha aberta, a linha do tempo pergunta a cada 10 s e
+  redesenha sem perder o que se está escrevendo (nem o cursor); o que chegou de
+  outra pessoa pisca em verde. Para sozinha quando a ficha fecha.
+- Cada **dia é uma seção**: a data gruda no topo só enquanto o dia está na
+  tela (antes todas grudavam juntas, uma por cima da outra).
+- Datas cruas em "antes → depois" aparecem como 14/08/2026; e a comparação da
+  campanha deixou de registrar "Data de envio" que ninguém mudou (ISO × dia).
+
 ## 2. Sino de avisos
 
 O sino do topo (`src/js/notifications.js`) agora é de **todos os perfis** e

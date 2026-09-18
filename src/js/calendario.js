@@ -7,8 +7,15 @@
 const T = window.TarefasUI;
 const { h, icone } = T;
 
-const HORA_PX = 48;           // altura de uma hora na grade
-const PASSO_MIN = 15;         // arrastar anda de 15 em 15 minutos
+// Zoom da grade de horas (Ctrl + rolagem, ou os botões − +): quantos px vale
+// uma hora. Afastado, o rótulo é de hora em hora; chegando perto, de 30 em 30
+// e depois de 15 em 15 minutos — e o arrastar fica mais fino (5 min).
+const ZOOM = [48, 64, 96, 128, 192, 256];
+const horaPx = () => ZOOM[estado.zoom] || ZOOM[0];
+const rotuloMin = () => (horaPx() >= 160 ? 15 : horaPx() >= 80 ? 30 : 60);
+const passoMin = () => (horaPx() >= 160 ? 5 : 15);
+const rotuloDoZoom = () => (rotuloMin() === 60 ? '1 h' : `${rotuloMin()} min`);
+const PASSO_MIN = 15;         // bloco mais curto que a grade desenha
 const MAX_NO_DIA = 4;         // no máximo, por dia, na visão de mês (menos se a tela for baixa)
 
 const estado = {
@@ -24,7 +31,9 @@ const estado = {
   periodo: null,
   sqlPendente: false,
   carregando: true,
-  rolouGrade: false
+  rolouGrade: false,
+  zoom: 0,
+  minutoNoTopo: null          // onde a grade de horas estava rolada (sobrevive ao redesenho)
 };
 
 const CAMADAS = [
@@ -116,10 +125,11 @@ function tituloDoMarco(m) {
   return [m.titulo, m.depois && m.depois !== m.titulo ? m.depois : null].filter(Boolean).join(': ');
 }
 
-function itens() {
+function itens({ todasAsCamadas = false } = {}) {
   const saida = [];
+  const ligada = chave => todasAsCamadas || estado.camadas[chave];
   const listas = new Map((estado.ctx?.listas || []).map(l => [Number(l.id), l]));
-  if (estado.camadas.tarefas) {
+  if (ligada('tarefas')) {
     for (const t of estado.dados.tarefas) {
       if (!estado.concluidas && t.status === 'concluida') continue;
       if (t.lista_id && estado.listasOcultas.has(Number(t.lista_id))) continue;
@@ -129,12 +139,12 @@ function itens() {
       saida.push({
         chave: `t${t.id}`, tipo: 'tarefa', dia, hora: t.data ? t.hora : null, duracao: t.duracao_min || 30,
         titulo: t.titulo, sub: (t.vinculos || []).map(v => v.nome).join(' · '), cor: lista?.cor || T.TIPOS[t.tipo]?.cor || '#d4c169',
-        icone: T.TIPOS[t.tipo]?.icone || 'fa-square-check', concluida: t.status === 'concluida', atrasada: T.atrasada(t),
+        icone: t.origem === 'proximo_passo' ? 'fa-forward-step' : T.TIPOS[t.tipo]?.icone || 'fa-square-check', concluida: t.status === 'concluida', atrasada: T.atrasada(t),
         arrastavel: aberta(t) && Boolean(t.pode?.concluir), prioridade: t.prioridade, pessoa: t.responsavel_id, dados: t
       });
     }
   }
-  if (estado.camadas.atividades && estado.concluidas) {
+  if (ligada('atividades') && estado.concluidas) {
     for (const a of estado.dados.atividades) {
       saida.push({
         chave: `a${a.id}`, tipo: 'atividade', dia: a.dia, hora: a.hora, duracao: a.duracao_min || 30,
@@ -143,7 +153,7 @@ function itens() {
       });
     }
   }
-  if (estado.camadas.marcos) {
+  if (ligada('marcos')) {
     for (const m of estado.dados.marcos) {
       saida.push({
         chave: `m${m.id}`, tipo: 'marco', dia: m.dia, hora: m.hora, duracao: 30, titulo: tituloDoMarco(m), sub: m.registro,
@@ -340,8 +350,8 @@ function blocoNaGrade(it, { restritoAColuna = false } = {}) {
   });
   el.style.setProperty('--cal-cor', it.cor);
   const ini = minutos(it.hora);
-  el.style.top = `${(ini / 60) * HORA_PX}px`;
-  el.style.height = `${Math.max(20, (Math.max(PASSO_MIN, it.duracao) / 60) * HORA_PX - 2)}px`;
+  el.style.top = `${(ini / 60) * horaPx()}px`;
+  el.style.height = `${Math.max(20, (Math.max(PASSO_MIN, it.duracao) / 60) * horaPx() - 2)}px`;
   el.style.left = `calc(${(it._col / it._n) * 100}% + 2px)`;
   el.style.width = `calc(${100 / it._n}% - 4px)`;
   const hora = h('span', { class: 'cal-evento__hora', text: `${it.hora}${it.duracao >= 45 ? ` – ${T.horaDeMinutos(ini + it.duracao)}` : ''}` });
@@ -368,15 +378,16 @@ function blocoNaGrade(it, { restritoAColuna = false } = {}) {
       if (!moveu && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
       if (!it.arrastavel) return;
       if (!moveu) { moveu = true; el.setPointerCapture(e.pointerId); el.classList.add('cal-evento--movendo'); }
-      const passos = Math.round(dy / (HORA_PX / (60 / PASSO_MIN)));
+      const passo = passoMin();
+      const passos = Math.round(dy / (horaPx() / (60 / passo)));
       if (esticar) {
-        novaDur = Math.max(PASSO_MIN, it.duracao + passos * PASSO_MIN);
-        el.style.height = `${(novaDur / 60) * HORA_PX - 2}px`;
+        novaDur = Math.max(passo, it.duracao + passos * passo);
+        el.style.height = `${(novaDur / 60) * horaPx() - 2}px`;
         hora.textContent = `${it.hora} – ${T.horaDeMinutos(ini + novaDur)}`;
         return;
       }
-      novoIni = Math.max(0, Math.min(1440 - PASSO_MIN, ini + passos * PASSO_MIN));
-      el.style.top = `${(novoIni / 60) * HORA_PX}px`;
+      novoIni = Math.max(0, Math.min(1440 - passo, Math.round((ini + passos * passo) / passo) * passo));
+      el.style.top = `${(novoIni / 60) * horaPx()}px`;
       hora.textContent = `${T.horaDeMinutos(novoIni)} – ${T.horaDeMinutos(novoIni + it.duracao)}`;
       if (!restritoAColuna) {
         const alvo = colunas.find(c => { const r = c.getBoundingClientRect(); return ev.clientX >= r.left && ev.clientX < r.right; });
@@ -414,7 +425,11 @@ function desenharGrade(area, colunas, { equipe = false } = {}) {
   const agora = T.agoraEmBrasilia();
   const todos = itens();
   const feriados = feriadosDoPeriodo();
-  const moldura = h('div', { class: `cal-grade${equipe ? ' cal-grade--equipe' : ''}`, style: { '--cal-colunas': String(colunas.length) } });
+  const px = horaPx();
+  const moldura = h('div', {
+    class: `cal-grade${equipe ? ' cal-grade--equipe' : ''}`,
+    style: { '--cal-colunas': String(colunas.length), '--cal-hora': `${px}px`, '--cal-sub': `${(px * Math.min(30, rotuloMin())) / 60}px` }
+  });
 
   // cabeçalho das colunas + faixa de dia inteiro
   const cabeca = h('div', { class: 'cal-grade__cabeca' }, h('div', { class: 'cal-grade__canto' }));
@@ -434,8 +449,13 @@ function desenharGrade(area, colunas, { equipe = false } = {}) {
 
   // corpo com as horas
   const rolagem = h('div', { class: 'cal-grade__rolagem' });
-  const corpo = h('div', { class: 'cal-grade__corpo', style: { height: `${24 * HORA_PX}px` } });
-  const horas = h('div', { class: 'cal-grade__horas' }, Array.from({ length: 24 }, (_, i) => h('span', { text: i ? `${String(i).padStart(2, '0')}:00` : '' })));
+  const corpo = h('div', { class: 'cal-grade__corpo', style: { height: `${24 * px}px` } });
+  const passoRotulo = rotuloMin();
+  const horas = h('div', { class: 'cal-grade__horas' }, Array.from({ length: 1440 / passoRotulo }, (_, i) => {
+    const min = i * passoRotulo;
+    const cheia = min % 60 === 0;
+    return h('span', { class: cheia ? '' : 'cal-grade__hora--sub', style: { height: `${(px * passoRotulo) / 60}px` }, text: min ? T.horaDeMinutos(min) : '' });
+  }));
   corpo.append(horas);
   for (const c of colunas) {
     const coluna = h('div', { class: `cal-dia-coluna${c.dia === hoje && !equipe ? ' cal-dia-coluna--hoje' : ''}${!equipe && [0, 6].includes(T.diaDaSemana(c.dia)) ? ' cal-dia-coluna--fim' : ''}`, dataset: { dia: c.dia } });
@@ -444,21 +464,24 @@ function desenharGrade(area, colunas, { equipe = false } = {}) {
     doDia.forEach(it => eventos.append(blocoNaGrade(it, { restritoAColuna: equipe })));
     coluna.append(eventos);
     if (c.dia === hoje) {
-      const linha = h('div', { class: 'cal-agora', style: { top: `${(agora.minutos / 60) * HORA_PX}px` } });
+      const linha = h('div', { class: 'cal-agora', style: { top: `${(agora.minutos / 60) * px}px` } });
       coluna.append(linha);
     }
     coluna.addEventListener('click', e => {
       if (e.target !== coluna && e.target !== eventos) return;
       const r = coluna.getBoundingClientRect();
-      const min = Math.floor(((e.clientY - r.top) / HORA_PX) * 2) * 30;
-      criarRapido(c.dia, T.horaDeMinutos(Math.max(0, Math.min(1410, min))));
+      // Cria no degrau que está desenhado: 30 min afastado, 15 chegando perto.
+      const degrau = passoRotulo === 60 ? 30 : passoRotulo;
+      const min = Math.floor(((e.clientY - r.top) / px) * (60 / degrau)) * degrau;
+      criarRapido(c.dia, T.horaDeMinutos(Math.max(0, Math.min(1440 - degrau, min))));
     });
     if (!equipe) {
       // Soltar uma tarefa de dia inteiro na grade dá a ela uma hora.
       aceitarSoltar(coluna, (it, e) => {
         const r = coluna.getBoundingClientRect();
-        const min = Math.round(((e.clientY - r.top) / HORA_PX) * (60 / PASSO_MIN)) * PASSO_MIN;
-        return T.mover(it.dados, { data: c.dia, hora: T.horaDeMinutos(Math.max(0, Math.min(1440 - PASSO_MIN, min))), duracao_min: it.duracao || 30 });
+        const passo = passoMin();
+        const min = Math.round(((e.clientY - r.top) / px) * (60 / passo)) * passo;
+        return T.mover(it.dados, { data: c.dia, hora: T.horaDeMinutos(Math.max(0, Math.min(1440 - passo, min))), duracao_min: it.duracao || 30 });
       });
     }
     corpo.append(coluna);
@@ -466,11 +489,38 @@ function desenharGrade(area, colunas, { equipe = false } = {}) {
   rolagem.append(corpo);
   moldura.append(cabeca, faixa, rolagem);
   area.append(moldura);
-  // Abre perto do horário de trabalho (ou de agora, se hoje estiver na tela).
-  requestAnimationFrame(() => {
-    const alvoHora = colunas.some(c => c.dia === hoje) ? Math.max(0, agora.minutos / 60 - 2) : 7;
-    rolagem.scrollTop = alvoHora * HORA_PX;
-  });
+  // Abre perto do horário de trabalho (ou de agora, se hoje estiver na tela);
+  // depois, fica onde a pessoa deixou — mover uma tarefa redesenha a grade, e
+  // voltar para as 7h a cada gesto seria perder o lugar.
+  // (Na hora, sem esperar o próximo quadro: a grade já está na tela.)
+  const alvoHora = estado.minutoNoTopo !== null
+    ? estado.minutoNoTopo / 60
+    : (colunas.some(c => c.dia === hoje) ? Math.max(0, agora.minutos / 60 - 2) : 7);
+  rolagem.scrollTop = alvoHora * px;
+  // Com o px DESTA grade: ao trocar o zoom, a grade velha ainda solta um
+  // último "scroll" ao sair da tela, e medir com o px novo deslocava a hora.
+  rolagem.addEventListener('scroll', () => {
+    if (rolagem.isConnected) estado.minutoNoTopo = (rolagem.scrollTop / px) * 60;
+  }, { passive: true });
+  // Ctrl + rolagem aproxima/afasta, mantendo parado o horário sob o mouse.
+  rolagem.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const y = e.clientY - rolagem.getBoundingClientRect().top;
+    const minutoSobOMouse = ((rolagem.scrollTop + y) / horaPx()) * 60;
+    if (!mudarZoom(e.deltaY < 0 ? 1 : -1)) return;
+    estado.minutoNoTopo = Math.max(0, minutoSobOMouse - (y / horaPx()) * 60);
+    desenhar();
+  }, { passive: false });
+}
+
+/** Um degrau de zoom para mais (1) ou para menos (-1). Devolve se mudou. */
+function mudarZoom(sentido) {
+  const novo = Math.max(0, Math.min(ZOOM.length - 1, estado.zoom + sentido));
+  if (novo === estado.zoom) return false;
+  estado.zoom = novo;
+  guardar();
+  return true;
 }
 
 function desenharSemana(area) {
@@ -566,15 +616,41 @@ function desenharMini() {
     grade);
 }
 
+/**
+ * O período que os números da lateral contam: na visão de mês, o mês inteiro
+ * (sem os dias de outros meses que completam a grade); nas outras, o que está
+ * na tela — a semana, o dia, os 30 dias da agenda.
+ */
+function periodoDeContagem() {
+  const foco = estado.foco;
+  const hoje = T.hoje();
+  if (estado.visao === 'mes') {
+    const de = `${foco.slice(0, 7)}-01`;
+    return { de, ate: T.somarDias(T.somarMeses(de, 1), -1), rotulo: `em ${T.MESES[Number(foco.slice(5, 7)) - 1].toLowerCase()}` };
+  }
+  const { de, ate } = estado.periodo || periodoDaVisao();
+  if (estado.visao === 'semana') return { de, ate, rotulo: hoje >= de && hoje <= ate ? 'nesta semana' : 'na semana' };
+  if (estado.visao === 'agenda') return { de, ate, rotulo: 'em 30 dias' };
+  return { de, ate, rotulo: de === hoje ? 'hoje' : 'no dia' };
+}
+
 function desenharLateral() {
   desenharMini();
-  const todos = itens();
-  const conta = tipo => todos.filter(it => it.tipo === tipo).length;
+  const periodo = periodoDeContagem();
+  $('calContagemRotulo').textContent = `· ${periodo.rotulo}`;
+  const noPeriodo = itens({ todasAsCamadas: true }).filter(it => it.dia >= periodo.de && it.dia <= periodo.ate);
+  const conta = tipo => noPeriodo.filter(it => it.tipo === tipo).length;
+  const anos = [...new Set([periodo.de.slice(0, 4), periodo.ate.slice(0, 4)])].map(Number);
+  const feriados = anos.flatMap(a => T.feriadosDoAno(a, { municipio: estado.ctx?.municipio }))
+    .filter(f => f.tipo !== 'data' && f.dia >= periodo.de && f.dia <= periodo.ate);
+  // Um feriado de dois dias (Carnaval) conta por dia, como aparece na grade.
+  const numeros = { tarefas: conta('tarefa'), atividades: conta('atividade'), marcos: conta('marco'), feriados: feriados.length };
   $('calCamadas').replaceChildren(...CAMADAS.map(([chave, rotulo, ic, cor, dica]) => {
     const marca = h('input', { type: 'checkbox', checked: estado.camadas[chave] });
     marca.addEventListener('change', () => { estado.camadas[chave] = marca.checked; desenhar(); });
-    const n = chave === 'feriados' ? null : conta({ tarefas: 'tarefa', atividades: 'atividade', marcos: 'marco' }[chave]);
-    const rotuloEl = h('label', { class: 'cal-camada', title: dica }, marca, h('span', { class: 'cal-camada__cor', style: { background: cor } }, icone(ic)), h('span', { class: 'cal-camada__rotulo', text: rotulo }), n ? h('span', { class: 'cal-camada__n', text: String(n) }) : null);
+    const n = numeros[chave];
+    const rotuloEl = h('label', { class: 'cal-camada', title: `${dica} — ${n} ${periodo.rotulo}` }, marca, h('span', { class: 'cal-camada__cor', style: { background: cor } }, icone(ic)), h('span', { class: 'cal-camada__rotulo', text: rotulo }),
+      estado.carregando && chave !== 'feriados' ? null : h('span', { class: `cal-camada__n${n ? '' : ' cal-camada__n--zero'}`, text: String(n) }));
     return rotuloEl;
   }));
   const listas = estado.ctx?.listas || [];
@@ -611,6 +687,11 @@ function desenhar() {
   $('calTitulo').textContent = tituloDaVisao();
   document.querySelectorAll('.cal-visoes [data-visao]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.visao === estado.visao)));
   desenharPessoas();
+  const comGrade = ['semana', 'dia', 'equipe'].includes(estado.visao);
+  $('calZoom').hidden = !comGrade;
+  $('calZoomRotulo').textContent = rotuloDoZoom();
+  $('calZoomMenos').disabled = estado.zoom === 0;
+  $('calZoomMais').disabled = estado.zoom === ZOOM.length - 1;
   if (!estado.periodo) estado.periodo = periodoDaVisao();
   desenharLateral();
   const area = $('calArea');
@@ -668,7 +749,7 @@ function mostrarAtalhos() {
       itens: [{ rotulo: '← →', valor: 'Período anterior / próximo' }, { rotulo: 'T', valor: 'Hoje' }, { rotulo: 'M · S · D · A · E', valor: 'Mês, semana, dia, agenda, equipe' }, { rotulo: 'N', valor: 'Nova tarefa' }]
     }, {
       titulo: 'Com o mouse', icone: 'fa-arrow-pointer',
-      itens: [{ rotulo: 'Arrastar', valor: 'Muda o dia (e a hora, na semana e no dia)' }, { rotulo: 'Puxar a borda de baixo', valor: 'Muda a duração' }, { rotulo: 'Clique no espaço vazio', valor: 'Cria a tarefa naquele horário' }, { rotulo: 'Duplo clique no dia (mês)', valor: 'Cria a tarefa naquele dia' }]
+      itens: [{ rotulo: 'Arrastar', valor: 'Muda o dia (e a hora, na semana e no dia)' }, { rotulo: 'Puxar a borda de baixo', valor: 'Muda a duração' }, { rotulo: 'Clique no espaço vazio', valor: 'Cria a tarefa naquele horário' }, { rotulo: 'Duplo clique no dia (mês)', valor: 'Cria a tarefa naquele dia' }, { rotulo: 'Ctrl + rolar', valor: 'Aproxima a grade de horas: de 1 h até 15 min' }]
     }]
   });
 }
@@ -690,7 +771,7 @@ function aoTeclar(e) {
 }
 
 function guardar() {
-  try { localStorage.setItem('calendario.preferencias', JSON.stringify({ visao: estado.visao, camadas: estado.camadas, concluidas: estado.concluidas })); } catch (_) { /* sem problema */ }
+  try { localStorage.setItem('calendario.preferencias', JSON.stringify({ visao: estado.visao, camadas: estado.camadas, concluidas: estado.concluidas, zoom: estado.zoom })); } catch (_) { /* sem problema */ }
 }
 
 // ------------------------------------------------------------ início
@@ -704,6 +785,7 @@ function iniciar() {
     if (salvo.visao && salvo.visao !== 'equipe') estado.visao = salvo.visao;
     if (salvo.camadas) Object.assign(estado.camadas, salvo.camadas);
     if (typeof salvo.concluidas === 'boolean') estado.concluidas = salvo.concluidas;
+    if (Number.isInteger(salvo.zoom) && salvo.zoom >= 0 && salvo.zoom < ZOOM.length) estado.zoom = salvo.zoom;
   } catch (_) { /* padrão */ }
   $('calConcluidas').checked = estado.concluidas;
   document.querySelectorAll('.cal-visoes [data-visao]').forEach(b => b.addEventListener('click', () => { estado.visao = b.dataset.visao; guardar(); carregar(); }));
@@ -715,6 +797,8 @@ function iniciar() {
   $('calBtnNova').addEventListener('click', () => T.abrirEditor({ preset: { data: estado.visao === 'mes' ? T.hoje() : estado.foco } }));
   $('calBtnExportar').addEventListener('click', exportar);
   $('calAjuda').addEventListener('click', mostrarAtalhos);
+  $('calZoomMenos').addEventListener('click', () => { if (mudarZoom(-1)) desenhar(); });
+  $('calZoomMais').addEventListener('click', () => { if (mudarZoom(1)) desenhar(); });
   document.addEventListener('keydown', aoTeclar);
   const aoMudar = () => { if (!document.body.contains($('calArea'))) { window.removeEventListener('tarefas:mudou', aoMudar); return; } carregar(); };
   window.addEventListener('tarefas:mudou', aoMudar);
@@ -722,7 +806,7 @@ function iniciar() {
   const relogio = setInterval(() => {
     if (!document.body.contains($('calArea'))) { clearInterval(relogio); return; }
     const linha = document.querySelector('.cal-agora');
-    if (linha) linha.style.top = `${(T.agoraEmBrasilia().minutos / 60) * HORA_PX}px`;
+    if (linha) linha.style.top = `${(T.agoraEmBrasilia().minutos / 60) * horaPx()}px`;
   }, 60000);
   return carregar().then(() => {
     $('calBtnExportar').hidden = !estado.ctx?.pode?.exportar;

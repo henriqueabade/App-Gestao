@@ -56,6 +56,8 @@
   const agora = new Date();
   agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
   get('concluirData').value = agora.toISOString().slice(0, 16);
+  // O que aconteceu já aconteceu: o campo não passa de agora.
+  get('concluirData').max = agora.toISOString().slice(0, 16);
 
   // Contatos desta prospecção — o backend recusa contato de outra.
   const contatos = Array.isArray(window.prospeccaoAcaoContatos) ? window.prospeccaoAcaoContatos : [];
@@ -111,6 +113,12 @@
     if (!nota) {
       showToast('Descreva o que aconteceu', 'error');
       get('concluirNota').focus();
+      return;
+    }
+
+    if (get('concluirData').value && new Date(get('concluirData').value).getTime() > Date.now() + 60000) {
+      showToast('O passo concluído é o que já aconteceu: escolha uma data e hora até agora.', 'error');
+      get('concluirData').focus();
       return;
     }
 

@@ -581,6 +581,14 @@ function initOrcamentos() {
     carregarOrcamentos();
 }
 
+// De fora do módulo (tarefa, calendário): abrir um orçamento direto.
+window.OrcamentosModulo = {
+    abrirVisualizar(id) {
+        window.selectedQuoteId = id;
+        return openQuoteModal('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento');
+    }
+};
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initOrcamentos);
 } else {

@@ -130,7 +130,10 @@ test('a regra alcança todo modal, inclusive tabela montada em JS', () => {
     .filter(Boolean);
   assert.ok(seletores.length >= 3, 'não achei os seletores da folha');
   for (const seletor of seletores) {
-    assert.match(seletor, /^\[id\$="Overlay"\] table thead/,
+    // Desde 18/09/2026 a folha também desenha a moldura inteira da tabela
+    // (a própria <table>, as células de canto, as divisórias) e neutraliza o
+    // que só a embrulhava — mas toda regra continua falando de tabela.
+    assert.match(seletor, /^\[id\$="Overlay"\] .*table/,
       `seletor sem "table" no meio, perde para a folha de módulo: ${seletor}`);
   }
 });
@@ -261,4 +264,43 @@ test('os módulos já grudam o cabeçalho pelo HTML', () => {
     assert.match(thead[1], /bg-gray-50/,
       `${modulo}: sem fundo opaco, grudar deixa as linhas passarem por baixo`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// A moldura inteira (18/09/2026): "mesma cor de cabeçalho e shape/formato todo
+// da tabela", só nos modais.
+// ---------------------------------------------------------------------------
+
+test('a própria tabela é a moldura: cantos, borda e corpo iguais em todo modal', () => {
+  const css = folha();
+  const moldura = css.match(/\[id\$="Overlay"\] table:not\(\.rp-tabela\) \{[^}]+\}/);
+  assert.ok(moldura, 'falta a regra da moldura');
+  assert.match(moldura[0], /border-collapse:\s*separate/, 'com a borda colapsada o raio não aparece');
+  assert.match(moldura[0], /border-radius:\s*0\.75rem/);
+  assert.match(moldura[0], /background:/, 'o corpo escuro que não deixa o vidro do modal clarear as linhas');
+  assert.match(css, /thead tr:first-child th:first-child \{ border-top-left-radius/, 'a célula do canto acompanha a curva');
+  assert.match(css, /div:has\(> table:not\(\.rp-tabela\):only-child\)/, 'o embrulho deixa de desenhar moldura própria');
+});
+
+test('só modal: a moldura nova não alcança as telas principais nem a folha de relatório', () => {
+  const css = folha();
+  const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const bloco of semComentarios.match(/[^{}]+\{/g) || []) {
+    for (const seletor of bloco.replace(/\{$/, '').split(',').map(s => s.trim()).filter(Boolean)) {
+      assert.match(seletor, /\[id\$="Overlay"\]/, `regra sem [id$="Overlay"] alcançaria as telas principais: ${seletor}`);
+    }
+  }
+  assert.ok(!/\.table-scroll\s*\{/.test(css) && !/#content/.test(css), 'as tabelas das telas principais não são desta folha');
+  assert.match(css, /table:not\(\.rp-tabela\)/, 'a folha de relatório (papel impresso) fica de fora');
+});
+
+test('as medidas das células dos modais moram em scroll.css, como as de .table-scroll', () => {
+  const scroll = ler('src', 'styles', 'scroll.css');
+  const th = scroll.match(/\[id\$="Overlay"\] table:not\(\.rp-tabela\) th \{[^}]+\}/);
+  assert.ok(th, 'falta a medida do cabeçalho dos modais');
+  const tableScroll = scroll.match(/\.table-scroll th,\s*\.table-scroll td \{[^}]+\}/);
+  const tamanho = bloco => (bloco.match(/font-size:\s*([^;]+);/) || [])[1];
+  assert.strictEqual(tamanho(th[0]), tamanho(tableScroll[0]), 'o modal usa a mesma letra das tabelas de Produtos');
+  assert.match(scroll, /table:not\(\.rp-tabela, \.items-table, \.ia-grade-revisao table\) td/,
+    'as grades de edição (itens, IA) mantêm a medida das células, que são campos');
 });

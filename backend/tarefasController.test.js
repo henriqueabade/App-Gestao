@@ -28,7 +28,8 @@ const COLUNAS = {
     'id', 'titulo', 'descricao', 'tipo', 'status', 'prioridade', 'data', 'hora', 'duracao_min', 'lembrete_min', 'local',
     'responsavel_id', 'criado_por', 'lista_id', 'marcadores', 'cliente_id', 'prospeccao_id', 'orcamento_id', 'pedido_id',
     'origem', 'chave_origem', 'recorrencia', 'serie_id', 'ordem', 'resultado', 'resultado_nota', 'concluida_em', 'concluida_por',
-    'interacao_origem', 'interacao_id', 'excluida_em', 'excluida_por', 'motivo_exclusao', 'criado_em', 'atualizado_em'
+    'interacao_origem', 'interacao_id', 'excluida_em', 'excluida_por', 'motivo_exclusao', 'criado_em', 'atualizado_em',
+    'acao_chave', 'acao_registro', 'acao_rotulo'
   ],
   tarefa_participantes: ['id', 'tarefa_id', 'usuario_id', 'status', 'convidado_por', 'mensagem', 'convidado_em', 'respondido_em'],
   tarefa_checklist: ['id', 'tarefa_id', 'texto', 'feito', 'feito_por', 'feito_em', 'ordem', 'criado_por', 'criado_em'],
@@ -119,7 +120,8 @@ function criarUpstream(dados) {
 
 const MODULOS = [
   './apiHttpClient', './permissionsController', './permissionsRepository', './tarefasController', './tarefasServico',
-  './historicoSocial', './historicoSocialController', './prospeccoesController', './notificacoesController', './clienteHistorico'
+  './historicoSocial', './historicoSocialController', './prospeccoesController', './notificacoesController', './clienteHistorico',
+  './tarefasAcoes'
 ];
 
 async function montar(dados) {
@@ -129,6 +131,9 @@ async function montar(dados) {
   for (const m of MODULOS) delete require.cache[require.resolve(m)];
   const app = express();
   app.use(express.json({ limit: '5mb' }));
+  // O vigia das ações de módulo, como no server.js, e um "módulo de pedidos" de mentira.
+  app.use('/api', require('./tarefasAcoes').observar);
+  app.put('/api/pedidos/:id/status', (req, res) => res.json({ success: true }));
   app.use('/api/tarefas', require('./tarefasController'));
   app.use('/api/prospeccoes', require('./prospeccoesController'));
   app.use('/api/notificacoes', require('./notificacoesController'));
@@ -527,6 +532,53 @@ test('sem o SQL: as telas recebem sql_pendente em vez de erro', async () => {
     // A prospecção continua funcionando sem as tarefas.
     const passo = await chamar(ctx.porta, '/api/prospeccoes/8/proximo-passo', { usuario: 1, method: 'PUT', corpo: { proximo_passo: 'Ligar', proximo_passo_data: dia(1) } });
     assert.strictEqual(passo.status, 200);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Ação de outro módulo (18/09/2026, 2ª rodada): a tarefa cobra "Despachar o
+// pedido" e conclui sozinha quando alguém despacha — seja quem for.
+// ---------------------------------------------------------------------------
+
+test('ação de módulo: só vale o que o responsável pode fazer, e a tarefa conclui quando a ação acontece', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // O catálogo marca o que cada um pode (a vendedora não despacha pedido).
+    const minhas = await chamar(ctx.porta, '/api/tarefas/acoes');
+    assert.strictEqual(minhas.status, 200);
+    assert.ok(minhas.json.acoes.find(a => a.chave === 'pedido.despachar').pode, 'Sup Admin pode tudo');
+    const daAna = await chamar(ctx.porta, '/api/tarefas/acoes?responsavel=2');
+    assert.strictEqual(daAna.json.acoes.find(a => a.chave === 'pedido.despachar').pode, false);
+
+    const semPermissao = await chamar(ctx.porta, '/api/tarefas', { usuario: 2, corpo: { titulo: 'Despachar', acao_chave: 'pedido.despachar', acao_registro: 40 } });
+    assert.strictEqual(semPermissao.status, 400, 'a vendedora não cria tarefa que cobra o que ela não pode fazer');
+    assert.match(semPermissao.json.error, /permissão/);
+
+    const semRegistro = await chamar(ctx.porta, '/api/tarefas', { corpo: { titulo: 'Despachar', acao_chave: 'pedido.despachar' } });
+    assert.strictEqual(semRegistro.status, 400);
+    assert.match(semRegistro.json.error, /o pedido/);
+
+    const criada = await chamar(ctx.porta, '/api/tarefas', { corpo: { titulo: 'Despachar o PED-40', acao_chave: 'pedido.despachar', acao_registro: 40, acao_rotulo: 'PED-40 — Loja Boa' } });
+    assert.strictEqual(criada.status, 201);
+    const t = ctx.tabelas.tarefas.find(x => x.id === criada.json.id);
+    assert.strictEqual(t.acao_registro, '40');
+    assert.strictEqual(t.pedido_id, 40, 'o pedido da ação vira o vínculo da tarefa');
+    const tela = await chamar(ctx.porta, `/api/tarefas/${t.id}`);
+    assert.strictEqual(tela.json.acao.rotulo, 'Despachar o pedido (Enviado)');
+    assert.strictEqual(tela.json.acao.registroRotulo, 'PED-40 — Loja Boa');
+
+    // Outro status do mesmo pedido não conta; "Enviado" (feito pelo João) conclui.
+    await chamar(ctx.porta, '/api/pedidos/40/status', { usuario: 3, method: 'PUT', corpo: { status: 'Produção' } });
+    await new Promise(r => setTimeout(r, 150));
+    assert.strictEqual(t.status, 'a_fazer');
+    await chamar(ctx.porta, '/api/pedidos/40/status', { usuario: 3, method: 'PUT', corpo: { status: 'Enviado' } });
+    for (let i = 0; i < 40 && t.status !== 'concluida'; i++) await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(t.status, 'concluida');
+    assert.match(t.resultado_nota, /João despachou o pedido \(PED-40 — Loja Boa\)/);
+    assert.strictEqual(avisosDe(ctx, 1, 'acao_concluida').length, 1, 'quem criou e responde é avisado');
+    assert.strictEqual(avisosDe(ctx, 3, 'acao_concluida').length, 0, 'quem fez a ação não');
   } finally {
     await ctx.encerrar();
   }

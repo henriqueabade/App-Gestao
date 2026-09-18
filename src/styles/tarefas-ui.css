@@ -109,7 +109,6 @@ dialog.tui-dialogo::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter:
 .tui-campo:disabled { opacity: 0.5; cursor: not-allowed; }
 .tui-campo::placeholder { color: var(--tui-texto-suave); }
 .tui-campo--curto { width: 4.5rem; flex: 0 0 auto; }
-select.tui-campo option { background: #2a0613; color: #fff; }
 input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark; }
 .tui-descricao { resize: vertical; min-height: 4.5rem; line-height: 1.5; }
 .tui-linha { display: flex; align-items: center; gap: 0.5rem; }
@@ -189,6 +188,28 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
 .tui-chip--info { --tui-chip-cor: var(--tui-info); }
 .tui-chip--ouro { --tui-chip-cor: var(--tui-destaque-claro); }
 .tui-chip--vinculo { --tui-chip-cor: #c4b5fd; }
+/* Ação de outro módulo: âmbar, com o raio. */
+.tui-chip--acao { --tui-chip-cor: #fbbf24; }
+[data-menu-theme="light"] .tui-chip--acao { --tui-chip-cor: #b45309; }
+.tui-acao { display: flex; flex-direction: column; gap: 0.5rem; }
+.tui-acao__resumo {
+    display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.75rem; border-radius: 0.75rem;
+    background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.tui-acao__resumo[hidden] { display: none; }
+.tui-acao__icone { width: 2rem; height: 2rem; flex-shrink: 0; border-radius: 0.6rem; display: grid; place-items: center; color: #1a0009; background: #fbbf24; }
+.tui-acao__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.tui-acao__texto strong { font-size: 0.85rem; color: var(--tui-texto-forte); }
+.tui-acao__texto span { font-size: 0.75rem; color: var(--tui-texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tui-acao__editor { display: flex; flex-direction: column; gap: 0.45rem; }
+.tui-acao__editor[hidden] { display: none; }
+.tui-acao__linha { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.45rem; }
+.tui-acao__registro:empty { display: none; }
+[data-menu-theme="light"] .tui-acao__resumo { background: #fffbeb; }
+
+/* Próximo passo da prospecção: cor própria (turquesa), não confunde com tipo nem vínculo. */
+.tui-chip--passo { --tui-chip-cor: #5eead4; font-weight: 700; }
+[data-menu-theme="light"] .tui-chip--passo { --tui-chip-cor: #0f766e; }
 .tui-chip--status.tui-chip--em_andamento { --tui-chip-cor: var(--tui-info); }
 .tui-chip--status.tui-chip--aguardando { --tui-chip-cor: var(--tui-aviso); }
 .tui-chip--status.tui-chip--concluida { --tui-chip-cor: var(--tui-sucesso); }
@@ -370,7 +391,6 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
 [data-menu-theme="light"] .tui-pessoa, [data-menu-theme="light"] .tui-participante, [data-menu-theme="light"] .tui-concluir__titulo,
 [data-menu-theme="light"] .tui-resultado[aria-checked="true"], [data-menu-theme="light"] .tui-meudia__ola,
 [data-menu-theme="light"] .tui-dia__numero strong, [data-menu-theme="light"] .tui-check--destaque, [data-menu-theme="light"] .tui-abas button[aria-selected="true"] { color: #0f172a; }
-[data-menu-theme="light"] select.tui-campo option { background: #fff; color: #0f172a; }
 [data-menu-theme="light"] input.tui-campo[type="date"], [data-menu-theme="light"] input.tui-campo[type="time"] { color-scheme: light; }
 [data-menu-theme="light"] .tui-avatar { color: #5b4510; background: rgba(182, 160, 62, 0.28); border-color: rgba(122, 92, 18, 0.25); }
 [data-menu-theme="light"] .tui-tarefa { background: #fff; }
@@ -398,6 +418,13 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
 .tui-dialogo .btn-secondary, .tui-escopo .btn-secondary { background: #8aa7f3; color: #0b1220; transition: all 150ms ease; }
 .tui-dialogo .btn-secondary:hover, .tui-escopo .btn-secondary:hover { background: #a5bcf7; }
 .cat { display: flex; flex-direction: column; gap: 1.1rem; }
+.cat__explica {
+    display: flex; align-items: flex-start; gap: 0.55rem; margin: 0; padding: 0.6rem 0.8rem; border-radius: 0.7rem;
+    font-size: 0.8rem; line-height: 1.5; color: var(--tui-texto);
+    background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.cat__explica > i { margin-top: 0.2rem; color: var(--tui-sucesso); }
+.cat__explica strong { color: var(--tui-texto-forte); }
 .cat__cartao { padding: 1rem 1.1rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--tui-borda-suave); }
 .cat__registrar { color: #0b1220 !important; }
 .cat__formulario { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem; border-radius: 0.9rem; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--tui-borda); }

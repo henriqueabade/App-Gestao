@@ -177,6 +177,7 @@
     }
     contatos.forEach((c, idx) => {
       const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td data-perm-col="col_ctt_nome" class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td data-perm-col="col_ctt_cargo" class="py-4 px-4 text-white">${c.cargo || ''}</td>

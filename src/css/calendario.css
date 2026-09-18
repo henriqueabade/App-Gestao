@@ -48,8 +48,11 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 .cal-titulo { margin: 0 0 0 0.6rem; font-size: 1.15rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-barra__direita { display: flex; align-items: center; gap: 0.5rem; }
 .cal-select { padding: 0.45rem 0.65rem; border-radius: 0.6rem; font-size: 0.83rem; color: #fff; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); }
-.cal-select option { background: #2a0613; }
 .cal-select[hidden] { display: none; }
+.cal-zoom { display: inline-flex; align-items: center; gap: 0.2rem; }
+.cal-zoom[hidden] { display: none; }
+.cal-zoom .cal-icone-botao:disabled { opacity: 0.35; cursor: not-allowed; }
+.cal-zoom__rotulo { min-width: 3.4rem; text-align: center; font-size: 0.75rem; font-weight: 700; color: rgba(255, 255, 255, 0.75); }
 
 /* ------------------------------------------------------------ corpo */
 
@@ -69,6 +72,8 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 .cal-camada__ponto { width: 0.7rem; height: 0.7rem; border-radius: 999px; flex-shrink: 0; }
 .cal-camada__rotulo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-camada__n { font-size: 0.68rem; font-weight: 700; padding: 0.02rem 0.4rem; border-radius: 999px; background: rgba(255, 255, 255, 0.1); }
+.cal-camada__n--zero { opacity: 0.45; }
+.cal-lado__periodo { text-transform: none; letter-spacing: 0; font-weight: 600; color: rgba(255, 255, 255, 0.45); }
 .cal-opcao { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.3rem; font-size: 0.82rem; color: rgba(255, 255, 255, 0.75); cursor: pointer; }
 .cal-opcao input { accent-color: var(--color-primary); }
 .cal-legenda { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 0.5rem; font-size: 0.74rem; color: rgba(255, 255, 255, 0.7); }
@@ -171,10 +176,16 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 .cal-grade__rolagem { flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto; }
 .cal-grade__corpo { position: relative; display: grid; grid-template-columns: 3.6rem repeat(var(--cal-colunas), minmax(0, 1fr)); }
 .cal-grade__horas { display: flex; flex-direction: column; border-right: 1px solid var(--cal-linha); }
-.cal-grade__horas span { height: 48px; flex-shrink: 0; padding-right: 0.4rem; text-align: right; font-size: 0.64rem; color: rgba(255, 255, 255, 0.4); transform: translateY(-0.45rem); }
+.cal-grade__horas span { flex-shrink: 0; padding-right: 0.4rem; text-align: right; font-size: 0.64rem; color: rgba(255, 255, 255, 0.4); transform: translateY(-0.45rem); }
+.cal-grade__horas .cal-grade__hora--sub { font-size: 0.56rem; color: rgba(255, 255, 255, 0.26); }
+/* Linhas da grade: a da hora (--cal-hora) e as finas de cada degrau do zoom
+   (--cal-sub: meia hora afastado, 15 min de perto) — as duas vêm do JS. */
+.cal-grade { --cal-hora: 48px; --cal-sub: 24px; }
 .cal-dia-coluna {
     position: relative; border-right: 1px solid var(--cal-linha); cursor: cell;
-    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 23px, rgba(255, 255, 255, 0.025) 23px, rgba(255, 255, 255, 0.025) 24px, transparent 24px, transparent 47px, var(--cal-linha) 47px, var(--cal-linha) 48px);
+    background-image:
+        repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--cal-hora) - 1px), var(--cal-linha) calc(var(--cal-hora) - 1px), var(--cal-linha) var(--cal-hora)),
+        repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--cal-sub) - 1px), rgba(255, 255, 255, 0.03) calc(var(--cal-sub) - 1px), rgba(255, 255, 255, 0.03) var(--cal-sub));
 }
 .cal-dia-coluna--fim { background-color: rgba(0, 0, 0, 0.08); }
 .cal-dia-coluna--hoje { background-color: rgba(182, 160, 62, 0.05); }
@@ -260,7 +271,6 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 [data-menu-theme="light"] .cal-evento__hora, [data-menu-theme="light"] .cal-evento__sub, [data-menu-theme="light"] .cal-pilula__hora { color: #475569; }
 [data-menu-theme="light"] .cal-celula--fora { background: #f8fafc; }
 [data-menu-theme="light"] .cal-visoes, [data-menu-theme="light"] .cal-select { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
-[data-menu-theme="light"] .cal-select option { background: #fff; }
 [data-menu-theme="light"] .cal-icone-botao { background: #f1f5f9; color: #334155; }
 [data-menu-theme="light"] .cal-ficha__linha strong, [data-menu-theme="light"] .cal-exportar__opcao strong { color: #0f172a; }
 /* o .module-header__title global tem cor clara fixa (ver dashboard.css) */
@@ -284,6 +294,9 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 [data-menu-theme="light"] .cal-feriado--facultativo { color: #92400e; background: #fef3c7; }
 [data-menu-theme="light"] .cal-feriado--municipal { color: #1d4ed8; background: #dbeafe; }
 [data-menu-theme="light"] .cal-grade__horas span, [data-menu-theme="light"] .cal-grade__canto--faixa { color: #94a3b8; }
+[data-menu-theme="light"] .cal-grade__horas .cal-grade__hora--sub { color: #cbd5e1; }
+[data-menu-theme="light"] .cal-zoom__rotulo { color: #334155; }
+[data-menu-theme="light"] .cal-lado__periodo { color: #94a3b8; }
 [data-menu-theme="light"] .cal-agenda__data span, [data-menu-theme="light"] .cal-agenda__hora, [data-menu-theme="light"] .cal-agenda__evento-sub { color: #64748b; }
 [data-menu-theme="light"] .cal-ficha__linha span, [data-menu-theme="light"] .cal-exportar__opcao small { color: #64748b; }
 [data-menu-theme="light"] .cal-ficha__detalhe { color: #334155; }

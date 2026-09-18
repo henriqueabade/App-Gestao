@@ -49,7 +49,11 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   // Categoria das preferências em que os avisos do histórico social entram.
   const CATEGORIA = 'sales';
-  const INTERVALO_MS = 60 * 1000;
+  // O sino pergunta a cada 10 s (pedido do dono em 18/09/2026: aviso tem de
+  // chegar "na hora", no sino e no Windows). Os lembretes e atrasos das
+  // tarefas, que o servidor gera a pedido, vão a cada 3 voltas (30 s).
+  const INTERVALO_MS = 10 * 1000;
+  const VOLTAS_PARA_TAREFAS = 3;
   const FOCO_MINIMO_MS = 15 * 1000;
 
   const preferenceKey = 'menu.notifications';
@@ -372,10 +376,14 @@ window.addEventListener('DOMContentLoaded', () => {
     tarefa_concluida: 'fa-circle-check',
     convite_tarefa: 'fa-user-plus',
     convite_respondido: 'fa-user-check',
+    mencao: 'fa-at',
+    acao_concluida: 'fa-bolt',
   };
   const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', tarefa: 'Tarefa' };
-  // O que vira notificação do Windows quando chega (não lido e novo).
-  const NO_SISTEMA = new Set(['tarefa_lembrete', 'tarefa_atrasada', 'tarefa_atribuida', 'convite_tarefa', 'convite_respondido', 'resposta', 'comentario']);
+  // O que vira notificação do Windows quando chega (não lido e novo): tudo,
+  // menos curtida — que fica só no sino, para não virar ruído.
+  const FORA_DO_WINDOWS = new Set(['curtida']);
+  const vaiParaOWindows = (tipo) => !FORA_DO_WINDOWS.has(tipo);
 
   async function dispensar(aviso) {
     avisos = avisos.filter((a) => a.id !== aviso.id);
@@ -574,7 +582,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     // Tarefa abre o editor por cima de onde a pessoa estiver (o comentário, na aba da conversa).
     if (aviso.origem === 'tarefa' && aviso.registro_id && window.TarefasUI?.abrirEditor) {
-      const conversa = ['comentario', 'resposta', 'observacao', 'curtida'].includes(aviso.tipo);
+      const conversa = ['comentario', 'resposta', 'observacao', 'curtida', 'mencao'].includes(aviso.tipo);
       window.TarefasUI.abrirEditor({
         id: aviso.registro_id, aba: conversa ? 'conversa' : 'detalhes',
         foco: conversa ? { itemId: aviso.item_id, comentarioId: aviso.comentario_id } : null,
@@ -655,7 +663,7 @@ window.addEventListener('DOMContentLoaded', () => {
     lista.forEach((n) => vistos.add(n.id));
     if (primeiraLeitura) { primeiraLeitura = false; return; }
     if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
-    for (const aviso of novos.filter((n) => NO_SISTEMA.has(n.tipo)).slice(0, 3)) {
+    for (const aviso of novos.filter((n) => vaiParaOWindows(n.tipo)).slice(0, 4)) {
       try {
         const n = new Notification(aviso.titulo || 'Aviso', { body: aviso.mensagem || '', tag: `sd-aviso-${aviso.id}` });
         n.onclick = () => { try { window.focus(); } catch (_) { /* segue */ } abrirAviso(aviso); n.close(); };
@@ -668,9 +676,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function iniciarVigia() {
     if (intervalo !== null || typeof window.setInterval !== 'function') return;
+    let volta = 0;
     intervalo = window.setInterval(async () => {
       if (!ativo()) return;
-      await gerarAvisosDeTarefas();
+      volta += 1;
+      if (volta % VOLTAS_PARA_TAREFAS === 0) await gerarAvisosDeTarefas();
       refreshNotifications({ respectDaily: false });
     }, INTERVALO_MS);
     // Logo depois de abrir: o lembrete que venceu com o app fechado já aparece.

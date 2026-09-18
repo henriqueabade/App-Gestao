@@ -34,6 +34,7 @@ const { usuarioDaRequisicao } = require('./usuarioAtual');
 const R = require('./tarefasRegras');
 const S = require('./tarefasServico');
 const social = require('./historicoSocial');
+const acoes = require('./tarefasAcoes');
 
 const router = express.Router();
 const { erro } = R;
@@ -185,6 +186,8 @@ async function paraTela(ctx, tarefas, participantes, { detalhe = false } = {}) {
       anexos: nAnexos.get(String(t.id)) || 0,
       atrasada: R.atrasada(t, agora),
       grupo: R.grupoDoPrazo(t, agora),
+      // A ação de outro módulo que esta tarefa cobra (conclui sozinha quando acontece).
+      acao: t.acao_chave ? { ...acoes.descreverAcao(t.acao_chave, t.acao_rotulo), registro: t.acao_registro ?? null } : null,
       criado_em: t.criado_em, atualizado_em: t.atualizado_em,
       pode: {
         editar: ctx.pode('tarefas.edit') && R.podeMexerNaTarefa(t, eu),
@@ -429,11 +432,106 @@ router.get('/convites', precisa('tarefas.view'), async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------ ações de outros módulos
+
+/** O que um usuário pode fazer (Admin e Sup Admin: tudo). Para conferir o responsável. */
+async function permissoesDoUsuario(api, usuarioId) {
+  const u = await api.get(`/api/usuarios/${Number(usuarioId)}`).catch(() => null);
+  if (!u || u.error) return { pode: () => false, nome: null };
+  if (R.ehGestor(u)) return { pode: () => true, nome: u.nome || null };
+  const permissoes = await permissoesRepo.loadPermissionsForUsuario(api, u).catch(() => null);
+  return { pode: chave => Boolean(permissoes) && permissoesRepo.can(permissoes, chave), nome: u.nome || null };
+}
+
+/**
+ * O catálogo das ações, marcando o que o RESPONSÁVEL pode fazer — é ele quem
+ * vai fazer (?responsavel=id; sem ele, quem está usando).
+ */
+router.get('/acoes', precisa('tarefas.view'), async (req, res) => {
+  try {
+    const ctx = req.ctxTarefas;
+    const responsavel = Number(req.query.responsavel) || ctx.usuarioId;
+    const { pode } = mesmoId(responsavel, ctx.usuarioId) ? { pode: ctx.pode } : await permissoesDoUsuario(ctx.api, responsavel);
+    res.json(acoes.catalogo(pode));
+  } catch (err) {
+    responderErro(res, err, 'ações');
+  }
+});
+
+/**
+ * Confere a ação que a tela mandou: o responsável precisa poder fazê-la, e o
+ * registro dela (pedido, orçamento…) vira também o vínculo da tarefa — assim
+ * ela aparece na ficha do cliente/prospecção como qualquer outra.
+ */
+async function conferirAcao(ctx, dados, { responsavelId, atual = {} } = {}) {
+  if (!dados.acao_chave) return;
+  const acao = acoes.ACOES.find(a => a.chave === dados.acao_chave);
+  const quem = mesmoId(responsavelId, ctx.usuarioId) ? { pode: ctx.pode, nome: null } : await permissoesDoUsuario(ctx.api, responsavelId);
+  if (!quem.pode(acao.permissao)) {
+    throw erro(400, `${quem.nome ? `${quem.nome} não tem` : 'Você não tem'} permissão para "${acao.rotulo}". Escolha outra ação ou outro responsável.`);
+  }
+  const tipo = acoes.MODULOS[acao.modulo].registro;
+  if (tipo === 'competencia') return;
+  const campo = `${tipo}_id`;
+  if (!dados[campo] && !atual[campo]) {
+    dados[campo] = Number(dados.acao_registro);
+    await conferirVinculos(ctx.api, { [campo]: dados[campo] });
+  }
+}
+
+/**
+ * A ação aconteceu no módulo (tarefasAcoes.observar viu a rota dar certo):
+ * conclui as tarefas abertas que a cobravam — seja quem for que fez —, com a
+ * nota de quem fez e quando, a atividade na ficha, a próxima da série e o
+ * aviso para quem acompanha.
+ */
+async function concluirPelaAcao(req, { chave, registro }) {
+  const api = createApiClient(req);
+  const usuarioId = Number(usuarioDaRequisicao(req)) || null;
+  let abertas;
+  try {
+    abertas = lista(await api.get('/api/tarefas', { query: { acao_chave: chave, acao_registro: String(registro) } }));
+  } catch (err) {
+    if (social.semTabela(err)) return [];
+    throw err;
+  }
+  abertas = abertas.filter(t => R.ABERTOS.has(t.status) && !t.excluida_em && t.acao_chave === chave && String(t.acao_registro) === String(registro));
+  if (!abertas.length) return [];
+  const nomes = await social.nomesDosUsuarios(api);
+  const quem = nomes.get(usuarioId) || 'Alguém';
+  const descricao = acoes.descreverAcao(chave);
+  const concluidas = [];
+  for (const t of abertas) {
+    const alvo = t.acao_rotulo ? ` (${t.acao_rotulo})` : '';
+    const nota = `Feito no módulo ${descricao.moduloRotulo}: ${quem} ${descricao.feito}${alvo}.`;
+    let interacao = null;
+    if (t.origem !== 'proximo_passo' && (t.prospeccao_id || t.cliente_id)) {
+      interacao = await registrarAtividade(api, t, { resultado: 'feito', nota, usuarioId }).catch(() => null);
+    }
+    await S.concluirTarefa(api, t, { usuarioId, resultado: 'feito', nota, interacao, nomes, registrarFicha: true });
+    const participantes = lista(await api.get('/api/tarefa_participantes', { query: { tarefa_id: t.id } }).catch(() => []));
+    if (t.recorrencia) await criarProximaDaSerie({ api, usuarioId }, t, participantes, nomes).catch(() => null);
+    const interessados = [t.criado_por, t.responsavel_id, ...participantes.filter(p => mesmoId(p.tarefa_id, t.id) && p.status === 'aceito').map(p => p.usuario_id)];
+    const para = social.destinatarios(interessados, usuarioId);
+    if (para.length) {
+      await social.notificar(api, para, {
+        tipo: 'acao_concluida', titulo: 'Tarefa concluída pelo módulo',
+        mensagem: `${quem} ${descricao.feito}${alvo} — "${t.titulo}" foi concluída sozinha.`,
+        origem: 'tarefa', registro_id: Number(t.id), autor_id: usuarioId
+      });
+    }
+    concluidas.push(t.id);
+  }
+  return concluidas;
+}
+
 router.get('/buscar-vinculos', precisa('tarefas.view'), async (req, res) => {
   try {
     const { api } = req.ctxTarefas;
     const q = texto(req.query.q).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     if (q.length < 2) return res.json({ resultados: [] });
+    // ?tipo=pedido: só pedidos (a "Ação no sistema" busca num módulo só).
+    const soTipo = ['cliente', 'prospeccao', 'orcamento', 'pedido'].includes(req.query.tipo) ? req.query.tipo : null;
     const casa = (...campos) => campos.some(c => String(c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(q));
     const digitos = q.replace(/\D/g, '');
     const [clientes, prospeccoes, orcamentos, pedidos] = await Promise.all([
@@ -452,7 +550,7 @@ router.get('/buscar-vinculos', precisa('tarefas.view'), async (req, res) => {
       ...lista(pedidos).filter(p => casa(p.numero) || casa(nomeCliente.get(String(p.cliente_id))))
         .slice(0, 6).map(p => ({ tipo: 'pedido', id: p.id, nome: p.numero || `#${p.id}`, detalhe: nomeCliente.get(String(p.cliente_id)) || null, cliente_id: p.cliente_id || null }))
     ];
-    res.json({ resultados });
+    res.json({ resultados: soTipo ? resultados.filter(r => r.tipo === soTipo) : resultados });
   } catch (err) {
     responderErro(res, err, 'buscar vínculos');
   }
@@ -700,6 +798,10 @@ router.post('/', precisa('tarefas.create'), async (req, res) => {
     const dados = R.normalizarTarefa(req.body || {});
     dados.responsavel_id = R.conferirResponsavel(dados.responsavel_id, { usuarioId: ctx.usuarioId, podeAtribuir: ctx.pode('tarefas.assign') });
     if (dados.status && !R.ABERTOS.has(dados.status)) delete dados.status;
+    if (req.body?.acao_chave) {
+      Object.assign(dados, acoes.normalizarAcao(req.body));
+      await conferirAcao(ctx, dados, { responsavelId: dados.responsavel_id });
+    }
     await conferirVinculos(api, dados);
     await conferirLista(api, dados.lista_id, ctx.usuarioId, ctx.gestor);
     const participantes = lista(req.body?.participantes).map(Number).filter(Boolean);
@@ -761,6 +863,11 @@ async function editar(req, res, { mover = false } = {}) {
     dados.responsavel_id = R.conferirResponsavel(dados.responsavel_id, { usuarioId: ctx.usuarioId, podeAtribuir: ctx.pode('tarefas.assign') });
   }
   if ('lista_id' in dados) await conferirLista(api, dados.lista_id, ctx.usuarioId, ctx.gestor);
+  if (Object.prototype.hasOwnProperty.call(corpo, 'acao_chave')) {
+    if (t.origem === 'proximo_passo' && corpo.acao_chave) throw erro(400, 'O próximo passo da prospecção não cobra ação de outro módulo.');
+    Object.assign(dados, acoes.normalizarAcao(corpo));
+    await conferirAcao(ctx, dados, { responsavelId: dados.responsavel_id ?? t.responsavel_id, atual: t });
+  }
   const vinculos = Object.fromEntries(['cliente_id', 'prospeccao_id', 'orcamento_id', 'pedido_id'].filter(c => c in dados).map(c => [c, dados[c]]));
   if (Object.keys(vinculos).length) await conferirVinculos(api, vinculos);
   if (req.body?.ordem !== undefined && Number.isFinite(Number(req.body.ordem))) dados.ordem = Number(req.body.ordem);
@@ -1081,3 +1188,4 @@ router.delete('/:id/participantes/:usuarioId', precisa('tarefas.view'), async (r
 module.exports = router;
 module.exports.acessoATarefa = acessoATarefa;
 module.exports.montarContexto = montarContexto;
+module.exports.concluirPelaAcao = concluirPelaAcao;

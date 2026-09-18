@@ -38,6 +38,8 @@
   const agora = new Date();
   agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
   get('interacaoData').value = agora.toISOString().slice(0, 16);
+  // Atividade é o que JÁ aconteceu: o calendário do campo não passa de agora.
+  get('interacaoData').max = agora.toISOString().slice(0, 16);
 
   // Contatos da prospecção: o backend recusa contato de outra, então a lista
   // só pode conter os desta.
@@ -117,6 +119,12 @@
     }
 
     const dataLocal = get('interacaoData').value;
+    // Um minuto de folga para o relógio da máquina; o backend confere de novo.
+    if (dataLocal && new Date(dataLocal).getTime() > Date.now() + 60000) {
+      showToast('A atividade registra o que já aconteceu: escolha uma data e hora até agora. Para algo futuro, preencha o próximo passo.', 'error');
+      get('interacaoData').focus();
+      return;
+    }
     const contatoId = get('interacaoContato').value;
     const proximoPasso = A.texto(get('interacaoProximoPasso').value);
     const proximoPassoData = get('interacaoProximoPassoData').value || null;

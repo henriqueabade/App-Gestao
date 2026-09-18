@@ -285,6 +285,73 @@ dialog :has(> table)::-webkit-scrollbar-thumb:hover,
   background: #d0a42e;
 }
 
+/* 3d) E o resto do programa também: TODA área que rola — lateral do
+   Calendário, colunas do Quadro de Tarefas, agenda, listas de um modal que não
+   é <dialog>, menus soltos no <body> — usa a mesma barra fina e dourada.
+   Antes cada tela nova nascia com a barra cinza e grossa do Windows, porque o
+   padrão só existia em #content, .table-scroll, .modal-scroll e <dialog>.
+
+   `:where(*)` zera a especificidade de propósito: qualquer regra de uma
+   tela (.scrollbar-hide, .ia-grade-revisao…) continua valendo por cima. */
+:where(*)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+:where(*)::-webkit-scrollbar-track,
+:where(*)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(*)::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 215, 0, 0.4);
+  border-radius: 3px;
+}
+
+:where(*)::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 215, 0, 0.6);
+}
+
+/* Área que rola uma tabela: o dourado cheio das tabelas dos módulos. */
+:where(:has(> table))::-webkit-scrollbar-thumb {
+  background: #f0c94c;
+  border-radius: 4px;
+}
+
+:where(:has(> table))::-webkit-scrollbar-thumb:hover {
+  background: #d0a42e;
+}
+
+/* Tema claro: o dourado translúcido some no fundo branco. */
+:where([data-menu-theme="light"]) :where(*)::-webkit-scrollbar-thumb {
+  background-color: rgba(181, 137, 27, 0.45);
+}
+
+/* 3e) Tabelas dos MODAIS: todas com as medidas das tabelas de Produtos
+   (.table-scroll), que acompanham a largura da tela. Antes cada modal tinha as
+   suas — cabeçalho de 12, 15 ou 16 px, célula apertada ou folgada. A moldura e
+   as cores são de tabelas-modais.css. As telas principais não entram
+   ([id$="Overlay"] é só modal), nem as folhas de relatório (.rp-tabela).
+
+   As grades de edição (itens do orçamento/pedido e a revisão da IA) só
+   uniformizam o cabeçalho: as células delas são campos, e têm medida própria. */
+[id$="Overlay"] table:not(.rp-tabela) th {
+  padding: clamp(0.35rem, 0.5rem + 0.2vw, 0.75rem);
+  font-size: clamp(0.7rem, 0.65rem + 0.4vw, 0.95rem);
+  line-height: 1.4;
+}
+
+[id$="Overlay"] table:not(.rp-tabela, .items-table, .ia-grade-revisao table) td {
+  padding: clamp(0.35rem, 0.5rem + 0.2vw, 0.75rem);
+  font-size: clamp(0.7rem, 0.65rem + 0.4vw, 0.95rem);
+  line-height: 1.4;
+}
+
+/* Primeira e última coluna um pouco mais para dentro: o texto não encosta na
+   curva da moldura. */
+[id$="Overlay"] table:not(.rp-tabela) :is(th, td):first-child { padding-left: 1.1rem; }
+[id$="Overlay"] table:not(.rp-tabela) :is(th, td):last-child { padding-right: 1.1rem; }
+
 /* 9) Evita seleção de texto ao arrastar */
 .no-select {
   user-select: none;

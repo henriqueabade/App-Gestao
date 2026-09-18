@@ -478,6 +478,22 @@ body {
     scrollbar-width: none;
 }
 
+/* Atividade = o que já aconteceu (sempre concluída) — explicação e selo. */
+.ativ-explica {
+    display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.7rem 0.9rem; border-radius: 0.8rem;
+    font-size: 0.82rem; line-height: 1.5; color: rgba(255, 255, 255, 0.8);
+    background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.ativ-explica > i { margin-top: 0.2rem; color: #4ade80; }
+.ativ-explica strong { color: #fff; }
+.ativ-feita {
+    display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.35rem; padding: 0.05rem 0.5rem; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; color: #4ade80; background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.3);
+}
+[data-menu-theme="light"] .ativ-explica { color: #334155; }
+[data-menu-theme="light"] .ativ-explica strong { color: #0f172a; }
+[data-menu-theme="light"] .ativ-feita, [data-menu-theme="light"] .ativ-explica > i { color: #047857; }
+
 .modal-prospeccao__abas::-webkit-scrollbar {
     display: none;
 }
