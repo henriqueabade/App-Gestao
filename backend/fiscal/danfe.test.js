@@ -102,7 +102,7 @@ test('montarDanfeHtml: página A4 retrato com os blocos, a chave formatada, o c�
   // Paginação: cada bloco inteiro (break-inside: avoid); linhas de item inteiras; cabeçalho da tabela repetido;
   // os dados adicionais são o último bloco e descem inteiros quando não cabem.
   assert.ok(html.includes('.bloco { break-inside: avoid; page-break-inside: avoid; }') && html.includes('tr { break-inside: avoid; page-break-inside: avoid; }') && html.includes('thead { display: table-header-group; }'));
-  assert.equal((html.match(/<div class="bloco">/g) || []).length, 6, 'cabeçalho, destinatário, fatura, imposto, transporte e dados adicionais');
+  assert.equal((html.match(/<div class="bloco">/g) || []).length, 7, 'cabeçalho, destinatário, fatura, imposto, transporte, ISSQN e dados adicionais');
   assert.ok(html.lastIndexOf('<div class="bloco">') < html.indexOf('Dados adicionais'), 'os dados adicionais são o último bloco');
   assert.ok(html.indexOf('Dados dos produtos / serviços') < html.lastIndexOf('<div class="bloco">'), 'a tabela de itens fica fora de bloco: pode continuar na folha seguinte');
   assert.ok(html.includes('SANTÍSSIMO DECOR LTDA SD'), 'marca dos volumes (sem fantasia na configuração do teste, vai a razão social + SD)');
@@ -142,8 +142,35 @@ test('vários volumes: o resumo soma pesos e quantidades e a tabela lista um por
   assert.equal(n.transporte.esp, 'Caixa, Engradado');
   assert.equal(n.transporte.pesoB, '30.500');
   assert.equal(n.transporte.pesoL, '27.000');
-  assert.equal(n.transporte.nVol, '1, 2');
+  // A numeração das caixas: a primeira e a última no resumo; cada uma na tabela.
+  assert.equal(n.transporte.nVol, '363_1/2 a 363_2/2');
+  assert.deepEqual(n.volumes.map(v => v.numeracao), ['363_1/2', '363_2/2']);
   const html = danfe.montarDanfeHtml(proc);
   assert.ok(html.includes('<table style="margin-top: -1px">'));
   assert.ok(html.includes('<td>Engradado</td>'));
+});
+
+test('quadro Cálculo do ISSQN: inscrição municipal, serviços, base e valor, entre os produtos e os dados adicionais', () => {
+  // Com a inscrição municipal na configuração, ela vai no <emit><IM> e o DANFE a mostra.
+  const montada = xmlNfe.montarNfe({
+    configuracao: { ...CONFIG, inscricao_municipal: '1234567', cnae: '3101200' }, ambiente: 'homologacao', serie: 1, numero: 364, cNF: '14000305',
+    dhEmi: new Date('2026-09-15T15:00:00-03:00'), pedido: PEDIDO, cliente: CLIENTE, itens: ITENS, produtos: PRODUTOS, parcelas: PARCELAS,
+    transporte: { modalidade_frete: 1, volumes_quantidade: 1, volumes_especie: 'Caixa' }, verProc: 'Santissimo 1.1.1'
+  });
+  const assinada = montada.xml.replace('</infNFe></NFe>', '</infNFe><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo></SignedInfo></Signature></NFe>');
+  const proc = sefaz.montarNfeProc(assinada, `<protNFe versao="4.00"><infProt><chNFe>${montada.chave}</chNFe><nProt>1</nProt><cStat>100</cStat><dhRecbto>2026-09-15T15:10:01-03:00</dhRecbto><xMotivo>ok</xMotivo></infProt></protNFe>`);
+  const n = danfe.lerNfe(proc);
+  assert.equal(n.emitente.im, '1234567');
+  assert.deepEqual(n.issqn, { vServ: '', vBC: '', vISS: '' }, 'nota só de produto: não há ISSQNtot');
+  assert.equal(n.transporte.nVol, '364_1/1', 'uma caixa só: 364_1/1');
+
+  const html = danfe.montarDanfeHtml(proc);
+  const quadro = html.slice(html.indexOf('Cálculo do ISSQN'), html.indexOf('Dados adicionais'));
+  assert.ok(quadro.length > 0, 'o quadro existe');
+  for (const rotulo of ['Inscrição municipal', 'Valor total dos serviços', 'Base de cálculo do ISSQN', 'Valor do ISSQN']) {
+    assert.ok(quadro.includes(`<span class="r">${rotulo}</span>`), rotulo);
+  }
+  assert.ok(quadro.includes('<span class="v">1234567</span>'), 'a inscrição municipal do emitente');
+  assert.equal((quadro.match(/<span class="v">0,00<\/span>/g) || []).length, 3, 'serviços, base e ISSQN zerados');
+  assert.ok(html.indexOf('Dados dos produtos / serviços') < html.indexOf('Cálculo do ISSQN'), 'depois dos produtos (leiaute oficial)');
 });

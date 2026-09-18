@@ -8,7 +8,7 @@
  *    colados na linha, grades que não abriam e modais na largura errada. As
  *    que faltavam foram para src/styles/utilitarios.css;
  *  - o botão Fechar/Cancelar do rodapé dos modais é vermelho (btn-danger);
- *  - o Conciliar BB é um botão azul ao lado do Atualizar;
+ *  - os botões do BB são azul escuro (btn-bb); "Ver relatório" é azul claro;
  *  - o Novo insumo tem o liga/desliga de estoque infinito, como o Editar;
  *  - o (i) do resumo em Prospecções e em Usuários usa o posicionador comum
  *    (window.Popover), que leva o balão para o <body>.
@@ -87,13 +87,13 @@ test('Fechar e Cancelar dos modais são vermelhos (btn-danger)', () => {
   assert.match(ler('js/modals/pedido-cancelar.js'), /data-action="cancel" class="btn-danger /);
 });
 
-test('Financeiro: Conciliar BB é botão azul à esquerda do Atualizar, e a faixa de texto saiu', () => {
+test('Financeiro: Conciliar BB é botão azul escuro à esquerda do Atualizar, e a faixa de texto saiu', () => {
   const html = ler('html/financeiro.html');
   const conciliar = html.indexOf('id="finConciliar"');
   const atualizar = html.indexOf('id="finAtualizar"');
   assert.ok(conciliar > 0 && atualizar > conciliar, 'Conciliar BB vem antes (à esquerda) do Atualizar');
   const tag = html.slice(html.lastIndexOf('<button', conciliar), html.indexOf('</button>', conciliar));
-  assert.match(tag, /class="btn-secondary /);
+  assert.match(tag, /class="btn-bb /);
   assert.match(tag, /data-fin-acao="conciliar"/);
   assert.match(tag, />\s*(?:<i[^>]*><\/i>\s*)?Conciliar BB\s*$/);
   assert.ok(!/fin-faixa[^"]*conciliar|>\s*Conciliar com o BB\s*</.test(html), 'o texto-link acima de Boletos em aberto não existe mais');
@@ -135,4 +135,51 @@ test('Produto (novo e editar): seta e "x de y preenchidos" da seção fiscal em 
     const regra = css.slice(css.indexOf(seletor), css.indexOf('}', css.indexOf(seletor)));
     assert.ok(regra.length > 0 && !/\bcolor\s*:/.test(regra), `${seletor} sem cor própria`);
   }
+});
+
+test('botões do Banco do Brasil: azul escuro (btn-bb, global) no Financeiro e em Pedidos', () => {
+  const css = ler('css/menu.css');
+  assert.match(css, /\.btn-bb \{\s*background: #1e3a8a;/, 'o mesmo azul escuro do Regra Produção, no menu.css (global)');
+  const alvos = [
+    ['html/financeiro.html', 'finConciliar'],
+    ['html/modals/financeiro/recebimentos.html', 'finRecebimentosConciliar'],
+    ['html/modals/financeiro/configuracao-cobranca.html', 'finCobTestar'],
+    ['html/modals/financeiro/configuracao-cobranca.html', 'finCobWebhookConciliar'],
+    ['html/modals/pedidos/boleto-detalhe.html', 'boletoDetalheSincronizar'],
+    ['html/modals/pedidos/gerar-boletos.html', 'consultarBoletosBB']
+  ];
+  for (const [arquivo, id] of alvos) {
+    const html = ler(arquivo);
+    const inicio = html.indexOf(`id="${id}"`);
+    const tag = html.slice(inicio, html.indexOf('>', inicio));
+    assert.match(tag, /class="(hidden )?btn-bb /, `${arquivo}#${id}`);
+  }
+  // Nenhum outro botão com "BB" no texto ficou de fora.
+  for (const f of arquivos('html', '.html')) {
+    for (const m of fs.readFileSync(f, 'utf8').matchAll(/<button\b([^>]*)>([^<]*\bBB\b[^<]*)<\/button>/g)) {
+      assert.match(m[1], /\bbtn-bb\b/, `${relativo(f)}: ${m[2].trim()}`);
+    }
+  }
+});
+
+test('Ver relatório / Ver itens: azul claro (btn-secondary)', () => {
+  for (const [arquivo, trecho] of [
+    ['html/modals/financeiro/aguardando-nfe.html', 'data-fin-relatorio="aguardando-nf"'],
+    ['html/modals/financeiro/comissoes-atrasadas.html', 'data-fin-relatorio="comissoes-atrasadas"'],
+    ['html/modals/financeiro/producao-competencia.html', 'id="finProdCompRelatorio"'],
+    ['html/modals/financeiro/fechar-competencia.html', 'id="finFechamentoVerItens"']
+  ]) {
+    const html = ler(arquivo);
+    const tag = html.slice(html.indexOf(trecho), html.indexOf('>', html.indexOf(trecho)));
+    assert.match(tag, /class="btn-secondary /, arquivo);
+  }
+});
+
+test('Fechar competência — produção: Tudo verde, Nada vermelho, Tudo pronto verde e o código da peça em etiqueta bordô', () => {
+  const js = ler('js/modals/financeiro-modais.js');
+  assert.ok(js.includes("criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo')"), 'Tudo verde');
+  assert.ok(js.includes("criar('button', 'btn-danger text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada')"), 'Nada vermelho');
+  assert.ok(js.includes("criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido')"), 'Tudo pronto verde');
+  assert.match(js, /const codigo = criar\('span', 'fin-tag-produto fin-tag-produto--bordo', peca\.codigo \|\| nomeInteiro\);\s*codigo\.title = nomeInteiro;/, 'só o código; o nome inteiro no hover');
+  assert.match(ler('css/financeiro.css'), /\.fin-tag-produto--bordo \{[^}]*background: #6a152c;/);
 });

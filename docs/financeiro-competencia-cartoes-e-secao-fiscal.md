@@ -136,9 +136,16 @@ Código: `montarAtividade` e as funções puras `juntarAtividade`,
 
 ## 7. Outros ajustes de tela
 
-- **Conciliar BB** virou botão azul à esquerda do Atualizar, no topo do
+- **Conciliar BB** virou botão à esquerda do Atualizar, no topo do
   módulo; o texto-link acima de "Boletos em aberto" saiu. No rodapé de
-  Recebimentos, o mesmo botão, também azul.
+  Recebimentos, o mesmo botão. Todo botão que fala com o Banco do Brasil
+  (Conciliar BB, Consultar no BB, Testar conexão BB) é **azul escuro**
+  (`btn-bb`, o mesmo do "Regra Produção"), no Financeiro e em Pedidos.
+- **Ver relatório** e **Ver itens**: azul claro (`btn-secondary`).
+- **Conciliação com o BB** (a caixa que aparece depois): cartões com os
+  números (avisos, boletos consultados, pagamentos, recebimentos lançados),
+  o detalhe por seção e as ocorrências em lista. Todas as caixas do app
+  seguem esse padrão agora: ver `docs/dialog-padrao.md`.
 - **Mês, ano e lupa do topo** com a mesma altura do Hoje e da engrenagem
   (44px), na mesma linha.
 - **Produto nas tabelas de produção** (modal de produção, relatórios de
@@ -147,8 +154,12 @@ Código: `montarAtividade` e as funções puras `juntarAtividade`,
 - **Título dos modais** não corta mais ("Produção da competência —
   Setembro/2…"): o meio do cabeçalho ficou com metade da largura.
 - **Filtro "Quem recebe"**: rótulo e caixa alinhados na mesma linha.
-- **Configuração de cobrança**: Atualizar azul, Processar avisos agora verde, e
-  20px antes de cada legenda ("Avisos recebidos", "Conciliações").
+- **Configuração de cobrança**: Atualizar azul claro, Processar avisos agora
+  verde, Conciliar BB e Testar conexão BB azul escuro, e 20px antes de cada
+  legenda ("Avisos recebidos", "Conciliações").
+- **Fechar competência — produção**: "Tudo pronto neste pedido" e "Tudo"
+  verdes, "Nada" vermelho; cada peça mostra só o **código numa etiqueta
+  bordô** (o nome inteiro aparece ao passar o mouse).
 
 ---
 

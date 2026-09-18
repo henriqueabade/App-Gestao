@@ -1,36 +1,41 @@
 // Script do módulo Calendário
 // Responsável por renderizar eventos e controlar filtros.
 
+/** Botão que ainda não funciona: a caixa da casa, não o alert do sistema. */
+function avisarEmDesenvolvimento() {
+    window.DialogPadrao?.info({ title: 'Função em desenvolvimento', tom: 'aviso', icone: 'fa-person-digging', message: 'Esta parte do Calendário ainda está sendo construída.' });
+}
+
 function menuCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function mesCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function semanaCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function diaCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function anteriorCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function proximoCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function hojeCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function novoEventoCalendarioHandler() {
-    alert('Função em desenvolvimento');
+    avisarEmDesenvolvimento();
 }
 
 function initCalendario() {

@@ -1643,7 +1643,8 @@ header.glass-surface {
 .btn-warning,
 .btn-neutral,
 .btn-preco-tabela,
-.btn-regra-producao {
+.btn-regra-producao,
+.btn-bb {
     white-space: nowrap;
 }
 
@@ -1664,6 +1665,29 @@ header.glass-surface {
 }
 
 .btn-regra-producao:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/**
+ * Botões que falam com o Banco do Brasil (Conciliar BB, Consultar no BB,
+ * Testar conexão BB): o mesmo azul escuro do "Regra Produção". Global porque
+ * o boleto de Pedidos abre por cima do Financeiro, e só a folha de um módulo
+ * fica carregada por vez.
+ */
+.btn-bb {
+    background: #1e3a8a;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-bb:hover:not(:disabled) {
+    background: #1e40af;
+    transform: scale(1.05);
+}
+
+.btn-bb:disabled {
     opacity: 0.55;
     cursor: not-allowed;
     transform: none;

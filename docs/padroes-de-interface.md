@@ -272,12 +272,27 @@ correção ocupando a tela inteira (`max-w-xl`).
 | Fechar / Cancelar do rodapé | `btn-danger` (vermelho) |
 | Voltar (cabeçalho) | `btn-neutral` |
 | Ação principal (Salvar, Registrar, Atualizar do módulo) | `btn-primary` (dourado) |
-| Confirmar | `btn-success` (verde) |
-| Consulta ao banco (Conciliar BB, Consultar no BB, Atualizar de uma lista) | `btn-secondary` (azul) |
+| Confirmar, "Tudo" / "Tudo pronto" | `btn-success` (verde) |
+| "Nada" (desfaz a escolha) | `btn-danger` (vermelho) |
+| Tudo o que fala com o Banco do Brasil (Conciliar BB, Consultar no BB, Testar conexão BB) | `btn-bb` (azul escuro, global em `menu.css`) |
+| Consulta dentro do app (Ver relatório, Ver itens, Atualizar de uma lista) | `btn-secondary` (azul claro) |
 
 Exceção: numa confirmação de **exclusão**, o vermelho é o "Excluir"; o
 Cancelar ao lado fica neutro, para não haver dois vermelhos. O teste acima
-confere o Fechar/Cancelar de todos os modais em `src/html/modals`.
+confere o Fechar/Cancelar de todos os modais em `src/html/modals` e o
+`btn-bb` de todo botão com "BB" no texto.
+
+### Caixas de aviso e de confirmação
+
+Toda caixa (aviso, erro, sucesso, confirmação) é o `DialogPadrao`
+(`src/components/dialogPadrao.js` + `src/styles/dialogo-padrao.css`, ver
+`docs/dialog-padrao.md`). Nada de caixa montada à mão só com título e
+parágrafo, nem `alert()` do sistema. Caixa com muita informação vai
+**estruturada**: `resumo` (cartões de número), `secoes` (com `itens`
+rótulo → valor ou `lista`), `alerta` (o que não tem volta) e `nota`. Caixa
+antiga que só manda `message` é organizada sozinha (linhas "Rótulo: valor",
+listas com "•", o "não tem volta" no quadro vermelho). Coberto por
+`src/js/__tests__/dialogPadrao.test.js`.
 
 ### Modal que abre outro por cima
 

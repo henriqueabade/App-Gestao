@@ -153,54 +153,28 @@ async function popularClientes() {
         console.error('Erro ao carregar clientes', err);
     }
 }
-function showPdfUnavailableDialog(id) {
-    const overlay = document.createElement('div');
-    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-    overlay.style.zIndex = 'var(--z-dialog)';
-    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
-        <div class="p-6 text-center">
-            <h3 class="text-lg font-semibold mb-4 text-red-400">Função Indisponível</h3>
-            <p class="text-sm text-gray-300 mb-6">Não é possivel gerar PDF para Orçamentos em RASCUNHO!</p>
-            <div class="flex justify-center gap-4">
-                <button id="pdfConvert" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">
-                    Converter <span class="info-icon" title="muda status para pendente"></span>
-                </button>
-                <button id="pdfOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
-            </div>
-        </div>
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#pdfOk').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#pdfConvert').addEventListener('click', async () => {
-        try {
-            await fetchApi(`/api/orcamentos/${id}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ situacao: 'Pendente' })
-            });
-            overlay.remove();
-            carregarOrcamentos();
-        } catch (err) {
-            console.error('Erro ao atualizar status', err);
-        }
+async function showPdfUnavailableDialog(id) {
+    const converter = await window.DialogPadrao?.confirm({
+        title: 'PDF indisponível', tom: 'aviso', icone: 'fa-file-pdf',
+        message: 'Orçamento em RASCUNHO não gera PDF.',
+        nota: '"Converter para Pendente" muda a situação do orçamento; depois disso o PDF pode ser gerado.',
+        confirmText: 'Converter para Pendente', cancelText: 'OK', confirmVariant: 'primary'
     });
+    if (!converter) return;
+    try {
+        await fetchApi(`/api/orcamentos/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ situacao: 'Pendente' })
+        });
+        carregarOrcamentos();
+    } catch (err) {
+        console.error('Erro ao atualizar status', err);
+    }
 }
 
 function showFunctionUnavailableDialog(message) {
-    const overlay = document.createElement('div');
-    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-    overlay.style.zIndex = 'var(--z-dialog)';
-    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
-        <div class="p-6 text-center">
-            <h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3>
-            <p class="text-sm text-gray-300 mb-6">${message}</p>
-            <div class="flex justify-center">
-                <button id="funcUnavailableOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
-            </div>
-        </div>
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
+    window.DialogPadrao?.info({ title: 'Função indisponível', tom: 'aviso', icone: 'fa-lock', message });
 }
 
 function openQuoteModal(htmlPath, scriptPath, overlayId) {

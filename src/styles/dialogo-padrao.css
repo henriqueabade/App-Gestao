@@ -1,0 +1,375 @@
+/* ---------------------------------------------------------------------------
+   Caixa de diálogo padrão (src/components/dialogPadrao.js).
+
+   Antes a caixa era um título e um parágrafo de texto corrido: aviso de
+   conciliação, regra de produção, resumo de devolução — tudo virava uma
+   parede de texto sem hierarquia. Agora ela tem:
+
+     - o ícone do tom (informação, sucesso, atenção, erro, pergunta) num
+       círculo, o título e um subtítulo opcional;
+     - um resumo em cartões (rótulo pequeno + número grande), como os
+       cartões dos módulos;
+     - seções com título e ícone, cada uma com texto, lista ou pares
+       "rótulo → valor" alinhados;
+     - o aviso que não tem volta num quadro de alerta, e a observação final
+       num quadro de nota.
+
+   Global (carregada pelo menu.html): a caixa abre em qualquer módulo, e a
+   folha de um módulo só existe enquanto ele está aberto. Não depende de
+   classe do Tailwind — o pré-compilado não tem todas.
+   --------------------------------------------------------------------------- */
+
+dialog[data-dialog-padrao]::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+.dlg-cartao {
+    --dlg-tom: var(--color-primary-light, #d4c169);
+    --dlg-tom-fundo: rgba(182, 160, 62, 0.16);
+    --dlg-tom-borda: rgba(182, 160, 62, 0.38);
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: min(86vh, 46rem);
+    border-radius: 1.25rem;
+    border: 1px solid var(--menu-surface-border-strong, rgba(255, 255, 255, 0.12));
+    background:
+        linear-gradient(180deg, var(--dlg-tom-fundo) 0%, transparent 7.5rem),
+        linear-gradient(to bottom right, rgba(61, 2, 31, 0.94), rgba(38, 4, 20, 0.92));
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    color: var(--menu-text-primary, rgba(255, 255, 255, 0.88));
+    overflow: hidden;
+    animation: dlgEntrar 160ms ease-out;
+}
+
+@keyframes dlgEntrar {
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dlg-cartao { animation: none; }
+}
+
+.dlg-cartao--sucesso { --dlg-tom: var(--color-green, #a2ffa6); --dlg-tom-fundo: rgba(162, 255, 166, 0.13); --dlg-tom-borda: rgba(162, 255, 166, 0.35); }
+.dlg-cartao--aviso { --dlg-tom: #fbbf24; --dlg-tom-fundo: rgba(251, 191, 36, 0.13); --dlg-tom-borda: rgba(251, 191, 36, 0.38); }
+.dlg-cartao--erro { --dlg-tom: #ff7a7a; --dlg-tom-fundo: rgba(255, 88, 88, 0.15); --dlg-tom-borda: rgba(255, 88, 88, 0.4); }
+.dlg-cartao--pergunta { --dlg-tom: var(--color-blue, #8aa7f3); --dlg-tom-fundo: rgba(138, 167, 243, 0.14); --dlg-tom-borda: rgba(138, 167, 243, 0.38); }
+
+/* ---------------------------------------------------------------- topo */
+
+.dlg-topo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 1.6rem 1.75rem 1.1rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.dlg-icone {
+    width: 3.25rem;
+    height: 3.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--dlg-tom-fundo);
+    border: 1px solid var(--dlg-tom-borda);
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.03);
+    color: var(--dlg-tom);
+    font-size: 1.35rem;
+    margin-bottom: 0.45rem;
+}
+
+.dlg-titulo {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--menu-text-strong, #fff);
+}
+
+.dlg-subtitulo {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--menu-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+/* --------------------------------------------------------------- corpo */
+
+.dlg-corpo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 0 1.75rem 1.4rem;
+    overflow-y: auto;
+    min-height: 0;
+    text-align: left;
+}
+
+.dlg-lead {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78));
+    text-align: center;
+}
+
+.dlg-paragrafo {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78));
+}
+
+.dlg-paragrafo strong,
+.dlg-lead strong { color: var(--menu-text-strong, #fff); font-weight: 600; }
+
+/* Resumo em cartões: rótulo pequeno em cima, número grande embaixo. */
+.dlg-resumo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    gap: 0.6rem;
+}
+
+.dlg-resumo__cartao {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.8rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--menu-surface-border-strong, rgba(255, 255, 255, 0.12));
+    min-width: 0;
+}
+
+.dlg-resumo__rotulo {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--menu-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.dlg-resumo__valor {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--menu-text-strong, #fff);
+    overflow-wrap: anywhere;
+}
+
+.dlg-resumo__dica {
+    font-size: 0.72rem;
+    color: var(--menu-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+/* Seções: um quadro com título e ícone. */
+.dlg-secao {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.9rem 1rem;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--menu-surface-border, rgba(255, 255, 255, 0.08));
+}
+
+.dlg-secao__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-primary-light, #d4c169);
+}
+
+.dlg-secao__titulo i { width: 1rem; text-align: center; opacity: 0.9; }
+
+/* Pares rótulo → valor, alinhados em duas colunas. */
+.dlg-itens {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+.dlg-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 0;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.dlg-item:first-child { border-top: 0; padding-top: 0.1rem; }
+.dlg-item:last-child { padding-bottom: 0.1rem; }
+
+.dlg-item__rotulo {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0;
+    min-width: 0;
+    font-size: 0.85rem;
+    color: var(--menu-text-primary, rgba(255, 255, 255, 0.88));
+}
+
+.dlg-item__valor {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+    color: var(--menu-text-strong, #fff);
+}
+
+.dlg-item__detalhe {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--menu-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+/* Valor longo (frase inteira): vai para baixo do rótulo, sem cortar. */
+.dlg-item--texto { grid-template-columns: minmax(0, 1fr); }
+.dlg-item--texto .dlg-item__valor { text-align: left; white-space: normal; font-weight: 500; color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78)); }
+
+.dlg-valor--sucesso { color: var(--color-green, #a2ffa6) !important; }
+.dlg-valor--aviso { color: #fbbf24 !important; }
+.dlg-valor--erro { color: #ff7a7a !important; }
+.dlg-valor--info { color: var(--color-primary-light, #d4c169) !important; }
+
+/* Etiqueta pequena (código da peça, contagem). */
+.dlg-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: rgba(212, 193, 105, 0.18);
+    color: var(--color-primary-light, #d4c169);
+    border: 1px solid rgba(212, 193, 105, 0.35);
+    white-space: nowrap;
+}
+
+/* Lista com marcador do tom. */
+.dlg-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dlg-lista li {
+    position: relative;
+    padding-left: 1.1rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78));
+    overflow-wrap: anywhere;
+}
+
+.dlg-lista li::before {
+    content: '';
+    position: absolute;
+    left: 0.15rem;
+    top: 0.55em;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    background: var(--dlg-tom);
+}
+
+/* Quadros de alerta (o que não tem volta) e de nota (observação). */
+.dlg-alerta,
+.dlg-nota {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.8rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.dlg-alerta {
+    background: rgba(255, 88, 88, 0.12);
+    border: 1px solid rgba(255, 88, 88, 0.35);
+    color: #ffd0d0;
+}
+
+.dlg-alerta i { color: #ff7a7a; margin-top: 0.15rem; }
+
+.dlg-nota {
+    background: rgba(138, 167, 243, 0.1);
+    border: 1px solid rgba(138, 167, 243, 0.28);
+    color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78));
+}
+
+.dlg-nota i { color: var(--color-blue, #8aa7f3); margin-top: 0.15rem; }
+
+/* -------------------------------------------------------------- rodapé */
+
+.dlg-rodape {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem 1.75rem 1.35rem;
+    border-top: 1px solid var(--menu-surface-border, rgba(255, 255, 255, 0.08));
+    flex-shrink: 0;
+}
+
+.dlg-rodape button {
+    min-width: 8rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: 0.6rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #fff;
+}
+
+/* btn-success mora nas folhas dos módulos: aqui ele precisa existir sozinho
+   (a caixa abre em qualquer tela), como os outros botões em menu.css. */
+.dlg-rodape .btn-success { background: var(--color-green, #a2ffa6); color: #000; transition: all 150ms ease; }
+.dlg-rodape .btn-success:hover { background: rgba(162, 255, 166, 0.8); transform: scale(1.05); }
+
+/* ---------------------------------------------------------- tema claro */
+
+[data-menu-theme="light"] .dlg-cartao {
+    background:
+        linear-gradient(180deg, var(--dlg-tom-fundo) 0%, transparent 7.5rem),
+        #ffffff;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+}
+
+[data-menu-theme="light"] .dlg-resumo__cartao,
+[data-menu-theme="light"] .dlg-secao { background: rgba(15, 23, 42, 0.03); }
+[data-menu-theme="light"] .dlg-item { border-top-color: rgba(15, 23, 42, 0.1); }
+[data-menu-theme="light"] .dlg-alerta { color: #991b1b; }
+[data-menu-theme="light"] .dlg-cartao--aviso { --dlg-tom: #b45309; }
+[data-menu-theme="light"] .dlg-cartao--erro { --dlg-tom: #dc2626; }
+[data-menu-theme="light"] .dlg-valor--aviso { color: #b45309 !important; }
+[data-menu-theme="light"] .dlg-valor--erro { color: #dc2626 !important; }
+/* Cores fixas no claro: a folha de alguns módulos redefine --color-green e
+   --color-primary-light com os tons do escuro, que somem no fundo branco. */
+[data-menu-theme="light"] .dlg-valor--sucesso { color: #047857 !important; }
+[data-menu-theme="light"] .dlg-valor--info { color: #7a5c12 !important; }
+[data-menu-theme="light"] .dlg-cartao--sucesso { --dlg-tom: #047857; }
+[data-menu-theme="light"] .dlg-cartao--info { --dlg-tom: #7a5c12; }
+[data-menu-theme="light"] .dlg-secao__titulo { color: #7a5c12; }
+[data-menu-theme="light"] .dlg-rodape .btn-success { background: #047857; color: #fff; }

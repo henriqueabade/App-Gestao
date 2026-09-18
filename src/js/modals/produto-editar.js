@@ -176,12 +176,7 @@
     }
 
     function showFunctionUnavailableDialog(message){
-      const overlay=document.createElement('div');
-      overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-      overlay.style.zIndex = 'var(--z-dialog)';
-      overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center"><button id="funcUnavailableOk" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">OK</button></div></div></div>`;
-      document.body.appendChild(overlay);
-      overlay.querySelector('#funcUnavailableOk').addEventListener('click',()=>overlay.remove());
+      window.DialogPadrao?.info({ title: 'Função indisponível', tom: 'aviso', icone: 'fa-lock', message });
     }
 
     const produtoSelecionado = window.produtoSelecionado;
@@ -759,7 +754,7 @@
       if (!regra) return;
       window.DialogPadrao?.info({
         title: 'Regra Produção',
-        message: regra.resumo({ codigo: codigoInput?.value.trim() || produtoSelecionado.codigo, nome: nomeInput?.value.trim() || produtoSelecionado.nome })
+        ...regra.caixa({ codigo: codigoInput?.value.trim() || produtoSelecionado.codigo, nome: nomeInput?.value.trim() || produtoSelecionado.nome })
       });
     });
 

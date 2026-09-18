@@ -1,12 +1,17 @@
+<!-- Aviso: já existe um insumo com o nome digitado.
+     Mesmo visual da caixa padrão (src/styles/dialogo-padrao.css). -->
 <div id="duplicadoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
-    <div class="p-6 text-center">
-      <h3 class="text-lg font-semibold mb-4 text-yellow-400">Atenção</h3>
-      <p class="text-sm text-gray-300">Já existe um insumo com este nome.</p>
-      <div class="flex justify-center mt-6">
-        <button id="fecharDuplicado" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button>
-      </div>
+  <div class="dlg-cartao dlg-cartao--aviso" style="width: min(30rem, calc(100vw - 2rem))" role="dialog" aria-modal="true" aria-labelledby="duplicadoTitulo">
+    <div class="dlg-topo">
+      <div class="dlg-icone"><i class="fas fa-clone" aria-hidden="true"></i></div>
+      <h3 id="duplicadoTitulo" class="dlg-titulo">Insumo já cadastrado</h3>
+    </div>
+    <div class="dlg-corpo">
+      <p class="dlg-lead">Já existe um insumo com este nome.</p>
+      <div class="dlg-nota"><i class="fas fa-circle-info" aria-hidden="true"></i><span>Use outro nome ou edite o insumo que já existe.</span></div>
+    </div>
+    <div class="dlg-rodape">
+      <button id="fecharDuplicado" type="button" class="btn-primary">OK</button>
     </div>
   </div>
 </div>
-

@@ -464,23 +464,28 @@
       );
     }
 
-    const linhasResumo = [];
-    if (ignorados.length) {
-      linhasResumo.push(
-        `Não convertidos (revisão cancelada):\n` +
-        ignorados.map(o => `• ${o.numero || o.id}`).join('\n')
-      );
-    }
-    if (falhas.length) {
-      linhasResumo.push(
-        `Com erro:\n` +
-        falhas.map(f => `• ${f.orcamento.numero || f.orcamento.id}: ${f.motivo}`).join('\n')
-      );
-    }
-    if (linhasResumo.length) {
+    if (ignorados.length || falhas.length) {
+      const secoes = [];
+      if (ignorados.length) {
+        secoes.push({ titulo: 'Não convertidos (revisão cancelada)', icone: 'fa-rotate-left', lista: ignorados.map(o => String(o.numero || o.id)) });
+      }
+      if (falhas.length) {
+        secoes.push({
+          titulo: 'Com erro', icone: 'fa-circle-xmark',
+          itens: falhas.map(f => ({ rotulo: String(f.orcamento.numero || f.orcamento.id), valor: f.motivo }))
+        });
+      }
       await window.DialogPadrao?.info?.({
         title: convertidos.length ? 'Conversão parcial' : 'Nenhum orçamento convertido',
-        message: linhasResumo.join('\n\n')
+        tom: falhas.length ? 'erro' : 'aviso',
+        icone: 'fa-right-left',
+        resumo: [
+          { rotulo: 'Convertidos', valor: String(convertidos.length), tom: convertidos.length ? 'sucesso' : undefined },
+          { rotulo: 'Não convertidos', valor: String(ignorados.length), tom: ignorados.length ? 'aviso' : undefined },
+          { rotulo: 'Com erro', valor: String(falhas.length), tom: falhas.length ? 'erro' : undefined }
+        ],
+        secoes,
+        nota: 'Os que não foram convertidos continuam na lista de orçamentos: é só abrir de novo.'
       });
     }
 

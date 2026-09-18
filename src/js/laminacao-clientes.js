@@ -273,7 +273,7 @@ function initClientes() {
         openModalWithSpinner('modals/laminacao-clientes/novo.html', '../js/modals/laminacao-clientes/cliente-novo.js', 'novoCliente');
     });
 
-    const emDesenvolvimento = () => alert('Função em desenvolvimento');
+    const emDesenvolvimento = () => window.DialogPadrao?.info({ title: 'Função em desenvolvimento', tom: 'aviso', icone: 'fa-person-digging', message: 'Esta ação ainda está sendo construída.' });
     document.getElementById('btnExportarCSV')?.addEventListener('click', emDesenvolvimento);
     document.getElementById('btnImportarCSV')?.addEventListener('click', emDesenvolvimento);
     document.getElementById('btnGerarRelatorio')?.addEventListener('click', emDesenvolvimento);

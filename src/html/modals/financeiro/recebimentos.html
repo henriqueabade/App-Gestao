@@ -4,7 +4,7 @@
   a receber na competência, em atraso e todas as parcelas em aberto. Cada
   parcela pode ser recebida à mão ("Registrar", por cima) ou ter o boleto
   aberto (modal "Boleto" dos Pedidos, por cima); o recebimento lançado à mão
-  pode ser estornado. "Conciliar BB" (azul, como no módulo) no rodapé. Só texto nos botões.
+  pode ser estornado. "Conciliar BB" (azul escuro, como no módulo) no rodapé. Só texto nos botões.
   Script: src/js/modals/financeiro-modais.js.
 -->
 <div id="finRecebimentosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
@@ -96,7 +96,7 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="finRecebimentosConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-secondary px-6 py-2 rounded-lg text-white font-medium min-w-[160px]" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">Conciliar BB</button>
+      <button id="finRecebimentosConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-bb px-6 py-2 rounded-lg text-white font-medium min-w-[160px]" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">Conciliar BB</button>
       <button id="finRecebimentosRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Registrar recebimento</button>
     </footer>
   </div>

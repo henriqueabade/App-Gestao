@@ -442,7 +442,8 @@
       const tr = document.createElement('tr');
       const numero = document.createElement('td');
       numero.className = 'px-4 py-2 text-white';
-      numero.textContent = String(linha.numero);
+      // A caixa e o total; na nota ela vira "nº da nota_caixa/total" (backend/fiscal/xmlNfe.js).
+      numero.textContent = `${linha.numero}/${volumesLinhas.length}`;
       tr.appendChild(numero);
       for (const [chave, largura, modo] of [['especie', 'w-full min-w-[10rem]', 'text'], ['peso_bruto', 'w-32', 'decimal'], ['peso_liquido', 'w-32', 'decimal']]) {
         const td = document.createElement('td');

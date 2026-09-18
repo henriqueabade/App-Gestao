@@ -6,7 +6,7 @@
  * notas_fiscais.xml_autorizado. Os blocos são os do leiaute oficial: canhoto
  * de recebimento, emitente (com a logo) e chave com código de barras
  * (Code 128 C), destinatário, fatura/duplicatas, cálculo do imposto,
- * transportador e volumes, produtos, dados adicionais. Em homologação e em
+ * transportador e volumes, produtos, cálculo do ISSQN, dados adicionais. Em homologação e em
  * nota cancelada a marca d'água diz isso na página.
  *
  * Sem biblioteca de XML nem de código de barras: o XML é o nosso (regulares
@@ -123,6 +123,9 @@ function lerNfe(xmlNfeProc) {
   const dest = bloco(inf, 'dest') || '';
   const enderDest = bloco(dest, 'enderDest') || '';
   const total = bloco(bloco(inf, 'total') || '', 'ICMSTot') || '';
+  // ISSQN: só existe em nota com serviço. Sem ele, o quadro sai zerado (como
+  // no leiaute oficial), com a inscrição municipal do emitente.
+  const issqn = bloco(bloco(inf, 'total') || '', 'ISSQNtot') || '';
   const transp = bloco(inf, 'transp') || '';
   const transporta = bloco(transp, 'transporta') || '';
   const cobr = bloco(inf, 'cobr') || '';
@@ -146,6 +149,11 @@ function lerNfe(xmlNfeProc) {
     quantidade: texto(v, 'qVol'), especie: texto(v, 'esp'), marca: texto(v, 'marca'), numeracao: texto(v, 'nVol'), pesoL: texto(v, 'pesoL'), pesoB: texto(v, 'pesoB')
   }));
   const soma = chave2 => volumes.reduce((s, v) => s + (Number(v[chave2]) || 0), 0);
+  // "125_1/3 a 125_3/3": a primeira e a última caixa (cada <vol> pode já ser uma faixa).
+  const numeracoes = volumes.map(v => v.numeracao).filter(Boolean);
+  const faixaDeCaixas = numeracoes.length > 1
+    ? `${numeracoes[0].split(' a ')[0]} a ${numeracoes[numeracoes.length - 1].split(' a ').pop()}`
+    : (numeracoes[0] || '');
   const distintos = chave2 => [...new Set(volumes.map(v => v[chave2]).filter(Boolean))].join(', ');
 
   return {
@@ -167,11 +175,12 @@ function lerNfe(xmlNfeProc) {
       vFrete: texto(total, 'vFrete'), vSeg: texto(total, 'vSeg'), vDesc: texto(total, 'vDesc'), vOutro: texto(total, 'vOutro'), vIPI: texto(total, 'vIPI'),
       vNF: texto(total, 'vNF'), vTotTrib: texto(total, 'vTotTrib')
     },
+    issqn: { vServ: texto(issqn, 'vServ'), vBC: texto(issqn, 'vBC'), vISS: texto(issqn, 'vISS') },
     transporte: {
       modFrete: texto(transp, 'modFrete'), nome: texto(transporta, 'xNome'), cnpj: texto(transporta, 'CNPJ'), ie: texto(transporta, 'IE'),
       endereco: texto(transporta, 'xEnder'), municipio: texto(transporta, 'xMun'), uf: texto(transporta, 'UF'),
       qVol: volumes.length ? String(soma('quantidade')) : '', esp: distintos('especie'), marca: distintos('marca'),
-      nVol: volumes.length > 1 ? volumes.map(v => v.numeracao).filter(Boolean).join(', ') : (volumes[0]?.numeracao || ''),
+      nVol: faixaDeCaixas,
       pesoL: volumes.length ? soma('pesoL').toFixed(3) : '', pesoB: volumes.length ? soma('pesoB').toFixed(3) : ''
     },
     volumes,
@@ -268,7 +277,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
   // Vários volumes detalhados: uma linha por volume, além do resumo.
   const volumesDetalhados = n.volumes.length > 1
     ? `<table style="margin-top: -1px"><thead><tr><th>Volume</th><th>Espécie</th><th>Marca</th><th>Numeração</th><th>Peso bruto</th><th>Peso líquido</th></tr></thead><tbody>${
-      n.volumes.map((v, i) => `<tr><td class="cen">${esc(v.numeracao || String(i + 1))}</td><td>${esc(v.especie)}</td><td>${esc(v.marca)}</td><td class="cen">${esc(v.numeracao)}</td><td class="dir">${v.pesoB ? quantidade(v.pesoB) : ''}</td><td class="dir">${v.pesoL ? quantidade(v.pesoL) : ''}</td></tr>`).join('')
+      n.volumes.map((v, i) => `<tr><td class="cen">${i + 1}</td><td>${esc(v.especie)}</td><td>${esc(v.marca)}</td><td class="cen">${esc(v.numeracao)}</td><td class="dir">${v.pesoB ? quantidade(v.pesoB) : ''}</td><td class="dir">${v.pesoL ? quantidade(v.pesoL) : ''}</td></tr>`).join('')
     }</tbody></table>`
     : '';
 
@@ -402,6 +411,16 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     </tr></thead>
     <tbody>${linhasItens}</tbody>
   </table>
+
+  <div class="bloco">
+  <div class="titulo">Cálculo do ISSQN</div>
+  <div class="grade" style="grid-template-columns: repeat(4, 1fr)">
+    ${campoHtml('Inscrição municipal', e.im)}
+    ${campoHtml('Valor total dos serviços', moeda(n.issqn.vServ || 0))}
+    ${campoHtml('Base de cálculo do ISSQN', moeda(n.issqn.vBC || 0))}
+    ${campoHtml('Valor do ISSQN', moeda(n.issqn.vISS || 0))}
+  </div>
+  </div>
 
   <div class="bloco">
   <div class="titulo">Dados adicionais</div>

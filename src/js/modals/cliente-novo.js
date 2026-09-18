@@ -159,7 +159,7 @@
     estadoSel.addEventListener('mousedown', e => {
       if(!paisSel.value){
         e.preventDefault();
-        alert('Por favor, selecione o país primeiro');
+        window.DialogPadrao?.info({ title: 'Escolha o país primeiro', tom: 'aviso', icone: 'fa-earth-americas', message: 'A lista de estados depende do país: escolha o país e depois o estado.' });
       }
     });
   }

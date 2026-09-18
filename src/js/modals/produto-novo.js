@@ -419,7 +419,7 @@
     if (!regra) return;
     window.DialogPadrao?.info({
       title: 'Regra Produção',
-      message: regra.resumo({ codigo: codigoInput.value.trim(), nome: nomeInput.value.trim() })
+      ...regra.caixa({ codigo: codigoInput.value.trim(), nome: nomeInput.value.trim() })
     });
   });
 

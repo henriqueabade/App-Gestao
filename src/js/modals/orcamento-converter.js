@@ -805,29 +805,11 @@
   }
 
   function showPieceApprovedDialog() {
-    document.getElementById('pieceApprovedDialogOverlay')?.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'pieceApprovedDialogOverlay';
-    overlay.className = 'app-message-overlay fixed inset-0 bg-black/60 flex items-center justify-center p-4';
-    const baseOverlay = document.getElementById('converterOrcamentoOverlay');
-    const computedZ = baseOverlay ? window.getComputedStyle(baseOverlay).zIndex : '';
-    const parsedZ = Number(computedZ);
-    const fallbackZ = 15000;
-    const finalZ = Number.isFinite(parsedZ) ? Math.max(parsedZ + 2, fallbackZ) : fallbackZ;
-    overlay.style.zIndex = String(finalZ);
-    overlay.innerHTML = `
-      <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
-        <div class="p-6 text-center">
-          <h3 class="text-lg font-semibold mb-4 text-yellow-400">Peça Aprovada</h3>
-          <p class="text-sm text-gray-300 mb-6">Esta peça já foi aprovada. Para substituí-la, é necessário desaprová-la primeiro.</p>
-          <div class="flex justify-center">
-            <button id="pieceApprovedOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Entendi</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const closeDialog = () => { if (overlay.isConnected) overlay.remove(); };
-    overlay.querySelector('#pieceApprovedOk')?.addEventListener('click', closeDialog, { once: true });
+    window.DialogPadrao?.info({
+      title: 'Peça aprovada', tom: 'aviso', icone: 'fa-circle-check', okText: 'Entendi',
+      message: 'Esta peça já foi aprovada.',
+      nota: 'Para substituí-la, desaprove a peça primeiro (o botão de aprovação na linha dela).'
+    });
   }
 
   // Reúne todos os motivos que impedem a conversão. Fonte única da verdade

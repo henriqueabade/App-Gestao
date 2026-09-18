@@ -290,7 +290,7 @@ function finAvisarEmImplementacao(chave) {
     const rotulo = FIN_ACOES[chave]?.rotulo || 'Esta função';
     const mensagem = `"${rotulo}" ainda está em implementação.\nEm breve estará disponível nesta tela.`;
     if (window.DialogPadrao?.info) {
-        window.DialogPadrao.info({ title: 'Função em implementação', message: mensagem });
+        window.DialogPadrao.info({ title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: `"${rotulo}" ainda está em implementação.`, nota: 'Em breve estará disponível nesta tela.' });
     } else {
         window.alert(mensagem);
     }
@@ -552,34 +552,59 @@ async function finCarregarDados(competencia) {
     };
 }
 
-/** O que a conciliação fez, em linhas para a caixa de aviso. Pura. */
-function finResumoDaConciliacao(r) {
-    const linhas = [];
+/**
+ * O que a conciliação fez, organizado para a caixa da casa: cartões com os
+ * números (avisos, boletos consultados, pagamentos, recebimentos lançados),
+ * o detalhe do que mudou e as ocorrências em lista. Pura.
+ */
+function finCaixaDaConciliacao(r) {
     const f = r?.fila || {};
     const c = r?.consultas || {};
     const acerto = r?.acerto || {};
-    if (r?.sql_pendente) linhas.push('Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.');
-    if (Number(f.lidos)) {
-        const partes = [finPlural(f.pagos, 'pagamento', 'pagamentos')];
-        if (Number(f.cancelados)) partes.push(finPlural(f.cancelados, 'cancelamento', 'cancelamentos'));
-        if (Number(f.alertas)) partes.push(finPlural(f.alertas, 'alerta', 'alertas'));
-        if (Number(f.ignorados)) partes.push(`${finPlural(f.ignorados, 'ignorado', 'ignorados')} (não são deste sistema)`);
-        if (Number(f.erros)) partes.push(finPlural(f.erros, 'com erro', 'com erro'));
-        linhas.push(`Avisos do BB: ${partes.join(' · ')}.`);
-    } else {
-        linhas.push('Nenhum aviso do BB na fila.');
-    }
+    const n = v => Number(v) || 0;
+    const pagamentos = n(f.pagos) + n(c.pagos);
+    const erros = n(f.erros) + n(c.erros) + n(acerto.erros);
+    const secoes = [];
+
+    const avisos = [
+        ['Pagamentos', f.pagos, 'sucesso'], ['Cancelamentos', f.cancelados], ['Alertas', f.alertas, 'aviso'],
+        ['Ignorados (não são deste sistema)', f.ignorados], ['Com erro', f.erros, 'erro']
+    ].filter(([, v]) => n(v)).map(([rotulo, v, tom]) => ({ rotulo, valor: finFormatarInteiro(v), tom }));
+    if (avisos.length) secoes.push({ titulo: 'Avisos de pagamento do BB', icone: 'fa-inbox', itens: avisos });
+
     if (!r?.sql_pendente && c.consultados !== undefined) {
-        const partes = [`${finPlural(c.consultados, 'boleto consultado', 'boletos consultados')}`];
-        if (Number(c.mudaram)) partes.push(`${finPlural(c.mudaram, 'mudou', 'mudaram')} de situação`);
-        if (Number(c.pagos)) partes.push(`${finPlural(c.pagos, 'pago', 'pagos')}`);
-        if (Number(c.erros)) partes.push(finPlural(c.erros, 'com erro', 'com erro'));
-        linhas.push(`Consulta ao BB: ${partes.join(' · ')}.`);
+        const consulta = [
+            ['Mudaram de situação', c.mudaram, 'info'], ['Pagos', c.pagos, 'sucesso'], ['Com erro', c.erros, 'erro']
+        ].filter(([, v]) => n(v)).map(([rotulo, v, tom]) => ({ rotulo, valor: finFormatarInteiro(v), tom }));
+        if (consulta.length) secoes.push({ titulo: 'Consulta ao BB', icone: 'fa-magnifying-glass', itens: consulta });
     }
-    if (Number(acerto.lancados)) linhas.push(`${finPlural(acerto.lancados, 'recebimento lançado', 'recebimentos lançados')} de boletos já pagos.`);
-    const mensagens = [...(f.mensagens || []), ...(c.mensagens || []), ...(acerto.mensagens || [])];
-    if (mensagens.length) linhas.push('', ...mensagens.slice(0, 5), ...(mensagens.length > 5 ? [`… e mais ${mensagens.length - 5}.`] : []));
-    return linhas.join('\n');
+
+    const mensagens = [...(f.mensagens || []), ...(c.mensagens || []), ...(acerto.mensagens || [])].filter(Boolean);
+    if (mensagens.length) {
+        secoes.push({
+            titulo: 'Ocorrências', icone: 'fa-list-ul',
+            lista: [...mensagens.slice(0, 5), ...(mensagens.length > 5 ? [`… e mais ${mensagens.length - 5}.`] : [])]
+        });
+    }
+
+    const nadaMudou = !pagamentos && !n(c.mudaram) && !n(acerto.lancados) && !n(f.cancelados) && !n(f.alertas);
+    return {
+        title: 'Conciliação com o BB',
+        subtitle: 'Avisos de pagamento e consulta dos boletos a pagar',
+        tom: erros || r?.sql_pendente ? 'aviso' : 'sucesso',
+        icone: 'fa-building-columns',
+        resumo: [
+            { rotulo: 'Avisos na fila', valor: finFormatarInteiro(n(f.lidos)) },
+            { rotulo: 'Boletos consultados', valor: r?.sql_pendente ? '—' : finFormatarInteiro(n(c.consultados)) },
+            { rotulo: 'Pagamentos', valor: finFormatarInteiro(pagamentos), tom: pagamentos ? 'sucesso' : undefined },
+            { rotulo: 'Recebimentos lançados', valor: finFormatarInteiro(n(acerto.lancados)), tom: n(acerto.lancados) ? 'sucesso' : undefined }
+        ],
+        secoes,
+        alerta: r?.sql_pendente ? 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.' : undefined,
+        nota: nadaMudou && !erros
+            ? 'Tudo em dia: nenhum boleto mudou de situação desde a última conciliação.'
+            : 'A tela já foi atualizada com o que mudou.'
+    };
 }
 
 /** "Conciliar com o BB": fila do webhook + consulta dos boletos a pagar; mostra o resumo e relê a tela. */
@@ -590,11 +615,10 @@ async function finConciliar(moduleEl) {
     try {
         window.showToast?.('Conciliando com o Banco do Brasil…', 'info');
         const { corpo, erro } = await finChamarApi('/api/cobranca/conciliar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        const titulo = erro ? 'Conciliação não concluída' : 'Conciliação com o BB';
-        const mensagem = erro
-            ? (erro.status === 403 ? 'Você não tem permissão para conciliar recebimentos.' : erro.message)
-            : finResumoDaConciliacao(corpo);
-        if (window.DialogPadrao?.info) await window.DialogPadrao.info({ title: titulo, message: mensagem });
+        const caixa = erro
+            ? { title: 'Conciliação não concluída', tom: 'erro', message: erro.status === 403 ? 'Você não tem permissão para conciliar recebimentos.' : erro.message }
+            : finCaixaDaConciliacao(corpo);
+        if (window.DialogPadrao?.info) await window.DialogPadrao.info(caixa);
         await finRecarregar(raiz);
     } finally {
         if (raiz) delete raiz.dataset.conciliando;
@@ -614,10 +638,16 @@ async function finReaplicarDevolucao(moduleEl, devolucaoId) {
         const { corpo, erro } = await finChamarApi(`/api/devolucoes/${encodeURIComponent(devolucaoId)}/reaplicar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         const restam = Number(corpo?.pendencias) || 0;
         const avisos = Array.isArray(corpo?.avisos) ? corpo.avisos.filter(Boolean) : [];
-        const mensagem = erro
-            ? (erro.status === 403 ? 'Você não tem permissão para registrar devoluções.' : erro.message)
-            : [restam ? `Ainda ${restam === 1 ? 'ficou 1 pendência' : `ficaram ${restam} pendências`}.` : 'Tudo resolvido: a devolução está concluída.', ...avisos].join('\n');
-        if (window.DialogPadrao?.info) await window.DialogPadrao.info({ title: erro || restam ? 'Devolução ainda pendente' : 'Devolução concluída', message: mensagem });
+        const caixa = erro
+            ? { title: 'Devolução ainda pendente', tom: 'erro', message: erro.status === 403 ? 'Você não tem permissão para registrar devoluções.' : erro.message }
+            : {
+                title: restam ? 'Devolução ainda pendente' : 'Devolução concluída',
+                tom: restam ? 'aviso' : 'sucesso',
+                icone: 'fa-rotate-left',
+                message: restam ? `Ainda ${restam === 1 ? 'ficou 1 pendência' : `ficaram ${restam} pendências`}: tente de novo mais tarde pela pendência do painel.` : 'Tudo resolvido: a devolução está concluída.',
+                secoes: avisos.length ? [{ titulo: 'O que aconteceu', icone: 'fa-list-ul', lista: avisos }] : undefined
+            };
+        if (window.DialogPadrao?.info) await window.DialogPadrao.info(caixa);
         await finRecarregar(raiz);
     } finally {
         if (raiz) delete raiz.dataset.reaplicando;

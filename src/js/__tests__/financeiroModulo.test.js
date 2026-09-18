@@ -429,12 +429,19 @@ test('"Conciliar com o BB" chama a conciliação inteira, mostra o resumo na cai
     modulo.ouvintes.click[0]({ target: botao, stopPropagation() {} });
     await new Promise(r => setTimeout(r, 20));
     assert.ok(chamadas.includes('POST http://api.teste/api/cobranca/conciliar {}'));
-    assert.strictEqual(avisos[0].title, 'Conciliação com o BB');
-    assert.strictEqual(avisos[0].message, 'Avisos do BB: 1 pagamento.\nConsulta ao BB: 3 boletos consultados · 1 mudou de situação · 1 pago · 1 com erro.\n2 recebimentos lançados de boletos já pagos.\n\nBoleto 000312: O BB respondeu 503');
+    // A caixa vem organizada: cartões com os números e seções com o detalhe.
+    const caixa = JSON.parse(JSON.stringify(avisos[0]));
+    assert.strictEqual(caixa.title, 'Conciliação com o BB');
+    assert.strictEqual(caixa.tom, 'aviso', 'houve erro na consulta: tom de atenção');
+    assert.deepStrictEqual(caixa.resumo.map(c => [c.rotulo, c.valor]),
+        [['Avisos na fila', '1'], ['Boletos consultados', '3'], ['Pagamentos', '2'], ['Recebimentos lançados', '2']]);
+    assert.deepStrictEqual(caixa.secoes.map(s => s.titulo), ['Avisos de pagamento do BB', 'Consulta ao BB', 'Ocorrências']);
+    assert.deepStrictEqual(caixa.secoes[1].itens.map(i => [i.rotulo, i.valor]), [['Mudaram de situação', '1'], ['Pagos', '1'], ['Com erro', '1']]);
+    assert.deepStrictEqual(caixa.secoes[2].lista, ['Boleto 000312: O BB respondeu 503']);
     assert.strictEqual(chamadas.filter(c => c.includes('/recebimentos/painel')).length, 2, 'relê depois de conciliar');
 });
 
-test('finMapearReceber e finResumoDaConciliacao são puras', () => {
+test('finMapearReceber e finCaixaDaConciliacao são puras', () => {
     const f = funcoes();
     const mapear = f('finMapearReceber');
     const r = mapear(receberFalso({ sql_pendente: true, a_conciliar: { fila: 3 } }), null);
@@ -453,10 +460,20 @@ test('finMapearReceber e finResumoDaConciliacao são puras', () => {
     assert.strictEqual(fora.pendencias[0].titulo, 'Painel de recebimentos indisponível');
     assert.strictEqual(fora.pendencias[0].destino, 'atualizar');
 
-    const resumo = f('finResumoDaConciliacao');
-    assert.strictEqual(resumo({ fila: { lidos: 0 }, sql_pendente: true }), 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.\nNenhum aviso do BB na fila.');
-    assert.strictEqual(resumo({ fila: { lidos: 3, pagos: 1, cancelados: 1, ignorados: 1, mensagens: [] }, consultas: { consultados: 0 }, acerto: {} }),
-        'Avisos do BB: 1 pagamento · 1 cancelamento · 1 ignorado (não são deste sistema).\nConsulta ao BB: 0 boletos consultados.');
+    const caixaDe = r => JSON.parse(JSON.stringify(f('finCaixaDaConciliacao')(r)));
+    const semSql = caixaDe({ fila: { lidos: 0 }, sql_pendente: true });
+    assert.strictEqual(semSql.alerta, 'Os recebimentos ainda não estão ativados: rode sql/cobranca_recebimentos.sql e reinicie a API.');
+    assert.strictEqual(semSql.tom, 'aviso');
+    assert.strictEqual(semSql.resumo[1].valor, '—', 'sem o SQL não houve consulta');
+    const comAvisos = caixaDe({ fila: { lidos: 3, pagos: 1, cancelados: 1, ignorados: 1, mensagens: [] }, consultas: { consultados: 0 }, acerto: {} });
+    assert.strictEqual(comAvisos.tom, 'sucesso');
+    assert.deepStrictEqual(comAvisos.secoes[0].itens.map(i => [i.rotulo, i.valor]),
+        [['Pagamentos', '1'], ['Cancelamentos', '1'], ['Ignorados (não são deste sistema)', '1']]);
+    // Nada mudou: nenhuma seção vazia, só os cartões e a nota de "tudo em dia".
+    const emDia = caixaDe({ fila: { lidos: 0 }, consultas: { consultados: 5, mudaram: 0, pagos: 0, erros: 0, mensagens: [] }, acerto: { lancados: 0 } });
+    assert.deepStrictEqual(emDia.secoes, []);
+    assert.strictEqual(emDia.resumo[1].valor, '5');
+    assert.match(emDia.nota, /Tudo em dia/);
 });
 
 test('sem permissão (403) ou sem rede, a parte fiscal fica vazia e avisa; o resto da tela segue', async () => {

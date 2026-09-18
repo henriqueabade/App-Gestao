@@ -1212,6 +1212,18 @@ label.fin-benef__nome { cursor: pointer; }
     border: 1px solid rgba(212, 193, 105, 0.35);
     cursor: help;
 }
+
+/* A mesma etiqueta em bordô (Fechar competência — produção): destaca o
+   código da peça no cabeçalho de cada bloco. O nome inteiro fica no hover. */
+.fin-tag-produto--bordo {
+    padding: 0.2rem 0.7rem;
+    font-size: 0.8rem;
+    background: #6a152c;
+    color: #ffe4ec;
+    border-color: rgba(255, 170, 195, 0.45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+[data-menu-theme="light"] .fin-tag-produto--bordo { background: #7f1d3a; border-color: #7f1d3a; }
 .fin-tabela tbody tr[data-fin-abrir] { cursor: pointer; }
 .fin-tabela tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
 .fin-tabela tbody tr[data-fin-abrir]:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }

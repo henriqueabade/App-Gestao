@@ -321,7 +321,7 @@ test('os dados de transporte e pagamento da entrada entram no XML; a mesma emiss
   assert.ok(b.reason.extra.pendencias.some(p => p.chave === 'nota_existente'));
   assert.equal(t.api.dados.notas_fiscais.length, 1);
   const xml = t.api.dados.notas_fiscais[0].xml_envio;
-  assert.match(xml, /<transp><modFrete>1<\/modFrete><transporta><xNome>Transp XYZ<\/xNome><\/transporta><vol><qVol>3<\/qVol><esp>Volumes<\/esp><marca>SANTÍSSIMO DECOR LTDA SD<\/marca><\/vol><\/transp>/);
+  assert.match(xml, /<transp><modFrete>1<\/modFrete><transporta><xNome>Transp XYZ<\/xNome><\/transporta><vol><qVol>3<\/qVol><esp>Volumes<\/esp><marca>SANTÍSSIMO DECOR LTDA SD<\/marca><nVol>1_1\/3 a 1_3\/3<\/nVol><\/vol><\/transp>/);
   assert.match(xml, /<tPag>17<\/tPag>/);
   // O que foi informado no embarque fica no pedido, para o DANFE e a próxima nota.
   const pedido = t.api.dados.pedidos[0];
@@ -346,7 +346,7 @@ test('volumes detalhados na emissão: um <vol> por linha no XML e o resumo no pe
   await t.emitir({ transporte: { modalidade_frete: 1, volumes: [{ especie: 'Caixa', peso_bruto: 10, peso_liquido: 9 }, { especie: 'Caixa', peso_bruto: 12, peso_liquido: 11 }] } });
   const xml = t.api.dados.notas_fiscais[0].xml_envio;
   assert.equal((xml.match(/<vol>/g) || []).length, 2);
-  assert.match(xml, /<vol><qVol>1<\/qVol><esp>Caixa<\/esp><marca>SANTÍSSIMO DECOR LTDA SD<\/marca><nVol>1<\/nVol><pesoL>9\.000<\/pesoL><pesoB>10\.000<\/pesoB><\/vol><vol><qVol>1<\/qVol><esp>Caixa<\/esp><marca>[^<]+<\/marca><nVol>2<\/nVol>/);
+  assert.match(xml, /<vol><qVol>1<\/qVol><esp>Caixa<\/esp><marca>SANTÍSSIMO DECOR LTDA SD<\/marca><nVol>1_1\/2<\/nVol><pesoL>9\.000<\/pesoL><pesoB>10\.000<\/pesoB><\/vol><vol><qVol>1<\/qVol><esp>Caixa<\/esp><marca>[^<]+<\/marca><nVol>1_2\/2<\/nVol>/);
   const pedido = t.api.dados.pedidos[0];
   assert.equal(pedido.volumes_quantidade, 2);
   assert.equal(pedido.volumes_especie, 'Caixa');

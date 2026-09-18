@@ -885,7 +885,7 @@
   function avisarEmImplementacao(rotulo) {
     const mensagem = `"${rotulo}" ainda está em implementação.\nNada foi gravado.`;
     if (window.DialogPadrao?.info) {
-      return window.DialogPadrao.info({ title: 'Função em implementação', message: mensagem });
+      return window.DialogPadrao.info({ title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: `"${rotulo}" ainda está em implementação.`, nota: 'Nada foi gravado.' });
     }
     window.alert(mensagem);
     return Promise.resolve(true);
@@ -1398,7 +1398,13 @@
         });
         const avisos = Array.isArray(r?.avisos) ? r.avisos : [];
         window.showToast?.(aberto ? 'Boleto baixado e recebimento registrado.' : 'Recebimento registrado.', avisos.length ? 'info' : 'success');
-        if (avisos.length && window.DialogPadrao?.info) await window.DialogPadrao.info({ title: 'Recebimento registrado com aviso', message: avisos.join('\n') });
+        if (avisos.length && window.DialogPadrao?.info) {
+          await window.DialogPadrao.info({
+            title: 'Recebimento registrado com aviso', tom: 'aviso', icone: 'fa-hand-holding-dollar',
+            message: `O recebimento de ${formatarMoeda(valor)} entrou na parcela ${l.parcela || l.numero_parcela} do pedido ${l.pedido}, mas confira:`,
+            secoes: [{ titulo: 'Avisos', icone: 'fa-triangle-exclamation', lista: avisos }]
+          });
+        }
         window.dispatchEvent(new CustomEvent('financeiro:recebimentos-alterados'));
         processando = false;
         fechar();
@@ -2405,11 +2411,11 @@
         campo.value = String(valor);
         pintarCabecaDaPeca(pedido, peca);
       };
-      const tudo = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Tudo');
+      const tudo = criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo');
       tudo.type = 'button';
       tudo.title = 'Todas as unidades ficaram prontas';
       tudo.addEventListener('click', () => marcar(limite(processo)));
-      const nada = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada');
+      const nada = criar('button', 'btn-danger text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada');
       nada.type = 'button';
       nada.title = 'Nada ficou pronto: tudo fica pendente para o mês seguinte';
       nada.addEventListener('click', () => marcar(0));
@@ -2444,8 +2450,14 @@
       const cabeca = criar('button', 'w-full flex items-center justify-between gap-3 px-4 py-3 text-left');
       cabeca.type = 'button';
       const esquerda = criar('div', 'min-w-0');
-      esquerda.appendChild(criar('p', 'text-sm text-white truncate', nomeDaPecaCurto(peca)));
-      esquerda.appendChild(criar('p', 'text-xs text-gray-400', `${peca.quantidade} un.${peca.do_estoque ? ` · ${peca.do_estoque} do estoque (paga só o que faltava)` : ''}`));
+      const nomeInteiro = nomeDaPecaCurto(peca);
+      const codigo = criar('span', 'fin-tag-produto fin-tag-produto--bordo', peca.codigo || nomeInteiro);
+      codigo.title = nomeInteiro;
+      codigo.setAttribute('aria-label', nomeInteiro);
+      const linhaCodigo = criar('p', 'flex items-center gap-2');
+      linhaCodigo.appendChild(codigo);
+      esquerda.appendChild(linhaCodigo);
+      esquerda.appendChild(criar('p', 'text-xs text-gray-400 mt-1', `${peca.quantidade} un.${peca.do_estoque ? ` · ${peca.do_estoque} do estoque (paga só o que faltava)` : ''}`));
       const direita = criar('div', 'flex items-center gap-2');
       const estado = criar('span', 'badge-warning px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap', '');
       estado.dataset.estado = 'true';
@@ -2490,7 +2502,7 @@
       const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
       etiquetas.appendChild(tagG(`Pendente: ${formatarMoeda(pedido.valor_pendente)}`, 'badge-neutral'));
       if (pedido.sem_valor) etiquetas.appendChild(tagG('Peça sem regra de produção', 'badge-danger', 'Acerte em "Regras" ou no cadastro da peça: sem valor a competência não fecha'));
-      const tudoPronto = criar('button', 'btn-neutral text-white px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido');
+      const tudoPronto = criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido');
       tudoPronto.type = 'button';
       tudoPronto.dataset.perm = 'financeiro.producao.registrar';
       acionar(tudoPronto, () => confirmarPedidoInteiro(pedido));

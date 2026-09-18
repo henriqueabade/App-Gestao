@@ -201,6 +201,49 @@
       return partes.join('\n');
     }
 
+    /**
+     * A caixa do (i), organizada: cartões (base do %, processos, total por
+     * peça) e uma linha por processo com o valor à direita e a conta embaixo.
+     * Vai direto para `DialogPadrao.info({ title, ...caixa() })`.
+     */
+    function caixa({ codigo = '', nome = '' } = {}) {
+      const preco = obterPreco();
+      const lista = linhas();
+      const comValor = lista.filter(l => l.etapa && l.pagando && !l.falta && l.valor_peca !== null);
+      const faltam = lista.filter(l => l.falta).length;
+      const total = centavos(comValor.reduce((s, l) => s + l.valor_peca, 0));
+      const itens = lista.map(l => {
+        const insumos = plural(l.insumos, 'insumo', 'insumos');
+        if (!l.etapa) return { rotulo: l.nome, valor: 'Não cadastrado', tom: 'erro', detalhe: `${insumos} · o processo não existe nas etapas de produção` };
+        if (!l.pagando) return { rotulo: l.nome, valor: 'Pagamento desligado', detalhe: `${insumos} · este processo não é pago por peça` };
+        if (l.falta) return { rotulo: l.nome, valor: 'Falta', tom: 'aviso', detalhe: `${insumos} · ${l.falta}` };
+        const origem = l.origem === 'peca' ? 'desta peça' : 'padrão do processo';
+        const cada = l.valor_peca !== null && l.insumos > 1 ? ` · cada insumo vale ${formatarMoeda(centavos(l.valor_peca / l.insumos))}` : '';
+        return {
+          rotulo: l.nome,
+          valor: l.valor_peca === null ? '—' : formatarMoeda(l.valor_peca),
+          tom: l.valor_peca === null ? 'aviso' : undefined,
+          detalhe: l.valor_peca === null
+            ? `${insumos} · ${descrever(l.regra)} (${origem}) · sem preço de tabela para calcular`
+            : `${insumos} · ${descrever(l.regra)} (${origem})${cada}`
+        };
+      });
+      return {
+        subtitle: [codigo, nome].filter(Boolean).join(' — ') || undefined,
+        tom: faltam ? 'aviso' : 'info',
+        icone: 'fa-industry',
+        resumo: [
+          { rotulo: 'Base do %', valor: preco > 0 ? formatarMoeda(preco) : '—', dica: preco > 0 ? 'preço da tabela fixa' : 'sem preço na tabela fixa' },
+          { rotulo: 'Processos', valor: String(lista.length), dica: faltam ? `${plural(faltam, 'falta acertar', 'faltam acertar')}` : 'todos com valor', tom: faltam ? 'aviso' : undefined },
+          { rotulo: 'Total por peça', valor: formatarMoeda(total), tom: 'sucesso', dica: 'soma dos processos' }
+        ],
+        secoes: lista.length
+          ? [{ titulo: 'Quanto cada processo paga', icone: 'fa-hammer', itens }]
+          : [{ titulo: 'Processos', icone: 'fa-hammer', texto: 'A peça ainda não tem insumos: nenhum processo a pagar.' }],
+        nota: 'Peça que sai do estoque com parte do processo pronta paga só os insumos que faltavam.'
+      };
+    }
+
     function definirRascunho(novo) {
       rascunho = new Map([...(novo instanceof Map ? novo : new Map(Object.entries(novo || {})))].map(([k, v]) => [String(k), { modo: v.modo, valor: v.valor ?? '' }]));
       aoMudar();
@@ -224,7 +267,7 @@
     }
 
     return {
-      carregar, linhas, pendencias, resumo, gravar, definirRascunho,
+      carregar, linhas, pendencias, resumo, caixa, gravar, definirRascunho,
       rascunho: () => new Map(rascunho),
       base: () => base,
       erro: () => erro,

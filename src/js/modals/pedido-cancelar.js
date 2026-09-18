@@ -101,46 +101,18 @@
   /**
    * Confirmação no padrão do app, no lugar de `window.confirm`.
    *
-   * Mesma moldura dos outros diálogos (vidro, borda vermelha para ação
-   * destrutiva) e o mesmo comportamento: Esc e clique fora cancelam. Devolve
-   * uma promessa para o chamador poder `await`.
+   * A caixa da casa (DialogPadrao): o destino das peças em lista, o alerta
+   * de que não tem volta num quadro vermelho e o Confirmar em vermelho. Esc
+   * cancela. Devolve uma promessa para o chamador poder `await`.
    */
   function confirmarNoPadrao(linhas = []) {
-    return new Promise(resolve => {
-      const overlay = document.createElement('div');
-      overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-      overlay.style.zIndex = 'var(--z-dialog)';
-      overlay.innerHTML = `
-        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
-          <div class="p-6 space-y-4">
-            <div class="text-center">
-              <h3 class="text-lg font-semibold text-red-400">Confirmar cancelamento</h3>
-              <p class="text-sm text-gray-300 mt-1">Esta ação reverte peças e insumos e não pode ser desfeita.</p>
-            </div>
-            ${linhas.length ? `
-              <ul class="space-y-1 text-sm text-gray-200 bg-white/5 border border-white/10 rounded-lg p-3">
-                ${linhas.map(l => `<li>• ${l}</li>`).join('')}
-              </ul>` : ''}
-            <div class="flex justify-center gap-3 pt-1">
-              <button type="button" data-acao="nao" class="btn-neutral px-5 py-2 rounded-lg text-white font-medium">Voltar</button>
-              <button type="button" data-acao="sim" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Confirmar cancelamento</button>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(overlay);
-
-      const encerrar = valor => {
-        document.removeEventListener('keydown', aoTeclar);
-        overlay.remove();
-        resolve(valor);
-      };
-      function aoTeclar(e) { if (e.key === 'Escape') encerrar(false); }
-
-      overlay.querySelector('[data-acao="sim"]')?.addEventListener('click', () => encerrar(true));
-      overlay.querySelector('[data-acao="nao"]')?.addEventListener('click', () => encerrar(false));
-      overlay.addEventListener('click', e => { if (e.target === overlay) encerrar(false); });
-      document.addEventListener('keydown', aoTeclar);
-    });
+    return window.DialogPadrao?.confirm({
+      title: 'Confirmar cancelamento', tom: 'erro', icone: 'fa-ban',
+      subtitle: 'O que acontece com as peças deste pedido',
+      secoes: linhas.length ? [{ titulo: 'Destino das peças', icone: 'fa-boxes-stacked', lista: linhas }] : undefined,
+      alerta: 'Esta ação reverte peças e insumos e não pode ser desfeita.',
+      confirmText: 'Confirmar cancelamento', cancelText: 'Voltar', confirmVariant: 'danger'
+    }) ?? Promise.resolve(false);
   }
 
   /**
