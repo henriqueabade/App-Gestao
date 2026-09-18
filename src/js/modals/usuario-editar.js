@@ -193,6 +193,69 @@
     activateTab(tabs[0], { setFocus: false });
   }
 
+  // ------------------------------------------------------------------
+  // Tarefas e calendário: de quem este usuário vê as tarefas. Só o Sup
+  // Admin mexe (o servidor confere de novo). Admin e Sup Admin já veem todos.
+  // ------------------------------------------------------------------
+  const abaTarefas = document.getElementById('tab-tarefas-usuario');
+  if (abaTarefas && window.Permissoes?.supAdmin && window.TarefasUI) {
+    abaTarefas.classList.remove('hidden');
+    let carregada = false;
+    abaTarefas.addEventListener('click', async () => {
+      if (carregada) return;
+      carregada = true;
+      const alvo = document.getElementById('usuarioVisibilidadeTarefas');
+      const { h, icone } = window.TarefasUI;
+      const base = await window.apiConfig.getApiBaseUrl();
+      try {
+        const [visao, lista] = await Promise.all([
+          fetch(`${base}/api/tarefas/visibilidade/${usuarioBase.id}`).then(r => r.json()),
+          fetch(`${base}/api/usuarios/lista`).then(r => r.json())
+        ]);
+        if (visao.sql_pendente) {
+          alvo.replaceChildren(h('div', { class: 'tui-aviso-sql' }, icone('fa-database'), h('span', { text: 'Rode sql/tarefas_calendario.sql e reinicie a API para configurar isto.' })));
+          return;
+        }
+        const outros = (Array.isArray(lista) ? lista : []).filter(u => Number(u.id) !== Number(usuarioBase.id)).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+        let modo = visao.todos ? 'todos' : (visao.alvos || []).length ? 'alguns' : 'nenhum';
+        const escolhidos = new Set((visao.alvos || []).map(Number));
+        const pessoas = h('div', { class: 'usr-vis__pessoas' }, outros.map(u => {
+          const marca = h('input', { type: 'checkbox', checked: escolhidos.has(Number(u.id)) });
+          marca.addEventListener('change', () => { if (marca.checked) escolhidos.add(Number(u.id)); else escolhidos.delete(Number(u.id)); });
+          return h('label', { class: 'usr-vis__pessoa' }, marca, h('span', { text: u.nome }), u.perfil ? h('small', { text: u.perfil }) : null);
+        }));
+        const opcao = (valor, titulo, dica) => {
+          const radio = h('input', { type: 'radio', name: 'usrVisModo', value: valor, checked: modo === valor });
+          radio.addEventListener('change', () => { modo = valor; pessoas.hidden = modo !== 'alguns'; });
+          return h('label', { class: 'usr-vis__opcao' }, radio, h('span', {}, h('strong', { text: titulo }), h('small', { text: dica })));
+        };
+        const salvar = h('button', { type: 'button', class: 'btn-primary px-5 py-2 rounded-lg text-white font-semibold' }, icone('fa-floppy-disk'), ' Salvar visão de tarefas');
+        salvar.addEventListener('click', async () => {
+          try {
+            const r = await fetch(`${base}/api/tarefas/visibilidade/${usuarioBase.id}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(modo === 'todos' ? { todos: true } : { todos: false, alvos: modo === 'alguns' ? [...escolhidos] : [] })
+            });
+            const json = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(json.error || `Erro ${r.status}`);
+            window.showToast?.('Visão de tarefas salva.', 'success');
+          } catch (err) { window.showToast?.(err.message, 'error'); }
+        });
+        pessoas.hidden = modo !== 'alguns';
+        alvo.replaceChildren(h('div', { class: 'usr-vis' },
+          h('p', { class: 'usr-vis__intro' }, icone('fa-circle-info'), ' Cada um vê só as próprias tarefas. Admin e Sup Admin veem as de todos. Para os demais, a visão vale quando o perfil tem a ação ', h('strong', { text: '"Ver tarefas de outros usuários"' }), ' (modelo de permissões) — e só das pessoas escolhidas aqui.'),
+          h('div', { class: 'usr-vis__opcoes' },
+            opcao('nenhum', 'Só as próprias tarefas', 'O padrão'),
+            opcao('todos', 'As de todos os usuários', 'Inclusive quem for cadastrado depois'),
+            opcao('alguns', 'Só as destas pessoas', 'Escolha abaixo')),
+          pessoas,
+          h('div', { class: 'usr-vis__rodape' }, salvar)));
+      } catch (err) {
+        alvo.replaceChildren(h('p', { class: 'tui-dica tui-dica--aviso', text: `Não foi possível carregar: ${err.message}` }));
+      }
+    });
+  }
+
   const inputs = {
     nome: document.getElementById('usuarioNome'),
     email: document.getElementById('usuarioEmail'),

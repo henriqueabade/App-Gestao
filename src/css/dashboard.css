@@ -1632,3 +1632,7 @@
         transition: none;
     }
 }
+
+/* "Meu dia" das tarefas (o cartão em si vem de src/styles/tarefas-ui.css). */
+.dash-meudia { margin-bottom: 1.25rem; }
+.dash-meudia[hidden] { display: none; }

@@ -35,7 +35,19 @@ router.param('origem', (req, res, next, origem) => {
   return next();
 });
 
-const podeVer = exigirPermissao(req => social.ORIGENS[req.params.origem]?.permissao);
+const porPermissao = exigirPermissao(req => social.ORIGENS[req.params.origem]?.permissao);
+
+/**
+ * Prospecção e cliente: basta a permissão de ver detalhes. Tarefa: é preciso
+ * poder ver AQUELA tarefa (quem criou, quem responde, quem participa ou tem
+ * a visão da agenda da pessoa) — a regra mora no controller de tarefas.
+ */
+function podeVer(req, res, next) {
+  if (req.params.origem !== 'tarefa') return porPermissao(req, res, next);
+  return require('./tarefasController').acessoATarefa(req, Number(req.params.id))
+    .then(ok => (ok ? next() : res.status(403).json({ error: 'Você não participa desta tarefa.' })))
+    .catch(err => res.status(err.status || 500).json({ error: err.message || 'Não foi possível conferir o acesso.' }));
+}
 
 /** Resposta de erro com o `sql_pendente` quando é o caso. */
 function responderErro(res, err, contexto) {

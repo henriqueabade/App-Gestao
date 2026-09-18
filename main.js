@@ -10,6 +10,10 @@ const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
 const publisher = require('./backend/publisher');
+
+// Sem o ID do app o Windows não mostra as notificações do sino (lembrete de
+// tarefa, convite...). O mesmo appId do instalador (electron-builder.config.js).
+if (process.platform === 'win32') app.setAppUserModelId('com.santissimo.decor');
 const versionManager = require('./backend/versionManager');
 const { performReleaseCommit } = require('./backend/gitAutomation');
 const {

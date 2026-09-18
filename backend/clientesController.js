@@ -4,6 +4,7 @@ const { exigirPermissao } = require('./permissionsController');
 const { usuarioDaRequisicao } = require('./usuarioAtual');
 const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
+const social = require('./historicoSocial');
 
 const router = express.Router();
 
@@ -321,6 +322,132 @@ router.get('/contatos', exigirPermissao('ctt.view'), async (req, res) => {
   } catch (err) {
     console.error('Erro ao listar contatos dos clientes:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar contatos dos clientes' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ATIVIDADES do cliente (a mesma aba da prospecção): ligação, e-mail, reunião,
+// WhatsApp, visita... O que foi FEITO. O que ainda vai ser feito é tarefa
+// (/api/tarefas, com cliente_id), e a tarefa concluída também vira atividade.
+// Tabela: cliente_interacoes (sql/tarefas_calendario.sql).
+// ---------------------------------------------------------------------------
+const TIPOS_ATIVIDADE = new Set(['Ligação', 'E-mail', 'Reunião', 'WhatsApp', 'Visita', 'Nota', 'Proposta', 'Atividade realizada']);
+const textoLimpo = v => (v === undefined || v === null ? '' : String(v).trim());
+const erroHttp = (status, mensagem) => Object.assign(new Error(mensagem), { status });
+
+function responderAtividade(res, err, onde) {
+  if (social.semTabela(err)) {
+    return res.status(409).json({ error: 'As atividades do cliente ainda não estão ativadas: rode sql/tarefas_calendario.sql e reinicie a API.', sql_pendente: true });
+  }
+  if (!err.status || err.status >= 500) console.error(`[clientes] atividade (${onde}):`, err);
+  return res.status(err.status || 500).json({ error: err.message || 'Erro na atividade.' });
+}
+
+/** Corpo da tela → linha de cliente_interacoes (confere tipo, resumo, contato do próprio cliente). */
+async function dadosDaAtividade(api, clienteId, corpo = {}) {
+  const tipo = textoLimpo(corpo.tipo);
+  const resumo = textoLimpo(corpo.resumo).slice(0, 300);
+  if (!TIPOS_ATIVIDADE.has(tipo)) throw erroHttp(400, `Tipo de atividade inválido: ${tipo}`);
+  if (!resumo) throw erroHttp(400, 'Descreva a atividade em uma linha.');
+  const contatoId = corpo.contato_id ? Number(corpo.contato_id) : null;
+  if (contatoId) {
+    const contato = await api.get(`/api/contatos_cliente/${contatoId}`).catch(() => null);
+    if (!contato || Number(contato.id_cliente) !== Number(clienteId)) throw erroHttp(400, 'Contato não pertence a este cliente.');
+  }
+  const duracao = corpo.duracao_min === null || corpo.duracao_min === undefined || corpo.duracao_min === '' ? null : Number(corpo.duracao_min);
+  if (duracao !== null && (!Number.isInteger(duracao) || duracao < 0 || duracao > 1440)) throw erroHttp(400, 'Duração inválida.');
+  const data = corpo.data ? new Date(corpo.data) : new Date();
+  if (Number.isNaN(data.getTime())) throw erroHttp(400, 'Data inválida.');
+  return { tipo, resumo, detalhe: textoLimpo(corpo.detalhe) || null, contato_id: contatoId, duracao_min: duracao, data: data.toISOString() };
+}
+
+const retratoDaAtividade = a => [
+  ['Tipo', a.tipo], ['Resumo', a.resumo], ['Detalhe', a.detalhe],
+  ['Duração', a.duracao_min ? `${a.duracao_min} min` : null]
+].filter(([, v]) => v).map(([rotulo, valor]) => ({ rotulo, valor: String(valor) }));
+
+router.get('/:id/interacoes', exigirPermissao('cli.details.view'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const [linhas, nomes, contatos] = await Promise.all([
+      api.get('/api/cliente_interacoes', { query: { cliente_id: req.params.id } }),
+      social.nomesDosUsuarios(api),
+      api.get('/api/contatos_cliente', { query: { id_cliente: req.params.id } }).catch(() => [])
+    ]);
+    const nomeContato = new Map((Array.isArray(contatos) ? contatos : []).map(c => [Number(c.id), c.nome]));
+    const atividades = (Array.isArray(linhas) ? linhas : [])
+      .sort((a, b) => String(b.data).localeCompare(String(a.data)) || Number(b.id) - Number(a.id))
+      .map(a => ({
+        ...a,
+        usuario: a.usuario_id ? nomes.get(Number(a.usuario_id)) || null : null,
+        contato: a.contato_id ? nomeContato.get(Number(a.contato_id)) || null : null
+      }));
+    res.json({ atividades });
+  } catch (err) {
+    if (social.semTabela(err)) return res.json({ atividades: [], sql_pendente: true });
+    responderAtividade(res, err, 'listar');
+  }
+});
+
+router.post('/:id/interacoes', exigirPermissao('cli.interaction.add'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const cliente = await api.get(`/api/clientes/${req.params.id}`).catch(() => null);
+    if (!cliente || cliente.error) throw erroHttp(404, 'Cliente não encontrado.');
+    const dados = await dadosDaAtividade(api, req.params.id, req.body);
+    const usuarioId = usuarioDaRequisicao(req);
+    const criada = await api.post('/api/cliente_interacoes', { ...dados, cliente_id: Number(req.params.id), usuario_id: usuarioId });
+    await clienteHistorico.registrarNoCliente(api, req.params.id, [{
+      tipo: 'interacao', acao: 'criou', entidade: `${dados.tipo} — ${dados.resumo}`, valor_novo: dados.resumo,
+      detalhe: { campos: retratoDaAtividade(dados), atividade_id: criada?.id ?? null }
+    }], usuarioId);
+    res.status(201).json({ id: criada?.id ?? null });
+  } catch (err) {
+    responderAtividade(res, err, 'registrar');
+  }
+});
+
+async function atividadeDoCliente(api, clienteId, atividadeId) {
+  const a = await api.get(`/api/cliente_interacoes/${Number(atividadeId)}`).catch(err => {
+    if (social.semTabela(err)) throw err;
+    return null;
+  });
+  if (!a || a.error || Number(a.cliente_id) !== Number(clienteId)) throw erroHttp(404, 'Atividade não encontrada.');
+  return a;
+}
+
+router.put('/:id/interacoes/:atividadeId', exigirPermissao('cli.interaction.add'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const antes = await atividadeDoCliente(api, req.params.id, req.params.atividadeId);
+    const dados = await dadosDaAtividade(api, req.params.id, { ...antes, ...req.body });
+    await api.put(`/api/cliente_interacoes/${antes.id}`, dados);
+    const eventos = [['tipo', 'Tipo'], ['resumo', 'Resumo'], ['detalhe', 'Detalhe'], ['duracao_min', 'Duração']]
+      .filter(([campo]) => String(antes[campo] ?? '') !== String(dados[campo] ?? ''))
+      .map(([campo, rotulo]) => ({
+        tipo: 'interacao', acao: 'alterou', entidade: `${antes.tipo} — ${antes.resumo}`, campo,
+        valor_anterior: antes[campo] ?? null, valor_novo: dados[campo] ?? null, detalhe: { rotulo }
+      }));
+    await clienteHistorico.registrarNoCliente(api, req.params.id, eventos, usuarioDaRequisicao(req));
+    res.json({ success: true });
+  } catch (err) {
+    responderAtividade(res, err, 'editar');
+  }
+});
+
+router.delete('/:id/interacoes/:atividadeId', exigirPermissao('cli.interaction.add'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const antes = await atividadeDoCliente(api, req.params.id, req.params.atividadeId);
+    await api.delete(`/api/cliente_interacoes/${antes.id}`);
+    await clienteHistorico.registrarNoCliente(api, req.params.id, [{
+      tipo: 'interacao', acao: 'excluiu', entidade: `${antes.tipo} — ${antes.resumo}`,
+      valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
+      detalhe: { campos: retratoDaAtividade(antes) }
+    }], usuarioDaRequisicao(req));
+    res.json({ success: true });
+  } catch (err) {
+    responderAtividade(res, err, 'excluir');
   }
 });
 

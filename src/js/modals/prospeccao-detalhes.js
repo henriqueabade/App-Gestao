@@ -41,6 +41,8 @@
   document.getElementById('voltarDetalhesProspeccao')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e) {
     if (e.key !== 'Escape') return;
+    // Com um diálogo por cima (editor de tarefa, confirmação), o Esc é dele.
+    if (document.querySelector('dialog[open]')) return;
     close();
     document.removeEventListener('keydown', esc);
   });
@@ -550,12 +552,15 @@
     orcamento: { rotulo: 'Orçamento', classe: 'badge-warning' },
     conversao: { rotulo: 'Conversão', classe: 'badge-success' },
     arquivamento: { rotulo: 'Situação', classe: 'badge-warning' },
-    responsavel: { rotulo: 'Responsável', classe: 'badge-info' }
+    responsavel: { rotulo: 'Responsável', classe: 'badge-info' },
+    tarefa: { rotulo: 'Tarefa', classe: 'badge-warning' },
+    edicao: { rotulo: 'Edição', classe: 'badge-neutral' }
   };
 
   const ACAO = {
     criou: 'Criou', alterou: 'Alterou', excluiu: 'Excluiu',
-    moveu: 'Moveu', converteu: 'Converteu'
+    moveu: 'Moveu', converteu: 'Converteu',
+    concluiu: 'Concluiu', reabriu: 'Reabriu', cancelou: 'Cancelou'
   };
 
   /**
@@ -623,6 +628,7 @@
    * abre a aba já no comentário.
    */
   let linhaDoTempo = null;
+  let tarefasMontadas = false;
   function renderHistorico() {
     const alvo = get('detProspHistorico');
     if (!alvo || !window.HistoricoSocial) return;
@@ -711,6 +717,11 @@
       renderAnotacoes(p);
       renderContatos(listas.contatos);
       renderInteracoes(listas.interacoes);
+      // O próximo passo muda por aqui (concluir, definir): o bloco de tarefas relê.
+      if (typeof tarefasMontadas === 'function') tarefasMontadas();
+      else if (!tarefasMontadas && window.TarefasUI && p?.id) {
+        tarefasMontadas = window.TarefasUI.montarTarefasDaFicha(get('detProspTarefas'), { tipo: 'prospeccao', id: p.id, nome: p.nome_fantasia || `Prospecção #${p.id}` });
+      }
       renderNotas(listas.notas);
       renderAnexos(listas.anexos);
       renderCampanhas(listas.campanhas);

@@ -1,0 +1,453 @@
+/* ---------------------------------------------------------------------------
+   Tarefas — peças globais (src/js/utils/tarefas-ui.js): o editor da tarefa,
+   a conclusão, o cartão "Meu dia" e a linha de tarefa usada em Tarefas, no
+   Calendário e nas fichas de cliente/prospecção.
+
+   Global (menu.html): o editor abre de qualquer lugar (Dashboard, sino,
+   fichas), e a folha de um módulo só existe com ele aberto. Os botões
+   btn-success/neutral/warning/danger são definidos aqui dentro dos diálogos
+   pelo mesmo motivo.
+   --------------------------------------------------------------------------- */
+
+:root {
+    --tui-fundo: linear-gradient(to bottom right, rgba(61, 2, 31, 0.97), rgba(34, 3, 18, 0.97));
+    --tui-borda: var(--menu-surface-border-strong, rgba(255, 255, 255, 0.12));
+    --tui-borda-suave: var(--menu-surface-border, rgba(255, 255, 255, 0.08));
+    --tui-texto: var(--menu-text-primary, rgba(255, 255, 255, 0.88));
+    --tui-texto-forte: var(--menu-text-strong, #fff);
+    --tui-texto-suave: var(--menu-text-muted, rgba(255, 255, 255, 0.6));
+    --tui-campo: rgba(0, 0, 0, 0.28);
+    --tui-campo-borda: rgba(255, 255, 255, 0.14);
+    --tui-destaque: var(--color-primary, #b6a03e);
+    --tui-destaque-claro: var(--color-primary-light, #d4c169);
+    --tui-sucesso: #4ade80;
+    --tui-perigo: #ff7a7a;
+    --tui-aviso: #fbbf24;
+    --tui-info: #8aa7f3;
+}
+
+/* ------------------------------------------------------------ diálogo */
+
+dialog.tui-dialogo {
+    padding: 0; border: none; background: transparent; color: var(--tui-texto); overflow: visible;
+    width: min(64rem, calc(100vw - 2rem)); max-width: none; max-height: none;
+}
+dialog.tui-dialogo--concluir { width: min(34rem, calc(100vw - 2rem)); }
+dialog.tui-dialogo::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+
+.tui-cartao {
+    display: flex; flex-direction: column; max-height: min(92vh, 56rem);
+    border-radius: 1.25rem; border: 1px solid var(--tui-borda); background: var(--tui-fundo);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    overflow: hidden; animation: tuiEntrar 160ms ease-out;
+}
+@keyframes tuiEntrar { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tui-cartao { animation: none; } }
+
+.tui-topo { padding: 1.1rem 1.4rem 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.tui-topo__linha { display: flex; align-items: center; gap: 0.75rem; }
+.tui-titulo {
+    flex: 1; min-width: 0; font-size: 1.35rem; font-weight: 700; color: var(--tui-texto-forte);
+    background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 0.25rem 0.1rem; outline: none;
+}
+.tui-titulo:focus { border-bottom-color: var(--tui-destaque); }
+.tui-titulo::placeholder { color: var(--tui-texto-suave); font-weight: 500; }
+.tui-fechar {
+    width: 2.25rem; height: 2.25rem; border-radius: 999px; display: grid; place-items: center;
+    color: var(--tui-texto-suave); transition: background 150ms ease, color 150ms ease;
+}
+.tui-fechar:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+
+.tui-tipo-caixa { position: relative; flex-shrink: 0; }
+.tui-tipo {
+    --tui-tipo-cor: #8aa7f3;
+    display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.75rem; border-radius: 0.7rem;
+    font-size: 0.8rem; font-weight: 700; color: var(--tui-tipo-cor);
+    background: color-mix(in srgb, var(--tui-tipo-cor) 16%, transparent); border: 1px solid color-mix(in srgb, var(--tui-tipo-cor) 40%, transparent);
+}
+.tui-tipo__seta { font-size: 0.6rem; opacity: 0.7; }
+.tui-menu {
+    position: absolute; top: calc(100% + 0.35rem); left: 0; z-index: 5; min-width: 12rem; padding: 0.35rem;
+    border-radius: 0.8rem; background: #3a0b1f; border: 1px solid var(--tui-borda); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+.tui-menu[hidden] { display: none; }
+.tui-menu__item { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.55rem 0.7rem; border-radius: 0.5rem; font-size: 0.85rem; color: #fff; text-align: left; }
+.tui-menu__item i { width: 1rem; text-align: center; color: var(--tui-destaque-claro); }
+.tui-menu__item:hover, .tui-menu__item:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
+
+.tui-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tui-selos__quem { font-size: 0.72rem; color: var(--tui-texto-suave); margin-left: auto; }
+
+.tui-abas { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--tui-borda-suave); margin: 0 -1.4rem; padding: 0 1.4rem; }
+.tui-abas button {
+    padding: 0.6rem 0.9rem; font-size: 0.85rem; font-weight: 600; color: var(--tui-texto-suave);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 150ms ease, border-color 150ms ease;
+}
+.tui-abas button[aria-selected="true"] { color: #fff; border-bottom-color: var(--tui-destaque); }
+.tui-painel { flex: 1; min-height: 0; overflow-y: auto; }
+.tui-painel--conversa { padding: 1.1rem 1.4rem; }
+
+.tui-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 0; min-height: 100%; }
+@media (max-width: 820px) { .tui-corpo { grid-template-columns: minmax(0, 1fr); } }
+.tui-principal { padding: 1.1rem 1.4rem 1.4rem; display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+.tui-lado { padding: 1.1rem 1.2rem 1.4rem; display: flex; flex-direction: column; gap: 1rem; background: rgba(0, 0, 0, 0.14); border-left: 1px solid var(--tui-borda-suave); }
+.tui-prop { display: flex; flex-direction: column; gap: 0.45rem; }
+.tui-prop[hidden] { display: none; }
+.tui-prop__rotulo, .tui-rotulo {
+    display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--tui-texto-suave);
+}
+.tui-rotulo { margin-top: 0.6rem; }
+.tui-rotulo:first-child { margin-top: 0; }
+.tui-rotulo__extra { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--tui-destaque-claro); }
+
+.tui-campo {
+    width: 100%; min-width: 0; padding: 0.5rem 0.7rem; border-radius: 0.6rem; font-size: 0.85rem; color: var(--tui-texto-forte);
+    background: var(--tui-campo); border: 1px solid var(--tui-campo-borda); transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.tui-campo:focus { outline: none; border-color: var(--tui-destaque); box-shadow: 0 0 0 2px rgba(182, 160, 62, 0.3); }
+.tui-campo:disabled { opacity: 0.5; cursor: not-allowed; }
+.tui-campo::placeholder { color: var(--tui-texto-suave); }
+.tui-campo--curto { width: 4.5rem; flex: 0 0 auto; }
+select.tui-campo option { background: #2a0613; color: #fff; }
+input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark; }
+.tui-descricao { resize: vertical; min-height: 4.5rem; line-height: 1.5; }
+.tui-linha { display: flex; align-items: center; gap: 0.5rem; }
+.tui-rotulo-inline { font-size: 0.8rem; color: var(--tui-texto-suave); white-space: nowrap; }
+.tui-dica { margin: 0; font-size: 0.72rem; line-height: 1.45; color: var(--tui-texto-suave); }
+.tui-dica:empty { display: none; }
+.tui-dica--aviso { color: var(--tui-aviso); }
+.tui-check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--tui-texto); cursor: pointer; }
+.tui-check--destaque { margin-top: 0.4rem; font-weight: 600; color: #fff; }
+.tui-link { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; font-weight: 600; color: var(--tui-info); }
+.tui-link:hover { text-decoration: underline; }
+.tui-icone-botao { width: 1.8rem; height: 1.8rem; border-radius: 0.5rem; display: grid; place-items: center; color: var(--tui-texto-suave); flex-shrink: 0; }
+.tui-icone-botao:hover { background: rgba(255, 255, 255, 0.08); color: var(--tui-perigo); }
+
+.tui-atalhos { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tui-atalho {
+    padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; color: var(--tui-texto);
+    border: 1px solid var(--tui-campo-borda); transition: background 150ms ease, border-color 150ms ease;
+}
+.tui-atalho:hover:not(:disabled) { background: rgba(182, 160, 62, 0.18); border-color: var(--tui-destaque); color: #fff; }
+
+.tui-prioridades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; }
+.tui-prioridade {
+    --tui-prioridade-cor: #8aa7f3;
+    display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.4rem 0.2rem; border-radius: 0.6rem;
+    font-size: 0.66rem; font-weight: 600; color: var(--tui-texto-suave); border: 1px solid transparent; transition: all 150ms ease;
+}
+.tui-prioridade i { color: var(--tui-prioridade-cor); font-size: 0.85rem; }
+.tui-prioridade:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.tui-prioridade[aria-checked="true"] {
+    color: #fff; border-color: var(--tui-prioridade-cor);
+    background: color-mix(in srgb, var(--tui-prioridade-cor) 18%, transparent);
+}
+
+.tui-repeticao { display: flex; flex-direction: column; gap: 0.45rem; }
+.tui-repeticao__detalhe { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.6rem; border-radius: 0.7rem; background: rgba(255, 255, 255, 0.04); border: 1px dashed var(--tui-campo-borda); }
+.tui-repeticao__detalhe[hidden] { display: none; }
+.tui-dias { display: flex; gap: 0.25rem; }
+.tui-dia {
+    width: 1.9rem; height: 1.9rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; color: var(--tui-texto-suave);
+    border: 1px solid var(--tui-campo-borda);
+}
+.tui-dia[aria-pressed="true"] { background: var(--tui-destaque); border-color: transparent; color: #fff; }
+
+/* pessoas */
+.tui-avatar {
+    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 999px;
+    font-weight: 700; color: #fff; background: rgba(182, 160, 62, 0.35); border: 2px solid rgba(255, 255, 255, 0.12);
+}
+.tui-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tui-avatar--p { width: 1.6rem; height: 1.6rem; font-size: 0.58rem; }
+.tui-avatar--m { width: 2.1rem; height: 2.1rem; font-size: 0.72rem; }
+.tui-avatar--g { width: 2.8rem; height: 2.8rem; font-size: 0.85rem; }
+.tui-pessoa { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #fff; }
+.tui-participantes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tui-participantes:empty { display: none; }
+.tui-participante {
+    display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.45rem 0.15rem 0.15rem; border-radius: 999px;
+    font-size: 0.75rem; color: #fff; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--tui-borda-suave);
+}
+.tui-participante > i { font-size: 0.65rem; color: var(--tui-sucesso); }
+.tui-participante--pendente > i { color: var(--tui-aviso); }
+.tui-participante--novo { border-style: dashed; border-color: var(--tui-destaque); }
+
+/* chips */
+.tui-chip {
+    --tui-chip-cor: var(--tui-texto-suave);
+    display: inline-flex; align-items: center; gap: 0.3rem; max-width: 100%; padding: 0.12rem 0.5rem; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 600; line-height: 1.5; white-space: nowrap; color: var(--tui-chip-cor);
+    background: color-mix(in srgb, var(--tui-chip-cor) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tui-chip-cor) 32%, transparent);
+}
+.tui-chip span { overflow: hidden; text-overflow: ellipsis; }
+.tui-chip i { font-size: 0.65rem; }
+.tui-chip--perigo { --tui-chip-cor: var(--tui-perigo); }
+.tui-chip--sucesso { --tui-chip-cor: var(--tui-sucesso); }
+.tui-chip--aviso { --tui-chip-cor: var(--tui-aviso); }
+.tui-chip--info { --tui-chip-cor: var(--tui-info); }
+.tui-chip--ouro { --tui-chip-cor: var(--tui-destaque-claro); }
+.tui-chip--vinculo { --tui-chip-cor: #c4b5fd; }
+.tui-chip--status.tui-chip--em_andamento { --tui-chip-cor: var(--tui-info); }
+.tui-chip--status.tui-chip--aguardando { --tui-chip-cor: var(--tui-aviso); }
+.tui-chip--status.tui-chip--concluida { --tui-chip-cor: var(--tui-sucesso); }
+.tui-chip--status.tui-chip--cancelada { --tui-chip-cor: var(--tui-perigo); }
+.tui-chip__x { display: inline-grid; place-items: center; width: 1rem; height: 1rem; border-radius: 999px; font-size: 0.55rem; color: inherit; opacity: 0.7; }
+.tui-chip__x:hover { opacity: 1; background: rgba(255, 255, 255, 0.15); }
+
+.tui-marcadores { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tui-marcadores:empty { display: none; }
+.tui-marcador {
+    --tui-marcador-cor: #d4c169;
+    padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; color: var(--tui-texto-suave);
+    border: 1px solid var(--tui-campo-borda); transition: all 150ms ease;
+}
+.tui-marcador[aria-pressed="true"] {
+    color: var(--tui-marcador-cor); border-color: color-mix(in srgb, var(--tui-marcador-cor) 50%, transparent);
+    background: color-mix(in srgb, var(--tui-marcador-cor) 16%, transparent);
+}
+
+/* checklist */
+.tui-progresso { height: 0.35rem; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.tui-progresso[hidden] { display: none; }
+.tui-progresso > span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--tui-destaque), var(--tui-sucesso)); transition: width 250ms ease; }
+.tui-checklist { display: flex; flex-direction: column; gap: 0.2rem; }
+.tui-checklist__item { display: flex; align-items: center; gap: 0.55rem; padding: 0.2rem 0.3rem; border-radius: 0.5rem; }
+.tui-checklist__item:hover { background: rgba(255, 255, 255, 0.04); }
+.tui-checklist__item input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--tui-sucesso); flex-shrink: 0; }
+.tui-checklist__texto { flex: 1; min-width: 0; background: transparent; border: 0; font-size: 0.87rem; color: var(--tui-texto-forte); padding: 0.2rem 0; outline: none; }
+.tui-checklist__texto:focus { border-bottom: 1px solid var(--tui-destaque); }
+.tui-checklist__item--feito .tui-checklist__texto { text-decoration: line-through; color: var(--tui-texto-suave); }
+
+/* vínculo */
+.tui-vinculos { position: relative; display: flex; flex-direction: column; gap: 0.4rem; }
+.tui-vinculos__escolhidos { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tui-vinculos__escolhidos:empty { display: none; }
+.tui-vinculos__resultados {
+    position: absolute; top: calc(100% + 0.25rem); left: 0; right: 0; z-index: 6; max-height: 16rem; overflow-y: auto; padding: 0.3rem;
+    border-radius: 0.75rem; background: #3a0b1f; border: 1px solid var(--tui-borda); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+.tui-vinculos__resultados[hidden] { display: none; }
+.tui-vinculos__opcao { display: grid; grid-template-columns: 1.2rem 1fr; column-gap: 0.55rem; width: 100%; text-align: left; padding: 0.45rem 0.55rem; border-radius: 0.5rem; }
+.tui-vinculos__opcao i { grid-row: span 2; align-self: center; color: var(--tui-destaque-claro); }
+.tui-vinculos__opcao:hover, .tui-vinculos__opcao:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+.tui-vinculos__nome { font-size: 0.85rem; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tui-vinculos__tipo { font-size: 0.7rem; color: var(--tui-texto-suave); }
+.tui-vinculos__vazio { padding: 0.6rem; font-size: 0.8rem; color: var(--tui-texto-suave); }
+.tui-vinculos__abrir { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.tui-vinculos__abrir:empty { display: none; }
+
+/* rodapé e botões */
+.tui-rodape {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.85rem 1.4rem;
+    border-top: 1px solid var(--tui-borda-suave); flex-shrink: 0; background: rgba(0, 0, 0, 0.12);
+}
+.tui-rodape__lado { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.tui-botao { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1.05rem; border-radius: 0.65rem; font-size: 0.85rem; font-weight: 600; color: #fff; }
+.tui-dialogo .btn-success, .tui-escopo .btn-success { background: #16a34a; color: #fff; transition: all 150ms ease; }
+.tui-dialogo .btn-success:hover, .tui-escopo .btn-success:hover { background: #22c55e; transform: translateY(-1px); }
+.tui-dialogo .btn-neutral, .tui-escopo .btn-neutral { background: rgba(255, 255, 255, 0.1); color: #fff; transition: all 150ms ease; }
+.tui-dialogo .btn-neutral:hover, .tui-escopo .btn-neutral:hover { background: rgba(255, 255, 255, 0.18); }
+.tui-dialogo .btn-danger, .tui-escopo .btn-danger { background: #9f1239; color: #fff; transition: all 150ms ease; }
+.tui-dialogo .btn-danger:hover, .tui-escopo .btn-danger:hover { background: #be123c; }
+.tui-dialogo .btn-warning, .tui-escopo .btn-warning { background: #b45309; color: #fff; transition: all 150ms ease; }
+.tui-dialogo .btn-warning:hover, .tui-escopo .btn-warning:hover { background: #d97706; }
+
+/* ------------------------------------------------------------ concluir */
+
+.tui-cartao--estreito { max-height: min(90vh, 44rem); }
+.tui-concluir__topo { display: flex; align-items: center; gap: 0.9rem; padding: 1.3rem 1.4rem 0.4rem; }
+.tui-concluir__icone {
+    width: 3rem; height: 3rem; border-radius: 999px; display: grid; place-items: center; flex-shrink: 0;
+    font-size: 1.2rem; color: #052e16; background: var(--tui-sucesso); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0.15);
+}
+.tui-concluir__titulo { margin: 0; font-size: 1.1rem; font-weight: 700; color: #fff; }
+.tui-concluir__sub { margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--tui-texto-suave); overflow: hidden; text-overflow: ellipsis; }
+.tui-concluir__corpo { padding: 0.8rem 1.4rem 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; overflow-y: auto; }
+.tui-resultados { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; }
+.tui-resultado {
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.7rem; border-radius: 0.7rem; text-align: left;
+    font-size: 0.8rem; font-weight: 600; color: var(--tui-texto); border: 1px solid var(--tui-campo-borda); transition: all 150ms ease;
+}
+.tui-resultado i { width: 1rem; text-align: center; color: var(--tui-destaque-claro); }
+.tui-resultado:hover { background: rgba(255, 255, 255, 0.06); }
+.tui-resultado[aria-checked="true"] { border-color: var(--tui-sucesso); background: rgba(74, 222, 128, 0.12); color: #fff; }
+.tui-resultado[aria-checked="true"] i { color: var(--tui-sucesso); }
+.tui-proxima { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border-radius: 0.8rem; background: rgba(255, 255, 255, 0.04); border: 1px dashed var(--tui-campo-borda); }
+.tui-proxima[hidden] { display: none; }
+
+/* ------------------------------------------------------------ Meu dia */
+
+.tui-meudia {
+    display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.1rem; border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(182, 160, 62, 0.16), rgba(106, 21, 44, 0.28));
+    border: 1px solid rgba(212, 193, 105, 0.28);
+}
+.tui-meudia__cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.tui-meudia__ola { font-size: 1rem; font-weight: 700; color: #fff; }
+.tui-meudia__data { font-size: 0.8rem; color: var(--tui-texto-suave); }
+.tui-meudia__numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+@media (max-width: 640px) { .tui-meudia__numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tui-dia__numero {
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 0.55rem; align-items: center;
+    padding: 0.6rem 0.75rem; border-radius: 0.8rem; text-align: left; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--tui-borda-suave);
+    transition: transform 150ms ease, background 150ms ease;
+}
+.tui-dia__numero:hover { transform: translateY(-1px); background: rgba(0, 0, 0, 0.28); }
+.tui-dia__numero i { grid-row: span 2; font-size: 1rem; }
+.tui-dia__numero strong { font-size: 1.35rem; line-height: 1.1; color: #fff; }
+.tui-dia__numero span { font-size: 0.7rem; color: var(--tui-texto-suave); }
+.tui-dia__numero--ouro i { color: var(--tui-destaque-claro); }
+.tui-dia__numero--perigo i, .tui-dia__numero--perigo strong { color: var(--tui-perigo); }
+.tui-dia__numero--sucesso i { color: var(--tui-sucesso); }
+.tui-dia__numero--info i, .tui-dia__numero--info strong { color: var(--tui-info); }
+.tui-dia__numero--neutro i { color: var(--tui-texto-suave); }
+.tui-meudia__proxima {
+    display: inline-flex; align-items: center; gap: 0.45rem; align-self: flex-start; padding: 0.35rem 0.75rem; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 600; color: #fff; background: rgba(0, 0, 0, 0.22);
+}
+.tui-meudia__proxima:hover { background: rgba(0, 0, 0, 0.35); }
+
+/* ------------------------------------------------------------ linha de tarefa (listas, fichas) */
+
+.tui-tarefa {
+    --tui-prioridade-cor: #8aa7f3;
+    position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0.75rem;
+    padding: 0.7rem 0.85rem; border-radius: 0.85rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--tui-borda-suave);
+    cursor: pointer; transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.tui-tarefa:hover { background: rgba(255, 255, 255, 0.075); border-color: var(--tui-borda); }
+.tui-tarefa:focus-visible { outline: 2px solid var(--tui-destaque); outline-offset: 2px; }
+.tui-tarefa--atrasada { border-left: 3px solid var(--tui-perigo); }
+.tui-tarefa--concluida { opacity: 0.6; }
+.tui-tarefa--concluida .tui-tarefa__titulo { text-decoration: line-through; }
+.tui-tarefa--convite { border-style: dashed; border-color: var(--tui-info); }
+.tui-tarefa__check {
+    width: 1.35rem; height: 1.35rem; margin-top: 0.1rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.6rem;
+    color: transparent; border: 2px solid var(--tui-prioridade-cor); background: color-mix(in srgb, var(--tui-prioridade-cor) 10%, transparent);
+    transition: all 150ms ease;
+}
+.tui-tarefa__check:hover { color: var(--tui-prioridade-cor); background: color-mix(in srgb, var(--tui-prioridade-cor) 25%, transparent); }
+.tui-tarefa--concluida .tui-tarefa__check { color: #052e16; background: var(--tui-sucesso); border-color: var(--tui-sucesso); }
+.tui-tarefa__corpo { min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.tui-tarefa__titulo { font-size: 0.92rem; font-weight: 600; color: var(--tui-texto-forte); overflow-wrap: anywhere; }
+.tui-tarefa__descricao { font-size: 0.78rem; color: var(--tui-texto-suave); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.tui-tarefa__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.tui-tarefa__lado { display: flex; align-items: center; gap: 0.35rem; }
+.tui-tarefa__contador { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.7rem; color: var(--tui-texto-suave); }
+.tui-tarefa__acoes { display: flex; gap: 0.25rem; opacity: 0; transition: opacity 150ms ease; }
+.tui-tarefa:hover .tui-tarefa__acoes, .tui-tarefa:focus-within .tui-tarefa__acoes { opacity: 1; }
+.tui-mini-botao { padding: 0.2rem 0.45rem; border-radius: 0.45rem; font-size: 0.68rem; font-weight: 600; color: var(--tui-texto); background: rgba(255, 255, 255, 0.07); }
+.tui-mini-botao:hover { background: rgba(182, 160, 62, 0.25); color: #fff; }
+.tui-mini-botao--sim { background: rgba(74, 222, 128, 0.18); color: var(--tui-sucesso); }
+.tui-mini-botao--nao { background: rgba(255, 122, 122, 0.14); color: var(--tui-perigo); }
+
+.tui-vazio { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2rem 1rem; text-align: center; color: var(--tui-texto-suave); font-size: 0.85rem; }
+.tui-vazio i { font-size: 1.8rem; opacity: 0.45; }
+.tui-aviso-sql[hidden] { display: none; }
+.tui-aviso-sql { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.8rem 1rem; border-radius: 0.8rem; font-size: 0.85rem; color: #fde68a; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.35); }
+
+/* ------------------------------------------------------------ tema claro */
+
+[data-menu-theme="light"] {
+    --tui-fundo: #ffffff;
+    --tui-texto: #1e293b;
+    --tui-texto-forte: #0f172a;
+    --tui-texto-suave: #64748b;
+    --tui-campo: #f8fafc;
+    --tui-campo-borda: #cbd5e1;
+    --tui-borda: rgba(15, 23, 42, 0.12);
+    --tui-borda-suave: rgba(15, 23, 42, 0.08);
+    --tui-sucesso: #16a34a;
+    --tui-perigo: #dc2626;
+    --tui-aviso: #b45309;
+    --tui-info: #2563eb;
+}
+[data-menu-theme="light"] .tui-lado, [data-menu-theme="light"] .tui-rodape { background: #f8fafc; }
+[data-menu-theme="light"] .tui-menu, [data-menu-theme="light"] .tui-vinculos__resultados { background: #fff; }
+[data-menu-theme="light"] .tui-menu__item, [data-menu-theme="light"] .tui-vinculos__nome,
+[data-menu-theme="light"] .tui-pessoa, [data-menu-theme="light"] .tui-participante, [data-menu-theme="light"] .tui-concluir__titulo,
+[data-menu-theme="light"] .tui-resultado[aria-checked="true"], [data-menu-theme="light"] .tui-meudia__ola,
+[data-menu-theme="light"] .tui-dia__numero strong, [data-menu-theme="light"] .tui-check--destaque, [data-menu-theme="light"] .tui-abas button[aria-selected="true"] { color: #0f172a; }
+[data-menu-theme="light"] select.tui-campo option { background: #fff; color: #0f172a; }
+[data-menu-theme="light"] input.tui-campo[type="date"], [data-menu-theme="light"] input.tui-campo[type="time"] { color-scheme: light; }
+[data-menu-theme="light"] .tui-avatar { color: #5b4510; background: rgba(182, 160, 62, 0.28); border-color: rgba(122, 92, 18, 0.25); }
+[data-menu-theme="light"] .tui-tarefa { background: #fff; }
+[data-menu-theme="light"] .tui-tarefa:hover { background: #f8fafc; }
+[data-menu-theme="light"] .tui-meudia { background: linear-gradient(135deg, rgba(182, 160, 62, 0.14), rgba(146, 64, 14, 0.08)); }
+[data-menu-theme="light"] .tui-dia__numero { background: #fff; }
+[data-menu-theme="light"] .tui-meudia__proxima { color: #0f172a; background: rgba(15, 23, 42, 0.06); }
+[data-menu-theme="light"] .tui-dialogo .btn-neutral { background: #e2e8f0; color: #0f172a; }
+[data-menu-theme="light"] .tui-mini-botao { background: #f1f5f9; color: #0f172a; }
+[data-menu-theme="light"] .tui-prioridade[aria-checked="true"], [data-menu-theme="light"] .tui-atalho:hover:not(:disabled),
+[data-menu-theme="light"] .tui-mini-botao:hover, [data-menu-theme="light"] .tui-fechar:hover { color: #0f172a; }
+[data-menu-theme="light"] .tui-prioridade:hover:not(:disabled), [data-menu-theme="light"] .tui-fechar:hover { background: #f1f5f9; }
+
+/* ------------------------------------------------------------ tarefas na ficha (cliente/prospecção) */
+
+.tui-ficha { display: flex; flex-direction: column; gap: 0.6rem; }
+.tui-ficha__topo { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.tui-ficha__titulo { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 1rem; color: var(--tui-texto-forte); }
+.tui-ficha__titulo > i { color: var(--tui-destaque-claro); }
+.tui-ficha__lista { display: flex; flex-direction: column; gap: 0.45rem; }
+.tui-ficha__ver { align-self: flex-start; }
+
+/* ------------------------------------------------------------ atividades do cliente (ficha) */
+
+.tui-dialogo .btn-secondary, .tui-escopo .btn-secondary { background: #8aa7f3; color: #0b1220; transition: all 150ms ease; }
+.tui-dialogo .btn-secondary:hover, .tui-escopo .btn-secondary:hover { background: #a5bcf7; }
+.cat { display: flex; flex-direction: column; gap: 1.1rem; }
+.cat__cartao { padding: 1rem 1.1rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--tui-borda-suave); }
+.cat__registrar { color: #0b1220 !important; }
+.cat__formulario { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem; border-radius: 0.9rem; background: rgba(0, 0, 0, 0.18); border: 1px solid var(--tui-borda); }
+.cat__formulario[hidden] { display: none; }
+.cat__tipos { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.cat__tipo {
+    --cat-cor: #cbd5e1;
+    display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+    color: var(--tui-texto); border: 1px solid var(--tui-campo-borda); transition: all 150ms ease;
+}
+.cat__tipo i { color: var(--cat-cor); }
+.cat__tipo[aria-checked="true"] { color: #fff; border-color: var(--cat-cor); background: color-mix(in srgb, var(--cat-cor) 22%, transparent); }
+.cat__linha { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 6rem; gap: 0.6rem; }
+@media (max-width: 720px) { .cat__linha { grid-template-columns: minmax(0, 1fr); } }
+.cat__campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.cat__campo .tui-rotulo { margin: 0; }
+.cat__rodape { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.cat__lista { display: flex; flex-direction: column; gap: 0.6rem; }
+.cat__item { --cat-cor: #cbd5e1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.8rem; padding: 0.75rem 0.85rem; border-radius: 0.85rem; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--tui-borda-suave); }
+.cat__icone { width: 2.2rem; height: 2.2rem; border-radius: 999px; display: grid; place-items: center; color: #1a0009; background: var(--cat-cor); flex-shrink: 0; }
+.cat__conteudo { min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.cat__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: 0.75rem; color: var(--tui-texto-suave); }
+.cat__meta strong { font-size: 0.8rem; color: var(--cat-cor); }
+.cat__resumo { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--tui-texto-forte); overflow-wrap: anywhere; }
+.cat__detalhe { margin: 0; font-size: 0.82rem; line-height: 1.5; color: var(--tui-texto); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cat__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.cat__chips:empty { display: none; }
+.cat__acoes { display: flex; gap: 0.2rem; opacity: 0; transition: opacity 150ms ease; }
+.cat__item:hover .cat__acoes, .cat__acoes:focus-within { opacity: 1; }
+[data-menu-theme="light"] .cat__cartao, [data-menu-theme="light"] .cat__item { background: #fff; }
+[data-menu-theme="light"] .cat__formulario { background: #f8fafc; }
+[data-menu-theme="light"] .cat__tipo[aria-checked="true"] { color: #0f172a; }
+
+/* ------------------------------------------------------------ ficha do usuário: visão de tarefas */
+
+.usr-vis { display: flex; flex-direction: column; gap: 1rem; max-width: 46rem; }
+.usr-vis__intro { margin: 0; padding: 0.8rem 1rem; border-radius: 0.8rem; font-size: 0.85rem; line-height: 1.55; color: var(--tui-texto); background: rgba(138, 167, 243, 0.08); border: 1px solid rgba(138, 167, 243, 0.25); }
+.usr-vis__intro i { color: var(--tui-info); }
+.usr-vis__opcoes { display: flex; flex-direction: column; gap: 0.45rem; }
+.usr-vis__opcao { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.7rem 0.85rem; border-radius: 0.75rem; border: 1px solid var(--tui-campo-borda); cursor: pointer; }
+.usr-vis__opcao:has(input:checked) { border-color: var(--tui-destaque); background: rgba(182, 160, 62, 0.1); }
+.usr-vis__opcao input { margin-top: 0.2rem; accent-color: var(--tui-destaque); }
+.usr-vis__opcao span { display: flex; flex-direction: column; gap: 0.1rem; }
+.usr-vis__opcao strong { font-size: 0.9rem; color: var(--tui-texto-forte); }
+.usr-vis__opcao small { font-size: 0.75rem; color: var(--tui-texto-suave); }
+.usr-vis__pessoas { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem; padding: 0.75rem; border-radius: 0.8rem; background: rgba(0, 0, 0, 0.15); border: 1px dashed var(--tui-campo-borda); }
+.usr-vis__pessoas[hidden] { display: none; }
+.usr-vis__pessoa { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; font-size: 0.85rem; color: var(--tui-texto-forte); cursor: pointer; }
+.usr-vis__pessoa:hover { background: rgba(255, 255, 255, 0.05); }
+.usr-vis__pessoa input { accent-color: var(--tui-destaque); }
+.usr-vis__pessoa small { margin-left: auto; font-size: 0.7rem; color: var(--tui-texto-suave); }
+.usr-vis__rodape { display: flex; justify-content: flex-end; }
+.usr-vis__rodape button { display: inline-flex; align-items: center; gap: 0.4rem; }

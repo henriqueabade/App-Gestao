@@ -87,6 +87,7 @@ app.use('/api/prospeccoes', prospeccoesRouter);
 // e os avisos do sino. Tabelas em sql/historico_social.sql.
 app.use('/api/historico-social', require('./historicoSocialController'));
 app.use('/api/notificacoes', require('./notificacoesController'));
+app.use('/api/tarefas', require('./tarefasController'));
 app.use('/api/ia', iaRouter);
 // Fiscal (NF-e): configuração do emitente, certificado e SEFAZ. Antes do
 // proxy genérico, que não confere permissão.
@@ -229,7 +230,7 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // A licao das duas vezes e a mesma: prefixo do MODULO, nao da tabela.
 // historico_*, cliente_historico e notificacoes: só pelas rotas próprias, que
 // conferem permissão, autoria e Sup Admin.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_|historico_|cliente_historico$|notificacoes$)/i;
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_|historico_|cliente_historico$|cliente_interacoes$|notificacoes$|tarefas$|tarefa_)/i;
 // Em DEV uma rota genérica só pode alcançar tabelas de negócio conhecidas.
 // Isso exclui também tabelas extras/segredos existentes no PostgreSQL local.
 const TABELAS_PUBLICAS_DEV = new Set([

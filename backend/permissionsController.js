@@ -101,6 +101,7 @@ function mapaPaginas() {
   const mapa = {};
   for (const mod of Object.values(PERMISSIONS_CATALOG)) {
     if (mod.page) mapa[mod.page] = mod.code;
+    for (const extra of mod.paginasExtras || []) mapa[extra] = mod.code;
     mapa[mod.code] = mod.code;
   }
   return mapa;
@@ -278,4 +279,5 @@ module.exports.exigirAlgumaPermissao = exigirAlgumaPermissao;
 module.exports.exigirSupAdmin = exigirSupAdmin;
 module.exports.ehSupAdmin = ehSupAdmin;
 module.exports.obterPermissoesEfetivas = obterPermissoesEfetivas;
+module.exports.carregarUsuarioAtual = carregarUsuarioAtual;
 module.exports.limparCachePermissoes = limparCache;

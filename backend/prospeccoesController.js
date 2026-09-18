@@ -38,6 +38,10 @@ const { normalizarCamposNumericos } = require('./numeros');
 const social = require('./historicoSocial');
 const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
+// O próximo passo é espelhado numa tarefa (Tarefas/Calendário). Sem o SQL de
+// tarefas, a sincronia simplesmente não faz nada.
+const tarefas = require('./tarefasServico');
+const passoNaTarefa = (api, id, usuarioId, extra = {}) => tarefas.sincronizarPassoDaProspeccao(api, id, { usuarioId, ...extra });
 
 const router = express.Router();
 
@@ -965,7 +969,9 @@ router.post(
   ),
   async (req, res) => {
     try {
-      const criadaId = await criarProspeccao(createApiClient(req), req.body || {}, usuarioDaRequisicao(req));
+      const api = createApiClient(req);
+      const criadaId = await criarProspeccao(api, req.body || {}, usuarioDaRequisicao(req));
+      await passoNaTarefa(api, criadaId, usuarioDaRequisicao(req));
       res.status(201).json({ id: criadaId });
     } catch (err) {
       if (err.status !== 409) console.error('Erro ao criar prospecção:', err);
@@ -1131,6 +1137,7 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     }
 
     await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
+    await passoNaTarefa(api, id, usuarioDaRequisicao(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -1228,6 +1235,7 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
     }
 
     await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
+    await passoNaTarefa(api, id, usuarioDaRequisicao(req));
 
     res.json({
       success: true,
@@ -1260,12 +1268,12 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
  *
  * Devolve os eventos de histórico para quem chamou registrar em bloco.
  */
-async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contatoId }, usuarioId) {
+async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contatoId, tarefaId = null }, usuarioId) {
   const passo = texto(prospeccao.proximo_passo);
   if (!passo) return [];
 
   const quando = data || new Date().toISOString();
-  await api.post('/api/prospeccao_interacoes', {
+  const criada = await api.post('/api/prospeccao_interacoes', {
     prospeccao_id: Number(id),
     contato_id: contatoId ?? null,
     tipo: 'Atividade realizada',
@@ -1274,10 +1282,12 @@ async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contato
     detalhe: texto(nota),
     passo_planejado: passo,
     passo_planejado_data: prospeccao.proximo_passo_data || null,
-    usuario_id: usuarioId ?? null
+    usuario_id: usuarioId ?? null,
+    // Só quando vem da tarefa: a coluna nasce com sql/tarefas_calendario.sql.
+    ...(tarefaId ? { tarefa_id: Number(tarefaId) } : {})
   });
 
-  return [{
+  const eventos = [{
     tipo: 'interacao', acao: 'criou',
     entidade: `Atividade realizada — ${passo}`,
     valor_anterior: passo,
@@ -1285,6 +1295,34 @@ async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contato
     observacao: 'Passo planejado concluído',
     detalhe: { passo_planejado: passo, passo_planejado_data: prospeccao.proximo_passo_data || null, nota: texto(nota) }
   }];
+  // Quem chama ainda acrescenta eventos no mesmo array; o id da atividade vai junto.
+  eventos.interacaoId = criada?.id ?? null;
+  return eventos;
+}
+
+/**
+ * Tarefas: concluir a tarefa-espelho do passo é concluir o passo aqui — a
+ * atividade "Atividade realizada" com o combinado, o passo limpo e o
+ * histórico. Devolve o id da atividade.
+ */
+async function concluirPassoPelaTarefa(api, id, { nota, tarefaId }, usuarioId) {
+  const alvo = await buscarProspeccao(api, id);
+  if (!texto(alvo.proximo_passo)) return null;
+  const eventos = await concluirPassoPlanejado(api, id, alvo, { nota, tarefaId }, usuarioId);
+  const interacaoId = eventos.interacaoId ?? null;
+  await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null });
+  eventos.push(...diferencasDaFicha(alvo, { proximo_passo: null, proximo_passo_data: null }));
+  await registrarHistorico(api, id, eventos, usuarioId);
+  return interacaoId;
+}
+
+/** Tarefas: editar o título/data da tarefa-espelho (ou cancelá-la) muda o passo aqui. */
+async function atualizarPassoPelaTarefa(api, id, { passo, data }, usuarioId) {
+  const alvo = await buscarProspeccao(api, id);
+  const novo = { proximo_passo: texto(passo) || null, proximo_passo_data: texto(passo) ? (data || null) : null };
+  await api.put(`/api/prospeccoes/${id}`, novo);
+  await registrarHistorico(api, id, diferencasDaFicha(alvo, novo), usuarioId);
+  await passoNaTarefa(api, id, usuarioId);
 }
 
 router.put('/:id/proximo-passo', exigirPermissao('pros.next.step'), async (req, res) => {
@@ -1315,6 +1353,9 @@ router.put('/:id/proximo-passo', exigirPermissao('pros.next.step'), async (req, 
 
     eventos.push(...diferencasDaFicha(alvo, { proximo_passo: novoPasso, proximo_passo_data: novaData }));
     await registrarHistorico(api, id, eventos, usuarioId);
+    await passoNaTarefa(api, id, usuarioId, {
+      concluiuAnterior: tinhaPasso && Boolean(notaAnterior), nota: notaAnterior, interacaoId: eventos.interacaoId ?? null
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -1420,6 +1461,7 @@ router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async
     }
 
     await registrarHistorico(api, id, eventos, usuarioId);
+    await passoNaTarefa(api, id, usuarioId, { concluiuAnterior: true, nota, interacaoId: eventos.interacaoId ?? null });
 
     // `converter` é só um sinal para a interface abrir o fluxo de conversão,
     // que valida os dados fiscais e pede status e dono do cliente. Converter
@@ -1479,6 +1521,7 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
         proximo_passo: texto(req.body.proximo_passo),
         proximo_passo_data: req.body?.proximo_passo_data || null
       });
+      await passoNaTarefa(api, id, usuarioDaRequisicao(req));
     }
 
     await registrarHistorico(api, id, {
@@ -1935,6 +1978,13 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
       }
     ], usuarioId);
 
+    await passoNaTarefa(api, id, usuarioId);
+    await tarefas.criarTarefaAutomatica(api, 'prospeccao_convertida', {
+      refId: id, responsavelId: p.responsavel_id || usuarioId, usuarioId,
+      vinculos: { cliente_id: clienteCriadoId },
+      valores: { cliente: p.nome_fantasia, prospeccao: p.nome_fantasia }
+    });
+
     return { clienteId: clienteCriadoId, jaExistia: false, contatos: deParaContatos, prospeccao: p };
   } catch (err) {
     // Sem transação: se o cliente entrou mas a prospecção não fechou, ficariam
@@ -2024,6 +2074,7 @@ router.put(
         valor_novo: novo ? (nomes.get(novo) || `#${novo}`) : null,
         observacao: texto(req.body?.observacao)
       }, usuarioDaRequisicao(req));
+      await passoNaTarefa(api, id, usuarioDaRequisicao(req));
 
       res.json({ success: true });
     } catch (err) {
@@ -2103,6 +2154,10 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
       throw erro(400, 'Não é possível excluir: existem orçamentos vinculados');
     }
 
+    // A tarefa do próximo passo não pode ficar aberta apontando para o nada.
+    await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null }).catch(() => null);
+    await passoNaTarefa(api, id, usuarioDaRequisicao(req));
+
     // Contatos, interações, histórico, notas, anexos e campanhas caem por
     // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
     await api.delete(`/api/prospeccoes/${id}`);
@@ -2134,4 +2189,7 @@ module.exports.rotuloContato = rotuloContato;
 // cliente antes de emitir o pedido.
 module.exports.converterProspeccaoEmCliente = converterProspeccaoEmCliente;
 module.exports.ETAPAS = ETAPAS;
+// Tarefas (backend/tarefasController.js): a tarefa-espelho do próximo passo.
+module.exports.concluirPassoPelaTarefa = concluirPassoPelaTarefa;
+module.exports.atualizarPassoPelaTarefa = atualizarPassoPelaTarefa;
 module.exports.PROBABILIDADE_PADRAO = PROBABILIDADE_PADRAO;

@@ -319,3 +319,23 @@
 [data-menu-theme="light"] .hs-avatar,
 [data-menu-theme="light"] .sino-avatar { color: #5b4510; background: rgba(182, 160, 62, 0.28); border-color: rgba(122, 92, 18, 0.25); }
 [data-menu-theme="light"] .hs-avatar--sistema { color: #1d4ed8; background: rgba(138, 167, 243, 0.25); }
+
+/* Sino — avisos de tarefas: aceitar/recusar convite, tirar do sino, cores dos tipos. */
+.sino-aviso { cursor: pointer; }
+.sino-aviso__lado { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 0.4rem; align-self: stretch; flex-shrink: 0; }
+.sino-aviso__tirar { width: 1.4rem; height: 1.4rem; border-radius: 999px; display: grid; place-items: center; font-size: 0.65rem; color: rgba(255, 255, 255, 0.45); opacity: 0; transition: opacity 150ms ease, background 150ms ease; }
+.sino-aviso:hover .sino-aviso__tirar, .sino-aviso__tirar:focus-visible { opacity: 1; }
+.sino-aviso__tirar:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.sino-aviso__acoes { display: flex; gap: 0.35rem; margin-top: 0.35rem; }
+.sino-aviso__botao { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+.sino-aviso__botao--sim { background: #16a34a; color: #fff; }
+.sino-aviso__botao--sim:hover { background: #22c55e; }
+.sino-aviso__botao--nao { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.85); }
+.sino-aviso__botao--nao:hover { background: rgba(255, 88, 88, 0.25); color: #fff; }
+.sino-avatar__tipo--tarefa_lembrete { background: #d97706; }
+.sino-avatar__tipo--tarefa_atrasada { background: #dc2626; }
+.sino-avatar__tipo--tarefa_atribuida, .sino-avatar__tipo--tarefa_alterada { background: var(--color-primary, #b6a03e); }
+.sino-avatar__tipo--tarefa_concluida, .sino-avatar__tipo--convite_respondido { background: #16a34a; }
+.sino-avatar__tipo--convite_tarefa { background: #2563eb; }
+[data-menu-theme="light"] .sino-aviso__botao--nao { background: rgba(15, 23, 42, 0.08); color: #334155; }
+[data-menu-theme="light"] .sino-aviso__tirar { color: #64748b; }

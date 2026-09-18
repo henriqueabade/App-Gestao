@@ -180,6 +180,12 @@
 
   function montar(alvo, opcoes = {}) {
     const { origem, registroId, descrever = () => ({}), aoCarregar = () => {}, colunas = {} } = opcoes;
+    // Textos da caixa do topo (a tarefa fala em "comentário ou arquivo", a ficha em "observação").
+    const textos = {
+      placeholder: 'Escreva uma observação para todos que acompanham esta ficha… (Ctrl+Enter publica)',
+      publicar: 'Publicar', publicado: 'Observação publicada.', vazio: 'Nenhum registro no histórico ainda.',
+      ...(opcoes.textos || {})
+    };
     // Colunas de permissão (data-perm-col) do módulo: quem não pode ver a data,
     // o tipo, o resumo ou quem fez continua sem ver, como na tabela antiga.
     const marcarColuna = (el, chave) => { if (colunas[chave]) el.setAttribute('data-perm-col', colunas[chave]); return el; };
@@ -330,7 +336,8 @@
       const enviar = botao('hs-botao hs-botao--publicar', [icone('fa-paper-plane'), rotulo]);
       enviar.dataset.acaoGerida = 'true';
       const disparar = async () => {
-        const texto = campo.value.trim();
+        let texto = campo.value.trim();
+        if (!texto && comAnexo && escolhidos.length) texto = escolhidos.length === 1 ? 'Anexou um arquivo' : `Anexou ${escolhidos.length} arquivos`;
         if (!texto) { campo.focus(); return; }
         enviar.disabled = true;
         campo.disabled = true;
@@ -685,14 +692,14 @@
       } else {
         const compor = criar('div', 'hs-compor');
         compor.append(avatar(dados.eu?.id, dados.eu?.nome), caixaDeTexto({
-          chave: 'obs', placeholder: 'Escreva uma observação para todos que acompanham esta ficha… (Ctrl+Enter publica)', rotulo: 'Publicar',
+          chave: 'obs', placeholder: textos.placeholder, rotulo: textos.publicar,
           aoEnviar: async (texto, arquivos) => {
             try {
               const criado = await chamar('/observacoes', { method: 'POST', corpo: { texto } });
               rascunhos.delete('obs');
               if (arquivos.length && criado?.id) await enviarAnexos(arquivos, { item_id: criado.id });
               await recarregar();
-              avisar('Observação publicada.', 'success');
+              avisar(textos.publicado, 'success');
               return true;
             } catch (err) { avisar(err.message); return false; }
           }
@@ -715,7 +722,7 @@
       raiz.appendChild(barra);
 
       if (!itens.length) {
-        raiz.appendChild(criar('div', 'hs-vazio', 'Nenhum registro no histórico ainda.'));
+        raiz.appendChild(criar('div', 'hs-vazio', textos.vazio));
       } else {
         const ol = criar('ol', 'hs-linha');
         let diaAtual = null;

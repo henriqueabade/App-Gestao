@@ -12,6 +12,9 @@ const {
   prazosDoTexto
 } = require('./faturamentoPedido');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+const clienteHistorico = require('./clienteHistorico');
+// Tarefa automática "orçamento enviado → follow-up" (sql/tarefas_calendario.sql).
+const tarefas = require('./tarefasServico');
 
 const router = express.Router();
 
@@ -213,6 +216,10 @@ async function numeroDeClienteLivre(api) {
  * é ruim, desfazer um orçamento já gravado por causa disso é pior.
  */
 async function anotarNaProspeccao(api, req, orcamento, evento) {
+  // O cliente também tem histórico (e o calendário mostra estes marcos).
+  if (orcamento?.cliente_id) {
+    await clienteHistorico.registrarNoCliente(api, orcamento.cliente_id, [evento], idDoUsuarioDaRequisicao(req));
+  }
   const prospeccaoId = orcamento?.prospeccao_id;
   if (!prospeccaoId) return;
   try {
@@ -220,6 +227,28 @@ async function anotarNaProspeccao(api, req, orcamento, evento) {
   } catch (err) {
     console.error('[orcamentos] falha ao anotar no histórico da prospecção:', err?.message || err);
   }
+}
+
+/**
+ * Orçamento que sai do rascunho (passa a Pendente = enviado ao cliente): quem
+ * enviou ganha a tarefa de cobrar a resposta, se a regra estiver ligada.
+ */
+async function tarefaDoOrcamentoEnviado(api, req, orcamento) {
+  if (!orcamento?.id) return;
+  const [cliente, prospeccao] = await Promise.all([
+    orcamento.cliente_id ? api.get(`/api/clientes/${orcamento.cliente_id}`).catch(() => null) : null,
+    orcamento.prospeccao_id ? api.get(`/api/prospeccoes/${orcamento.prospeccao_id}`).catch(() => null) : null
+  ]);
+  const usuarioId = idDoUsuarioDaRequisicao(req);
+  await tarefas.criarTarefaAutomatica(api, 'orcamento_enviado', {
+    refId: orcamento.id, responsavelId: usuarioId, usuarioId,
+    vinculos: {
+      orcamento_id: Number(orcamento.id),
+      cliente_id: orcamento.cliente_id ? Number(orcamento.cliente_id) : null,
+      prospeccao_id: !orcamento.cliente_id && orcamento.prospeccao_id ? Number(orcamento.prospeccao_id) : null
+    },
+    valores: { orcamento: orcamento.numero, cliente: cliente?.nome_fantasia || prospeccao?.nome_fantasia || '' }
+  });
 }
 
 /**
@@ -809,6 +838,16 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
       }, idDoUsuarioDaRequisicao(req));
     }
 
+    if (temCliente) {
+      await clienteHistorico.registrarNoCliente(api, body.cliente_id, [{
+        tipo: 'orcamento', acao: 'criou', entidade: `Orçamento ${numero}`, valor_novo: numero,
+        detalhe: { orcamento_id: orcamentoId, situacao: body.situacao || null, valor_final: body.valor_final ?? null, itens: itens.length }
+      }], idDoUsuarioDaRequisicao(req));
+    }
+    if (body.situacao === 'Pendente') {
+      await tarefaDoOrcamentoEnviado(api, req, { id: orcamentoId, numero, cliente_id: body.cliente_id || null, prospeccao_id: body.prospeccao_id || null });
+    }
+
     res.json({ success: true, id: orcamentoId, numero });
   } catch (err) {
     console.error('Erro ao salvar orçamento:', err);
@@ -914,9 +953,12 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       });
     }
 
-    await anotarNaProspeccao(api, req, { prospeccao_id: payload.prospeccao_id }, {
+    if (body.situacao === 'Pendente' && atual?.situacao !== 'Pendente') {
+      await tarefaDoOrcamentoEnviado(api, req, { ...atual, ...payload, id: Number(id), numero: atual?.numero || payload.numero });
+    }
+    await anotarNaProspeccao(api, req, { prospeccao_id: payload.prospeccao_id, cliente_id: payload.cliente_id ?? atual?.cliente_id }, {
       tipo: 'orcamento',
-      acao: 'editou',
+      acao: 'alterou',
       entidade: `Orçamento ${atual?.numero || id}`,
       campo: 'situacao',
       valor_anterior: atual?.situacao ?? null,
@@ -991,9 +1033,12 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
     }
     await api.put(`/api/orcamentos/${id}`, payload);
 
+    if (situacao === 'Pendente' && antes?.situacao !== 'Pendente') {
+      await tarefaDoOrcamentoEnviado(api, req, { ...antes, id: Number(id) });
+    }
     await anotarNaProspeccao(api, req, antes, {
       tipo: 'orcamento',
-      acao: 'editou',
+      acao: 'alterou',
       entidade: `Orçamento ${antes?.numero || id}`,
       campo: 'situacao',
       valor_anterior: antes?.situacao ?? null,

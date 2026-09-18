@@ -2635,6 +2635,19 @@ function localizarModuloDashboard() {
  * espera por ela antes de tirar a máscara, e a tela nasce pronta em vez de
  * montar os cartões na frente do usuário.
  */
+/** "Meu dia" (tarefas de hoje, atrasadas, feitas e convites): clicar abre Tarefas no filtro. */
+function montarMeuDia(moduleEl) {
+    if (typeof window === 'undefined' || !window.TarefasUI?.montarMeuDia || typeof moduleEl?.querySelector !== 'function') return;
+    const alvo = moduleEl.querySelector('[data-dash-meudia]');
+    if (!alvo) return;
+    window.TarefasUI.montarMeuDia(alvo, {
+        aoClicar: filtro => {
+            window.tarefasPedido = { filtro: ['hoje', 'atrasadas', 'concluidas', 'convites'].includes(filtro) ? filtro : 'hoje' };
+            window.loadPage?.('tarefas');
+        }
+    });
+}
+
 function iniciarDashboard(moduleEl, { aguardarAvisoDoMenu = true } = {}) {
     if (!moduleEl || !moduleEl.dataset) return null;
     if (moduleEl.dataset.iniciado === '1') return moduleEl.moduleReadyPromise || null;
@@ -2644,6 +2657,7 @@ function iniciarDashboard(moduleEl, { aguardarAvisoDoMenu = true } = {}) {
     // virar uma segunda requisição.
     if (aguardarAvisoDoMenu) moduleEl.dataset.aguardaAvisoDoMenu = '1';
     ligarAcoes(moduleEl);
+    montarMeuDia(moduleEl);
     moduleEl.moduleReadyPromise = carregarDashboard(moduleEl, { atualizar: false });
     return moduleEl.moduleReadyPromise;
 }

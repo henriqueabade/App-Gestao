@@ -14,6 +14,7 @@
         <button id="tab-ordens" role="tab" aria-selected="false" aria-controls="panel-ordens" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Ordens</button>
         <button id="tab-transportadoras" role="tab" aria-selected="false" aria-controls="panel-transportadoras" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Transportadoras</button>
         <button id="tab-notas" role="tab" aria-selected="false" aria-controls="panel-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
+        <button id="tab-atividades" role="tab" aria-selected="false" aria-controls="panel-atividades" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Atividades</button>
         <button id="tab-historico" role="tab" aria-selected="false" aria-controls="panel-historico" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Histórico</button>
       </div>
     </nav>
@@ -333,6 +334,16 @@
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
           <textarea id="clienteNotas" rows="12" placeholder="Digite suas observações sobre o cliente..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        </div>
+      </section>
+
+      <!-- Atividades: o que foi feito com o cliente (ligação, visita...) e as
+           tarefas agendadas para ele. data-editavel-na-ficha: fora do aviso de
+           "somente leitura" (aqui se escreve). -->
+      <section id="panel-atividades" role="tabpanel" aria-labelledby="tab-atividades" class="px-8 py-6 hidden" data-editavel-na-ficha>
+        <div class="cat">
+          <div id="clienteTarefas" class="cat__cartao"></div>
+          <div id="clienteAtividades" class="cat__cartao"></div>
         </div>
       </section>
 

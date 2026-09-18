@@ -316,7 +316,9 @@ fecha o modal de cima.
 Conta como tabela com rolagem própria: `.table-scroll`, `.fin-tabela`,
 `.items-table-scroll`, `[data-rolagem-tabela]` ou qualquer elemento que role
 e tenha uma `<table>` como filha direta. A barra de rolagem dentro dos modais é
-a fina dourada de `src/styles/scroll.css` (seção 3c). Coberto por
+a fina dourada de `src/styles/scroll.css` (seção 3c) — inclusive nas caixas da
+`DialogPadrao`, que são `<dialog>` nativo e por isso entram pelo seletor `dialog`,
+não por `[role="dialog"]`. Coberto por
 `src/js/__tests__/rolagemEncadeada.test.js`.
 
 ### Carregamento
@@ -354,3 +356,12 @@ relatório "Resultado da importação". Detalhes em
 Histórico de ficha é `window.HistoricoSocial.montar(alvo, { origem, registroId, descrever })`
 (`src/js/utils/historico-social.js`): o módulo só diz como descrever cada
 evento. Nova origem entra em `ORIGENS` de `backend/historicoSocial.js`.
+
+### Tarefas em qualquer tela
+
+Linha de tarefa, editor, "Concluir", criação rápida e a caixa de tarefas de
+uma ficha são do `window.TarefasUI` (`src/js/utils/tarefas-ui.js` +
+`src/styles/tarefas-ui.css`, globais). Numa ficha:
+`TarefasUI.montarTarefasDaFicha(alvo, { tipo: 'cliente' | 'prospeccao', id, nome })`.
+Não recrie o editor num módulo: abra com `TarefasUI.abrirEditor({ id })` ou
+`abrirEditor({ preset })`. Regras e rotas em `docs/tarefas-e-calendario.md`.

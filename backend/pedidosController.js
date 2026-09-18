@@ -4,6 +4,8 @@ const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+// Tarefa automática "pedido entregue → pós-venda" (sql/tarefas_calendario.sql).
+const tarefas = require('./tarefasServico');
 const confirmacaoDaProducao = require('./financeiro/producaoConfirmacao');
 const {
   hojeEmSaoPaulo,
@@ -390,6 +392,22 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
           : `Pedido marcado como ${status}.`,
         usuarioId: idDoUsuarioDaRequisicao(req)
       }, avisos);
+    }
+
+    if (status === 'Entregue') {
+      try {
+        const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+        const cliente = pedido?.cliente_id ? await api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null) : null;
+        const usuarioId = idDoUsuarioDaRequisicao(req);
+        const dono = await tarefas.usuarioPeloNome(api, cliente?.dono_cliente);
+        await tarefas.criarTarefaAutomatica(api, 'pedido_entregue', {
+          refId: id, responsavelId: dono || usuarioId, usuarioId,
+          vinculos: { pedido_id: Number(id), cliente_id: pedido?.cliente_id ? Number(pedido.cliente_id) : null },
+          valores: { pedido: pedido?.numero || id, cliente: cliente?.nome_fantasia || '' }
+        });
+      } catch (err) {
+        console.error('[pedidos] tarefa de pós-venda não criada:', err?.message || err);
+      }
     }
 
     res.json({

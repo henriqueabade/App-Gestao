@@ -156,3 +156,30 @@ test('o menu carrega o utilitário, e a barra de rolagem das tabelas nos modais 
   const scroll = fs.readFileSync(path.join(SRC, 'styles', 'scroll.css'), 'utf8');
   assert.match(scroll, /\[role="dialog"\] \*::-webkit-scrollbar\s*\{[^}]*width:\s*6px/);
 });
+
+test('as caixas da DialogPadrao (<dialog> nativo) também têm a barra da casa', () => {
+  // `[role="dialog"]` só casa com o ATRIBUTO escrito; o papel implícito do
+  // <dialog> não conta. O relatório de importação CSV rolava com a barra cinza
+  // e grossa do sistema por isso — e com ele toda caixa da DialogPadrao.
+  const dialogo = fs.readFileSync(path.join(SRC, 'components', 'dialogPadrao.js'), 'utf8');
+  assert.match(dialogo, /document\.createElement\('dialog'\)/,
+    'a DialogPadrao deixou de ser <dialog> nativo — reveja o seletor da seção 3c do scroll.css');
+
+  const scroll = fs.readFileSync(path.join(SRC, 'styles', 'scroll.css'), 'utf8');
+  const bloco = seletor => {
+    const i = scroll.indexOf(seletor);
+    return i < 0 ? null : scroll.slice(i, scroll.indexOf('}', i) + 1);
+  };
+
+  const largura = bloco('dialog *::-webkit-scrollbar,');
+  assert.ok(largura, 'a largura da barra não vale para <dialog> nativo');
+  assert.match(largura, /width:\s*6px/);
+
+  const trilho = bloco('dialog *::-webkit-scrollbar-track,');
+  assert.ok(trilho, 'o trilho da barra não vale para <dialog> nativo');
+  assert.match(trilho, /background:\s*transparent/);
+
+  const cursor = bloco('dialog *::-webkit-scrollbar-thumb,');
+  assert.ok(cursor, 'o cursor dourado não vale para <dialog> nativo');
+  assert.match(cursor, /rgba\(255,\s*215,\s*0,\s*0\.4\)/);
+});

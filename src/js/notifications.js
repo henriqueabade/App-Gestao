@@ -15,6 +15,11 @@
  * desligado, o sino fica quieto; a categoria "Vendas e pedidos" desligada
  * silencia estes avisos (são movimentação comercial).
  *
+ * Tarefas (sql/tarefas_calendario.sql): a cada minuto o sino pede ao servidor
+ * os lembretes e atrasos devidos (POST /api/tarefas/avisos); convite de
+ * tarefa em conjunto tem Aceitar/Recusar no próprio aviso; o "x" tira o aviso
+ * do sino; o que chega de novo também aparece como notificação do Windows.
+ *
  * `window.__notificationsInternals` segue com o mesmo contrato de antes
  * (fetchNotificationsWithRetry, refreshNotifications({ respectDaily }),
  * resetDailyState, shutdown) — session.js e os testes dependem dele.
@@ -276,6 +281,7 @@ window.addEventListener('DOMContentLoaded', () => {
         avisos = lista.filter((n) => n && typeof n === 'object');
         naoLidas = ultimaResposta.naoLidas;
         sqlPendente = ultimaResposta.sqlPendente;
+        notificarNoSistema(avisos);
       }
       ultimaBusca = Date.now();
     } catch (error) {
@@ -359,8 +365,44 @@ window.addEventListener('DOMContentLoaded', () => {
     resposta: 'fa-reply',
     curtida: 'fa-heart',
     observacao: 'fa-pen-to-square',
+    tarefa_lembrete: 'fa-clock',
+    tarefa_atrasada: 'fa-triangle-exclamation',
+    tarefa_atribuida: 'fa-list-check',
+    tarefa_alterada: 'fa-calendar-days',
+    tarefa_concluida: 'fa-circle-check',
+    convite_tarefa: 'fa-user-plus',
+    convite_respondido: 'fa-user-check',
   };
-  const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente' };
+  const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', tarefa: 'Tarefa' };
+  // O que vira notificação do Windows quando chega (não lido e novo).
+  const NO_SISTEMA = new Set(['tarefa_lembrete', 'tarefa_atrasada', 'tarefa_atribuida', 'convite_tarefa', 'convite_respondido', 'resposta', 'comentario']);
+
+  async function dispensar(aviso) {
+    avisos = avisos.filter((a) => a.id !== aviso.id);
+    if (!aviso.lida) naoLidas = Math.max(0, naoLidas - 1);
+    updateIcon();
+    desenharPainel();
+    const baseUrl = await baseDaApi();
+    if (!baseUrl) return;
+    try {
+      await fetch(new URL('/api/notificacoes/dispensar', baseUrl).toString(), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: [aviso.id] }),
+      });
+    } catch (err) {
+      console.warn('Não foi possível tirar o aviso do sino.', err);
+    }
+  }
+
+  async function responderConvite(aviso, resposta) {
+    if (!window.TarefasUI?.responderConvite) return;
+    const ok = await window.TarefasUI.responderConvite(aviso.registro_id, resposta);
+    if (ok) {
+      avisos = avisos.map((a) => (a.id === aviso.id ? { ...a, lida: true, convite_pendente: false } : a));
+      if (!aviso.lida) naoLidas = Math.max(0, naoLidas - 1);
+      updateIcon();
+      desenharPainel();
+    }
+  }
 
   let fotos = new Map();
 
@@ -372,6 +414,9 @@ window.addEventListener('DOMContentLoaded', () => {
       img.src = foto;
       img.alt = '';
       caixa.appendChild(img);
+    } else if (!aviso.autor && String(aviso.tipo || '').startsWith('tarefa_')) {
+      // Lembrete e atraso vêm do sistema, não de uma pessoa.
+      caixa.appendChild(icone('fa-calendar-check'));
     } else {
       caixa.textContent = window.HistoricoSocial?.iniciais?.(aviso.autor || '') || (aviso.autor || '?').slice(0, 1).toUpperCase();
     }
@@ -382,8 +427,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function linhaDoAviso(aviso) {
-    const linha = criar('button', `sino-aviso${aviso.lida ? '' : ' sino-aviso--nova'}`);
-    linha.type = 'button';
+    const linha = criar('div', `sino-aviso${aviso.lida ? '' : ' sino-aviso--nova'}`);
+    linha.tabIndex = 0;
     linha.setAttribute('role', 'menuitem');
     linha.appendChild(avatar(aviso));
     const corpo = criar('span', 'sino-aviso__corpo');
@@ -393,13 +438,36 @@ window.addEventListener('DOMContentLoaded', () => {
     if (ORIGEM[aviso.origem]) rodape.appendChild(criar('span', 'sino-aviso__origem', ORIGEM[aviso.origem]));
     rodape.appendChild(criar('span', null, quando(aviso.criado_em || aviso.date)));
     corpo.appendChild(rodape);
+    if (aviso.tipo === 'convite_tarefa' && aviso.convite_pendente) {
+      const acoes = criar('span', 'sino-aviso__acoes');
+      const aceitar = criar('button', 'sino-aviso__botao sino-aviso__botao--sim');
+      aceitar.type = 'button';
+      aceitar.append(icone('fa-check'), document.createTextNode(' Aceitar'));
+      aceitar.addEventListener('click', (e) => { e.stopPropagation(); responderConvite(aviso, 'aceitar'); });
+      const recusar = criar('button', 'sino-aviso__botao sino-aviso__botao--nao');
+      recusar.type = 'button';
+      recusar.append(icone('fa-xmark'), document.createTextNode(' Recusar'));
+      recusar.addEventListener('click', (e) => { e.stopPropagation(); responderConvite(aviso, 'recusar'); });
+      acoes.append(aceitar, recusar);
+      corpo.appendChild(acoes);
+    }
     linha.appendChild(corpo);
+    const lado = criar('span', 'sino-aviso__lado');
     if (!aviso.lida) {
       const ponto = criar('span', 'sino-aviso__ponto');
       ponto.title = 'Não lido';
-      linha.appendChild(ponto);
+      lado.appendChild(ponto);
     }
+    const tirar = criar('button', 'sino-aviso__tirar');
+    tirar.type = 'button';
+    tirar.title = 'Tirar do sino';
+    tirar.setAttribute('aria-label', 'Tirar este aviso do sino');
+    tirar.appendChild(icone('fa-xmark'));
+    tirar.addEventListener('click', (e) => { e.stopPropagation(); dispensar(aviso); });
+    lado.appendChild(tirar);
+    linha.appendChild(lado);
     linha.addEventListener('click', () => abrirAviso(aviso));
+    linha.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === linha) abrirAviso(aviso); });
     return linha;
   }
 
@@ -504,6 +572,15 @@ window.addEventListener('DOMContentLoaded', () => {
       updateIcon();
       marcarLidas({ ids: [aviso.id] });
     }
+    // Tarefa abre o editor por cima de onde a pessoa estiver (o comentário, na aba da conversa).
+    if (aviso.origem === 'tarefa' && aviso.registro_id && window.TarefasUI?.abrirEditor) {
+      const conversa = ['comentario', 'resposta', 'observacao', 'curtida'].includes(aviso.tipo);
+      window.TarefasUI.abrirEditor({
+        id: aviso.registro_id, aba: conversa ? 'conversa' : 'detalhes',
+        foco: conversa ? { itemId: aviso.item_id, comentarioId: aviso.comentario_id } : null,
+      });
+      return;
+    }
     const pagina = aviso.origem === 'cliente' ? 'clientes' : aviso.origem === 'prospeccao' ? 'prospeccoes' : null;
     if (!pagina || !aviso.registro_id) return;
     window.historicoSocialFoco = {
@@ -551,11 +628,58 @@ window.addEventListener('DOMContentLoaded', () => {
     if (ativo() && Date.now() - ultimaBusca > FOCO_MINIMO_MS) refreshNotifications({ respectDaily: false });
   };
 
+  /** Lembretes e atrasos de tarefa: quem gera é o servidor, a pedido do sino. */
+  let gerando = false;
+  async function gerarAvisosDeTarefas() {
+    if (gerando || !ativo()) return;
+    gerando = true;
+    try {
+      const baseUrl = await baseDaApi();
+      if (!baseUrl) return;
+      await fetch(new URL('/api/tarefas/avisos', baseUrl).toString(), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, credentials: 'include', body: '{}',
+      });
+    } catch (err) {
+      console.warn('Não foi possível gerar os avisos das tarefas.', err);
+    } finally {
+      gerando = false;
+    }
+  }
+
+  // Notificação do Windows para o que chegou de novo. Na primeira leitura só
+  // anota o que já existia (abrir o app não pode disparar dez notificações).
+  const vistos = new Set();
+  let primeiraLeitura = true;
+  function notificarNoSistema(lista) {
+    const novos = lista.filter((n) => !n.lida && n.id !== undefined && !vistos.has(n.id));
+    lista.forEach((n) => vistos.add(n.id));
+    if (primeiraLeitura) { primeiraLeitura = false; return; }
+    if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
+    for (const aviso of novos.filter((n) => NO_SISTEMA.has(n.tipo)).slice(0, 3)) {
+      try {
+        const n = new Notification(aviso.titulo || 'Aviso', { body: aviso.mensagem || '', tag: `sd-aviso-${aviso.id}` });
+        n.onclick = () => { try { window.focus(); } catch (_) { /* segue */ } abrirAviso(aviso); n.close(); };
+      } catch (err) {
+        console.warn('Notificação do Windows indisponível.', err);
+        return;
+      }
+    }
+  }
+
   function iniciarVigia() {
     if (intervalo !== null || typeof window.setInterval !== 'function') return;
-    intervalo = window.setInterval(() => {
-      if (ativo()) refreshNotifications({ respectDaily: false });
+    intervalo = window.setInterval(async () => {
+      if (!ativo()) return;
+      await gerarAvisosDeTarefas();
+      refreshNotifications({ respectDaily: false });
     }, INTERVALO_MS);
+    // Logo depois de abrir: o lembrete que venceu com o app fechado já aparece.
+    // (Só na tela de verdade: nos testes o documento é um dublê sem body.)
+    if (document.body) window.setTimeout?.(async () => {
+      if (!ativo()) return;
+      await gerarAvisosDeTarefas();
+      refreshNotifications({ respectDaily: false });
+    }, 4000);
   }
 
   function pararVigia() {

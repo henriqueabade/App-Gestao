@@ -35,6 +35,13 @@ const ORIGENS = {
   cliente: {
     tabela: 'cliente_historico', coluna: 'cliente_id', tabelaRegistro: 'clientes',
     permissao: 'cli.details.view', rotulo: 'o cliente', pagina: 'clientes'
+  },
+  // A linha do tempo de cada tarefa (sql/tarefas_calendario.sql). Quem vê é
+  // decidido tarefa a tarefa (backend/tarefasController.js, podeVerTarefa),
+  // não só pela permissão do módulo.
+  tarefa: {
+    tabela: 'tarefa_historico', coluna: 'tarefa_id', tabelaRegistro: 'tarefas',
+    permissao: 'tarefas.view', rotulo: 'a tarefa', pagina: 'tarefas'
   }
 };
 
@@ -254,7 +261,13 @@ async function lerRegistro(api, origem, registroId, { itens = null, nomes = null
       for (const [id, n] of mapa) if (texto(n).toLowerCase() === alvo) { criador = id; break; }
     }
   }
-  return { registro, nome: texto(registro.nome_fantasia) || `#${registroId}`, criadorId: criador };
+  // Na tarefa, além de quem criou, acompanham quem responde e quem participa.
+  let interessados = [];
+  if (origem === 'tarefa') {
+    const participantes = lista(await api.get('/api/tarefa_participantes', { query: { tarefa_id: registroId } }).catch(() => []));
+    interessados = [registro.responsavel_id, ...participantes.filter(p => p.status === 'aceito').map(p => p.usuario_id)];
+  }
+  return { registro, nome: texto(registro.nome_fantasia) || texto(registro.titulo) || `#${registroId}`, criadorId: criador, interessados };
 }
 
 /** Lê tudo o que a linha do tempo precisa de uma vez (1 ida em paralelo). */
@@ -350,14 +363,14 @@ async function escreverSocial(promessa) {
 /** Nova observação (um evento "publicou" escrito à mão). */
 async function publicarObservacao(api, { origem, registroId, texto: bruto, usuarioId, nomes }) {
   const conteudo = textoValido(bruto, { rotulo: 'A observação' });
-  const { nome, criadorId } = await lerRegistro(api, origem, registroId, { nomes });
+  const { nome, criadorId, interessados = [] } = await lerRegistro(api, origem, registroId, { nomes });
   const o = ORIGENS[origem];
   const criado = await escreverSocial(api.post(`/api/${o.tabela}`, {
     [o.coluna]: Number(registroId), tipo: 'observacao', acao: 'publicou', entidade: 'Observação',
     observacao: conteudo, usuario_id: usuarioId ?? null
   }));
   const autor = nomes?.get(Number(usuarioId)) || 'Alguém';
-  await notificar(api, destinatarios([criadorId], usuarioId), {
+  await notificar(api, destinatarios([criadorId, ...interessados], usuarioId), {
     tipo: 'observacao', ...textoDoAviso('observacao', { autor, registro: nome, conteudo }),
     origem, registro_id: Number(registroId), item_id: criado?.id ?? null, autor_id: usuarioId ?? null
   });
@@ -379,12 +392,12 @@ async function comentar(api, { origem, registroId, itemId, respostaDe = null, te
     origem, registro_id: Number(registroId), item_id: Number(itemId),
     resposta_de: pai ? Number(pai.id) : null, usuario_id: usuarioId ?? null, texto: conteudo
   }));
-  const { nome, criadorId } = await lerRegistro(api, origem, registroId, { nomes });
+  const { nome, criadorId, interessados = [] } = await lerRegistro(api, origem, registroId, { nomes });
   const autor = nomes?.get(Number(usuarioId)) || 'Alguém';
   const base = { origem, registro_id: Number(registroId), item_id: Number(itemId), comentario_id: criado?.id ?? null, autor_id: usuarioId ?? null };
   const paraPai = pai ? destinatarios([pai.usuario_id], usuarioId) : [];
   if (paraPai.length) await notificar(api, paraPai, { tipo: 'resposta', ...textoDoAviso('resposta', { autor, registro: nome, conteudo }), ...base });
-  const demais = destinatarios([criadorId, item.usuario_id], usuarioId).filter(id => !paraPai.includes(id));
+  const demais = destinatarios([criadorId, item.usuario_id, ...interessados], usuarioId).filter(id => !paraPai.includes(id));
   if (demais.length) await notificar(api, demais, { tipo: 'comentario', ...textoDoAviso('comentario', { autor, registro: nome, conteudo }), ...base });
   return criado;
 }

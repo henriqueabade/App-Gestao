@@ -11,6 +11,7 @@
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
       <div class="usuario-modal-tablist overflow-x-auto scrollbar-hide">
         <button id="tab-dados-usuario" role="tab" aria-selected="true" aria-controls="panel-dados-usuario" tabindex="0" class="usuario-modal-tab usuario-modal-tab--active">Dados Pessoais</button>
+        <button id="tab-tarefas-usuario" role="tab" aria-selected="false" aria-controls="panel-tarefas-usuario" tabindex="-1" class="usuario-modal-tab hidden">Tarefas e calendário</button>
       </div>
     </nav>
 
@@ -64,6 +65,12 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- Só o Sup Admin: de quem este usuário vê as tarefas e o calendário
+           (src/js/modals/usuario-editar.js → /api/tarefas/visibilidade). -->
+      <section id="panel-tarefas-usuario" role="tabpanel" aria-labelledby="tab-tarefas-usuario" class="px-8 py-6 hidden">
+        <div id="usuarioVisibilidadeTarefas" class="tui-escopo"></div>
       </section>
     </div>
 

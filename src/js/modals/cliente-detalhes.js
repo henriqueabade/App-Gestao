@@ -8,9 +8,12 @@
   const close = () => Modal.close('detalhesCliente');
   const voltar = document.getElementById('voltarDetalhesCliente');
   if(voltar) voltar.addEventListener('click', close);
-  document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
+  // Com um diálogo por cima (editor de tarefa, confirmação), o Esc é dele.
+  document.addEventListener('keydown', function esc(e){ if(e.key==='Escape' && !document.querySelector('dialog[open]')){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteDetalhes;
+  let nomeDoCliente = cliente?.nome_fantasia || '';
+  let contatosDoCliente = [];
 
   // Preservação do trabalho (ver docs/restauracao-de-trabalho.md).
   // Aqui não há nada a digitar — a tela é só leitura —, mas o modal precisa
@@ -56,9 +59,11 @@ async function carregarContatos(idCliente) {
       if(data && data.cliente){
         // Aberta pelo sino, a ficha chega só com o id: o nome vem daqui.
         if(titulo && data.cliente.nome_fantasia) titulo.textContent = `Detalhes – ${data.cliente.nome_fantasia}`;
+        nomeDoCliente = data.cliente.nome_fantasia || nomeDoCliente;
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         const contatos = await carregarContatos(cliente.id);
+        contatosDoCliente = contatos;
         renderContatos(contatos);
         renderTransportadoras(await carregarTransportadoras(cliente.id));
         inicializarToggles(data.cliente);
@@ -140,8 +145,8 @@ async function carregarContatos(idCliente) {
   activateTab(tabs[0], { setFocus: false });
 
   const warn = e => {
-    // A linha do tempo do histórico é o único lugar da ficha em que se escreve.
-    if(e.target.closest?.('[data-historico-social]')) return;
+    // A linha do tempo e as atividades são os lugares da ficha em que se escreve.
+    if(e.target.closest?.('[data-historico-social], [data-editavel-na-ficha]')) return;
     if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
       e.preventDefault();
       e.target.blur();
@@ -164,9 +169,12 @@ async function carregarContatos(idCliente) {
     campo: { rotulo: 'Edição', tom: 'neutro' },
     contato: { rotulo: 'Contato', tom: 'info' },
     transportadora: { rotulo: 'Transportadora', tom: 'neutro' },
-    conversao: { rotulo: 'Conversão', tom: 'sucesso' }
+    conversao: { rotulo: 'Conversão', tom: 'sucesso' },
+    tarefa: { rotulo: 'Tarefa', tom: 'aviso' },
+    interacao: { rotulo: 'Atividade', tom: 'info' },
+    orcamento: { rotulo: 'Orçamento', tom: 'aviso' }
   };
-  const ACAO_CLIENTE = { criou: 'Criou', alterou: 'Alterou', excluiu: 'Excluiu', moveu: 'Moveu', converteu: 'Converteu' };
+  const ACAO_CLIENTE = { criou: 'Criou', alterou: 'Alterou', excluiu: 'Excluiu', moveu: 'Moveu', converteu: 'Converteu', concluiu: 'Concluiu', reabriu: 'Reabriu', cancelou: 'Cancelou' };
   const cru = v => (v === null || v === undefined || String(v).trim() === '' ? null : String(v));
   const lerDetalhe = bruto => {
     if (!bruto) return null;
@@ -197,6 +205,153 @@ async function carregarContatos(idCliente) {
   }
   const abaHistorico = document.getElementById('tab-historico');
   abaHistorico?.addEventListener('click', () => montarHistorico());
+
+  // ------------------------------------------------------------------
+  // Atividades do cliente: o que foi FEITO (cliente_interacoes) e as
+  // tarefas agendadas para ele (src/js/utils/tarefas-ui.js). Tarefa
+  // concluída também vira atividade aqui.
+  // ------------------------------------------------------------------
+  const TIPOS_ATIVIDADE = [
+    ['Ligação', 'fa-phone', '#7dd3fc'], ['WhatsApp', 'fa-comment-dots', '#86efac'], ['E-mail', 'fa-envelope', '#c4a7ff'],
+    ['Reunião', 'fa-users', '#fdba74'], ['Visita', 'fa-location-dot', '#f9a8d4'], ['Proposta', 'fa-file-signature', '#d4c169'],
+    ['Nota', 'fa-note-sticky', '#cbd5e1'], ['Atividade realizada', 'fa-circle-check', '#4ade80']
+  ];
+  const corDoTipo = tipo => (TIPOS_ATIVIDADE.find(t => t[0] === tipo) || [])[2] || '#cbd5e1';
+  const iconeDoTipo = tipo => (TIPOS_ATIVIDADE.find(t => t[0] === tipo) || [])[1] || 'fa-circle-check';
+  const podeRegistrar = () => window.Permissoes?.pode?.('cli.interaction.add') !== false;
+  let atividadesMontadas = false;
+
+  /** "2026-09-18T17:00:00Z" → "2026-09-18T14:00" (datetime-local, hora da máquina). */
+  const paraCampoLocal = iso => {
+    const d = iso ? new Date(iso) : new Date();
+    const dois = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}`;
+  };
+  const quandoLegivel = iso => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  async function pintarAtividades(editando = null) {
+    const alvo = document.getElementById('clienteAtividades');
+    const T = window.TarefasUI;
+    if (!alvo || !T || !cliente?.id) return;
+    const { h, icone } = T;
+    let dados;
+    try {
+      const res = await fetchApi(`/api/clientes/${cliente.id}/interacoes`);
+      dados = await res.json();
+      if (!res.ok) throw new Error(dados.error || `Erro ${res.status}`);
+    } catch (err) {
+      alvo.replaceChildren(h('p', { class: 'tui-dica tui-dica--aviso', text: `Não foi possível carregar as atividades: ${err.message}` }));
+      return;
+    }
+    if (dados.sql_pendente) {
+      alvo.replaceChildren(h('div', { class: 'tui-aviso-sql' }, icone('fa-database'), h('span', { text: 'As atividades do cliente aparecem aqui depois que o SQL de tarefas (sql/tarefas_calendario.sql) for executado.' })));
+      return;
+    }
+    const atividades = dados.atividades || [];
+    let formularioAberto = Boolean(editando);
+
+    const topo = h('div', { class: 'tui-ficha__topo' },
+      h('div', { class: 'tui-ficha__titulo' }, icone('fa-clock-rotate-left'), h('strong', { text: 'Atividades realizadas' }),
+        atividades.length ? T.chip(String(atividades.length), { classe: 'tui-chip--info' }) : null),
+      podeRegistrar() ? h('button', { type: 'button', class: 'btn-secondary tui-botao cat__registrar', on: { click: () => { formularioAberto = !formularioAberto; formulario.hidden = !formularioAberto; if (formularioAberto) resumo.focus(); } } }, icone('fa-plus'), ' Registrar atividade') : null);
+
+    // formulário
+    let tipo = editando?.tipo || 'Ligação';
+    const chips = h('div', { class: 'cat__tipos', attrs: { role: 'radiogroup', 'aria-label': 'Tipo' } });
+    const pintarTipos = () => chips.replaceChildren(...TIPOS_ATIVIDADE.filter(([t]) => t !== 'Atividade realizada' || tipo === t).map(([t, ic, cor]) => {
+      const b = h('button', { type: 'button', class: 'cat__tipo', attrs: { role: 'radio', 'aria-checked': String(tipo === t) }, on: { click: () => { tipo = t; pintarTipos(); } } }, icone(ic), h('span', { text: t }));
+      b.style.setProperty('--cat-cor', cor);
+      return b;
+    }));
+    pintarTipos();
+    const quando = h('input', { class: 'tui-campo', type: 'datetime-local', value: paraCampoLocal(editando?.data) });
+    const contato = h('select', { class: 'tui-campo' }, h('option', { value: '', text: 'Com quem? (opcional)' }),
+      contatosDoCliente.map(c => h('option', { value: c.id, text: [c.nome, c.cargo].filter(Boolean).join(' — '), selected: Number(editando?.contato_id) === Number(c.id) })));
+    const resumo = h('input', { class: 'tui-campo', type: 'text', maxLength: 300, value: editando?.resumo || '', placeholder: 'Resumo em uma linha — ex.: Liguei, pediu catálogo novo' });
+    const detalhe = h('textarea', { class: 'tui-campo', rows: 3, maxLength: 5000, value: editando?.detalhe || '', placeholder: 'Detalhes (opcional)' });
+    const duracao = h('input', { class: 'tui-campo tui-campo--curto', type: 'number', min: 0, max: 1440, value: editando?.duracao_min ?? '', placeholder: 'min' });
+    const agendar = h('input', { type: 'checkbox' });
+    const salvar = h('button', { type: 'button', class: 'btn-primary tui-botao' }, icone('fa-check'), editando ? ' Salvar' : ' Registrar');
+    const cancelar = h('button', { type: 'button', class: 'btn-neutral tui-botao', text: 'Cancelar', on: { click: () => pintarAtividades() } });
+    salvar.addEventListener('click', async () => {
+      if (!resumo.value.trim()) { resumo.focus(); window.showToast?.('Descreva a atividade em uma linha.', 'error'); return; }
+      const corpo = {
+        tipo, resumo: resumo.value.trim(), detalhe: detalhe.value.trim() || null,
+        contato_id: contato.value ? Number(contato.value) : null,
+        duracao_min: duracao.value === '' ? null : Number(duracao.value),
+        data: quando.value ? new Date(quando.value).toISOString() : new Date().toISOString()
+      };
+      try {
+        const res = await fetchApi(editando ? `/api/clientes/${cliente.id}/interacoes/${editando.id}` : `/api/clientes/${cliente.id}/interacoes`, {
+          method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo)
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || `Erro ${res.status}`);
+        window.showToast?.(editando ? 'Atividade salva.' : 'Atividade registrada.', 'success');
+        linhaDoTempo?.recarregar?.();
+        await pintarAtividades();
+        if (agendar.checked) T.abrirEditor({ preset: { vinculos: [{ tipo: 'cliente', id: Number(cliente.id), nome: nomeDoCliente }], titulo: '', data: T.somarDias(T.hoje(), 3), origemTexto: 'Próximo passo depois da atividade' } });
+      } catch (err) {
+        window.showToast?.(err.message, 'error');
+      }
+    });
+    const formulario = h('div', { class: 'cat__formulario', hidden: !formularioAberto },
+      chips,
+      h('div', { class: 'cat__linha' }, h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Quando' }), quando), h('label', { class: 'cat__campo' }, h('span', { class: 'tui-rotulo', text: 'Com quem' }), contato), h('label', { class: 'cat__campo cat__campo--curto' }, h('span', { class: 'tui-rotulo', text: 'Duração' }), duracao)),
+      resumo, detalhe,
+      h('div', { class: 'cat__rodape' },
+        editando ? h('span') : h('label', { class: 'tui-check' }, agendar, ' Agendar o próximo passo em seguida'),
+        h('div', { class: 'tui-rodape__lado' }, cancelar, salvar)));
+
+    // linha do tempo
+    const lista = h('div', { class: 'cat__lista' });
+    if (!atividades.length) lista.append(h('p', { class: 'tui-dica', text: 'Nenhuma atividade registrada. Registre ligações, visitas e reuniões — ou conclua uma tarefa do cliente, que ela vem para cá.' }));
+    for (const a of atividades) {
+      const cor = corDoTipo(a.tipo);
+      const acoes = podeRegistrar() ? h('div', { class: 'cat__acoes' },
+        h('button', { type: 'button', class: 'tui-icone-botao', title: 'Editar', on: { click: () => pintarAtividades(a) } }, icone('fa-pen')),
+        h('button', { type: 'button', class: 'tui-icone-botao', title: 'Excluir', on: { click: async () => {
+          const ok = await window.DialogPadrao?.confirm({ title: 'Excluir esta atividade?', tom: 'erro', message: `"${a.resumo}" sai da lista de atividades.`, nota: 'O histórico do cliente guarda o que era.', confirmText: 'Excluir', confirmVariant: 'danger' });
+          if (!ok) return;
+          try {
+            const res = await fetchApi(`/api/clientes/${cliente.id}/interacoes/${a.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+            window.showToast?.('Atividade excluída.', 'success');
+            linhaDoTempo?.recarregar?.();
+            pintarAtividades();
+          } catch (err) { window.showToast?.(err.message, 'error'); }
+        } } }, icone('fa-trash-can'))) : null;
+      const item = h('article', { class: 'cat__item' },
+        h('span', { class: 'cat__icone' }, icone(iconeDoTipo(a.tipo))),
+        h('div', { class: 'cat__conteudo' },
+          h('div', { class: 'cat__meta' }, h('strong', { text: a.tipo }), h('span', { text: quandoLegivel(a.data) }), a.usuario ? h('span', { text: a.usuario }) : null),
+          h('p', { class: 'cat__resumo', text: a.resumo }),
+          a.detalhe ? h('p', { class: 'cat__detalhe', text: a.detalhe }) : null,
+          h('div', { class: 'cat__chips' },
+            a.contato ? T.chip(a.contato, { icone: 'fa-user' }) : null,
+            a.duracao_min ? T.chip(`${a.duracao_min} min`, { icone: 'fa-hourglass-half' }) : null,
+            a.tarefa_id ? h('button', { type: 'button', class: 'tui-link', on: { click: () => T.abrirEditor({ id: a.tarefa_id }) } }, icone('fa-list-check'), ' Veio de uma tarefa') : null)),
+        acoes);
+      item.style.setProperty('--cat-cor', cor);
+      lista.append(item);
+    }
+    alvo.replaceChildren(h('div', { class: 'tui-ficha tui-escopo' }, topo, formulario, lista));
+    if (editando) resumo.focus();
+  }
+
+  function montarAtividades() {
+    if (atividadesMontadas || !cliente?.id || !window.TarefasUI) return;
+    atividadesMontadas = true;
+    window.TarefasUI.montarTarefasDaFicha(document.getElementById('clienteTarefas'), { tipo: 'cliente', id: cliente.id, nome: nomeDoCliente || `Cliente #${cliente.id}` });
+    pintarAtividades();
+    // Tarefa concluída aqui vira atividade: a lista precisa acompanhar.
+    const aoMudar = () => { if (!document.getElementById('clienteAtividades')) { window.removeEventListener('tarefas:mudou', aoMudar); return; } pintarAtividades(); };
+    window.addEventListener('tarefas:mudou', aoMudar);
+  }
+  document.getElementById('tab-atividades')?.addEventListener('click', montarAtividades);
   const pedidoDeFoco = window.historicoSocialFoco;
   if (abaHistorico && pedidoDeFoco?.origem === 'cliente' && String(pedidoDeFoco.registroId) === String(cliente?.id)) {
     window.historicoSocialFoco = null;

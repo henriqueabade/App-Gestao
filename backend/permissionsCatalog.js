@@ -1015,6 +1015,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botão \"+ Nova Ordem\""
       },
       {
+        "key": "cli.interaction.add",
+        "column": "acao_interaction_add",
+        "label": "Registrar atividade",
+        "desc": "Aba Atividades do cliente: ligação, e-mail, reunião, visita..."
+      },
+      {
         "key": "cli.address.copy",
         "column": "acao_address_copy",
         "label": "Copiar endereço",
@@ -1928,6 +1934,7 @@ const PERMISSIONS_CATALOG = {
     "code": "tarefas",
     "label": "Tarefas",
     "page": "tarefas",
+    "paginasExtras": ["calendario"],
     "table": "perm_tarefas",
     "configured": true,
     "actions": [
@@ -1959,13 +1966,43 @@ const PERMISSIONS_CATALOG = {
         "key": "tarefas.assign",
         "column": "acao_assign",
         "label": "Atribuir tarefa",
-        "desc": "Definir responsável ou participantes"
+        "desc": "Criar ou passar tarefa para outra pessoa (Admin e Sup Admin já podem)"
       },
       {
         "key": "tarefas.calendar.view",
         "column": "acao_calendar_view",
         "label": "Ver calendário",
         "desc": "Abrir visão de calendário"
+      },
+      {
+        "key": "tarefas.invite",
+        "column": "acao_invite",
+        "label": "Convidar para tarefa em conjunto",
+        "desc": "Chamar outra pessoa para a tarefa (ela aceita ou recusa)"
+      },
+      {
+        "key": "tarefas.others.view",
+        "column": "acao_others_view",
+        "label": "Ver tarefas de outros usuários",
+        "desc": "Tarefas e calendário das pessoas escolhidas na ficha do usuário (Admin e Sup Admin veem todos)"
+      },
+      {
+        "key": "tarefas.stats",
+        "column": "acao_stats",
+        "label": "Estatísticas",
+        "desc": "Painel de concluídas, atrasos e desempenho"
+      },
+      {
+        "key": "tarefas.export",
+        "column": "acao_export",
+        "label": "Exportar para Google/Outlook",
+        "desc": "Baixar o arquivo .ics do calendário"
+      },
+      {
+        "key": "tarefas.automations",
+        "column": "acao_automations",
+        "label": "Configurar tarefas automáticas",
+        "desc": "Ligar, desligar e ajustar as regras (orçamento, conversão, entrega)"
       }
     ],
     "columns": [

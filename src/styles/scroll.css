@@ -244,31 +244,43 @@ table td {
 /* 3c) TODA área que rola dentro de um modal segue o padrão da casa: fina (6px),
    sem trilho e dourada. As tabelas dos modais (Financeiro, Pedidos, boletos…)
    ficavam com a barra cinza e grossa do sistema, fora do padrão; e a tabela
-   ganha a mesma barra das tabelas dos módulos (.table-scroll). */
+   ganha a mesma barra das tabelas dos módulos (.table-scroll).
+
+   `dialog` entra junto de `[role="dialog"]`: as caixas da DialogPadrao (avisos,
+   confirmações, relatório de importação CSV…) são `<dialog>` NATIVO, e seletor
+   de atributo só casa com o atributo escrito — o papel implícito do elemento
+   não conta. Sem esta linha elas ficavam com a barra cinza do sistema. */
+dialog *::-webkit-scrollbar,
 [role="dialog"] *::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
+dialog *::-webkit-scrollbar-track,
+dialog *::-webkit-scrollbar-corner,
 [role="dialog"] *::-webkit-scrollbar-track,
 [role="dialog"] *::-webkit-scrollbar-corner {
   background: transparent;
 }
 
+dialog *::-webkit-scrollbar-thumb,
 [role="dialog"] *::-webkit-scrollbar-thumb {
   background-color: rgba(255, 215, 0, 0.4);
   border-radius: 3px;
 }
 
+dialog *::-webkit-scrollbar-thumb:hover,
 [role="dialog"] *::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 215, 0, 0.6);
 }
 
+dialog :has(> table)::-webkit-scrollbar-thumb,
 [role="dialog"] :has(> table)::-webkit-scrollbar-thumb {
   background: #f0c94c;
   border-radius: 4px;
 }
 
+dialog :has(> table)::-webkit-scrollbar-thumb:hover,
 [role="dialog"] :has(> table)::-webkit-scrollbar-thumb:hover {
   background: #d0a42e;
 }

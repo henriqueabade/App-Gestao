@@ -470,7 +470,7 @@ async function aplicarProspeccoes(item, contexto) {
     }
 
     await prospeccoes.registrarHistorico(api, alvo, [{
-      tipo: 'edicao', acao: 'editou', entidade: 'Prospecção',
+      tipo: 'edicao', acao: 'alterou', entidade: 'Prospecção',
       observacao: contexto.nota, detalhe: vindos
     }], usuarioId);
 
