@@ -31,7 +31,8 @@ const COLUNAS = {
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
   prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id', 'passo_planejado', 'passo_planejado_data'],
   prospeccao_etapas_historico: ['id', 'prospeccao_id', 'etapa_anterior', 'etapa_nova', 'observacao', 'usuario_id', 'criado_em'],
-  prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
+  // excluido_*: sql/historico_social.sql (a exclusão do Sup Admin é por marca).
+  prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em', 'excluido_em', 'excluido_por', 'motivo_exclusao'],
   prospeccao_notas: ['id', 'prospeccao_id', 'titulo', 'conteudo', 'usuario_id', 'criado_em'],
   prospeccao_campanhas: ['id', 'prospeccao_id', 'nome', 'canal', 'status', 'data_envio', 'resposta', 'observacao', 'usuario_id'],
   prospeccao_anexos: ['id', 'prospeccao_id', 'nota_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'usuario_id', 'criado_em'],
@@ -1026,7 +1027,14 @@ test('so o Sup Admin apaga evento do historico', async () => {
       usuario: 1, method: 'DELETE'
     });
     assert.strictEqual(permitido.status, 200);
-    assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.id === evento.id), false);
+    // Por marca: o evento continua no banco, com quem e quando excluiu...
+    const marcado = ctx.tabelas.prospeccao_historico.find(h => h.id === evento.id);
+    assert.ok(marcado, 'nada some do banco');
+    assert.ok(marcado.excluido_em, 'marcado como excluído');
+    assert.strictEqual(Number(marcado.excluido_por), 1);
+    // ...e sai da ficha.
+    const ficha = await chamar(ctx.porta, '/api/prospeccoes/1');
+    assert.strictEqual((await ficha.json()).historico.some(h => h.id === evento.id), false);
   } finally {
     await ctx.encerrar();
   }

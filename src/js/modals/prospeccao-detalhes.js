@@ -579,117 +579,68 @@
     situacao: 'Situação', principal: 'Contato principal', contato_id: 'Com quem'
   };
 
+  /** O `detalhe` é JSONB: às vezes chega objeto, às vezes string. */
+  const lerDetalhe = bruto => {
+    if (!bruto) return null;
+    if (typeof bruto === 'object') return bruto;
+    try { return JSON.parse(bruto); } catch (_) { return null; }
+  };
+  /** Texto cru (a linha do tempo põe tudo por textContent, sem escapar). */
+  const cru = v => (v === null || v === undefined || String(v).trim() === '' ? null : String(v));
+  const TOM_DA_CLASSE = { 'badge-info': 'info', 'badge-warning': 'aviso', 'badge-success': 'sucesso', 'badge-neutral': 'neutro', 'badge-danger': 'perigo' };
+
   /**
-   * Histórico completo, não só movimentação de funil.
-   *
-   * Cada linha mostra o par anterior → novo. Em exclusões só existe o anterior,
-   * e é justamente isso que responde "o que era antes de apagarem".
+   * Um evento do histórico → o que o cartão da linha do tempo mostra: a
+   * etiqueta, a ação, o que mudou (anterior → novo; na exclusão só o
+   * anterior, riscado — é o que responde "o que era antes de apagarem"), o
+   * rótulo do campo e o "retrato" dos dados na criação/exclusão.
    */
-  function renderHistorico(historico) {
+  function descreverEvento(h) {
+    const meta = EVENTO[h.tipo] || { rotulo: h.tipo, classe: 'badge-neutral' };
+    const detalhe = lerDetalhe(h.detalhe);
+    // Suprimido quando repete a entidade ("Etapa do funil" em cima de "Etapa do funil").
+    const rotuloBruto = detalhe?.rotulo || ROTULO_CAMPO[h.campo] || null;
+    return {
+      etiqueta: meta.rotulo,
+      tom: TOM_DA_CLASSE[meta.classe] || 'neutro',
+      acao: ACAO[h.acao] || h.acao,
+      titulo: cru(h.entidade),
+      campo: rotuloBruto === (h.entidade || '') ? null : rotuloBruto,
+      antes: cru(h.valor_anterior),
+      depois: cru(h.valor_novo),
+      riscado: h.acao === 'excluiu',
+      retrato: Array.isArray(detalhe?.campos) ? detalhe.campos : [],
+      pendencias: Array.isArray(detalhe?.pendencias) ? detalhe.pendencias : [],
+      nota: cru(h.observacao)
+    };
+  }
+
+  /**
+   * Histórico em linha do tempo "de rede social" (src/js/utils/historico-social.js):
+   * curtir, comentar, responder, anexar, publicar observação. O componente lê a
+   * própria rota; aqui só é montado uma vez e, nas recargas da ficha, relido.
+   * O aviso do sino que trouxe o usuário até aqui (window.historicoSocialFoco)
+   * abre a aba já no comentário.
+   */
+  let linhaDoTempo = null;
+  function renderHistorico() {
     const alvo = get('detProspHistorico');
-    if (!historico.length) {
-      alvo.innerHTML = estadoVazio('Nenhum evento registrado');
+    if (!alvo || !window.HistoricoSocial) return;
+    const pedido = window.historicoSocialFoco;
+    const foco = pedido?.origem === 'prospeccao' && String(pedido.registroId) === String(resumo.id) ? pedido : null;
+    if (foco) {
+      window.historicoSocialFoco = null;
+      setTab('historico');
+    }
+    if (linhaDoTempo) {
+      if (foco) linhaDoTempo.focar(foco);
+      linhaDoTempo.recarregar();
       return;
     }
-
-    // Só o Sup Admin apaga histórico — e o backend confere de novo.
-    const podeExcluir = Boolean(window.Permissoes?.supAdmin);
-
-    const valor = (v, classe) => texto(v)
-      ? `<span class="${classe}">${esc(v)}</span>`
-      : '<span class="text-white/30">—</span>';
-
-    /**
-     * O `detalhe` é JSONB: às vezes chega objeto, às vezes string.
-     * Quem grava é o backend; quem lê aqui não pode assumir a forma.
-     */
-    const lerDetalhe = bruto => {
-      if (!bruto) return null;
-      if (typeof bruto === 'object') return bruto;
-      try { return JSON.parse(bruto); } catch (_) { return null; }
-    };
-
-    /**
-     * Retrato do registro em criação e exclusão.
-     *
-     * O backend manda `campos` já rotulado. Sem isto o histórico só dizia
-     * "Criou Contato Fulano" — e nunca COM QUAIS DADOS.
-     */
-    const retrato = detalhe => {
-      const campos = Array.isArray(detalhe?.campos) ? detalhe.campos : [];
-      if (!campos.length) return '';
-      return `
-        <dl class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          ${campos.map(c => `
-            <div class="flex gap-1 min-w-0">
-              <dt class="text-white/40 whitespace-nowrap">${esc(c.rotulo)}:</dt>
-              <dd class="text-white/80 break-words min-w-0">${esc(c.valor)}</dd>
-            </div>`).join('')}
-        </dl>`;
-    };
-
-    const linhas = historico.map(h => {
-      const meta = EVENTO[h.tipo] || { rotulo: h.tipo, classe: 'badge-neutral' };
-      const excluido = h.acao === 'excluiu';
-      const detalhe = lerDetalhe(h.detalhe);
-      // O rótulo do campo é o que faltava: sem ele, "Alterou Contato Tainá"
-      // seguido de dois textos parecidos não diz O QUE mudou.
-      //
-      // Suprimido quando repete a entidade: nos eventos da própria ficha os
-      // dois são a mesma coisa ("Etapa do funil" em cima de "Etapa do funil").
-      const rotuloBruto = detalhe?.rotulo || ROTULO_CAMPO[h.campo] || null;
-      const rotuloCampo = rotuloBruto === (h.entidade || '') ? null : rotuloBruto;
-      return `
-      <tr class="border-b border-white/5">
-        <td data-perm-col="col_hist_data" class="px-4 py-3 text-sm text-white/80 whitespace-nowrap align-top">
-          ${esc(formatarDataHora(h.criado_em))}
-        </td>
-        <td data-perm-col="col_hist_tipo" class="px-4 py-3 text-sm align-top whitespace-nowrap">
-          <span class="${meta.classe} px-2 py-1 rounded text-xs">${esc(meta.rotulo)}</span>
-          <span class="block text-xs text-white/50 mt-1">${esc(ACAO[h.acao] || h.acao)}</span>
-        </td>
-        <td data-perm-col="col_hist_resumo" class="px-4 py-3 text-sm align-top">
-          <div class="text-white">${esc(h.entidade || '')}</div>
-          ${rotuloCampo ? `<div class="mt-1 text-xs font-medium" style="color: var(--color-violet)">${esc(rotuloCampo)}</div>` : ''}
-          ${(h.valor_anterior || h.valor_novo) ? `
-            <div class="mt-1 text-xs flex flex-wrap items-center gap-2">
-              ${valor(h.valor_anterior, excluido ? 'prox-passo-atrasado line-through' : 'text-white/50 line-through')}
-              ${!excluido ? '<span class="text-white/30">→</span>' + valor(h.valor_novo, 'text-white') : ''}
-            </div>` : ''}
-          ${retrato(detalhe)}
-          ${texto(h.observacao) ? `<div class="mt-1 text-xs text-white/50">${esc(h.observacao)}</div>` : ''}
-        </td>
-        <td data-perm-col="col_hist_resp" class="px-4 py-3 text-sm text-white/80 align-top whitespace-nowrap">
-          ${texto(h.responsavel) || VAZIO}
-        </td>
-        ${podeExcluir ? `
-        <td class="px-4 py-3 text-sm align-top">
-          <i class="fas fa-trash acao-tabela acao-tabela--excluir" data-remover="historico"
-             data-id="${esc(h.id)}" data-rotulo="${esc(h.entidade || meta.rotulo)}"
-             title="Excluir evento (Sup Admin)"></i>
-        </td>` : ''}
-      </tr>`;
-    }).join('');
-
-    alvo.innerHTML = `
-      <p class="text-xs text-white/50 mb-3">
-        Todo evento da prospecção fica registrado aqui, com o valor anterior.
-        ${podeExcluir ? 'Como Sup Admin, você pode remover eventos.' : 'Os eventos não podem ser removidos.'}
-      </p>
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-white/10">
-              <th data-perm-col="col_hist_data" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Data</th>
-              <th data-perm-col="col_hist_tipo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Evento</th>
-              <th data-perm-col="col_hist_resumo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">O que mudou</th>
-              <th data-perm-col="col_hist_resp" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Quem</th>
-              ${podeExcluir ? '<th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ações</th>' : ''}
-            </tr>
-          </thead>
-          <tbody>${linhas}</tbody>
-        </table>
-      </div>`;
+    linhaDoTempo = window.HistoricoSocial.montar(alvo, {
+      origem: 'prospeccao', registroId: resumo.id, descrever: descreverEvento, foco,
+      colunas: { data: 'col_hist_data', tipo: 'col_hist_tipo', resumo: 'col_hist_resumo', quem: 'col_hist_resp' }
+    });
   }
 
   function atualizarContadores(dados) {
@@ -764,7 +715,7 @@
       renderAnexos(listas.anexos);
       renderCampanhas(listas.campanhas);
       renderOrcamentos(listas.orcamentos);
-      renderHistorico(listas.historico);
+      renderHistorico();
       atualizarContadores(listas);
       refletirEstado(p);
       refletirPassoPlanejado(p);
@@ -1175,14 +1126,6 @@
       rota: 'interacoes', titulo: 'Excluir esta atividade?',
       texto: rotulo => `"${rotulo}" sai da timeline. O histórico guarda o registro inteiro.`,
       espera: 'Removendo a atividade...', sucesso: 'Atividade removida'
-    },
-    historico: {
-      rota: 'historico', titulo: 'Apagar este evento do histórico?',
-      // O histórico é o registro de tudo o mais; apagar aqui não deixa rastro
-      // em lugar nenhum. Por isso o aviso é mais duro que o dos outros.
-      texto: rotulo => `"${rotulo}" será apagado definitivamente. O histórico é o único registro deste fato — não há como recuperá-lo.`,
-      confirmar: 'Apagar definitivamente',
-      espera: 'Apagando o evento...', sucesso: 'Evento removido do histórico'
     }
   };
 

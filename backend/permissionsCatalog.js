@@ -1271,6 +1271,30 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_convert",
         "label": "Converter em cliente",
         "desc": "Fechar como Ganho e criar o cliente"
+      },
+      {
+        "key": "pros.export.csv",
+        "column": "acao_export_csv",
+        "label": "Exportar CSV",
+        "desc": "Ações Rápidas: \"Exportar CSV\""
+      },
+      {
+        "key": "pros.import.csv",
+        "column": "acao_import_csv",
+        "label": "Importar CSV",
+        "desc": "Ações Rápidas: \"Importar CSV\" e \"Salvar modelo CSV\""
+      },
+      {
+        "key": "pros.report",
+        "column": "acao_report",
+        "label": "Gerar relatório",
+        "desc": "Ações Rápidas: \"Gerar Relatório\""
+      },
+      {
+        "key": "pros.email.bulk",
+        "column": "acao_email_bulk",
+        "label": "Enviar e-mail em massa",
+        "desc": "Ações Rápidas: \"Enviar E-mail em Massa\""
       }
     ],
     "columns": [

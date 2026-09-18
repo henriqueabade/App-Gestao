@@ -54,6 +54,8 @@ async function carregarContatos(idCliente) {
       const res = await fetchApi(`/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
+        // Aberta pelo sino, a ficha chega só com o id: o nome vem daqui.
+        if(titulo && data.cliente.nome_fantasia) titulo.textContent = `Detalhes – ${data.cliente.nome_fantasia}`;
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         const contatos = await carregarContatos(cliente.id);
@@ -138,6 +140,8 @@ async function carregarContatos(idCliente) {
   activateTab(tabs[0], { setFocus: false });
 
   const warn = e => {
+    // A linha do tempo do histórico é o único lugar da ficha em que se escreve.
+    if(e.target.closest?.('[data-historico-social]')) return;
     if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
       e.preventDefault();
       e.target.blur();
@@ -149,6 +153,56 @@ async function carregarContatos(idCliente) {
   overlay.querySelectorAll('input, textarea').forEach(el => el.readOnly = true);
   addCopyButtons();
   setupAddressCopyButtons();
+
+  // ------------------------------------------------------------------
+  // Histórico do cliente — linha do tempo "de rede social"
+  // (src/js/utils/historico-social.js). Montado na primeira vez que a aba
+  // abre, ou já aberto quando o aviso do sino trouxe o usuário até aqui.
+  // ------------------------------------------------------------------
+  const EVENTO_CLIENTE = {
+    criacao: { rotulo: 'Cadastro', tom: 'sucesso' },
+    campo: { rotulo: 'Edição', tom: 'neutro' },
+    contato: { rotulo: 'Contato', tom: 'info' },
+    transportadora: { rotulo: 'Transportadora', tom: 'neutro' },
+    conversao: { rotulo: 'Conversão', tom: 'sucesso' }
+  };
+  const ACAO_CLIENTE = { criou: 'Criou', alterou: 'Alterou', excluiu: 'Excluiu', moveu: 'Moveu', converteu: 'Converteu' };
+  const cru = v => (v === null || v === undefined || String(v).trim() === '' ? null : String(v));
+  const lerDetalhe = bruto => {
+    if (!bruto) return null;
+    if (typeof bruto === 'object') return bruto;
+    try { return JSON.parse(bruto); } catch (_) { return null; }
+  };
+  function descreverEventoCliente(h) {
+    const meta = EVENTO_CLIENTE[h.tipo] || { rotulo: h.tipo, tom: 'neutro' };
+    const detalhe = lerDetalhe(h.detalhe);
+    const rotuloCampo = detalhe?.rotulo || null;
+    return {
+      etiqueta: meta.rotulo, tom: meta.tom,
+      acao: ACAO_CLIENTE[h.acao] || h.acao,
+      titulo: cru(h.entidade),
+      campo: rotuloCampo && rotuloCampo !== h.entidade ? rotuloCampo : null,
+      antes: cru(h.valor_anterior), depois: cru(h.valor_novo), riscado: h.acao === 'excluiu',
+      retrato: Array.isArray(detalhe?.campos) ? detalhe.campos : [],
+      pendencias: Array.isArray(detalhe?.pendencias) ? detalhe.pendencias : [],
+      nota: cru(h.observacao)
+    };
+  }
+  let linhaDoTempo = null;
+  function montarHistorico(foco = null) {
+    const alvo = document.getElementById('clienteHistorico');
+    if (!alvo || !cliente?.id || !window.HistoricoSocial) return;
+    if (linhaDoTempo) { if (foco) linhaDoTempo.focar(foco); return; }
+    linhaDoTempo = window.HistoricoSocial.montar(alvo, { origem: 'cliente', registroId: cliente.id, descrever: descreverEventoCliente, foco });
+  }
+  const abaHistorico = document.getElementById('tab-historico');
+  abaHistorico?.addEventListener('click', () => montarHistorico());
+  const pedidoDeFoco = window.historicoSocialFoco;
+  if (abaHistorico && pedidoDeFoco?.origem === 'cliente' && String(pedidoDeFoco.registroId) === String(cliente?.id)) {
+    window.historicoSocialFoco = null;
+    activateTab(abaHistorico, { setFocus: false });
+    montarHistorico(pedidoDeFoco);
+  }
 
   const editar = document.getElementById('editarDetalhesCliente');
   if(editar){

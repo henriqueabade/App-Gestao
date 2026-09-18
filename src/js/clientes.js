@@ -7,6 +7,8 @@ async function fetchApi(path, options) {
 }
 
 let todosClientes = [];
+// O que está na tabela agora (com o filtro aplicado): é o que "Exportar CSV" leva.
+let clientesNaTela = [];
 
 async function carregarClientes(preserveFilters = false) {
     try {
@@ -108,6 +110,7 @@ function badgeForStatus(status) {
 }
 
 function renderClientes(clientes) {
+    clientesNaTela = Array.isArray(clientes) ? clientes : [];
     const tbody = document.getElementById('clientesTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -207,6 +210,8 @@ function abrirExcluirCliente(cliente) {
 // Expose the edit modal opener globally so other scripts (like the
 // detalhes modal) can trigger it after closing.
 window.abrirEditarCliente = abrirEditarCliente;
+// O sino (src/js/notifications.js) abre a ficha a partir de um aviso.
+window.ClientesModulo = { abrirDetalhes: abrirDetalhesCliente, carregar: carregarClientes };
 
 window.addEventListener('clienteEditado', () => carregarClientes(true));
 window.addEventListener('clienteExcluido', () => carregarClientes(true));
@@ -262,35 +267,23 @@ function initClientes() {
         openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
     });
 
-    const acoesRapidasContainer = document.getElementById('acoesRapidasContainer');
-    const btnAcoesRapidas = document.getElementById('btnAcoesRapidas');
-    const menuAcoesRapidas = document.getElementById('menuAcoesRapidas');
-    const fecharAcoesRapidas = (devolverFoco = false) => {
-        if (!btnAcoesRapidas || !menuAcoesRapidas) return;
-        menuAcoesRapidas.hidden = true;
-        btnAcoesRapidas.setAttribute('aria-expanded', 'false');
-        if (devolverFoco) btnAcoesRapidas.focus();
-    };
-
-    btnAcoesRapidas?.addEventListener('click', () => {
-        const deveAbrir = menuAcoesRapidas.hidden;
-        menuAcoesRapidas.hidden = !deveAbrir;
-        btnAcoesRapidas.setAttribute('aria-expanded', String(deveAbrir));
-        if (deveAbrir) menuAcoesRapidas.querySelector('[role="menuitem"]:not([hidden])')?.focus();
+    // Ações Rápidas: planilha (src/js/utils/acoes-csv.js). Relatório e
+    // e-mail em massa ainda em construção.
+    window.AcoesCsv?.ligarMenu({
+        container: document.getElementById('acoesRapidasContainer'),
+        botao: document.getElementById('btnAcoesRapidas'),
+        menu: document.getElementById('menuAcoesRapidas')
     });
-    menuAcoesRapidas?.addEventListener('click', event => {
-        if (event.target.closest('[role="menuitem"]')) fecharAcoesRapidas();
+    const planilha = { modulo: 'clientes', rotulo: 'clientes', singular: 'cliente' };
+    document.getElementById('btnExportarCSV')?.addEventListener('click', () => {
+        window.AcoesCsv?.exportar({ ...planilha, ids: clientesNaTela.map(c => c.id) });
     });
-    document.addEventListener('click', event => {
-        if (!acoesRapidasContainer?.contains(event.target)) fecharAcoesRapidas();
+    document.getElementById('btnImportarCSV')?.addEventListener('click', () => {
+        window.AcoesCsv?.importar({ ...planilha, aoConcluir: () => carregarClientes(true) });
     });
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && !menuAcoesRapidas?.hidden) fecharAcoesRapidas(true);
-    });
+    document.getElementById('btnModeloCSV')?.addEventListener('click', () => window.AcoesCsv?.salvarModelo(planilha));
 
     const emDesenvolvimento = () => window.DialogPadrao?.info({ title: 'Função em desenvolvimento', tom: 'aviso', icone: 'fa-person-digging', message: 'Esta ação ainda está sendo construída.' });
-    document.getElementById('btnExportarCSV')?.addEventListener('click', emDesenvolvimento);
-    document.getElementById('btnImportarCSV')?.addEventListener('click', emDesenvolvimento);
     document.getElementById('btnGerarRelatorio')?.addEventListener('click', emDesenvolvimento);
     document.getElementById('btnEnviarEmailMassa')?.addEventListener('click', emDesenvolvimento);
 

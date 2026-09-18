@@ -5174,6 +5174,44 @@ ipcMain.handle('salvar-texto-como-arquivo', async (_event, { conteudo, nomeSuger
   }
 });
 
+/**
+ * Anexo do histórico (qualquer tipo de arquivo, em base64): salva onde o
+ * usuário escolher ou, com `abrir`, grava numa pasta temporária e abre no
+ * programa padrão do Windows (imagem, PDF, planilha...).
+ */
+ipcMain.handle('salvar-arquivo-binario', async (_event, { base64, nomeSugerido, titulo, abrir = false } = {}) => {
+  if (typeof base64 !== 'string' || !base64) return { success: false, message: 'Arquivo vazio.' };
+  const nome = String(nomeSugerido || 'arquivo')
+    .split(/[\\/]/).pop()
+    .replace(/[<>:"|?*\u0000-\u001f]/g, '_')
+    .slice(0, 180) || 'arquivo';
+  try {
+    const conteudo = Buffer.from(base64, 'base64');
+    if (abrir) {
+      const pasta = path.join(app.getPath('temp'), 'santissimo-anexos', `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`);
+      await fs.promises.mkdir(pasta, { recursive: true });
+      const filePath = path.join(pasta, nome);
+      await fs.promises.writeFile(filePath, conteudo);
+      const erroAoAbrir = await shell.openPath(filePath);
+      return erroAoAbrir ? { success: false, message: erroAoAbrir, filePath } : { success: true, filePath };
+    }
+    const dono = getPrimaryMonitorWindow();
+    const extensao = path.extname(nome).replace('.', '');
+    const opcoes = {
+      title: titulo || 'Salvar anexo',
+      defaultPath: path.join(app.getPath('downloads'), nome),
+      ...(extensao ? { filters: [{ name: extensao.toUpperCase(), extensions: [extensao] }, { name: 'Todos os arquivos', extensions: ['*'] }] } : {})
+    };
+    const { canceled, filePath } = dono ? await dialog.showSaveDialog(dono, opcoes) : await dialog.showSaveDialog(opcoes);
+    if (canceled || !filePath) return { success: false, canceled: true };
+    await fs.promises.writeFile(filePath, conteudo);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Erro ao salvar anexo:', err);
+    return { success: false, message: err?.message || 'Erro ao salvar o anexo.' };
+  }
+});
+
 ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const prefix = `[pdf:${requestId}]`;

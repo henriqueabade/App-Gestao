@@ -87,6 +87,40 @@ body {
     transform: scale(1.05);
 }
 
+/* "Ações Rápidas" — o mesmo botão bordô de Clientes (o menu em si é global:
+   src/styles/acoes-csv.css). */
+.btn-bordo {
+    background: var(--color-bordeaux);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: all 150ms ease;
+}
+
+.btn-bordo:hover,
+.btn-bordo[aria-expanded="true"] {
+    background: rgba(106, 21, 44, 0.85);
+    transform: translateY(-1px);
+}
+
+/* A animação de entrada cria um contexto de empilhamento por seção: o
+   cabeçalho fica acima dos filtros para o menu aberto não ir para baixo deles. */
+.prospeccoes-header {
+    position: relative;
+    z-index: 40;
+}
+
+@media (max-width: 767px) {
+    .prospeccoes-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .prospeccoes-header__acoes {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+}
+
 /*
    O botão "Limpar" da barra de filtros usa `btn-warning`, como em Orçamentos,
    Pedidos e Clientes — mas esta folha nunca definiu a classe. O botão ficava

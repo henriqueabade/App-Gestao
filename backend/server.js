@@ -33,7 +33,14 @@ const API_BASE_ORIGIN = (
   process.env.API_BASE_URL || process.env.API_URL || 'https://api.santissimodecor.com.br'
 ).replace(/\/+$/, '').replace(/\/api$/, '');
 app.use(cors());
-app.use(express.json({ limit: '3mb' }));
+// 3 MB para tudo, menos o histórico social (um anexo de até 20 MB chega em
+// base64, ~27 MB) e a planilha das Ações Rápidas (importação e a lista de ids
+// da exportação). Decidido aqui, pelo caminho, para as travas abaixo (token,
+// sessão DEV) continuarem valendo para eles também.
+const jsonPadrao = express.json({ limit: '3mb' });
+const jsonGrande = express.json({ limit: '30mb' });
+const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes)\/csv\/)/;
+app.use((req, res, next) => (CORPO_GRANDE.test(req.path) ? jsonGrande : jsonPadrao)(req, res, next));
 
 if (isDev) {
   app.use((req, res, next) => {
@@ -76,6 +83,10 @@ app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/prospeccoes', prospeccoesRouter);
+// Histórico social de Prospecções e Clientes (curtidas, comentários, anexos)
+// e os avisos do sino. Tabelas em sql/historico_social.sql.
+app.use('/api/historico-social', require('./historicoSocialController'));
+app.use('/api/notificacoes', require('./notificacoesController'));
 app.use('/api/ia', iaRouter);
 // Fiscal (NF-e): configuração do emitente, certificado e SEFAZ. Antes do
 // proxy genérico, que não confere permissão.
@@ -216,7 +227,9 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // a linha direto por aqui e trocaria o modelo de todo mundo.
 //
 // A licao das duas vezes e a mesma: prefixo do MODULO, nao da tabela.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_)/i;
+// historico_*, cliente_historico e notificacoes: só pelas rotas próprias, que
+// conferem permissão, autoria e Sup Admin.
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_|historico_|cliente_historico$|notificacoes$)/i;
 // Em DEV uma rota genérica só pode alcançar tabelas de negócio conhecidas.
 // Isso exclui também tabelas extras/segredos existentes no PostgreSQL local.
 const TABELAS_PUBLICAS_DEV = new Set([

@@ -15,14 +15,41 @@
 <body class="text-white">
   <div class="modulo-container">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-6 animate-fade-in-up">
+    <div class="prospeccoes-header flex justify-between items-center mb-6 animate-fade-in-up">
         <div>
             <h1 class="text-2xl font-semibold mb-1 module-header__title">Prospecções</h1>
             <p class="module-header__description">Pipeline comercial: da primeira conversa ao cliente fechado</p>
         </div>
-        <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium whitespace-nowrap">
-            <i class="fas fa-plus mr-2"></i>Nova Prospecção
-        </button>
+        <div class="prospeccoes-header__acoes flex items-center gap-3">
+            <!-- Mesmo menu de Clientes (src/js/utils/acoes-csv.js, src/styles/acoes-csv.css). -->
+            <div id="acoesRapidasProspeccoes" class="acoes-rapidas">
+                <button id="btnAcoesRapidasProspeccoes" type="button" class="btn-bordo text-white rounded-md px-4 py-3 font-medium flex items-center gap-2" aria-haspopup="menu" aria-expanded="false" aria-controls="menuAcoesRapidasProspeccoes">
+                    <i class="fas fa-bolt" aria-hidden="true"></i>
+                    Ações Rápidas
+                    <i class="fas fa-chevron-down acoes-rapidas__chevron" aria-hidden="true"></i>
+                </button>
+                <div id="menuAcoesRapidasProspeccoes" class="acoes-rapidas__menu" role="menu" aria-label="Ações rápidas de prospecções" hidden>
+                    <button id="btnExportarCsvProspeccoes" data-perm="pros.export.csv" type="button" role="menuitem" class="acoes-rapidas__item">
+                        <i class="fas fa-download" aria-hidden="true"></i><span>Exportar CSV</span>
+                    </button>
+                    <button id="btnImportarCsvProspeccoes" data-perm="pros.import.csv" type="button" role="menuitem" class="acoes-rapidas__item">
+                        <i class="fas fa-upload" aria-hidden="true"></i><span>Importar CSV</span>
+                    </button>
+                    <button id="btnModeloCsvProspeccoes" data-perm="pros.import.csv" type="button" role="menuitem" class="acoes-rapidas__item">
+                        <i class="fas fa-file-csv" aria-hidden="true"></i><span>Salvar modelo CSV</span>
+                    </button>
+                    <button id="btnRelatorioProspeccoes" data-perm="pros.report" type="button" role="menuitem" class="acoes-rapidas__item">
+                        <i class="fas fa-file-alt" aria-hidden="true"></i><span>Gerar Relatório</span>
+                    </button>
+                    <button id="btnEmailMassaProspeccoes" data-perm="pros.email.bulk" type="button" role="menuitem" class="acoes-rapidas__item">
+                        <i class="fas fa-envelope" aria-hidden="true"></i><span>Enviar E-mail em Massa</span>
+                    </button>
+                </div>
+            </div>
+            <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium whitespace-nowrap">
+                <i class="fas fa-plus mr-2"></i>Nova Prospecção
+            </button>
+        </div>
     </div>
 
     <!-- Barra de filtros -->

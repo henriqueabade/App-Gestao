@@ -339,3 +339,18 @@ de aba não muda o tamanho do modal.
 Sempre pelo `window.Popover` (`src/js/utils/popover.js`), que leva o balão
 para o `<body>` e o posiciona junto do ícone. Balão posicionado à mão dentro
 de um módulo com `transform` ou `backdrop-filter` vai parar longe do (i).
+
+### Menu "Ações Rápidas" e planilhas
+
+O botão bordô com a lista (Clientes, Prospecções) é um só:
+`window.AcoesCsv.ligarMenu({ container, botao, menu })` e as classes
+`acoes-rapidas*` (`src/styles/acoes-csv.css`, global). Exportar, importar e o
+modelo CSV passam por `AcoesCsv.exportar/importar/salvarModelo`, que abrem o
+relatório "Resultado da importação". Detalhes em
+`docs/historico-social-e-planilhas.md`.
+
+### Linha do tempo com curtidas e comentários
+
+Histórico de ficha é `window.HistoricoSocial.montar(alvo, { origem, registroId, descrever })`
+(`src/js/utils/historico-social.js`): o módulo só diz como descrever cada
+evento. Nova origem entra em `ORIGENS` de `backend/historicoSocial.js`.

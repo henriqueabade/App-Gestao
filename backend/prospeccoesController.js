@@ -35,6 +35,9 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
 const { normalizarCamposNumericos } = require('./numeros');
+const social = require('./historicoSocial');
+const clienteHistorico = require('./clienteHistorico');
+const csv = require('./importacaoCsv');
 
 const router = express.Router();
 
@@ -686,6 +689,129 @@ router.get('/lista', exigirPermissao('pros.view'), async (req, res) => {
 // DETALHE COMPLETO
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// PLANILHA (Ações Rápidas): modelo, exportação e importação em CSV — as mesmas
+// de Clientes. Colunas e conferência em backend/importacaoCsv.js.
+// ---------------------------------------------------------------------------
+
+router.get('/csv/modelo', exigirPermissao('pros.import.csv'), (req, res) => {
+  res.json({ nome: 'modelo-prospeccoes', conteudo: csv.modeloDeProspeccoes() });
+});
+
+// `ids` (opcional): só as prospecções da tela, na ordem da tela. GET com
+// ?ids=1,2 ou POST com { ids: [...] } (a tela usa o POST).
+const idsPedidos = req => (Array.isArray(req.body?.ids) ? req.body.ids : String(req.query?.ids || '').split(','))
+  .map(s => String(s).trim()).filter(Boolean);
+// Data local no nome do arquivo (o toISOString vira o dia depois das 21h).
+const hojeNoNome = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+router.get('/csv/exportar', exigirPermissao('pros.export.csv'), exportarProspeccoes);
+router.post('/csv/exportar', exigirPermissao('pros.export.csv'), exportarProspeccoes);
+async function exportarProspeccoes(req, res) {
+  try {
+    const api = createApiClient(req);
+    const [prospeccoes, contatos, nomes] = await Promise.all([
+      api.get('/api/prospeccoes'),
+      api.get('/api/prospeccao_contatos').catch(() => []),
+      carregarNomesDeUsuario(api)
+    ]);
+    const principal = new Map();
+    for (const c of (Array.isArray(contatos) ? contatos : []).slice().sort((a, b) => Number(Boolean(b.principal)) - Number(Boolean(a.principal)) || Number(a.id) - Number(b.id))) {
+      if (!principal.has(String(c.prospeccao_id))) principal.set(String(c.prospeccao_id), c);
+    }
+    let lista = Array.isArray(prospeccoes) ? prospeccoes : [];
+    const ids = idsPedidos(req);
+    if (ids.length) {
+      const porId = new Map(lista.map(p => [String(p.id), p]));
+      lista = ids.map(id => porId.get(id)).filter(Boolean);
+    } else {
+      lista = lista.slice().sort((a, b) => String(a.nome_fantasia || '').localeCompare(String(b.nome_fantasia || ''), 'pt-BR'));
+    }
+    const linhas = lista.map(p => csv.prospeccaoParaLinha(p, principal.get(String(p.id)) || null, nomes.get(p.responsavel_id) || ''));
+    res.json({ nome: `prospeccoes-${hojeNoNome()}`, total: linhas.length, conteudo: csv.gerarCsv(csv.COLUNAS_PROSPECCAO, linhas) });
+  } catch (err) {
+    console.error('Erro ao exportar prospecções:', err);
+    res.status(err.status || 500).json({ error: 'Não foi possível exportar as prospecções.' });
+  }
+}
+
+/**
+ * Importa a planilha linha a linha, sem parar no primeiro erro (ver
+ * importarClientes em clientesController.js — mesmo relatório).
+ */
+async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquivo = 'planilha.csv' } = {}) {
+  const { linhas } = csv.lerCsv(conteudo);
+  if (linhas.length < 2) throw erro(400, 'A planilha está vazia: nenhuma linha de prospecção abaixo do cabeçalho.');
+  const [cabecalho, ...dados] = linhas;
+  const mapa = csv.mapearCabecalho(cabecalho.valores, csv.COLUNAS_PROSPECCAO);
+  if (mapa.indice.nome_fantasia === undefined) {
+    throw erro(400, 'O cabeçalho não tem a coluna "Empresa". Use "Salvar modelo CSV" e preencha a partir dele.');
+  }
+  const [prospeccoes, usuarios] = await Promise.all([
+    api.get('/api/prospeccoes'),
+    api.get('/api/usuarios').catch(() => [])
+  ]);
+  const cnpjsAtivos = new Set((Array.isArray(prospeccoes) ? prospeccoes : [])
+    .filter(p => p.status === 'ativa').map(p => csv.digitos(p.cnpj)).filter(Boolean));
+  const cnpjsDoArquivo = new Map();
+  const listaUsuarios = (Array.isArray(usuarios) ? usuarios : []).map(u => ({ id: u.id, nome: u.nome, email: u.email }));
+
+  const resultados = [];
+  const aGravar = [];
+  for (const linha of dados) {
+    const r = csv.registroDaLinha(linha.valores, mapa.indice);
+    if (csv.ehLinhaDeExemplo(r)) {
+      resultados.push({ linha: linha.numero, identificacao: r.nome_fantasia || '', situacao: 'ignorado', id: null, bloqueios: [], pendencias: [], avisos: ['Linha de exemplo do modelo: ignorada.'] });
+      continue;
+    }
+    const conf = csv.conferirProspeccao(r, { cnpjsAtivos, cnpjsDoArquivo, usuarios: listaUsuarios });
+    const resultado = {
+      linha: linha.numero, identificacao: conf.identificacao, situacao: csv.situacaoDaLinha(conf), id: null,
+      bloqueios: conf.bloqueios, pendencias: conf.pendencias, avisos: conf.avisos
+    };
+    resultados.push(resultado);
+    if (resultado.situacao === 'nao_registrado') continue;
+    if (conf.cnpj) cnpjsDoArquivo.set(conf.cnpj, linha.numero);
+    aGravar.push({ resultado, conf });
+  }
+
+  await csv.emParalelo(aGravar, 4, async ({ resultado, conf }) => {
+    try {
+      resultado.id = await criarProspeccao(api, conf.payload, usuarioId, {
+        observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`,
+        pendencias: conf.pendencias
+      });
+    } catch (err) {
+      resultado.situacao = 'nao_registrado';
+      resultado.bloqueios = [...resultado.bloqueios, err.status === 409 ? err.message : `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
+    }
+  });
+
+  return {
+    arquivo: nomeArquivo,
+    colunas_desconhecidas: mapa.desconhecidas,
+    colunas_ausentes: mapa.ausentes,
+    resumo: csv.resumirImportacao(resultados),
+    linhas: resultados
+  };
+}
+
+router.post('/csv/importar', exigirPermissao(['pros.import.csv', 'pros.create']), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    res.json(await importarProspeccoes(api, String(req.body?.conteudo || ''), {
+      usuarioId: usuarioDaRequisicao(req),
+      nomeArquivo: String(req.body?.nome_arquivo || 'planilha.csv').slice(0, 200)
+    }));
+  } catch (err) {
+    console.error('Erro ao importar prospecções:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Não foi possível importar a planilha.' });
+  }
+});
+
 router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
   const { id } = req.params;
   try {
@@ -734,7 +860,10 @@ router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
       interacoes: (interacoes || [])
         .map(i => ({ ...i, responsavel: nome(i.usuario_id) }))
         .sort(porDataDesc('data')),
+      // Evento excluído pelo Sup Admin (marca, não apaga) sai da ficha; a
+      // linha do tempo social (historicoSocialController) mostra ao Sup Admin.
       historico: (historico || [])
+        .filter(h => !h.excluido_em)
         .map(h => ({ ...h, responsavel: nome(h.usuario_id) }))
         .sort(porDataDesc('criado_em')),
       notas: (notas || [])
@@ -757,6 +886,76 @@ router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
 // CRIAR
 // ---------------------------------------------------------------------------
 
+/**
+ * Cria a prospecção com os contatos e grava o histórico. O mesmo caminho do
+ * formulário (POST /) e da importação da planilha.
+ *
+ * Sem transação (ver topo): se a prospecção entrou mas um contato falhou, o
+ * registro ficaria meio pronto e invisível para quem tentasse recriar, travado
+ * pelo índice único do CNPJ. Desfazemos — o CASCADE leva junto os contatos que
+ * chegaram a entrar.
+ */
+async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao = 'Cadastro inicial', pendencias = [] } = {}) {
+  let criadaId = null;
+  try {
+    const payload = montarPayload(dados);
+    validarProspeccao(payload);
+    payload.criado_por = usuarioId ?? null;
+
+    // Mesma empresa não pode estar em prospecção ativa duas vezes. O banco
+    // tem índice único parcial, mas conferir antes devolve 409 em vez de 500.
+    if (payload.cnpj) {
+      const existentes = await api
+        .get('/api/prospeccoes', { query: { cnpj: payload.cnpj } })
+        .catch(() => []);
+      if ((existentes || []).some(p => p.status === 'ativa')) {
+        throw erro(409, 'Já existe uma prospecção ativa para este CNPJ');
+      }
+    }
+
+    const criada = await api.post('/api/prospeccoes', payload);
+    criadaId = criada?.id ?? criada?.[0]?.id;
+    if (!criadaId) throw erro(500, 'A API não devolveu o id da prospecção criada');
+
+    const contatos = normalizarPrincipais(
+      (Array.isArray(dados.contatos) ? dados.contatos : []).filter(c => texto(c?.nome))
+    );
+    for (const c of contatos) {
+      await api.post('/api/prospeccao_contatos', montarPayloadContato(c, criadaId));
+    }
+
+    await registrarHistorico(api, criadaId, [
+      {
+        tipo: 'criacao', acao: 'criou', entidade: 'Prospecção',
+        valor_novo: payload.nome_fantasia,
+        observacao,
+        detalhe: pendencias.length ? { ...payload, pendencias } : payload
+      },
+      {
+        tipo: 'etapa', acao: 'criou', entidade: 'Etapa do funil', campo: 'etapa',
+        valor_novo: payload.etapa
+      },
+      ...contatos.map(c => ({
+        tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c
+      }))
+    ], usuarioId);
+
+    return criadaId;
+  } catch (err) {
+    if (criadaId) {
+      try {
+        await api.delete(`/api/prospeccoes/${criadaId}`);
+      } catch (limpeza) {
+        console.error(
+          `[prospeccoes] prospecção ${criadaId} ficou órfã após falha e não pôde ser removida:`,
+          limpeza?.message || limpeza
+        );
+      }
+    }
+    throw err;
+  }
+}
+
 router.post(
   '/',
   exigirPermissao(req =>
@@ -765,70 +964,11 @@ router.post(
       : ['pros.create']
   ),
   async (req, res) => {
-    const api = createApiClient(req);
-    const usuarioId = usuarioDaRequisicao(req);
-    let criadaId = null;
-
     try {
-      const payload = montarPayload(req.body);
-      validarProspeccao(payload);
-      payload.criado_por = usuarioId ?? null;
-
-      // Mesma empresa não pode estar em prospecção ativa duas vezes. O banco
-      // tem índice único parcial, mas conferir antes devolve 409 em vez de 500.
-      if (payload.cnpj) {
-        const existentes = await api
-          .get('/api/prospeccoes', { query: { cnpj: payload.cnpj } })
-          .catch(() => []);
-        if ((existentes || []).some(p => p.status === 'ativa')) {
-          return res.status(409).json({ error: 'Já existe uma prospecção ativa para este CNPJ' });
-        }
-      }
-
-      const criada = await api.post('/api/prospeccoes', payload);
-      criadaId = criada?.id ?? criada?.[0]?.id;
-      if (!criadaId) throw erro(500, 'A API não devolveu o id da prospecção criada');
-
-      const contatos = normalizarPrincipais(
-        (Array.isArray(req.body.contatos) ? req.body.contatos : []).filter(c => texto(c?.nome))
-      );
-      for (const c of contatos) {
-        await api.post('/api/prospeccao_contatos', montarPayloadContato(c, criadaId));
-      }
-
-      await registrarHistorico(api, criadaId, [
-        {
-          tipo: 'criacao', acao: 'criou', entidade: 'Prospecção',
-          valor_novo: payload.nome_fantasia,
-          observacao: 'Cadastro inicial',
-          detalhe: payload
-        },
-        {
-          tipo: 'etapa', acao: 'criou', entidade: 'Etapa do funil', campo: 'etapa',
-          valor_novo: payload.etapa
-        },
-        ...contatos.map(c => ({
-          tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c
-        }))
-      ], usuarioId);
-
+      const criadaId = await criarProspeccao(createApiClient(req), req.body || {}, usuarioDaRequisicao(req));
       res.status(201).json({ id: criadaId });
     } catch (err) {
-      // Sem transação (ver topo): se a prospecção entrou mas um contato falhou,
-      // o registro ficaria meio pronto e invisível para quem tentasse recriar,
-      // travado pelo índice único do CNPJ. Desfazemos — o CASCADE leva junto os
-      // contatos que chegaram a entrar.
-      if (criadaId) {
-        try {
-          await api.delete(`/api/prospeccoes/${criadaId}`);
-        } catch (limpeza) {
-          console.error(
-            `[prospeccoes] prospecção ${criadaId} ficou órfã após falha e não pôde ser removida:`,
-            limpeza?.message || limpeza
-          );
-        }
-      }
-      console.error('Erro ao criar prospecção:', err);
+      if (err.status !== 409) console.error('Erro ao criar prospecção:', err);
       res.status(err.status || 500).json({ error: err.message || 'Erro ao criar prospecção' });
     }
   }
@@ -1738,6 +1878,14 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
 
     clienteCriadoId = cliente?.id ?? cliente?.[0]?.id;
     if (!clienteCriadoId) throw erro(500, 'A API não devolveu o id do cliente criado');
+    await clienteHistorico.marcarCriador(api, clienteCriadoId, usuarioId);
+    // O cliente nasce com a origem na linha do tempo dele (a da prospecção continua lá).
+    await clienteHistorico.registrarNoCliente(api, clienteCriadoId, [{
+      tipo: 'conversao', acao: 'converteu', entidade: 'Cliente',
+      valor_anterior: 'Prospecção', valor_novo: p.nome_fantasia,
+      observacao: `Convertido da prospecção #${id} (${(Array.isArray(contatos) ? contatos : []).length} contato(s) copiado(s))`,
+      detalhe: { prospeccaoId: Number(id) }
+    }], usuarioId);
 
     const deParaContatos = [];
     for (const c of Array.isArray(contatos) ? contatos : []) {
@@ -1908,7 +2056,12 @@ router.delete(
         throw erro(404, 'Evento não pertence a esta prospecção');
       }
 
-      await api.delete(`/api/prospeccao_historico/${eventoId}`);
+      // Por marca (excluido_em/excluido_por): nada some do banco. A tela nova
+      // usa /api/historico-social; esta rota fica pelo mesmo comportamento.
+      await social.excluirEvento(api, {
+        origem: 'prospeccao', registroId: Number(id), itemId: Number(eventoId),
+        usuarioId: usuarioDaRequisicao(req), motivo: req.body?.motivo
+      });
       res.json({ success: true });
     } catch (err) {
       console.error('Erro ao excluir evento do histórico:', err);
@@ -1962,6 +2115,8 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
 });
 
 module.exports = router;
+module.exports.criarProspeccao = criarProspeccao;
+module.exports.importarProspeccoes = importarProspeccoes;
 // Exportado para o módulo de Orçamentos: um OCRP criado lá precisa aparecer no
 // histórico da prospecção, e duplicar a gravação seria arriscar dois formatos
 // de evento para o mesmo fato.

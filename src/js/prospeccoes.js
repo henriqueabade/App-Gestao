@@ -19,6 +19,8 @@ async function fetchApi(path, options) {
 // ---------------------------------------------------------------------------
 
 let todasProspeccoes = [];
+// O que está na tabela agora (com os filtros): é o que "Exportar CSV" leva.
+let prospeccoesNaTela = [];
 let funilAtual = null;
 let etapasDisponiveis = [];
 let filtroGeo = { paises: [], estados: [] };
@@ -637,6 +639,7 @@ function ligarAcao(el, handler) {
 }
 
 function renderTabela(lista) {
+    prospeccoesNaTela = Array.isArray(lista) ? lista : [];
     const tbody = document.getElementById('prospeccoesTableBody');
     if (!tbody) return;
 
@@ -889,6 +892,25 @@ function initProspeccoes() {
 
     document.getElementById('btnNovaProspeccao')?.addEventListener('click', abrirNovaProspeccao);
     document.getElementById('prospeccoesEmptyNew')?.addEventListener('click', abrirNovaProspeccao);
+
+    // Ações Rápidas — as mesmas de Clientes (src/js/utils/acoes-csv.js).
+    // Planilha funcionando; relatório e e-mail em massa ainda em construção.
+    window.AcoesCsv?.ligarMenu({
+        container: document.getElementById('acoesRapidasProspeccoes'),
+        botao: document.getElementById('btnAcoesRapidasProspeccoes'),
+        menu: document.getElementById('menuAcoesRapidasProspeccoes')
+    });
+    const planilha = { modulo: 'prospeccoes', rotulo: 'prospecções', singular: 'prospecção', feminino: true };
+    document.getElementById('btnExportarCsvProspeccoes')?.addEventListener('click', () => {
+        window.AcoesCsv?.exportar({ ...planilha, ids: prospeccoesNaTela.map(p => p.id) });
+    });
+    document.getElementById('btnImportarCsvProspeccoes')?.addEventListener('click', () => {
+        window.AcoesCsv?.importar({ ...planilha, aoConcluir: () => carregarProspeccoes(true) });
+    });
+    document.getElementById('btnModeloCsvProspeccoes')?.addEventListener('click', () => window.AcoesCsv?.salvarModelo(planilha));
+    const emConstrucao = () => window.DialogPadrao?.info({ title: 'Função em desenvolvimento', tom: 'aviso', icone: 'fa-person-digging', message: 'Esta ação ainda está sendo construída.' });
+    document.getElementById('btnRelatorioProspeccoes')?.addEventListener('click', emConstrucao);
+    document.getElementById('btnEmailMassaProspeccoes')?.addEventListener('click', emConstrucao);
 
     document.getElementById('btnFiltrarProspeccoes')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimparProspeccoes')?.addEventListener('click', limparFiltros);

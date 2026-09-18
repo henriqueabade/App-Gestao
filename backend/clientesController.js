@@ -1,6 +1,9 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao } = require('./permissionsController');
+const { usuarioDaRequisicao } = require('./usuarioAtual');
+const clienteHistorico = require('./clienteHistorico');
+const csv = require('./importacaoCsv');
 
 const router = express.Router();
 
@@ -154,6 +157,139 @@ router.get('/lista', exigirPermissao('cli.view'), async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// PLANILHA (Ações Rápidas): modelo, exportação e importação em CSV.
+// As colunas, a leitura e a conferência de cada linha moram em
+// backend/importacaoCsv.js — o mesmo arquivo para os três, então o que se
+// exporta volta pela importação sem ajuste.
+// ---------------------------------------------------------------------------
+
+// Data local (o toISOString daria o dia seguinte depois das 21h em Brasília).
+const hojeNoNome = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+router.get('/csv/modelo', exigirPermissao('cli.import.csv'), (req, res) => {
+  res.json({ nome: 'modelo-clientes', conteudo: csv.modeloDeClientes() });
+});
+
+// `ids` (opcional): só os clientes da tela, na ordem da tela — o filtro que
+// a pessoa aplicou vale para o arquivo. GET com ?ids=1,2 ou POST com
+// { ids: [...] } (a tela usa o POST: milhares de ids não cabem numa URL).
+const idsPedidos = req => (Array.isArray(req.body?.ids) ? req.body.ids : String(req.query?.ids || '').split(','))
+  .map(s => String(s).trim()).filter(Boolean);
+
+router.get('/csv/exportar', exigirPermissao('cli.export.csv'), exportarClientes);
+router.post('/csv/exportar', exigirPermissao('cli.export.csv'), exportarClientes);
+async function exportarClientes(req, res) {
+  try {
+    const api = createApiClient(req);
+    const [clientes, contatos] = await Promise.all([
+      api.get('/api/clientes'),
+      api.get('/api/contatos_cliente').catch(() => [])
+    ]);
+    const primeiro = new Map();
+    for (const c of (Array.isArray(contatos) ? contatos : []).slice().sort((a, b) => Number(a.id) - Number(b.id))) {
+      if (!primeiro.has(String(c.id_cliente))) primeiro.set(String(c.id_cliente), c);
+    }
+    let lista = Array.isArray(clientes) ? clientes : [];
+    const ids = idsPedidos(req);
+    if (ids.length) {
+      const porId = new Map(lista.map(c => [String(c.id), c]));
+      lista = ids.map(id => porId.get(id)).filter(Boolean);
+    } else {
+      lista = lista.slice().sort((a, b) => String(a.nome_fantasia || '').localeCompare(String(b.nome_fantasia || ''), 'pt-BR'));
+    }
+    const linhas = lista.map(c => csv.clienteParaLinha(c, primeiro.get(String(c.id)) || null));
+    res.json({ nome: `clientes-${hojeNoNome()}`, total: linhas.length, conteudo: csv.gerarCsv(csv.COLUNAS_CLIENTE, linhas) });
+  } catch (err) {
+    console.error('Erro ao exportar clientes:', err);
+    res.status(err.status || 500).json({ error: 'Não foi possível exportar os clientes.' });
+  }
+}
+
+/**
+ * Importa a planilha linha a linha, sem parar no primeiro erro. Cada linha
+ * volta com a situação (registrado, com pendências, não registrado, ignorado)
+ * e o porquê — é o relatório que a tela mostra no fim.
+ */
+async function importarClientes(api, conteudo, { usuarioId = null, nomeArquivo = 'planilha.csv' } = {}) {
+  const { linhas } = csv.lerCsv(conteudo);
+  if (linhas.length < 2) {
+    const e = new Error('A planilha está vazia: nenhuma linha de cliente abaixo do cabeçalho.');
+    e.status = 400;
+    throw e;
+  }
+  const [cabecalho, ...dados] = linhas;
+  const mapa = csv.mapearCabecalho(cabecalho.valores, csv.COLUNAS_CLIENTE);
+  if (mapa.indice.nome_fantasia === undefined && mapa.indice.razao_social === undefined) {
+    const e = new Error('O cabeçalho não tem as colunas do modelo. Use "Salvar modelo CSV" e preencha a partir dele.');
+    e.status = 400;
+    throw e;
+  }
+  const [clientes, usuarios] = await Promise.all([
+    api.get('/api/clientes'),
+    api.get('/api/usuarios').catch(() => [])
+  ]);
+  const documentosCadastrados = new Set((Array.isArray(clientes) ? clientes : [])
+    .flatMap(c => [csv.digitos(c.cnpj), csv.digitos(c.cpf)]).filter(Boolean));
+  const documentosDoArquivo = new Map();
+  const donos = (Array.isArray(usuarios) ? usuarios : []).map(u => u.nome).filter(Boolean);
+
+  const resultados = [];
+  const aGravar = [];
+  for (const linha of dados) {
+    const r = csv.registroDaLinha(linha.valores, mapa.indice);
+    if (csv.ehLinhaDeExemplo(r)) {
+      resultados.push({ linha: linha.numero, identificacao: r.nome_fantasia || '', situacao: 'ignorado', id: null, bloqueios: [], pendencias: [], avisos: ['Linha de exemplo do modelo: ignorada.'] });
+      continue;
+    }
+    const conf = csv.conferirCliente(r, { documentosCadastrados, documentosDoArquivo, donos });
+    const resultado = {
+      linha: linha.numero, identificacao: conf.identificacao, situacao: csv.situacaoDaLinha(conf), id: null,
+      bloqueios: conf.bloqueios, pendencias: conf.pendencias, avisos: conf.avisos
+    };
+    resultados.push(resultado);
+    if (resultado.situacao === 'nao_registrado') continue;
+    if (conf.documento) documentosDoArquivo.set(conf.documento, linha.numero);
+    aGravar.push({ resultado, conf });
+  }
+
+  await csv.emParalelo(aGravar, 4, async ({ resultado, conf }) => {
+    try {
+      resultado.id = await criarCliente(api, conf.payload, usuarioId, {
+        observacao: `Importado da planilha ${nomeArquivo} (linha ${resultado.linha})`,
+        pendencias: conf.pendencias
+      });
+    } catch (err) {
+      resultado.situacao = 'nao_registrado';
+      resultado.bloqueios = [...resultado.bloqueios, `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
+    }
+  });
+
+  return {
+    arquivo: nomeArquivo,
+    colunas_desconhecidas: mapa.desconhecidas,
+    colunas_ausentes: mapa.ausentes,
+    resumo: csv.resumirImportacao(resultados),
+    linhas: resultados
+  };
+}
+
+router.post('/csv/importar', exigirPermissao(['cli.import.csv', 'cli.create']), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    res.json(await importarClientes(api, String(req.body?.conteudo || ''), {
+      usuarioId: usuarioDaRequisicao(req),
+      nomeArquivo: String(req.body?.nome_arquivo || 'planilha.csv').slice(0, 200)
+    }));
+  } catch (err) {
+    console.error('Erro ao importar clientes:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Não foi possível importar a planilha.' });
+  }
+});
+
 router.get('/contatos', exigirPermissao('ctt.view'), async (req, res) => {
   try {
     const api = createApiClient(req);
@@ -283,6 +419,30 @@ router.get('/:id/resumo', exigirPermissao('cli.details.view'), async (req, res) 
   }
 });
 
+/**
+ * Cadastra o cliente com os contatos e grava quem cadastrou e o histórico.
+ * O mesmo caminho do formulário (POST /) e da importação da planilha.
+ */
+async function criarCliente(api, cli, usuarioId, { observacao = 'Cadastro inicial', pendencias = [] } = {}) {
+  const payload = buildPayload(cli);
+  const created = await api.post('/api/clientes', payload);
+  const clienteId = created?.id || created?.[0]?.id || created?.data?.id;
+  const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
+  for (const ct of contatos) {
+    await api.post('/api/contatos_cliente', {
+      id_cliente: clienteId,
+      nome: ct.nome,
+      cargo: ct.cargo,
+      telefone_celular: ct.telefone_celular,
+      telefone_fixo: ct.telefone_fixo,
+      email: ct.email
+    });
+  }
+  await clienteHistorico.marcarCriador(api, clienteId, usuarioId);
+  await clienteHistorico.registrarNoCliente(api, clienteId, clienteHistorico.eventosDaCriacao(payload, contatos, { observacao, pendencias }), usuarioId);
+  return clienteId;
+}
+
 router.post('/', exigirPermissao(req => (Array.isArray(req.body?.contatos) && req.body.contatos.length ? ['cli.create', 'cli.contact.add'] : ['cli.create'])), async (req, res) => {
   const cli = req.body || {};
   try {
@@ -294,19 +454,7 @@ router.post('/', exigirPermissao(req => (Array.isArray(req.body?.contatos) && re
       return res.status(409).json({ error: 'Cliente já registrado' });
     }
 
-    const created = await api.post('/api/clientes', buildPayload(cli));
-    const clienteId = created?.id || created?.[0]?.id || created?.data?.id;
-    const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
-    for (const ct of contatos) {
-      await api.post('/api/contatos_cliente', {
-        id_cliente: clienteId,
-        nome: ct.nome,
-        cargo: ct.cargo,
-        telefone_celular: ct.telefone_celular,
-        telefone_fixo: ct.telefone_fixo,
-        email: ct.email
-      });
-    }
+    const clienteId = await criarCliente(api, cli, usuarioDaRequisicao(req));
     res.json({ id: clienteId });
   } catch(err){
     console.error('Erro ao criar cliente:', err);
@@ -338,7 +486,14 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
   const cli = req.body || {};
   try {
     const api = createApiClient(req);
-    await api.put(`/api/clientes/${id}`, buildPayload(cli));
+    // O "antes" é o que a linha do tempo mostra riscado ("era X, virou Y").
+    const [antes, contatosAntes, transportadorasAntes] = await Promise.all([
+      api.get(`/api/clientes/${id}`).catch(() => null),
+      api.get('/api/contatos_cliente', { query: { id_cliente: id } }).catch(() => []),
+      api.get('/api/transportadoras', { query: { id_cliente: id } }).catch(() => [])
+    ]);
+    const payload = buildPayload(cli);
+    await api.put(`/api/clientes/${id}`, payload);
 
     const contatosNovos = Array.isArray(cli.contatosNovos) ? cli.contatosNovos : [];
     for(const ct of contatosNovos){
@@ -394,6 +549,15 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
       if (!tid) continue;
       await api.delete(`/api/transportadoras/${tid}`);
     }
+
+    await clienteHistorico.registrarNoCliente(api, id, [
+      ...clienteHistorico.diferencasDoCliente(antes && !antes.error ? antes : {}, payload),
+      ...clienteHistorico.eventosDosFilhos({
+        contatosNovos, contatosAtualizados, contatosExcluidos,
+        transportadorasNovas: Array.isArray(cli.transportadorasNovas) ? cli.transportadorasNovas : [],
+        transportadorasExcluidas: Array.isArray(cli.transportadorasExcluidas) ? cli.transportadorasExcluidas : []
+      }, { contatosAntes, transportadorasAntes })
+    ], usuarioDaRequisicao(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -458,3 +622,5 @@ module.exports = router;
 module.exports.buildPayload = buildPayload;
 module.exports.mapClienteCompleto = mapClienteCompleto;
 module.exports.camposFiscaisDoCliente = camposFiscaisDoCliente;
+module.exports.criarCliente = criarCliente;
+module.exports.importarClientes = importarClientes;

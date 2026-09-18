@@ -40,6 +40,10 @@
 
     <!-- Seções retráteis dos modais (a parte fiscal da peça, por enquanto). -->
     <link rel="stylesheet" href="../styles/secao-retratil.css">
+
+    <!-- Histórico social (curtidas, comentários, observações) de Prospecções e Clientes. -->
+    <link rel="stylesheet" href="../styles/historico-social.css">
+    <link rel="stylesheet" href="../styles/acoes-csv.css">
 </head>
 <body class="text-white">
     <!-- Topbar -->
@@ -190,7 +194,7 @@
 
                     <button id="notificationBtn" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: white" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="updateNotificationColor()">
                         <i class="fas fa-bell w-5 h-5"></i>
-                        <span id="notificationBadge" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full" style="background: var(--color-red)"></span>
+                        <span id="notificationBadge" class="sino-contador hidden" aria-hidden="true"></span>
                     </button>
                 </div>
             </div>
@@ -373,6 +377,8 @@
     <script src="../js/utils/secao-retratil.js"></script>
     <!-- Rolagem encadeada entre página/modal e as tabelas (padrão de TODAS as tabelas). -->
     <script src="../js/utils/rolagem-encadeada.js"></script>
+    <script src="../js/utils/historico-social.js"></script>
+    <script src="../js/utils/acoes-csv.js"></script>
     <!-- O seletor de transportadora do orçamento. Aqui e não no HTML do modal
          porque `menu.js` só executa `../js/{pagina}.js`: todo `<script>` dentro
          de um módulo é ignorado, e o utilitário nunca rodaria. -->
