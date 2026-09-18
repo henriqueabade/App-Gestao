@@ -610,3 +610,41 @@ test('ajuste manual aparece no painel: o cartão mostra o que falta pagar e o re
     await t.fechar();
   }
 });
+
+test('atividade: o histórico inteiro do módulo, do mais novo ao mais antigo, com o nome de quem fez', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    // Sem a permissão de ver o Financeiro, nada.
+    assert.equal((await t.chamar('GET', '/api/financeiro/atividade')).status, 403);
+
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar', 'financeiro.ajuste.registrar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    const ajuste = await t.chamar('POST', '/api/financeiro/ajustes', {
+      pedido_id: 55, numero_parcela: 1, tipo: 'desconto', valor: 500, data_ajuste: `${ant}-12`, motivo: 'Negociação'
+    });
+    assert.equal(ajuste.status, 200, JSON.stringify(ajuste.corpo));
+
+    const r = await t.chamar('GET', '/api/financeiro/atividade?limite=50');
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    const itens = r.corpo.itens;
+    assert.ok(itens.length >= 2, 'a regra e o ajuste');
+    const quandos = itens.map(i => i.quando);
+    assert.deepEqual(quandos, [...quandos].sort().reverse(), 'do mais novo ao mais antigo');
+    const doAjuste = itens.find(i => String(i.tipo).startsWith('ajuste'));
+    assert.ok(doAjuste, JSON.stringify(itens));
+    assert.equal(doAjuste.pedido_id, 55);
+    assert.equal(doAjuste.numero_parcela, 1);
+    assert.equal(doAjuste.usuario_id, 1, 'quem estava logado (o id do token)');
+    assert.equal(doAjuste.usuario, 'Henrique', 'o nome vem da tabela de usuários');
+    for (const chave of ['id', 'quando', 'tipo', 'rotulo', 'descricao', 'valor']) assert.ok(chave in doAjuste, `falta ${chave}`);
+
+    // O limite é respeitado (e tem piso de 10, para a tela nunca pedir zero).
+    const t1 = await t.chamar('GET', '/api/financeiro/atividade?limite=1');
+    assert.equal(t1.status, 200);
+    assert.ok(t1.corpo.itens.length <= 10);
+  } finally {
+    await t.fechar();
+  }
+});

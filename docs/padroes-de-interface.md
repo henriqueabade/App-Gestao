@@ -1,4 +1,4 @@
-# Padrões de interface: números, diálogos e botões
+# Padrões de interface: números, diálogos, botões e telas
 
 Utilitários globais, carregados em `src/html/menu.html` (e os aplicáveis em
 `src/login/login.html`), resolvem de uma vez regras que antes eram repetidas — ou
@@ -241,3 +241,86 @@ implementações que possam divergir. Se falhar, a caixa mostra o erro e o botã
 volta como *Tentar novamente*; ela continua sem saída.
 
 Coberto por `src/js/__tests__/atualizacaoObrigatoria.test.js`.
+
+---
+
+## 5. Telas e modais: o que vale em todo lugar
+
+### Classe do Tailwind que não existe não faz nada
+
+O Tailwind do app é **pré-compilado** (`src/styles/tailwind-offline.css`):
+classe que não estava no arquivo na hora da compilação não existe, e o
+navegador a ignora em silêncio. Era daí que vinham títulos colados na linha
+(`mt-5`, `pt-5`), grades que não abriam (`md:grid-cols-4`) e a Carta de
+correção ocupando a tela inteira (`max-w-xl`).
+
+- As que faltavam estão em `src/styles/utilitarios.css`, carregado **logo
+  depois** do `tailwind-offline.css` no `menu.html` (as variantes responsivas
+  precisam vir depois das classes base).
+- Só contam as folhas que o `menu.html` carrega. A folha de um módulo
+  (`src/css/<modulo>.css`) só existe enquanto ele está aberto: classe definida
+  só lá não funciona em modal aberto de outro lugar.
+- `src/js/__tests__/padroesDeTela.test.js` varre todos os HTML e JS atrás de
+  classes de espaço e tamanho sem CSS e **falha dizendo quais são**. Classe
+  nova que falhar ali: acrescente em `utilitarios.css` com o valor do Tailwind
+  (1 unidade = 0,25rem; quebras sm 640, md 768, lg 1024, xl 1280).
+
+### Cores dos botões
+
+| Botão | Classe |
+| --- | --- |
+| Fechar / Cancelar do rodapé | `btn-danger` (vermelho) |
+| Voltar (cabeçalho) | `btn-neutral` |
+| Ação principal (Salvar, Registrar, Atualizar do módulo) | `btn-primary` (dourado) |
+| Confirmar | `btn-success` (verde) |
+| Consulta ao banco (Conciliar BB, Consultar no BB, Atualizar de uma lista) | `btn-secondary` (azul) |
+
+Exceção: numa confirmação de **exclusão**, o vermelho é o "Excluir"; o
+Cancelar ao lado fica neutro, para não haver dois vermelhos. O teste acima
+confere o Fechar/Cancelar de todos os modais em `src/html/modals`.
+
+### Modal que abre outro por cima
+
+`Modal.open(html, script, id)` fecha **todos** os modais abertos antes de abrir
+o novo. Modal aberto a partir de outro (Carta de correção, Cancelar NF-e,
+E-mail, Boletos, Devolução a partir do Visualizar pedido) passa o quarto
+argumento, `keepExisting = true`, para o de baixo continuar aberto. No
+Visualizar pedido isso fica em `abrirPorCima()`, que também relê o pedido
+quando o filho muda alguma coisa (nota cancelada, boleto gerado…). O Esc só
+fecha o modal de cima.
+
+### Rolagem das tabelas
+
+`src/js/utils/rolagem-encadeada.js` (um ouvinte só, instalado pelo menu):
+
+- mouse **em cima** da tabela: a roda rola a tabela; quando ela chega no
+  limite, passa a rolar o modal ou o módulo;
+- mouse **fora** da tabela: a roda rola o modal ou o módulo; quando ele chega
+  no limite, passa a rolar a tabela da tela mais perto do mouse.
+
+Conta como tabela com rolagem própria: `.table-scroll`, `.fin-tabela`,
+`.items-table-scroll`, `[data-rolagem-tabela]` ou qualquer elemento que role
+e tenha uma `<table>` como filha direta. A barra de rolagem dentro dos modais é
+a fina dourada de `src/styles/scroll.css` (seção 3c). Coberto por
+`src/js/__tests__/rolagemEncadeada.test.js`.
+
+### Carregamento
+
+Modal que lê o servidor antes de mostrar alguma coisa **não aparece vazio**:
+fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo 1 s
+e o modal aparece já preenchido. No Financeiro, `finSpinnerDoModal()`
+(`src/js/financeiro.js`) põe o spinner e `window.FinanceiroModalPronto()` o
+troca pelo modal quando a primeira leitura termina (no máximo 15 s). Trocar um
+filtro dentro do modal mostra uma linha com o mesmo spinner no lugar da tabela.
+
+### Modais com abas
+
+Tamanho fixo, o da Nova prospecção: `max-w-6xl` (72rem) × `h-[90vh]`, em
+coluna (`flex flex-col overflow-hidden`), com só o corpo rolando. Assim trocar
+de aba não muda o tamanho do modal.
+
+### Balões de informação (i)
+
+Sempre pelo `window.Popover` (`src/js/utils/popover.js`), que leva o balão
+para o `<body>` e o posiciona junto do ícone. Balão posicionado à mão dentro
+de um módulo com `transform` ou `backdrop-filter` vai parar longe do (i).

@@ -203,18 +203,15 @@
     const contextoDaNota = () => ({ notaId: nota.id, serie: nota.serie, numero: nota.numero, chave: nota.chave_acesso, pedidoId: id, pedidoNumero: pedido?.numero || '', email: nota.destinatario?.email || '' });
     const cancelarNfe = () => {
       window.cancelarNfeContext = contextoDaNota();
-      close();
-      Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe');
+      abrirPorCima('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe');
     };
     const emailNfe = () => {
       window.emailNfeContext = contextoDaNota();
-      close();
-      Modal.open('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail');
+      abrirPorCima('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail');
     };
     const cartaNfe = () => {
       window.cartaCorrecaoContext = contextoDaNota();
-      close();
-      Modal.open('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe');
+      abrirPorCima('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe');
     };
 
     const ligar = (botao, fn) => {
@@ -300,8 +297,7 @@
     const cancelado = String(pedido?.situacao || '').toLowerCase() === 'cancelado';
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
-      close();
-      Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos');
+      abrirPorCima('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos');
     };
     const ligar = b => {
       b.classList.remove('hidden');
@@ -318,7 +314,77 @@
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
+    desligarFilhos();
   };
+
+  // ------------------------------------------------ modais por cima
+  // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
+  // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
+  // Antes cada um fechava o Visualizar primeiro.
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido'];
+  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido'];
+  let filhoMudouOPedido = false;
+
+  function abrirPorCima(htmlPath, scriptPath, filhoId) {
+    Modal.open(htmlPath, scriptPath, filhoId, true);
+  }
+
+  /** O Visualizar é o modal de cima? (Esc de um filho não pode fechar os dois.) */
+  function ehOModalDeCima() {
+    if (document.querySelector('dialog[open]')) return false;
+    const abertos = [...document.querySelectorAll('body > div > [id$="Overlay"]')]
+      .filter(o => !o.classList.contains('hidden') && o.offsetParent !== null);
+    return abertos.length === 0 || abertos[abertos.length - 1] === overlay;
+  }
+
+  function aoMudarOPedido(evento) {
+    const pedidoId = evento?.detail?.pedidoId;
+    if (pedidoId === undefined || pedidoId === null || String(pedidoId) === String(window.selectedOrderId)) filhoMudouOPedido = true;
+  }
+
+  function aoFecharFilho(evento) {
+    const filho = evento?.detail;
+    // O próprio Visualizar fechou por fora (troca de módulo, closeAll): solta tudo.
+    if (filho === overlayId) {
+      desligarFilhos();
+      document.removeEventListener('keydown', esc);
+      return;
+    }
+    if (!FILHOS.includes(filho)) return;
+    // Cancelar o pedido não avisa por evento: ao fechar, relê sempre.
+    if (filho === 'cancelarPedido') filhoMudouOPedido = true;
+    const outroFilhoAberto = FILHOS.some(f => f !== filho && document.getElementById(`${f}Overlay`));
+    if (filhoMudouOPedido && !outroFilhoAberto && document.getElementById(`${overlayId}Overlay`)) reabrirAtualizado();
+  }
+
+  function desligarFilhos() {
+    EVENTOS_QUE_MUDAM_O_PEDIDO.forEach(nome => window.removeEventListener(nome, aoMudarOPedido));
+    window.removeEventListener('modalFechado', aoFecharFilho);
+  }
+
+  /** O pedido mudou lá no filho (NF-e cancelada, boletos, devolução…): o Visualizar volta atualizado. */
+  function reabrirAtualizado() {
+    desligarFilhos();
+    document.removeEventListener('keydown', esc);
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    spinner.style.zIndex = 'var(--z-dialog)';
+    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
+    document.body.appendChild(spinner);
+    const aoCarregar = e => {
+      if (e?.detail !== overlayId) return;
+      window.removeEventListener('pedidoModalLoaded', aoCarregar);
+      spinner.remove();
+      document.getElementById(`${overlayId}Overlay`)?.classList.remove('hidden');
+    };
+    window.addEventListener('pedidoModalLoaded', aoCarregar);
+    setTimeout(() => spinner.remove(), 15000);
+    Modal.open('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', overlayId);
+  }
+
+  EVENTOS_QUE_MUDAM_O_PEDIDO.forEach(nome => window.addEventListener(nome, aoMudarOPedido));
+  window.addEventListener('modalFechado', aoFecharFilho);
 
   /** O botão roxo "Devolução" toma o lugar do "Cancelar" (a permissão de cada um está escrita no HTML). */
   function ligarDevolucao(pedido, notas) {
@@ -328,11 +394,10 @@
     devolver.classList.remove('hidden');
     devolver.addEventListener('click', () => {
       window.devolucaoPedidoContext = { pedidoId: window.selectedOrderId, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
-      close();
-      Modal.open('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');
+      abrirPorCima('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');
     });
   }
-  const esc = e => { if (e.key === 'Escape') close(); };
+  const esc = e => { if (e.key === 'Escape' && ehOModalDeCima()) close(); };
   document.addEventListener('keydown', esc);
   overlay.querySelector('#voltarVisualizarPedido')?.addEventListener('click', close);
   overlay.querySelector('#voltarVisualizarPedidoFooter')?.addEventListener('click', close);
@@ -668,9 +733,9 @@
       return;
     }
 
-    close();
     const openCancelModal = async () => {
-      await Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
+      // Por cima do Visualizar, que continua aberto embaixo.
+      await Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido', true);
       if (typeof Modal?.waitForReady === 'function') {
         await Modal.waitForReady('cancelarPedido');
       }

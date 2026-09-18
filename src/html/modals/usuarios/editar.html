@@ -1,5 +1,5 @@
 <div id="editarUsuarioOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
-  <div class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button id="voltarEditarUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
       <h2 id="usuarioEditarTitulo" class="text-lg font-semibold text-white text-center truncate">Editar usuário</h2>
@@ -70,7 +70,7 @@
     <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
       <div id="usuarioEditarMensagem" class="hidden text-sm"></div>
       <div class="flex items-center gap-3 justify-end w-full md:w-auto">
-        <button id="cancelarEditarUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+        <button id="cancelarEditarUsuario" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
         <button id="salvarEditarUsuario" class="btn-primary px-6 py-2.5 rounded-lg text-white font-semibold flex items-center gap-2">
           <span>Salvar alterações</span>
         </button>

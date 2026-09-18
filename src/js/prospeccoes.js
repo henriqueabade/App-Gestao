@@ -987,21 +987,29 @@ function initProspeccoes() {
     const iconeResumo = document.getElementById('resumoInfoIcon');
     const popoverResumo = document.getElementById('resumoPopover');
     if (iconeResumo && popoverResumo) {
-        const posicionar = () => {
-            const r = iconeResumo.getBoundingClientRect();
-            popoverResumo.style.left = `${window.scrollX + r.left}px`;
-            popoverResumo.style.top = `${window.scrollY + r.bottom + 8}px`;
+        // `window.Popover` (src/js/utils/popover.js) leva o balão para o <body>
+        // e o posiciona em relação à janela, colado no (i). A conta à mão usava
+        // coordenadas da PÁGINA com o balão dentro do módulo, que rola e tem
+        // deslocamento próprio — e ele aparecia longe do ícone.
+        const abrirResumo = () => {
+            if (window.Popover?.abrir) window.Popover.abrir(popoverResumo, iconeResumo);
+            else popoverResumo.classList.add('show');
         };
-        iconeResumo.addEventListener('mouseenter', () => {
-            posicionar();
-            popoverResumo.classList.add('show');
-        });
+        const fecharResumo = () => {
+            if (window.Popover?.fechar) window.Popover.fechar(popoverResumo);
+            else popoverResumo.classList.remove('show');
+        };
+        iconeResumo.addEventListener('mouseenter', abrirResumo);
         iconeResumo.addEventListener('mouseleave', () => {
             setTimeout(() => {
-                if (!popoverResumo.matches(':hover')) popoverResumo.classList.remove('show');
-            }, 100);
+                if (!popoverResumo.matches(':hover') && !iconeResumo.matches(':hover')) fecharResumo();
+            }, 120);
         });
-        popoverResumo.addEventListener('mouseleave', () => popoverResumo.classList.remove('show'));
+        popoverResumo.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!popoverResumo.matches(':hover') && !iconeResumo.matches(':hover')) fecharResumo();
+            }, 120);
+        });
     }
 
     document.addEventListener('prospeccoes:geo-filter-change', evento => {

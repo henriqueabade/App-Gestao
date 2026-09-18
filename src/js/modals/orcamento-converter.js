@@ -1,4 +1,38 @@
 (function(){
+  /**
+   * A necessidade de cada INSUMO somando as peças e as etapas. O estoque é
+   * por insumo, então a comparação também tem de ser: a chave antiga
+   * (insumo + etapa) comparava o estoque INTEIRO com a parte de cada etapa —
+   * MDF com 10 em estoque, 6 na Marcenaria e 6 no Acabamento dava duas linhas
+   * "sobra 4" e deixava converter faltando 2. `pecaId` limita a uma peça
+   * (a visão por peça). Pura.
+   */
+  function necessidadePorInsumo(pecas, { pecaId = null } = {}) {
+    const mapa = new Map();
+    for (const p of pecas || []) {
+      if (pecaId !== null && pecaId !== undefined && Number(p?.produto_id) !== Number(pecaId)) continue;
+      for (const fi of p?.faltantes || []) {
+        const chave = String(fi?.nome ?? '');
+        if (!chave) continue;
+        const atual = mapa.get(chave) || { nome: fi.nome, un: fi.un || '', etapas: [], necessario: 0, ordem: Infinity };
+        atual.necessario += Number(fi.necessario || 0);
+        if (fi.etapa && !atual.etapas.includes(fi.etapa)) atual.etapas.push(fi.etapa);
+        atual.ordem = Math.min(atual.ordem, Number(fi.ordem || 0));
+        if (!atual.un && fi.un) atual.un = fi.un;
+        mapa.set(chave, atual);
+      }
+    }
+    return mapa;
+  }
+
+  /** Saldo previsto de um insumo: o estoque menos o que o PEDIDO INTEIRO precisa. Pura. */
+  function saldoDoInsumo(estoque, necessarioTotal) {
+    if (estoque?.infinito) return Infinity;
+    return Number(estoque?.quantidade || 0) - Number(necessarioTotal || 0);
+  }
+
+  window.ConversaoInsumos = { necessidadePorInsumo, saldoDoInsumo };
+
   const overlayId = 'converterOrcamento';
   const overlay = document.getElementById('converterOrcamentoOverlay');
   if (!overlay) return;
@@ -602,6 +636,9 @@
 
   function renderRows() {
     if (!pecasBody) return;
+    // Esvaziar o corpo antes de refazer as linhas derrubava a altura da tabela
+    // e a rolagem voltava para o topo a cada clique numa peça.
+    const rolagemDasPecas = guardarRolagem(pecasBody);
     const isLoading = pecasBody.dataset.tableLoading === 'true';
     let placeholderRow = null;
     if (isLoading) {
@@ -718,6 +755,7 @@
       }
       pecasBody.appendChild(fragment);
     }
+    restaurarRolagem(rolagemDasPecas);
 
     pecasBody.querySelectorAll('button[data-action="toggle-approval"]').forEach(btn => {
       btn.addEventListener('click', e => {
@@ -1465,21 +1503,25 @@ async function computeInsumosAndRender(options = {}) {
   // para que a validação seja confiável mesmo com a tabela filtrada.
   function computeHasNegativeStock(stockByName) {
     const map = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
-    const agg = new Map();
-    rows.forEach(p => {
-      (p.faltantes || []).forEach(fi => {
-        const key = `${fi.nome}__${fi.un}__${fi.etapa}`;
-        const cur = agg.get(key) || { nome: fi.nome, necessario: 0 };
-        cur.necessario += Number(fi.necessario || 0);
-        agg.set(key, cur);
-      });
-    });
-    for (const v of agg.values()) {
+    for (const v of necessidadePorInsumo(rows).values()) {
       const stock = map.get(v.nome) || { quantidade: 0, infinito: false };
-      if (stock.infinito) continue;
-      if (Number(stock.quantidade || 0) - Number(v.necessario || 0) < 0) return true;
+      if (saldoDoInsumo(stock, v.necessario) < 0) return true;
     }
     return false;
+  }
+
+  /** Quem rola acima de um elemento (a tabela e o corpo do modal), com a posição de cada um. */
+  function guardarRolagem(el) {
+    const lista = [];
+    for (let n = el?.parentElement; n; n = n.parentElement) {
+      if (n.scrollHeight > n.clientHeight + 1) lista.push([n, n.scrollTop]);
+      if (n === overlay) break;
+    }
+    return lista;
+  }
+
+  function restaurarRolagem(lista) {
+    for (const [n, topo] of lista) n.scrollTop = topo;
   }
 
   function buildInsumosGrid(stockByName) {
@@ -1499,6 +1541,7 @@ async function computeInsumosAndRender(options = {}) {
       }
     }
 
+    const rolagemDosInsumos = guardarRolagem(insumosBody);
     if (insumosLoading && insumosPlaceholder) {
       Array.from(insumosBody.children).forEach(child => {
         if (child !== insumosPlaceholder) child.remove();
@@ -1506,90 +1549,51 @@ async function computeInsumosAndRender(options = {}) {
     } else {
       insumosBody.innerHTML = '';
     }
-    const list = [];
-    rows.forEach(p => {
-      if (filtroPecaId && Number(p.produto_id) !== Number(filtroPecaId)) return;
-      (p.faltantes || []).forEach(fi => {
-        list.push({
-          produto_id: p.produto_id,
-          nome: fi.nome,
-          un: fi.un,
-          etapa: fi.etapa,
-          necessario: Number(fi.necessario || 0),
-          ordem: fi.ordem || 0
-        });
-      });
-    });
+    // Uma linha por INSUMO (as etapas em que ele entra vão juntas). O saldo é
+    // sempre o do PEDIDO INTEIRO — na visão por peça, "Necessário" é o desta
+    // peça e o total do pedido aparece ao lado quando é diferente. Antes a
+    // visão por peça dizia "correto" enquanto o pedido todo faltava.
+    const totalDoPedido = necessidadePorInsumo(rows);
+    const doFiltro = filtroPecaId ? necessidadePorInsumo(rows, { pecaId: filtroPecaId }) : totalDoPedido;
+    const linhasDaGrade = [...doFiltro.values()]
+      .sort(filtroPecaId ? (a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome) : (a, b) => a.nome.localeCompare(b.nome));
 
     let anyNegative = false;
-
-    if (filtroPecaId) {
-      list.sort((a, b) => a.ordem - b.ordem);
-      list.forEach(v => {
-        const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
-        const disponivel = stock.infinito ? Infinity : Number(stock.quantidade || 0);
-        const saldo = disponivel === Infinity ? Infinity : disponivel - Number(v.necessario || 0);
-        const negative = saldo !== Infinity && saldo < 0;
-        if (negative) anyNegative = true;
-        if (mostrarSomenteFaltantes && !negative) return;
-        const tr = document.createElement('tr');
-        if (negative) tr.classList.add('negative-balance');
-        tr.classList.add('border-b', 'border-white/5');
-        const flags = [];
-        if (saldo === Infinity) {
-          flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
-        } else if (negative) {
-          flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
-        } else {
-          flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
-        }
-        tr.innerHTML = `
+    for (const v of linhasDaGrade) {
+      const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
+      const disponivel = stock.infinito ? Infinity : Number(stock.quantidade || 0);
+      const necessarioTotal = totalDoPedido.get(String(v.nome))?.necessario ?? v.necessario;
+      const saldo = saldoDoInsumo(stock, necessarioTotal);
+      const negative = saldo !== Infinity && saldo < 0;
+      if (negative) anyNegative = true;
+      if (mostrarSomenteFaltantes && !negative) continue;
+      const tr = document.createElement('tr');
+      if (negative) tr.classList.add('negative-balance');
+      tr.classList.add('border-b', 'border-white/5');
+      const flags = [];
+      if (saldo === Infinity) {
+        flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
+      } else if (negative) {
+        flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
+      } else {
+        flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
+      }
+      const numero = n => Number(n || 0).toLocaleString('pt-BR');
+      const doPedido = filtroPecaId && Math.abs(necessarioTotal - v.necessario) > 1e-9
+        ? ` <span class="text-xs text-gray-400" title="O saldo considera o pedido inteiro">(de ${numero(necessarioTotal)} no pedido)</span>`
+        : '';
+      tr.innerHTML = `
           <td data-perm-col="col_conv_ins_nome" class="py-3 px-2 text-white">${v.nome}</td>
           <td data-perm-col="col_conv_ins_unidade" class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
-          <td data-perm-col="col_conv_ins_disponivel" class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-          <td data-perm-col="col_conv_ins_necessario" class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td data-perm-col="col_conv_ins_disponivel" class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + numero(disponivel) + '</span>'}</td>
+          <td data-perm-col="col_conv_ins_necessario" class="py-3 px-2 text-left text-white">${numero(v.necessario)}${doPedido}</td>
           <td data-perm-col="col_conv_ins_saldo" class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-          <td data-perm-col="col_conv_ins_etapa" class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
+          <td data-perm-col="col_conv_ins_etapa" class="py-3 px-2 text-left text-white">${v.etapas.length ? v.etapas.join(', ') : '-'}</td>
           <td data-perm-col="col_conv_ins_flags" class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
-        insumosBody.appendChild(tr);
-      });
-    } else {
-      const agg = new Map();
-      list.forEach(i => {
-        const key = `${i.nome}__${i.un}__${i.etapa}`;
-        const cur = agg.get(key) || { nome: i.nome, un: i.un, etapa: i.etapa, necessario: 0 };
-        cur.necessario += i.necessario;
-        agg.set(key, cur);
-      });
-      for (const v of Array.from(agg.values()).sort((a, b) => a.nome.localeCompare(b.nome))) {
-        const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
-        const disponivel = stock.infinito ? Infinity : Number(stock.quantidade || 0);
-        const saldo = disponivel === Infinity ? Infinity : disponivel - Number(v.necessario || 0);
-        const negative = saldo !== Infinity && saldo < 0;
-        if (negative) anyNegative = true;
-        if (mostrarSomenteFaltantes && !negative) continue;
-        const tr = document.createElement('tr');
-        if (negative) tr.classList.add('negative-balance');
-        tr.classList.add('border-b', 'border-white/5');
-        const flags = [];
-        if (saldo === Infinity) {
-          flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
-        } else if (negative) {
-          flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
-        } else {
-          flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
-        }
-        tr.innerHTML = `
-          <td class="py-3 px-2 text-white">${v.nome}</td>
-          <td class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
-          <td class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-          <td class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
-          <td class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-          <td class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
-          <td class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
-        insumosBody.appendChild(tr);
-      }
+      insumosBody.appendChild(tr);
     }
+
+    restaurarRolagem(rolagemDosInsumos);
 
     // O estado de saldo negativo é calculado de forma agregada em
     // computeHasNegativeStock() e a habilitação do botão é decidida por

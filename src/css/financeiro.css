@@ -238,10 +238,38 @@ body {
 
 .fin-competencia-campo--desligado { opacity: 0.55; }
 
-/* Dentro dos modais os campos seguem a altura dos outros (px-4 py-3). */
-.fin-competencia-campo--modal .fin-competencia-campo__mes,
-.fin-competencia-campo--modal .fin-competencia-campo__ano { flex: 0 1 auto; }
-.fin-competencia-campo--modal .fin-competencia-campo__mes { flex: 1 1 auto; }
+/* No cabeçalho do módulo o seletor tem a MESMA altura dos botões da linha
+   (Hoje, engrenagens, Conciliar BB, Atualizar: py-3 + text-sm = 2,75rem).
+   Com o texto base e a borda do input ele ficava mais alto que eles. */
+.fin-cabecalho .fin-competencia-campo > select,
+.fin-cabecalho .fin-competencia-campo > input:not([type="hidden"]),
+.fin-cabecalho .fin-competencia-campo > button {
+    box-sizing: border-box;
+    height: 2.75rem;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+/* Nos modais o seletor CABE na coluna do filtro: antes ele passava da largura
+   da célula e a lupa encostava no campo vizinho (Recebimentos, Aguardando
+   NF-e…). O mês é quem encolhe; ano e lupa têm largura fixa, e o espaço até o
+   próximo filtro volta a ser o da grade, igual entre todos. */
+.fin-competencia-campo--modal { width: 100%; min-width: 0; }
+div:has(> .fin-competencia-campo--modal) { min-width: 0; }
+.fin-competencia-campo--modal .fin-competencia-campo__mes {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 0.85rem;
+}
+.fin-competencia-campo--modal .fin-competencia-campo__ano {
+    flex: 0 0 5.25rem;
+    width: 5.25rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+.fin-competencia-campo--modal .fin-competencia-campo__ir { flex: 0 0 auto; }
 
 /* ---------------------------------------------------------- indicadores */
 
@@ -630,7 +658,7 @@ body {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--color-pen, #a394a7);
+    color: var(--menu-text-secondary, #9ca3af);
 }
 
 .fin-benef__total { font-size: 0.8rem; color: var(--color-green); font-weight: 600; }
@@ -661,13 +689,37 @@ body {
 .fin-benef__legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; }
 
 /* Filtro "quem recebe" dos relatórios de comissão, acima da tabela. */
+/* Mesmo recuo do cabeçalho da folha (1,25rem) e tudo na mesma linha de centro:
+   antes o rótulo encostava na borda e a caixa ficava mais baixa que ele. */
 .fin-filtro-benef {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.5rem 0.9rem;
-    margin: 0 0 0.75rem;
+    gap: 0.75rem 1.25rem;
+    margin: 0;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+.fin-filtro-benef > label {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--menu-text-secondary, #d1d5db);
+    white-space: nowrap;
+}
+
+.fin-filtro-benef > select {
+    box-sizing: border-box;
+    height: 2.5rem;
+    min-width: 13rem;
+    margin: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.fin-filtro-benef .fin-legenda { margin-left: auto; }
 
 /* Várias etiquetas na mesma célula (coluna "Quem recebe"). */
 .fin-etiquetas-benef { display: flex; flex-wrap: wrap; gap: 0.25rem; }
@@ -676,7 +728,7 @@ body {
 label.fin-benef__nome { cursor: pointer; }
 .fin-benef__nome input[type="checkbox"] { flex-shrink: 0; cursor: pointer; accent-color: var(--color-primary); }
 .fin-benef__nome input[type="checkbox"]:disabled { cursor: default; }
-.fin-benef__pago { flex-shrink: 0; white-space: nowrap; font-size: 0.72rem; color: var(--color-pen, #a394a7); }
+.fin-benef__pago { flex-shrink: 0; white-space: nowrap; font-size: 0.72rem; color: var(--menu-text-secondary, #9ca3af); }
 
 .fin-ponto {
     width: 0.6rem;
@@ -710,7 +762,7 @@ label.fin-benef__nome { cursor: pointer; }
 .fin-etiqueta-benef__tipo--cms { background: var(--color-primary); color: #1a1a1a; }
 .fin-etiqueta-benef__tipo--royalty { border: 1px solid var(--color-primary); color: var(--color-primary); }
 
-.fin-legenda { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; font-size: 0.7rem; color: var(--color-pen, #a394a7); }
+.fin-legenda { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; font-size: 0.7rem; color: var(--menu-text-secondary, #9ca3af); }
 .fin-legenda__item { display: inline-flex; align-items: center; gap: 0.3rem; }
 
 .fin-resumo__linha {
@@ -849,10 +901,37 @@ label.fin-benef__nome { cursor: pointer; }
 
 @keyframes finBrilho { to { background-position: -200% 0; } }
 
-/* Lista carregando: as linhas de esqueleto ocupam a tabela e nada ali é
-   clicável enquanto o servidor responde (o filtro segue livre). */
-.fin-linha-esqueleto { pointer-events: none; }
-.fin-linha-esqueleto .fin-esqueleto { min-width: 2rem; }
+/* Lista carregando: uma linha com o spinner da casa (órbita + logo, o mesmo
+   da abertura dos modais) e o que está sendo lido. Nada ali é clicável
+   enquanto o servidor responde; o filtro segue livre. */
+.fin-linha-carregando { pointer-events: none; }
+.fin-linha-carregando:hover { background: transparent !important; }
+.fin-linha-carregando td { padding: 2.25rem 1rem !important; }
+
+.fin-carregando-caixa {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+}
+
+.fin-carregando-texto {
+    font-size: 0.85rem;
+    color: var(--menu-text-secondary, #9ca3af);
+}
+
+/* Tamanho médio do spinner, entre o de linha e o de tela cheia. */
+.fin-spinner.app-loading-indicator {
+    width: 3.25rem;
+    height: 3.25rem;
+    margin: 0;
+}
+
+.fin-spinner .module-loading-orbit { border-width: 3px; }
+.fin-spinner .module-loading-core { width: 2.1rem; height: 2.1rem; }
+.fin-spinner .module-loading-core img { width: 1.35rem; height: 1.35rem; }
+
 .fin-carregando { position: relative; }
 .fin-carregando .fin-vazio { display: none; }
 
@@ -988,7 +1067,151 @@ label.fin-benef__nome { cursor: pointer; }
 /* Tabelas dos modais: o cabeçalho claro e fixo vem de tabelas-modais.css. */
 .fin-tabela { overflow: auto; max-height: 55vh; }
 .fin-tabela--folha { max-height: none; border-radius: 0; border: 0; }
-.fin-tabela tbody td { color: #e5e7eb; white-space: nowrap; }
+.fin-tabela tbody td { color: #e5e7eb; white-space: normal; overflow-wrap: break-word; }
+
+/* Sem rolagem de lado: o texto (cliente, produto, motivo) quebra linha, e só
+   número, data e etiqueta ficam inteiros. Era o nowrap geral nas células, mais
+   o espaço largo entre colunas, que empurrava a folha para a barra horizontal. */
+.fin-tabela tbody td.text-right,
+.fin-tabela tbody td .fin-etiqueta-benef,
+.fin-tabela tbody td [class*="badge-"],
+.fin-tabela tbody td .fin-link-celula,
+.fin-tabela tbody td .fin-tag-produto { white-space: nowrap; }
+
+.fin-tabela th,
+.fin-tabela td {
+    padding-left: 0.7rem !important;
+    padding-right: 0.7rem !important;
+}
+
+.fin-tabela th:first-child,
+.fin-tabela td:first-child { padding-left: 1.1rem !important; }
+
+.fin-tabela th:last-child,
+.fin-tabela td:last-child { padding-right: 1.1rem !important; }
+
+/* Cabeçalho dos modais (Voltar | título | etiqueta): em três terços iguais o
+   título ficava com um terço e cortava ("Produção da competência —
+   Setembro/2…"). O meio fica com metade, e as pontas continuam iguais entre
+   si, para o título seguir centralizado. */
+[data-fin-modal] > [role="dialog"] > header.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+    column-gap: 1rem;
+}
+
+/* ------------------------------------------------ linha do tempo (atividade)
+   Um dia por cabeçalho; em cada movimento, a foto (ou as iniciais coloridas)
+   de quem fez, o nome, a hora, a etiqueta do tipo e o que aconteceu. A linha
+   vertical liga os avatares. */
+.fin-linha-tempo { list-style: none; margin: 0; padding: 0; position: relative; }
+
+.fin-linha-tempo__dia {
+    margin: 1.5rem 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-primary-light, #d4c169);
+}
+
+.fin-linha-tempo__dia:first-child { margin-top: 0; }
+
+.fin-linha-tempo__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0 0 1.25rem;
+}
+
+/* O traço que liga um avatar ao próximo. */
+.fin-linha-tempo__item::before {
+    content: '';
+    position: absolute;
+    left: calc(1.375rem - 1px);
+    top: 2.9rem;
+    bottom: 0.15rem;
+    width: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.fin-linha-tempo__item:last-child::before,
+.fin-linha-tempo__item:has(+ .fin-linha-tempo__dia)::before { display: none; }
+
+.fin-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1a0009;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.fin-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.fin-avatar--sistema {
+    color: var(--color-primary-light, #d4c169);
+    background: rgba(182, 160, 62, 0.14);
+    border-color: rgba(182, 160, 62, 0.4);
+    font-size: 1rem;
+}
+
+.fin-linha-tempo__corpo {
+    min-width: 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.fin-linha-tempo__topo {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.fin-linha-tempo__quem { font-size: 0.9rem; color: var(--menu-text-strong, #fff); }
+.fin-linha-tempo__hora { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+
+.fin-linha-tempo__tag {
+    margin-left: auto;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.fin-linha-tempo__texto { margin: 0; font-size: 0.85rem; line-height: 1.45; color: #e5e7eb; overflow-wrap: anywhere; }
+.fin-linha-tempo__valor { margin: 0.35rem 0 0; font-size: 0.85rem; font-weight: 600; color: var(--color-green, #a2ffa6); }
+
+.fin-atividade-carregando { padding: 2.5rem 0; }
+
+/* Código da peça em etiqueta: o nome inteiro aparece ao passar o mouse. */
+.fin-tag-produto {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: rgba(212, 193, 105, 0.2);
+    color: var(--color-primary-light, #d4c169);
+    border: 1px solid rgba(212, 193, 105, 0.35);
+    cursor: help;
+}
 .fin-tabela tbody tr[data-fin-abrir] { cursor: pointer; }
 .fin-tabela tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
 .fin-tabela tbody tr[data-fin-abrir]:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }

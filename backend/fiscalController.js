@@ -400,6 +400,26 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     }
   });
 
+  /**
+   * GET /api/fiscal/atividade?limite=200 — o histórico da SEFAZ inteiro para o
+   * modal "Atividade recente" do Financeiro (o painel traz só os últimos 8).
+   */
+  router.get('/atividade', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const limite = Math.min(500, Math.max(10, Number(req.query?.limite) || 200));
+      const lista = r => (Array.isArray(r) ? r : []);
+      const [pedidos, notas, eventosCce] = await Promise.all([
+        api.get('/api/pedidos').then(lista).catch(() => []),
+        api.get('/api/notas_fiscais').then(lista).catch(() => []),
+        api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => [])
+      ]);
+      res.json({ itens: painel.atividadeRecente({ notas, eventosCce, pedidos, limite }) });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/atividade');
+    }
+  });
+
   /** Uma nota completa, com os XMLs (para DANFE, download e conferência). */
   router.get('/notas/:id', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {

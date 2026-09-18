@@ -522,7 +522,7 @@
     titulo: `Pagamento ${nome.toLowerCase()}`,
     colunas: [
       { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
-      { chave: 'produto', rotulo: 'Produto' },
+      { chave: 'produto', rotulo: 'Produto', tipo: 'produto' },
       { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
       { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
       { chave: 'valor_peca', rotulo: 'Peça inteira', tipo: 'moeda' },
@@ -611,7 +611,7 @@
       colunas: [
         { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
         { chave: 'data', rotulo: 'Finalização', tipo: 'data' },
-        { chave: 'produto', rotulo: 'Produto' },
+        { chave: 'produto', rotulo: 'Produto', tipo: 'produto' },
         { chave: 'setor', rotulo: 'Processo' },
         { chave: 'quantidade', rotulo: 'Quantidade', tipo: 'inteiro', total: true },
         { chave: 'unitario', rotulo: 'Valor por peça (média)', tipo: 'moeda' },
@@ -748,6 +748,81 @@
     return opcoes.pessoas.find(p => p.chave === valor)?.nome || valor;
   };
 
+  // ------------------------------------------------------------ atividade (puras)
+
+  /** Os tipos do histórico em grupos (a etiqueta e o filtro "Tipo"). */
+  const GRUPOS_ATIVIDADE = {
+    nfe: { rotulo: 'NF-e', badge: 'badge-info', icone: 'fa-file-invoice' },
+    ajuste: { rotulo: 'Ajustes', badge: 'badge-warning', icone: 'fa-undo' },
+    producao: { rotulo: 'Produção', badge: 'badge-info', icone: 'fa-hammer' },
+    fechamento: { rotulo: 'Fechamentos', badge: 'badge-neutral', icone: 'fa-lock' },
+    pagamento: { rotulo: 'Pagamentos', badge: 'badge-success', icone: 'fa-check-circle' },
+    regra: { rotulo: 'Regras e prazos', badge: 'badge-neutral', icone: 'fa-percent' },
+    devolucao: { rotulo: 'Devoluções', badge: 'badge-danger', icone: 'fa-undo-alt' }
+  };
+
+  /** O grupo de um tipo do histórico do Financeiro ou da SEFAZ. Pura. */
+  function grupoDaAtividade(tipo, fiscal = false) {
+    const t = String(tipo || '');
+    if (fiscal) return 'nfe';
+    if (t.startsWith('ajuste')) return 'ajuste';
+    if (t.startsWith('producao')) return 'producao';
+    if (t === 'competencia_fechada') return 'fechamento';
+    if (t === 'pagamento_confirmado' || t === 'reembolso_confirmado') return 'pagamento';
+    if (t === 'devolucao_registrada') return 'devolucao';
+    return 'regra';
+  }
+
+  const ETIQUETA_FISCAL = {
+    autorizada: ['NF-e autorizada', 'badge-success'], cancelada: ['NF-e cancelada', 'badge-danger'],
+    rejeitada: ['NF-e recusada', 'badge-danger'], processando: ['NF-e na SEFAZ', 'badge-info'], cce: ['Carta de correção', 'badge-warning']
+  };
+
+  /**
+   * O histórico do Financeiro e o da SEFAZ numa linha só, do mais novo para o
+   * mais antigo, cada um com quem fez (o da SEFAZ é o sistema). Pura.
+   */
+  function juntarAtividade(financeiro = [], fiscal = []) {
+    const itens = [
+      ...financeiro.map(e => ({
+        id: `f${e.id}`, quando: e.quando, grupo: grupoDaAtividade(e.tipo),
+        etiqueta: e.rotulo || e.tipo, badge: GRUPOS_ATIVIDADE[grupoDaAtividade(e.tipo)].badge,
+        texto: e.descricao || e.rotulo || '', valor: e.valor ?? null,
+        usuario_id: e.usuario_id ?? null, usuario: e.usuario || null
+      })),
+      ...fiscal.map((e, i) => {
+        const [etiqueta, badgeFiscal] = ETIQUETA_FISCAL[e.tipo] || ['NF-e', 'badge-info'];
+        return {
+          id: `n${e.nota_id ?? ''}-${e.tipo}-${i}`, quando: e.quando, grupo: 'nfe',
+          etiqueta, badge: badgeFiscal, texto: [e.titulo, e.detalhe].filter(Boolean).join(' — '), valor: null,
+          usuario_id: null, usuario: null, sistema: true
+        };
+      })
+    ].filter(i => i.quando);
+    return itens.sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+  }
+
+  /** O dia de um instante no fuso de quem vê (o banco guarda em UTC: 23h30 aqui já é o dia seguinte lá). */
+  function diaLocal(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso || '').slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /** "Hoje", "Ontem" ou a data, para o cabeçalho de cada dia. Pura. */
+  function rotuloDoDia(iso, hoje = hojeLocal()) {
+    const dia = diaLocal(iso);
+    if (!dia) return '—';
+    if (dia === hoje) return `Hoje · ${formatarData(dia)}`;
+    const ontem = somarDias(hoje, -1);
+    if (dia === ontem) return `Ontem · ${formatarData(dia)}`;
+    return formatarData(dia);
+  }
+
+  /** As iniciais de quem fez (a bolinha quando não há foto). */
+  const iniciais = nome => String(nome || '?').trim().split(/\s+/).filter(Boolean)
+    .map((p, i, todos) => (i === 0 || i === todos.length - 1 ? p[0] : '')).join('').toUpperCase().slice(0, 2) || '?';
+
   window.FinanceiroModais = {
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
@@ -757,6 +832,7 @@
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     textoDaConciliacao, BADGE_DO_AVISO,
     opcoesDeBeneficiario, filtrarPorBeneficiario, rotuloDoFiltroBenef,
+    grupoDaAtividade, juntarAtividade, diaLocal, rotuloDoDia, iniciais, GRUPOS_ATIVIDADE,
     RELATORIOS: Object.keys(RELATORIOS), RELATORIOS_DE_PARCELA: [...RELATORIOS_DE_PARCELA], FAIXAS_ATRASO
   };
 
@@ -1023,6 +1099,19 @@
       return td;
     }
     if (coluna.tipo === 'badge') { td.appendChild(badge(String(bruto ?? '—'))); return td; }
+    // Peça: só o código, em etiqueta; o nome inteiro aparece ao passar o mouse.
+    // (O nome inteiro na coluna era o que empurrava as tabelas de produção para
+    // a rolagem de lado.) O PDF e a planilha continuam com o texto completo.
+    if (coluna.tipo === 'produto') {
+      const completo = String(linha.produto ?? linha.produtoCompleto ?? '').trim();
+      const codigo = String(linha.produto_codigo ?? '').trim();
+      if (!codigo) { td.textContent = completo || '—'; return td; }
+      const tag = criar('span', 'fin-tag-produto', codigo);
+      tag.title = completo || codigo;
+      tag.setAttribute('aria-label', completo || codigo);
+      td.appendChild(tag);
+      return td;
+    }
     // Quem recebe: uma etiqueta por pessoa, com a cor dela e o tipo (CMS/Royalty).
     if (coluna.tipo === 'beneficiarios') {
       const lista = linha.benef_lista || [];
@@ -1079,22 +1168,33 @@
    * fazia a resposta mais LENTA (a do filtro antigo) chegar por último e
    * apagar a certa.
    */
-  function esqueletoNaTabela(tbody, colunas = 4, linhas = 5) {
+  /** O spinner da casa (órbita + logo), o mesmo da abertura dos modais. */
+  function spinnerDaCasa(classeExtra = '') {
+    const indicador = criar('span', `app-loading-indicator fin-spinner ${classeExtra}`.trim());
+    indicador.setAttribute('aria-hidden', 'true');
+    const nucleo = criar('span', 'module-loading-core');
+    const logo = document.createElement('img');
+    logo.src = '../assets/Logo.ico';
+    logo.alt = '';
+    nucleo.appendChild(logo);
+    indicador.append(criar('span', 'module-loading-orbit'), nucleo);
+    return indicador;
+  }
+
+  /** A tabela durante a leitura: uma linha só, com o spinner e o que está sendo lido. */
+  function esqueletoNaTabela(tbody, colunas = 4, _linhas = 5, texto = 'Carregando…') {
     if (!tbody) return;
-    tbody.replaceChildren();
-    for (let i = 0; i < linhas; i += 1) {
-      const tr = document.createElement('tr');
-      tr.className = 'fin-linha-esqueleto';
-      for (let c = 0; c < colunas; c += 1) {
-        const td = criar('td', 'px-4 py-3');
-        const marca = criar('span', 'fin-esqueleto');
-        // Larguras diferentes: parece uma lista de verdade, não um gabarito.
-        marca.style.width = `${[70, 45, 60, 35, 55][(i + c) % 5]}%`;
-        td.appendChild(marca);
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
+    const tr = document.createElement('tr');
+    tr.className = 'fin-linha-carregando';
+    tr.setAttribute('role', 'status');
+    tr.setAttribute('aria-live', 'polite');
+    const td = criar('td');
+    td.colSpan = Math.max(1, colunas);
+    const caixa = criar('div', 'fin-carregando-caixa');
+    caixa.append(spinnerDaCasa(), criar('span', 'fin-carregando-texto', texto));
+    td.appendChild(caixa);
+    tr.appendChild(td);
+    tbody.replaceChildren(tr);
   }
 
   function marcarOcupado(alvo, ocupado) {
@@ -1116,13 +1216,14 @@
       comecar() {
         const minha = ++leitura;
         alvos().forEach(a => marcarOcupado(a, true));
-        if (aviso) aviso.classList.remove('hidden');
+        // O texto de "lendo…" vai para dentro da tabela, junto do spinner.
+        if (aviso) aviso.classList.add('hidden');
         // A lista pode ter ficado escondida no filtro anterior (nenhuma linha):
-        // sem isto o esqueleto nasceria dentro de uma tabela invisível e a tela
+        // sem isto o spinner nasceria dentro de uma tabela invisível e a tela
         // parecia travada.
         tabela()?.classList.remove('hidden');
         vazio?.classList.add('hidden');
-        esqueletoNaTabela(tbody, colunas, linhas);
+        esqueletoNaTabela(tbody, colunas, linhas, (aviso?.textContent || '').trim() || 'Carregando…');
         return minha;
       },
       atual: () => leitura,
@@ -3135,7 +3236,9 @@
         const situacao = e.status === 'estornado' ? tagG('Estornado', 'badge-danger')
           : (e.quantidade < 0 ? tagG('Estorno', 'badge-warning') : (e.estornado ? tagG('Estornado depois de fechar', 'badge-warning') : tagG('Registrado', 'badge-success')));
         const tr = document.createElement('tr');
-        tr.append(celulaG(formatarData(e.data), 'px-4 py-3 text-white'), celulaG(e.produto), celulaG(e.setor || '—'),
+        // Peça: o código em etiqueta (o nome inteiro no passar do mouse), como nos relatórios.
+        const peca = e.produto_codigo ? tagG(e.produto_codigo, 'fin-tag-produto', e.produto || e.produto_codigo) : (e.produto || '—');
+        tr.append(celulaG(formatarData(e.data), 'px-4 py-3 text-white'), celulaG(peca), celulaG(e.setor || '—'),
           celulaG(String(e.quantidade), 'px-4 py-3 text-right'), celulaG(situacao));
         corpoP.appendChild(tr);
       }
@@ -3326,7 +3429,7 @@
     const carregamento = criarCarregamento({ tbody: el('finProdCompCorpo'), colunas: 8, aviso: el('finProdCompCarregando'), vazio: el('finProdCompVazio') });
 
     const colunas = [
-      { chave: 'pedido', tipo: 'pedido' }, { chave: 'data', tipo: 'data' }, { chave: 'produto' }, { chave: 'setor' },
+      { chave: 'pedido', tipo: 'pedido' }, { chave: 'data', tipo: 'data' }, { chave: 'produto', tipo: 'produto' }, { chave: 'setor' },
       { chave: 'quantidade', tipo: 'inteiro' }, { chave: 'valor_unitario', tipo: 'moeda' },
       { chave: 'total', tipo: 'moeda', classe: 'font-semibold' }, { chave: 'status_item', tipo: 'badge' }
     ];
@@ -3401,6 +3504,129 @@
     aoAlterar(carregar);
     pintarTopo();
     return carregar();
+  }
+
+  // ------------------------------------------------------------ atividade
+
+  function montarAtividade() {
+    const linha = el('finAtividadeLinha');
+    const busca = el('finAtividadeBusca');
+    const tipoSel = el('finAtividadeTipo');
+    const quemSel = el('finAtividadeQuem');
+    let itens = [];
+    let fotos = new Map();
+    let base = '';
+
+    for (const [chave, g] of Object.entries(GRUPOS_ATIVIDADE)) tipoSel.appendChild(opcao(chave, g.rotulo));
+
+    /** A foto de quem fez: data: e http: valem como vieram; caminho, contra a base da API. */
+    const urlDaFoto = valor => {
+      const bruto = String(valor || '').trim();
+      if (!bruto) return null;
+      if (/^(https?:|data:|blob:|file:)/i.test(bruto)) return bruto;
+      return base ? `${base.replace(/\/+$/, '')}${bruto.startsWith('/') ? '' : '/'}${bruto}` : null;
+    };
+
+    function avatar(item) {
+      const caixa = criar('span', 'fin-avatar');
+      if (item.sistema) {
+        caixa.classList.add('fin-avatar--sistema');
+        caixa.title = 'Sistema (SEFAZ)';
+        caixa.appendChild(Object.assign(document.createElement('i'), { className: 'fas fa-landmark' }));
+        return caixa;
+      }
+      const nome = item.usuario || (item.usuario_id ? `Usuário ${item.usuario_id}` : 'Sistema');
+      caixa.title = nome;
+      const foto = fotos.get(String(item.usuario_id));
+      if (foto) {
+        const img = document.createElement('img');
+        img.src = foto;
+        img.alt = nome;
+        img.loading = 'lazy';
+        // Foto que não carrega volta para as iniciais.
+        img.addEventListener('error', () => { img.remove(); caixa.textContent = iniciais(nome); });
+        caixa.appendChild(img);
+      } else {
+        caixa.textContent = iniciais(nome);
+        caixa.style.background = window.Beneficiarios?.cor ? window.Beneficiarios.cor(nome) : '';
+      }
+      return caixa;
+    }
+
+    function desenhar() {
+      const termo = semAcento(busca.value).trim();
+      const grupo = tipoSel.value;
+      const quem = quemSel.value;
+      const visiveis = itens.filter(i => (!grupo || i.grupo === grupo)
+        && (!quem || (quem === 'sistema' ? i.sistema : String(i.usuario_id) === quem))
+        && (!termo || semAcento(`${i.texto} ${i.etiqueta} ${i.usuario || ''}`).includes(termo)));
+      el('finAtividadeContagem').textContent = `${visiveis.length} ${visiveis.length === 1 ? 'movimento' : 'movimentos'}`;
+      linha.replaceChildren();
+      let diaAtual = null;
+      for (const item of visiveis) {
+        const dia = diaLocal(item.quando);
+        if (dia !== diaAtual) {
+          diaAtual = dia;
+          linha.appendChild(criar('li', 'fin-linha-tempo__dia', rotuloDoDia(item.quando)));
+        }
+        const li = criar('li', 'fin-linha-tempo__item');
+        const corpo = criar('div', 'fin-linha-tempo__corpo');
+        const topo = criar('div', 'fin-linha-tempo__topo');
+        topo.append(
+          criar('strong', 'fin-linha-tempo__quem', item.sistema ? 'Sistema (SEFAZ)' : (item.usuario || (item.usuario_id ? `Usuário ${item.usuario_id}` : 'Sistema'))),
+          criar('span', 'fin-linha-tempo__hora', horaDe(item.quando)),
+          criar('span', `${item.badge} fin-linha-tempo__tag`, item.etiqueta)
+        );
+        corpo.appendChild(topo);
+        corpo.appendChild(criar('p', 'fin-linha-tempo__texto', item.texto || '—'));
+        if (item.valor !== null && item.valor !== undefined) corpo.appendChild(criar('p', 'fin-linha-tempo__valor', formatarMoeda(item.valor)));
+        li.append(avatar(item), corpo);
+        linha.appendChild(li);
+      }
+      el('finAtividadeVazio').classList.toggle('hidden', visiveis.length > 0);
+    }
+
+    function montarQuem() {
+      const pessoas = new Map();
+      for (const i of itens) if (i.usuario_id !== null && i.usuario_id !== undefined) pessoas.set(String(i.usuario_id), i.usuario || `Usuário ${i.usuario_id}`);
+      quemSel.replaceChildren(opcao('', 'Todos'));
+      for (const [id, nome] of [...pessoas].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))) quemSel.appendChild(opcao(id, nome));
+      if (itens.some(i => i.sistema)) quemSel.appendChild(opcao('sistema', 'Sistema (SEFAZ)'));
+    }
+
+    async function carregar() {
+      mostrarMensagem('finAtividadeMensagem', '');
+      el('finAtividadeCarregando').classList.remove('hidden');
+      el('finAtividadeCarregando').replaceChildren(spinnerDaCasa(), criar('span', 'fin-carregando-texto', 'Carregando a atividade…'));
+      try { base = (await window.apiConfig?.getApiBaseUrl?.()) || ''; } catch (_) { base = ''; }
+      // As três leituras são independentes: sem permissão de NF-e (403) ou
+      // sem a lista de usuários, o resto aparece do mesmo jeito.
+      const [fin, fisc, usuarios] = await Promise.all([
+        fetchApi('/api/financeiro/atividade?limite=300').catch(e => ({ erro: e })),
+        fetchApi('/api/fiscal/atividade?limite=200').catch(() => ({ itens: [] })),
+        fetchApi('/api/usuarios/lista').catch(() => [])
+      ]);
+      el('finAtividadeCarregando').classList.add('hidden');
+      if (fin?.erro) mostrarMensagem('finAtividadeMensagem', textoDoErro(fin.erro, 'Você não tem permissão para ver a atividade do Financeiro.'));
+      fotos = new Map((Array.isArray(usuarios) ? usuarios : [])
+        .map(u => [String(u.id), urlDaFoto(u.foto_perfil_url || u.foto_perfil || u.fotoPerfil || u.foto_usuario || u.avatar || u.avatar_url || u.avatarUrl || null)])
+        .filter(([, url]) => url));
+      itens = juntarAtividade(fin?.itens || [], fisc?.itens || []);
+      montarQuem();
+      desenhar();
+    }
+
+    busca.addEventListener('input', desenhar);
+    tipoSel.addEventListener('change', desenhar);
+    quemSel.addEventListener('change', desenhar);
+    return carregar();
+  }
+
+  /** "14:32" de um instante (no fuso de quem vê). */
+  function horaDe(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
   /**
@@ -4379,7 +4605,7 @@
     ligar('finCfgInutilizar', inutilizar);
     el('finCfg_ambiente')?.addEventListener('change', alternarConfirmacao);
 
-    carregar();
+    return carregar();
   }
 
   // ------------------------------------------- pedidos aguardando NF-e
@@ -5024,18 +5250,30 @@
     finVisualizarRelatorio: montarVisualizarRelatorio,
     finComissoesAtrasadas: montarComissoesAtrasadas,
     finProducaoCompetencia: montarProducaoCompetencia,
-    finRegras: montarRegras
+    finRegras: montarRegras,
+    finAtividade: montarAtividade
   };
 
-  // Os montadores fiscais são assíncronos (leem o backend): o erro deles cai no mesmo lugar.
+  // Os montadores são assíncronos (leem o backend): o erro deles cai no mesmo lugar.
+  let montagem;
   try {
-    Promise.resolve(montadores[overlayId]?.()).catch(erro => console.error('[financeiro] falha ao montar o modal', overlayId, erro));
+    montagem = Promise.resolve(montadores[overlayId]?.());
   } catch (erro) {
-    console.error('[financeiro] falha ao montar o modal', overlayId, erro);
+    montagem = Promise.reject(erro);
   }
 
-  // Revela só depois de montado, como os modais de Pedidos.
-  overlay.classList.remove('hidden');
-  overlay.removeAttribute('aria-hidden');
-  window.Modal?.signalReady?.(overlayId);
+  // Revela só depois da PRIMEIRA leitura, como os modais dos outros módulos:
+  // até lá fica o spinner da casa (financeiro.js, finSpinnerDoModal). Antes o
+  // modal aparecia vazio e parecia travado enquanto o servidor respondia.
+  const revelar = () => {
+    overlay.classList.remove('hidden');
+    overlay.removeAttribute('aria-hidden');
+    window.Modal?.signalReady?.(overlayId);
+  };
+  montagem
+    .catch(erro => console.error('[financeiro] falha ao montar o modal', overlayId, erro))
+    .finally(() => {
+      if (typeof window.FinanceiroModalPronto === 'function') window.FinanceiroModalPronto(overlayId, revelar);
+      else revelar();
+    });
 })();

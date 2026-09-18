@@ -37,7 +37,8 @@ const MODAIS = {
     'configuracao-fiscal': 'finConfiguracaoFiscal',
     'configuracao-cobranca': 'finConfiguracaoCobranca',
     'recebimentos': 'finRecebimentos',
-    'regras': 'finRegras'
+    'regras': 'finRegras',
+    'atividade': 'finAtividade'
 };
 /* Os de ação têm Cancelar + ação principal; os de consulta fecham com "Fechar". */
 const DE_ACAO = ['registrar-ajuste', 'registrar-producao', 'fechar-competencia', 'fechar-producao', 'relatorios', 'confirmar-pagamento'];
@@ -153,7 +154,8 @@ test('os doze HTML seguem a anatomia da casa: overlay escondido, Voltar, rodapé
             assert.match(html, /btn-danger[^>]*>Cancelar</, `${arquivo}: Cancelar no padrão`);
             assert.match(html, /<button id="fin\w+" type="button"( data-perm="financeiro\.[a-z.]+")? class="btn-success[^"]*">[^<]+<\/button>\s*<\/footer>/, `${arquivo}: ação principal no padrão, só texto`);
         } else {
-            assert.match(html, /btn-neutral[^>]*>Fechar</, `${arquivo}: Fechar no padrão`);
+            // Fechar/Cancelar do rodapé é VERMELHO no programa inteiro (os cinzas eram só os modais novos).
+            assert.match(html, /btn-danger[^>]*>Fechar</, `${arquivo}: Fechar no padrão (vermelho)`);
         }
         assert.doesNotMatch(html, /\*<\/label>/, `${arquivo}: asterisco solto fora do fin-obrigatorio`);
         assert.doesNotMatch(html, /role="[^"]*"[^>]*role="/, `${arquivo}: atributo role duplicado`);
@@ -204,7 +206,7 @@ test('o módulo abre cada modal pelo Modal.open com o script compartilhado e o H
     assert.match(MODULO, /'emitir-nfe': \{ rotulo: 'Emitir NF-e', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
     assert.match(MODULO, /'aguardando-nf': \{ rotulo: '[^']+', abrir: \(m, extra\) => finAbrirModal\('aguardando-nfe', m, extra\) \}/);
     assert.match(MODULO, /'notas-fiscais': \{ rotulo: 'Notas fiscais', abrir: \(m, extra\) => finAbrirModal\('notas-fiscais', m, extra\) \}/);
-    assert.match(MODULO, /'atividade-todas': \{ rotulo: '[^']+', abrir: m => finMostrarTodaAtividade\(m\) \}/);
+    assert.match(MODULO, /'atividade-todas': \{ rotulo: '[^']+', abrir: m => finAbrirModal\('atividade', m\) \}/, '"Ver todas" abre o modal da atividade');
     assert.ok(!MODULO.includes("'registrar-nf'"), 'não existe mais "Registrar NF" à mão');
     assert.match(MODULO, /window\.Modal\.open\(modal\.html, FIN_SCRIPT_MODAIS, modal\.overlay, extra\.empilhar === true\)/);
     assert.match(MODULO, /window\.FinanceiroAbrirModal = finAbrirModal/);
@@ -735,4 +737,66 @@ test('comissões por quem recebe: etiquetas com cor, legenda e filtro nas telas;
     assert.match(SCRIPT, /confirmarBtn\.classList\.toggle\('hidden', !\(falta > 0\)\);/, 'com saldo, ainda dá para pagar o resto');
     assert.match(SCRIPT, /'Escolha quem foi pago \(ou marque "Pagar tudo o que falta"\)\.'/);
     assert.match(MODULO, /parcial: 'paga em parte'/, 'a competência paga pela metade tem situação própria');
+});
+
+test('atividade: Financeiro e SEFAZ numa linha só, do mais novo ao mais antigo, com quem fez', () => {
+    const f = puro();
+    assert.strictEqual(f.grupoDaAtividade('ajuste_desconto'), 'ajuste');
+    assert.strictEqual(f.grupoDaAtividade('producao_registrada'), 'producao');
+    assert.strictEqual(f.grupoDaAtividade('competencia_fechada'), 'fechamento');
+    assert.strictEqual(f.grupoDaAtividade('pagamento_confirmado'), 'pagamento');
+    assert.strictEqual(f.grupoDaAtividade('reembolso_confirmado'), 'pagamento');
+    assert.strictEqual(f.grupoDaAtividade('devolucao_registrada'), 'devolucao');
+    assert.strictEqual(f.grupoDaAtividade('regra_alterada'), 'regra');
+    assert.strictEqual(f.grupoDaAtividade('qualquer', true), 'nfe', 'o que vem da SEFAZ é NF-e');
+
+    const linha = plano(f.juntarAtividade(
+        [
+            { id: 1, quando: '2026-09-17T13:00:00Z', tipo: 'pagamento_confirmado', rotulo: 'Pagamento confirmado', descricao: 'Comissão paga', valor: 150, usuario_id: 7, usuario: 'Ana Souza' },
+            { id: 2, quando: null, tipo: 'ajuste_desconto', rotulo: 'Ajuste' }
+        ],
+        [{ nota_id: 9, quando: '2026-09-18T10:00:00Z', tipo: 'autorizada', titulo: 'NF-e 123', detalhe: 'Pedido 45' }]
+    ));
+    assert.deepStrictEqual(linha.map(i => i.id), ['n9-autorizada-0', 'f1'], 'sem data não entra; o mais novo primeiro');
+    assert.deepStrictEqual(linha[0], {
+        id: 'n9-autorizada-0', quando: '2026-09-18T10:00:00Z', grupo: 'nfe', etiqueta: 'NF-e autorizada', badge: 'badge-success',
+        texto: 'NF-e 123 — Pedido 45', valor: null, usuario_id: null, usuario: null, sistema: true
+    });
+    assert.strictEqual(linha[1].usuario, 'Ana Souza');
+    assert.strictEqual(linha[1].etiqueta, 'Pagamento confirmado');
+    assert.strictEqual(linha[1].badge, 'badge-success');
+    assert.strictEqual(linha[1].valor, 150);
+
+    // Cabeçalho do dia no fuso de quem vê: 01h UTC do dia 18 ainda é dia 17 em Brasília.
+    assert.strictEqual(f.diaLocal('2026-09-18T01:00:00Z'), '2026-09-17');
+    assert.strictEqual(semNbsp(f.rotuloDoDia('2026-09-18T15:00:00Z', '2026-09-18')), 'Hoje · 18/09/2026');
+    assert.strictEqual(semNbsp(f.rotuloDoDia('2026-09-17T15:00:00Z', '2026-09-18')), 'Ontem · 17/09/2026');
+    assert.strictEqual(semNbsp(f.rotuloDoDia('2026-09-10T15:00:00Z', '2026-09-18')), '10/09/2026');
+
+    // A bolinha sem foto: primeira e última iniciais.
+    assert.strictEqual(f.iniciais('Ana Maria Souza'), 'AS');
+    assert.strictEqual(f.iniciais('joão'), 'J');
+    assert.strictEqual(f.iniciais(''), '?');
+
+    // O modal: busca, tipo, quem fez e a linha do tempo; lê as duas fontes e as fotos.
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'atividade.html'), 'utf8');
+    for (const id of ['finAtividadeBusca', 'finAtividadeTipo', 'finAtividadeQuem', 'finAtividadeLinha', 'finAtividadeCarregando', 'finAtividadeVazio']) {
+        assert.ok(html.includes(`id="${id}"`), `atividade.html: falta #${id}`);
+    }
+    assert.match(SCRIPT, /fetchApi\('\/api\/financeiro\/atividade\?limite=300'\)/);
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/atividade\?limite=200'\)/);
+    assert.match(SCRIPT, /finAtividade: montarAtividade/);
+});
+
+test('spinner da casa: o modal só aparece depois da primeira leitura, com tempo mínimo', () => {
+    // O módulo põe o spinner ANTES de abrir o modal (o mesmo desenho dos outros módulos)...
+    assert.match(MODULO, /finSpinnerDoModal\(modal\.overlay\);\s*window\.Modal\.open\(modal\.html/);
+    assert.match(MODULO, /const FIN_SPINNER_MINIMO_MS = 1000;/);
+    assert.match(MODULO, /indicador\.className = 'app-loading-indicator app-loading-indicator--compact';/);
+    assert.match(MODULO, /orbita\.className = 'module-loading-orbit';/);
+    assert.match(MODULO, /limite = setTimeout\(\(\) => registro\.remover\(\), FIN_SPINNER_MAXIMO_MS\);/, 'nunca fica para sempre');
+    // ...e o modal chama quando terminou de montar (dê certo ou errado).
+    assert.match(SCRIPT, /\.finally\(\(\) => \{\s*if \(typeof window\.FinanceiroModalPronto === 'function'\) window\.FinanceiroModalPronto\(overlayId, revelar\);/);
+    // A carga dentro do modal (trocar filtro) é uma linha só com o spinner, não esqueleto.
+    assert.match(SCRIPT, /fin-linha-carregando/);
 });

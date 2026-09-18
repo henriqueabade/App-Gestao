@@ -822,7 +822,7 @@
               <p class="text-xs text-gray-400" data-etapa-ajuda>${etapaAjuda}</p>
             </div>` : ''}
             <div class="flex justify-end gap-3 pt-2">
-              <button type="button" data-action="cancel" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+              <button type="button" data-action="cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
               <button type="button" data-action="confirm" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
             </div>
           </div>

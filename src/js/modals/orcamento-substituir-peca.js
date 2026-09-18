@@ -918,8 +918,8 @@
         ? `Confirmar ${stagingQty.toLocaleString('pt-BR')} un`
         : 'Confirmar';
       const minusAriaLabel = isStaging
-        ? `Limpar quantidade em edição para ${variantLabel}`
-        : `Remover quantidade confirmada de ${variantLabel}`;
+        ? `Tirar uma unidade da quantidade em edição para ${variantLabel}`
+        : `Tirar uma unidade da quantidade confirmada de ${variantLabel}`;
       const plusAriaLabel = `Adicionar unidade para ${variantLabel}`;
 
       const confirmAria = isStaging
@@ -940,17 +940,22 @@
 
       const decrementBtn = card.querySelector('[data-role="decrement"]');
       if (decrementBtn) {
+        // O "−" tira UMA unidade por clique, como o "+" põe uma. Antes ele
+        // zerava tudo de uma vez (a quantidade em edição ou a já confirmada).
         decrementBtn.addEventListener('click', e => {
           e.preventDefault();
           e.stopPropagation();
           const currentStaging = getSelectionQuantity(variant.key);
           if (currentStaging > 0) {
-            clearStagingForVariant(variant.key);
+            updateStagingQuantityForVariant(variant, currentStaging - 1, { focus: { key: variant.key, select: true } });
             renderReplaceModalList({ skipReload: true });
-          } else if (getCommittedQuantity(variant.key) > 0) {
-            setCommittedQuantity(variant.key, 0);
-            updateReplaceModalConfirmButton();
-            renderReplaceModalList({ skipReload: true });
+          } else {
+            const confirmada = getCommittedQuantity(variant.key);
+            if (confirmada > 0) {
+              setCommittedQuantity(variant.key, confirmada - 1);
+              updateReplaceModalConfirmButton();
+              renderReplaceModalList({ skipReload: true });
+            }
           }
         });
       }

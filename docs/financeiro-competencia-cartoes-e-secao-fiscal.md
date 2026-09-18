@@ -69,14 +69,20 @@ Código: `resumirItens` em `backend/financeiro/comissoes.js` (campo
 - **Abas não mudam o tamanho do modal**: Detalhes da parcela, Detalhes do
   pedido e Relatórios passaram de `max-h-[90vh]` para `h-[90vh]` — a maior
   dimensão que já tinham. Regras e as listas grandes já eram assim.
-- **Carregamento padrão**: enquanto o servidor responde, a tabela mostra
-  **linhas de esqueleto** (o brilho de `.fin-esqueleto`, que existia na folha e
-  não era usado) e a caixa fica `aria-busy`. Antes, aplicar um filtro parecia
-  travar: a lista antiga continuava na tela, sem sinal nenhum.
+- **Abrir um modal** mostra o spinner da casa (a logo girando, o mesmo dos
+  outros módulos) por no mínimo 1 s, e o modal aparece **já preenchido**. Antes
+  ele abria vazio e parecia travado enquanto o servidor respondia.
+  Código: `finSpinnerDoModal` e `window.FinanceiroModalPronto` em
+  `src/js/financeiro.js`; o fim de `financeiro-modais.js` chama o segundo
+  quando a primeira leitura termina (dê certo ou não). Se a leitura não voltar
+  em 15 s, o modal aparece mesmo assim, com o aviso de erro dele.
+- **Trocar um filtro dentro do modal**: a tabela dá lugar a uma linha só com o
+  mesmo spinner e "Carregando…" (`.fin-linha-carregando`), e a caixa fica
+  `aria-busy`. Antes a lista antiga continuava na tela, sem sinal nenhum.
 - **Filtro trocado duas vezes** não embaralha mais: cada leitura tem um número
   e a resposta atrasada é descartada (era possível a resposta do filtro ANTIGO
   chegar por último e apagar a certa).
-- **Lista que ficou vazia** volta a aparecer: o esqueleto reabre a tabela que o
+- **Lista que ficou vazia** volta a aparecer: o carregamento reabre a tabela que o
   filtro anterior tinha escondido (era o caso que mais parecia travamento).
 - Vale em: recebimentos, notas fiscais, aguardando NF-e, comissões atrasadas,
   produção da competência, relatório visualizado, regras, detalhes da parcela e
@@ -101,9 +107,53 @@ e **Editar produto**. Agora são uma seção com barra própria:
   (ambos carregados por `menu.html`); os modais chamam
   `SecaoRetratil.ligar(overlay)`.
 
+## 6. Atividade recente: o histórico inteiro, em linha do tempo
+
+O "Ver todas" do card **abre um modal** (antes esticava o card). Nele:
+
+- um cabeçalho por dia ("Hoje · 18/09/2026", "Ontem · …"), do mais novo ao
+  mais antigo, no fuso de quem vê;
+- em cada movimento, **a foto de quem fez** (ou as iniciais numa bolinha
+  colorida), o nome, a hora, a **etiqueta do tipo** (Pagamentos, Ajustes,
+  Produção, Fechamentos, Regras e prazos, Devoluções, NF-e) e o que aconteceu,
+  com o valor quando há;
+- o que vem da SEFAZ aparece como **Sistema (SEFAZ)**;
+- filtros: busca livre, Tipo e Quem fez.
+
+Rotas novas (só leitura):
+
+| Rota | Permissão | O que devolve |
+| --- | --- | --- |
+| `GET /api/financeiro/atividade?limite=300` | `financeiro.comissao.view` | Eventos do Financeiro com `usuario_id` e o nome de quem fez |
+| `GET /api/fiscal/atividade?limite=200` | `financeiro.nfe.view` | NF-e autorizadas, canceladas, recusadas, em processamento e cartas de correção |
+
+A foto vem de `GET /api/usuarios/lista`, pelos mesmos campos que o módulo de
+Usuários usa. Sem permissão de NF-e, o modal mostra só o Financeiro.
+Código: `montarAtividade` e as funções puras `juntarAtividade`,
+`grupoDaAtividade`, `rotuloDoDia` e `iniciais` em
+`src/js/modals/financeiro-modais.js`; o HTML é
+`src/html/modals/financeiro/atividade.html`.
+
+## 7. Outros ajustes de tela
+
+- **Conciliar BB** virou botão azul à esquerda do Atualizar, no topo do
+  módulo; o texto-link acima de "Boletos em aberto" saiu. No rodapé de
+  Recebimentos, o mesmo botão, também azul.
+- **Mês, ano e lupa do topo** com a mesma altura do Hoje e da engrenagem
+  (44px), na mesma linha.
+- **Produto nas tabelas de produção** (modal de produção, relatórios de
+  produção, detalhes do pedido): só o **código numa etiqueta**; o nome inteiro
+  aparece ao passar o mouse. As tabelas não têm mais rolagem de lado.
+- **Título dos modais** não corta mais ("Produção da competência —
+  Setembro/2…"): o meio do cabeçalho ficou com metade da largura.
+- **Filtro "Quem recebe"**: rótulo e caixa alinhados na mesma linha.
+- **Configuração de cobrança**: Atualizar azul, Processar avisos agora verde, e
+  20px antes de cada legenda ("Avisos recebidos", "Conciliações").
+
 ---
 
 ## Depois de puxar o código
 
-Nada de SQL. Basta abrir o sistema: o módulo Financeiro já vem com o seletor
-novo, e o cadastro de peça com a seção fiscal fechada.
+Nada de SQL. Reinicie a API (as duas rotas de atividade são novas). O módulo
+Financeiro já vem com o seletor novo, e o cadastro de peça com a seção fiscal
+fechada.

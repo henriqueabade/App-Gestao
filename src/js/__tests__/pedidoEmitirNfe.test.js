@@ -315,7 +315,7 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(f({}, [], 0, null)), []);
   assert.ok(VISUALIZAR.includes('/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));'));
   assert.ok(VISUALIZAR.includes('pintarColunaDeBoletos(pagamentoBox, detalhes, boletosEstado);') && VISUALIZAR.includes("th.textContent = 'BOLETO';"), 'a coluna BOLETO entra na tabela de parcelas, por createElement');
-  assert.ok(VISUALIZAR.includes("Modal.open('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos')"));
+  assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos')"), 'Gerar boletos abre por cima do Visualizar');
   assert.ok(/id="visualizarPedidoGerarBoletos"[^>]*data-perm="financeiro\.boleto\.emit"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Gerar boletos" nasce escondido, com a guarda escrita');
   assert.ok(/id="visualizarPedidoBoletosPdf"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Boletos (PDF)" nasce escondido, com a guarda escrita');
   assert.ok(VISUALIZAR.includes('ligarBoletosPdf(boletosEstado);') && VISUALIZAR.includes('window.BoletoDocumentos.gerarBoletosDoPedidoPdf(id)'), 'PDF de todos os boletos do pedido');

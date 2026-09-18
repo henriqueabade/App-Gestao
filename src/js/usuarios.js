@@ -810,6 +810,14 @@ function initUsuarios() {
 
         const posicionarPopover = () => {
             if (!resumoPopover.classList.contains('show')) return;
+            // `window.Popover` leva o balão para o <body> e posiciona em
+            // relação à janela: com ele dentro do módulo (que rola e tem
+            // deslocamento próprio), as coordenadas da janela o jogavam longe
+            // do (i). A conta abaixo fica como reserva, sem o utilitário.
+            if (window.Popover?.abrir) {
+                window.Popover.abrir(resumoPopover, infoIcon);
+                return;
+            }
 
             const iconRect = infoIcon.getBoundingClientRect();
             const popRect = resumoPopover.getBoundingClientRect();

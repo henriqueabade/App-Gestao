@@ -70,7 +70,8 @@ const FIN_ACOES = {
     'fechar-competencia-producao': { rotulo: 'Fechar competência — produção', abrir: (m, extra) => finAbrirModal('fechar-producao', m, finDoFiltro(extra)) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
-    'atividade-todas': { rotulo: 'Atividade recente', abrir: m => finMostrarTodaAtividade(m) },
+    // "Ver todas" abre o histórico inteiro num modal (quem fez, quando, o quê), em vez de esticar o card.
+    'atividade-todas': { rotulo: 'Atividade recente', abrir: m => finAbrirModal('atividade', m) },
     // Contas a receber: os cartões e as pendências de cobrança abrem a lista na visão certa.
     'recebimentos-recebidos': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'recebidos' }) },
     'recebimentos-a-receber': { rotulo: 'Recebimentos', abrir: m => finAbrirModal('recebimentos', m, { visao: 'a_receber' }) },
@@ -95,6 +96,7 @@ const FIN_MODAIS = {
     'confirmar-pagamento': { html: 'modals/financeiro/confirmar-pagamento.html', overlay: 'finConfirmarPagamento' },
     'visualizar-relatorio': { html: 'modals/financeiro/visualizar-relatorio.html', overlay: 'finVisualizarRelatorio' },
     'comissoes-atrasadas': { html: 'modals/financeiro/comissoes-atrasadas.html', overlay: 'finComissoesAtrasadas' },
+    'atividade': { html: 'modals/financeiro/atividade.html', overlay: 'finAtividade' },
     'producao-competencia': { html: 'modals/financeiro/producao-competencia.html', overlay: 'finProducaoCompetencia' },
     'configuracao-fiscal': { html: 'modals/financeiro/configuracao-fiscal.html', overlay: 'finConfiguracaoFiscal' },
     'configuracao-cobranca': { html: 'modals/financeiro/configuracao-cobranca.html', overlay: 'finConfiguracaoCobranca' },
@@ -132,8 +134,80 @@ function finAbrirModal(chave, moduleEl, extra = {}) {
         rotulo: FIN_ACOES[chave]?.rotulo || '',
         competencia: extra.competencia || raiz?.querySelector('#finCompetencia')?.value || null
     };
+    // O spinner da casa (o mesmo dos outros módulos) fica na tela até o
+    // modal terminar a primeira leitura: sem ele, o modal abria vazio e
+    // parecia travado enquanto o servidor respondia.
+    finSpinnerDoModal(modal.overlay);
     window.Modal.open(modal.html, FIN_SCRIPT_MODAIS, modal.overlay, extra.empilhar === true);
 }
+
+/* Tempo mínimo do spinner, como em openModalWithSpinner dos outros módulos:
+   evita o "piscar" quando o modal fica pronto rápido demais. */
+const FIN_SPINNER_MINIMO_MS = 1000;
+/* E o máximo: se a leitura não voltar, o modal aparece mesmo assim (com o
+   aviso de erro dele), em vez de o spinner ficar para sempre. */
+const FIN_SPINNER_MAXIMO_MS = 15000;
+const finSpinners = new Map();
+
+function finSpinnerDoModal(overlayId) {
+    finSpinners.get(overlayId)?.remover();
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    spinner.style.zIndex = 'var(--z-dialog)';
+    const indicador = document.createElement('div');
+    indicador.className = 'app-loading-indicator app-loading-indicator--compact';
+    indicador.setAttribute('aria-hidden', 'true');
+    const orbita = document.createElement('span');
+    orbita.className = 'module-loading-orbit';
+    const nucleo = document.createElement('span');
+    nucleo.className = 'module-loading-core';
+    const logo = document.createElement('img');
+    logo.src = '../assets/Logo.ico';
+    logo.alt = '';
+    nucleo.appendChild(logo);
+    indicador.append(orbita, nucleo);
+    spinner.appendChild(indicador);
+    document.body?.appendChild(spinner);
+
+    const inicio = Date.now();
+    let limite = null;
+    let vigia = null;
+    const registro = {
+        inicio,
+        remover() {
+            clearTimeout(limite);
+            clearInterval(vigia);
+            spinner.remove?.();
+            if (finSpinners.get(overlayId) === registro) finSpinners.delete(overlayId);
+        }
+    };
+    limite = setTimeout(() => registro.remover(), FIN_SPINNER_MAXIMO_MS);
+    // Fechado antes de ficar pronto (troca de módulo, Esc): o spinner vai junto.
+    // Uma vigia e não um ouvinte em `window` — este script é reexecutado a
+    // cada visita e não pode deixar ouvinte pendurado.
+    let viuOModal = false;
+    vigia = setInterval(() => {
+        const existe = document.getElementById?.(`${overlayId}Overlay`);
+        if (existe) viuOModal = true;
+        else if (viuOModal) registro.remover();
+    }, 400);
+    finSpinners.set(overlayId, registro);
+}
+
+/**
+ * O modal avisa que terminou a primeira leitura; `revelar` é quem o mostra.
+ * Com spinner na tela, espera o tempo mínimo e troca um pelo outro.
+ */
+window.FinanceiroModalPronto = (overlayId, revelar) => {
+    const registro = finSpinners.get(overlayId);
+    if (!registro) { revelar(); return; }
+    const resta = Math.max(0, FIN_SPINNER_MINIMO_MS - (Date.now() - registro.inicio));
+    setTimeout(() => {
+        registro.remover();
+        revelar();
+    }, resta);
+};
 // Os modais abrem uns aos outros por aqui (financeiro-modais.js não enxerga FIN_MODAIS).
 window.FinanceiroAbrirModal = finAbrirModal;
 
@@ -719,17 +793,18 @@ function finRenderizarBeneficiarios(moduleEl, resumo) {
     legenda.replaceChildren(window.Beneficiarios.legenda([]));
 }
 
-function finRenderizarAtividade(moduleEl, eventos, hoje, todas = false) {
+function finRenderizarAtividade(moduleEl, eventos, hoje) {
     const lista = moduleEl.querySelector('[data-fin-lista="atividade"]');
     if (!lista) return;
     lista.replaceChildren();
+    // "Ver todas" abre o histórico inteiro no modal (com quem fez): vale sempre que houver movimento.
     const verTodas = moduleEl.querySelector('[data-fin-acao="atividade-todas"]');
-    if (verTodas) verTodas.classList.toggle('hidden', todas || eventos.length <= FIN_ATIVIDADE_VISIVEL);
+    if (verTodas) verTodas.classList.toggle('hidden', !eventos.length);
     if (!eventos.length) {
         lista.appendChild(finCriar('li', 'fin-vazio', 'Nenhum movimento registrado ainda.'));
         return;
     }
-    for (const e of todas ? eventos : eventos.slice(0, FIN_ATIVIDADE_VISIVEL)) {
+    for (const e of eventos.slice(0, FIN_ATIVIDADE_VISIVEL)) {
         const item = finCriar('li', 'fin-evento');
         const texto = finCriar('div', 'fin-evento__texto');
         texto.appendChild(finCriar('span', 'fin-evento__titulo', e.titulo));
@@ -745,19 +820,13 @@ function finRenderizar(moduleEl, dados, hoje) {
     finRenderizarReceber(moduleEl, dados.receber);
     finRenderizarPendencias(moduleEl, dados.pendencias, moduleEl.dataset.pendenciasTodas === '1');
     finRenderizarResumos(moduleEl, dados);
-    finRenderizarAtividade(moduleEl, dados.atividade, hoje, moduleEl.dataset.atividadeToda === '1');
+    finRenderizarAtividade(moduleEl, dados.atividade, hoje);
 }
 
 function finMostrarTodasPendencias(moduleEl) {
     if (!moduleEl?.finDados) return;
     moduleEl.dataset.pendenciasTodas = '1';
     finRenderizarPendencias(moduleEl, moduleEl.finDados.pendencias, true);
-}
-
-function finMostrarTodaAtividade(moduleEl) {
-    if (!moduleEl?.finDados) return;
-    moduleEl.dataset.atividadeToda = '1';
-    finRenderizarAtividade(moduleEl, moduleEl.finDados.atividade, moduleEl.dataset.hoje, true);
 }
 
 /** Relê o painel da competência escolhida e redesenha. Os modais chamam ao fechar. */

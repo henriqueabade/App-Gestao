@@ -133,6 +133,7 @@ async function pedido({ api, pedidoId, hoje, desde }) {
     producao: prod.eventos.map(e => ({
       id: e.id, data: e.data_finalizacao, quantidade: Number(e.quantidade), setor: e.setor, status: e.status, estornado: Boolean(e.estornado_em),
       produto: (() => { const it = prod.itens.find(i => String(i.id) === String(e.pedido_item_id)); return it ? [it.codigo, it.nome].filter(Boolean).join(' — ') : `item ${e.pedido_item_id}`; })(),
+      produto_codigo: prod.itens.find(i => String(i.id) === String(e.pedido_item_id))?.codigo || null,
       observacao: e.observacao || null
     })),
     comissoes: {
@@ -150,4 +151,4 @@ async function pedido({ api, pedidoId, hoje, desde }) {
   };
 }
 
-module.exports = { ROTULO_SITUACAO, fechamentosDaParcela, parcela, pedido };
+module.exports = { ROTULO_SITUACAO, fechamentosDaParcela, parcela, pedido, nomesDosUsuarios };

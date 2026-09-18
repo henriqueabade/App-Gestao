@@ -6,6 +6,27 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   const form = document.getElementById('novoInsumoForm');
 
+  // Estoque infinito: a quantidade vira ∞ e trava (e deixa de ser obrigatória).
+  const infinitoCheckbox = form?.infinito || document.getElementById('infinito');
+  const quantidadeInput = form?.quantidade;
+  let quantidadeAntes = '';
+  infinitoCheckbox?.addEventListener('change', () => {
+    if (!quantidadeInput) return;
+    if (infinitoCheckbox.checked) {
+      quantidadeAntes = quantidadeInput.value === '∞' ? quantidadeAntes : quantidadeInput.value;
+      quantidadeInput.type = 'text';
+      quantidadeInput.value = '∞';
+      quantidadeInput.disabled = true;
+      quantidadeInput.required = false;
+    } else {
+      quantidadeInput.type = 'number';
+      quantidadeInput.value = quantidadeAntes;
+      quantidadeInput.disabled = false;
+      quantidadeInput.required = true;
+    }
+    quantidadeInput.setAttribute('data-filled', quantidadeInput.value !== '');
+  });
+
   document.getElementById('addCategoriaNovo').addEventListener('click', () => {
     Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
   });
@@ -104,7 +125,9 @@
   // terminar. Sem isso o salvamento acontecia em silêncio — o insumo entrava no
   // banco e a tela não dava sinal nenhum de que algo estava em curso.
   async function salvar() {
-    const quantidade = parseFloat(form.quantidade.value);
+    // Estoque infinito: a quantidade não conta (vai nula), como no Editar.
+    const infinito = Boolean(infinitoCheckbox?.checked);
+    const quantidade = infinito ? null : parseFloat(form.quantidade.value);
     const dados = {
       nome: form.nome.value.trim(),
       categoria: form.categoria.value.trim(),
@@ -112,10 +135,10 @@
       unidade: form.unidade.value.trim(),
       preco_unitario: parseFloat(form.preco.value),
       processo: form.processo.value.trim(),
-      infinito: false,
+      infinito,
       descricao: form.descricao.value.trim()
     };
-    if(!dados.nome || !dados.categoria || !dados.unidade || !dados.processo || isNaN(quantidade) || quantidade < 0 || isNaN(dados.preco_unitario) || dados.preco_unitario < 0){
+    if(!dados.nome || !dados.categoria || !dados.unidade || !dados.processo || (!infinito && (isNaN(quantidade) || quantidade < 0)) || isNaN(dados.preco_unitario) || dados.preco_unitario < 0){
       showToast('Verifique os campos obrigatórios.', 'error');
       return;
     }

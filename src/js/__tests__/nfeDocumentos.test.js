@@ -56,12 +56,13 @@ test('visualizar: DANFE vai ao PDF em retrato, XML ao arquivo .xml (e o do cance
   assert.ok(UTIL.includes('window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };'));
   assert.ok(MENU.indexOf('js/utils/nfe-documentos.js') > MENU.indexOf('js/utils/cliente-fiscal.js'), 'o menu carrega o utilitário');
   assert.ok(VIS_JS.includes('window.NfeDocumentos.gerarDanfe(nota.id)') && VIS_JS.includes('window.NfeDocumentos.salvarXml(nota.id)'));
-  assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe')"));
+  // Por cima do Visualizar, que continua aberto embaixo.
+  assert.ok(VIS_JS.includes("abrirPorCima('modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe')"));
   const soAutorizada = VIS_JS.slice(VIS_JS.indexOf("if (nota.status_fiscal === 'autorizada') {"), VIS_JS.indexOf('ligar(cancelarBtn, cancelarNfe);'));
   assert.ok(soAutorizada.length > 0 && soAutorizada.includes('cartaNfe'), 'cancelar e carta de correção só com nota autorizada');
   assert.ok(VIS_JS.includes("ligar(overlay.querySelector('#visualizarPedidoEmailNfe'), emailNfe);"), 'e-mail também para nota cancelada (DANFE cancelado)');
-  assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail')"));
-  assert.ok(VIS_JS.includes("Modal.open('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe')"));
+  assert.ok(VIS_JS.includes("abrirPorCima('modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail')"));
+  assert.ok(VIS_JS.includes("abrirPorCima('modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe')"));
   assert.ok(VIS_JS.includes("email: nota.destinatario?.email || ''"), 'o e-mail do destinatário da nota vai no contexto');
   assert.ok(/id="visualizarPedidoEmailNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML) && /id="visualizarPedidoCartaNfe"[^>]*data-perm="financeiro\.nfe\.emit"/.test(VIS_HTML));
   assert.ok(VIS_JS.includes('ligarDocumentosDaNota(notaDocs, data)') && VIS_JS.includes('window.NfeDocumentos.listarCartasCorrecao(notaDocs.id)'), 'as cartas da nota entram nas tags');

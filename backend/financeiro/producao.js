@@ -128,6 +128,8 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
         evento_id: e.id, tipo_item: 'producao', pedido_id: e.pedido_id, pedido: pedido.numero ?? String(e.pedido_id), cliente_id: pedido.cliente_id ?? null,
         pedido_item_id: e.pedido_item_id, produto_id: produtoId,
         produto: [item.codigo, item.nome].filter(Boolean).join(' — ') || `item ${e.pedido_item_id}`,
+        // Separados: a tela mostra só o código (em etiqueta) e o nome ao passar o mouse.
+        produto_codigo: item.codigo || null, produto_nome: item.nome || null,
         setor_id: etapa ? etapa.id : null, setor: etapa ? etapa.nome : (e.setor_legado ? `setor ${e.setor_legado}` : 'processo removido'),
         data: c.dia(e.data_finalizacao), quantidade, estorno_de: e.estorno_de ?? null,
         competencia_natural: natural, competencia: competenciaAlvo(natural, estado.proxima),
@@ -140,6 +142,13 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
     });
 }
 
+/** 'CÓD — Nome' (como o fechamento guarda) em código e nome. Pura. */
+function partesDoProduto(texto) {
+  const partes = String(texto || '').split(' — ');
+  if (partes.length < 2) return { produto_codigo: null, produto_nome: texto || null };
+  return { produto_codigo: partes[0] || null, produto_nome: partes.slice(1).join(' — ') || null };
+}
+
 /** Linhas congeladas de um fechamento de produção, no mesmo formato das pendentes. Pura. */
 function congeladas(estado, fechamentoId) {
   return estado.congelados
@@ -147,6 +156,7 @@ function congeladas(estado, fechamentoId) {
     .map(i => ({
       evento_id: i.producao_evento_id, tipo_item: i.tipo_item, pedido_id: i.pedido_id, pedido: i.detalhes?.pedido ?? String(i.pedido_id ?? '—'),
       pedido_item_id: i.detalhes?.pedido_item_id ?? null, produto_id: i.detalhes?.produto_id ?? null, produto: i.produto || '—',
+      ...partesDoProduto(i.produto),
       setor_id: i.detalhes?.setor_id ?? null, setor: i.setor || '—', data: c.dia(i.data_referencia), quantidade: Number(i.quantidade) || 0,
       estorno_de: i.detalhes?.estorno_de ?? null, competencia: i.competencia, competencia_natural: String(i.competencia_origem || '').trim() || i.competencia,
       valor_unitario: i.valor_unitario === null || i.valor_unitario === undefined ? null : c.centavos(i.valor_unitario),

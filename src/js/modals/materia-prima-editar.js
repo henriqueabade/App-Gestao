@@ -100,17 +100,24 @@
     }
   }
 
+  // O campo é numérico: "∞" só aparece se ele virar texto enquanto está
+  // ligado (num campo number o navegador descarta o símbolo e o campo sumia).
   const toggleInfinito = () => {
     if (infinitoCheckbox.checked) {
+      quantidadeInput.type = 'text';
       quantidadeInput.value = '∞';
       quantidadeInput.disabled = true;
     } else {
+      quantidadeInput.type = 'number';
       quantidadeInput.disabled = false;
       if (!item || !item.quantidade) quantidadeInput.value = '';
+      else if (quantidadeInput.value === '∞') quantidadeInput.value = String(item.quantidade);
     }
   };
 
   infinitoCheckbox.addEventListener('change', toggleInfinito);
+  // Insumo que já é infinito abre com a quantidade em ∞ e travada.
+  if (infinitoCheckbox.checked) toggleInfinito();
   carregarOpcoes().finally(() => {
     window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'editarInsumo' }));
   });

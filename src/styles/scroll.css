@@ -241,6 +241,38 @@ table td {
   background-color: rgba(255, 215, 0, 0.6);
 }
 
+/* 3c) TODA área que rola dentro de um modal segue o padrão da casa: fina (6px),
+   sem trilho e dourada. As tabelas dos modais (Financeiro, Pedidos, boletos…)
+   ficavam com a barra cinza e grossa do sistema, fora do padrão; e a tabela
+   ganha a mesma barra das tabelas dos módulos (.table-scroll). */
+[role="dialog"] *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[role="dialog"] *::-webkit-scrollbar-track,
+[role="dialog"] *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+[role="dialog"] *::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 215, 0, 0.4);
+  border-radius: 3px;
+}
+
+[role="dialog"] *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 215, 0, 0.6);
+}
+
+[role="dialog"] :has(> table)::-webkit-scrollbar-thumb {
+  background: #f0c94c;
+  border-radius: 4px;
+}
+
+[role="dialog"] :has(> table)::-webkit-scrollbar-thumb:hover {
+  background: #d0a42e;
+}
+
 /* 9) Evita seleção de texto ao arrastar */
 .no-select {
   user-select: none;

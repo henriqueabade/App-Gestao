@@ -179,7 +179,8 @@ test('Visualizar pedido: o botão roxo "Devolução" toma o lugar do "Cancelar" 
   assert.strictEqual(etiqueta({ devolucao: null }), null);
 
   assert.ok(VISUALIZAR.includes("overlay.querySelector('#cancelarVisualizarPedido')?.classList.add('hidden');") && VISUALIZAR.includes("devolver.classList.remove('hidden');"));
-  assert.ok(VISUALIZAR.includes("Modal.open('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');"));
+  // Por cima do Visualizar, que não fecha (o voltar da devolução cai de novo nele).
+  assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');"));
   assert.ok(VISUALIZAR.includes("'data_devolucao'"), 'a data da devolução é DATE: cortada como texto');
   assert.ok(VISUALIZAR.includes("const totalAtual = data.devolucao === 'parcial' ? Math.max(0, total - devolvido) : total;"), 'parcial: o Total mostra o que restou');
 

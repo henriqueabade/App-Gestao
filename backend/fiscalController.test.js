@@ -787,6 +787,15 @@ test('GET /painel exige financeiro.nfe.view e devolve o painel fiscal da compet�
     assert.equal(depois.corpo.atividade[0].tipo, 'autorizada');
     assert.equal(depois.corpo.atividade[0].titulo, 'NF-e 1/1 autorizada');
     assert.ok(!JSON.stringify(depois.corpo).includes('xml_'), 'o painel não carrega XML');
+
+    // O histórico inteiro, para o modal "Atividade recente" (o painel só traz os últimos).
+    const historico = await t.chamar('GET', '/api/fiscal/atividade?limite=50');
+    assert.equal(historico.status, 200, JSON.stringify(historico.corpo));
+    assert.equal(historico.corpo.itens[0].tipo, 'autorizada');
+    assert.equal(historico.corpo.itens[0].titulo, 'NF-e 1/1 autorizada');
+    assert.ok(!JSON.stringify(historico.corpo).includes('xml_'), 'sem XML também aqui');
+    t.estado.chaves.delete('financeiro.nfe.view');
+    assert.equal((await t.chamar('GET', '/api/fiscal/atividade')).status, 403, 'exige ver NF-e');
   } finally {
     await t.fechar();
   }

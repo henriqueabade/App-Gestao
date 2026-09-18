@@ -3,6 +3,7 @@
  * comissões CMS e Royalty, ajustes, produção, fechamentos e pagamentos.
  *
  *   GET    /painel?competencia=                 cartões, resumos, pendências e atividade
+ *   GET    /atividade?limite=                   o histórico do módulo inteiro, com quem fez (o modal "Ver todas")
  *   GET    /regras                              regras de CMS/Royalty, setores, valores por peça, feriados, prazos
  *   POST   /regras, PUT /regras/:id             cria / altera (ativo: false desliga)
  *   POST   /setores, PUT /setores/:id           (fase G, sem uso na tela: os setores viraram os processos)
@@ -48,6 +49,7 @@ const painel = require('./financeiro/painel');
 const relatorios = require('./financeiro/relatorios');
 const detalhes = require('./financeiro/detalhes');
 const base = require('./financeiro/base');
+const auditoria = require('./financeiro/auditoria');
 
 const VER = 'financeiro.comissao.view';
 const EDITAR_REGRAS = 'financeiro.regras.editar';
@@ -174,6 +176,25 @@ function criarRouter() {
       return linhas.map(p => ({ id: p.id, codigo: p.codigo || null, nome: p.nome || null })).sort((a, b) => String(a.codigo || a.nome).localeCompare(String(b.codigo || b.nome), 'pt-BR', { numeric: true }));
     }
     throw c.erro('Busca desconhecida.', 404);
+  }));
+
+  // ------------------------------------------------------------ atividade
+  // O histórico do módulo inteiro (o card mostra só os últimos): quem fez,
+  // quando, o quê. O nome e a foto de quem fez a tela busca na lista de
+  // usuários — aqui vai só o `usuario_id`.
+  router.get('/atividade', exigirPermissao(VER), rota('GET /api/financeiro/atividade', async ({ api, req }) => {
+    const limite = Math.min(500, Math.max(10, Number(req.query?.limite) || 200));
+    const eventos = await auditoria.recentes(api, { limite });
+    const nomes = await detalhes.nomesDosUsuarios(api, eventos.map(e => e.usuario_id ?? e.criado_por));
+    return {
+      itens: eventos.map(e => ({
+        id: e.id, quando: e.criado_em, tipo: e.tipo, rotulo: e.rotulo, descricao: e.descricao || '',
+        valor: e.valor === null || e.valor === undefined ? null : c.centavos(e.valor),
+        pedido_id: e.pedido_id ?? null, numero_parcela: e.numero_parcela ?? null,
+        usuario_id: e.usuario_id ?? e.criado_por ?? null,
+        usuario: nomes.get(String(e.usuario_id ?? e.criado_por)) || null
+      }))
+    };
   }));
 
   // ------------------------------------------------------------ parcelas

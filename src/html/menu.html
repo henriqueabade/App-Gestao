@@ -9,6 +9,9 @@
     />
     <title>Santíssimo Decor - Dashboard</title>
     <link rel="stylesheet" href="../styles/tailwind-offline.css" />
+    <!-- As classes que o Tailwind pré-compilado não tem (mt-5, max-w-xl, md:grid-cols-4…).
+         Logo depois dele: as variantes responsivas precisam ganhar das classes base. -->
+    <link rel="stylesheet" href="../styles/utilitarios.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Estilos específicos do menu -->
     <link rel="stylesheet" href="../css/menu.css">
@@ -365,6 +368,8 @@
     <script src="../js/utils/competencia.js"></script>
     <!-- Seções retráteis dos modais: abrem sozinhas quando falta preencher algo ao salvar. -->
     <script src="../js/utils/secao-retratil.js"></script>
+    <!-- Rolagem encadeada entre página/modal e as tabelas (padrão de TODAS as tabelas). -->
+    <script src="../js/utils/rolagem-encadeada.js"></script>
     <!-- O seletor de transportadora do orçamento. Aqui e não no HTML do modal
          porque `menu.js` só executa `../js/{pagina}.js`: todo `<script>` dentro
          de um módulo é ignorado, e o utilitário nunca rodaria. -->

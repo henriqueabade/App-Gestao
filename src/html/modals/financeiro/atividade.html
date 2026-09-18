@@ -1,0 +1,55 @@
+<!--
+  Atividade recente — o histórico inteiro do Financeiro, em linha do tempo:
+  quem fez (com a foto), quando, o quê, com etiqueta do tipo. Abre pelo
+  "Ver todas" do card do módulo. Modal grande, só de consulta.
+  Dados: GET /api/financeiro/atividade (comissões, produção, pagamentos,
+  regras) e GET /api/fiscal/atividade (NF-e na SEFAZ); a foto e o nome vêm de
+  GET /api/usuarios/lista.
+  Script: src/js/modals/financeiro-modais.js (montarAtividade).
+-->
+<div id="finAtividadeOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finAtividadeTitulo" class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finAtividadeTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-stream mr-2" aria-hidden="true"></i>Atividade recente</h2>
+        <p class="text-xs text-gray-300 truncate">Quem fez o quê, do mais novo ao mais antigo</p>
+      </div>
+      <span id="finAtividadeContagem" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="fin-filtros">
+          <div class="md:col-span-2">
+            <label for="finAtividadeBusca" class="block text-sm font-medium text-gray-300 mb-2">Buscar</label>
+            <input id="finAtividadeBusca" type="text" autocomplete="off" placeholder="Pedido, NF-e, motivo…"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="finAtividadeTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
+            <select id="finAtividadeTipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="finAtividadeQuem" class="block text-sm font-medium text-gray-300 mb-2">Quem fez</label>
+            <select id="finAtividadeQuem" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="finAtividadeMensagem" class="hidden text-sm" role="alert"></div>
+        <div id="finAtividadeCarregando" class="fin-carregando-caixa fin-atividade-carregando" role="status">Carregando a atividade…</div>
+        <ol id="finAtividadeLinha" class="fin-linha-tempo" aria-label="Linha do tempo"></ol>
+        <p id="finAtividadeVazio" class="hidden fin-vazio">Nenhum movimento com esse filtro.</p>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>
