@@ -594,7 +594,7 @@ test('dado da tela entra por textContent; innerHTML não aparece no script', () 
 });
 
 test('o HTML tem os blocos da descrição e todo data-fin-acao tem rótulo no script', () => {
-    for (const trecho of ['Comissões e Produção', 'Acompanhamento financeiro e produtivo dos pedidos',
+    for (const trecho of ['>Financeiro</h1>', 'Acompanhe e controle o financeiro',
         'Aguardando NF-e', 'Comissões a pagar', 'Comissões atrasadas', 'Produção a pagar',
         'Pendências que exigem ação', 'Ações rápidas', 'Resumo de Comissões', 'Resumo de Produção',
         'Atividade recente', 'Emitir NF-e', 'Notas fiscais', 'Registrar recebimento', 'Registrar ajuste',

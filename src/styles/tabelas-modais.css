@@ -4,8 +4,8 @@
  * O PADRÃO
  *
  * É o que as tabelas de item de Produto sempre tiveram: faixa clara, título da
- * coluna em cinza médio, caixa alta e espaçado. O corpo da tabela continua
- * escuro, sobre o vidro do modal — o claro é só a moldura, e é ele que separa
+ * coluna em cinza médio, caixa alta e espaçado. O corpo da tabela não tem
+ * fundo próprio: fica sobre o vidro do modal — o claro é só o cabeçalho, e é ele que separa
  * "o que é título" de "o que é dado" numa lista longa.
  *
  * ---------------------------------------------------------------------------
@@ -82,10 +82,11 @@
  *
  * Cada modal embrulhava a tabela do seu jeito: cantos de 12 ou de 16 px, com
  * borda ou sem, com vidro, com sombra, ou sem moldura nenhuma (Cancelar
- * pedido, Devolução). Agora a moldura é da própria tabela: cantos de 12 px,
- * borda fina e corpo escuro. O corpo escuro também é o que impede o vidro do
- * modal de mostrar, como um clarão nas linhas, o que está atrás dele (o
- * cabeçalho claro da lista do módulo).
+ * pedido, Devolução). Agora a moldura é da própria tabela: cantos de 12 px e
+ * borda fina. O corpo é TRANSPARENTE — o vidro do modal aparece por trás das
+ * linhas (decisão do dono, 18/09/2026: o corpo escuro que chegou a ser usado
+ * não agradou). E sem realce ao passar o mouse: nas faixas de processo dos
+ * itens do produto ele apagava a faixa.
  *
  * As telas principais NÃO entram (`[id$="Overlay"]` é só modal). As folhas
  * de relatório (`.rp-tabela`), que imitam o papel impresso, também não.
@@ -96,7 +97,7 @@
     border-spacing: 0;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0.75rem;
-    background: rgba(42, 6, 22, 0.72);
+    background: transparent;
 }
 
 /* O fundo de uma célula não é cortado pelo raio da tabela: as de canto
@@ -106,11 +107,9 @@
 [id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td:first-child { border-bottom-left-radius: calc(0.75rem - 1px); }
 [id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td:last-child { border-bottom-right-radius: calc(0.75rem - 1px); }
 
-/* Linhas: a divisória na CÉLULA (com a borda separada, a do <tr> não aparece)
-   e o realce ao passar o mouse, os mesmos de Produtos. */
+/* Linhas: a divisória na CÉLULA (com a borda separada, a do <tr> não aparece). */
 [id$="Overlay"] table:not(.rp-tabela) tbody td { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 [id$="Overlay"] table:not(.rp-tabela) tbody tr:last-child td { border-bottom-color: transparent; }
-[id$="Overlay"] table:not(.rp-tabela) tbody tr:hover > td { background-color: rgba(255, 255, 255, 0.04); }
 
 /* O que só embrulha a tabela deixa de desenhar moldura própria — senão fica
    moldura dentro de moldura, e o vidro claro do embrulho aparece nos cantos
@@ -136,7 +135,6 @@
 
 [data-menu-theme="light"] [id$="Overlay"] table:not(.rp-tabela) {
     border-color: #e2e8f0;
-    background: #fff;
 }
 
 [data-menu-theme="light"] [id$="Overlay"] table:not(.rp-tabela) tbody td { border-bottom-color: #f1f5f9; }

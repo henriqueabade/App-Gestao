@@ -29,8 +29,10 @@ const FIN_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
 /* Quantas pendências a lista mostra antes do "Ver todas". */
 const FIN_PENDENCIAS_VISIVEIS = 5;
 
-/* Quantos movimentos a "Atividade recente" mostra (fiscais e do módulo juntos). */
-const FIN_ATIVIDADE_VISIVEL = 8;
+/* Quantos movimentos a "Atividade recente" mostra (fiscais e do módulo
+   juntos): no máximo 5 no cartão (pedido do dono, 18/09/2026); o resto fica
+   em "Ver todas". */
+const FIN_ATIVIDADE_VISIVEL = 5;
 
 /* Rótulo humano de cada ação, para o aviso "em implementação". Quando a ação
    ganhar modal/função real, basta preencher `abrir`. `extra` é o que a linha

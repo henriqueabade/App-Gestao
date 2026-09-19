@@ -484,7 +484,6 @@ async function carregarContatos(idCliente) {
     }
     contatos.forEach(c => {
       const tr = document.createElement('tr');
-      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td data-perm-col="col_ctt_nome" class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td data-perm-col="col_ctt_cargo" class="py-4 px-4 text-white">${c.cargo || ''}</td>
@@ -621,7 +620,6 @@ async function carregarContatos(idCliente) {
     const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
     ordens.forEach(o => {
       const tr = document.createElement('tr');
-      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td data-perm-col="col_ord_numero" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
         <td data-perm-col="col_ord_tipo" class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.tipo}</td>

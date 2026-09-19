@@ -1090,6 +1090,33 @@ label.fin-benef__nome { cursor: pointer; }
 .fin-tabela th:last-child,
 .fin-tabela td:last-child { padding-right: 1.1rem !important; }
 
+/* Folha de relatório (Previsão de comissões e as outras de parcela): NUNCA
+   rola de lado (pedido do dono, 18/09/2026). Cada coluna fica com a largura
+   mínima: letra e espaço compactos, e só número e data não quebram — pedido,
+   cliente e as etiquetas de "Quem recebe" quebram linha. A moldura e a cor do
+   cabeçalho continuam as de todo modal (tabelas-modais.css). */
+.fin-tabela--folha { overflow-x: hidden; }
+.fin-tabela--folha table { width: 100%; table-layout: auto; }
+[id$="Overlay"] .fin-tabela--folha table th {
+    font-size: 0.7rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    white-space: normal;
+}
+[id$="Overlay"] .fin-tabela--folha table td {
+    font-size: 0.82rem;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    overflow-wrap: break-word;
+}
+[id$="Overlay"] .fin-tabela--folha table :is(th, td) {
+    padding-left: 0.45rem !important;
+    padding-right: 0.45rem !important;
+}
+[id$="Overlay"] .fin-tabela--folha table :is(th, td):first-child { padding-left: 0.85rem !important; }
+[id$="Overlay"] .fin-tabela--folha table :is(th, td):last-child { padding-right: 0.85rem !important; }
+.fin-tabela--folha .fin-etiqueta-benef { white-space: normal; max-width: 100%; }
+
 /* Cabeçalho dos modais (Voltar | título | etiqueta): em três terços iguais o
    título ficava com um terço e cortava ("Produção da competência —
    Setembro/2…"). O meio fica com metade, e as pontas continuam iguais entre

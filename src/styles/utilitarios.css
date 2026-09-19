@@ -69,3 +69,24 @@
 @media (min-width: 1280px) {
     .xl\:grid-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 }
+
+/* Etiquetas de resumo na barra de filtros (Prospecções, Matéria-prima,
+   Clientes, Laminação, Contatos, IA): sempre UMA linha. A etiqueta que não
+   cabe desce para a segunda linha, que fica escondida — a barra nunca muda de
+   altura nem passa por cima do vizinho (o "0 Estoque" da Matéria-prima) — e
+   volta sozinha quando sobra espaço (menu recolhido, janela maior). Só CSS:
+   nada é recalculado em JavaScript a cada mudança de largura. */
+.tags-uma-linha {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 0.5rem;
+    min-width: 0;
+    max-height: 1.75rem;
+    overflow: hidden;
+}
+
+.tags-uma-linha > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+}

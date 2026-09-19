@@ -3507,13 +3507,50 @@ function setActiveNavigation(page) {
     }
 }
 
+/**
+ * Leva o conteúdo para a nova margem sem recalcular a tela a cada quadro.
+ *
+ * Antes o <main> tinha `transition-all`: a MARGEM era animada por 300 ms e,
+ * a cada quadro, o módulo inteiro era recalculado — com 150 linhas de tabela
+ * (Prospecções, Matéria-prima) o recolher/abrir do menu engasgava. Agora a
+ * margem muda de uma vez (um recálculo só) e o deslize que se vê é um
+ * `transform`, que a placa de vídeo anima sem mexer no layout. O transform sai
+ * no fim: enquanto existe, ele vira a referência dos elementos `fixed` de
+ * dentro do conteúdo.
+ */
+let fimDoDeslize = null;
+function deslizarConteudo(margem) {
+    if (!mainContent) return;
+    const semMovimento = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    clearTimeout(fimDoDeslize);
+    const antes = mainContent.getBoundingClientRect().left;
+    mainContent.style.transition = 'none';
+    mainContent.style.transform = '';
+    mainContent.style.marginLeft = margem;
+    const dx = antes - mainContent.getBoundingClientRect().left;
+    if (!dx || semMovimento) {
+        mainContent.style.transition = '';
+        return;
+    }
+    mainContent.style.transform = `translateX(${dx}px)`;
+    mainContent.getBoundingClientRect();
+    mainContent.style.transition = 'transform 220ms ease';
+    mainContent.style.transform = '';
+    const limpar = () => {
+        mainContent.style.transition = '';
+        mainContent.style.transform = '';
+    };
+    mainContent.addEventListener('transitionend', (e) => { if (e.propertyName === 'transform') limpar(); }, { once: true });
+    fimDoDeslize = setTimeout(limpar, 300);
+}
+
 // Expande a sidebar quando necessário
 function expandSidebar() {
     if (!sidebarExpanded) {
         sidebar.classList.remove('sidebar-collapsed');
         sidebar.classList.add('sidebar-expanded');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
-        mainContent.style.marginLeft = offset;
+        deslizarConteudo(offset);
         if (companyName) companyName.classList.remove('collapsed');
 
         // Aguarda a animação de expansão finalizar para exibir o texto
@@ -3556,7 +3593,7 @@ function collapseSidebar() {
         sidebar.classList.add('sidebar-collapsed');
     });
 
-    mainContent.style.marginLeft = '64px';
+    deslizarConteudo('64px');
     if (companyName) companyName.classList.add('collapsed');
     sidebarExpanded = false;
 

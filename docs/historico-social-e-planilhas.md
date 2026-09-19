@@ -50,6 +50,9 @@ de corpo só nessas rotas (e nas de planilha); o resto continua em 3 MB.
   (lista com foto), que recebe o aviso "mencionou você" — e só esse, sem
   duplicar com o de comentário. Marcas gravadas no texto: `@[Nome](u:id)` e
   `*[rótulo](e:id)`; o backend as lê (`mencionadosNoTexto`, `textoSimples`).
+  A lista de sugestões é vidro branco com texto preto e **não fecha ao clicar
+  nos botões `@`/`*`**: eles não roubam o foco da caixa (`mousedown` com
+  `preventDefault`), e a lista só fecha quando o foco sai de verdade.
 - **Curtir** o cartão soma as curtidas dos registros; descurtir tira as suas.
 - **Ao vivo**: com a ficha aberta, a linha do tempo pergunta a cada 10 s e
   redesenha sem perder o que se está escrevendo (nem o cursor); o que chegou de

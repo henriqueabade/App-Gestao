@@ -1398,14 +1398,16 @@
     const caixa = get('iaDetResumoRevisao');
     if (!caixa) return;
 
+    // Sem nada pendente a barra não tem o que contar: concluída a leitura,
+    // ela some em vez de ficar vazia em cima da tabela.
     const itens = leitura?.itens || [];
-    if (!itens.length || leitura.status !== 'revisao') {
+    const pendentes = itens.filter(i => i.status !== 'aplicado');
+    if (!pendentes.length || leitura.status !== 'revisao') {
       caixa.classList.add('hidden');
       return;
     }
 
     const conta = f => itens.filter(f).length;
-    const pendentes = itens.filter(i => i.status !== 'aplicado');
     const criar = pendentes.filter(i => i.acao === 'criar').length;
     const atualizar = pendentes.filter(i => i.acao === 'atualizar').length;
     const ignorar = pendentes.filter(i => i.acao === 'ignorar').length;

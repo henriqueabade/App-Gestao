@@ -559,7 +559,9 @@
         campo.setSelectionRange(campo.value.length, campo.value.length);
       };
       campo.addEventListener('click', atualizarSugestoes);
-      campo.addEventListener('blur', () => setTimeout(fecharSugestoes, 150));
+      // Fecha ao sair do campo — mas só se o foco não voltou para ele (os botões
+      // @ e * devolvem o foco ao campo logo depois do clique).
+      campo.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== campo) fecharSugestoes(); }, 150));
 
       const pintarEscolhidos = () => {
         chips.replaceChildren();
@@ -599,11 +601,14 @@
         rascunho.texto = campo.value;
         atualizarSugestoes();
       };
-      const mencionar = botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-at')], 'Mencionar alguém (@) — a pessoa recebe um aviso');
+      // mousedown sem padrão: o clique no botão não tira o foco do campo (era o
+      // que fechava a lista de sugestões logo depois de abrir).
+      const semRoubarFoco = b => { b.addEventListener('mousedown', e => e.preventDefault()); return b; };
+      const mencionar = semRoubarFoco(botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-at')], 'Mencionar alguém (@) — a pessoa recebe um aviso'));
       mencionar.addEventListener('click', () => inserirGatilho('@'));
       botoes.appendChild(mencionar);
       if (citaveis && citaveis().length > 1) {
-        const citar = botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-quote-right')], 'Citar um registro deste grupo (*)');
+        const citar = semRoubarFoco(botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-quote-right')], 'Citar um registro deste grupo (*)'));
         citar.addEventListener('click', () => inserirGatilho('*'));
         botoes.appendChild(citar);
       }

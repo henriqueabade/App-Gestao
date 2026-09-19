@@ -35,9 +35,12 @@ dialog[data-dialog-padrao]::backdrop {
     max-height: min(86vh, 46rem);
     border-radius: 1.25rem;
     border: 1px solid var(--menu-surface-border-strong, rgba(255, 255, 255, 0.12));
-    background:
-        linear-gradient(180deg, var(--dlg-tom-fundo) 0%, transparent 7.5rem),
-        linear-gradient(to bottom right, rgba(61, 2, 31, 0.94), rgba(38, 4, 20, 0.92));
+    /* Vidro na cor do programa, sem degradê (pedido do dono, 18/09/2026): o
+       mesmo "glass" dos modais (a caixa de excluir prospecção), um pouco mais
+       escuro para o texto continuar legível sobre o que estiver atrás. */
+    background: rgba(38, 4, 20, 0.55);
+    backdrop-filter: blur(24px) saturate(120%);
+    -webkit-backdrop-filter: blur(24px) saturate(120%);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     color: var(--menu-text-primary, rgba(255, 255, 255, 0.88));
     overflow: hidden;
@@ -351,9 +354,7 @@ dialog[data-dialog-padrao]::backdrop {
 /* ---------------------------------------------------------- tema claro */
 
 [data-menu-theme="light"] .dlg-cartao {
-    background:
-        linear-gradient(180deg, var(--dlg-tom-fundo) 0%, transparent 7.5rem),
-        #ffffff;
+    background: rgba(255, 255, 255, 0.88);
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
 }
 

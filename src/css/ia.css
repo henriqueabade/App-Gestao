@@ -1719,10 +1719,14 @@ body {
 
    Duas classes vencem uma. Vale para todo painel deste módulo que declare
    `display`, e é por isso que o seletor cobre a lista inteira: um painel novo
-   com `display` próprio repete o defeito calado. */
+   com `display` próprio repete o defeito calado — e repetiu: a barra de
+   resumo da revisão ficava na tela, vazia, depois da leitura concluída, e o
+   "Ocultar" do texto lido não escondia nada (18/09/2026). */
 .ia-painel-itens.hidden,
 .ia-painel-rolante.hidden,
-.ia-modulo-coluna.hidden {
+.ia-modulo-coluna.hidden,
+.ia-resumo-revisao.hidden,
+.ia-arquivo-paineis.hidden {
     display: none;
 }
 

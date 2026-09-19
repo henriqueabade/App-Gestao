@@ -323,8 +323,11 @@ módulo — fundo escuro com o texto preto do padrão deixa a lista ilegível.
 Toda tabela de modal tem **o mesmo formato**, de uma regra só
 (`src/styles/tabelas-modais.css`, alcançada por `[id$="Overlay"]`, inclusive
 tabela montada em JavaScript): **a própria tabela é a moldura** — cantos de
-12 px, borda fina, corpo escuro —, cabeçalho na faixa clara com título cinza
-em caixa alta, divisória entre as linhas e realce ao passar o mouse. As
+12 px, borda fina, corpo **transparente** (o vidro do modal aparece por trás
+das linhas) —, cabeçalho na faixa clara com título cinza em caixa alta e
+divisória entre as linhas. **Sem realce ao passar o mouse** (decisão do dono,
+18/09/2026: nas faixas de processo dos itens do produto ele apagava a faixa);
+não ponha `hover:bg-*` em linha de tabela de modal. As
 medidas (letra e espaçamento, que acompanham a largura da tela) são as de
 `.table-scroll`, em `src/styles/scroll.css` seção 3e. O que só embrulhava a
 tabela (vidro, borda, sombra, legenda "Itens da nota" dentro da moldura)
@@ -335,6 +338,40 @@ delas) e as **folhas de relatório** (`.rp-tabela`, que imitam o papel
 impresso). As grades de edição (itens de orçamento/pedido, revisão da IA)
 uniformizam o cabeçalho e a moldura; as células, que são campos, mantêm a
 medida própria. **Não desenhe moldura nem cabeçalho de tabela num modal.**
+
+### Etiquetas de resumo acima da lista (uma linha só)
+
+Os totais em etiqueta das telas principais (Prospecções, Matéria-prima,
+Clientes, Laminação, IA, Contatos) ficam num contêiner `tags-uma-linha`
+(`src/styles/utilitarios.css`): **uma linha, altura fixa**. A etiqueta que
+não cabe some inteira — nunca quebra para uma segunda linha (a seção de
+filtros mudava de altura) nem passa por cima do vizinho — e volta sozinha
+quando sobra espaço (menu lateral recolhido, janela maior). É só CSS: nada a
+recalcular em JS. Contêiner novo de etiquetas de resumo usa a mesma classe.
+
+### Menu lateral: o conteúdo desliza, não recalcula
+
+Abrir/recolher o menu muda a margem do `#mainContent` **de uma vez** e o
+deslize visível é um `transform` (`deslizarConteudo()` em `src/js/menu.js`).
+Animar a própria margem (`transition-all` no `<main>`, como era) recalcula o
+módulo inteiro a cada quadro e travava as telas de lista longa. **Não ponha
+`transition` de margem, largura ou `all` no `#mainContent`.**
+
+### Caixas de diálogo: vidro sólido
+
+O cartão da `DialogPadrao` (`.dlg-cartao`) é vidro **sólido** na cor do
+programa (bordô translúcido com desfoque), sem degradê — decisão do dono em
+18/09/2026. No tema claro, vidro branco. Não volte a pôr degradê no fundo.
+
+### `.hidden` e a folha do módulo
+
+A folha de um módulo carrega **depois** do Tailwind. Classe dela com
+`display` próprio (`display: flex`, `block`, `grid`) empata com o `.hidden`
+em especificidade e **ganha por ordem**: o elemento continua na tela. Foi
+assim que a barra de resumo da revisão da IA ficava vazia em cima da tabela.
+Toda classe de módulo com `display` que convive com `hidden` precisa do par
+`.classe.hidden { display: none; }` (lista em `src/css/ia.css`; no Financeiro,
+`[class*="fin-"].hidden`).
 
 ### Rolagem das tabelas
 

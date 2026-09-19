@@ -187,7 +187,6 @@
     }
     contatos.forEach((c, idx) => {
       const tr = document.createElement('tr');
-      tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
       tr.innerHTML = `
         <td class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td class="py-4 px-4 text-white">${c.cargo || ''}</td>
