@@ -365,6 +365,8 @@ dialog[data-dialog-padrao]::backdrop {
     color: #fff;
 }
 
+.dlg-rodape button.hidden { display: none; }
+
 /* btn-success mora nas folhas dos módulos: aqui ele precisa existir sozinho
    (a caixa abre em qualquer tela), como os outros botões em menu.css. */
 .dlg-rodape .btn-success { background: var(--color-green, #a2ffa6); color: #000; transition: all 150ms ease; }

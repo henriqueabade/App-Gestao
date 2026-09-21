@@ -1024,8 +1024,10 @@ const MenuStartupPreferences = (() => {
         if (values.telefone && !isValidPhone(values.telefone)) {
             errors.telefone = 'Informe um telefone válido (DDD + número).';
         }
-        if (values.senha && values.senha.length < 6) {
-            errors.senha = 'A nova senha deve ter pelo menos 6 caracteres.';
+        // A regra da senha forte (src/js/utils/senha-forte.js); o backend confere de novo.
+        const senhaFraca = values.senha && window.SenhaForte ? window.SenhaForte.mensagem(values.senha) : '';
+        if (senhaFraca) {
+            errors.senha = senhaFraca;
         }
         if (values.confirmacao) {
             if (!values.senha) {
@@ -1033,6 +1035,8 @@ const MenuStartupPreferences = (() => {
             } else if (values.confirmacao !== values.senha) {
                 errors.confirmacao = 'As senhas informadas não coincidem.';
             }
+        } else if (values.senha) {
+            errors.confirmacao = 'Repita a nova senha para confirmar.';
         }
         return errors;
     }
@@ -1078,6 +1082,7 @@ const MenuStartupPreferences = (() => {
         }
         if (dom.profile.password) {
             dom.profile.password.value = '';
+            dom.profile.senhaRegras?.atualizar();
         }
         if (dom.profile.confirmPassword) {
             dom.profile.confirmPassword.value = '';
@@ -1372,6 +1377,16 @@ const MenuStartupPreferences = (() => {
         }
         if (dom.profile.password) {
             dom.profile.password.addEventListener('input', () => clearSingleProfileError('senha'));
+            // Requisitos da senha forte: a lista aparece quando se começa a
+            // digitar (campo vazio = manter a senha atual) e marca cada um.
+            const regras = dom.profile.form.querySelector('#personalDataPasswordRegras');
+            if (regras && window.SenhaForte) {
+                const lista = window.SenhaForte.ligarLista(dom.profile.password, regras);
+                const mostrar = () => regras.classList.toggle('hidden', !dom.profile.password.value);
+                dom.profile.password.addEventListener('input', mostrar);
+                dom.profile.senhaRegras = { atualizar: () => { lista.atualizar(); mostrar(); } };
+                mostrar();
+            }
         }
         if (dom.profile.confirmPassword) {
             dom.profile.confirmPassword.addEventListener('input', () => clearSingleProfileError('confirmacao'));

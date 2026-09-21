@@ -29,6 +29,9 @@
     observacoes: document.getElementById('novoUsuarioObservacoes')
   };
 
+  // Requisitos da senha forte, marcados enquanto se digita (o backend confere de novo).
+  window.SenhaForte?.ligarLista(inputs.senha, document.getElementById('novoUsuarioSenhaRegras'));
+
   const avatarEl = document.getElementById('novoUsuarioAvatar');
   const fotoInput = document.getElementById('novoUsuarioFoto');
   const removerFotoBtn = document.getElementById('novoUsuarioRemoverFoto');
@@ -188,7 +191,8 @@
     if (dados.nome.length < 3) return 'Informe o nome completo do usuário.';
     if (!RE_EMAIL.test(dados.email)) return 'Informe um e-mail válido.';
     if (!dados.perfil) return 'Selecione o perfil do usuário.';
-    if (dados.senha.length < 6) return 'A senha deve ter ao menos 6 caracteres.';
+    const senhaFraca = window.SenhaForte?.mensagem(dados.senha);
+    if (senhaFraca) return senhaFraca;
     if (dados.senha !== dados.senhaConfirma) return 'As senhas não conferem.';
     return null;
   }

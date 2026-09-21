@@ -147,7 +147,7 @@ test('regra da peça: processos da ficha, padrão, valor próprio, pagamento des
   assert.deepStrictEqual(plano(linhas.map(l => [l.nome, l.origem, l.valor_peca, l.falta])), [
     ['Marcenaria', 'padrao', 100, ''],
     ['Acabamento', 'peca', 25, ''],
-    ['Montagem', null, null, 'sem valor próprio nem padrão'],
+    ['Montagem', null, null, 'sem regra própria nem de todas as peças'],
     ['Embalagem', null, null, ''],
     ['Pintura', null, null, 'processo não cadastrado']
   ]);
@@ -163,7 +163,7 @@ test('regra da peça: processos da ficha, padrão, valor próprio, pagamento des
   const resumo = outro.resumo({ codigo: 'POL-01', nome: 'Poltrona' });
   assert.match(resumo, /Peça: POL-01 — Poltrona/);
   assert.match(resumo, /Base do %: R\$\s1\.000,00 \(tabela fixa\)/);
-  assert.match(resumo, /Marcenaria \(2 insumos\): 10% da tabela fixa \(padrão do processo\) → R\$\s100,00 por peça inteira; cada insumo vale R\$\s50,00/);
+  assert.match(resumo, /Marcenaria \(2 insumos\): 10% da tabela fixa \(todas as peças\) → R\$\s100,00 por peça inteira; cada insumo vale R\$\s50,00/);
   assert.match(resumo, /Montagem \(1 insumo\): 5% da tabela fixa \(desta peça\) → R\$\s50,00 por peça inteira/);
   assert.match(resumo, /Embalagem \(1 insumo\): pagamento desligado/);
 

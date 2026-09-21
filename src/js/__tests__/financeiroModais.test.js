@@ -62,6 +62,23 @@ const semNbsp = t => String(t).replace(/ /g, ' ');
    rejeita mesmo iguais. O JSON os traz para cá. */
 const plano = v => JSON.parse(JSON.stringify(v));
 
+test('Regras › Produção: "Todas as peças" sempre no topo da tabela, depois as peças; processos na ordem da lista', () => {
+    const f = puro();
+    const etapas = [{ id: 1, ordem: 1 }, { id: 3, ordem: 2 }, { id: 2, ordem: 3 }, { id: 4, ordem: 4 }]; // Marcenaria, Acabamento, Montagem, Embalagem
+    const v = (id, etapa_id, etapa, produto_codigo = null) => ({ id, etapa_id, etapa, produto_id: produto_codigo ? id : null, produto_codigo });
+    const valores = [
+        v(1, 3, 'Acabamento', 'BROO 3030 BRZ'), v(2, 3, 'Acabamento'), v(3, 3, 'Acabamento', 'BROO 1050 BRZ'),
+        v(4, 1, 'Marcenaria', 'BROO 1050 PRA'), v(5, 4, 'Embalagem'), v(6, 1, 'Marcenaria'), v(7, 2, 'Montagem')
+    ];
+    const ordem = plano(f.ordenarValoresDeProducao(valores, etapas)).map(x => `${x.etapa}:${x.produto_codigo || 'TODAS'}`);
+    assert.deepStrictEqual(ordem, [
+        'Marcenaria:TODAS', 'Acabamento:TODAS', 'Montagem:TODAS', 'Embalagem:TODAS',
+        'Marcenaria:BROO 1050 PRA', 'Acabamento:BROO 1050 BRZ', 'Acabamento:BROO 3030 BRZ'
+    ]);
+    assert.ok(SCRIPT.includes('const valores = ordenarValoresDeProducao(dados?.valores, dados?.etapas);'), 'a tabela usa a ordem');
+    assert.deepStrictEqual(plano(f.ordenarValoresDeProducao(undefined)), []);
+});
+
 test('parcelas da NF: partes iguais em centavos, sobra um centavo por parcela a partir da primeira', () => {
     const f = puro();
     const tres = plano(f.calcularParcelas(5193.88, [30, 60, 90], '2026-09-14'));

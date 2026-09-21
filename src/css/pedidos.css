@@ -238,14 +238,12 @@ input[type="date"]:valid::-webkit-datetime-edit {
     word-break: break-word;
 }
 
+/* Sem a coluna de ações (no Visualizar os itens não se editam), o nome fica
+   com o espaço dela: 38% + 8%. A última coluna passou a ser o TOT R$, que
+   segue alinhado à esquerda como os outros valores. */
 #pedidoItens th:first-child,
 #pedidoItens td:first-child {
-    width: 38%;
-}
-
-#pedidoItens th:last-child,
-#pedidoItens td:last-child {
-    text-align: center;
+    width: 46%;
 }
 
 .icon-disabled {

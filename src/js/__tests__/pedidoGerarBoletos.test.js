@@ -136,7 +136,7 @@ test('Visualizar pedido: "Boletos" abre a lista quando está tudo gerado, para q
   const VISUALIZAR = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-visualizar.js'), 'utf8');
   const VIS_HTML = fs.readFileSync(path.join(RAIZ, 'html', 'modals', 'pedidos', 'visualizar.html'), 'utf8');
   assert.ok(/id="visualizarPedidoBoletos"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(VIS_HTML));
-  assert.ok(VISUALIZAR.includes('if (botao && falta && !cancelado && podeGerar) ligar(botao);') && VISUALIZAR.includes('else if (lista && temBoleto) ligar(lista);'));
+  assert.ok(VISUALIZAR.includes('if (botao && falta && !cancelado && podeGerar && pedidoJaSaiu(pedido) && pagaComBoleto(pedido)) ligar(botao);') && VISUALIZAR.includes('else if (lista && temBoleto) ligar(lista);'), 'gerar só depois que o pedido saiu, e só em pedido pago com boleto');
   assert.ok(VISUALIZAR.includes("window.Permissoes.pode('financeiro.boleto.emit')"));
   assert.ok(VISUALIZAR.includes("const MOTIVO = { quitado_por_fora: 'quitado por fora'"), 'a tag do baixado diz o motivo');
 });

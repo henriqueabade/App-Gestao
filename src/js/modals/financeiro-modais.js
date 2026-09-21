@@ -823,7 +823,27 @@
   const iniciais = nome => String(nome || '?').trim().split(/\s+/).filter(Boolean)
     .map((p, i, todos) => (i === 0 || i === todos.length - 1 ? p[0] : '')).join('').toUpperCase().slice(0, 2) || '?';
 
+  /**
+   * A ordem da tabela de valores da produção (Regras › Produção): as regras
+   * de TODAS AS PEÇAS sempre primeiro (regra do dono, 21/09/2026), depois as
+   * de cada peça. Em cada grupo, os processos na ordem da lista ao lado
+   * (Marcenaria, Acabamento, Montagem, Embalagem) e, entre peças, pelo código.
+   * `etapas`: [{ id, ordem }]. Pura.
+   */
+  function ordenarValoresDeProducao(valores, etapas = []) {
+    const semPeca = v => v.produto_id === null || v.produto_id === undefined;
+    const ordemDe = new Map((etapas || []).map(e => [String(e.id), Number(e.ordem) || 0]));
+    const ordem = v => (ordemDe.has(String(v.etapa_id)) ? ordemDe.get(String(v.etapa_id)) : Number.MAX_SAFE_INTEGER);
+    const peca = v => String(v.produto_codigo || v.produto || '');
+    return (valores || []).slice().sort((a, b) =>
+      (semPeca(a) === semPeca(b) ? 0 : (semPeca(a) ? -1 : 1))
+      || ordem(a) - ordem(b)
+      || String(a.etapa || '').localeCompare(String(b.etapa || ''), 'pt-BR')
+      || peca(a).localeCompare(peca(b), 'pt-BR', { numeric: true }));
+  }
+
   window.FinanceiroModais = {
+    ordenarValoresDeProducao,
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
     faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
@@ -4010,7 +4030,10 @@
     const produtoBusca = el('finValorProdutoBusca');
     const tipoValorSel = el('finValorTipo');
     const valorCampo = el('finValorValor');
-    const PADRAO_DO_PROCESSO = 'Padrão do processo (toda peça sem valor próprio)';
+    // A regra de todas as peças vale para toda peça sem regra própria ATIVA
+    // naquele processo; a peça que tem a dela segue a dela
+    // (backend/financeiro/producaoUnidades.js, regraDaPeca).
+    const PADRAO_DO_PROCESSO = 'Todas as peças (vale para quem não tem regra própria ativa)';
 
     async function montarProdutos(selecionado) {
       const itens = await lista('produtos');
@@ -4054,7 +4077,9 @@
       if (remover) {
         const confirmado = await window.DialogPadrao?.confirm?.({
           title: 'Remover o valor?',
-          message: `${remover.etapa}: ${remover.produto || 'padrão do processo'} (${remover.descricao}). O que ainda não foi fechado passa a usar o padrão do processo, se houver.`,
+          message: remover.produto
+            ? `${remover.etapa}: ${remover.produto} (${remover.descricao}). O que ainda não foi fechado desta peça passa a usar a regra de todas as peças, se houver.`
+            : `${remover.etapa}: todas as peças (${remover.descricao}). As peças sem regra própria ativa ficam sem valor neste processo até que haja outra.`,
           confirmText: 'Remover'
         });
         if (!confirmado) return;
@@ -4083,8 +4108,8 @@
       const corpo = el('finValoresCorpo');
       corpo.replaceChildren();
       const semPeca = v => v.produto_id === null || v.produto_id === undefined;
-      const valores = (dados?.valores || []).slice().sort((a, b) => String(a.etapa).localeCompare(String(b.etapa), 'pt-BR')
-        || (semPeca(a) ? -1 : (semPeca(b) ? 1 : String(a.produto).localeCompare(String(b.produto), 'pt-BR'))));
+      // "Todas as peças" sempre no topo (ordenarValoresDeProducao).
+      const valores = ordenarValoresDeProducao(dados?.valores, dados?.etapas);
       el('finValoresVazio').classList.toggle('hidden', !dados || valores.length > 0);
       corpo.closest('.fin-tabela').classList.toggle('hidden', valores.length === 0);
       for (const v of valores) {
@@ -4096,7 +4121,7 @@
         const tr = document.createElement('tr');
         tr.append(
           celulaG(v.etapa || '—', 'px-4 py-3 text-white'),
-          celulaG(semPeca(v) ? tagG('Padrão do processo', 'badge-info') : tagG(v.produto_codigo || v.produto, 'badge-warning', v.produto_nome || v.produto || '')),
+          celulaG(semPeca(v) ? tagG('Todas as peças', 'badge-info') : tagG(v.produto_codigo || v.produto, 'badge-warning', v.produto_nome || v.produto || '')),
           celulaG(v.descricao || '—'), celulaG(acoes)
         );
         corpo.appendChild(tr);
@@ -4713,6 +4738,14 @@
         acionar(semNf, () => marcarSemNfe(l));
         acoes.appendChild(semNf);
       }
+      // A nota saiu por fora (contador, outro sistema): informa os dados e o
+      // pedido sai desta lista. Os boletos de fora vão no mesmo modal.
+      const deFora = criar('button', 'btn-neutral px-3 py-1 rounded-md text-xs font-medium text-white', 'NF-e de fora');
+      deFora.type = 'button';
+      deFora.dataset.perm = 'financeiro.nfe.emit';
+      deFora.title = 'Informar a NF-e (e os boletos) emitidos fora do sistema';
+      deFora.addEventListener('click', () => abrirDadosDeFora(l));
+      acoes.appendChild(deFora);
 
       tr.append(
         celula(pedidoBtn), celula(l.cliente), celula(formatarData(l.enviado_em)), dias, celula(condicaoDoPedido(l)),
@@ -4725,6 +4758,12 @@
       window.selectedOrderId = l.pedido_id;
       window.emitirNfeContext = { pedidoId: l.pedido_id, numero: String(l.numero), cliente: l.cliente || '' };
       abrirModalDePedido('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido', { esperar: true, aoFechar: carregarLista });
+    }
+
+    function abrirDadosDeFora(l) {
+      window.selectedOrderId = l.pedido_id;
+      window.dadosExternosContext = { pedidoId: l.pedido_id, numero: String(l.numero), cliente: l.cliente || '', formaPagamento: l.forma_pagamento || '' };
+      abrirModalDePedido('modals/pedidos/dados-externos.html', '../js/modals/pedido-dados-externos.js', 'dadosExternos', { esperar: true, aoFechar: carregarLista });
     }
 
     async function marcarSemNfe(l) {

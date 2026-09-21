@@ -150,10 +150,10 @@ function showMaxAttemptsError(mensagem, emailEnviado = null) {
   if (maxAttemptsErrorShown) return;
   maxAttemptsErrorShown = true;
   const rodape = emailEnviado === true
-    ? 'Enviamos um e-mail de redefinição de senha para o endereço cadastrado. Verifique sua caixa de entrada.'
+    ? 'Para criar uma nova senha, abra "Esqueceu a senha?" › "Já tenho o código" e digite o código que chegou no seu e-mail.'
     : (emailEnviado === false
-      ? 'Não foi possível enviar o e-mail de redefinição de senha. Procure o administrador para liberar o acesso.'
-      : 'Aguarde o tempo indicado ou procure o administrador para liberar o acesso.');
+      ? 'Não foi possível enviar o código por e-mail. Procure o administrador para liberar o acesso.'
+      : 'Aguarde o tempo indicado, crie uma nova senha em "Esqueceu a senha?" ou procure o administrador.');
   const overlay = document.createElement('div');
   overlay.className = 'warning-overlay';
   overlay.innerHTML = `
@@ -1095,16 +1095,73 @@ if (intro) {
   }
 
   // === 4) Modal "Esqueceu a senha?" ===
+  // Dois passos (docs/redefinicao-de-senha.md): pedir o código pelo e-mail e,
+  // com o código de 8 números que chegou, criar a senha nova aqui mesmo.
   const forgotPasswordLink  = document.getElementById('forgotPassword');
   const forgotPasswordModal = document.getElementById('forgotPasswordModal');
   const cancelResetBtn      = document.getElementById('cancelReset');
+  const resetPasswordForm   = document.getElementById('resetPasswordForm');
+  const novaSenhaForm       = document.getElementById('novaSenhaForm');
+  const novaSenhaErro       = document.getElementById('novaSenhaErro');
+  const campoCodigo         = document.getElementById('novaSenhaCodigo');
+  const listaNovaSenha = window.SenhaForte?.ligarLista(
+    document.getElementById('novaSenha'),
+    document.getElementById('novaSenhaRegras')
+  );
+
+  function mostrarPassoDaSenha(passo) {
+    const noCodigo = passo === 'codigo';
+    resetPasswordForm.classList.toggle('hidden', noCodigo);
+    novaSenhaForm.classList.toggle('hidden', !noCodigo);
+    novaSenhaErro.classList.add('hidden');
+    if (!noCodigo) {
+      document.getElementById('resetEmail').focus();
+      return;
+    }
+    const campoEmail = document.getElementById('novaSenhaEmail');
+    if (!campoEmail.value) campoEmail.value = document.getElementById('resetEmail').value.trim();
+    (campoEmail.value ? campoCodigo : campoEmail).focus();
+  }
+
+  function abrirRecuperarSenha() {
+    resetPasswordForm.reset();
+    novaSenhaForm.reset();
+    listaNovaSenha?.atualizar();
+    const emailDoLogin = document.getElementById('email')?.value.trim() || '';
+    if (emailDoLogin.includes('@')) document.getElementById('resetEmail').value = emailDoLogin;
+    forgotPasswordModal.classList.remove('hidden');
+    mostrarPassoDaSenha('email');
+  }
+
+  function fecharRecuperarSenha() {
+    forgotPasswordModal.classList.add('hidden');
+  }
+
   forgotPasswordLink.addEventListener('click', e => {
     e.preventDefault();
-    forgotPasswordModal.classList.remove('hidden');
+    abrirRecuperarSenha();
   });
-  cancelResetBtn.addEventListener('click', () => {
-    forgotPasswordModal.classList.add('hidden');
+  cancelResetBtn.addEventListener('click', fecharRecuperarSenha);
+  document.getElementById('cancelNovaSenha').addEventListener('click', fecharRecuperarSenha);
+  document.getElementById('jaTenhoCodigo').addEventListener('click', e => {
+    e.preventDefault();
+    mostrarPassoDaSenha('codigo');
   });
+  document.getElementById('voltarPedirCodigo').addEventListener('click', e => {
+    e.preventDefault();
+    mostrarPassoDaSenha('email');
+  });
+  // O código aparece em dois blocos ("1234 5678"), como no e-mail.
+  campoCodigo.addEventListener('input', () => {
+    const numeros = campoCodigo.value.replace(/\D/g, '').slice(0, 8);
+    campoCodigo.value = numeros.length > 4 ? `${numeros.slice(0, 4)} ${numeros.slice(4)}` : numeros;
+  });
+
+  // Requisitos da senha no cadastro, marcados enquanto se digita.
+  const listaCadastro = window.SenhaForte?.ligarLista(
+    document.getElementById('registerPassword'),
+    document.getElementById('registerSenhaRegras')
+  );
 
   // === 5) Toggle visibilidade de senha ===
   document.querySelectorAll('.toggle-password').forEach(btn => {
@@ -1137,6 +1194,12 @@ if (intro) {
     const emailReg        = document.getElementById('registerEmail').value;
     const passwordReg     = document.getElementById('registerPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
+    const senhaFraca = window.SenhaForte?.mensagem(passwordReg);
+    if (senhaFraca) {
+      showToast(senhaFraca, 'error');
+      document.getElementById('registerPassword').focus();
+      return;
+    }
     if (passwordReg !== confirmPassword) {
       showToast('As senhas não coincidem!', 'error');
       return;
@@ -1155,6 +1218,7 @@ if (intro) {
 
       showToast(result.message, 'success');
       registerForm.reset();
+      listaCadastro?.atualizar();
       loginTab.click();
     } catch (err) {
       showToast(err.message || 'Erro ao cadastrar usuário', 'error');
@@ -1163,55 +1227,78 @@ if (intro) {
     }
   });
 
-  // === 8) Envio do formulário de Recuperação de Senha ===
-  document.getElementById('resetPasswordForm').addEventListener('submit', async e => {
+  // === 8) "Esqueceu a senha?" — passo 1: pedir o código ===
+  resetPasswordForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const emailReset = document.getElementById('resetEmail').value;
-
+    const email = document.getElementById('resetEmail').value.trim();
     try {
       const resp = await fetchApi('/password-reset-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailReset })
+        body: JSON.stringify({ email })
       });
-
-      if (resp.ok) {
-        // O token foi criado; o e-mail pode não ter saído (envio desligado no
-        // servidor). Dizer "enviado" nesse caso deixa o usuário esperando.
-        const dados = await resp.json().catch(() => null);
-        if (dados?.emailEnviado === false) {
-          showToast(
-            'Não foi possível enviar o e-mail de redefinição. Procure o administrador.',
-            'error'
-          );
-        } else {
-          showToast('E-mail enviado!', 'success');
-        }
-      } else {
-        let errorMessage = '';
-        try {
-          const data = await resp.json();
-          if (data && typeof data.error === 'string') errorMessage = data.error;
-        } catch (_) {
-          errorMessage = '';
-        }
-
-        if (resp.status === 404) {
-          showToast(errorMessage || 'E-mail não encontrado!', 'error');
-        } else if (resp.status === 401) {
-          showToast(errorMessage || 'Sessão inválida. Tente novamente.', 'error');
-        } else if (resp.status === 400) {
-          showToast(errorMessage || 'Solicitação inválida. Tente novamente.', 'error');
-        } else if (resp.status === 503) {
-          showToast(errorMessage || 'Sem conexão com internet.', 'error');
-        } else {
-          showToast('Erro ao solicitar redefinição', 'error');
-        }
+      const dados = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        showToast(dados?.error || 'Não foi possível pedir o código. Tente de novo.', 'error');
+        return;
       }
+      // O código foi criado, mas o e-mail pode não ter saído (envio desligado).
+      // Dizer "enviado" nesse caso deixa o usuário esperando à toa.
+      if (dados?.emailEnviado === false && !dados?.dev) {
+        showToast('O e-mail com o código não saiu. Procure o administrador.', 'error');
+        return;
+      }
+      showToast(
+        dados?.emailEnviado === false
+          ? 'E-mail desligado neste computador (DEV): o código foi escrito no terminal do aplicativo.'
+          : 'Código enviado! Confira seu e-mail.',
+        dados?.emailEnviado === false ? 'info' : 'success'
+      );
+      document.getElementById('novaSenhaEmail').value = email;
+      mostrarPassoDaSenha('codigo');
     } catch (err) {
-      showToast('Erro ao solicitar redefinição', 'error');
-    } finally {
-      forgotPasswordModal.classList.add('hidden');
+      showToast('Sem resposta do aplicativo. Tente de novo.', 'error');
+    }
+  });
+
+  // === 9) "Esqueceu a senha?" — passo 2: o código e a senha nova ===
+  novaSenhaForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = document.getElementById('novaSenhaEmail').value.trim();
+    const codigo = campoCodigo.value.replace(/\D/g, '');
+    const novaSenha = document.getElementById('novaSenha').value;
+    const confirma = document.getElementById('novaSenhaConfirma').value;
+    const mostrarErro = mensagem => {
+      novaSenhaErro.textContent = mensagem;
+      novaSenhaErro.classList.remove('hidden');
+    };
+    novaSenhaErro.classList.add('hidden');
+
+    if (codigo.length !== 8) return mostrarErro('O código tem 8 números. Confira no e-mail.');
+    const senhaFraca = window.SenhaForte?.mensagem(novaSenha);
+    if (senhaFraca) return mostrarErro(senhaFraca);
+    if (novaSenha !== confirma) return mostrarErro('As senhas não coincidem.');
+
+    try {
+      const resp = await fetchApi('/password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, codigo, novaSenha })
+      });
+      const dados = await resp.json().catch(() => null);
+      if (!resp.ok) return mostrarErro(dados?.error || 'Não foi possível trocar a senha. Tente de novo.');
+
+      fecharRecuperarSenha();
+      const campoEmailLogin = document.getElementById('email');
+      const campoSenhaLogin = document.getElementById('password');
+      if (campoEmailLogin) campoEmailLogin.value = email;
+      if (campoSenhaLogin) {
+        campoSenhaLogin.value = '';
+        campoSenhaLogin.focus();
+      }
+      showToast('Senha alterada! Entre com a nova senha.', 'success');
+    } catch (err) {
+      mostrarErro('Sem resposta do aplicativo. Tente de novo.');
     }
   });
 });

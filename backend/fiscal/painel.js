@@ -12,6 +12,8 @@
  * da competência escolhida — antes do sistema fiscal existir as notas saíam
  * por fora, e contar esses pedidos velhos só faria ruído.
  */
+const externasFiscais = require('./externas');
+
 const STATUS_VIVOS = new Set(['autorizada', 'processando', 'enviando', 'cancelamento_pendente']);
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -84,16 +86,18 @@ const notaViva = grupo => (grupo || []).find(n => STATUS_VIVOS.has(String(n.stat
  * nota" entram com `dispensada: true` (a tela decide se mostra), mas não
  * contam no total.
  */
-function pedidosAguardandoNfe({ pedidos, notas, clientes = [], desde, hoje }) {
+function pedidosAguardandoNfe({ pedidos, notas, clientes = [], desde, hoje, externas = [] }) {
   const grupos = notasPorPedido(notas);
   const nomes = new Map(lista(clientes).filter(Boolean).map(c => [String(c.id), nomeDoCliente(c)]));
+  // A NF-e emitida FORA e informada (fiscal/externas.js) também é nota: o pedido sai da lista.
+  const comNotaDeFora = new Set(lista(externas).filter(n => n && n.ativo !== false && n.ativo !== 'false').map(n => String(n.pedido_id)));
   const linhas = [];
   for (const p of lista(pedidos)) {
     if (!p || !enviado(p)) continue;
     const enviadoEm = dataDeEnvio(p);
     if (!enviadoEm || (desde && enviadoEm < desde)) continue;
     const grupo = grupos.get(String(p.id)) || [];
-    if (notaViva(grupo)) continue;
+    if (notaViva(grupo) || comNotaDeFora.has(String(p.id))) continue;
     const ultima = grupo[0] || null;
     linhas.push({
       pedido_id: p.id,
@@ -230,11 +234,11 @@ function atividadeRecente({ notas, eventosCce = [], pedidos = [], limite = LIMIT
 }
 
 /** O painel inteiro a partir das listas lidas. Pura. */
-function montar({ pedidos = [], notas = [], eventosCce = [], clientes = [], competencia, hoje = new Date(), certificado = null, pendenciasConfiguracao = [], ambiente = null }) {
+function montar({ pedidos = [], notas = [], eventosCce = [], clientes = [], competencia, hoje = new Date(), certificado = null, pendenciasConfiguracao = [], ambiente = null, externas = [] }) {
   const comp = competenciaValida(competencia, hoje);
   const desde = `${comp}-01`;
   const semXml = lista(notas).map(enxuta);
-  const aguardando = pedidosAguardandoNfe({ pedidos, notas: semXml, clientes, desde, hoje });
+  const aguardando = pedidosAguardandoNfe({ pedidos, notas: semXml, clientes, desde, hoje, externas });
   const cert = certificado ? { configurado: Boolean(certificado.configurado), vencido: Boolean(certificado.vencido), venceEmBreve: Boolean(certificado.venceEmBreve), diasRestantes: certificado.diasRestantes ?? null, validoAte: certificado.validoAte || null } : { configurado: false };
   return {
     competencia: comp,
@@ -250,16 +254,18 @@ function montar({ pedidos = [], notas = [], eventosCce = [], clientes = [], comp
 
 /** Lê o que o painel precisa (pedidos, notas, cartas, e só os clientes dos pedidos sem nota) e monta. */
 async function carregar({ api, competencia, hoje = new Date(), certificado = null, pendenciasConfiguracao = [], ambiente = null }) {
-  const [pedidos, notas, eventosCce] = await Promise.all([
+  const [pedidos, notas, eventosCce, externas] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/notas_fiscais').then(lista).catch(() => []),
-    api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => [])
+    api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => []),
+    // Sem sql/nfe_boletos_externos.sql, lista vazia: o painel fica como era.
+    externasFiscais.listarNotas(api).catch(() => [])
   ]);
   const comp = competenciaValida(competencia, hoje);
-  const previa = pedidosAguardandoNfe({ pedidos, notas: notas.map(enxuta), desde: `${comp}-01`, hoje });
+  const previa = pedidosAguardandoNfe({ pedidos, notas: notas.map(enxuta), desde: `${comp}-01`, hoje, externas });
   const ids = [...new Set(previa.pedidos.map(l => l.cliente_id).filter(v => v !== null && v !== undefined))];
   const clientes = await Promise.all(ids.map(id => api.get('/api/clientes', { query: { id } }).then(r => lista(r)[0] || null).catch(() => null)));
-  return montar({ pedidos, notas, eventosCce, clientes: clientes.filter(Boolean), competencia: comp, hoje, certificado, pendenciasConfiguracao, ambiente });
+  return montar({ pedidos, notas, eventosCce, clientes: clientes.filter(Boolean), competencia: comp, hoje, certificado, pendenciasConfiguracao, ambiente, externas });
 }
 
 module.exports = {

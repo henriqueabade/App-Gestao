@@ -1,0 +1,71 @@
+/*
+ * Lista dos requisitos da senha (src/js/utils/senha-forte.js → ligarLista).
+ * Cada item ganha a marca quando é cumprido, enquanto se digita. A marca é
+ * desenhada aqui, sem biblioteca de ícones (a tela de login não carrega o
+ * Font Awesome). Em fundo escuro (modais de vidro), use .senha-forte--escuro.
+ */
+.senha-forte {
+  --sf-ok: #15803d;
+  --sf-pendente: #6b7280;
+  --sf-borda: #9ca3af;
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Esta folha carrega depois do Tailwind: sem o par, o display:grid acima
+   venceria o .hidden (a lista de Configurações só aparece ao digitar). */
+.senha-forte.hidden {
+  display: none;
+}
+
+.senha-forte--escuro {
+  --sf-ok: #4ade80;
+  --sf-pendente: rgba(255, 255, 255, 0.6);
+  --sf-borda: rgba(255, 255, 255, 0.45);
+}
+
+.senha-forte__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--sf-pendente);
+}
+
+.senha-forte__item--ok {
+  color: var(--sf-ok);
+}
+
+.senha-forte__marca {
+  position: relative;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border: 1.5px solid var(--sf-borda);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.senha-forte__item--ok .senha-forte__marca {
+  border-color: var(--sf-ok);
+  background: var(--sf-ok);
+}
+
+/* O "✓" feito com duas bordas de um retângulo girado. */
+.senha-forte__item--ok .senha-forte__marca::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.5px;
+  width: 3px;
+  height: 6px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}

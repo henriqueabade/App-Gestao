@@ -42,12 +42,18 @@ function normalizeEmail(email) {
 }
 
 async function registrarUsuario(nome, email, senha) {
+  // A regra da senha forte vale no cadastro da tela de login também
+  // (src/js/utils/senha-forte.js); a tela confere antes, aqui se confere de novo.
+  const senhaFraca = require('../src/js/utils/senha-forte').mensagem(senha);
+  if (senhaFraca) throw new Error(senhaFraca);
   if (isDev) return require('./localAuth').register(nome, normalizeEmail(email), senha);
   const api = createApiClient();
   const payload = {
     nome,
     email: normalizeEmail(email),
-    senha
+    // A coluna guarda só hash bcrypt (é o que o login compara) e a API
+    // genérica não hasheia: antes a senha ia crua e o login nunca conferia.
+    senha: await require('bcrypt').hash(senha, 12)
   };
   const created = await api.post('/api/usuarios', payload);
   return created;

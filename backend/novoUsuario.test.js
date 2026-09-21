@@ -83,7 +83,7 @@ const VALIDO = {
   email: 'Maria.Souza@Empresa.com',
   telefone: '(11) 99999-0000',
   perfil: 'Comercial',
-  senha: 'segredo123',
+  senha: 'Segredo@123',
   observacoes: 'Equipe de vendas'
 };
 
@@ -123,7 +123,7 @@ test('grava a senha apenas como hash bcrypt, nunca em texto', async () => {
     const enviada = ctx.recebidos.find(r => r.metodo === 'POST').corpo.senha;
 
     assert.notStrictEqual(enviada, VALIDO.senha, 'a senha NÃO pode trafegar/gravar crua');
-    assert.doesNotMatch(enviada, /segredo123/, 'a senha original não pode aparecer no valor gravado');
+    assert.doesNotMatch(enviada, /Segredo@123/, 'a senha original não pode aparecer no valor gravado');
     assert.match(enviada, /^\$2[aby]\$\d{2}\$/, 'deveria ser um hash bcrypt');
 
     // O que realmente importa: o login precisa conseguir validar por este hash.
@@ -164,7 +164,11 @@ test('valida os campos obrigatórios antes de tocar no banco', async () => {
   const casos = [
     [{ ...VALIDO, nome: 'Jo' }, /nome completo/i],
     [{ ...VALIDO, email: 'sem-arroba' }, /e-mail válido/i],
-    [{ ...VALIDO, senha: '123' }, /6 caracteres/i],
+    [{ ...VALIDO, senha: '123' }, /pelo menos 8 caracteres/i],
+    // A regra da senha forte (src/js/utils/senha-forte.js): 8+, maiúscula, número e especial.
+    [{ ...VALIDO, senha: 'segredo123' }, /^A senha precisa ter uma letra maiúscula e um caractere especial\.$/],
+    [{ ...VALIDO, senha: 'Segredo123' }, /^A senha precisa ter um caractere especial\.$/],
+    [{ ...VALIDO, senha: 'Segr@do!' }, /^A senha precisa ter um número\.$/],
     [{ ...VALIDO, perfil: '' }, /perfil/i]
   ];
 

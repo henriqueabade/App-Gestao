@@ -68,6 +68,8 @@
                             <label for="personalDataPassword" class="personal-data-label">Nova senha</label>
                             <input type="password" id="personalDataPassword" data-perm="cfg.password.change" class="ctl-campo input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
                             <p class="personal-field-error" id="personalDataPasswordError"></p>
+                            <!-- Requisitos da senha (src/js/utils/senha-forte.js); aparece ao digitar -->
+                            <ul id="personalDataPasswordRegras" class="senha-forte senha-forte--escuro hidden" aria-label="Requisitos da senha"></ul>
                         </div>
                         <div class="personal-data-field" data-field="confirmacao">
                             <label for="personalDataPasswordConfirm" class="personal-data-label">Confirmar nova senha</label>

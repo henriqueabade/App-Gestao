@@ -37,7 +37,9 @@ async function login(email, senha) {
   return { token: signToken(user.id), usuario: sanitizarSaida(user) };
 }
 async function register(nome, email, senha) {
-  if (typeof senha !== 'string' || senha.length < 6 || !nome || !email) throw new Error('Informe nome, e-mail e senha com ao menos 6 caracteres.');
+  if (!nome || !email) throw new Error('Informe nome, e-mail e senha.');
+  const senhaFraca = require('../src/js/utils/senha-forte').mensagem(senha);
+  if (senhaFraca) throw new Error(senhaFraca);
   const { rows } = await db.query(
     'INSERT INTO "public"."usuarios" (nome, email, senha, status) VALUES ($1, $2, $3, $4) RETURNING id, nome, email, status',
     [nome, email, await bcrypt.hash(senha, 12), 'nao_confirmado']

@@ -11,6 +11,7 @@ esquecidas — em cada módulo. Os três primeiros funcionam por conta própria:
 | `DialogTopLayer`| `src/utils/dialogTopLayer.js` | Toda caixa de diálogo fica à frente de qualquer outro elemento |
 | `BotaoAcao`     | `src/utils/botaoAcao.js`      | Nenhum botão aceita duplo clique; fica carregando até a ação terminar |
 | `AtualizacaoObrigatoria` | `src/utils/atualizacaoObrigatoria.js` | Versão atrasada não usa o app: caixa sem saída, um botão só |
+| `SenhaForte` | `src/js/utils/senha-forte.js` | A regra da senha (8+, maiúscula, número, especial): `mensagem(senha)` diz o que falta; `ligarLista(campo, ul)` marca os requisitos enquanto se digita. Todo campo de senha nova usa os dois (ver `docs/redefinicao-de-senha.md`) |
 
 ---
 
@@ -420,6 +421,12 @@ assim que a barra de resumo da revisão da IA ficava vazia em cima da tabela.
 Toda classe de módulo com `display` que convive com `hidden` precisa do par
 `.classe.hidden { display: none; }` (lista em `src/css/ia.css`; no Financeiro,
 `[class*="fin-"].hidden`).
+
+Vale também para as folhas globais que vêm depois do Tailwind: `controles.css`
+tem o par para `ctl-botao`, `ctl-acoes` e `ctl-rotulo` (sem ele, todo botão
+padronizado que nascia escondido aparecia — o rodapé do Visualizar pedido
+mostrava DANFE, Boletos e Cancelar + Devolução juntos) e para os ícones do
+Font Awesome. Travado em `padraoControles.test.js`.
 
 ### Rolagem das tabelas
 

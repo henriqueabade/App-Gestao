@@ -64,6 +64,7 @@ const conciliacao = require('./cobranca/conciliacao');
 const execucoes = require('./cobranca/execucoes');
 const webhookEstado = require('./cobranca/webhookEstado');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+const externas = require('./fiscal/externas');
 
 /** Quem lê a parcela mínima: quem monta orçamento, mexe em pedido ou está no financeiro. */
 const LEEM_A_PARCELA_MINIMA = ['orc.view', 'orc.create', 'orc.edit', 'ped.view', 'ped.payment.edit', 'financeiro.view', 'financeiro.config.view'];
@@ -328,7 +329,7 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       nota_fiscal: dados.notaViva ? { id: dados.notaViva.id, serie: dados.notaViva.serie, numero: dados.notaViva.numero } : null,
       parcelas: linhas,
       pendencias: [...pendencias, ...pendenciasPagador],
-      pode_gerar: !pendencias.length && !pendenciasPagador.length && linhas.some(l => !l.tem_boleto_vivo) && String(dados.pedido.situacao || '').toLowerCase() !== 'cancelado',
+      pode_gerar: !pendencias.length && !pendenciasPagador.length && linhas.some(l => !l.tem_boleto_vivo && !l.boleto_externo) && String(dados.pedido.situacao || '').toLowerCase() !== 'cancelado',
       gerar_ao_emitir_nfe: cfg ? cfg.gerar_ao_emitir_nfe !== false : false,
       resumo: boletos.resumo(dados.boletos)
     };
@@ -365,6 +366,48 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       }));
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos');
+    }
+  });
+
+  // --------------------------------------- boletos emitidos FORA do sistema
+  // Só os dados (fiscal/externas.js), pela linha digitável de cada parcela.
+  // Não passam pelo BB. Quem pode gerar boletos informa.
+
+  /** A parcela já tem boleto do BB que vale? Então não recebe um de fora. */
+  async function ocupadaPeloBB(api, pedidoId) {
+    const dados = await boletos.lerPedidoCobranca(api, pedidoId);
+    return parcela => boletos.ocupaParcela(boletos.boletoDaParcela(dados.boletos, parcela));
+  }
+
+  /** Confere sem gravar: `linhas: [{ parcela_id, linha }]`, cada parcela com o seu resultado. */
+  router.post('/pedidos/:id/boletos-externos/previa', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      res.json(await externas.informarBoletos({
+        api, pedidoId: req.params.id, linhas: req.body?.linhas, apenasPrevia: true, hoje: hojeEmBrasilia(), ocupadaPeloBB: await ocupadaPeloBB(api, req.params.id)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos-externos/previa');
+    }
+  });
+
+  router.post('/pedidos/:id/boletos-externos', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      res.json(await externas.informarBoletos({
+        api, pedidoId: req.params.id, linhas: req.body?.linhas, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia(), ocupadaPeloBB: await ocupadaPeloBB(api, req.params.id)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos-externos');
+    }
+  });
+
+  /** Tira um boleto de fora (só desliga; fica o rastro de quem tirou). */
+  router.delete('/boletos-externos/:id', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      res.json(await externas.removerBoleto({ api: createApiClient(req), id: req.params.id, usuarioId: usuarioDaRequisicao(req) }));
+    } catch (err) {
+      responder(res, err, 'DELETE /api/cobranca/boletos-externos/:id');
     }
   });
 

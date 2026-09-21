@@ -183,7 +183,7 @@ test('registrarUsuario cria token e envia e-mail de confirmação', async () => 
   const { pool, cleanup, confirmationEmails } = setupEnvironment();
   try {
     const { registrarUsuario } = require('./backend');
-    const resultado = await registrarUsuario('Fulano', 'FULANO@example.com', 'senhaSegura', 5432);
+    const resultado = await registrarUsuario('Fulano', 'FULANO@example.com', 'Senha@Segura1', 5432);
     assert.ok(resultado.id);
 
     const registro = await pool.query('SELECT * FROM usuarios WHERE id = $1', [resultado.id]);

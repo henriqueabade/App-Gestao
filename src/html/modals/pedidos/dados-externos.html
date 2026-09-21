@@ -1,0 +1,128 @@
+<!--
+  NF-e e boletos de fora (Pedidos → Visualizar → "NF-e e boletos de fora", e
+  Financeiro → Aguardando NF-e → "NF-e de fora"). Para o pedido que saiu com
+  nota e/ou boleto feitos em outro lugar, informa só os DADOS: a nota pelo
+  XML (lido e descartado) ou pela chave de acesso + valor, e o boleto de cada
+  parcela pela linha digitável. Nenhum arquivo fica guardado (decisão do
+  dono, 21/09/2026). Nada passa pela SEFAZ nem pelo BB.
+  Não fecha clicando fora (docs/padroes-de-interface.md).
+  Contexto: window.dadosExternosContext = { pedidoId, numero, cliente, formaPagamento }.
+  Script: src/js/modals/pedido-dados-externos.js.
+-->
+<div id="dadosExternosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="dadosExternosTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarDadosExternos" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="dadosExternosTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>NF-e e boletos de fora</h2>
+        <p id="dadosExternosSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span aria-hidden="true"></span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="px-6 py-5 space-y-6">
+        <p class="text-sm text-gray-300">
+          Para o pedido que saiu com nota ou boleto feitos em outro lugar. Só os <strong class="text-white">dados</strong> ficam
+          no pedido: o XML é lido e descartado, e o boleto não é guardado. Nada disso vai para a SEFAZ nem para o banco.
+        </p>
+
+        <p id="dadosExternosCarregando" class="text-sm text-gray-300"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Carregando…</p>
+
+        <!-- ================================================= NF-e -->
+        <section id="dadosExternosNota" class="hidden glass-surface rounded-xl border border-white/10 p-5 space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="ctl-secao text-white"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>NF-e emitida fora</h3>
+            <span id="dadosExternosNotaTag" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">—</span>
+          </div>
+
+          <p id="dadosExternosNotaMotivo" class="hidden text-sm text-gray-300"></p>
+
+          <!-- A nota já informada -->
+          <div id="dadosExternosNotaAtual" class="hidden space-y-3">
+            <dl id="dadosExternosNotaDados" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm"></dl>
+            <div class="ctl-acoes justify-end">
+              <button id="removerNotaExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-danger ctl-botao ctl-botao--pequeno text-white">Remover a nota</button>
+            </div>
+          </div>
+
+          <!-- Informar uma: pelo XML (confere tudo) ou pela chave -->
+          <div id="dadosExternosNotaForm" class="hidden space-y-4">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <p class="text-sm text-white font-medium">Pelo XML <span class="text-xs text-gray-400 font-normal">— confere tudo</span></p>
+                <p class="text-xs text-gray-400">O XML autorizado (o "procNFe") traz o protocolo da SEFAZ e o destinatário, que a chave sozinha não traz.</p>
+                <input id="notaExternaXml" type="file" accept=".xml,text/xml,application/xml" class="hidden" />
+                <button id="escolherXmlExterno" type="button" data-perm="financeiro.nfe.emit" class="btn-neutral ctl-botao text-white"><i class="fas fa-file-code" aria-hidden="true"></i>Escolher o XML</button>
+              </div>
+              <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <p class="text-sm text-white font-medium">Ou pela chave de acesso</p>
+                <div>
+                  <label for="notaExternaChave" class="ctl-rotulo text-gray-300">Chave de acesso (44 números)</label>
+                  <input id="notaExternaChave" type="text" inputmode="numeric" autocomplete="off" maxlength="60"
+                         class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
+                         placeholder="3126 0912 3456 7800 0195 5500 2000 ..." />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label for="notaExternaValor" class="ctl-rotulo text-gray-300">Valor total (R$)</label>
+                    <input id="notaExternaValor" type="text" inputmode="decimal" autocomplete="off"
+                           class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="0,00" />
+                  </div>
+                  <div>
+                    <label for="notaExternaData" class="ctl-rotulo text-gray-300">Emissão (opcional)</label>
+                    <input id="notaExternaData" type="date"
+                           class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  </div>
+                </div>
+                <button id="conferirChaveExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-neutral ctl-botao text-white">Conferir</button>
+              </div>
+            </div>
+
+            <!-- O que a nota diz, antes de gravar -->
+            <div id="dadosExternosNotaPrevia" class="hidden rounded-xl border border-white/10 p-4 space-y-3">
+              <h4 class="ctl-secao text-white">Confira antes de gravar</h4>
+              <dl id="dadosExternosPreviaDados" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm"></dl>
+              <ul id="dadosExternosPreviaAvisos" class="hidden space-y-1 text-xs" style="color: var(--color-primary-light)"></ul>
+              <div class="ctl-acoes justify-end">
+                <button id="gravarNotaExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-success ctl-botao">Gravar a nota</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================== boletos -->
+        <section id="dadosExternosBoletos" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+            <h3 class="ctl-secao text-white"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Boletos emitidos fora</h3>
+            <span class="text-xs text-gray-400">Cole a linha digitável de cada parcela</span>
+          </div>
+          <p id="dadosExternosBoletosMotivo" class="hidden px-5 py-4 text-sm text-gray-300"></p>
+          <div id="dadosExternosParcelasCaixa" class="overflow-x-auto">
+            <table id="dadosExternosParcelas" class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-white/10">
+                  <th class="px-4 py-3 text-left uppercase">Parcela</th>
+                  <th class="px-4 py-3 text-left uppercase">Vencimento</th>
+                  <th class="px-4 py-3 text-left uppercase">Valor</th>
+                  <th class="px-4 py-3 text-left uppercase">Boleto</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+          <div class="px-5 py-4 border-t border-white/10 ctl-acoes justify-end">
+            <button id="gravarBoletosExternos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-success ctl-botao">Gravar boletos</button>
+          </div>
+        </section>
+
+        <div id="dadosExternosMensagem" class="hidden text-sm" role="alert"></div>
+      </div>
+    </div>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="fecharDadosExternos" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>

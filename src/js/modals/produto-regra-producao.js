@@ -65,7 +65,7 @@
     const problema = R.erroDaEscolha(escolha);
     if (problema) return { texto: problema, erro: true };
     const regra = R.regraDaEscolha(escolha) || linha.etapa.padrao || null;
-    if (!regra) return { texto: 'sem valor: defina aqui ou um padrão', erro: true };
+    if (!regra) return { texto: 'sem valor: defina aqui ou em todas as peças', erro: true };
     const valor = R.valorDaPeca(regra, preco);
     if (valor === null) return { texto: 'o % precisa do preço da tabela fixa', erro: false };
     const porInsumo = linha.insumos > 1 ? ` · ${linha.insumos} insumos: ${R.formatarMoeda(Math.round(valor / linha.insumos * 100) / 100)} cada` : '';
@@ -88,7 +88,7 @@
     else if (!linha.pagando) nome.appendChild(criar('span', 'badge-process px-2 py-0.5 rounded-full text-xs', 'pagamento desligado'));
 
     const modo = criar('select', `${CAMPO} select-arrow appearance-none`);
-    modo.append(opcao('padrao', 'Usar o padrão'), opcao('valor', 'R$ por peça'), opcao('percentual', '% da tabela fixa'));
+    modo.append(opcao('padrao', 'Usar a de todas as peças'), opcao('valor', 'R$ por peça'), opcao('percentual', '% da tabela fixa'));
     modo.value = escolha.modo;
     const valor = criar('input', CAMPO);
     valor.type = 'text';
@@ -101,7 +101,7 @@
 
     const atualizar = () => {
       valor.disabled = bloqueada || escolha.modo === 'padrao';
-      valor.placeholder = escolha.modo === 'percentual' ? 'Ex.: 10 ou 7,5' : (escolha.modo === 'valor' ? 'R$ 0,00' : 'o padrão vale');
+      valor.placeholder = escolha.modo === 'percentual' ? 'Ex.: 10 ou 7,5' : (escolha.modo === 'valor' ? 'R$ 0,00' : 'vale a de todas as peças');
       const p = previa(linha, escolha);
       saida.textContent = p.texto;
       saida.style.color = p.erro ? 'var(--color-red)' : '';
