@@ -189,8 +189,8 @@ Quando o dono mandar o módulo:
 | 8 | CRM › Contatos | **feito em 22/09** — tela (cartão "Ações Rápidas" com os 4 botões, filtros); sem modais próprios. A folha tinha a regra de 48 px nos controles do filtro e o empurrão de 1vw: saíram. **Aprovado pelo dono.** |
 | 9 | CRM › Calendário | **conferido em 22/09** (referência) — só os centésimos: cabeçalho de 40,8 → 40 px (`ctl-botao`), barra de 32,7–34,3 → 32 px (Mês/Semana, ícones, Hoje, agenda). Os modais (Atividade/Marco, Nova tarefa, Exportar e o editor) usam o TarefasUI, que passou para as medidas do padrão: `tui-botao` 37,4 → 40 px e `tui-campo` 37,8 → 40 px, letra 13,6 → 14 px (vale também para Tarefas e para as tarefas das fichas). **Aprovado pelo dono.** |
 | 10 | CRM › Tarefas | **conferido em 22/09** (referência) — cabeçalho 40,8 → 40 px (`ctl-botao`); barra (busca, "De quem"/ordem, Lista/Quadro, atalhos) em 32 px; tarefa rápida com a letra do campo (15,2 → 14 px). Os modais já tinham entrado com o TarefasUI. Commitado direto (o dono liberou o commit automático em 22/09). |
-| 11 | Laminação › Clientes | a fazer — **próximo** |
-| 12 | Laminação › Serviços | a fazer |
+| 11 | Laminação › Clientes | **feito em 22/09** — clone de Clientes: tela (com o cartão "Ações Rápidas" em `ctl-secao-tela`) e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato). Commitado direto. |
+| 12 | Laminação › Serviços | a fazer — **próximo** |
 | 13 | IA | a fazer |
 | 14 | Usuários | a fazer |
 | 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |

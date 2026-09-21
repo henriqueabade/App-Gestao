@@ -113,6 +113,13 @@ const PADRONIZADOS = [
   // 22/09/2026 — referência: cabeçalho 40,8 → 40 px; barra (busca, selects,
   // Lista/Quadro, atalhos) em 32 px; tarefa rápida com a letra do campo.
   { modulo: 'tarefas', arquivos: ['html/tarefas.html'] },
+  {
+    // 22/09/2026. Clone de Clientes; Novo contato abre de dentro do
+    // Novo/Editar.
+    modulo: 'laminacao-clientes',
+    arquivos: ['html/laminacao-clientes.html', ...['detalhes', 'novo', 'editar', 'excluir', 'contato']
+      .map(m => `html/modals/laminacao-clientes/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
