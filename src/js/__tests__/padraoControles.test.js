@@ -74,10 +74,22 @@ const PADRONIZADOS = [
       'colecao-novo', 'colecao-excluir', 'desenhista-novo', 'desenhista-excluir'
     ].map(m => `html/modals/produtos/${m}.html`)]
   },
+  {
+    // 22/09/2026. Do Visualizar abrem Cancelar NF-e, E-mail, Carta de
+    // correção, Boletos (→ Detalhe do boleto), Devolução e Cancelar pedido;
+    // do Pagamento, o Datas (já na lista de Orçamentos). A conversão em lote
+    // reusa os modais de Orçamentos.
+    modulo: 'pedidos',
+    arquivos: ['html/pedidos.html', ...[
+      'visualizar', 'pagamento', 'emitir-nfe', 'relatorio-producao', 'converter-orcamentos',
+      'cancelar', 'cancelar-nfe', 'carta-correcao-nfe', 'enviar-nfe-email',
+      'gerar-boletos', 'boleto-detalhe', 'devolucao'
+    ].map(m => `html/modals/pedidos/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
-const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela)\b/;
+const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela|devolucao|ghost)\b/;
 /** Classes de tamanho que o padrão substitui num botão ou campo. */
 const TAMANHO_ANTIGO = /(^|\s)(text-(base|lg|xl)|py-3|py-4|px-6|px-8|h-12|h-14)(?=\s|$)/;
 
@@ -189,6 +201,22 @@ const JS_PADRONIZADOS = [
     modulo: 'produtos',
     arquivos: ['js/produtos.js', 'js/modals/produto-proxima-etapa.js', 'js/modals/produto-proxima-etapa-novo.js'],
     ignorar: []
+  },
+  {
+    modulo: 'pedidos',
+    arquivos: [
+      'js/pedidos.js',
+      'js/modals/pedido-cancelar.js',
+      'js/modals/pedido-pagamento.js',
+      'js/modals/pedido-carta-correcao-nfe.js',
+      'js/modals/pedido-devolucao.js',
+      'js/modals/pedido-gerar-boletos.js'
+    ],
+    // "Detalhes" e "PDF" dentro das linhas da tabela de boletos: ação de
+    // linha (20 px), como os ícones das linhas — fica fora do padrão.
+    // "Selecionar este pedido" na realocação é um <span> dentro de um cartão
+    // clicável (o cartão é o botão): etiqueta, fica.
+    ignorar: [/\bpy-0\.5\b/, /^btn-primary px-3 py-1 rounded text-xs$/]
   },
   {
     modulo: 'orcamentos (converter)',

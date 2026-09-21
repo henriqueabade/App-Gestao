@@ -1,11 +1,11 @@
-<div id="cancelarPedidoOverlay" class="fixed inset-0 z-[1003] bg-black/50 flex items-start justify-center overflow-y-auto hidden" aria-hidden="true" data-modal-loading="true">
+<div id="cancelarPedidoOverlay" class="fixed inset-0 z-[1003] bg-black/50 flex items-start justify-center overflow-y-auto hidden ctl-padrao" aria-hidden="true" data-modal-loading="true">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-6xl h-[calc(100vh-3.5rem)] max-h-[calc(100vh-4.5rem)] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex items-center justify-between px-8 py-4 border-b border-white/10 flex-shrink-0">
       <div>
-        <h2 id="cancelarPedidoTitulo" class="text-2xl font-bold text-white mb-1">Cancelar Pedido</h2>
+        <h2 id="cancelarPedidoTitulo" class="ctl-modal-titulo text-white mb-1">Cancelar Pedido</h2>
         <p id="cancelarPedidoInfo" class="text-gray-300 text-sm"></p>
       </div>
-      <button id="fecharCancelarPedido" class="btn-ghost p-3 rounded-lg text-white flex items-center justify-center" aria-label="Fechar">
+      <button id="fecharCancelarPedido" class="btn-ghost ctl-botao ctl-botao--icone text-white" aria-label="Fechar">
         <i class="fas fa-times text-lg" aria-hidden="true"></i>
       </button>
     </header>
@@ -14,7 +14,7 @@
       <div class="flex items-start gap-3">
         <i class="fas fa-exclamation-triangle text-orange-400 text-xl" aria-hidden="true"></i>
         <div>
-          <h3 class="text-orange-300 font-semibold mb-1">Atenção: Cancelamento de Pedido</h3>
+          <h3 class="text-sm text-orange-300 font-semibold mb-1">Atenção: Cancelamento de Pedido</h3>
           <p class="text-orange-200 text-sm">
             Ao cancelar este pedido, peças e insumos serão revertidos. Defina o destino de cada item antes de confirmar.
           </p>
@@ -33,7 +33,7 @@
       <div class="p-8 space-y-8">
         <section class="bg-surface/40 rounded-2xl border border-white/10 p-6">
           <header class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Peças e Insumos do Pedido</h3>
+            <h3 class="ctl-secao text-white">Peças e Insumos do Pedido</h3>
             <span id="cancelarPedidoStatus" class="badge-warning px-3 py-1 rounded-full text-xs font-medium hidden"></span>
           </header>
           <div class="overflow-x-auto max-h-[45vh] overflow-y-auto modal-scroll">
@@ -58,13 +58,13 @@
 
         <section id="cancelarPedidoResumoRealocacao" class="bg-surface/40 rounded-2xl border border-white/10 p-6 hidden">
           <header class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Resumo de Realocações</h3>
+            <h3 class="ctl-secao text-white">Resumo de Realocações</h3>
           </header>
           <div id="cancelarPedidoListaRealocacao" class="space-y-3 max-h-[45vh] overflow-y-auto pr-1 modal-scroll"></div>
         </section>
 
         <section id="cancelarPedidoPedidosDisponiveis" class="bg-surface/40 rounded-2xl border border-white/10 p-6 hidden">
-          <h3 class="text-lg font-semibold text-white mb-4">Pedidos Disponíveis para Realocação</h3>
+          <h3 class="ctl-secao text-white mb-4">Pedidos Disponíveis para Realocação</h3>
           <div class="max-h-[45vh] overflow-y-auto pr-1 modal-scroll">
             <div id="cancelarPedidoPedidosLista" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
           </div>
@@ -73,10 +73,10 @@
       </div>
     </div>
 
-    <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
-      <button id="cancelarPedidoFecharFooter" class="btn-danger px-6 py-3 rounded-lg text-white font-medium">Voltar Sem Cancelar</button>
-      <button id="cancelarPedidoResetDestinos" data-sem-guarda data-perm="ped.stock.restore_on_cancel" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar Destinação</button>
-      <button id="cancelarPedidoConfirmar" data-sem-guarda data-perm="ped.cancel" class="btn-success px-6 py-3 rounded-lg text-white font-medium" disabled>
+    <footer class="ctl-acoes justify-end px-8 py-6 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarPedidoFecharFooter" class="btn-danger ctl-botao text-white">Voltar Sem Cancelar</button>
+      <button id="cancelarPedidoResetDestinos" data-sem-guarda data-perm="ped.stock.restore_on_cancel" class="btn-secondary ctl-botao text-white hidden">Reiniciar Destinação</button>
+      <button id="cancelarPedidoConfirmar" data-sem-guarda data-perm="ped.cancel" class="btn-success ctl-botao text-white" disabled>
         Confirmar Cancelamento
       </button>
     </footer>
@@ -89,10 +89,10 @@
     <div class="flex flex-col h-full">
       <header class="flex items-center justify-between px-6 py-4 border-b border-white/10">
         <div>
-          <h3 class="text-lg font-semibold text-white">Realocar Item</h3>
+          <h3 class="ctl-secao text-white">Realocar Item</h3>
           <p id="cancelarPedidoDrawerItem" class="text-gray-300 text-sm"></p>
         </div>
-        <button id="cancelarPedidoDrawerFechar" data-sem-guarda class="btn-ghost p-2 rounded-lg text-white flex items-center justify-center" aria-label="Fechar">
+        <button id="cancelarPedidoDrawerFechar" data-sem-guarda class="btn-ghost ctl-botao ctl-botao--pequeno ctl-botao--icone text-white" aria-label="Fechar">
           <i class="fas fa-times" aria-hidden="true"></i>
         </button>
       </header>

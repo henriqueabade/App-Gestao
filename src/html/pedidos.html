@@ -1,23 +1,23 @@
 <!-- Página de pedidos: lista e filtros -->
-<div class="modulo-container">
+<div class="modulo-container ctl-padrao">
     <!-- Header -->
     <div class="flex justify-between items-center mb-8 animate-fade-in-up">
         <div>
             <h1 class="text-2xl font-semibold mb-2 module-header__title">Pedidos</h1>
             <p class="module-header__description">Acompanhe o status de produção e entrega dos pedidos</p>
         </div>
-        <button id="converterOrcamentoBtn" data-perm="orc.convert" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+        <button id="converterOrcamentoBtn" data-perm="orc.convert" class="btn-primary ctl-botao text-white">
             <i class="fas fa-plus mr-2"></i>Converter Orçamento
         </button>
     </div>
 
     <!-- Filters -->
     <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
+        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-end">
             <!-- Status Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                <select id="filterStatus" data-perm="ped.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Status</label>
+                <select id="filterStatus" data-perm="ped.search" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Status</option>
                     <option value="Em Produção">Em Produção</option>
                     <option value="Enviado">Enviado</option>
@@ -30,8 +30,8 @@
 
             <!-- Period Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Período</label>
-                <select id="filterPeriod" data-perm="ped.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Período</label>
+                <select id="filterPeriod" data-perm="ped.search" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Períodos</option>
                     <option value="Semana">Semana</option>
                     <option value="Mês">Mês</option>
@@ -43,26 +43,26 @@
 
             <!-- Salesperson Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                <select id="filterOwner" data-perm="ped.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Dono</label>
+                <select id="filterOwner" data-perm="ped.search" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Donos</option>
                 </select>
             </div>
 
             <!-- Client Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
-                <select id="filterClient" data-perm="ped.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Cliente</label>
+                <select id="filterClient" data-perm="ped.search" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Clientes</option>
                 </select>
             </div>
 
             <!-- Action Buttons -->
-            <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                <button id="btnFiltrar" data-perm="ped.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+            <div id="bt-actions" class="ctl-acoes flex-shrink-0">
+                <button id="btnFiltrar" data-perm="ped.search" class="btn-secondary ctl-botao text-white">
                     Filtrar
                 </button>
-                <button id="btnLimpar" data-perm="ped.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                <button id="btnLimpar" data-perm="ped.search" class="btn-warning ctl-botao text-white">
                     Limpar
                 </button>
             </div>
@@ -98,7 +98,7 @@
         <button
           id="pedidosEmptyNew"
           type="button"
-          class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+          class="btn-primary ctl-botao text-white"
         >
           <i class="fas fa-plus w-4 h-4 mr-2"></i>
           Converter Orçamento

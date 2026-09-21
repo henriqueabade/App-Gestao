@@ -131,6 +131,12 @@ Regras:
 - Teste antigo que confira a classe EXATA de um botão (`px-6 py-3…`)
   quebra na troca: atualize a classe esperada para a do padrão, mantendo o
   que ele protege (posição, ordem, permissão).
+- **`hidden` na frente continua na frente**: vários testes leem
+  `class="hidden btn-…"` como "o botão nasce escondido". A troca não pode
+  empurrar o `hidden` para depois do `ctl-botao`.
+- **Ação dentro da linha de tabela** ("Detalhes"/"PDF" na tabela de
+  boletos) e etiqueta dentro de cartão clicável ficam do tamanho delas,
+  como os ícones das linhas.
 - A cor é da classe `btn-*`; o tamanho é do `ctl-botao`. Não escreva
   `padding`/`font-size` de botão na folha do módulo.
 - Modal montado em JavaScript usa as mesmas classes no código que monta.
@@ -172,10 +178,10 @@ Quando o dono mandar o módulo:
 | --- | --- | --- |
 | 1 | Dashboard | **feito em 22/09** — só o "Atualizar" do cabeçalho e o "Atualizar" do cartão com erro (botão pequeno); as letras dos cartões já estavam na faixa do Financeiro (medidas lado a lado) e ficaram. Sem modais próprios. **Aprovado pelo dono.** |
 | 2 | Matéria-prima | **feito em 22/09** — tela e os 13 modais (Novo, Editar, Excluir, Auditoria, Duplicado, Dependência, categoria/unidade/processo novo e excluir, ordem duplicada). **Aprovado pelo dono.** |
-| 3 | Produtos | **feito em 22/09** — tela e os 15 modais (Novo, Editar com o editor de preço, Visualizar, Detalhe de estoque, Adicionar ao estoque, Item já registrado, Excluir, Excluir lote, Movimentações, Próxima etapa e as 3 caixas dela, Regra produção, coleção e desenhista novo/excluir). Aguardando o "ok" do dono. |
+| 3 | Produtos | **feito em 22/09** — tela e os 15 modais (Novo, Editar com o editor de preço, Visualizar, Detalhe de estoque, Adicionar ao estoque, Item já registrado, Excluir, Excluir lote, Movimentações, Próxima etapa e as 3 caixas dela, Regra produção, coleção e desenhista novo/excluir). **Aprovado pelo dono.** |
 | 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
-| 5 | Pedidos | a fazer — **próximo** |
-| 6 | CRM › Clientes | a fazer |
+| 5 | Pedidos | **feito em 22/09** — tela e os 12 modais (Visualizar, Pagamento, Emitir NF-e, Relatório de produção, Converter orçamentos, Cancelar pedido com a realocação, Cancelar NF-e, Carta de correção, E-mail da NF-e, Boletos, Detalhe do boleto, Devolução); o Datas já tinha entrado com Orçamentos. Aguardando o "ok" do dono. |
+| 6 | CRM › Clientes | a fazer — **próximo** |
 | 7 | CRM › Prospecções | a fazer |
 | 8 | CRM › Contatos | a fazer |
 | 9 | CRM › Calendário | referência — só conferir |

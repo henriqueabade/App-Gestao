@@ -776,26 +776,26 @@
         <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 space-y-4">
             <div>
-              <h3 class="text-lg font-semibold text-white">${title}</h3>
+              <h3 class="ctl-modal-titulo text-white">${title}</h3>
               ${description ? `<p class="text-sm text-gray-300 mt-1">${description}</p>` : ''}
             </div>
             <div class="space-y-2">
-              <label class="text-xs uppercase tracking-wide text-gray-400">Quantidade</label>
-              <input type="number" step="1" min="0" inputmode="numeric" pattern="\\d*" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white" value="${initialValue}" />
+              <label class="ctl-secao text-gray-400">Quantidade</label>
+              <input type="number" step="1" min="0" inputmode="numeric" pattern="\\d*" class="w-full ctl-campo bg-input border border-inputBorder text-white" value="${initialValue}" />
               <p class="text-xs text-gray-400" data-disponivel>Disponível: ${formatUnitsLabel(safeMax)}.</p>
               <p class="text-xs text-red-400 hidden" data-error></p>
             </div>
             ${etapas.length ? `
             <div class="space-y-2">
-              <label class="text-xs uppercase tracking-wide text-gray-400">${etapaLabel}</label>
-              <select data-etapa class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white">
+              <label class="ctl-secao text-gray-400">${etapaLabel}</label>
+              <select data-etapa class="w-full ctl-campo bg-input border border-inputBorder text-white">
                 ${etapas.map(e => `<option value="${e.ordem}"${e.selecionada ? ' selected' : ''}>${e.rotulo}</option>`).join('')}
               </select>
               <p class="text-xs text-gray-400" data-etapa-ajuda>${etapaAjuda}</p>
             </div>` : ''}
-            <div class="flex justify-end gap-3 pt-2">
-              <button type="button" data-action="cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
-              <button type="button" data-action="confirm" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
+            <div class="ctl-acoes justify-end pt-2">
+              <button type="button" data-action="cancel" class="btn-danger ctl-botao text-white">Cancelar</button>
+              <button type="button" data-action="confirm" class="btn-primary ctl-botao text-white">${confirmLabel}</button>
             </div>
           </div>
         </div>
@@ -948,12 +948,12 @@
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 space-y-6 text-center">
             <div>
-              <h3 class="text-lg font-semibold text-white">${title}</h3>
+              <h3 class="ctl-modal-titulo text-white">${title}</h3>
               <p class="text-sm text-gray-300 mt-2">${message}</p>
             </div>
-            <div class="flex justify-center gap-4">
-              <button type="button" data-action="confirm" class="btn-warning px-5 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
-              <button type="button" data-action="cancel" class="btn-neutral px-5 py-2 rounded-lg text-white font-medium">${cancelLabel}</button>
+            <div class="ctl-acoes justify-center">
+              <button type="button" data-action="confirm" class="btn-warning ctl-botao text-white">${confirmLabel}</button>
+              <button type="button" data-action="cancel" class="btn-neutral ctl-botao text-white">${cancelLabel}</button>
             </div>
           </div>
         </div>

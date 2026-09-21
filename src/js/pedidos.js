@@ -279,11 +279,11 @@ function confirmarExclusaoSupAdmin(mensagem, cb) {
     overlay.innerHTML = `
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
             <div class="p-6 text-center">
-                <h3 class="text-lg font-semibold mb-4 text-red-400">Confirmar exclusão</h3>
+                <h3 class="ctl-modal-titulo mb-4 text-red-400">Confirmar exclusão</h3>
                 <p class="text-sm text-gray-300 mb-6">${mensagem}</p>
-                <div class="flex justify-center gap-4">
-                    <button id="excluirSim" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
-                    <button id="excluirNao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+                <div class="ctl-acoes justify-center">
+                    <button id="excluirSim" class="btn-danger ctl-botao text-white">Excluir</button>
+                    <button id="excluirNao" class="btn-neutral ctl-botao text-white">Cancelar</button>
                 </div>
             </div>
         </div>`;
@@ -298,11 +298,11 @@ function showStatusConfirmDialog(message, cb) {
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML = `<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
-            <h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3>
+            <h3 class="ctl-modal-titulo mb-4 text-yellow-300">Atenção</h3>
             <p class="text-sm text-gray-300 mb-6">${message}</p>
-            <div class="flex justify-center gap-4">
-                <button id="statusYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button>
-                <button id="statusNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button>
+            <div class="ctl-acoes justify-center">
+                <button id="statusYes" class="btn-warning ctl-botao text-white">Sim</button>
+                <button id="statusNo" class="btn-neutral ctl-botao text-white">Não</button>
             </div>
         </div>
     </div>`;
