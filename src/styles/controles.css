@@ -81,8 +81,9 @@
 
 /* O ícone acompanha a letra do botão (havia `w-4 h-4`, `text-lg`…). A
    setinha do "Ações Rápidas" fica de fora: ela é menor de propósito
-   (acoes-csv.css). */
-.ctl-botao > i:not(.acoes-rapidas__chevron),
+   (acoes-csv.css); as setinhas `text-xs` dos botões de lista (Relatórios:
+   "Carregar Modelo", "Exportar", "Colunas") também. */
+.ctl-botao > i:not(.acoes-rapidas__chevron):not(.text-xs),
 .ctl-botao > svg {
     font-size: 1em;
     width: auto;

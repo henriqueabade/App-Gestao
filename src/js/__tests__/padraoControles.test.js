@@ -139,6 +139,8 @@ const PADRONIZADOS = [
       'registrar-producao', 'registrar-recebimento', 'regras', 'relatorios', 'visualizar-relatorio'
     ].map(m => `html/modals/financeiro/${m}.html`)]
   },
+  // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
+  { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -390,7 +392,17 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
-for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contatos.css', 'css/ia.css']) {
+test('relatórios: abas no botão de barra e nenhuma regra da folha segurando o tamanho de botão ou campo', () => {
+  const css = ler('css/relatorios.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const abas = (css.match(/\[data-relatorios-tab\],\s*\.relatorios-module \[data-relatorios-result\]\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(abas, /height:\s*var\(--ctl-altura-pequena\)/);
+  assert.match(abas, /font-size:\s*var\(--ctl-fonte-pequena\)/);
+  const campo = (css.match(/\.relatorios-module \.input-glass\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.doesNotMatch(campo, /(padding|border-radius|height)\s*:/, '.input-glass não pode fixar tamanho');
+  assert.doesNotMatch(css, /\.relatorios-filter-actions \.btn-/, 'botões do filtro com tamanho próprio');
+});
+
+for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contatos.css', 'css/ia.css', 'css/usuarios.css', 'css/relatorios.css']) {
   test(`${folha}: a folha não prende mais os controles do filtro em 48 px`, () => {
     const css = ler(folha).replace(/\/\*[\s\S]*?\*\//g, '');
     for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
