@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container tarefas-modulo tui-escopo">
+  <div class="modulo-container tarefas-modulo tui-escopo ctl-padrao">
     <!-- Cabeçalho -->
     <header class="tarefas-cabecalho animate-fade-in-up">
       <div>
@@ -19,13 +19,13 @@
         <p class="module-header__description">O que é seu para fazer — dos clientes, das prospecções e o resto do dia</p>
       </div>
       <div class="tarefas-cabecalho__acoes">
-        <button id="tarefasBtnAutomacoes" type="button" data-perm="tarefas.automations" class="btn-neutral tarefas-botao" hidden>
+        <button id="tarefasBtnAutomacoes" type="button" data-perm="tarefas.automations" class="btn-neutral ctl-botao tarefas-botao" hidden>
           <i class="fas fa-robot" aria-hidden="true"></i> Automáticas
         </button>
-        <button id="tarefasBtnEstatisticas" type="button" data-perm="tarefas.stats" class="btn-secondary tarefas-botao">
+        <button id="tarefasBtnEstatisticas" type="button" data-perm="tarefas.stats" class="btn-secondary ctl-botao tarefas-botao">
           <i class="fas fa-chart-column" aria-hidden="true"></i> Estatísticas
         </button>
-        <button id="tarefasBtnNova" type="button" data-perm="tarefas.create" class="btn-primary tarefas-botao">
+        <button id="tarefasBtnNova" type="button" data-perm="tarefas.create" class="btn-primary ctl-botao tarefas-botao">
           <i class="fas fa-plus" aria-hidden="true"></i> Nova tarefa
         </button>
       </div>
@@ -39,7 +39,7 @@
     <!-- Criação rápida: o texto vira data, hora, prioridade, lista, marcador e pessoa -->
     <div class="tarefas-rapida animate-fade-in-up" data-perm="tarefas.create">
       <i class="fas fa-wand-magic-sparkles tarefas-rapida__icone" aria-hidden="true"></i>
-      <input id="tarefasRapida" type="text" maxlength="300" autocomplete="off"
+      <input id="tarefasRapida" data-ctl-embutido type="text" maxlength="300" autocomplete="off"
              placeholder="Nova tarefa rápida — ex.: Ligar ACME amanhã 14h !alta #vip ~Lista @Ana   (Enter cria · Shift+Enter abre completa)"
              aria-label="Nova tarefa rápida">
       <div id="tarefasRapidaPrevia" class="tarefas-rapida__previa" aria-live="polite"></div>
@@ -79,10 +79,10 @@
           <div class="tarefas-barra__controles">
             <label class="tarefas-busca">
               <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
-              <input id="tarefasBusca" type="search" placeholder="Buscar  ( / )" aria-label="Buscar tarefas">
+              <input id="tarefasBusca" data-ctl-embutido type="search" placeholder="Buscar  ( / )" aria-label="Buscar tarefas">
             </label>
-            <select id="tarefasPessoa" class="tarefas-select" aria-label="De quem" hidden></select>
-            <select id="tarefasOrdem" class="tarefas-select" aria-label="Ordenar">
+            <select id="tarefasPessoa" class="ctl-campo ctl-campo--pequeno tarefas-select" aria-label="De quem" hidden></select>
+            <select id="tarefasOrdem" class="ctl-campo ctl-campo--pequeno tarefas-select" aria-label="Ordenar">
               <option value="prazo">Por prazo</option>
               <option value="prioridade">Por prioridade</option>
               <option value="criacao">Mais novas</option>

@@ -110,6 +110,9 @@ const PADRONIZADOS = [
   // 22/09/2026 — referência: só alinhados os centésimos (40,8 → 40 px; barra
   // de 32,7–34,3 → 32 px). Os modais são os do TarefasUI (teste abaixo).
   { modulo: 'calendario', arquivos: ['html/calendario.html'] },
+  // 22/09/2026 — referência: cabeçalho 40,8 → 40 px; barra (busca, selects,
+  // Lista/Quadro, atalhos) em 32 px; tarefa rápida com a letra do campo.
+  { modulo: 'tarefas', arquivos: ['html/tarefas.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -136,6 +139,9 @@ function problemasDoPadrao(html) {
       if (['hidden', 'checkbox', 'radio', 'file', 'range', 'color'].includes(tipo)) continue;
       if (/\bsr-only\b/.test(classe)) continue;
       if (/\baria-hidden="true"/.test(tag)) continue; // campo invisível que só abre o calendário
+      // Campo transparente dentro de uma caixa que faz o papel de campo (a
+      // busca e a tarefa rápida de Tarefas): quem tem o tamanho é a caixa.
+      if (/\bdata-ctl-embutido\b/.test(tag)) continue;
       if (!/\bctl-campo\b/.test(classe)) problemas.push(`campo sem ctl-campo: ${tag}`);
       if (TAMANHO_ANTIGO.test(classe)) problemas.push(`campo com tamanho antigo: ${tag}`);
     }
@@ -252,6 +258,11 @@ const JS_PADRONIZADOS = [
   {
     modulo: 'calendario',
     arquivos: ['js/calendario.js'],
+    ignorar: []
+  },
+  {
+    modulo: 'tarefas',
+    arquivos: ['js/tarefas.js', 'js/utils/tarefas-ui.js'],
     ignorar: []
   },
   {
