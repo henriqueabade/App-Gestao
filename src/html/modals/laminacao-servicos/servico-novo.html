@@ -1,19 +1,19 @@
-<div data-modal-overlay id="novoServicoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true" data-modal-loading="true"></div>
+<div data-modal-overlay id="novoServicoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true" data-modal-loading="true"></div>
 <div data-modal-dialog class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col" role="dialog" aria-modal="true" tabindex="0"></div>
 <div data-modal-slot="header" class="flex flex-col flex-shrink-0">
   <div class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10">
     <div class="flex items-center gap-4 justify-self-start">
-      <button id="voltarNovoServico" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+      <button id="voltarNovoServico" class="btn-neutral ctl-botao text-white">← Voltar</button>
       <div class="min-w-[220px]">
-        <label for="servicoCliente" class="block text-xs font-medium text-gray-300 mb-1">Cliente</label>
-        <select id="servicoCliente" required class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+        <label for="servicoCliente" class="ctl-rotulo text-gray-300">Cliente</label>
+        <select id="servicoCliente" required class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
           <option value="">Selecione o cliente</option>
         </select>
       </div>
     </div>
-    <h2 id="servicoNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Serviço</h2>
+    <h2 id="servicoNovoTitulo" class="ctl-modal-titulo text-white text-center">Novo Serviço</h2>
     <div class="justify-self-end">
-      <button id="novoDesenhoBtn" class="btn-desenho btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Desenho</button>
+      <button id="novoDesenhoBtn" class="btn-primary ctl-botao btn-desenho text-white">+ Desenho</button>
     </div>
   </div>
 
@@ -28,7 +28,7 @@
 <div data-modal-slot="body" class="flex-1 overflow-y-auto modal-scroll">
       <section id="panel-pecas" role="tabpanel" aria-labelledby="tab-pecas" class="px-8 py-6">
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-semibold text-white">Peças</h3>
+          <h3 class="ctl-secao text-white">Peças</h3>
           <div class="flex items-center gap-4">
             <span id="codigoPecaAtual" class="text-sm text-gray-300">Código: -</span>
           </div>
@@ -37,12 +37,12 @@
         <div class="glass-surface rounded-xl border border-white/10 p-6 mb-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
-              <input id="servicoAmbiente" type="text" placeholder="Ex.: Cozinha" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Ambiente</label>
+              <input id="servicoAmbiente" type="text" placeholder="Ex.: Cozinha" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Nome da Peça</label>
-              <select id="servicoNome" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">Nome da Peça</label>
+              <select id="servicoNome" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione a peça</option>
                 <option value="Painel">Painel</option>
                 <option value="Forro">Forro</option>
@@ -56,20 +56,20 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Segue Veio</label>
-              <input id="servicoSegueVeio" type="number" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Segue Veio</label>
+              <input id="servicoSegueVeio" type="number" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Largura</label>
-              <input id="servicoLargura" type="text" data-numeric="true" placeholder="Ex.: 600" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Largura</label>
+              <input id="servicoLargura" type="text" data-numeric="true" placeholder="Ex.: 600" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
-              <input id="servicoQuantidade" type="text" data-numeric="true" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Quantidade</label>
+              <input id="servicoQuantidade" type="text" data-numeric="true" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
-              <select id="servicoTipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">Tipo</label>
+              <select id="servicoTipo" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione o tipo</option>
                 <option value="1 face">1 Face</option>
                 <option value="2 faces">2 Faces</option>
@@ -77,20 +77,20 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Lâmina</label>
-              <input id="servicoLamina" type="text" placeholder="Informe a lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Lâmina</label>
+              <input id="servicoLamina" type="text" placeholder="Informe a lâmina" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Dono da Lâmina</label>
-              <select id="servicoDonoLamina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">Dono da Lâmina</label>
+              <select id="servicoDonoLamina" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione o dono</option>
                 <option value="Lâmina Cliente">Lâmina Cliente</option>
                 <option value="Lâmina Santíssimo Decor">Lâmina Santíssimo Decor</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">MDF</label>
-              <select id="servicoMdf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">MDF</label>
+              <select id="servicoMdf" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione o MDF</option>
                 <option value="03 mm">03 mm</option>
                 <option value="06 mm">06 mm</option>
@@ -101,17 +101,17 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Dono do MDF</label>
-              <select id="servicoDonoMdf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">Dono do MDF</label>
+              <select id="servicoDonoMdf" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione o dono</option>
                 <option value="MDF Cliente">MDF Cliente</option>
                 <option value="MDF Santíssimo Decor">MDF Santíssimo Decor</option>
               </select>
             </div>
           </div>
-          <div class="flex justify-end gap-3 mt-6">
-            <button id="pecasSalvarBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
-            <button id="pecasLimparBtn" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Limpar</button>
+          <div class="ctl-acoes justify-end mt-6">
+            <button id="pecasSalvarBtn" class="btn-primary ctl-botao text-white">Salvar</button>
+            <button id="pecasLimparBtn" class="btn-secondary ctl-botao text-white">Limpar</button>
           </div>
         </div>
 
@@ -146,53 +146,53 @@
         <div class="grid grid-cols-1 gap-6">
           <div class="glass-surface rounded-xl border border-white/10 p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-white">Dados do Amarrado</h3>
+              <h3 class="ctl-secao text-white">Dados do Amarrado</h3>
               <span id="amarradoModoEdicao" class="hidden text-xs font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 px-3 py-1 rounded-full">Modo edição</span>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Lâmina</label>
-                <input id="amarradoLamina" type="text" placeholder="Informe a lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Lâmina</label>
+                <input id="amarradoLamina" type="text" placeholder="Informe a lâmina" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Comprimento</label>
-                <input id="amarradoComprimento" type="text" data-numeric="true" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Comprimento</label>
+                <input id="amarradoComprimento" type="text" data-numeric="true" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Principal</label>
-                <input id="amarradoLarguraPrincipal" type="text" data-numeric="true" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Largura Principal</label>
+                <input id="amarradoLarguraPrincipal" type="text" data-numeric="true" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Menor</label>
-                <input id="amarradoLarguraMenor" type="text" data-numeric="true" placeholder="0" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Largura Menor</label>
+                <input id="amarradoLarguraMenor" type="text" data-numeric="true" placeholder="0" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Média</label>
-                <input id="amarradoLarguraMedia" type="text" data-numeric="true" placeholder="0" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Largura Média</label>
+                <input id="amarradoLarguraMedia" type="text" data-numeric="true" placeholder="0" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Altura Média</label>
-                <input id="amarradoAlturaMedia" type="text" data-numeric="true" placeholder="0" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Altura Média</label>
+                <input id="amarradoAlturaMedia" type="text" data-numeric="true" placeholder="0" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Maior</label>
-                <input id="amarradoLarguraMaior" type="text" data-numeric="true" placeholder="0" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Largura Maior</label>
+                <input id="amarradoLarguraMaior" type="text" data-numeric="true" placeholder="0" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
-                <input id="amarradoQuantidade" type="text" data-numeric="true" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Quantidade</label>
+                <input id="amarradoQuantidade" type="text" data-numeric="true" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
-                <input id="amarradoTipo" type="text" placeholder="Tipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Tipo</label>
+                <input id="amarradoTipo" type="text" placeholder="Tipo" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Sequência</label>
-                <input id="amarradoSequencia" type="text" data-numeric="true" data-numeric-decimals="0" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Sequência</label>
+                <input id="amarradoSequencia" type="text" data-numeric="true" data-numeric-decimals="0" placeholder="0" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
-              <div class="md:col-span-2 flex justify-end gap-3">
-                <button id="amarradoSalvarBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
-                <button id="amarradoLimparBtn" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Limpar</button>
+              <div class="md:col-span-2 ctl-acoes justify-end">
+                <button id="amarradoSalvarBtn" class="btn-primary ctl-botao text-white">Salvar</button>
+                <button id="amarradoLimparBtn" class="btn-secondary ctl-botao text-white">Limpar</button>
               </div>
             </div>
           </div>
@@ -222,7 +222,7 @@
     </div>
 </div>
 
-<footer data-modal-slot="footer" class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
-  <button id="cancelarNovoServico" class="btn-danger px-6 py-3 rounded-lg text-white font-medium">Cancelar</button>
-  <button id="salvarNovoServico" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">Salvar</button>
+<footer data-modal-slot="footer" class="ctl-acoes justify-end px-8 py-6 border-t border-white/10 flex-shrink-0">
+  <button id="cancelarNovoServico" class="btn-danger ctl-botao text-white">Cancelar</button>
+  <button id="salvarNovoServico" class="btn-primary ctl-botao text-white">Salvar</button>
 </footer>

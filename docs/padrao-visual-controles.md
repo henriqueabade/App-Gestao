@@ -190,8 +190,8 @@ Quando o dono mandar o módulo:
 | 9 | CRM › Calendário | **conferido em 22/09** (referência) — só os centésimos: cabeçalho de 40,8 → 40 px (`ctl-botao`), barra de 32,7–34,3 → 32 px (Mês/Semana, ícones, Hoje, agenda). Os modais (Atividade/Marco, Nova tarefa, Exportar e o editor) usam o TarefasUI, que passou para as medidas do padrão: `tui-botao` 37,4 → 40 px e `tui-campo` 37,8 → 40 px, letra 13,6 → 14 px (vale também para Tarefas e para as tarefas das fichas). **Aprovado pelo dono.** |
 | 10 | CRM › Tarefas | **conferido em 22/09** (referência) — cabeçalho 40,8 → 40 px (`ctl-botao`); barra (busca, "De quem"/ordem, Lista/Quadro, atalhos) em 32 px; tarefa rápida com a letra do campo (15,2 → 14 px). Os modais já tinham entrado com o TarefasUI. Commitado direto (o dono liberou o commit automático em 22/09). |
 | 11 | Laminação › Clientes | **feito em 22/09** — clone de Clientes: tela (com o cartão "Ações Rápidas" em `ctl-secao-tela`) e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato). Commitado direto. |
-| 12 | Laminação › Serviços | a fazer — **próximo** |
-| 13 | IA | a fazer |
+| 12 | Laminação › Serviços | **feito em 22/09** — tela e o modal Novo serviço (com Peças e Dados do amarrado). O modal é montado em partes (véu vazio + `data-modal-dialog`/`data-modal-slot` encaixados pelo JS): para medir na prévia, encaixar o diálogo no véu antes. Commitado direto. |
+| 13 | IA | a fazer — **próximo** |
 | 14 | Usuários | a fazer |
 | 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |
 | 16 | Relatórios | a fazer |

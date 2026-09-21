@@ -120,6 +120,7 @@ const PADRONIZADOS = [
     arquivos: ['html/laminacao-clientes.html', ...['detalhes', 'novo', 'editar', 'excluir', 'contato']
       .map(m => `html/modals/laminacao-clientes/${m}.html`)]
   },
+  { modulo: 'laminacao-servicos', arquivos: ['html/laminacao-servicos.html', 'html/modals/laminacao-servicos/servico-novo.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
