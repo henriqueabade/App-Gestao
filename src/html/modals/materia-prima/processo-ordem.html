@@ -1,26 +1,26 @@
-<div id="ordemDuplicadaOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+<div id="ordemDuplicadaOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="w-full max-w-md bg-surface/60 backdrop-blur-xl rounded-2xl border border-yellow-500 ring-1 ring-yellow-500/50 shadow-2xl/40 animate-modalFade">
     <div class="p-6 text-center">
-      <h3 class="text-lg font-semibold mb-4 text-white">Ordem Duplicada</h3>
+      <h3 class="ctl-modal-titulo mb-4 text-white">Ordem Duplicada</h3>
       <p class="text-sm text-gray-300">Essa ordem já pertence a um processo. Deseja troca-la?</p>
-      <div class="flex justify-center gap-6 mt-6">
+      <div class="ctl-acoes justify-center mt-6">
         <button
           id="trocarOrdem" data-perm="mp.process.order"
-          class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 active:scale-95"
+          class="btn-warning ctl-botao text-white active:scale-95"
           title="Trocar: empurra os processos existentes para baixo."
         >
           Trocar <span class="info-icon"></span>
         </button>
         <button
           id="ultimaOrdem" data-perm="mp.process.order"
-          class="btn-primary px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 active:scale-95"
+          class="btn-primary ctl-botao text-white active:scale-95"
           title="Última: adiciona o processo ao final."
         >
           Última <span class="info-icon"></span>
         </button>
         <button
           id="cancelarOrdem"
-          class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 active:scale-95"
+          class="btn-danger ctl-botao text-white active:scale-95"
           title="Cancelar: mantém a ordem existente sem alterações."
         >
           Cancelar <span class="info-icon"></span>

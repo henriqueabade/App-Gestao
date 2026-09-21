@@ -86,6 +86,9 @@ encosta nesses números. Mudar cantos ou peso depois é **uma variável** em
 | Grupo de botões | `ctl-acoes` | `flex gap-4`, `space-x-3`… |
 | Campo / select / textarea | `ctl-campo` + o fundo (`input-glass`…) | `px-* py-* rounded-md` |
 | Campo com ícone por cima à direita (a seta desenhada, o calendário) | `ctl-campo ctl-campo--icone` | o `pr-12` |
+| Campo com DOIS botões de ícone embutidos (o "−" e o "+" de Matéria-prima) | `ctl-campo ctl-campo--dois-icones` | o `pr-12` (que deixava o texto passar por baixo do "−") |
+| "✕" de fechar no canto do modal | `ctl-botao ctl-botao--pequeno ctl-botao--icone` | `icon-only` |
+| Textarea com altura fixa (`h-28`…) | `rows="N"` com a mesma altura | o `h-*` (o padrão tira a altura fixa do textarea) |
 | Rótulo flutuante (dentro do campo, sobe ao preencher) | fica o Tailwind: `left-4`→`left-3`, `text-base`→`text-sm`; **sai** o `peer-placeholder-shown:text-base` | — |
 | Rótulo | `ctl-rotulo` | `block text-sm font-medium mb-2` |
 | Título de seção | `ctl-secao` | — |
@@ -106,6 +109,14 @@ Regras:
   (`#bt-actions { margin-top: 1vw }` e parecidos).
 - Títulos de seção dentro do modal ("Itens", "Peças", "Parcelas") viram
   `ctl-secao`; o título do modal, `ctl-modal-titulo`.
+- **Botão de ícone embutido no campo** (`icon-only` + `top-1/2`, como o
+  "−/+" dentro do select) fica do tamanho dele — é ícone, não botão
+  principal. O teste o ignora pela mesma marca.
+- Regra da folha do módulo que prenda altura nos controles do filtro
+  (`.filter-bar select, .filter-bar button { height: 48px }` em
+  Matéria-prima) sai: ela carrega depois e venceria o padrão.
+- Folha de relatório (`rp-*`, como a Auditoria do Insumo) imita o papel
+  impresso e fica fora, como a `.rp-tabela`.
 - A cor é da classe `btn-*`; o tamanho é do `ctl-botao`. Não escreva
   `padding`/`font-size` de botão na folha do módulo.
 - Modal montado em JavaScript usa as mesmas classes no código que monta.
@@ -145,9 +156,9 @@ Quando o dono mandar o módulo:
 
 | # | Módulo | Situação |
 | --- | --- | --- |
-| 1 | Dashboard | **feito em 22/09** — só o "Atualizar" do cabeçalho e o "Atualizar" do cartão com erro (botão pequeno); as letras dos cartões já estavam na faixa do Financeiro (medidas lado a lado) e ficaram. Sem modais próprios. Aguardando o "ok" do dono. |
-| 2 | Matéria-prima | a fazer — **próximo** |
-| 3 | Produtos | a fazer |
+| 1 | Dashboard | **feito em 22/09** — só o "Atualizar" do cabeçalho e o "Atualizar" do cartão com erro (botão pequeno); as letras dos cartões já estavam na faixa do Financeiro (medidas lado a lado) e ficaram. Sem modais próprios. **Aprovado pelo dono.** |
+| 2 | Matéria-prima | **feito em 22/09** — tela e os 13 modais (Novo, Editar, Excluir, Auditoria, Duplicado, Dependência, categoria/unidade/processo novo e excluir, ordem duplicada). Aguardando o "ok" do dono. |
+| 3 | Produtos | a fazer — **próximo** |
 | 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
 | 5 | Pedidos | a fazer |
 | 6 | CRM › Clientes | a fazer |

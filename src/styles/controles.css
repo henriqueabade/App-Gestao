@@ -121,6 +121,10 @@
    o calendário): o texto para antes do ícone. Substitui o `pr-12`. */
 .ctl-campo--icone { padding-right: 2.5rem; }
 
+/* Dois botões de ícone embutidos à direita (o "−" e o "+" de categoria,
+   unidade e processo em Matéria-prima): 2 × 32 px + as margens. */
+.ctl-campo--dois-icones { padding-right: 4.75rem; }
+
 /* A altura sai das linhas (`rows`). O espaço de cima é o `top-3` do rótulo
    flutuante: rótulo e primeira linha ficam na mesma altura. */
 textarea.ctl-campo {
@@ -138,6 +142,9 @@ textarea.ctl-campo {
     font-weight: 500;
     line-height: 1.3;
 }
+
+/* Rótulo com o (i) ao lado ("Totais por Tipo"): continua em linha. */
+.ctl-rotulo.flex { display: flex; }
 
 .ctl-secao {
     font-size: var(--txt-secao);

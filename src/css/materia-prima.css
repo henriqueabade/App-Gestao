@@ -161,11 +161,8 @@ body {
     }
 }
 
-.filter-bar input:not([type="checkbox"]),
-.filter-bar select,
-.filter-bar button {
-    height: 48px;
-}
+/* A altura dos campos e botões do filtro é a do padrão (ctl-campo e
+   ctl-botao, controles.css). A regra de 48 px que ficava aqui vencia o padrão. */
 
 /* Permite que a barra de busca encolha para evitar sobreposição quando a sidebar estiver ativa */
 #materiaPrimaSearch {

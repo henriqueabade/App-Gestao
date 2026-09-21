@@ -51,6 +51,17 @@ const PADRONIZADOS = [
   // 22/09/2026. Sem modais próprios: o "Meu dia" é das Tarefas (referência)
   // e os itens das listas abrem os outros módulos.
   { modulo: 'dashboard', arquivos: ['html/dashboard.html'] },
+  {
+    // 22/09/2026. Todos os modais são da pasta dele (os de categoria,
+    // unidade e processo abrem de dentro do Novo/Editar; dependência e
+    // ordem duplicada, de dentro deles).
+    modulo: 'materia-prima',
+    arquivos: ['html/materia-prima.html', ...[
+      'novo', 'editar', 'excluir', 'movimentos', 'duplicado', 'dependencia',
+      'categoria-novo', 'categoria-excluir', 'unidade-novo', 'unidade-excluir',
+      'processo-novo', 'processo-excluir', 'processo-ordem'
+    ].map(m => `html/modals/materia-prima/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -60,12 +71,17 @@ const TAMANHO_ANTIGO = /(^|\s)(text-(base|lg|xl)|py-3|py-4|px-6|px-8|h-12|h-14)(
 
 function problemasDoPadrao(html) {
   const problemas = [];
-  const tags = html.match(/<(button|select|input|textarea)\b[^>]*>/g) || [];
+  // Comentário não conta ("<!-- floating para <select> -->" não é um campo).
+  const semComentario = html.replace(/<!--[\s\S]*?-->/g, '');
+  const tags = semComentario.match(/<(button|select|input|textarea)\b[^>]*>/g) || [];
   for (const tag of tags) {
     const classe = (tag.match(/\bclass="([^"]*)"/) || [])[1] || '';
     const tipo = (tag.match(/\btype="([^"]*)"/) || [])[1] || '';
     if (tag.startsWith('<button')) {
       if (!COR_DE_BOTAO.test(classe)) continue; // ícone de linha, aba, etiqueta
+      // Ícone embutido no campo (o "−"/"+" dentro do select de Matéria-prima):
+      // fica do tamanho dele, como os ícones das linhas.
+      if (/\bicon-only\b/.test(classe) && /\btop-1\/2\b/.test(classe)) continue;
       if (!/\bctl-botao\b/.test(classe)) problemas.push(`botão sem ctl-botao: ${tag}`);
       if (TAMANHO_ANTIGO.test(classe)) problemas.push(`botão com tamanho antigo: ${tag}`);
     } else {
@@ -202,6 +218,15 @@ test('dashboard: o "Atualizar" do cartão com erro é o botão pequeno do padrã
   const css = ler('css/dashboard.css');
   for (const classe of ['.dash-botao-leve', '.dash-botao-atualizar']) {
     assert.deepStrictEqual(regrasComTamanho(css, classe), [], `${classe} não pode fixar tamanho em dashboard.css`);
+  }
+});
+
+test('materia-prima: a folha não prende mais os controles do filtro em 48 px', () => {
+  const css = ler('css/materia-prima.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (/\.filter-bar\s+(input|select|button)/.test(m[1])) {
+      assert.doesNotMatch(m[2], /\bheight\s*:/, `${m[1].trim()} não pode fixar altura`);
+    }
   }
 });
 
