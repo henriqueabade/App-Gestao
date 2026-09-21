@@ -117,6 +117,14 @@
     line-height: 1.25;
 }
 
+/* Campo pequeno, par do botão pequeno: número curto numa lista de valores
+   (os percentuais do produto). 32 px, letra de 13 px. */
+.ctl-campo--pequeno {
+    height: var(--ctl-altura-pequena);
+    padding: 0 0.6rem;
+    font-size: var(--ctl-fonte-pequena);
+}
+
 /* Campo com ícone por cima do lado direito (a seta desenhada dos selects,
    o calendário): o texto para antes do ícone. Substitui o `pr-12`. */
 .ctl-campo--icone { padding-right: 2.5rem; }
@@ -124,6 +132,11 @@
 /* Dois botões de ícone embutidos à direita (o "−" e o "+" de categoria,
    unidade e processo em Matéria-prima): 2 × 32 px + as margens. */
 .ctl-campo--dois-icones { padding-right: 4.75rem; }
+
+/* Texto fixo dentro do campo: o "R$" à esquerda (preço) e a unidade à
+   direita (quantidade). Substituem o `pl-10` e o `pr-16`. */
+.ctl-campo--prefixo { padding-left: 2.5rem; }
+.ctl-campo--sufixo { padding-right: 4rem; }
 
 /* A altura sai das linhas (`rows`). O espaço de cima é o `top-3` do rótulo
    flutuante: rótulo e primeira linha ficam na mesma altura. */

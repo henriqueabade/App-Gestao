@@ -204,7 +204,8 @@ test('o título fica centrado e é ele quem cede espaço', () => {
 
     // Os blocos laterais NÃO levam min-w-0: é o mínimo automático deles que
     // segura a largura real dos botões e impede que sejam espremidos.
-    const grupoDireita = linhas.find(l => l.includes('justify-end gap-3'));
+    // (o espaço entre os botões é o do padrão: `ctl-acoes`, controles.css)
+    const grupoDireita = linhas.find(l => l.includes('ctl-acoes justify-end'));
     assert.ok(grupoDireita.includes('flex-1'), 'o grupo da direita divide a barra por igual');
     assert.ok(!grupoDireita.includes('min-w-0'), 'min-w-0 aqui deixaria os botões serem espremidos');
 });

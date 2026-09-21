@@ -131,11 +131,11 @@
     warn.innerHTML = `
       <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
-          <h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3>
+          <h3 class="ctl-modal-titulo mb-4 text-yellow-300">Atenção</h3>
           <p class="text-sm text-gray-300">Somar à quantidade existente?</p>
-          <div class="flex justify-center gap-6 mt-8">
-            <button id="confirmarSomar" class="btn-warning px-6 py-2 rounded-lg text-white font-medium">Sim</button>
-            <button id="cancelarSomar" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Não</button>
+          <div class="ctl-acoes justify-center mt-8">
+            <button id="confirmarSomar" class="btn-warning ctl-botao text-white">Sim</button>
+            <button id="cancelarSomar" class="btn-neutral ctl-botao text-white">Não</button>
           </div>
         </div>
       </div>`;
@@ -156,12 +156,12 @@
       warn.innerHTML = `
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center">
-            <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Duplicado</h3>
+            <h3 class="ctl-modal-titulo mb-4 text-yellow-300">Item Duplicado</h3>
             <p class="text-sm text-gray-300 mb-4">O item <span class="text-white font-medium">${item.nome}</span> já está na lista. O que deseja fazer?</p>
-            <div class="flex justify-center gap-4 mt-6">
-              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Somar à quantidade existente">Somar <span class="info-icon"></span></button>
-              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Substituir o item existente">Substituir <span class="info-icon"></span></button>
-              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Manter o item atual">Manter <span class="info-icon"></span></button>
+            <div class="ctl-acoes justify-center mt-6">
+              <button id="dupSomar" class="btn-warning ctl-botao text-white" title="Somar à quantidade existente">Somar <span class="info-icon"></span></button>
+              <button id="dupSubstituir" class="btn-danger ctl-botao text-white" title="Substituir o item existente">Substituir <span class="info-icon"></span></button>
+              <button id="dupManter" class="btn-neutral ctl-botao text-white" title="Manter o item atual">Manter <span class="info-icon"></span></button>
             </div>
           </div>
         </div>`;
@@ -221,11 +221,11 @@
     warn.innerHTML = `
       <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
-          <h3 class="text-lg font-semibold mb-4 text-red-300">Limpar Tudo</h3>
+          <h3 class="ctl-modal-titulo mb-4 text-red-300">Limpar Tudo</h3>
           <p class="text-sm text-gray-300">Deseja remover todos os itens?</p>
-          <div class="flex justify-center gap-6 mt-8">
-            <button id="confirmarLimpar" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Sim</button>
-            <button id="cancelarLimpar" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Não</button>
+          <div class="ctl-acoes justify-center mt-8">
+            <button id="confirmarLimpar" class="btn-danger ctl-botao text-white">Sim</button>
+            <button id="cancelarLimpar" class="btn-neutral ctl-botao text-white">Não</button>
           </div>
         </div>
       </div>`;

@@ -62,10 +62,22 @@ const PADRONIZADOS = [
       'processo-novo', 'processo-excluir', 'processo-ordem'
     ].map(m => `html/modals/materia-prima/${m}.html`)]
   },
+  {
+    // 22/09/2026. Os de coleção, desenhista, regra de produção e próxima
+    // etapa abrem de dentro do Novo/Editar; o de estoque e o de excluir lote,
+    // de dentro do Detalhe de estoque. O "Não é possível excluir" é o de
+    // Matéria-prima (já na lista acima).
+    modulo: 'produtos',
+    arquivos: ['html/produtos.html', ...[
+      'novo', 'editar', 'visualizar', 'detalhes', 'excluir', 'excluir-lote', 'movimentos',
+      'estoque-inserir', 'estoque-somar', 'proxima-etapa', 'regra-producao',
+      'colecao-novo', 'colecao-excluir', 'desenhista-novo', 'desenhista-excluir'
+    ].map(m => `html/modals/produtos/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
-const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo)\b/;
+const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela)\b/;
 /** Classes de tamanho que o padrão substitui num botão ou campo. */
 const TAMANHO_ANTIGO = /(^|\s)(text-(base|lg|xl)|py-3|py-4|px-6|px-8|h-12|h-14)(?=\s|$)/;
 
@@ -174,6 +186,11 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'produtos',
+    arquivos: ['js/produtos.js', 'js/modals/produto-proxima-etapa.js', 'js/modals/produto-proxima-etapa-novo.js'],
+    ignorar: []
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -186,7 +203,7 @@ function botoesJsForaDoPadrao(js, ignorar) {
     ...[...js.matchAll(/class="([^"]*)"/g)].map(m => m[1]),
     ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1])
   ];
-  return classes.filter(c => /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green)\b/.test(c)
+  return classes.filter(c => COR_DE_BOTAO.test(c)
     && !/\bctl-botao\b/.test(c) && !ignorar.some(re => re.test(c)));
 }
 

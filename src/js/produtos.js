@@ -538,7 +538,7 @@ function obterAvisoNovoItemContainer() {
             <i class="fas fa-filter"></i>
             <p class="text-sm" data-role="aviso-mensagem">Novo item criado, mas filtrado.</p>
         </div>
-        <button type="button" class="btn-warning text-white rounded-md px-4 py-2 text-sm font-medium" data-role="aviso-reset">
+        <button type="button" class="btn-warning ctl-botao text-white" data-role="aviso-reset">
             Limpar filtros e recarregar
         </button>
     `;

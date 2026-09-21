@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container">
+  <div class="modulo-container ctl-padrao">
     <div>
         <!-- Header -->
         <div class="module-header flex justify-between items-center mb-8 animate-fade-in-up">
@@ -18,66 +18,66 @@
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Produtos</h1>
                 <p class="module-header__description">Gerencie seu catálogo de produtos e controle de estoque</p>
             </div>
-            <button id="btnNovoProduto" data-perm="prod.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <button id="btnNovoProduto" data-perm="prod.create" class="btn-primary ctl-botao text-white">
                 <i class="fas fa-plus mr-2"></i>Novo Produto
             </button>
         </div>
 
         <!-- Filters -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-end">
                 <!-- Search -->
                 <div class="flex-1 min-w-0">
-                    <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
-                    <input id="filterSearch" type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+                    <label class="ctl-rotulo text-white">Buscar</label>
+                    <input id="filterSearch" type="text" placeholder="Código ou Nome do Produto" class="ctl-campo input-glass text-white w-full placeholder-white/50">
                 </div>
 
                 <!-- Category -->
                 <div class="flex-1 min-w-0">
-                    <label class="block text-sm font-medium mb-2 text-white">Coleções</label>
-                    <select id="filterCategory" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Coleções</label>
+                    <select id="filterCategory" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todas as Coleções</option>
                     </select>
                 </div>
 
                 <!-- Status -->
                 <div class="flex-1 min-w-0">
-                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Status</label>
+                    <select id="filterStatus" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
                 <!-- Price Min -->
                 <div class="flex-1 min-w-0">
-                    <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
+                    <label class="ctl-rotulo text-white">Preço Min.</label>
                     <div class="relative">
-                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input id="filterPriceMin" type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-white/70">R$</span>
+                        <input id="filterPriceMin" type="number" class="ctl-campo ctl-campo--prefixo input-glass text-white w-full placeholder-white/50">
                     </div>
                 </div>
 
                 <!-- Price Max -->
                 <div class="flex-1 min-w-0">
-                    <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
+                    <label class="ctl-rotulo text-white">Preço Máx.</label>
                     <div class="relative">
-                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input id="filterPriceMax" type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-white/70">R$</span>
+                        <input id="filterPriceMax" type="number" class="ctl-campo ctl-campo--prefixo input-glass text-white w-full placeholder-white/50">
                     </div>
                 </div>
 
                 <!-- Zero Stock Toggle -->
                 <div class="filter-toggle flex flex-col items-center space-y-1 flex-shrink-0">
-                    <label for="zeroStock" class="text-sm font-medium text-white whitespace-nowrap">0 Estoque</label>
+                    <label for="zeroStock" class="ctl-rotulo text-white whitespace-nowrap">0 Estoque</label>
                     <input type="checkbox" id="zeroStock" class="toggle" />
                 </div>
 
                 <!-- Action Buttons -->
-                <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                    <button id="btnFiltrar" data-perm="prod.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                <div id="bt-actions" class="ctl-acoes flex-shrink-0">
+                    <button id="btnFiltrar" data-perm="prod.search" class="btn-secondary ctl-botao text-white">
                         Filtrar
                     </button>
-                    <button id="btnLimpar" data-perm="prod.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                    <button id="btnLimpar" data-perm="prod.search" class="btn-warning ctl-botao text-white">
                         Limpar
                     </button>
                 </div>
@@ -115,7 +115,7 @@
             <button
               id="produtosEmptyNew"
               type="button"
-              class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+              class="btn-primary ctl-botao text-white"
             >
               <i class="fas fa-plus w-4 h-4 mr-2"></i>
               Novo Produto

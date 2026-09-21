@@ -1,18 +1,18 @@
-<div id="novoDesenhistaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+<div id="novoDesenhistaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <header class="relative px-6 py-4 border-b border-white/10">
-      <h2 class="text-lg font-semibold text-center text-white">INSERIR DESENHISTA</h2>
-      <button id="fecharNovoDesenhista" class="btn-danger icon-only absolute right-4 top-4 text-white">✕</button>
+      <h2 class="ctl-modal-titulo text-center text-white">INSERIR DESENHISTA</h2>
+      <button id="fecharNovoDesenhista" class="btn-danger ctl-botao ctl-botao--pequeno ctl-botao--icone absolute right-4 top-4 text-white">✕</button>
     </header>
     <form id="novoDesenhistaForm" class="p-6">
       <div class="relative">
-        <input id="nomeDesenhista" name="nome" type="text" maxlength="120" placeholder=" " required autocomplete="off" class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        <label for="nomeDesenhista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Nome</label>
+        <input id="nomeDesenhista" name="nome" type="text" maxlength="120" placeholder=" " required autocomplete="off" class="peer w-full ctl-campo bg-input border border-inputBorder text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        <label for="nomeDesenhista" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Nome</label>
       </div>
       <p id="novoDesenhistaMensagem" class="mt-4 text-sm text-red-400 hidden" role="alert"></p>
     </form>
     <footer class="flex justify-end px-6 py-4 border-t border-white/10">
-      <button type="submit" data-perm="prod.designer.create" form="novoDesenhistaForm" class="btn-primary px-6 py-2 rounded-lg text-white font-medium active:scale-95">Inserir</button>
+      <button type="submit" data-perm="prod.designer.create" form="novoDesenhistaForm" class="btn-primary ctl-botao text-white active:scale-95">Inserir</button>
     </footer>
   </div>
 </div>

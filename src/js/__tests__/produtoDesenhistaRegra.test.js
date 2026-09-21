@@ -32,7 +32,9 @@ test('os dois modais: Desenhado por com + e − (permissões próprias) e a mesm
     assert.match(m.html, /<select id="desenhistaSelect" name="desenhado_por" required/, `${m.nome}: desenhista obrigatório`);
     assert.match(m.html, new RegExp(`id="addDesenhista${m.sufixo}" data-perm="prod\\.designer\\.create"`), `${m.nome}: + pede Incluir desenhista`);
     assert.match(m.html, new RegExp(`id="delDesenhista${m.sufixo}" data-perm="prod\\.designer\\.delete"`), `${m.nome}: − pede Excluir desenhista`);
-    const linha = new RegExp(`id="${m.comecar}"[^>]*>\\+ Começar</button>\\s*<button id="regraProducao${m.sufixo}" type="button" class="btn-regra-producao px-6 py-3 rounded-lg font-medium"[^>]*>Regra Produção</button>\\s*<!--[^>]*-->\\s*<span id="regraProducaoInfoCaixa${m.sufixo}" class="hidden">\\s*<button id="regraProducaoInfo${m.sufixo}" type="button" class="btn-neutral icon-only`);
+    // Tamanhos do padrão de controles (controles.css): o botão é `ctl-botao`
+    // e o (i) é o botão pequeno de ícone.
+    const linha = new RegExp(`id="${m.comecar}"[^>]*>\\+ Começar</button>\\s*<button id="regraProducao${m.sufixo}" type="button" class="btn-regra-producao ctl-botao"[^>]*>Regra Produção</button>\\s*<!--[^>]*-->\\s*<span id="regraProducaoInfoCaixa${m.sufixo}" class="hidden">\\s*<button id="regraProducaoInfo${m.sufixo}" type="button" class="btn-neutral ctl-botao ctl-botao--pequeno ctl-botao--icone`);
     assert.match(m.html, linha, `${m.nome}: Regra Produção à direita do + Começar, e o (i) escondido até a regra estar completa`);
     assert.match(m.html, new RegExp(`id="regraProducaoStatus${m.sufixo}"`));
   }

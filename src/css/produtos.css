@@ -299,9 +299,8 @@ textarea:disabled::placeholder {
     white-space: nowrap;
 }
 
-#bt-actions {
-    margin-top: 1vw;
-}
+/* O empurrão de 1vw que alinhava "Filtrar/Limpar" com os campos saiu: agora
+   têm a mesma altura (controles.css) e a barra alinha pela base. */
 
 /* Ícone de informações e popover */
 .info-icon {

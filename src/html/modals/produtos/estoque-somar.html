@@ -1,14 +1,14 @@
-<div id="somarEstoqueOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+<div id="somarEstoqueOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <div class="p-6 text-center">
-      <h3 class="text-lg font-semibold mb-4 text-yellow-400">Item já registrado</h3>
+      <h3 class="ctl-modal-titulo mb-4 text-yellow-400">Item já registrado</h3>
       <p class="text-sm text-gray-300">Já existe um lote com este processo e este item.</p>
       <p id="somarEstoqueResumo" class="text-sm text-gray-200 mt-3"></p>
       <p class="text-xs text-gray-400 mt-3">O que deseja fazer com a quantidade?</p>
-      <div class="flex flex-wrap justify-center gap-4 mt-8">
-        <button id="confirmarSomarEstoque" data-perm="prod.stock.adjust" class="btn-warning px-6 py-2 rounded-lg text-white font-medium">Somar</button>
-        <button id="substituirSomarEstoque" data-perm="prod.stock.adjust" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Substituir</button>
-        <button id="cancelarSomarEstoque" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <div class="ctl-acoes justify-center mt-8">
+        <button id="confirmarSomarEstoque" data-perm="prod.stock.adjust" class="btn-warning ctl-botao text-white">Somar</button>
+        <button id="substituirSomarEstoque" data-perm="prod.stock.adjust" class="btn-danger ctl-botao text-white">Substituir</button>
+        <button id="cancelarSomarEstoque" class="btn-danger ctl-botao text-white">Cancelar</button>
       </div>
     </div>
   </div>

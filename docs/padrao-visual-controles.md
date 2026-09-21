@@ -88,6 +88,8 @@ encosta nesses números. Mudar cantos ou peso depois é **uma variável** em
 | Campo com ícone por cima à direita (a seta desenhada, o calendário) | `ctl-campo ctl-campo--icone` | o `pr-12` |
 | Campo com DOIS botões de ícone embutidos (o "−" e o "+" de Matéria-prima) | `ctl-campo ctl-campo--dois-icones` | o `pr-12` (que deixava o texto passar por baixo do "−") |
 | "✕" de fechar no canto do modal | `ctl-botao ctl-botao--pequeno ctl-botao--icone` | `icon-only` |
+| Campo com texto fixo dentro: "R$" à esquerda / unidade à direita | `ctl-campo--prefixo` / `ctl-campo--sufixo` (e o texto fixo com `text-sm`) | `pl-10` / `pr-16` |
+| Campo pequeno — número curto numa lista de valores (os percentuais do produto) | `ctl-campo ctl-campo--pequeno` (32 px, 13 px) | `px-3 py-1 text-sm` |
 | Textarea com altura fixa (`h-28`…) | `rows="N"` com a mesma altura | o `h-*` (o padrão tira a altura fixa do textarea) |
 | Rótulo flutuante (dentro do campo, sobe ao preencher) | fica o Tailwind: `left-4`→`left-3`, `text-base`→`text-sm`; **sai** o `peer-placeholder-shown:text-base` | — |
 | Rótulo | `ctl-rotulo` | `block text-sm font-medium mb-2` |
@@ -117,6 +119,18 @@ Regras:
   Matéria-prima) sai: ela carrega depois e venceria o padrão.
 - Folha de relatório (`rp-*`, como a Auditoria do Insumo) imita o papel
   impresso e fica fora, como a `.rp-tabela`.
+- **Cores de botão contam todas**: além de `btn-primary…`, as próprias de
+  um módulo (`btn-regra-producao`, `btn-preco-tabela`, `btn-purple`,
+  `btn-dark-green`) e botão com cor inline (`style="background:…"`, o
+  "Gerar PDF" do produto). O levantamento pelas classes não enxerga o de cor
+  inline — a varredura de textos grandes na tela (§6) acha.
+- **Texto sem classe de tamanho herda 16 px**: nome de linha de lista
+  ("Marcenaria"), valor de campo só de leitura ("Status"). Vai para
+  `text-sm` (14 px). Valor em destaque (o total grande, o selo de preço)
+  fica.
+- Teste antigo que confira a classe EXATA de um botão (`px-6 py-3…`)
+  quebra na troca: atualize a classe esperada para a do padrão, mantendo o
+  que ele protege (posição, ordem, permissão).
 - A cor é da classe `btn-*`; o tamanho é do `ctl-botao`. Não escreva
   `padding`/`font-size` de botão na folha do módulo.
 - Modal montado em JavaScript usa as mesmas classes no código que monta.
@@ -157,10 +171,10 @@ Quando o dono mandar o módulo:
 | # | Módulo | Situação |
 | --- | --- | --- |
 | 1 | Dashboard | **feito em 22/09** — só o "Atualizar" do cabeçalho e o "Atualizar" do cartão com erro (botão pequeno); as letras dos cartões já estavam na faixa do Financeiro (medidas lado a lado) e ficaram. Sem modais próprios. **Aprovado pelo dono.** |
-| 2 | Matéria-prima | **feito em 22/09** — tela e os 13 modais (Novo, Editar, Excluir, Auditoria, Duplicado, Dependência, categoria/unidade/processo novo e excluir, ordem duplicada). Aguardando o "ok" do dono. |
-| 3 | Produtos | a fazer — **próximo** |
+| 2 | Matéria-prima | **feito em 22/09** — tela e os 13 modais (Novo, Editar, Excluir, Auditoria, Duplicado, Dependência, categoria/unidade/processo novo e excluir, ordem duplicada). **Aprovado pelo dono.** |
+| 3 | Produtos | **feito em 22/09** — tela e os 15 modais (Novo, Editar com o editor de preço, Visualizar, Detalhe de estoque, Adicionar ao estoque, Item já registrado, Excluir, Excluir lote, Movimentações, Próxima etapa e as 3 caixas dela, Regra produção, coleção e desenhista novo/excluir). Aguardando o "ok" do dono. |
 | 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
-| 5 | Pedidos | a fazer |
+| 5 | Pedidos | a fazer — **próximo** |
 | 6 | CRM › Clientes | a fazer |
 | 7 | CRM › Prospecções | a fazer |
 | 8 | CRM › Contatos | a fazer |
@@ -205,5 +219,25 @@ altura, letra, peso, espaço interno e cantos. Janela de referência:
     'input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea': 'campo', label: 'rótulo', th: 'th', td: 'td' };
   for (const [sel, tipo] of Object.entries(tipos)) raiz.querySelectorAll(sel).forEach(e => vis(e) && reg(tipo, e));
   console.table([...grupos.values()]);
+})();
+```
+
+Textos acima de 14 px (acha nome de lista sem classe, herdando 16 px, e
+botão com cor inline, que o levantamento pelas classes não vê). O que for
+título do modal (18 px) ou valor em destaque fica:
+
+```js
+(() => {
+  const raiz = document.querySelector('[id$="Overlay"]:not(.hidden)') || document.getElementById('content');
+  const achados = new Map();
+  raiz.querySelectorAll('*').forEach(e => {
+    const r = e.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const texto = [...e.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim()).map(n => n.textContent.trim()).join(' ');
+    const letra = parseFloat(getComputedStyle(e).fontSize);
+    if (!texto || letra <= 14.5) return;
+    const k = `${e.tagName.toLowerCase()}.${String(e.className).split(' ').slice(0, 3).join('.')} ${letra}px`;
+    const g = achados.get(k) || { qtd: 0, exemplo: texto.slice(0, 30) }; g.qtd++; achados.set(k, g);
+  });
+  console.table([...achados].map(([k, g]) => ({ elemento: k, ...g })));
 })();
 ```
