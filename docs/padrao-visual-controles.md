@@ -145,10 +145,10 @@ Quando o dono mandar o módulo:
 
 | # | Módulo | Situação |
 | --- | --- | --- |
-| 1 | Dashboard | a fazer — **próximo** (o dono pediu Orçamentos antes) |
-| 2 | Matéria-prima | a fazer |
+| 1 | Dashboard | **feito em 22/09** — só o "Atualizar" do cabeçalho e o "Atualizar" do cartão com erro (botão pequeno); as letras dos cartões já estavam na faixa do Financeiro (medidas lado a lado) e ficaram. Sem modais próprios. Aguardando o "ok" do dono. |
+| 2 | Matéria-prima | a fazer — **próximo** |
 | 3 | Produtos | a fazer |
-| 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). Aguardando o "ok" do dono. |
+| 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
 | 5 | Pedidos | a fazer |
 | 6 | CRM › Clientes | a fazer |
 | 7 | CRM › Prospecções | a fazer |
@@ -162,6 +162,7 @@ Quando o dono mandar o módulo:
 | 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |
 | 16 | Relatórios | a fazer |
 | 17 | Configurações | a fazer |
+| — | Globais: caixa de diálogo (`DialogPadrao`) | conferir no fim — botões já com 14 px / 600, mas ~38 px de altura e cantos de 9,6 px |
 
 Os modais do Financeiro **não** são referência: medidos em 21/09, estão no
 tamanho grande (botões de 40 px com letra de 16 px, campos de 50 px).

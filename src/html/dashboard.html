@@ -18,7 +18,7 @@
       `data-secao` diz de qual seção do contrato o cartão depende — seção que
       não vem (sem permissão) faz o cartão sumir.
     -->
-    <div class="modulo-container dashboard-module">
+    <div class="modulo-container dashboard-module ctl-padrao">
         <div class="module-header dash-cabecalho animate-fade-in-up">
             <div>
                 <h1 class="text-2xl font-semibold mb-2 module-header__title dash-titulo">Dashboard</h1>
@@ -31,7 +31,7 @@
                     <span data-dash-atualizado>Carregando indicadores…</span>
                 </span>
                 <!-- data-acao-gerida: o clique é tratado por BotaoAcao.run (ver dashboard.js) -->
-                <button type="button" class="btn-primary text-white rounded-md px-5 py-2 font-medium dash-botao-atualizar"
+                <button type="button" class="btn-primary ctl-botao text-white dash-botao-atualizar"
                         data-dash-acao="atualizar" data-acao-gerida="true">
                     <i class="fas fa-rotate" aria-hidden="true"></i>
                     <span>Atualizar</span>

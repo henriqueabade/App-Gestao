@@ -48,6 +48,9 @@ const PADRONIZADOS = [
       'html/modals/clientes/transportadora.html'
     ]
   },
+  // 22/09/2026. Sem modais próprios: o "Meu dia" é das Tarefas (referência)
+  // e os itens das listas abrem os outros módulos.
+  { modulo: 'dashboard', arquivos: ['html/dashboard.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -176,6 +179,31 @@ for (const { modulo, arquivos, ignorar } of JS_PADRONIZADOS) {
     for (const rel of arquivos) assert.deepStrictEqual(botoesJsForaDoPadrao(ler(rel), ignorar), [], rel);
   });
 }
+
+/**
+ * A folha do módulo carrega DEPOIS de controles.css: uma regra dela que
+ * fixe tamanho num botão padronizado venceria o padrão em silêncio.
+ */
+function regrasComTamanho(css, classe) {
+  const semComentario = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const achadas = [];
+  for (const m of semComentario.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const seletores = m[1].split(',').map(s => s.trim());
+    // só a regra do próprio botão (não a do ícone dentro dele, nem o :hover)
+    if (!seletores.some(s => s === classe)) continue;
+    if (/(^|;|\s)(padding|font-size|height|border-radius|gap)\s*:/.test(m[2])) achadas.push(`${m[1].trim()} { … }`);
+  }
+  return achadas;
+}
+
+test('dashboard: o "Atualizar" do cartão com erro é o botão pequeno do padrão', () => {
+  const js = ler('js/dashboard.js');
+  assert.match(js, /criarEl\('button', 'dash-botao-leve ctl-botao ctl-botao--pequeno'\)/);
+  const css = ler('css/dashboard.css');
+  for (const classe of ['.dash-botao-leve', '.dash-botao-atualizar']) {
+    assert.deepStrictEqual(regrasComTamanho(css, classe), [], `${classe} não pode fixar tamanho em dashboard.css`);
+  }
+});
 
 for (const { modulo, arquivos } of PADRONIZADOS) {
   test(`${modulo}: botões principais e campos no padrão (tela e modais)`, () => {
