@@ -94,10 +94,20 @@ const PADRONIZADOS = [
     arquivos: ['html/clientes.html', ...['detalhes', 'novo', 'editar', 'excluir', 'contato']
       .map(m => `html/modals/clientes/${m}.html`)]
   },
+  {
+    // 22/09/2026. Do Detalhes abrem as ações (interação, nota, campanha,
+    // próximo passo, mover no funil, responsável, converter, contato,
+    // excluir); o Concluir passo abre também pelas Tarefas.
+    modulo: 'prospeccoes',
+    arquivos: ['html/prospeccoes.html', ...[
+      'detalhes', 'novo', 'editar', 'excluir', 'contato', 'interacao', 'nota', 'campanha',
+      'proximo-passo', 'concluir-passo', 'etapa', 'responsavel', 'converter'
+    ].map(m => `html/modals/prospeccoes/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
-const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela|devolucao|ghost)\b/;
+const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela|devolucao|ghost|violet|dark-blue)\b/;
 /** Classes de tamanho que o padrão substitui num botão ou campo. */
 const TAMANHO_ANTIGO = /(^|\s)(text-(base|lg|xl)|py-3|py-4|px-6|px-8|h-12|h-14)(?=\s|$)/;
 
@@ -287,11 +297,27 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
-test('materia-prima: a folha não prende mais os controles do filtro em 48 px', () => {
-  const css = ler('css/materia-prima.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (/\.filter-bar\s+(input|select|button)/.test(m[1])) {
-      assert.doesNotMatch(m[2], /\bheight\s*:/, `${m[1].trim()} não pode fixar altura`);
+for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css']) {
+  test(`${folha}: a folha não prende mais os controles do filtro em 48 px`, () => {
+    const css = ler(folha).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (/\.filter-bar\s+(input|select|button)/.test(m[1])) {
+        assert.doesNotMatch(m[2], /\bheight\s*:/, `${m[1].trim()} não pode fixar altura`);
+      }
+    }
+  });
+}
+
+test('seletor de estados/cidades (Prospecções e Relatórios): botões e busca no padrão', () => {
+  const js = ler('js/utils/geo-multiselect.js');
+  assert.match(js, /cancelBtn\.className = 'geo-multiselect-btn cancel ctl-botao'/);
+  assert.match(js, /confirmBtn\.className = 'geo-multiselect-btn confirm ctl-botao'/);
+  assert.match(js, /searchInput\.className = 'ctl-campo'/);
+  for (const folha of ['css/prospeccoes.css', 'css/relatorios.css']) {
+    const css = ler(folha).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const sel of [/\.geo-multiselect-btn\s*\{([^}]*)\}/, /\.geo-multiselect-search input\s*\{([^}]*)\}/]) {
+      const corpo = (css.match(sel) || [])[1] || '';
+      assert.doesNotMatch(corpo, /(padding|border-radius|font-size|height)\s*:/, `${folha}: ${sel} não pode fixar tamanho`);
     }
   }
 });

@@ -1,8 +1,8 @@
-<div id="proximoPassoProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+<div id="proximoPassoProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
-      <button id="voltarProximoPasso" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 class="text-lg font-semibold text-white text-center">Próximo Passo</h2>
+      <button id="voltarProximoPasso" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 class="ctl-modal-titulo text-white text-center">Próximo Passo</h2>
       <span></span>
     </header>
 
@@ -17,34 +17,34 @@
         <p id="passoAnteriorTexto" class="text-white font-medium"></p>
         <p id="passoAnteriorData" class="text-xs text-white/50 mt-1"></p>
 
-        <label for="passoAnteriorNota" class="block text-sm font-medium text-gray-300 mt-4 mb-2">
+        <label for="passoAnteriorNota" class="ctl-rotulo text-gray-300 mt-4">
           O que aconteceu com ele? <span class="text-[var(--color-red)]">*</span>
         </label>
         <textarea id="passoAnteriorNota" rows="3" placeholder="Liguei e o Ricardo pediu para retomar depois do conselho"
-                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
         <p class="mt-2 text-xs text-gray-400">
           Vira uma atividade na timeline, do tipo <strong>Atividade realizada</strong>.
         </p>
       </div>
 
       <div>
-        <label for="proximoPassoTexto" class="block text-sm font-medium text-gray-300 mb-2">O que fazer agora</label>
+        <label for="proximoPassoTexto" class="ctl-rotulo text-gray-300">O que fazer agora</label>
         <input id="proximoPassoTexto" type="text" maxlength="255" placeholder="Ligar para confirmar o recebimento da proposta"
-               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+               class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
       </div>
       <div>
-        <label for="proximoPassoData" class="block text-sm font-medium text-gray-300 mb-2">Para quando</label>
+        <label for="proximoPassoData" class="ctl-rotulo text-gray-300">Para quando</label>
         <input id="proximoPassoData" type="date"
-               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+               class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
       </div>
       <p class="text-xs text-gray-400">
         Deixe os dois campos em branco para encerrar sem agendar um novo passo.
       </p>
     </form>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
-      <button id="cancelarProximoPasso" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
-      <button type="button" id="salvarProximoPasso" data-perm="pros.next.step" class="btn-success px-6 py-2 rounded-lg font-medium">Salvar</button>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10">
+      <button id="cancelarProximoPasso" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
+      <button type="button" id="salvarProximoPasso" data-perm="pros.next.step" class="btn-success ctl-botao">Salvar</button>
     </footer>
   </div>
 </div>

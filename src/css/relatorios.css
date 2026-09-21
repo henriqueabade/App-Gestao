@@ -1035,13 +1035,12 @@ body {
     padding: 0 1.5rem 1rem;
 }
 
+/* Altura, letra e cantos: ctl-campo (controles.css). */
 .geo-multiselect-search input {
     width: 100%;
-    border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    padding: 0.6rem 0.9rem;
     transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -1127,10 +1126,8 @@ body {
     gap: 0.5rem;
 }
 
+/* Tamanho: ctl-botao (controles.css). Aqui só a aparência. */
 .geo-multiselect-btn {
-    border-radius: 0.75rem;
-    padding: 0.55rem 1.2rem;
-    font-weight: 500;
     border: none;
     cursor: pointer;
     transition: background 150ms ease, transform 150ms ease;
