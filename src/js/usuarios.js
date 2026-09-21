@@ -148,11 +148,11 @@ function showUsuariosConfirmDialog({
         overlay.innerHTML = `
             <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
                 <div class="p-6 text-center space-y-4">
-                    <h3 class="text-lg font-semibold text-white">${title}</h3>
+                    <h3 class="ctl-modal-titulo text-white">${title}</h3>
                     <p class="text-sm text-gray-300">${message}</p>
-                    <div class="flex justify-center gap-4">
-                        <button data-action="confirm" class="btn-success px-4 py-2 rounded-lg text-white font-medium min-w-[96px]">${confirmLabel}</button>
-                        <button data-action="cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium min-w-[96px]">${cancelLabel}</button>
+                    <div class="ctl-acoes justify-center">
+                        <button data-action="confirm" class="btn-success ctl-botao text-white min-w-[96px]">${confirmLabel}</button>
+                        <button data-action="cancel" class="btn-danger ctl-botao text-white min-w-[96px]">${cancelLabel}</button>
                     </div>
                 </div>
             </div>

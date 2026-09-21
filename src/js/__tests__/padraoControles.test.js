@@ -125,6 +125,10 @@ const PADRONIZADOS = [
     modulo: 'ia',
     arquivos: ['html/ia.html', ...['acao', 'configuracao', 'detalhes', 'excluir', 'nova'].map(m => `html/modals/ia/${m}.html`)]
   },
+  {
+    modulo: 'usuarios',
+    arquivos: ['html/usuarios.html', ...['novo', 'editar', 'transferir', 'permissoes'].map(m => `html/modals/usuarios/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -283,6 +287,11 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'usuarios',
+    arquivos: ['js/usuarios.js', 'js/modals/usuario-novo.js', 'js/modals/usuario-editar.js', 'js/modals/usuario-permissoes.js', 'js/modals/usuario-transferir.js'],
+    ignorar: []
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -293,7 +302,9 @@ const JS_PADRONIZADOS = [
 function botoesJsForaDoPadrao(js, ignorar) {
   const classes = [
     ...[...js.matchAll(/class="([^"]*)"/g)].map(m => m[1]),
-    ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1])
+    ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1]),
+    // h('button', { class: '…' }) do TarefasUI
+    ...[...js.matchAll(/\bclass:\s*'([^']*)'/g)].map(m => m[1])
   ];
   // `tui-botao` (modais de Tarefas e Calendário) já usa as medidas do padrão
   // na própria regra (tarefas-ui.css) — conta como padronizado.

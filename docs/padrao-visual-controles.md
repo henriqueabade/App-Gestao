@@ -200,8 +200,8 @@ Quando o dono mandar o módulo:
 | 11 | Laminação › Clientes | **feito em 22/09** — clone de Clientes: tela (com o cartão "Ações Rápidas" em `ctl-secao-tela`) e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato). Commitado direto. |
 | 12 | Laminação › Serviços | **feito em 22/09** — tela e o modal Novo serviço (com Peças e Dados do amarrado). O modal é montado em partes (véu vazio + `data-modal-dialog`/`data-modal-slot` encaixados pelo JS): para medir na prévia, encaixar o diálogo no véu antes. Commitado direto. |
 | 13 | IA | **feito em 22/09** — tela e os 5 modais (Nova leitura, Configuração, Detalhes da leitura com as abas e a vista do texto, O que fazer com a linha, Excluir). O "Transparente" da IA (`ia-btn-transparente`: "O que fazer", "Descartar selecionados", "Copiar tudo para cá") conta como cor de botão. Nos cartões de arquivo, "Ver o que foi lido" e os ícones de reler/copiar ficam todos em 32 px. A grade de revisão continua com os campos de linha. Commitado direto. |
-| 14 | Usuários | a fazer — **próximo** |
-| 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |
+| 14 | Usuários | **feito em 22/09** — tela (com o popover de resumo) e os 4 modais (Novo, Editar com a aba de tarefas, Transferir, Permissões com o "Salvar perfil"), mais a confirmação montada em JS. Em Permissões: título de cada aba (o módulo) em `ctl-secao-tela`, "Ações"/"Colunas" de cada sanfona em `ctl-secao`, nome de cada permissão e "Selecionar tudo" de 16 → 14 px; o ✕ do canto é o botão de ícone pequeno. Abas sublinhadas e a chave "Módulo ativo" ficam. O conferidor de JS passou a ler também `h('button', { class: '…' })`. Commitado direto. |
+| 15 | Financeiro | referência — alinhar a diferença do §2 e os modais — **próximo** |
 | 16 | Relatórios | a fazer |
 | 17 | Configurações | a fazer |
 | — | Globais: caixa de diálogo (`DialogPadrao`) | conferir no fim — botões já com 14 px / 600, mas ~38 px de altura e cantos de 9,6 px. Entram junto os modais que usam o mesmo desenho (`dlg-rodape`): o resultado da importação de planilha (`AcoesCsv`) e o "Não é possível excluir"/"Insumo já cadastrado" de Matéria-prima |
