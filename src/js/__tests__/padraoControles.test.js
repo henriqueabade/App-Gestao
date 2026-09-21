@@ -393,6 +393,16 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
+test('caixa de diálogo (DialogPadrao, importação de planilha, Matéria-prima): botões do rodapé com as medidas do padrão', () => {
+  const css = ler('styles/dialogo-padrao.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const regra = (css.match(/\.dlg-rodape button\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(regra, /height:\s*var\(--ctl-altura\)/);
+  assert.match(regra, /padding:\s*0 var\(--ctl-pad-x\)/);
+  assert.match(regra, /border-radius:\s*var\(--ctl-raio\)/);
+  assert.match(regra, /font-size:\s*var\(--ctl-fonte\)/);
+  assert.match(regra, /font-weight:\s*var\(--ctl-peso\)/);
+});
+
 test('configurações: os botões próprios (Salvar/Cancelar) usam o ctl-botao e a folha não guarda tamanho', () => {
   const html = ler('html/configuracoes.html');
   assert.match(html, /id="personalDataSubmit"[^>]*class="personal-button personal-button--primary ctl-botao"/);
