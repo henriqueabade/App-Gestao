@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-    <div id="configuracoesModule" class="modulo-container configuracoes-module" data-module="configuracoes" data-perm-hide="cfg.view">
+    <div id="configuracoesModule" class="modulo-container ctl-padrao configuracoes-module" data-module="configuracoes" data-perm-hide="cfg.view">
         <header class="module-header settings-header mb-8 animate-fade-in-up">
             <div>
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Configurações</h1>
@@ -51,27 +51,27 @@
                     <div class="personal-data-fields">
                         <div class="personal-data-field" data-field="nome">
                             <label for="personalDataName" class="personal-data-label">Nome completo</label>
-                            <input type="text" id="personalDataName" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="Seu nome" autocomplete="name" required>
+                            <input type="text" id="personalDataName" data-perm="cfg.profile.edit" class="ctl-campo input-glass personal-data-input" placeholder="Seu nome" autocomplete="name" required>
                             <p class="personal-field-error" id="personalDataNameError"></p>
                         </div>
                         <div class="personal-data-field" data-field="email">
                             <label for="personalDataEmail" class="personal-data-label">E-mail</label>
-                            <input type="email" id="personalDataEmail" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="voce@empresa.com" autocomplete="email" required>
+                            <input type="email" id="personalDataEmail" data-perm="cfg.profile.edit" class="ctl-campo input-glass personal-data-input" placeholder="voce@empresa.com" autocomplete="email" required>
                             <p class="personal-field-error" id="personalDataEmailError"></p>
                         </div>
                         <div class="personal-data-field" data-field="telefone">
                             <label for="personalDataPhone" class="personal-data-label">Telefone</label>
-                            <input type="tel" id="personalDataPhone" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="(00) 00000-0000" autocomplete="tel">
+                            <input type="tel" id="personalDataPhone" data-perm="cfg.profile.edit" class="ctl-campo input-glass personal-data-input" placeholder="(00) 00000-0000" autocomplete="tel">
                             <p class="personal-field-error" id="personalDataPhoneError"></p>
                         </div>
                         <div class="personal-data-field" data-field="senha">
                             <label for="personalDataPassword" class="personal-data-label">Nova senha</label>
-                            <input type="password" id="personalDataPassword" data-perm="cfg.password.change" class="input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
+                            <input type="password" id="personalDataPassword" data-perm="cfg.password.change" class="ctl-campo input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
                             <p class="personal-field-error" id="personalDataPasswordError"></p>
                         </div>
                         <div class="personal-data-field" data-field="confirmacao">
                             <label for="personalDataPasswordConfirm" class="personal-data-label">Confirmar nova senha</label>
-                            <input type="password" id="personalDataPasswordConfirm" data-perm="cfg.password.change" class="input-glass personal-data-input" placeholder="Repita a nova senha" autocomplete="new-password">
+                            <input type="password" id="personalDataPasswordConfirm" data-perm="cfg.password.change" class="ctl-campo input-glass personal-data-input" placeholder="Repita a nova senha" autocomplete="new-password">
                             <p class="personal-field-error" id="personalDataPasswordConfirmError"></p>
                         </div>
                     </div>
@@ -79,12 +79,12 @@
 
                 <div class="personal-feedback" id="personalDataFeedback" role="status" aria-live="polite"></div>
 
-                <div class="personal-data-actions">
-                    <button type="submit" id="personalDataSubmit" data-perm="cfg.prefs.edit" class="personal-button personal-button--primary">
+                <div class="personal-data-actions ctl-acoes">
+                    <button type="submit" id="personalDataSubmit" data-perm="cfg.prefs.edit" class="personal-button personal-button--primary ctl-botao">
                         <span class="personal-button-label">Salvar alterações</span>
                         <span class="personal-button-spinner app-loading-indicator app-loading-indicator--inline" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></span>
                     </button>
-                    <button type="button" id="personalDataReset" data-perm="cfg.profile.edit" class="personal-button personal-button--ghost">Cancelar</button>
+                    <button type="button" id="personalDataReset" data-perm="cfg.profile.edit" class="personal-button personal-button--ghost ctl-botao">Cancelar</button>
                 </div>
             </form>
         </section>
@@ -99,8 +99,8 @@
 
             <div class="space-y-6 mt-6">
                 <div>
-                    <label for="defaultModuleSelect" class="block text-sm font-medium text-white/80">Módulo inicial</label>
-                    <select id="defaultModuleSelect" data-perm="cfg.prefs.edit" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
+                    <label for="defaultModuleSelect" class="ctl-rotulo text-white/80">Módulo inicial</label>
+                    <select id="defaultModuleSelect" data-perm="cfg.prefs.edit" class="w-full ctl-campo input-glass text-white">
                         <option value="last">Retomar última tela</option>
                         <option value="dashboard">Dashboard</option>
                         <option value="materia-prima">Matéria Prima</option>
@@ -134,8 +134,8 @@
                 </div>
 
                 <div>
-                    <label for="sidebarBehaviorSelect" class="block text-sm font-medium text-white/80">Barra lateral</label>
-                    <select id="sidebarBehaviorSelect" data-perm="cfg.prefs.edit" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
+                    <label for="sidebarBehaviorSelect" class="ctl-rotulo text-white/80">Barra lateral</label>
+                    <select id="sidebarBehaviorSelect" data-perm="cfg.prefs.edit" class="w-full ctl-campo input-glass text-white">
                         <option value="auto">Recolher automaticamente</option>
                         <option value="fixed">Manter sempre aberta</option>
                     </select>

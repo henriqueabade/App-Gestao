@@ -141,6 +141,7 @@ const PADRONIZADOS = [
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
   { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },
+  { modulo: 'configuracoes', arquivos: ['html/configuracoes.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -390,6 +391,16 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /height:\s*var\(--ctl-altura-pequena/);
   assert.match(regra, /font-size:\s*var\(--ctl-fonte-pequena/);
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
+});
+
+test('configurações: os botões próprios (Salvar/Cancelar) usam o ctl-botao e a folha não guarda tamanho', () => {
+  const html = ler('html/configuracoes.html');
+  assert.match(html, /id="personalDataSubmit"[^>]*class="personal-button personal-button--primary ctl-botao"/);
+  assert.match(html, /id="personalDataReset"[^>]*class="personal-button personal-button--ghost ctl-botao"/);
+  const css = ler('css/configuracoes.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const sel of [/\.personal-button\s*\{([^}]*)\}/, /\.personal-data-input\s*\{([^}]*)\}/]) {
+    assert.doesNotMatch((css.match(sel) || [])[1] || '', /(padding|border-radius|font-size|height)\s*:/, String(sel));
+  }
 });
 
 test('relatórios: abas no botão de barra e nenhuma regra da folha segurando o tamanho de botão ou campo', () => {
