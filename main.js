@@ -3790,8 +3790,14 @@ function limparTentativasLogin(email) {
   if (tentativasLogin.delete(chaveTentativa(email))) salvarTentativas();
 }
 
+// Senha trocada pelo código do e-mail ("Esqueceu a senha?"): quem acabou de
+// provar que é dono do e-mail não fica preso ao bloqueio desta máquina.
+require('./backend/passwordResetRoutes').eventos.on('senha-redefinida', limparTentativasLogin);
+
 /**
- * Dispara o e-mail de redefinição. Nunca revela se o e-mail existe.
+ * Dispara o e-mail com o código de redefinição (o mesmo do "Esqueceu a
+ * senha?"; a pessoa digita o código na tela de login). Nunca revela se o
+ * e-mail existe.
  *
  * @returns {Promise<{enviado: boolean, motivo: string|null}>} — e o retorno
  *   IMPORTA: a tela dizia "enviamos um e-mail" sempre, inclusive quando o envio
@@ -3838,9 +3844,9 @@ function mensagemDeBloqueio(email, envio) {
   if (!envio) return `Número máximo de tentativas de login atingido.${tempo}`;
   return envio.enviado
     ? `Número máximo de tentativas de login atingido.${tempo}`
-      + ' Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+      + ' Enviamos um código para o e-mail cadastrado.'
     : `Número máximo de tentativas de login atingido.${tempo}`
-      + ' Não foi possível enviar o e-mail de redefinição — procure o administrador.';
+      + ' Não foi possível enviar o código por e-mail — procure o administrador.';
 }
 
 ipcMain.handle('login-usuario', async (event, dados) => {

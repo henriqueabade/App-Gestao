@@ -11,6 +11,7 @@ esquecidas — em cada módulo. Os três primeiros funcionam por conta própria:
 | `DialogTopLayer`| `src/utils/dialogTopLayer.js` | Toda caixa de diálogo fica à frente de qualquer outro elemento |
 | `BotaoAcao`     | `src/utils/botaoAcao.js`      | Nenhum botão aceita duplo clique; fica carregando até a ação terminar |
 | `AtualizacaoObrigatoria` | `src/utils/atualizacaoObrigatoria.js` | Versão atrasada não usa o app: caixa sem saída, um botão só |
+| `SenhaForte` | `src/js/utils/senha-forte.js` | A regra da senha (8+, maiúscula, número, especial): `mensagem(senha)` diz o que falta; `ligarLista(campo, ul)` marca os requisitos enquanto se digita. Todo campo de senha nova usa os dois (ver `docs/redefinicao-de-senha.md`) |
 
 ---
 

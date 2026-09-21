@@ -47,12 +47,14 @@
               </div>
               <div>
                 <label for="novoUsuarioSenha" class="ctl-rotulo text-gray-300">Senha <span class="text-red-400">*</span></label>
-                <input id="novoUsuarioSenha" type="password" autocomplete="new-password" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Mínimo de 6 caracteres" />
+                <input id="novoUsuarioSenha" type="password" autocomplete="new-password" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Mínimo de 8 caracteres" />
               </div>
               <div>
                 <label for="novoUsuarioSenhaConfirma" class="ctl-rotulo text-gray-300">Confirmar senha <span class="text-red-400">*</span></label>
                 <input id="novoUsuarioSenhaConfirma" type="password" autocomplete="new-password" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Repita a senha" />
               </div>
+              <!-- Requisitos da senha (src/js/utils/senha-forte.js), marcados enquanto se digita -->
+              <ul id="novoUsuarioSenhaRegras" class="senha-forte senha-forte--escuro md:col-span-2" aria-label="Requisitos da senha"></ul>
               <div class="md:col-span-2">
                 <label for="novoUsuarioObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
                 <textarea id="novoUsuarioObservacoes" rows="3" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none" placeholder="Notas internas sobre o usuário"></textarea>

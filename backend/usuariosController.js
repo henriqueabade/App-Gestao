@@ -5,6 +5,7 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
 const permissoesRepo = require('./permissionsRepository');
+const SenhaForte = require('../src/js/utils/senha-forte');
 
 const router = express.Router();
 
@@ -966,7 +967,9 @@ function validarNovoUsuario(body = {}) {
 
   if (nome.length < 3) recusar('Informe o nome completo do usuário.');
   if (!RE_EMAIL.test(email)) recusar('Informe um e-mail válido.');
-  if (senha.length < 6) recusar('A senha deve ter ao menos 6 caracteres.');
+  // A regra da senha forte (src/js/utils/senha-forte.js), a mesma da tela.
+  const senhaFraca = SenhaForte.mensagem(senha);
+  if (senhaFraca) recusar(senhaFraca);
   if (!perfil) recusar('Selecione o perfil do usuário.');
 
   const modeloId = Number(body.modeloPermissoesId ?? body.modelo_permissoes_id);
@@ -1013,7 +1016,7 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
       email: dados.email,
       // A coluna `senha` guarda SOMENTE hash bcrypt — é o que o login compara.
       // Quem hasheia é a aplicação, não o upstream (mesmo custo 12 usado na
-      // redefinição de senha, em backend/passwordResetRoutes.js).
+      // redefinição de senha, em backend/redefinicaoSenha.js).
       senha: await bcrypt.hash(dados.senha, CUSTO_BCRYPT),
       perfil: dados.perfil,
       telefone: dados.telefone,
@@ -1061,22 +1064,48 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
 });
 
 /**
+ * O corpo de uma edição, com a senha (quando veio) conferida pela regra da
+ * senha forte e já em hash bcrypt.
+ *
+ * Antes a senha ia CRUA para a coluna `senha`, que só guarda hash (é o que o
+ * login compara): trocar a senha em Configurações gravava o texto e a pessoa
+ * não conseguia mais entrar. Nem a API genérica nem o banco local hasheiam.
+ */
+async function payloadDeEdicao(body = {}) {
+  const payload = buildPayload(body);
+  if (payload.senha === undefined || payload.senha === null || payload.senha === '') {
+    delete payload.senha;
+    return payload;
+  }
+  const senhaFraca = SenhaForte.mensagem(payload.senha);
+  if (senhaFraca) {
+    const erro = new Error(senhaFraca);
+    erro.status = 400;
+    throw erro;
+  }
+  payload.senha = await bcrypt.hash(payload.senha, CUSTO_BCRYPT);
+  return payload;
+}
+
+/**
  * PUT /usuarios/me
  */
 router.put('/me', async (req, res) => {
   try {
+    const payload = await payloadDeEdicao(req.body);
     const api = createInternalApiClient();
     const tokenFromRequest = req.headers?.authorization || getToken();
     const userId = extractUserIdFromToken(tokenFromRequest);
     const targetPath = userId ? `/api/usuarios/${userId}` : '/api/usuarios/me';
 
-    const updated = await api.put(targetPath, buildPayload(req.body));
-    res.json(normalizeAvatar(updated || {}));
+    const updated = await api.put(targetPath, payload);
+    // Sem o hash da senha na resposta: a tela guarda este objeto no navegador.
+    res.json(sanitizarSaida(normalizeAvatar(updated || {})));
   } catch (err) {
     console.error('Erro ao atualizar usuário autenticado:', err);
     res
       .status(err.status || 500)
-      .json({ error: 'Erro ao atualizar usuário autenticado' });
+      .json({ error: err.status === 400 ? err.message : 'Erro ao atualizar usuário autenticado' });
   }
 });
 
@@ -1085,14 +1114,15 @@ router.put('/me', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
+    const payload = await payloadDeEdicao(req.body);
     const api = createInternalApiClient();
-    await api.put(`/api/usuarios/${req.params.id}`, buildPayload(req.body));
+    await api.put(`/api/usuarios/${req.params.id}`, payload);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err);
     res
       .status(err.status || 500)
-      .json({ error: 'Erro ao atualizar usuário' });
+      .json({ error: err.status === 400 ? err.message : 'Erro ao atualizar usuário' });
   }
 });
 

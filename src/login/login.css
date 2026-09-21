@@ -465,3 +465,11 @@ body.fade-out {
 html.skip-intro #introOverlay {
   display: none;
 }
+
+/* "Esqueceu a senha?": o passo do código (e-mail, código, senha nova com a
+   lista de requisitos e confirmação) é alto; em tela baixa rola por dentro
+   em vez de cortar o topo. */
+#forgotPasswordModal > .bg-white {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}

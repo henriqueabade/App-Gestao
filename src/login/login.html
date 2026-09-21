@@ -16,6 +16,8 @@
   <link rel="stylesheet" href="../icons.css" />
   <!-- Estilos globais para barras de rolagem -->
   <link rel="stylesheet" href="../styles/scroll.css" />
+  <!-- Lista dos requisitos da senha (cadastro e "Esqueceu a senha?") -->
+  <link rel="stylesheet" href="../styles/senha-forte.css" />
   <script>
     (function () {
       const params = new URLSearchParams(location.search);
@@ -116,13 +118,15 @@
         </div>
         <div class="relative">
           <label for="registerPassword" class="block text-sm font-medium text-[#b6a03e] mb-1">Senha</label>
-          <input type="password" id="registerPassword" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" required />
+          <input type="password" id="registerPassword" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" autocomplete="new-password" required />
           <button type="button" class="toggle-password absolute right-2 top-8 text-gray-500 hover:text-gray-700" data-target="registerPassword">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
               <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
             </svg>
           </button>
+          <!-- Requisitos da senha (src/js/utils/senha-forte.js), marcados enquanto se digita -->
+          <ul id="registerSenhaRegras" class="senha-forte senha-forte--escuro" aria-label="Requisitos da senha"></ul>
         </div>
         <div class="relative">
           <label for="confirmPassword" class="block text-sm font-medium text-[#b6a03e] mb-1">Confirmar senha</label>
@@ -141,15 +145,50 @@
       <div class="absolute inset-0 bg-black opacity-50"></div>
       <div class="bg-white p-6 rounded-lg shadow-lg z-10 w-full max-w-md mx-4">
         <h3 class="text-xl font-semibold text-[#b6a03e] mb-4">Recuperar senha</h3>
-        <p class="text-gray-600 mb-4">Digite seu e-mail para receber um link de recuperação de senha.</p>
+        <!-- Passo 1: pedir o código (chega no e-mail cadastrado; ver docs/redefinicao-de-senha.md) -->
         <form id="resetPasswordForm" class="space-y-4">
+          <p class="text-gray-600">Digite seu e-mail. Enviaremos um código de 8 números para você criar uma nova senha aqui mesmo.</p>
           <div>
             <label for="resetEmail" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail</label>
-            <input type="email" id="resetEmail" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+            <input type="email" id="resetEmail" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" autocomplete="email" required />
+            <p class="text-sm text-gray-600 mt-2">Já recebeu o código? <a href="#" id="jaTenhoCodigo" class="text-[#b6a03e] hover:text-[#d4c169] font-medium">Digitar o código</a></p>
           </div>
           <div class="flex justify-end space-x-3">
             <button type="button" id="cancelReset" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
-            <button type="submit" class="btn-primary px-4 py-2 rounded-md text-white">Enviar</button>
+            <button type="submit" id="enviarCodigoBtn" class="btn-primary px-4 py-2 rounded-md text-white">Enviar código</button>
+          </div>
+        </form>
+        <!-- Passo 2: o código do e-mail e a senha nova -->
+        <form id="novaSenhaForm" class="space-y-4 hidden">
+          <p class="text-gray-600">Digite o código que chegou no seu e-mail e crie a nova senha.</p>
+          <div>
+            <label for="novaSenhaEmail" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail</label>
+            <input type="email" id="novaSenhaEmail" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" autocomplete="email" required />
+          </div>
+          <div>
+            <label for="novaSenhaCodigo" class="block text-sm font-medium text-[#b6a03e] mb-1">Código do e-mail</label>
+            <input type="text" id="novaSenhaCodigo" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none tracking-widest" inputmode="numeric" autocomplete="one-time-code" maxlength="9" placeholder="1234 5678" required />
+            <p class="text-sm text-gray-600 mt-2">Não chegou ou venceu (30 minutos)? <a href="#" id="voltarPedirCodigo" class="text-[#b6a03e] hover:text-[#d4c169] font-medium">Pedir outro código</a></p>
+          </div>
+          <div class="relative">
+            <label for="novaSenha" class="block text-sm font-medium text-[#b6a03e] mb-1">Nova senha</label>
+            <input type="password" id="novaSenha" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" autocomplete="new-password" required />
+            <button type="button" class="toggle-password absolute right-2 top-8 text-gray-500 hover:text-gray-700" data-target="novaSenha" aria-label="Mostrar senha">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <ul id="novaSenhaRegras" class="senha-forte" aria-label="Requisitos da senha"></ul>
+          </div>
+          <div>
+            <label for="novaSenhaConfirma" class="block text-sm font-medium text-[#b6a03e] mb-1">Confirmar nova senha</label>
+            <input type="password" id="novaSenhaConfirma" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" autocomplete="new-password" required />
+          </div>
+          <p id="novaSenhaErro" class="text-sm text-red-500 hidden" role="alert"></p>
+          <div class="flex justify-end space-x-3">
+            <button type="button" id="cancelNovaSenha" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
+            <button type="submit" id="salvarNovaSenhaBtn" class="btn-primary px-4 py-2 rounded-md text-white">Salvar nova senha</button>
           </div>
         </form>
       </div>
@@ -174,6 +213,8 @@
   <script src="../js/utils/restauracao.js"></script>
   <script src="../utils/dialogTopLayer.js"></script>
   <script src="../utils/botaoAcao.js"></script>
+  <!-- Regra da senha forte (a mesma que o backend confere antes de gravar) -->
+  <script src="../js/utils/senha-forte.js"></script>
   <script src="loginRenderer.js"></script>
   <!-- scripts adicionais -->
   <script src="../utils/userActions.js"></script>
