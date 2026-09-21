@@ -152,6 +152,15 @@ body {
     transition: all 150ms ease;
 }
 
+/* O `display` acima venceria o `hidden` do Tailwind (esta folha vem depois). */
+.relatorios-module [data-relatorios-tab].hidden,
+.relatorios-module [data-relatorios-result].hidden { display: none; }
+
+/* Idem para os indicadores de cada aba (o `display: grid` mais abaixo): sem
+   isto os 8 grupos ficavam na tela ao mesmo tempo — só o da aba ativa tem
+   conteúdo, os outros viravam espaço vazio. */
+.relatorios-module .relatorios-kpi-grid.hidden { display: none; }
+
 .relatorios-module .tab-active {
     background: var(--color-primary);
     color: #fff;

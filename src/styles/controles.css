@@ -93,6 +93,21 @@
 
 .ctl-botao[hidden] { display: none; }
 
+/* `hidden` (Tailwind) e estas classes empatam em especificidade, e esta
+   folha carrega DEPOIS do Tailwind: sem o par abaixo, o `display` daqui
+   vence e o que devia nascer escondido aparece. Foi o que pôs DANFE, XML,
+   Boletos e Cancelar + Devolução juntos no rodapé do Visualizar pedido. */
+.ctl-botao.hidden,
+.ctl-acoes.hidden,
+.ctl-rotulo.hidden,
+.ctl-rotulo.flex.hidden { display: none; }
+
+/* Ícone do Font Awesome com `hidden`: a folha do FA (CDN) também carrega
+   depois do Tailwind, e o `display: inline-block` dela vencia — o ícone
+   girando da Nova leitura da IA ficava sempre na tela. */
+.fa.hidden, .fas.hidden, .far.hidden, .fab.hidden,
+.fa-solid.hidden, .fa-regular.hidden, .fa-brands.hidden { display: none; }
+
 .ctl-botao--pequeno {
     height: var(--ctl-altura-pequena);
     padding: 0 var(--ctl-pad-x-pequeno);

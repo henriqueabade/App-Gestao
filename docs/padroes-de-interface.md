@@ -421,6 +421,12 @@ Toda classe de módulo com `display` que convive com `hidden` precisa do par
 `.classe.hidden { display: none; }` (lista em `src/css/ia.css`; no Financeiro,
 `[class*="fin-"].hidden`).
 
+Vale também para as folhas globais que vêm depois do Tailwind: `controles.css`
+tem o par para `ctl-botao`, `ctl-acoes` e `ctl-rotulo` (sem ele, todo botão
+padronizado que nascia escondido aparecia — o rodapé do Visualizar pedido
+mostrava DANFE, Boletos e Cancelar + Devolução juntos) e para os ícones do
+Font Awesome. Travado em `padraoControles.test.js`.
+
 ### Rolagem das tabelas
 
 `src/js/utils/rolagem-encadeada.js` (um ouvinte só, instalado pelo menu):

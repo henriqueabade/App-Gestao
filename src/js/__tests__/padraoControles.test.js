@@ -211,6 +211,27 @@ test('os valores do padrão são os aprovados', () => {
   for (const [nome, v] of Object.entries(esperado)) assert.strictEqual(valor(nome), v, nome);
 });
 
+test('`hidden` continua escondendo o que usa as classes do padrão', () => {
+  // controles.css carrega DEPOIS do Tailwind: uma classe daqui com `display`
+  // empata com `.hidden` e vence por ordem. Sem o par `.classe.hidden`, todo
+  // botão que devia nascer escondido aparecia (o rodapé do Visualizar pedido
+  // mostrava DANFE, XML, Boletos e Cancelar + Devolução juntos).
+  const semComentario = CONTROLES.replace(/\/\*[\s\S]*?\*\//g, '');
+  const regras = [...semComentario.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({ seletores: m[1].split(',').map(s => s.trim()), corpo: m[2] }));
+  const escondem = regras.filter(r => /display:\s*none/.test(r.corpo)).flatMap(r => r.seletores);
+  const comDisplay = regras
+    .filter(r => /display:\s*(?!none)[a-z-]+/.test(r.corpo))
+    .flatMap(r => r.seletores)
+    .filter(s => /^(\.[\w-]+)+$/.test(s) && s.includes('.ctl-'));
+  assert.ok(comDisplay.length >= 3, `achou poucas regras com display: ${comDisplay}`);
+  for (const seletor of comDisplay) {
+    assert.ok(escondem.includes(`${seletor}.hidden`), `falta "${seletor}.hidden { display: none; }" em controles.css`);
+  }
+  // As outras regras novas com display que convivem com `hidden`.
+  assert.match(ler('styles/dialogo-padrao.css'), /\.dlg-rodape button\.hidden\s*\{\s*display:\s*none/);
+  assert.match(ler('css/relatorios.css'), /\[data-relatorios-tab\]\.hidden,\s*\.relatorios-module \[data-relatorios-result\]\.hidden\s*\{\s*display:\s*none/);
+});
+
 test('as classes do padrão existem', () => {
   for (const classe of ['ctl-botao', 'ctl-botao--pequeno', 'ctl-botao--icone', 'ctl-acoes', 'ctl-campo', 'ctl-campo--pequeno',
     'ctl-campo--icone', 'ctl-campo--dois-icones', 'ctl-campo--prefixo', 'ctl-campo--sufixo',
