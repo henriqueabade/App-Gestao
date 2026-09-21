@@ -79,8 +79,10 @@
     flex-shrink: 0;
 }
 
-/* O ícone acompanha a letra do botão (havia `w-4 h-4`, `text-lg`…). */
-.ctl-botao > i,
+/* O ícone acompanha a letra do botão (havia `w-4 h-4`, `text-lg`…). A
+   setinha do "Ações Rápidas" fica de fora: ela é menor de propósito
+   (acoes-csv.css). */
+.ctl-botao > i:not(.acoes-rapidas__chevron),
 .ctl-botao > svg {
     font-size: 1em;
     width: auto;

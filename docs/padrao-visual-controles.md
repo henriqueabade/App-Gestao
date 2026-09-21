@@ -180,9 +180,9 @@ Quando o dono mandar o módulo:
 | 2 | Matéria-prima | **feito em 22/09** — tela e os 13 modais (Novo, Editar, Excluir, Auditoria, Duplicado, Dependência, categoria/unidade/processo novo e excluir, ordem duplicada). **Aprovado pelo dono.** |
 | 3 | Produtos | **feito em 22/09** — tela e os 15 modais (Novo, Editar com o editor de preço, Visualizar, Detalhe de estoque, Adicionar ao estoque, Item já registrado, Excluir, Excluir lote, Movimentações, Próxima etapa e as 3 caixas dela, Regra produção, coleção e desenhista novo/excluir). **Aprovado pelo dono.** |
 | 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
-| 5 | Pedidos | **feito em 22/09** — tela e os 12 modais (Visualizar, Pagamento, Emitir NF-e, Relatório de produção, Converter orçamentos, Cancelar pedido com a realocação, Cancelar NF-e, Carta de correção, E-mail da NF-e, Boletos, Detalhe do boleto, Devolução); o Datas já tinha entrado com Orçamentos. Aguardando o "ok" do dono. |
-| 6 | CRM › Clientes | a fazer — **próximo** |
-| 7 | CRM › Prospecções | a fazer |
+| 5 | Pedidos | **feito em 22/09** — tela e os 12 modais (Visualizar, Pagamento, Emitir NF-e, Relatório de produção, Converter orçamentos, Cancelar pedido com a realocação, Cancelar NF-e, Carta de correção, E-mail da NF-e, Boletos, Detalhe do boleto, Devolução); o Datas já tinha entrado com Orçamentos. **Aprovado pelo dono.** |
+| 6 | CRM › Clientes | **feito em 22/09** — tela (com o "Ações Rápidas") e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato); a Transportadora já tinha entrado com Orçamentos. O botão da linha do tempo (`.hs-botao`, compartilhado com Prospecções) passou para as medidas do botão pequeno. Aguardando o "ok" do dono. |
+| 7 | CRM › Prospecções | a fazer — **próximo** |
 | 8 | CRM › Contatos | a fazer |
 | 9 | CRM › Calendário | referência — só conferir |
 | 10 | CRM › Tarefas | referência — só conferir |
@@ -193,7 +193,7 @@ Quando o dono mandar o módulo:
 | 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |
 | 16 | Relatórios | a fazer |
 | 17 | Configurações | a fazer |
-| — | Globais: caixa de diálogo (`DialogPadrao`) | conferir no fim — botões já com 14 px / 600, mas ~38 px de altura e cantos de 9,6 px |
+| — | Globais: caixa de diálogo (`DialogPadrao`) | conferir no fim — botões já com 14 px / 600, mas ~38 px de altura e cantos de 9,6 px. Entram junto os modais que usam o mesmo desenho (`dlg-rodape`): o resultado da importação de planilha (`AcoesCsv`) e o "Não é possível excluir"/"Insumo já cadastrado" de Matéria-prima |
 
 Os modais do Financeiro **não** são referência: medidos em 21/09, estão no
 tamanho grande (botões de 40 px com letra de 16 px, campos de 50 px).

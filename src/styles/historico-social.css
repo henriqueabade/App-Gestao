@@ -51,9 +51,11 @@
 .hs-compor__resposta strong { color: var(--color-primary-light, #d4c169); }
 .hs-compor__botoes { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
 
+/* O botão pequeno do padrão (controles.css: 32 px, letra de 13 px). */
 .hs-botao {
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 0.45rem 0.95rem; border-radius: 0.6rem; font-size: 0.8rem; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--ctl-espaco-icone, 0.45rem);
+    height: var(--ctl-altura-pequena, 2rem); padding: 0 var(--ctl-pad-x-pequeno, 0.8rem);
+    border-radius: var(--ctl-raio, 0.7rem); font-size: var(--ctl-fonte-pequena, 0.8125rem); font-weight: 600;
     color: #fff; transition: transform 150ms ease, background 150ms ease; white-space: nowrap;
 }
 .hs-botao:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
@@ -183,7 +185,7 @@
 .hs-sugestao__hora { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: #7a5c12; }
 .hs-sugestao__texto { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-sugestao__detalhe { font-size: 0.7rem; color: #4b5563; }
-.hs-botao--icone { padding: 0.45rem 0.6rem; }
+.hs-botao--icone { width: var(--ctl-altura-pequena, 2rem); padding: 0; }
 
 /* Ao vivo: o selo da barra e o piscar do que acabou de chegar. */
 .hs-ao-vivo {

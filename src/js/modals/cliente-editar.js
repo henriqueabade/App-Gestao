@@ -308,7 +308,7 @@
     const ov=document.createElement('div');
     ov.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     ov.style.zIndex = 'var(--z-dialog)';
-    ov.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-white">Tem certeza?</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="dlgYes" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="dlgNo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
+    ov.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="ctl-modal-titulo mb-4 text-white">Tem certeza?</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="ctl-acoes justify-center"><button id="dlgYes" class="btn-success ctl-botao text-white">Sim</button><button id="dlgNo" class="btn-danger ctl-botao text-white">Não</button></div></div></div>`;
     document.body.appendChild(ov);
     ov.querySelector('#dlgYes').addEventListener('click',()=>{ov.remove();cb(true);});
     ov.querySelector('#dlgNo').addEventListener('click',()=>{ov.remove();cb(false);});

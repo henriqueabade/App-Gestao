@@ -86,6 +86,14 @@ const PADRONIZADOS = [
       'gerar-boletos', 'boleto-detalhe', 'devolucao'
     ].map(m => `html/modals/pedidos/${m}.html`)]
   },
+  {
+    // 22/09/2026. Novo contato abre de dentro do Novo/Editar; a
+    // Transportadora já está na lista de Orçamentos. Na ficha: a linha do
+    // tempo (HistoricoSocial, teste próprio abaixo) e as tarefas (referência).
+    modulo: 'clientes',
+    arquivos: ['html/clientes.html', ...['detalhes', 'novo', 'editar', 'excluir', 'contato']
+      .map(m => `html/modals/clientes/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -219,6 +227,11 @@ const JS_PADRONIZADOS = [
     ignorar: [/\bpy-0\.5\b/, /^btn-primary px-3 py-1 rounded text-xs$/]
   },
   {
+    modulo: 'clientes',
+    arquivos: ['js/clientes.js', 'js/modals/cliente-editar.js', 'js/modals/cliente-novo.js', 'js/modals/cliente-detalhes.js'],
+    ignorar: []
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -264,6 +277,14 @@ test('dashboard: o "Atualizar" do cartão com erro é o botão pequeno do padrã
   for (const classe of ['.dash-botao-leve', '.dash-botao-atualizar']) {
     assert.deepStrictEqual(regrasComTamanho(css, classe), [], `${classe} não pode fixar tamanho em dashboard.css`);
   }
+});
+
+test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrão', () => {
+  const css = ler('styles/historico-social.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const regra = (css.match(/\.hs-botao\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(regra, /height:\s*var\(--ctl-altura-pequena/);
+  assert.match(regra, /font-size:\s*var\(--ctl-fonte-pequena/);
+  assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
 test('materia-prima: a folha não prende mais os controles do filtro em 48 px', () => {
