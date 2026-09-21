@@ -4738,6 +4738,14 @@
         acionar(semNf, () => marcarSemNfe(l));
         acoes.appendChild(semNf);
       }
+      // A nota saiu por fora (contador, outro sistema): informa os dados e o
+      // pedido sai desta lista. Os boletos de fora vão no mesmo modal.
+      const deFora = criar('button', 'btn-neutral px-3 py-1 rounded-md text-xs font-medium text-white', 'NF-e de fora');
+      deFora.type = 'button';
+      deFora.dataset.perm = 'financeiro.nfe.emit';
+      deFora.title = 'Informar a NF-e (e os boletos) emitidos fora do sistema';
+      deFora.addEventListener('click', () => abrirDadosDeFora(l));
+      acoes.appendChild(deFora);
 
       tr.append(
         celula(pedidoBtn), celula(l.cliente), celula(formatarData(l.enviado_em)), dias, celula(condicaoDoPedido(l)),
@@ -4750,6 +4758,12 @@
       window.selectedOrderId = l.pedido_id;
       window.emitirNfeContext = { pedidoId: l.pedido_id, numero: String(l.numero), cliente: l.cliente || '' };
       abrirModalDePedido('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido', { esperar: true, aoFechar: carregarLista });
+    }
+
+    function abrirDadosDeFora(l) {
+      window.selectedOrderId = l.pedido_id;
+      window.dadosExternosContext = { pedidoId: l.pedido_id, numero: String(l.numero), cliente: l.cliente || '', formaPagamento: l.forma_pagamento || '' };
+      abrirModalDePedido('modals/pedidos/dados-externos.html', '../js/modals/pedido-dados-externos.js', 'dadosExternos', { esperar: true, aoFechar: carregarLista });
     }
 
     async function marcarSemNfe(l) {

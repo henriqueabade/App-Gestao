@@ -146,7 +146,7 @@ function indexarNotasDevolucao(notas) {
  * "S/NF" (enviado sem nota). Com carta de correção, a amarela "CC-e" vem
  * antes. Pura; '' quando não há o que mostrar.
  */
-function tagNota(p, nota) {
+function tagNota(p, nota, notaDeFora = null) {
     if (nota && nota.status_fiscal === 'autorizada') {
         const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para gerar o DANFE`;
         return `${tagCartaCorrecao(nota)} <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
@@ -154,9 +154,30 @@ function tagNota(p, nota) {
     if (nota && nota.status_fiscal === 'cancelada') {
         const quando = formatarDiaDate(nota.cancelada_em);
         const titulo = `NF-e série ${nota.serie} nº ${nota.numero} cancelada${quando ? ` em ${quando}` : ''}`;
-        return `${tagCartaCorrecao(nota)} <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
+        // Cancelada aqui e informada uma de fora depois: vale a de fora.
+        if (!notaDeFora) return `${tagCartaCorrecao(nota)} <span class="badge-danger ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">X/NF</span>`;
     }
-    return tagSemNota(p);
+    return tagNotaDeFora(notaDeFora) || tagSemNota(p);
+}
+
+/**
+ * Tag azul "NF fora": a NF-e foi emitida fora do sistema e só os dados foram
+ * informados (pedido-dados-externos.js) — não há DANFE aqui. Pura; '' sem nota.
+ */
+function tagNotaDeFora(nota) {
+    if (!nota) return '';
+    const titulo = `NF-e série ${Number(nota.serie) || 0} nº ${Number(nota.numero) || 0} emitida fora do sistema (dados informados)`;
+    return ` <span class="badge-info ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
+}
+
+/** As notas de fora vivas, por pedido. Pura. */
+function indexarNotasDeFora(notas) {
+    const porPedido = {};
+    for (const n of Array.isArray(notas) ? notas : []) {
+        if (!n || n.pedido_id === null || n.pedido_id === undefined || n.ativo === false) continue;
+        porPedido[String(n.pedido_id)] = n;
+    }
+    return porPedido;
 }
 
 /**
@@ -407,15 +428,19 @@ async function carregarPedidos() {
         // as tags — a lista não depende disso.
         // As notas de DEVOLUÇÃO (a do cliente, guardada pela devolução) vêm do
         // mesmo jeito: sem a tabela ou sem permissão, a lista sai sem a tag.
-        const [resp, respNotas, respNotasDev] = await Promise.all([
+        // E as NF-e emitidas FORA e informadas (a tag "NF fora"): sem o SQL ou
+        // sem permissão, a lista sai sem ela.
+        const [resp, respNotas, respNotasDev, respNotasFora] = await Promise.all([
             fetchApi('/api/pedidos'),
             fetchApi('/api/fiscal/notas').catch(() => null),
             fetchApi('/api/devolucoes/notas').catch(() => null),
+            fetchApi('/api/fiscal/notas-externas').catch(() => null),
             cacheClientes.size ? Promise.resolve() : carregarClientes()
         ]);
         const data = await resp.json();
         const notasPorPedido = indexarNotas(respNotas?.ok ? await respNotas.json().catch(() => []) : []);
         const notasDevPorPedido = indexarNotasDevolucao(respNotasDev?.ok ? await respNotasDev.json().catch(() => []) : []);
+        const notasForaPorPedido = indexarNotasDeFora(respNotasFora?.ok ? await respNotasFora.json().catch(() => []) : []);
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -463,7 +488,7 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)], notasForaPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
                 <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>

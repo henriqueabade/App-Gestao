@@ -94,6 +94,28 @@ const registrar = (api, bb, extra = {}) => boletos.registrar({
   api, pedidoId: 55, bb, credenciais: { clientId: 'c', clientSecret: 's' }, appKey: 'k', ambiente: 'sandbox', usuarioId: 1, hoje: '2026-09-16', ...extra
 });
 
+test('boleto emitido FORA ocupa a parcela: aparece na tela e o "gerar" não leva ao BB (sem cobrar duas vezes)', async () => {
+  configuracao.limparCache();
+  const calculo = require('./boletoCalculo');
+  const livre = calculo.campoLivre({ convenio: '3128557', sequencial: 42 });
+  const linha = calculo.linhaDigitavel(calculo.codigoBarras({ vencimento: '2027-02-17', valor: 1000, campoLivre: livre, banco: '341' })).digitos;
+  const api = apiFalsa({
+    ...tabelasBase(),
+    boletos_externos: [{ id: 5, pedido_id: 55, parcela_id: 2, numero_parcela: 2, linha_digitavel: linha, banco: '341', valor: 1000, vencimento: '2027-02-17', ativo: true }]
+  });
+  const bb = bbFalso();
+  const r = await registrar(api, bb);
+  assert.equal(bb.chamadas.length, 2, 'só as parcelas 1 e 3 vão ao BB');
+  const segunda = r.resultados.find(x => x.numero_parcela === 2);
+  assert.deepEqual([segunda.ok, segunda.ja_existia, segunda.externo, segunda.boleto_externo.banco_nome], [true, true, true, 'Itaú']);
+
+  const dados = await boletos.lerPedidoCobranca(api, 55);
+  const linhas = boletos.parcelasComBoletos(dados);
+  assert.equal(linhas[1].boleto_externo.vencimento, '2027-02-17');
+  assert.equal(linhas[1].boleto_externo.linha_impressa.length, 54, 'a linha como sai impressa, com os pontos e espaços');
+  assert.equal(linhas[1].tem_boleto_vivo, false, 'tem_boleto_vivo continua só do BB');
+});
+
 test('registra as três parcelas: nosso número sequencial reservado, BB chamado com o payload, linha/Pix gravados, eventos e sequencial avançado', async () => {
   configuracao.limparCache();
   const api = apiFalsa();

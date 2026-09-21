@@ -29,6 +29,17 @@
 
   /** Como a parcela aparece: se pode ser marcada, e a tag do boleto que ela tem. */
   function linhaDaParcela(l) {
+    // Boleto emitido fora e informado: a parcela já está cobrada, não se marca.
+    if (l?.boleto_externo && !l?.tem_boleto_vivo) {
+      const e = l.boleto_externo;
+      return {
+        id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
+        vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        classe: 'badge-info', rotulo: `Boleto de fora${e.banco_nome ? ` · ${e.banco_nome}` : ''}`,
+        detalhe: [e.vencimento ? `vence ${diaCurto(e.vencimento)}` : '', e.linha_impressa || e.linha_digitavel || ''].filter(Boolean).join(' · ')
+      };
+    }
     const b = l?.boleto || null;
     const [classe, rotuloBase] = b ? (ROTULO_STATUS[b.status] || ['badge-neutral', String(b.status || '')]) : ['badge-neutral', 'Sem boleto'];
     const rotulo = b?.status === 'baixado' && MOTIVOS_BAIXA[b.motivo_baixa] ? `${rotuloBase} · ${MOTIVOS_BAIXA[b.motivo_baixa]}` : rotuloBase;

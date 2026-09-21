@@ -80,7 +80,7 @@
   // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
   // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
   // ------------------------------------------------------------------
-  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null, notasDevolucao = []) {
+  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null, notasDevolucao = [], notaExterna = null) {
     const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
     const STATUS_NF = {
       autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
@@ -100,6 +100,10 @@
         classe,
         texto: `NF-e ${nota.serie}/${nota.numero} · ${rotulo}${Number.isFinite(valor) && valor > 0 ? ` · ${brl(valor)}` : ''}${nota.ambiente === 'homologacao' ? ' · homologação' : ''}`
       });
+    } else if (notaExterna) {
+      // A NF-e emitida fora e informada (só os dados): vence o "Sem nota fiscal".
+      const valorDeFora = Number(notaExterna.valor_total);
+      tags.push({ classe: 'badge-info', texto: `NF-e ${Number(notaExterna.serie) || 0}/${Number(notaExterna.numero) || 0} · de fora${Number.isFinite(valorDeFora) && valorDeFora > 0 ? ` · ${brl(valorDeFora)}` : ''}` });
     } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
       tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
     }
@@ -118,6 +122,9 @@
       const pagos = Number(boletos?.pagos) || 0;
       tags.push({ classe: registrados === parcelas ? 'badge-success' : 'badge-warning', texto: `Boletos ${registrados}/${parcelas}${pagos ? ` · ${pagos} pago${pagos > 1 ? 's' : ''}` : ''}` });
     }
+    // Boletos emitidos fora e informados: contados à parte (não são do BB).
+    const deFora = Number(boletos?.externos) || 0;
+    if (parcelas > 0 && deFora > 0) tags.push({ classe: 'badge-info', texto: `Boletos de fora ${deFora}/${parcelas}` });
     const modalidade = p.modalidade_frete;
     if (modalidade !== null && modalidade !== undefined && modalidade !== '' && ROTULO_FRETE[Number(modalidade)]) {
       tags.push({ classe: 'badge-neutral', texto: `Frete: ${ROTULO_FRETE[Number(modalidade)]}` });
@@ -138,8 +145,31 @@
       parcelas: linhas.length,
       registrados: linhas.filter(l => l?.tem_boleto_vivo).length,
       pagos: linhas.filter(l => l?.boleto?.status === 'pago').length,
-      com_erro: linhas.filter(l => l?.boleto?.status === 'erro').length
+      com_erro: linhas.filter(l => l?.boleto?.status === 'erro').length,
+      externos: linhas.filter(l => l?.boleto_externo).length
     };
+  }
+
+  /** Como o boleto emitido fora aparece na coluna das parcelas. Pura. */
+  function rotuloDoBoletoExterno(b) {
+    const [ano, mes, dia] = String(b?.vencimento || '').split('-');
+    const partes = [b?.banco_nome || (b?.banco ? `Banco ${b.banco}` : ''), dia ? `vence ${dia}/${mes}/${ano}` : ''].filter(Boolean);
+    return { classe: 'badge-info', texto: `de fora${partes.length ? ` · ${partes.join(' · ')}` : ''}`, linha: String(b?.linha_digitavel || '') };
+  }
+
+  /**
+   * O botão "NF-e e boletos de fora": só pedido que saiu, e só quando falta a
+   * nota (nenhuma emitida aqui nem informada), falta boleto numa parcela de
+   * pedido pago com boleto, ou já há dado de fora para ver ou tirar. Pura.
+   */
+  function precisaDeDadosDeFora({ pedido, notas = [], notaExterna = null, boletos = null }) {
+    if (!pedidoJaSaiu(pedido)) return false;
+    const temNotaPropria = (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
+    const linhas = Array.isArray(boletos?.parcelas) ? boletos.parcelas : [];
+    const temDeFora = Boolean(notaExterna) || linhas.some(l => l?.boleto_externo);
+    const faltaNota = !temNotaPropria && !notaExterna;
+    const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
+    return faltaNota || faltaBoleto || temDeFora;
   }
 
   /** Como cada boleto aparece na coluna das parcelas: classe da tag e texto. Pura. */
@@ -288,6 +318,21 @@
       const td = document.createElement('td');
       td.className = 'px-6 py-4 text-left text-sm';
       const linha = porParcela.get(String(p.id)) || estado.parcelas.find(l => Number(l?.parcela?.numero_parcela) === Number(p.numero_parcela));
+      // Boleto emitido fora: a tag azul copia a linha digitável.
+      if (linha?.boleto_externo && !linha?.tem_boleto_vivo) {
+        const ext = rotuloDoBoletoExterno(linha.boleto_externo);
+        const tagFora = document.createElement('span');
+        tagFora.className = `${ext.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-pointer`;
+        tagFora.setAttribute('role', 'button');
+        tagFora.textContent = ext.texto;
+        tagFora.title = `${linha.boleto_externo.linha_impressa || ext.linha} — clique para copiar a linha digitável`;
+        tagFora.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(ext.linha); window.showToast?.('Linha digitável copiada.', 'success'); } catch (_) { window.showToast?.('Não foi possível copiar.', 'error'); }
+        });
+        td.appendChild(tagFora);
+        tr.appendChild(td);
+        return;
+      }
       const r = rotuloDoBoleto(linha?.boleto || null);
       const tag = document.createElement('span');
       tag.className = `${r.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
@@ -311,6 +356,26 @@
     return ['registrado', 'vencido', 'protestado'].includes(String(boleto?.status || ''));
   }
 
+  /**
+   * "NF-e e boletos de fora" no rodapé: abre por cima o modal que informa os
+   * dados da nota e dos boletos emitidos fora do sistema. Aparece para quem
+   * pode emitir NF-e ou gerar boletos, quando precisaDeDadosDeFora.
+   */
+  function ligarDadosDeFora({ pedido, notas, notaExterna, boletos, cliente }) {
+    const botao = overlay.querySelector('#visualizarPedidoDadosExternos');
+    if (!botao) return;
+    const pode = chave => (typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode(chave) : true);
+    if (!(pode('financeiro.nfe.emit') || pode('financeiro.boleto.emit'))) return;
+    if (!precisaDeDadosDeFora({ pedido, notas, notaExterna, boletos })) return;
+    botao.classList.remove('hidden');
+    const abrir = () => {
+      window.dadosExternosContext = { pedidoId: id, numero: pedido?.numero || '', cliente, formaPagamento: pedido?.forma_pagamento || '' };
+      abrirPorCima('modals/pedidos/dados-externos.html', '../js/modals/pedido-dados-externos.js', 'dadosExternos');
+    };
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
+    else botao.addEventListener('click', abrir);
+  }
+
   /** "Boletos (PDF)" no rodapé: todos os boletos a pagar do pedido. */
   function ligarBoletosPdf(estado) {
     const botao = overlay.querySelector('#visualizarPedidoBoletosPdf');
@@ -331,7 +396,8 @@
     const botao = overlay.querySelector('#visualizarPedidoGerarBoletos');
     const lista = overlay.querySelector('#visualizarPedidoBoletos');
     if (!estado || !Array.isArray(estado.parcelas)) return;
-    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo);
+    // Parcela com boleto emitido fora já está cobrada: não conta como faltando.
+    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
     const cancelado = String(pedido?.situacao || '').toLowerCase() === 'cancelado';
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
@@ -363,8 +429,8 @@
   // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
   // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
   // Antes cada um fechava o Visualizar primeiro.
-  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido'];
-  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida'];
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos'];
+  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa'];
   let filhoMudouOPedido = false;
 
   function abrirPorCima(htmlPath, scriptPath, filhoId) {
@@ -699,7 +765,13 @@
         if (respDev.ok) notasDevolucao = await respDev.json();
       } catch (_) { /* sem nota de devolução, sem tag */ }
     }
-    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));
+    // A NF-e emitida fora e informada (só os dados): sem permissão ou sem o SQL, fica como era.
+    let notaExterna = null;
+    try {
+      const respExt = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa`);
+      if (respExt.ok) notaExterna = (await respExt.json())?.nota_externa || null;
+    } catch (_) { /* sem nota de fora */ }
+    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));
     ligarBotoesDoPedido(data, clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '', notas);
     ligarDocumentosDaNota(notaDocs, data);
 
@@ -756,6 +828,7 @@
     }
     ligarGerarBoletos(boletosEstado, data);
     ligarBoletosPdf(boletosEstado);
+    ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';
     const contatoNome = contatoSel?.selectedOptions?.[0]?.textContent?.trim() || data.contato || '';

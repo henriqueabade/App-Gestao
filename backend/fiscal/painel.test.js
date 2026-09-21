@@ -57,6 +57,14 @@ test('aguardando NF-e: enviado ou entregue, sem nota viva, a partir da competên
   assert.equal(r.pedidos.find(l => l.numero === '2543').dispensada, true);
   assert.equal(r.pedidos.find(l => l.numero === '2544').cliente, 'Marcenaria Serrana');
 
+  // A NF-e emitida fora e informada (fiscal/externas.js) também é nota; a desligada não conta.
+  const comDeFora = painel.pedidosAguardandoNfe({
+    pedidos: pedidos(), notas: notas(), desde: '2026-09-01', hoje: HOJE,
+    externas: [{ pedido_id: 1, ativo: true }, { pedido_id: 6, ativo: false }]
+  });
+  assert.deepEqual(comDeFora.pedidos.map(l => l.numero), ['2543', '2544'], 'o 2540 tem nota de fora e sai da lista');
+  assert.equal(comDeFora.total, 400);
+
   const agosto = painel.pedidosAguardandoNfe({ pedidos: pedidos(), notas: notas(), desde: '2026-08-01', hoje: HOJE });
   assert.ok(agosto.pedidos.some(l => l.numero === '2500'), 'com a competência anterior o pedido de agosto (nota cancelada) entra');
   assert.equal(agosto.pedidos.find(l => l.numero === '2500').ultima_nota.status_fiscal, 'cancelada');

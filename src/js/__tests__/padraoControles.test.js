@@ -83,7 +83,7 @@ const PADRONIZADOS = [
     arquivos: ['html/pedidos.html', ...[
       'visualizar', 'pagamento', 'emitir-nfe', 'relatorio-producao', 'converter-orcamentos',
       'cancelar', 'cancelar-nfe', 'carta-correcao-nfe', 'enviar-nfe-email',
-      'gerar-boletos', 'boleto-detalhe', 'devolucao'
+      'gerar-boletos', 'boleto-detalhe', 'devolucao', 'dados-externos'
     ].map(m => `html/modals/pedidos/${m}.html`)]
   },
   {
@@ -292,13 +292,15 @@ const JS_PADRONIZADOS = [
       'js/modals/pedido-pagamento.js',
       'js/modals/pedido-carta-correcao-nfe.js',
       'js/modals/pedido-devolucao.js',
-      'js/modals/pedido-gerar-boletos.js'
+      'js/modals/pedido-gerar-boletos.js',
+      'js/modals/pedido-dados-externos.js'
     ],
     // "Detalhes" e "PDF" dentro das linhas da tabela de boletos: ação de
     // linha (20 px), como os ícones das linhas — fica fora do padrão.
     // "Selecionar este pedido" na realocação é um <span> dentro de um cartão
     // clicável (o cartão é o botão): etiqueta, fica.
-    ignorar: [/\bpy-0\.5\b/, /^btn-primary px-3 py-1 rounded text-xs$/]
+    // "Copiar linha" e "Remover" em cada parcela dos boletos de fora: ação de linha.
+    ignorar: [/\bpy-0\.5\b/, /^btn-primary px-3 py-1 rounded text-xs$/, /\bpx-3 py-1 rounded-md text-xs\b/]
   },
   {
     modulo: 'clientes',

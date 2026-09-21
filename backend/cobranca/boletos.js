@@ -16,6 +16,7 @@
 const configuracao = require('./configuracaoCobranca');
 const bbBoleto = require('./bbBoleto');
 const calculo = require('./boletoCalculo');
+const externas = require('../fiscal/externas');
 
 const STATUS_VIVOS = new Set(['registrado', 'pago', 'vencido', 'protestado']);
 /** Os que ainda se pagam: entram no PDF "todos os boletos do pedido". */
@@ -79,12 +80,14 @@ async function registrarEvento(api, boletoId, { origem = 'app', tipo, nosso_nume
 async function lerPedidoCobranca(api, pedidoId) {
   const id = Number(pedidoId);
   if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
-  const [pedidos, parcelas, notas, boletos, cfg] = await Promise.all([
+  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos] = await Promise.all([
     api.get('/api/pedidos', { query: { id } }).then(lista),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/boletos', { query: { pedido_id: id } }).then(lista).catch(() => []),
-    configuracao.carregar(api)
+    configuracao.carregar(api),
+    // Boletos emitidos FORA e informados (fiscal/externas.js). Sem o SQL, nenhum.
+    externas.listarBoletos(api, id).catch(() => [])
   ]);
   const pedido = pedidos.find(p => Number(p?.id) === id) || null;
   if (!pedido) throw erro('Pedido não encontrado.', 404);
@@ -97,7 +100,8 @@ async function lerPedidoCobranca(api, pedidoId) {
   return {
     pedido, cliente, configuracao: cfg, notaViva,
     parcelas: parcelas.filter(p => Number(p?.pedido_id) === id).sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0)),
-    boletos: boletos.filter(b => Number(b?.pedido_id) === id).sort((a, b) => Number(b.id) - Number(a.id))
+    boletos: boletos.filter(b => Number(b?.pedido_id) === id).sort((a, b) => Number(b.id) - Number(a.id)),
+    boletosExternos
   };
 }
 
@@ -127,12 +131,15 @@ function boletoDaParcela(boletos, parcela) {
  * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
  * histórico; a parcela continua livre para gerar outro.
  */
-function parcelasComBoletos({ parcelas, boletos }) {
+function parcelasComBoletos({ parcelas, boletos, boletosExternos = [] }) {
   return (parcelas || []).map(p => {
     const b = boletoDaParcela(boletos, p)
       || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
       || null;
-    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b) };
+    // O boleto emitido FORA ocupa a parcela para o "Gerar boletos" (não se
+    // cobra duas vezes), mas não é do BB: `tem_boleto_vivo` continua só do BB.
+    const deFora = externas.boletoParaTela(externas.boletoExternoDaParcela(boletosExternos, p));
+    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora };
   });
 }
 
@@ -248,6 +255,12 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
   const resultados = [];
 
   for (const parcela of alvo) {
+    // Boleto emitido fora e informado: a parcela já está cobrada — não vai ao BB.
+    const deFora = externas.boletoExternoDaParcela(dados.boletosExternos, parcela);
+    if (deFora) {
+      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, externo: true, boleto_externo: externas.boletoParaTela(deFora) });
+      continue;
+    }
     const existente = boletoDaParcela(dados.boletos, parcela);
     if (ocupaParcela(existente)) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, boleto: enxuto(existente) });

@@ -27,6 +27,7 @@ const email = require('./fiscal/email');
 const segredoBanco = require('./fiscal/segredoBanco');
 const cartaCorrecaoDoc = require('./fiscal/cartaCorrecaoDoc');
 const painel = require('./fiscal/painel');
+const externas = require('./fiscal/externas');
 const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -368,6 +369,54 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       res.json({ ok: true, pedido_id: id, ...marca });
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/pedidos/:id/dispensar-nfe');
+    }
+  });
+
+  // ------------------------------------------ NF-e emitida FORA do sistema
+  // Só os dados (fiscal/externas.js): pelo XML, lido e descartado, ou pela
+  // chave + valor. Quem pode emitir NF-e informa; quem vê notas, vê.
+
+  /** As notas de fora vivas (a lista de Pedidos mostra a etiqueta "NF fora"). */
+  router.get('/notas-externas', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await externas.listarNotas(createApiClient(req), { pedidoId: req.query?.pedido_id || null }));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/notas-externas');
+    }
+  });
+
+  /** A NF-e de fora do pedido e se dá para informar uma agora. */
+  router.get('/pedidos/:id/nfe-externa', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await externas.estadoDaNota(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa');
+    }
+  });
+
+  /** Confere sem gravar: o que a nota diz e o que ela tem de estranho para o pedido. */
+  router.post('/pedidos/:id/nfe-externa/previa', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.informarNota({ api: createApiClient(req), pedidoId: req.params.id, entrada: req.body || {}, apenasPrevia: true }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/nfe-externa/previa');
+    }
+  });
+
+  router.post('/pedidos/:id/nfe-externa', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.informarNota({ api: createApiClient(req), pedidoId: req.params.id, entrada: req.body || {}, usuarioId: usuarioDaRequisicao(req) }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/nfe-externa');
+    }
+  });
+
+  /** Tira a nota de fora (só desliga; fica o rastro de quem tirou). */
+  router.delete('/pedidos/:id/nfe-externa', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.removerNota({ api: createApiClient(req), pedidoId: req.params.id, usuarioId: usuarioDaRequisicao(req) }));
+    } catch (err) {
+      responder(res, err, 'DELETE /api/fiscal/pedidos/:id/nfe-externa');
     }
   });
 
