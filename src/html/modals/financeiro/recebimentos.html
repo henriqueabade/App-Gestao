@@ -7,13 +7,13 @@
   pode ser estornado. "Conciliar BB" (azul escuro, como no módulo) no rodapé. Só texto nos botões.
   Script: src/js/modals/financeiro-modais.js.
 -->
-<div id="finRecebimentosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finRecebimentosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRecebimentosTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finRecebimentosTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-money-bill-wave mr-2" aria-hidden="true"></i>Recebimentos</h2>
+        <h2 id="finRecebimentosTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-money-bill-wave mr-2" aria-hidden="true"></i>Recebimentos</h2>
         <p id="finRecebimentosDesde" class="text-xs text-gray-300 truncate">Contas a receber dos pedidos faturados</p>
       </div>
       <span class="justify-self-end"></span>
@@ -42,8 +42,8 @@
 
         <div class="fin-filtros fin-filtros--4">
           <div>
-            <label for="finRecebimentosVisao" class="block text-sm font-medium text-gray-300 mb-2">Mostrar</label>
-            <select id="finRecebimentosVisao" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finRecebimentosVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="finRecebimentosVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="recebidos">Recebidos na competência</option>
               <option value="a_receber">A receber na competência</option>
               <option value="em_atraso">Em atraso</option>
@@ -51,18 +51,18 @@
             </select>
           </div>
           <div>
-            <label for="finRecebimentosCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <label for="finRecebimentosCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finRecebimentosCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finRecebimentosCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finRecebimentosCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finRecebimentosCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finRecebimentosCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finRecebimentosCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finRecebimentosCompetencia" />
             </div>
           </div>
           <div>
-            <label for="finRecebimentosBoleto" class="block text-sm font-medium text-gray-300 mb-2">Boleto</label>
-            <select id="finRecebimentosBoleto" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finRecebimentosBoleto" class="ctl-rotulo text-gray-300">Boleto</label>
+            <select id="finRecebimentosBoleto" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
               <option value="aberto">Com boleto em aberto</option>
               <option value="sem">Sem boleto em aberto</option>
@@ -70,9 +70,9 @@
             </select>
           </div>
           <div>
-            <label for="finRecebimentosBusca" class="block text-sm font-medium text-gray-300 mb-2">Pedido, cliente ou NF</label>
+            <label for="finRecebimentosBusca" class="ctl-rotulo text-gray-300">Pedido, cliente ou NF</label>
             <input id="finRecebimentosBusca" type="text" placeholder="Nº do pedido, cliente ou NF" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
 
@@ -94,10 +94,10 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="finRecebimentosConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-bb px-6 py-2 rounded-lg text-white font-medium min-w-[160px]" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">Conciliar BB</button>
-      <button id="finRecebimentosRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Registrar recebimento</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="finRecebimentosConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-bb ctl-botao text-white min-w-[160px]" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">Conciliar BB</button>
+      <button id="finRecebimentosRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success ctl-botao min-w-[160px]">Registrar recebimento</button>
     </footer>
   </div>
 </div>

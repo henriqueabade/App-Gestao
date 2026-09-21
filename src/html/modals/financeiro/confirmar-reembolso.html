@@ -6,12 +6,12 @@
   POST /api/devolucoes/reembolsos/:id/confirmar (financeiro.reembolso.confirmar).
   Script: src/js/modals/financeiro-modais.js (montarConfirmarReembolso).
 -->
-<div id="finConfirmarReembolsoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finConfirmarReembolsoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finReembolsoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finReembolsoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-undo-alt mr-2" aria-hidden="true"></i>Confirmar reembolso</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finReembolsoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-undo-alt mr-2" aria-hidden="true"></i>Confirmar reembolso</h2>
       <span id="finReembolsoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
@@ -20,29 +20,29 @@
         <p class="text-xs text-gray-400">O reembolso é o que volta para o cliente numa devolução de pedido. Confirme depois de pagar: o app só registra.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="md:col-span-2">
-            <label for="finReembolsoQual" class="block text-sm font-medium text-gray-300 mb-2">Reembolso <span class="fin-obrigatorio">*</span></label>
-            <select id="finReembolsoQual" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finReembolsoQual" class="ctl-rotulo text-gray-300">Reembolso <span class="fin-obrigatorio">*</span></label>
+            <select id="finReembolsoQual" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
           <div>
-            <label for="finReembolsoValor" class="block text-sm font-medium text-gray-300 mb-2">Valor</label>
+            <label for="finReembolsoValor" class="ctl-rotulo text-gray-300">Valor</label>
             <input id="finReembolsoValor" type="text" readonly value="—"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white fin-somente-leitura" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white fin-somente-leitura" />
           </div>
           <div>
-            <label for="finReembolsoData" class="block text-sm font-medium text-gray-300 mb-2">Data do reembolso <span class="fin-obrigatorio">*</span></label>
+            <label for="finReembolsoData" class="ctl-rotulo text-gray-300">Data do reembolso <span class="fin-obrigatorio">*</span></label>
             <input id="finReembolsoData" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="md:col-span-2">
-            <label for="finReembolsoForma" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento <span class="fin-obrigatorio">*</span></label>
-            <select id="finReembolsoForma" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finReembolsoForma" class="ctl-rotulo text-gray-300">Forma de pagamento <span class="fin-obrigatorio">*</span></label>
+            <select id="finReembolsoForma" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
             </select>
           </div>
           <div class="md:col-span-2">
-            <label for="finReembolsoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+            <label for="finReembolsoObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
             <textarea id="finReembolsoObservacoes" rows="3" maxlength="500" placeholder="Opcional"
-                      class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
 
@@ -50,9 +50,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finReembolsoConfirmar" type="button" data-perm="financeiro.reembolso.confirmar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Confirmar reembolso</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finReembolsoConfirmar" type="button" data-perm="financeiro.reembolso.confirmar" class="btn-success ctl-botao min-w-[160px]">Confirmar reembolso</button>
     </footer>
   </div>
 </div>

@@ -6,13 +6,13 @@
   Ver é financeiro.comissao.view; gravar é financeiro.regras.editar.
   Script: src/js/modals/financeiro-modais.js (montarRegras).
 -->
-<div id="finRegrasOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finRegrasOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRegrasTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finRegrasTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-percent mr-2" aria-hidden="true"></i>Regras de comissão e produção</h2>
+        <h2 id="finRegrasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-percent mr-2" aria-hidden="true"></i>Regras de comissão e produção</h2>
         <p class="text-xs text-gray-300 truncate">O que decide quanto se paga — editável aqui</p>
       </div>
       <span id="finRegrasSomenteLeitura" class="hidden badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">Somente leitura</span>
@@ -51,47 +51,47 @@
             <p id="finRegraFormTitulo" class="text-sm font-semibold text-white">Nova regra</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label for="finRegraTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="fin-obrigatorio">*</span></label>
-                <select id="finRegraTipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finRegraTipo" class="ctl-rotulo text-gray-300">Tipo <span class="fin-obrigatorio">*</span></label>
+                <select id="finRegraTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="cms">CMS (dono do cliente)</option>
                   <option value="royalty">Royalty (desenhista da peça)</option>
                 </select>
               </div>
               <div>
-                <label for="finRegraBeneficiario" class="block text-sm font-medium text-gray-300 mb-2">Quem recebe <span class="fin-obrigatorio">*</span></label>
-                <select id="finRegraBeneficiario" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finRegraBeneficiario" class="ctl-rotulo text-gray-300">Quem recebe <span class="fin-obrigatorio">*</span></label>
+                <select id="finRegraBeneficiario" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="">Escolha o dono do cliente</option>
                 </select>
                 <p id="finRegraBeneficiarioRoyalty" class="hidden w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-gray-300 fin-somente-leitura">Desenhista de cada peça</p>
               </div>
               <div>
-                <label for="finRegraPercentual" class="block text-sm font-medium text-gray-300 mb-2">Percentual (%) <span class="fin-obrigatorio">*</span></label>
+                <label for="finRegraPercentual" class="ctl-rotulo text-gray-300">Percentual (%) <span class="fin-obrigatorio">*</span></label>
                 <input id="finRegraPercentual" type="text" inputmode="decimal" placeholder="Ex.: 10 ou 7,5" autocomplete="off"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                       class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finRegraEscopo" class="block text-sm font-medium text-gray-300 mb-2">Vale para <span class="fin-obrigatorio">*</span></label>
-                <select id="finRegraEscopo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finRegraEscopo" class="ctl-rotulo text-gray-300">Vale para <span class="fin-obrigatorio">*</span></label>
+                <select id="finRegraEscopo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="todos">Todos os pedidos</option>
                   <option value="cliente">Um cliente</option>
                   <option value="pedido">Um pedido</option>
                 </select>
               </div>
               <div id="finRegraAlvoBloco" class="hidden">
-                <label for="finRegraAlvo" id="finRegraAlvoRotulo" class="block text-sm font-medium text-gray-300 mb-2">Cliente <span class="fin-obrigatorio">*</span></label>
+                <label for="finRegraAlvo" id="finRegraAlvoRotulo" class="ctl-rotulo text-gray-300">Cliente <span class="fin-obrigatorio">*</span></label>
                 <input id="finRegraAlvoBusca" type="text" placeholder="Buscar" autocomplete="off"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 mb-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                <select id="finRegraAlvo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                       class="w-full ctl-campo bg-input border border-inputBorder mb-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <select id="finRegraAlvo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
               </div>
               <div>
-                <label for="finRegraObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observação</label>
+                <label for="finRegraObservacao" class="ctl-rotulo text-gray-300">Observação</label>
                 <input id="finRegraObservacao" type="text" maxlength="300" placeholder="Opcional" autocomplete="off"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                       class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-3">
-              <button id="finRegraCancelarEdicao" type="button" class="hidden btn-neutral px-5 py-2 rounded-lg text-white font-medium">Cancelar edição</button>
-              <button id="finRegraSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Incluir regra</button>
+            <div class="ctl-acoes justify-end">
+              <button id="finRegraCancelarEdicao" type="button" class="hidden btn-neutral ctl-botao text-white">Cancelar edição</button>
+              <button id="finRegraSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao min-w-[140px]">Incluir regra</button>
             </div>
           </div>
 
@@ -128,7 +128,7 @@
               <p class="text-sm font-semibold text-white">Processos</p>
               <p class="text-xs text-gray-400">Renomear troca o nome no banco (insumos e estoque acompanham). Desligar interrompe só o pagamento do processo: ele some do Registrar produção.</p>
               <div class="relative">
-                <select id="finProcessoSelect" aria-label="Processo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-16 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                <select id="finProcessoSelect" aria-label="Processo" class="w-full ctl-campo ctl-campo--sufixo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
                 <button id="finProcessoExcluir" type="button" data-perm="financeiro.regras.editar" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir processo" title="Excluir processo">
                   <i class="fas fa-minus" aria-hidden="true"></i>
                 </button>
@@ -137,25 +137,25 @@
                 </button>
               </div>
               <div id="finProcessoNovoBloco" class="hidden space-y-2">
-                <label for="finProcessoNovoNome" class="block text-xs text-gray-400">Novo processo</label>
+                <label for="finProcessoNovoNome" class="ctl-rotulo text-gray-400">Novo processo</label>
                 <div class="flex gap-3">
                   <input id="finProcessoNovoNome" type="text" maxlength="60" placeholder="Ex.: Pintura" autocomplete="off"
-                         class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  <button id="finProcessoNovoSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-4 py-2 rounded-lg font-medium whitespace-nowrap">Incluir</button>
-                  <button id="finProcessoNovoCancelar" type="button" class="btn-danger px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Cancelar</button>
+                         class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <button id="finProcessoNovoSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao">Incluir</button>
+                  <button id="finProcessoNovoCancelar" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
                 </div>
               </div>
               <div class="space-y-2">
-                <label for="finProcessoNome" class="block text-xs text-gray-400">Nome do processo escolhido</label>
+                <label for="finProcessoNome" class="ctl-rotulo text-gray-400">Nome do processo escolhido</label>
                 <div class="flex gap-3">
                   <input id="finProcessoNome" type="text" maxlength="60" autocomplete="off"
-                         class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  <button id="finProcessoRenomear" type="button" data-perm="financeiro.regras.editar" class="btn-primary px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Renomear</button>
+                         class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <button id="finProcessoRenomear" type="button" data-perm="financeiro.regras.editar" class="btn-primary ctl-botao text-white">Renomear</button>
                 </div>
               </div>
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <span id="finProcessoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
-                <button id="finProcessoPagamento" type="button" data-perm="financeiro.regras.editar" class="btn-danger px-4 py-2 rounded-lg text-white font-medium whitespace-nowrap">Desligar pagamento</button>
+                <button id="finProcessoPagamento" type="button" data-perm="financeiro.regras.editar" class="btn-danger ctl-botao text-white">Desligar pagamento</button>
               </div>
               <ul id="finSetoresLista" class="divide-y divide-white/10"></ul>
             </div>
@@ -164,30 +164,30 @@
               <p id="finValorFormTitulo" class="text-sm font-semibold text-white">Valor por peça</p>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label for="finValorSetor" class="block text-sm font-medium text-gray-300 mb-2">Processo <span class="fin-obrigatorio">*</span></label>
-                  <select id="finValorSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                  <label for="finValorSetor" class="ctl-rotulo text-gray-300">Processo <span class="fin-obrigatorio">*</span></label>
+                  <select id="finValorSetor" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
                 </div>
                 <div>
-                  <label for="finValorProduto" class="block text-sm font-medium text-gray-300 mb-2">Peça <span class="fin-obrigatorio">*</span></label>
+                  <label for="finValorProduto" class="ctl-rotulo text-gray-300">Peça <span class="fin-obrigatorio">*</span></label>
                   <input id="finValorProdutoBusca" type="text" placeholder="Buscar peça (código ou nome)" autocomplete="off"
-                         class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 mb-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  <select id="finValorProduto" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                         class="w-full ctl-campo bg-input border border-inputBorder mb-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <select id="finValorProduto" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
                 </div>
                 <div>
-                  <label for="finValorTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="fin-obrigatorio">*</span></label>
-                  <select id="finValorTipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <label for="finValorTipo" class="ctl-rotulo text-gray-300">Tipo <span class="fin-obrigatorio">*</span></label>
+                  <select id="finValorTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                     <option value="valor">R$ por peça</option>
                     <option value="percentual">% do preço da tabela fixa</option>
                   </select>
                 </div>
                 <div>
-                  <label for="finValorValor" id="finValorValorRotulo" class="block text-sm font-medium text-gray-300 mb-2">Valor por peça <span class="fin-obrigatorio">*</span></label>
+                  <label for="finValorValor" id="finValorValorRotulo" class="ctl-rotulo text-gray-300">Valor por peça <span class="fin-obrigatorio">*</span></label>
                   <input id="finValorValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off"
-                         class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                         class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
               </div>
               <div class="flex justify-end">
-                <button id="finValorSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Salvar valor</button>
+                <button id="finValorSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao min-w-[140px]">Salvar valor</button>
               </div>
               <div class="fin-tabela glass-surface rounded-xl border border-white/10">
                 <table class="w-full text-sm">
@@ -213,14 +213,14 @@
             <p class="text-sm font-semibold text-white">Prazos de pagamento</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
-                <label for="finCfgDiaComissao" class="block text-sm font-medium text-gray-300 mb-2">Comissões: até o dia (do mês seguinte)</label>
+                <label for="finCfgDiaComissao" class="ctl-rotulo text-gray-300">Comissões: até o dia (do mês seguinte)</label>
                 <input id="finCfgDiaComissao" type="number" min="1" max="28" step="1"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                       class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfgDiaUtil" class="block text-sm font-medium text-gray-300 mb-2">Produção: até o dia útil nº (do mês seguinte)</label>
+                <label for="finCfgDiaUtil" class="ctl-rotulo text-gray-300">Produção: até o dia útil nº (do mês seguinte)</label>
                 <input id="finCfgDiaUtil" type="number" min="1" max="20" step="1"
-                       class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                       class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <label class="fin-opcao">
                 <input id="finCfgSabado" type="checkbox" style="accent-color: var(--color-primary)" />
@@ -228,7 +228,7 @@
               </label>
             </div>
             <div class="flex justify-end">
-              <button id="finCfgSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Salvar prazos</button>
+              <button id="finCfgSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao min-w-[140px]">Salvar prazos</button>
             </div>
           </div>
 
@@ -238,10 +238,10 @@
               <p class="text-xs text-gray-400">Estaduais, municipais e pontos facultativos em que não se trabalha. Os nacionais já contam sozinhos.</p>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <input id="finFeriadoData" type="date"
-                       class="bg-input border border-inputBorder rounded-lg px-4 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                       class="ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <input id="finFeriadoDescricao" type="text" maxlength="80" placeholder="Ex.: Aniversário de Contagem" autocomplete="off"
-                       class="bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                <button id="finFeriadoIncluir" type="button" data-perm="financeiro.regras.editar" class="btn-success px-4 py-2 rounded-lg font-medium">Incluir feriado</button>
+                       class="ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="finFeriadoIncluir" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao">Incluir feriado</button>
               </div>
               <div class="fin-tabela glass-surface rounded-xl border border-white/10">
                 <table class="w-full text-sm">
@@ -266,8 +266,8 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
     </footer>
   </div>
 </div>

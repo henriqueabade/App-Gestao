@@ -7,12 +7,12 @@
   Esc nem por Voltar/Cancelar. Script: src/js/modals/financeiro-modais.js
   (montarFechamento).
 -->
-<div id="finFecharCompetenciaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finFecharCompetenciaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finFechamentoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finFechamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência — comissões</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finFechamentoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência — comissões</h2>
       <span id="finFechamentoSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
@@ -24,12 +24,12 @@
         </p>
 
         <div>
-          <label for="finFechamentoCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+          <label for="finFechamentoCompetenciaMes" class="ctl-rotulo text-gray-300">Competência <span class="fin-obrigatorio">*</span></label>
           <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
           <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-            <select id="finFechamentoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-            <input id="finFechamentoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            <button id="finFechamentoCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+            <select id="finFechamentoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <input id="finFechamentoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <button id="finFechamentoCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
             <input type="hidden" id="finFechamentoCompetencia" />
           </div>
           <p id="finFechamentoInfo" class="text-xs text-gray-400 mt-2"></p>
@@ -78,7 +78,7 @@
         </div>
 
         <div class="flex justify-end">
-          <button id="finFechamentoVerItens" type="button" class="btn-secondary px-5 py-2 rounded-lg text-white font-medium">Ver itens</button>
+          <button id="finFechamentoVerItens" type="button" class="btn-secondary ctl-botao text-white">Ver itens</button>
         </div>
 
         <div id="finFechamentoBloqueios" class="hidden fin-aviso" role="alert">
@@ -96,9 +96,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finFechamentoConfirmar" type="button" data-perm="financeiro.competencia.fechar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Confirmar fechamento</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finFechamentoConfirmar" type="button" data-perm="financeiro.competencia.fechar" class="btn-success ctl-botao min-w-[160px]">Confirmar fechamento</button>
     </footer>
   </div>
 </div>

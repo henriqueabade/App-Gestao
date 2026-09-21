@@ -129,6 +129,16 @@ const PADRONIZADOS = [
     modulo: 'usuarios',
     arquivos: ['html/usuarios.html', ...['novo', 'editar', 'transferir', 'permissoes'].map(m => `html/modals/usuarios/${m}.html`)]
   },
+  {
+    // Tela de referência (só o cabeçalho encostou no padrão) e os 20 modais.
+    modulo: 'financeiro',
+    arquivos: ['html/financeiro.html', ...[
+      'aguardando-nfe', 'atividade', 'comissoes-atrasadas', 'configuracao-cobranca', 'configuracao-fiscal',
+      'confirmar-pagamento', 'confirmar-reembolso', 'detalhes-parcela', 'detalhes-pedido', 'fechar-competencia',
+      'fechar-producao', 'notas-fiscais', 'producao-competencia', 'recebimentos', 'registrar-ajuste',
+      'registrar-producao', 'registrar-recebimento', 'regras', 'relatorios', 'visualizar-relatorio'
+    ].map(m => `html/modals/financeiro/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -292,6 +302,15 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'financeiro',
+    arquivos: ['js/financeiro.js', 'js/modals/financeiro-modais.js'],
+    // Ações dentro das linhas das tabelas (Estornar, DANFE, XML, Emitir NF-e,
+    // Sem NF-e…: `px-3 py-1 text-xs`, montadas por botaoEm/botaoG) e a ação
+    // de cada pendência na lista da tela ficam do tamanho delas, como os
+    // ícones das linhas.
+    ignorar: [/\bpx-3 py-1 rounded-md text-xs\b/, /^\$\{classe\} px-3 py-1/, /\bfin-pendencia__acao\b/]
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -304,7 +323,9 @@ function botoesJsForaDoPadrao(js, ignorar) {
     ...[...js.matchAll(/class="([^"]*)"/g)].map(m => m[1]),
     ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1]),
     // h('button', { class: '…' }) do TarefasUI
-    ...[...js.matchAll(/\bclass:\s*'([^']*)'/g)].map(m => m[1])
+    ...[...js.matchAll(/\bclass:\s*'([^']*)'/g)].map(m => m[1]),
+    // criar('button', '…') / finCriar('button', `…`) do Financeiro
+    ...[...js.matchAll(/[cC]riar\('button',\s*['`]([^'`]*)['`]/g)].map(m => m[1])
   ];
   // `tui-botao` (modais de Tarefas e Calendário) já usa as medidas do padrão
   // na própria regra (tarefas-ui.css) — conta como padronizado.

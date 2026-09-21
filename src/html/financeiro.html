@@ -26,7 +26,7 @@
     `data-fin-acao`: quem ainda não tem função real abre o aviso
     "em implementação".
   -->
-  <div class="modulo-container financeiro-module">
+  <div class="modulo-container ctl-padrao financeiro-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
     <div class="module-header fin-cabecalho mb-8 animate-fade-in-up">
       <div>
@@ -38,26 +38,26 @@
         <div class="fin-competencia">
           <span class="fin-competencia__rotulo" id="finCompetenciaRotulo">Competência</span>
           <div class="fin-competencia-campo" data-competencia role="group" aria-labelledby="finCompetenciaRotulo">
-            <select id="finCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes input-glass text-white rounded-md px-4 py-3 select-arrow appearance-none"></select>
-            <input id="finCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano input-glass text-white rounded-md px-3 py-3" />
-            <button id="finCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium" title="Ver esta competência" aria-label="Ver esta competência">
+            <select id="finCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes ctl-campo input-glass text-white select-arrow appearance-none"></select>
+            <input id="finCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo input-glass text-white" />
+            <button id="finCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência">
               <i class="fas fa-search" aria-hidden="true"></i>
             </button>
             <input type="hidden" id="finCompetencia" />
           </div>
         </div>
-        <button id="finHoje" type="button" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium">Hoje</button>
-        <button type="button" data-perm="financeiro.config.view" data-fin-acao="configuracao-fiscal" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium" title="Configuração fiscal (NF-e)" aria-label="Configuração fiscal">
+        <button id="finHoje" type="button" class="btn-neutral ctl-botao text-white">Hoje</button>
+        <button type="button" data-perm="financeiro.config.view" data-fin-acao="configuracao-fiscal" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Configuração fiscal (NF-e)" aria-label="Configuração fiscal">
           <i class="fas fa-cog" aria-hidden="true"></i>
         </button>
-        <button type="button" data-perm="financeiro.config.view" data-fin-acao="configuracao-cobranca" class="btn-neutral text-white rounded-md px-4 py-3 text-sm font-medium" title="Configuração de cobrança (boletos BB)" aria-label="Configuração de cobrança">
+        <button type="button" data-perm="financeiro.config.view" data-fin-acao="configuracao-cobranca" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Configuração de cobrança (boletos BB)" aria-label="Configuração de cobrança">
           <i class="fas fa-barcode" aria-hidden="true"></i>
         </button>
         <!-- Conciliar com o BB: processa os avisos de pagamento e consulta os boletos a pagar. Azul escuro (btn-bb, o dos botões do BB), ao lado do Atualizar. -->
-        <button id="finConciliar" type="button" data-perm="financeiro.recebimento.view" data-fin-acao="conciliar" class="btn-bb text-white rounded-md px-4 py-3 text-sm font-medium" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">
+        <button id="finConciliar" type="button" data-perm="financeiro.recebimento.view" data-fin-acao="conciliar" class="btn-bb ctl-botao text-white" title="Processa os avisos de pagamento do BB e consulta os boletos a pagar">
           <i class="fas fa-university mr-2" aria-hidden="true"></i>Conciliar BB
         </button>
-        <button id="finAtualizar" type="button" class="btn-primary text-white rounded-md px-5 py-3 text-sm font-medium" data-fin-acao="atualizar">
+        <button id="finAtualizar" type="button" class="btn-primary ctl-botao text-white" data-fin-acao="atualizar">
           <i class="fas fa-rotate mr-2" aria-hidden="true"></i>Atualizar
         </button>
       </div>

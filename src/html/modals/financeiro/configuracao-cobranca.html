@@ -7,13 +7,13 @@
   altera. Dados reais de GET/PUT /api/cobranca/configuracao.
   Script: src/js/modals/financeiro-modais.js (montador finConfiguracaoCobranca).
 -->
-<div id="finConfiguracaoCobrancaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finConfiguracaoCobrancaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finCobTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finCobTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Configuração de cobrança</h2>
+        <h2 id="finCobTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Configuração de cobrança</h2>
         <p class="text-xs text-gray-300 truncate">Boletos pela API do Banco do Brasil</p>
       </div>
       <span id="finCobAmbienteTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -37,8 +37,8 @@
             <p class="text-xs text-gray-400 mb-4">Os testes vão para a <strong>homologação</strong> do BB, com a conta de teste do banco: os boletos são de mentira, ninguém paga e nada entra na sua conta. Produção registra boletos reais no seu convênio.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="finCob_ambiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente (vale para todos)</label>
-                <select id="finCob_ambiente" data-fin-cob="ambiente" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_ambiente" class="ctl-rotulo text-gray-300">Ambiente (vale para todos)</label>
+                <select id="finCob_ambiente" data-fin-cob="ambiente" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="sandbox">Homologação (testes, boletos sem valor)</option>
                   <option value="producao">Produção (boletos reais)</option>
                 </select>
@@ -49,7 +49,7 @@
               <i class="fas fa-lock" aria-hidden="true"></i>
               <div class="flex-1 min-w-0">
                 <p class="mb-2">Ligar a produção passa a registrar boletos reais na conta da empresa, para todos os usuários. Digite <strong>PRODUCAO</strong> para confirmar ao salvar.</p>
-                <input id="finCobConfirmacao" type="text" placeholder="PRODUCAO" autocomplete="off" class="w-full md:w-64 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="finCobConfirmacao" type="text" placeholder="PRODUCAO" autocomplete="off" class="w-full md:w-64 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -60,32 +60,32 @@
             <p class="text-xs text-gray-400 mb-4">Como no painel "Gerar Boleto" do Gerenciador Financeiro: modalidade Simples, forma de pagamento Único, carteira 17.</p>
             <div class="grid grid-cols-2 md:grid-cols-6 gap-6">
               <div>
-                <label for="finCob_agencia" class="block text-sm font-medium text-gray-300 mb-2">Agência <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_agencia" data-fin-cob="agencia" type="text" inputmode="numeric" maxlength="5" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_agencia" class="ctl-rotulo text-gray-300">Agência <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_agencia" data-fin-cob="agencia" type="text" inputmode="numeric" maxlength="5" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_agencia_dv" class="block text-sm font-medium text-gray-300 mb-2">Dígito</label>
-                <input id="finCob_agencia_dv" data-fin-cob="agencia_dv" type="text" maxlength="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_agencia_dv" class="ctl-rotulo text-gray-300">Dígito</label>
+                <input id="finCob_agencia_dv" data-fin-cob="agencia_dv" type="text" maxlength="1" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_conta" class="block text-sm font-medium text-gray-300 mb-2">Conta <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_conta" data-fin-cob="conta" type="text" inputmode="numeric" maxlength="12" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_conta" class="ctl-rotulo text-gray-300">Conta <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_conta" data-fin-cob="conta" type="text" inputmode="numeric" maxlength="12" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_conta_dv" class="block text-sm font-medium text-gray-300 mb-2">Dígito</label>
-                <input id="finCob_conta_dv" data-fin-cob="conta_dv" type="text" maxlength="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_conta_dv" class="ctl-rotulo text-gray-300">Dígito</label>
+                <input id="finCob_conta_dv" data-fin-cob="conta_dv" type="text" maxlength="1" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="col-span-2">
-                <label for="finCob_convenio" class="block text-sm font-medium text-gray-300 mb-2">Convênio de cobrança (7 dígitos) <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_convenio" data-fin-cob="convenio" type="text" inputmode="numeric" maxlength="7" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_convenio" class="ctl-rotulo text-gray-300">Convênio de cobrança (7 dígitos) <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_convenio" data-fin-cob="convenio" type="text" inputmode="numeric" maxlength="7" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_carteira" class="block text-sm font-medium text-gray-300 mb-2">Carteira <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_carteira" data-fin-cob="carteira" type="number" min="1" max="99" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_carteira" class="ctl-rotulo text-gray-300">Carteira <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_carteira" data-fin-cob="carteira" type="number" min="1" max="99" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_variacao" class="block text-sm font-medium text-gray-300 mb-2">Variação <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_variacao" data-fin-cob="variacao" type="number" min="1" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_variacao" class="ctl-rotulo text-gray-300">Variação <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_variacao" data-fin-cob="variacao" type="number" min="1" max="999" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -96,24 +96,24 @@
             <p class="text-xs text-gray-400 mb-4">Na homologação o Banco do Brasil só aceita a conta e o convênio de teste da documentação da API Cobranças, não os seus. Vazio = os da documentação (convênio 3128557, carteira 17/35, agência 452, conta 123873). Em produção valem os dados reais acima.</p>
             <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
               <div>
-                <label for="finCob_homologacao_convenio" class="block text-sm font-medium text-gray-300 mb-2">Convênio de teste</label>
-                <input id="finCob_homologacao_convenio" data-fin-cob="homologacao_convenio" type="text" inputmode="numeric" maxlength="7" placeholder="3128557" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_homologacao_convenio" class="ctl-rotulo text-gray-300">Convênio de teste</label>
+                <input id="finCob_homologacao_convenio" data-fin-cob="homologacao_convenio" type="text" inputmode="numeric" maxlength="7" placeholder="3128557" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_homologacao_carteira" class="block text-sm font-medium text-gray-300 mb-2">Carteira</label>
-                <input id="finCob_homologacao_carteira" data-fin-cob="homologacao_carteira" type="number" min="1" max="99" placeholder="17" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_homologacao_carteira" class="ctl-rotulo text-gray-300">Carteira</label>
+                <input id="finCob_homologacao_carteira" data-fin-cob="homologacao_carteira" type="number" min="1" max="99" placeholder="17" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_homologacao_variacao" class="block text-sm font-medium text-gray-300 mb-2">Variação</label>
-                <input id="finCob_homologacao_variacao" data-fin-cob="homologacao_variacao" type="number" min="1" max="999" placeholder="35" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_homologacao_variacao" class="ctl-rotulo text-gray-300">Variação</label>
+                <input id="finCob_homologacao_variacao" data-fin-cob="homologacao_variacao" type="number" min="1" max="999" placeholder="35" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_homologacao_agencia" class="block text-sm font-medium text-gray-300 mb-2">Agência</label>
-                <input id="finCob_homologacao_agencia" data-fin-cob="homologacao_agencia" type="text" inputmode="numeric" maxlength="5" placeholder="452" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_homologacao_agencia" class="ctl-rotulo text-gray-300">Agência</label>
+                <input id="finCob_homologacao_agencia" data-fin-cob="homologacao_agencia" type="text" inputmode="numeric" maxlength="5" placeholder="452" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_homologacao_conta" class="block text-sm font-medium text-gray-300 mb-2">Conta</label>
-                <input id="finCob_homologacao_conta" data-fin-cob="homologacao_conta" type="text" inputmode="numeric" maxlength="12" placeholder="123873" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_homologacao_conta" class="ctl-rotulo text-gray-300">Conta</label>
+                <input id="finCob_homologacao_conta" data-fin-cob="homologacao_conta" type="text" inputmode="numeric" maxlength="12" placeholder="123873" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -124,28 +124,28 @@
             <p class="text-xs text-gray-400 mb-4">O endereço é o cadastrado no banco para a conta — pode ser diferente do endereço fiscal da NF-e.</p>
             <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
               <div class="md:col-span-4">
-                <label for="finCob_beneficiario_nome" class="block text-sm font-medium text-gray-300 mb-2">Nome <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_beneficiario_nome" data-fin-cob="beneficiario_nome" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_nome" class="ctl-rotulo text-gray-300">Nome <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_beneficiario_nome" data-fin-cob="beneficiario_nome" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCob_beneficiario_cnpj" class="block text-sm font-medium text-gray-300 mb-2">CNPJ <span class="fin-obrigatorio">*</span></label>
-                <input id="finCob_beneficiario_cnpj" data-fin-cob="beneficiario_cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_cnpj" class="ctl-rotulo text-gray-300">CNPJ <span class="fin-obrigatorio">*</span></label>
+                <input id="finCob_beneficiario_cnpj" data-fin-cob="beneficiario_cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-3">
-                <label for="finCob_beneficiario_endereco" class="block text-sm font-medium text-gray-300 mb-2">Endereço</label>
-                <input id="finCob_beneficiario_endereco" data-fin-cob="beneficiario_endereco" type="text" maxlength="80" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_endereco" class="ctl-rotulo text-gray-300">Endereço</label>
+                <input id="finCob_beneficiario_endereco" data-fin-cob="beneficiario_endereco" type="text" maxlength="80" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_beneficiario_cep" class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
-                <input id="finCob_beneficiario_cep" data-fin-cob="beneficiario_cep" type="text" inputmode="numeric" maxlength="9" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_cep" class="ctl-rotulo text-gray-300">CEP</label>
+                <input id="finCob_beneficiario_cep" data-fin-cob="beneficiario_cep" type="text" inputmode="numeric" maxlength="9" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_beneficiario_cidade" class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
-                <input id="finCob_beneficiario_cidade" data-fin-cob="beneficiario_cidade" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_cidade" class="ctl-rotulo text-gray-300">Cidade</label>
+                <input id="finCob_beneficiario_cidade" data-fin-cob="beneficiario_cidade" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_beneficiario_uf" class="block text-sm font-medium text-gray-300 mb-2">UF</label>
-                <input id="finCob_beneficiario_uf" data-fin-cob="beneficiario_uf" type="text" maxlength="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white uppercase focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_beneficiario_uf" class="ctl-rotulo text-gray-300">UF</label>
+                <input id="finCob_beneficiario_uf" data-fin-cob="beneficiario_uf" type="text" maxlength="2" class="w-full ctl-campo bg-input border border-inputBorder text-white uppercase focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -161,12 +161,12 @@
                   <span id="finCobSecretTag_sandbox" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
                 </div>
                 <div>
-                  <label for="finCob_client_id_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
-                  <input id="finCob_client_id_sandbox" data-fin-cob="client_id_sandbox" type="text" maxlength="200" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCob_client_id_sandbox" class="ctl-rotulo text-gray-300">Client ID</label>
+                  <input id="finCob_client_id_sandbox" data-fin-cob="client_id_sandbox" type="text" maxlength="200" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="finCob_app_key_sandbox" class="block text-sm font-medium text-gray-300 mb-2">App key (gw-dev-app-key)</label>
-                  <input id="finCob_app_key_sandbox" data-fin-cob="app_key_sandbox" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCob_app_key_sandbox" class="ctl-rotulo text-gray-300">App key (gw-dev-app-key)</label>
+                  <input id="finCob_app_key_sandbox" data-fin-cob="app_key_sandbox" type="text" maxlength="120" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <p id="finCobSecretEstado_sandbox" class="text-xs text-gray-400" role="status"></p>
               </div>
@@ -176,12 +176,12 @@
                   <span id="finCobSecretTag_producao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">—</span>
                 </div>
                 <div>
-                  <label for="finCob_client_id_producao" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
-                  <input id="finCob_client_id_producao" data-fin-cob="client_id_producao" type="text" maxlength="200" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCob_client_id_producao" class="ctl-rotulo text-gray-300">Client ID</label>
+                  <input id="finCob_client_id_producao" data-fin-cob="client_id_producao" type="text" maxlength="200" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="finCob_app_key_producao" class="block text-sm font-medium text-gray-300 mb-2">App key (gw-dev-app-key)</label>
-                  <input id="finCob_app_key_producao" data-fin-cob="app_key_producao" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCob_app_key_producao" class="ctl-rotulo text-gray-300">App key (gw-dev-app-key)</label>
+                  <input id="finCob_app_key_producao" data-fin-cob="app_key_producao" type="text" maxlength="120" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <p id="finCobSecretEstado_producao" class="text-xs text-gray-400" role="status"></p>
               </div>
@@ -189,22 +189,22 @@
             <div id="finCobSecretBloco" class="mt-5 pt-4 border-t border-inputBorder">
               <div class="flex flex-wrap items-end gap-3">
                 <div>
-                  <label for="finCobSecretAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Client secret de</label>
-                  <select id="finCobSecretAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                  <label for="finCobSecretAmbiente" class="ctl-rotulo text-gray-300">Client secret de</label>
+                  <select id="finCobSecretAmbiente" class="w-40 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                     <option value="sandbox">Homologação</option>
                     <option value="producao">Produção</option>
                   </select>
                 </div>
                 <div>
-                  <label for="finCobSecret" class="block text-sm font-medium text-gray-300 mb-2">Client secret</label>
-                  <input id="finCobSecret" type="password" autocomplete="off" placeholder="••••••••" class="w-72 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCobSecret" class="ctl-rotulo text-gray-300">Client secret</label>
+                  <input id="finCobSecret" type="password" autocomplete="off" placeholder="••••••••" class="w-72 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div role="radiogroup" aria-label="Onde guardar o client secret" class="flex flex-wrap gap-4 pb-3">
                   <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCobSecretDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco</label>
                   <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCobSecretDestino" value="computador" style="accent-color: var(--color-primary)" /> Só aqui</label>
                 </div>
-                <button id="finCobSecretGuardar" type="button" class="btn-success px-5 py-3 rounded-lg font-medium">Guardar secret</button>
-                <button id="finCobSecretRemover" type="button" class="btn-danger px-5 py-3 rounded-lg text-white font-medium">Remover</button>
+                <button id="finCobSecretGuardar" type="button" class="btn-success ctl-botao">Guardar secret</button>
+                <button id="finCobSecretRemover" type="button" class="btn-danger ctl-botao text-white">Remover</button>
               </div>
               <p id="finCobSecretDestinoAviso" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Para guardar no banco, defina SEGREDOS_CHAVE_MESTRA no .env desta máquina (veja .env.example).</p>
             </div>
@@ -216,13 +216,13 @@
             <p class="text-xs text-gray-400 mb-4">Pede o token ao BB e lista os boletos em aberto da conta. É a prova de que client ID, secret, app key, agência e conta estão certos. Produção só é testada quando ela está valendo.</p>
             <div class="flex flex-wrap items-end gap-3">
               <div>
-                <label for="finCobTesteAmbiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
-                <select id="finCobTesteAmbiente" class="w-40 appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCobTesteAmbiente" class="ctl-rotulo text-gray-300">Ambiente</label>
+                <select id="finCobTesteAmbiente" class="w-40 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="sandbox">Homologação</option>
                   <option value="producao">Produção</option>
                 </select>
               </div>
-              <button id="finCobTestar" type="button" class="btn-bb text-white px-5 py-3 rounded-lg font-medium">Testar conexão BB</button>
+              <button id="finCobTestar" type="button" class="btn-bb ctl-botao text-white">Testar conexão BB</button>
               <span id="finCobTesteResultado" class="text-sm text-gray-300 pb-3"></span>
             </div>
             <dl id="finCobTesteDetalhe" class="hidden fin-dl mt-3 max-w-md">
@@ -249,22 +249,22 @@
             <div id="finCobWebhookSemSql" class="hidden fin-aviso mb-4" role="status"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><span>A conciliação automática ainda não está ativa: rode sql/cobranca_webhook.sql no banco (depois dos SQL das fases D e E) e reinicie a API.</span></div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
               <div data-fin-cob-bloco="conciliacao_automatica">
-                <label for="finCob_conciliacao_automatica" class="block text-sm font-medium text-gray-300 mb-2">Conciliação automática</label>
-                <select id="finCob_conciliacao_automatica" data-fin-cob="conciliacao_automatica" data-fin-cob-coluna-nova="true" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_conciliacao_automatica" class="ctl-rotulo text-gray-300">Conciliação automática</label>
+                <select id="finCob_conciliacao_automatica" data-fin-cob="conciliacao_automatica" data-fin-cob-coluna-nova="true" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="true">Ligada (processa os avisos e consulta os boletos a pagar)</option>
                   <option value="false">Desligada (só pelo botão "Conciliar BB")</option>
                 </select>
               </div>
               <div data-fin-cob-bloco="conciliacao_intervalo_min">
-                <label for="finCob_conciliacao_intervalo_min" class="block text-sm font-medium text-gray-300 mb-2">A cada (minutos, de 15 a 720)</label>
-                <input id="finCob_conciliacao_intervalo_min" data-fin-cob="conciliacao_intervalo_min" data-fin-cob-coluna-nova="true" type="number" min="15" max="720" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_conciliacao_intervalo_min" class="ctl-rotulo text-gray-300">A cada (minutos, de 15 a 720)</label>
+                <input id="finCob_conciliacao_intervalo_min" data-fin-cob="conciliacao_intervalo_min" data-fin-cob-coluna-nova="true" type="number" min="15" max="720" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-1 text-xs text-gray-400">Com o app aberto em várias máquinas, só uma concilia em cada intervalo.</p>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-3">
-              <button id="finCobWebhookAtualizar" type="button" class="btn-secondary px-5 py-3 rounded-lg text-white font-medium">Atualizar</button>
-              <button id="finCobWebhookProcessar" type="button" data-perm="financeiro.recebimento.view" class="btn-success px-5 py-3 rounded-lg font-medium">Processar avisos agora</button>
-              <button id="finCobWebhookConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-bb text-white px-5 py-3 rounded-lg font-medium">Conciliar BB</button>
+              <button id="finCobWebhookAtualizar" type="button" class="btn-secondary ctl-botao text-white">Atualizar</button>
+              <button id="finCobWebhookProcessar" type="button" data-perm="financeiro.recebimento.view" class="btn-success ctl-botao">Processar avisos agora</button>
+              <button id="finCobWebhookConciliar" type="button" data-perm="financeiro.recebimento.view" class="btn-bb ctl-botao text-white">Conciliar BB</button>
               <span id="finCobWebhookResultado" class="text-sm text-gray-300"></span>
             </div>
             <div class="space-y-5 mt-5">
@@ -295,13 +295,13 @@
             <p class="text-xs text-gray-400 mb-4">Convênio de 7 posições: "000" + convênio + sequencial de 10 dígitos. Em produção continue do último boleto emitido pelo Gerenciador Financeiro (o nº 393 saiu em 15/09/2026): um número repetido é recusado pelo banco.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label for="finCob_proximo_sequencial_sandbox" class="block text-sm font-medium text-gray-300 mb-2">Homologação: próximo sequencial</label>
-                <input id="finCob_proximo_sequencial_sandbox" data-fin-cob="proximo_sequencial_sandbox" type="number" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_proximo_sequencial_sandbox" class="ctl-rotulo text-gray-300">Homologação: próximo sequencial</label>
+                <input id="finCob_proximo_sequencial_sandbox" data-fin-cob="proximo_sequencial_sandbox" type="number" min="1" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-2 text-xs text-gray-400">Próximo nosso número: <span id="finCobNossoNumeroSandbox" class="text-white">—</span></p>
               </div>
               <div>
-                <label for="finCob_proximo_sequencial_producao" class="block text-sm font-medium text-gray-300 mb-2">Produção: próximo sequencial</label>
-                <input id="finCob_proximo_sequencial_producao" data-fin-cob="proximo_sequencial_producao" type="number" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_proximo_sequencial_producao" class="ctl-rotulo text-gray-300">Produção: próximo sequencial</label>
+                <input id="finCob_proximo_sequencial_producao" data-fin-cob="proximo_sequencial_producao" type="number" min="1" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-2 text-xs text-gray-400">Próximo nosso número: <span id="finCobNossoNumeroProducao" class="text-white">—</span></p>
               </div>
             </div>
@@ -314,11 +314,11 @@
             <p class="text-xs text-gray-400 mb-4">Nenhuma parcela fica abaixo do valor mínimo, a não ser a parcela única ou a primeira com prazo 0 (entrada à vista). Orçamentos e pedidos não deixam dividir abaixo dele; a devolução junta nas primeiras as parcelas em aberto que ficariam abaixo; o abatimento que deixaria o boleto abaixo é recusado. Pedidos que já existem ficam como estão.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
               <div>
-                <label for="finCobParcelaMinima" class="block text-sm font-medium text-gray-300 mb-2">Valor mínimo da parcela</label>
-                <input id="finCobParcelaMinima" type="text" inputmode="decimal" autocomplete="off" placeholder="R$ 1.500,00" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCobParcelaMinima" class="ctl-rotulo text-gray-300">Valor mínimo da parcela</label>
+                <input id="finCobParcelaMinima" type="text" inputmode="decimal" autocomplete="off" placeholder="R$ 1.500,00" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <button id="finCobParcelaSalvar" type="button" data-perm="financeiro.parcela.editar" class="btn-success px-6 py-3 rounded-lg font-medium min-w-[160px]">Salvar parcela mínima</button>
+                <button id="finCobParcelaSalvar" type="button" data-perm="financeiro.parcela.editar" class="btn-success ctl-botao min-w-[160px]">Salvar parcela mínima</button>
               </div>
             </div>
             <p id="finCobParcelaMensagem" class="hidden mt-3 text-xs" role="status"></p>
@@ -330,8 +330,8 @@
             <p class="text-xs text-gray-400 mb-4">Juros e multa incidem sobre o valor bruto do boleto (sem o desconto, quando há). Os juros saem como valor por dia de atraso: a taxa mensal dividida por 30.</p>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
               <div>
-                <label for="finCob_especie" class="block text-sm font-medium text-gray-300 mb-2">Espécie</label>
-                <select id="finCob_especie" data-fin-cob="especie" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_especie" class="ctl-rotulo text-gray-300">Espécie</label>
+                <select id="finCob_especie" data-fin-cob="especie" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="DM">DM — Duplicata mercantil</option>
                   <option value="DS">DS — Duplicata de serviço</option>
                   <option value="NP">NP — Nota promissória</option>
@@ -340,75 +340,75 @@
                 </select>
               </div>
               <div>
-                <label for="finCob_aceite" class="block text-sm font-medium text-gray-300 mb-2">Aceite</label>
-                <select id="finCob_aceite" data-fin-cob="aceite" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_aceite" class="ctl-rotulo text-gray-300">Aceite</label>
+                <select id="finCob_aceite" data-fin-cob="aceite" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="false">N — Sem aceite</option>
                   <option value="true">A — Com aceite</option>
                 </select>
               </div>
               <div>
-                <label for="finCob_juros_tipo" class="block text-sm font-medium text-gray-300 mb-2">Juros de mora</label>
-                <select id="finCob_juros_tipo" data-fin-cob="juros_tipo" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_juros_tipo" class="ctl-rotulo text-gray-300">Juros de mora</label>
+                <select id="finCob_juros_tipo" data-fin-cob="juros_tipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="valor_dia">Valor por dia (taxa ÷ 30)</option>
                   <option value="percentual_mes">Percentual ao mês</option>
                   <option value="sem">Sem juros</option>
                 </select>
               </div>
               <div>
-                <label for="finCob_juros_percentual_mes" class="block text-sm font-medium text-gray-300 mb-2">Taxa de juros (% ao mês)</label>
-                <input id="finCob_juros_percentual_mes" data-fin-cob="juros_percentual_mes" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_juros_percentual_mes" class="ctl-rotulo text-gray-300">Taxa de juros (% ao mês)</label>
+                <input id="finCob_juros_percentual_mes" data-fin-cob="juros_percentual_mes" type="text" inputmode="decimal" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_multa_percentual" class="block text-sm font-medium text-gray-300 mb-2">Multa (%)</label>
-                <input id="finCob_multa_percentual" data-fin-cob="multa_percentual" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_multa_percentual" class="ctl-rotulo text-gray-300">Multa (%)</label>
+                <input id="finCob_multa_percentual" data-fin-cob="multa_percentual" type="text" inputmode="decimal" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_multa_dias" class="block text-sm font-medium text-gray-300 mb-2">Multa a partir de (dias após vencer)</label>
-                <input id="finCob_multa_dias" data-fin-cob="multa_dias" type="number" min="0" max="30" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_multa_dias" class="ctl-rotulo text-gray-300">Multa a partir de (dias após vencer)</label>
+                <input id="finCob_multa_dias" data-fin-cob="multa_dias" type="number" min="0" max="30" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_protesto_dias" class="block text-sm font-medium text-gray-300 mb-2">Protesto (dias após vencer)</label>
-                <input id="finCob_protesto_dias" data-fin-cob="protesto_dias" type="number" min="0" max="99" placeholder="vazio = não protesta" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_protesto_dias" class="ctl-rotulo text-gray-300">Protesto (dias após vencer)</label>
+                <input id="finCob_protesto_dias" data-fin-cob="protesto_dias" type="number" min="0" max="99" placeholder="vazio = não protesta" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_negativacao_dias" class="block text-sm font-medium text-gray-300 mb-2">Negativação (dias após vencer)</label>
-                <input id="finCob_negativacao_dias" data-fin-cob="negativacao_dias" type="number" min="0" max="99" placeholder="vazio = não negativa" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_negativacao_dias" class="ctl-rotulo text-gray-300">Negativação (dias após vencer)</label>
+                <input id="finCob_negativacao_dias" data-fin-cob="negativacao_dias" type="number" min="0" max="99" placeholder="vazio = não negativa" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_dias_limite_recebimento" class="block text-sm font-medium text-gray-300 mb-2">Receber até (dias após vencer)</label>
-                <input id="finCob_dias_limite_recebimento" data-fin-cob="dias_limite_recebimento" type="number" min="0" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_dias_limite_recebimento" class="ctl-rotulo text-gray-300">Receber até (dias após vencer)</label>
+                <input id="finCob_dias_limite_recebimento" data-fin-cob="dias_limite_recebimento" type="number" min="0" max="999" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_desconto_percentual" class="block text-sm font-medium text-gray-300 mb-2">Desconto por antecipação (%)</label>
-                <input id="finCob_desconto_percentual" data-fin-cob="desconto_percentual" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_desconto_percentual" class="ctl-rotulo text-gray-300">Desconto por antecipação (%)</label>
+                <input id="finCob_desconto_percentual" data-fin-cob="desconto_percentual" type="text" inputmode="decimal" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_desconto_dias" class="block text-sm font-medium text-gray-300 mb-2">Desconto até (dias antes de vencer)</label>
-                <input id="finCob_desconto_dias" data-fin-cob="desconto_dias" type="number" min="0" max="999" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_desconto_dias" class="ctl-rotulo text-gray-300">Desconto até (dias antes de vencer)</label>
+                <input id="finCob_desconto_dias" data-fin-cob="desconto_dias" type="number" min="0" max="999" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCob_indicador_pix" class="block text-sm font-medium text-gray-300 mb-2">QR Code Pix no boleto</label>
-                <select id="finCob_indicador_pix" data-fin-cob="indicador_pix" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_indicador_pix" class="ctl-rotulo text-gray-300">QR Code Pix no boleto</label>
+                <select id="finCob_indicador_pix" data-fin-cob="indicador_pix" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="true">Sim</option>
                   <option value="false">Não</option>
                 </select>
               </div>
               <div class="col-span-2">
-                <label for="finCob_gerar_ao_emitir_nfe" class="block text-sm font-medium text-gray-300 mb-2">Ao emitir a NF-e</label>
-                <select id="finCob_gerar_ao_emitir_nfe" data-fin-cob="gerar_ao_emitir_nfe" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCob_gerar_ao_emitir_nfe" class="ctl-rotulo text-gray-300">Ao emitir a NF-e</label>
+                <select id="finCob_gerar_ao_emitir_nfe" data-fin-cob="gerar_ao_emitir_nfe" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="true">"Gerar boleto" já marcado (pode desmarcar na hora)</option>
                   <option value="false">"Gerar boleto" desmarcado (gerar à mão depois)</option>
                 </select>
               </div>
               <!-- Fase E: sem a coluna (sql/cobranca_recebimentos.sql) o campo some e não é enviado. -->
               <div id="finCobRecebimentosDesdeBloco" data-fin-cob-bloco="recebimentos_desde" class="col-span-2">
-                <label for="finCob_recebimentos_desde" class="block text-sm font-medium text-gray-300 mb-2">Controlar recebimentos a partir de</label>
-                <input id="finCob_recebimentos_desde" data-fin-cob="recebimentos_desde" data-fin-cob-coluna-nova="true" type="date" style="color-scheme: dark" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCob_recebimentos_desde" class="ctl-rotulo text-gray-300">Controlar recebimentos a partir de</label>
+                <input id="finCob_recebimentos_desde" data-fin-cob="recebimentos_desde" data-fin-cob-coluna-nova="true" type="date" style="color-scheme: dark" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 <p class="mt-1 text-xs text-gray-400">Parcelas que venceram antes desta data ficam fora de "a receber" e "em atraso" (eram controladas por fora).</p>
               </div>
               <div class="col-span-2 md:col-span-4">
-                <label for="finCob_mensagem_boleto" class="block text-sm font-medium text-gray-300 mb-2">Mensagem no boleto (opcional)</label>
-                <textarea id="finCob_mensagem_boleto" data-fin-cob="mensagem_boleto" rows="2" maxlength="400" placeholder="Sai nas informações de responsabilidade do beneficiário, depois de juros, multa e protesto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                <label for="finCob_mensagem_boleto" class="ctl-rotulo text-gray-300">Mensagem no boleto (opcional)</label>
+                <textarea id="finCob_mensagem_boleto" data-fin-cob="mensagem_boleto" rows="2" maxlength="400" placeholder="Sai nas informações de responsabilidade do beneficiário, depois de juros, multa e protesto" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
               </div>
             </div>
             <p id="finCobPrevia" class="mt-4 text-xs" style="color: var(--color-primary-light)" role="status"></p>
@@ -421,9 +421,9 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-between gap-4 flex-shrink-0">
       <span id="finCobRodapeAviso" class="text-xs text-gray-400"></span>
-      <div class="flex items-center gap-4">
-        <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-        <button id="finCobSalvar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Salvar</button>
+      <div class="ctl-acoes">
+        <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+        <button id="finCobSalvar" type="button" class="btn-success ctl-botao min-w-[120px]">Salvar</button>
       </div>
     </footer>
   </div>

@@ -6,13 +6,13 @@
   planilha CSV (separada por ponto e vírgula, abre no Excel).
   Script: src/js/modals/financeiro-modais.js (montarVisualizarRelatorio).
 -->
-<div id="finVisualizarRelatorioOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finVisualizarRelatorioOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRelatorioTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finRelatorioTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Relatório</h2>
+        <h2 id="finRelatorioTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Relatório</h2>
         <p id="finRelatorioSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span id="finRelatorioGeradoEm" class="text-sm text-gray-300 justify-self-end truncate"></span>
@@ -34,7 +34,7 @@
         -->
         <div id="finRelatorioQuemRecebeBloco" class="hidden fin-filtro-benef">
           <label for="finRelatorioQuemRecebe" class="text-xs text-gray-300">Quem recebe</label>
-          <select id="finRelatorioQuemRecebe" class="input-glass text-white rounded-md px-3 py-2 text-sm select-arrow appearance-none"></select>
+          <select id="finRelatorioQuemRecebe" class="ctl-campo input-glass text-white select-arrow appearance-none"></select>
           <div id="finRelatorioLegendaBenef" class="fin-legenda"></div>
         </div>
         <div class="fin-tabela fin-tabela--folha flex-1 min-h-0">
@@ -49,10 +49,10 @@
       </div>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="finRelatorioExcel" type="button" class="btn-secondary px-6 py-2 rounded-lg text-white font-medium min-w-[140px]">Exportar Excel</button>
-      <button id="finRelatorioPdf" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Exportar PDF</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="finRelatorioExcel" type="button" class="btn-secondary ctl-botao text-white min-w-[140px]">Exportar Excel</button>
+      <button id="finRelatorioPdf" type="button" class="btn-success ctl-botao min-w-[140px]">Exportar PDF</button>
     </footer>
   </div>
 </div>
