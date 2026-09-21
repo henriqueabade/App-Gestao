@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container">
+  <div class="modulo-container ctl-padrao">
     <div>
         <!-- Header -->
         <div class="flex justify-between items-center mb-8 animate-fade-in-up">
@@ -20,30 +20,30 @@
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Contatos</h1>
                 <p class="module-header__description">Gerencie fornecedores, parceiros e colaboradores</p>
             </div>
-            <button id="btnNovoContato" data-perm="ctt.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <button id="btnNovoContato" data-perm="ctt.create" class="btn-primary ctl-botao text-white">
                 <i class="fas fa-plus mr-2"></i>Novo Contato
             </button>
         </div>
 
         <!-- Quick Actions -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <h3 class="text-lg font-medium mb-4 text-white">Ações Rápidas</h3>
+            <h3 class="ctl-secao-tela mb-4 text-white">Ações Rápidas</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Coluna esquerda -->
                 <div class="space-y-3">
-                    <button data-perm="ctt.export.csv" data-action="exportar-csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-perm="ctt.export.csv" data-action="exportar-csv" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-download mr-2"></i>Exportar CSV
                     </button>
-                    <button data-perm="ctt.import.csv" data-action="importar-csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-perm="ctt.import.csv" data-action="importar-csv" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-upload mr-2"></i>Importar CSV
                     </button>
                 </div>
                 <!-- Coluna direita -->
                 <div class="space-y-3">
-                    <button data-perm="ctt.report" data-action="gerar-relatorio" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-perm="ctt.report" data-action="gerar-relatorio" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-file-alt mr-2"></i>Gerar Relatório
                     </button>
-                    <button data-perm="ctt.email.bulk" data-action="enviar-email-massa" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-perm="ctt.email.bulk" data-action="enviar-email-massa" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-envelope mr-2"></i>Enviar E-mail em Massa
                     </button>
                 </div>
@@ -56,14 +56,14 @@
             <div class="filtro-contatos">
                 <!-- Busca -->
                 <div class="flex flex-col flex-1 min-w-[250px]">
-                    <label class="block text-sm font-medium mb-1 text-white">Buscar Contato</label>
-                    <input type="text" placeholder="Nome / Empresa" class="input-glass text-white rounded-md px-4 h-12 w-full">
+                    <label class="ctl-rotulo text-white">Buscar Contato</label>
+                    <input type="text" placeholder="Nome / Empresa" class="ctl-campo input-glass text-white w-full">
                 </div>
 
                 <!-- Tipo de contato -->
                 <div class="flex flex-col flex-1 min-w-[180px]">
-                    <label class="block text-sm font-medium mb-1 text-white">Tipo de Contato</label>
-                    <select class="input-glass text-white rounded-md px-4 h-12 w-full">
+                    <label class="ctl-rotulo text-white">Tipo de Contato</label>
+                    <select class="ctl-campo input-glass text-white w-full">
                         <option>Todos</option>
                         <option>Fornecedor</option>
                         <option>Parceiro</option>
@@ -75,7 +75,7 @@
 
                 <!-- Totais por tipo -->
                 <div class="flex flex-col">
-                    <label class="block text-sm font-medium mb-1 text-white">Totais por Tipo</label>
+                    <label class="ctl-rotulo text-white">Totais por Tipo</label>
                     <div class="tags-uma-linha">
                         <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Fornecedores: 45</span>
                         <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Parceiros: 23</span>
@@ -85,9 +85,9 @@
                 </div>
 
                 <!-- Ações -->
-                <div id= "bt-actions" class="flex gap-2 flex-shrink-0">
-                    <button data-perm="ctt.search" data-action="filtrar" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
-                    <button data-perm="ctt.search" data-action="limpar" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
+                <div id= "bt-actions" class="ctl-acoes flex-shrink-0">
+                    <button data-perm="ctt.search" data-action="filtrar" class="btn-secondary ctl-botao text-white">Filtrar</button>
+                    <button data-perm="ctt.search" data-action="limpar" class="btn-warning ctl-botao text-white">Limpar</button>
                 </div>
             </div>
         </div>
@@ -217,7 +217,7 @@
             <button
               id="contatosEmptyNew" data-perm="ctt.create"
               type="button"
-              class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+              class="btn-primary ctl-botao text-white"
             >
               <i class="fas fa-plus w-4 h-4 mr-2"></i>
               Novo Contato

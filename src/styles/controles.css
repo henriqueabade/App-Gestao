@@ -169,6 +169,14 @@ textarea.ctl-campo {
     line-height: 1.4;
 }
 
+/* Título de seção NA TELA do módulo (não no modal): o "Contas a receber" do
+   Financeiro e o "Precisa de atenção" do Dashboard — 16,8 px, peso 600. */
+.ctl-secao-tela {
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
 .ctl-modal-titulo {
     font-size: var(--txt-modal-titulo);
     font-weight: 600;

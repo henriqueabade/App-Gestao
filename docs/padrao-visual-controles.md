@@ -59,6 +59,7 @@ principais** e o tamanho das **letras dos textos**.
 | Rótulo de campo | **13 px**, peso 500 | 14–16 px | — |
 | Título de seção (caixa alta) | **11,2 px**, peso 700 | — | "DESCRIÇÃO", "QUANDO" do editor |
 | Título do modal | **18 px**, peso 600 | 18 px (já igual) | Estatísticas 17,6 |
+| Título de seção NA TELA (cartão da tela, não do modal) | **16,8 px**, peso 600 (`ctl-secao-tela`) | 18 px / 500 ("Ações Rápidas" de Contatos) | "Contas a receber" do Financeiro, "Precisa de atenção" do Dashboard |
 | Título / subtítulo do módulo | 24 px / 16 px | 24 px / 16 px (já iguais) | todos |
 | Tabela — linhas | **14 px** (encolhe em tela pequena) | 15,2 px | Estatísticas 13,3 |
 | Tabela — cabeçalho (caixa alta) | **12 px** | 15,2 px | Estatísticas 11,5 |
@@ -184,9 +185,9 @@ Quando o dono mandar o módulo:
 | 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). **Aprovado pelo dono.** |
 | 5 | Pedidos | **feito em 22/09** — tela e os 12 modais (Visualizar, Pagamento, Emitir NF-e, Relatório de produção, Converter orçamentos, Cancelar pedido com a realocação, Cancelar NF-e, Carta de correção, E-mail da NF-e, Boletos, Detalhe do boleto, Devolução); o Datas já tinha entrado com Orçamentos. **Aprovado pelo dono.** |
 | 6 | CRM › Clientes | **feito em 22/09** — tela (com o "Ações Rápidas") e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato); a Transportadora já tinha entrado com Orçamentos. O botão da linha do tempo (`.hs-botao`, compartilhado com Prospecções) passou para as medidas do botão pequeno. **Aprovado pelo dono.** |
-| 7 | CRM › Prospecções | **feito em 22/09** — tela (filtros, filtros avançados com os falsos selects de país/estado, Funil) e os 13 modais (Detalhes, Novo, Editar, Excluir, Contato, Interação, Nota, Campanha, Próximo passo, Concluir passo, Mover no funil, Responsável, Converter). O seletor de estados/cidades (`geo-multiselect`, usado também em Relatórios) ficou no padrão nos dois módulos. O nome da pessoa e da empresa no topo do Detalhes e do Converter (24/20 px) ficou: é a identidade da ficha, como valor em destaque. Aguardando o "ok" do dono. |
-| 8 | CRM › Contatos | a fazer — **próximo** |
-| 9 | CRM › Calendário | referência — só conferir |
+| 7 | CRM › Prospecções | **feito em 22/09** — tela (filtros, filtros avançados com os falsos selects de país/estado, Funil) e os 13 modais (Detalhes, Novo, Editar, Excluir, Contato, Interação, Nota, Campanha, Próximo passo, Concluir passo, Mover no funil, Responsável, Converter). O seletor de estados/cidades (`geo-multiselect`, usado também em Relatórios) ficou no padrão nos dois módulos. O nome da pessoa e da empresa no topo do Detalhes e do Converter (24/20 px) ficou: é a identidade da ficha, como valor em destaque. **Aprovado pelo dono.** |
+| 8 | CRM › Contatos | **feito em 22/09** — tela (cartão "Ações Rápidas" com os 4 botões, filtros); sem modais próprios. A folha tinha a regra de 48 px nos controles do filtro e o empurrão de 1vw: saíram. Aguardando o "ok" do dono. |
+| 9 | CRM › Calendário | referência — só conferir — **próximo** |
 | 10 | CRM › Tarefas | referência — só conferir |
 | 11 | Laminação › Clientes | a fazer |
 | 12 | Laminação › Serviços | a fazer |

@@ -104,6 +104,9 @@ const PADRONIZADOS = [
       'proximo-passo', 'concluir-passo', 'etapa', 'responsavel', 'converter'
     ].map(m => `html/modals/prospeccoes/${m}.html`)]
   },
+  // 22/09/2026. Sem modais próprios (as ações ainda mostram "Função
+  // indisponível" pela DialogPadrao).
+  { modulo: 'contatos', arquivos: ['html/contatos.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -171,7 +174,9 @@ test('os valores do padrão são os aprovados', () => {
 });
 
 test('as classes do padrão existem', () => {
-  for (const classe of ['ctl-botao', 'ctl-botao--pequeno', 'ctl-botao--icone', 'ctl-acoes', 'ctl-campo', 'ctl-rotulo', 'ctl-secao', 'ctl-modal-titulo', 'ctl-padrao']) {
+  for (const classe of ['ctl-botao', 'ctl-botao--pequeno', 'ctl-botao--icone', 'ctl-acoes', 'ctl-campo', 'ctl-campo--pequeno',
+    'ctl-campo--icone', 'ctl-campo--dois-icones', 'ctl-campo--prefixo', 'ctl-campo--sufixo',
+    'ctl-rotulo', 'ctl-secao', 'ctl-secao-tela', 'ctl-modal-titulo', 'ctl-padrao']) {
     assert.ok(new RegExp(`\\.${classe}\\b`).test(CONTROLES), `.${classe} não está em controles.css`);
   }
 });
@@ -297,11 +302,11 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
-for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css']) {
+for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contatos.css']) {
   test(`${folha}: a folha não prende mais os controles do filtro em 48 px`, () => {
     const css = ler(folha).replace(/\/\*[\s\S]*?\*\//g, '');
     for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (/\.filter-bar\s+(input|select|button)/.test(m[1])) {
+      if (/\.(filter-bar|filtro-contatos)\s+(input|select|button|\.input-glass)/.test(m[1])) {
         assert.doesNotMatch(m[2], /\bheight\s*:/, `${m[1].trim()} não pode fixar altura`);
       }
     }
