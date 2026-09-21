@@ -823,7 +823,27 @@
   const iniciais = nome => String(nome || '?').trim().split(/\s+/).filter(Boolean)
     .map((p, i, todos) => (i === 0 || i === todos.length - 1 ? p[0] : '')).join('').toUpperCase().slice(0, 2) || '?';
 
+  /**
+   * A ordem da tabela de valores da produção (Regras › Produção): as regras
+   * de TODAS AS PEÇAS sempre primeiro (regra do dono, 21/09/2026), depois as
+   * de cada peça. Em cada grupo, os processos na ordem da lista ao lado
+   * (Marcenaria, Acabamento, Montagem, Embalagem) e, entre peças, pelo código.
+   * `etapas`: [{ id, ordem }]. Pura.
+   */
+  function ordenarValoresDeProducao(valores, etapas = []) {
+    const semPeca = v => v.produto_id === null || v.produto_id === undefined;
+    const ordemDe = new Map((etapas || []).map(e => [String(e.id), Number(e.ordem) || 0]));
+    const ordem = v => (ordemDe.has(String(v.etapa_id)) ? ordemDe.get(String(v.etapa_id)) : Number.MAX_SAFE_INTEGER);
+    const peca = v => String(v.produto_codigo || v.produto || '');
+    return (valores || []).slice().sort((a, b) =>
+      (semPeca(a) === semPeca(b) ? 0 : (semPeca(a) ? -1 : 1))
+      || ordem(a) - ordem(b)
+      || String(a.etapa || '').localeCompare(String(b.etapa || ''), 'pt-BR')
+      || peca(a).localeCompare(peca(b), 'pt-BR', { numeric: true }));
+  }
+
   window.FinanceiroModais = {
+    ordenarValoresDeProducao,
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
     faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
@@ -4088,8 +4108,8 @@
       const corpo = el('finValoresCorpo');
       corpo.replaceChildren();
       const semPeca = v => v.produto_id === null || v.produto_id === undefined;
-      const valores = (dados?.valores || []).slice().sort((a, b) => String(a.etapa).localeCompare(String(b.etapa), 'pt-BR')
-        || (semPeca(a) ? -1 : (semPeca(b) ? 1 : String(a.produto).localeCompare(String(b.produto), 'pt-BR'))));
+      // "Todas as peças" sempre no topo (ordenarValoresDeProducao).
+      const valores = ordenarValoresDeProducao(dados?.valores, dados?.etapas);
       el('finValoresVazio').classList.toggle('hidden', !dados || valores.length > 0);
       corpo.closest('.fin-tabela').classList.toggle('hidden', valores.length === 0);
       for (const v of valores) {

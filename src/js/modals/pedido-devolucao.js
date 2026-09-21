@@ -80,19 +80,56 @@
     };
   }
 
-  /** O texto da confirmação: o que será feito, em linhas. */
-  function textoDaConfirmacao(plano, numero) {
-    const pecas = (plano?.itens || []).map(i => `${i.quantidade}× ${i.nome}`).join(', ');
-    const linhas = [
-      `Devolução ${plano?.tipo === 'total' ? 'TOTAL' : 'parcial'} do pedido ${numero || ''}: ${moedaBR(plano?.valor)}.`,
-      `Voltam ao estoque: ${pecas}.`
-    ];
-    const abertas = (plano?.parcelas || []).filter(p => p.situacao === 'aberta');
-    if (abertas.length) linhas.push(`Parcelas em aberto: ${moedaBR(plano.valor_parcelas)} de desconto em ${abertas.length === 1 ? '1 parcela' : `${abertas.length} parcelas`} (os prazos não mudam).`);
-    if (abertas.some(p => p.modo === 'abatimento_boleto' || p.modo === 'baixa_boleto')) linhas.push('Os boletos em aberto são alterados no Banco do Brasil agora.');
-    if (Number(plano?.valor_reembolso) > 0) linhas.push(`Reembolso ao cliente: ${moedaBR(plano.valor_reembolso)} (fica pendente no Financeiro até ser pago).`);
-    linhas.push('Esta ação não pode ser desfeita.');
-    return linhas.join('\n');
+  /**
+   * A caixa de confirmação, organizada para a DialogPadrao: cartões com os
+   * números, as peças que voltam ao estoque (uma por linha), o que acontece
+   * com cada parcela, a nota do que muda fora daqui e o alerta do que não tem
+   * volta. Antes era um parágrafo corrido com tudo junto. Pura.
+   */
+  function caixaDaConfirmacao(plano, numero, cliente = '') {
+    const total = plano?.tipo === 'total';
+    const itens = plano?.itens || [];
+    const pecas = itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0);
+    const parcelas = (plano?.parcelas || []).filter(p => p && (p.situacao === 'aberta' || p.modo === 'reembolso'));
+    const abertas = parcelas.filter(p => p.situacao === 'aberta');
+    const reembolso = Number(plano?.valor_reembolso) || 0;
+    const unidades = q => `${q} ${Number(q) === 1 ? 'peça' : 'peças'}`;
+
+    // Só dinheiro nos cartões (no máximo três: com quatro, a caixa quebrava os
+    // valores no meio). O total de peças vai no título da seção delas.
+    const resumo = [{ rotulo: 'Valor devolvido', valor: moedaBR(plano?.valor) }];
+    if (abertas.length) resumo.push({ rotulo: 'Desconto nas parcelas', valor: moedaBR(plano.valor_parcelas) });
+    if (reembolso > 0) resumo.push({ rotulo: 'Reembolso ao cliente', valor: moedaBR(reembolso), tom: 'aviso' });
+
+    const secoes = [{
+      titulo: `Voltam ao estoque · ${unidades(pecas)}`, icone: 'fa-box-open',
+      itens: itens.map(i => ({ rotulo: i.nome, valor: unidades(i.quantidade) }))
+    }];
+    if (parcelas.length) {
+      secoes.push({
+        titulo: abertas.length === 1 && parcelas.length === 1 ? 'Parcela' : 'Parcelas', icone: 'fa-file-invoice-dollar',
+        itens: parcelas.map(p => {
+          const l = linhaDaParcela(p);
+          return { rotulo: `${l.numero} parcela`, valor: l.desconto, detalhe: [l.acao, l.detalhe].filter(Boolean).join(' — ') };
+        })
+      });
+    }
+
+    const notas = [];
+    if (abertas.length) notas.push('Os prazos das parcelas não mudam.');
+    if (abertas.some(p => p.modo === 'abatimento_boleto' || p.modo === 'baixa_boleto')) notas.push('Os boletos em aberto são alterados no Banco do Brasil agora.');
+    if (reembolso > 0) notas.push('O reembolso fica pendente no Financeiro até ser pago.');
+
+    return {
+      title: total ? 'Registrar a devolução total?' : 'Registrar a devolução parcial?',
+      subtitle: [`Pedido ${numero || ''}`.trim(), cliente].filter(Boolean).join(' · '),
+      tom: 'pergunta', icone: 'fa-rotate-left',
+      largura: 'larga',
+      resumo, secoes,
+      nota: notas.length ? notas.join(' ') : undefined,
+      alerta: 'Esta ação não pode ser desfeita.',
+      confirmText: 'Confirmar devolução'
+    };
   }
 
   /** O resumo depois de gravar. */
@@ -499,11 +536,9 @@
     if (!plano) { exibirMensagem('erro', 'Informe quantas peças foram devolvidas.'); return; }
     if (!data) { exibirMensagem('erro', 'Informe a data da devolução.'); el('devolucaoData').focus(); return; }
     if (motivo.length < 3) { exibirMensagem('erro', 'Diga o motivo da devolução.'); el('devolucaoMotivo').focus(); return; }
-    const ok = await window.DialogPadrao?.confirm?.({
-      title: plano.tipo === 'total' ? 'Registrar a devolução total?' : 'Registrar a devolução parcial?',
-      message: textoDaConfirmacao(plano, estado?.pedido?.numero || ctx.numero),
-      confirmText: 'Confirmar devolução'
-    });
+    const ok = await window.DialogPadrao?.confirm?.(
+      caixaDaConfirmacao(plano, estado?.pedido?.numero || ctx.numero, estado?.pedido?.cliente || ctx.cliente || '')
+    );
     if (!ok) return;
     emAndamento = true;
     confirmarBtn.disabled = true;

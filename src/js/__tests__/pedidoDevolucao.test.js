@@ -30,7 +30,7 @@ function puras() {
   const fim = FONTE.indexOf('// ------------------------------------------------- fim das funções puras');
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   return vm.runInContext(`${FONTE.slice(inicio, fim)}
-({ quantidadeValida, escolhasDe, estimativa, etiquetaDoTipo, linhaDaParcela, textoDaConfirmacao, resumoDoResultado, linhaDoHistorico, mensagemDeErro })`, vm.createContext({}));
+({ quantidadeValida, escolhasDe, estimativa, etiquetaDoTipo, linhaDaParcela, caixaDaConfirmacao, resumoDoResultado, linhaDoHistorico, mensagemDeErro })`, vm.createContext({}));
 }
 
 /** Recorta uma função de nível do arquivo (ou de dentro do IIFE) pelo nome e a executa isolada. */
@@ -90,22 +90,40 @@ test('linha da parcela: diz o que acontece com cada uma (desconto, abatimento, b
   assert.strictEqual(f.linhaDaParcela({ modo: 'cancelada' }).acao, 'Parcela cancelada');
 });
 
-test('confirmação, resultado, histórico e erros: o texto diz o que será (e o que foi) feito', () => {
+test('confirmação, resultado, histórico e erros: a caixa diz o que será (e o que foi) feito', () => {
   const f = puras();
   const planoTotal = {
     tipo: 'total', valor: 3000, valor_parcelas: 2000, valor_reembolso: 1000,
     itens: [{ quantidade: 2, nome: 'Poltrona Asa' }, { quantidade: 1, nome: 'Mesa Lateral' }],
-    parcelas: [{ situacao: 'aberta', modo: 'baixa_boleto' }, { situacao: 'aberta', modo: 'cancelada' }, { situacao: 'paga', modo: 'reembolso' }]
+    parcelas: [
+      { numero_parcela: 1, situacao: 'aberta', modo: 'baixa_boleto', desconto: 1000, valor_depois: 0, nosso_numero: '000312' },
+      { numero_parcela: 2, situacao: 'aberta', modo: 'cancelada', desconto: 1000, valor_depois: 0 },
+      { numero_parcela: 3, situacao: 'paga', modo: 'reembolso', desconto: 1000, valor_depois: 0 }
+    ]
   };
-  const texto = semEspacoFixo(f.textoDaConfirmacao(planoTotal, 'PED55'));
-  assert.match(texto, /Devolução TOTAL do pedido PED55: R\$ 3\.000,00\./);
-  assert.match(texto, /Voltam ao estoque: 2× Poltrona Asa, 1× Mesa Lateral\./);
-  assert.match(texto, /R\$ 2\.000,00 de desconto em 2 parcelas \(os prazos não mudam\)/);
-  assert.match(texto, /alterados no Banco do Brasil agora/);
-  assert.match(texto, /Reembolso ao cliente: R\$ 1\.000,00/);
-  assert.match(texto, /não pode ser desfeita/);
-  const semBB = f.textoDaConfirmacao({ tipo: 'parcial', valor: 500, valor_parcelas: 500, valor_reembolso: 0, itens: [{ quantidade: 1, nome: 'X' }], parcelas: [{ situacao: 'aberta', modo: 'valor_parcela' }] }, 'P1');
-  assert.ok(!/Banco do Brasil/.test(semBB) && !/Reembolso/.test(semBB), 'sem boleto e sem reembolso, não promete nenhum dos dois');
+  // Organizada (cartões, seções, nota e alerta) em vez de um parágrafo corrido.
+  const caixa = plano(f.caixaDaConfirmacao(planoTotal, 'PED55', 'MAG Confecções'));
+  assert.strictEqual(caixa.title, 'Registrar a devolução total?');
+  assert.strictEqual(caixa.subtitle, 'Pedido PED55 · MAG Confecções');
+  assert.strictEqual(caixa.message, undefined, 'nada de texto corrido');
+  assert.deepStrictEqual(caixa.resumo.map(r => `${r.rotulo}: ${semEspacoFixo(r.valor)}`), [
+    'Valor devolvido: R$ 3.000,00', 'Desconto nas parcelas: R$ 2.000,00', 'Reembolso ao cliente: R$ 1.000,00'
+  ], 'só dinheiro nos cartões, no máximo três (com quatro os valores quebravam no meio)');
+  const [estoque, parcelas] = caixa.secoes;
+  assert.strictEqual(estoque.titulo, 'Voltam ao estoque · 3 peças');
+  assert.deepStrictEqual(estoque.itens.map(i => `${i.rotulo} = ${i.valor}`), ['Poltrona Asa = 2 peças', 'Mesa Lateral = 1 peça'], 'uma peça por linha');
+  assert.deepStrictEqual(parcelas.itens.map(i => i.rotulo), ['1ª parcela', '2ª parcela', '3ª parcela']);
+  assert.deepStrictEqual(parcelas.itens.map(i => i.detalhe.split(' — ')[0]), ['Boleto baixado no BB', 'Parcela cancelada', 'Reembolso ao cliente']);
+  assert.strictEqual(semEspacoFixo(parcelas.itens[1].valor), '− R$ 1.000,00');
+  assert.match(caixa.nota, /prazos das parcelas não mudam/);
+  assert.match(caixa.nota, /alterados no Banco do Brasil agora/);
+  assert.match(caixa.nota, /reembolso fica pendente no Financeiro/);
+  assert.match(caixa.alerta, /não pode ser desfeita/);
+  assert.strictEqual(caixa.confirmText, 'Confirmar devolução');
+  const semBB = plano(f.caixaDaConfirmacao({ tipo: 'parcial', valor: 500, valor_parcelas: 500, valor_reembolso: 0, itens: [{ quantidade: 1, nome: 'X' }], parcelas: [{ situacao: 'aberta', modo: 'valor_parcela' }] }, 'P1'));
+  assert.strictEqual(semBB.title, 'Registrar a devolução parcial?');
+  assert.ok(!/Banco do Brasil|reembolso/i.test(semBB.nota) && !semBB.resumo.some(r => /Reembolso/.test(r.rotulo)), 'sem boleto e sem reembolso, não promete nenhum dos dois');
+  assert.match(FONTE, /window\.DialogPadrao\?\.confirm\?\.\(\s*caixaDaConfirmacao\(plano,/, 'o botão confirmar usa a caixa organizada');
 
   const ok = f.resumoDoResultado({ devolucao: { tipo: 'parcial', sequencia: 1, valor: 1500 }, pendencias: 0, itens: [{ quantidade: 2 }], parcelas: [{ numero_parcela: 2, modo: 'valor_parcela', desconto: 500, status: 'ok' }], reembolso: null, nota: { numero: 456 } });
   assert.deepStrictEqual([ok.titulo, ok.tipo], ['Devolução parcial nº 1 registrada', 'success']);
@@ -149,7 +167,7 @@ test('script do modal: prévia e registro em /api/devolucoes, XML junto, confirm
   assert.ok(FONTE.includes("observacao: el('devolucaoObservacao').value.trim(), xml, chave_idempotencia: chave"), 'o XML e a chave vão no registro');
   assert.ok(FONTE.includes('chave = novaChave();'), 'depois de registrar, chave nova');
   assert.ok(FONTE.includes('/api/devolucoes/${encodeURIComponent(devolucaoId)}/reaplicar'));
-  assert.ok(FONTE.includes('window.DialogPadrao?.confirm?.({') && FONTE.includes("confirmText: 'Confirmar devolução'"));
+  assert.ok(FONTE.includes('window.DialogPadrao?.confirm?.(') && FONTE.includes("confirmText: 'Confirmar devolução'"));
   assert.ok(!/window\.confirm\(|showStatusConfirmDialog|innerHTML|insertAdjacentHTML/.test(FONTE));
   assert.ok(FONTE.includes('window.BotaoAcao.bind(confirmarBtn, confirmar)'), 'trava de clique duplo');
   assert.ok(FONTE.includes("botao.dataset.acaoGerida = 'true';") && FONTE.includes("botao.dataset.perm = 'ped.devolucao';"), 'o "Tentar de novo" é gerido e pede a permissão');
