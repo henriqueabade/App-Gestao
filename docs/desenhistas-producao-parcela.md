@@ -40,6 +40,12 @@ roda e reinicia a API). Sem o SQL, as telas avisam qual arquivo rodar e nada
   recusa se algum insumo usa o processo. "Pintura" (teste da fase G) saiu.
 - **Valor** de cada processo: em R$ por peça ou em **% do preço cheio da
   tabela fixa**; o da peça vale mais que o padrão do processo.
+- **Regra de todas as peças** (o "padrão do processo"; nas telas, "Todas as
+  peças" — regra do dono, 21/09/2026): vale para **toda peça que não tem
+  regra própria ativa** naquele processo. A peça que tem a dela, ativa, segue
+  a dela; regra própria desligada não conta. A regra própria de um processo
+  não mexe nos outros processos da peça. Travado em
+  `backend/financeiro/producaoUnidades.test.js` ("regra de todas as peças").
 - **Conta**: cada insumo do processo é uma parte igual do valor da peça
   inteira. A peça que sai do estoque paga só os insumos que faltavam (9 de 10
   prontos → 1/10; 10 de 10 → nem aparece no processo) e entra primeiro no

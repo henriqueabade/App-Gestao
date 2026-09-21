@@ -4010,7 +4010,10 @@
     const produtoBusca = el('finValorProdutoBusca');
     const tipoValorSel = el('finValorTipo');
     const valorCampo = el('finValorValor');
-    const PADRAO_DO_PROCESSO = 'Padrão do processo (toda peça sem valor próprio)';
+    // A regra de todas as peças vale para toda peça sem regra própria ATIVA
+    // naquele processo; a peça que tem a dela segue a dela
+    // (backend/financeiro/producaoUnidades.js, regraDaPeca).
+    const PADRAO_DO_PROCESSO = 'Todas as peças (vale para quem não tem regra própria ativa)';
 
     async function montarProdutos(selecionado) {
       const itens = await lista('produtos');
@@ -4054,7 +4057,9 @@
       if (remover) {
         const confirmado = await window.DialogPadrao?.confirm?.({
           title: 'Remover o valor?',
-          message: `${remover.etapa}: ${remover.produto || 'padrão do processo'} (${remover.descricao}). O que ainda não foi fechado passa a usar o padrão do processo, se houver.`,
+          message: remover.produto
+            ? `${remover.etapa}: ${remover.produto} (${remover.descricao}). O que ainda não foi fechado desta peça passa a usar a regra de todas as peças, se houver.`
+            : `${remover.etapa}: todas as peças (${remover.descricao}). As peças sem regra própria ativa ficam sem valor neste processo até que haja outra.`,
           confirmText: 'Remover'
         });
         if (!confirmado) return;
@@ -4096,7 +4101,7 @@
         const tr = document.createElement('tr');
         tr.append(
           celulaG(v.etapa || '—', 'px-4 py-3 text-white'),
-          celulaG(semPeca(v) ? tagG('Padrão do processo', 'badge-info') : tagG(v.produto_codigo || v.produto, 'badge-warning', v.produto_nome || v.produto || '')),
+          celulaG(semPeca(v) ? tagG('Todas as peças', 'badge-info') : tagG(v.produto_codigo || v.produto, 'badge-warning', v.produto_nome || v.produto || '')),
           celulaG(v.descricao || '—'), celulaG(acoes)
         );
         corpo.appendChild(tr);

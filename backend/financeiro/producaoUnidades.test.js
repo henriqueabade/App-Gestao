@@ -54,6 +54,34 @@ test('alocar: os registros consomem a fila na ordem; o estornado devolve as peç
   assert.deepEqual(r.pendentes, [1]);
 });
 
+test('regra de todas as peças: vale para toda peça sem regra própria ATIVA; a que tem a dela segue a dela', () => {
+  // Regra do dono (21/09/2026): "a regra de todas as peças é válida para todas
+  // as peças que não têm cadastro específico ativo; se tiver algum cadastro
+  // ativo ele rege aquela peça; não tendo, o de todas vale para ela."
+  const MARCENARIA = 1;
+  const ACABAMENTO = 3;
+  const valores = [
+    { id: 1, etapa_id: MARCENARIA, produto_id: null, tipo: 'percentual', percentual: '7.2', ativo: true }, // todas as peças
+    { id: 2, etapa_id: ACABAMENTO, produto_id: null, tipo: 'percentual', percentual: '3.6', ativo: true }, // todas as peças
+    { id: 3, etapa_id: MARCENARIA, produto_id: 50, tipo: 'valor', valor_unitario: '120', ativo: true },   // própria, ativa
+    { id: 4, etapa_id: MARCENARIA, produto_id: 60, tipo: 'valor', valor_unitario: '999', ativo: false },  // própria, DESLIGADA
+    { id: 5, etapa_id: MARCENARIA, produto_id: 70, tipo: 'valor', valor_unitario: '80', ativo: 'f' }      // desligada (como o banco devolve)
+  ];
+  const origem = (peca, etapa) => {
+    const r = u.regraDaPeca(valores, peca, etapa);
+    return r && `${r.origem}:${r.tipo === 'valor' ? r.valor : r.percentual}`;
+  };
+
+  assert.equal(origem(50, MARCENARIA), 'peca:120', 'a peça com regra própria ativa segue a dela');
+  assert.equal(origem(50, ACABAMENTO), 'padrao:3.6', 'a regra própria de um processo não mexe nos outros processos da peça');
+  assert.equal(origem(60, MARCENARIA), 'padrao:7.2', 'regra própria desligada não vale: fica a de todas as peças');
+  assert.equal(origem(70, MARCENARIA), 'padrao:7.2', 'desligada vinda do banco como "f" também não vale');
+  assert.equal(origem(99, MARCENARIA), 'padrao:7.2', 'peça sem cadastro próprio: a de todas as peças');
+  assert.equal(origem(null, MARCENARIA), 'padrao:7.2');
+  // Sem a regra de todas as peças no processo, só quem tem a própria recebe.
+  assert.equal(u.regraDaPeca(valores, 99, 2), null);
+});
+
 test('regra da peça: a da peça vale mais que o padrão; % usa o preço cheio da tabela fixa', () => {
   const valores = [
     { id: 1, etapa_id: 1, produto_id: null, tipo: 'percentual', percentual: '10', valor_unitario: 0, ativo: true },

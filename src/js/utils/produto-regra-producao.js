@@ -158,7 +158,7 @@
         if (!etapa) falta = 'processo não cadastrado';
         else if (!pagando) falta = '';
         else if (problemaDoValor) falta = problemaDoValor;
-        else if (!regra) falta = 'sem valor próprio nem padrão';
+        else if (!regra) falta = 'sem regra própria nem de todas as peças';
         return {
           nome: etapa ? etapa.nome : p.nome, insumos: p.insumos, etapa, pagando, escolha,
           origem: propria ? 'peca' : (etapa?.padrao ? 'padrao' : null), regra,
@@ -191,7 +191,7 @@
         if (!l.etapa) { partes.push(`${cabeca}: processo não cadastrado nas etapas`); continue; }
         if (!l.pagando) { partes.push(`${cabeca}: pagamento desligado`); continue; }
         if (l.falta) { partes.push(`${cabeca}: FALTA — ${l.falta}`); continue; }
-        const origem = l.origem === 'peca' ? 'desta peça' : 'padrão do processo';
+        const origem = l.origem === 'peca' ? 'desta peça' : 'todas as peças';
         const inteira = l.valor_peca === null ? 'sem preço de tabela para calcular' : `${formatarMoeda(l.valor_peca)} por peça inteira`;
         const cada = l.valor_peca !== null && l.insumos > 1 ? `; cada insumo vale ${formatarMoeda(centavos(l.valor_peca / l.insumos))}` : '';
         partes.push(`${cabeca}: ${descrever(l.regra)} (${origem}) → ${inteira}${cada}`);
@@ -217,7 +217,7 @@
         if (!l.etapa) return { rotulo: l.nome, valor: 'Não cadastrado', tom: 'erro', detalhe: `${insumos} · o processo não existe nas etapas de produção` };
         if (!l.pagando) return { rotulo: l.nome, valor: 'Pagamento desligado', detalhe: `${insumos} · este processo não é pago por peça` };
         if (l.falta) return { rotulo: l.nome, valor: 'Falta', tom: 'aviso', detalhe: `${insumos} · ${l.falta}` };
-        const origem = l.origem === 'peca' ? 'desta peça' : 'padrão do processo';
+        const origem = l.origem === 'peca' ? 'desta peça' : 'todas as peças';
         const cada = l.valor_peca !== null && l.insumos > 1 ? ` · cada insumo vale ${formatarMoeda(centavos(l.valor_peca / l.insumos))}` : '';
         return {
           rotulo: l.nome,
