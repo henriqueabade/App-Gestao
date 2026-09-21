@@ -154,14 +154,52 @@
   }
 
   /**
-   * Pedido enviado, entregue ou com NF-e autorizada não se cancela: devolve-se.
-   * Cancelada a nota (na SEFAZ), o pedido em produção volta a ser cancelável. Pura.
+   * Quais dos botões Cancelar, Enviar e Devolução o rodapé mostra, pela
+   * situação do pedido (regra do dono, 21/09/2026):
+   *
+   *   Produção .............. Cancelar e Enviar (verde) — não saiu: não se devolve
+   *     com NF-e autorizada . só Enviar — o backend não cancela pedido com
+   *                           nota viva (409); cancelada a nota na SEFAZ
+   *                           ("Cancelar NF-e"), o Cancelar volta
+   *   Enviado / Entregue .... só Devolução — o que já saiu não se cancela
+   *   Parcial ............... só Devolução, das peças que ainda não voltaram
+   *   Devolvido (total) ..... nenhum dos três
+   *   Cancelado ............. nenhum
+   *   Pendente, Rascunho .... Cancelar
+   *
+   * Pura.
    */
-  function pedidoSeDevolve(pedido, notas) {
+  function botoesDoPedido(pedido, notas = []) {
+    const situacao = String(pedido?.situacao || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const nenhum = { cancelar: false, enviar: false, devolucao: false };
+    if (situacao === 'cancelado' || pedido?.devolucao === 'total') return nenhum;
+    if (situacao === 'enviado' || situacao === 'entregue' || pedido?.devolucao === 'parcial') return { ...nenhum, devolucao: true };
+    if (situacao === 'producao' || situacao === 'em producao') {
+      const notaViva = (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
+      return { ...nenhum, cancelar: !notaViva, enviar: true };
+    }
+    return { ...nenhum, cancelar: true };
+  }
+
+  /** A etiqueta roxa "N dev." que vai na frente do nome do item (vazia sem devolução). Pura. */
+  function tagDeDevolucaoDoItem(item) {
+    const devolvidas = Number(item?.quantidade_devolvida);
+    if (!(devolvidas > 0)) return '';
+    const todas = devolvidas >= Number(item?.quantidade);
+    const titulo = todas ? 'Todas as peças deste item foram devolvidas pelo cliente' : 'Peças devolvidas pelo cliente';
+    return `<span class="badge-purple mr-2 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap align-middle" title="${titulo}">${devolvidas} dev.</span>`;
+  }
+
+  /** A forma de pagamento do pedido é boleto? Pura. */
+  function pagaComBoleto(pedido) {
+    return String(pedido?.forma_pagamento || '').trim().toLowerCase() === 'boleto';
+  }
+
+  /** O pedido já saiu para o cliente (enviado ou entregue, e não devolvido por inteiro)? Pura. */
+  function pedidoJaSaiu(pedido) {
     const situacao = String(pedido?.situacao || '').trim().toLowerCase();
-    if (situacao === 'cancelado') return false;
-    if (situacao === 'enviado' || situacao === 'entregue' || Boolean(pedido?.devolucao)) return true;
-    return (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
+    return (situacao === 'enviado' || situacao === 'entregue') && pedido?.devolucao !== 'total';
   }
 
   /** A etiqueta de status: a devolução (roxa) vence o Enviado/Entregue que está por baixo. Pura. */
@@ -307,7 +345,11 @@
     const temBoleto = estado.parcelas.some(l => l?.boleto?.id);
     // Quem só vê boletos (ou pedido cancelado, cujos boletos ainda se baixam) entra pela lista.
     const podeGerar = typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode('financeiro.boleto.emit') : true;
-    if (botao && falta && !cancelado && podeGerar) ligar(botao);
+    // Gerar só depois que o pedido saiu (antes disso ele "não foi nem
+    // enviado", regra do dono, e o embarque ainda reprograma os vencimentos)
+    // e só em pedido pago com boleto — num pedido em Pix ou cartão o botão
+    // aparecia só porque as parcelas não tinham boleto.
+    if (botao && falta && !cancelado && podeGerar && pedidoJaSaiu(pedido) && pagaComBoleto(pedido)) ligar(botao);
     else if (lista && temBoleto) ligar(lista);
   }
 
@@ -321,8 +363,8 @@
   // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
   // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
   // Antes cada um fechava o Visualizar primeiro.
-  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido'];
-  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido'];
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido'];
+  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida'];
   let filhoMudouOPedido = false;
 
   function abrirPorCima(htmlPath, scriptPath, filhoId) {
@@ -386,16 +428,35 @@
   EVENTOS_QUE_MUDAM_O_PEDIDO.forEach(nome => window.addEventListener(nome, aoMudarOPedido));
   window.addEventListener('modalFechado', aoFecharFilho);
 
-  /** O botão roxo "Devolução" toma o lugar do "Cancelar" (a permissão de cada um está escrita no HTML). */
-  function ligarDevolucao(pedido, notas) {
+  /**
+   * Cancelar, Enviar e Devolução: os três nascem escondidos e aparecem os que
+   * a situação pede (botoesDoPedido). A permissão de cada um está no HTML.
+   */
+  function ligarBotoesDoPedido(pedido, clienteNome, notas) {
+    const quais = botoesDoPedido(pedido, notas);
+    overlay.querySelector('#cancelarVisualizarPedido')?.classList.toggle('hidden', !quais.cancelar);
+
+    const enviar = overlay.querySelector('#enviarVisualizarPedido');
+    if (enviar && quais.enviar) {
+      enviar.classList.remove('hidden');
+      // O mesmo do "Concluir" da tabela em produção: a conferência da NF-e,
+      // que emite e só então marca Enviado (ou envia sem nota, com
+      // confirmação). Por cima do Visualizar; ao terminar ele volta atualizado.
+      enviar.addEventListener('click', () => {
+        window.selectedOrderId = id;
+        window.emitirNfeContext = { pedidoId: id, numero: pedido?.numero || '', cliente: clienteNome || pedido?.cliente_nome || '' };
+        abrirPorCima('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido');
+      });
+    }
+
     const devolver = overlay.querySelector('#devolucaoVisualizarPedido');
-    if (!devolver || !pedidoSeDevolve(pedido, notas)) return;
-    overlay.querySelector('#cancelarVisualizarPedido')?.classList.add('hidden');
-    devolver.classList.remove('hidden');
-    devolver.addEventListener('click', () => {
-      window.devolucaoPedidoContext = { pedidoId: window.selectedOrderId, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
-      abrirPorCima('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');
-    });
+    if (devolver && quais.devolucao) {
+      devolver.classList.remove('hidden');
+      devolver.addEventListener('click', () => {
+        window.devolucaoPedidoContext = { pedidoId: window.selectedOrderId, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
+        abrirPorCima('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');
+      });
+    }
   }
   const esc = e => { if (e.key === 'Escape' && ehOModalDeCima()) close(); };
   document.addEventListener('keydown', esc);
@@ -582,19 +643,15 @@
 
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
+      // As peças devolvidas: etiqueta roxa na FRENTE do nome (não mais na
+      // quantidade). Sem a coluna de ações: no Visualizar os itens não se editam.
       tr.innerHTML = `
-        <td data-perm-col="col_ped_it_nome" class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
-        <td data-perm-col="col_ped_it_qtd" class="text-left text-white">${fmtNumber(qtd)}${Number(item.quantidade_devolvida) > 0 ? ` <span class="badge-purple ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" title="Peças devolvidas pelo cliente">${Number(item.quantidade_devolvida)} dev.</span>` : ''}</td>
+        <td data-perm-col="col_ped_it_nome" class="text-left text-white" title="${escapeAttr(item.nome || '')}">${tagDeDevolucaoDoItem(item)}${item.nome || ''}</td>
+        <td data-perm-col="col_ped_it_qtd" class="text-left text-white">${fmtNumber(qtd)}</td>
         <td data-perm-col="col_ped_it_preco" class="text-left text-white">${fmtNumber(valorUnit)}</td>
         <td data-perm-col="col_ped_it_preco_desc" class="text-left text-white">${fmtNumber(valorUnitDesc)}</td>
         <td data-perm-col="col_ped_it_desc" class="text-left text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
-        <td data-perm-col="col_ped_it_subtotal" class="text-left text-white">${fmtCurrency(valorTotal)}</td>
-        <td class="text-left modal-actions-disabled actions-cell">
-          <div class="flex items-center justify-start gap-2">
-            <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
-            <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>
-          </div>
-        </td>`;
+        <td data-perm-col="col_ped_it_subtotal" class="text-left text-white">${fmtCurrency(valorTotal)}</td>`;
       itensTbody.appendChild(tr);
       subtotal += valorUnit * qtd;
       descPag += descPagUnit * qtd;
@@ -643,7 +700,7 @@
       } catch (_) { /* sem nota de devolução, sem tag */ }
     }
     pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao));
-    ligarDevolucao(data, notas);
+    ligarBotoesDoPedido(data, clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '', notas);
     ligarDocumentosDaNota(notaDocs, data);
 
     if (pagamentoBox) {

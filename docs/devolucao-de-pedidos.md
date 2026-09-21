@@ -1,9 +1,21 @@
 # Devolução de pedidos (parcial e total)
 
-Pedido **enviado**, **entregue** ou com **NF-e autorizada** não se cancela:
-devolve-se. No Visualizar, o botão vermelho "Cancelar" dá lugar ao roxo
-**"Devolução"**. Cancelada a nota na SEFAZ (dentro do prazo), o pedido em
-produção volta a ser cancelável. A trava também está no backend
+Pedido **enviado** ou **entregue** não se cancela: devolve-se. Os botões do
+rodapé do Visualizar seguem a situação (regra do dono, 21/09/2026 —
+`botoesDoPedido` em `src/js/modals/pedido-visualizar.js`):
+
+| Situação | Botões |
+|---|---|
+| Produção | Cancelar e **Enviar** (verde: a conferência da NF-e, o mesmo do "Concluir" da tabela) |
+| Produção com NF-e autorizada | só Enviar (o pedido não se cancela com nota viva; cancelada a nota na SEFAZ, o Cancelar volta) |
+| Enviado, Entregue | só **Devolução** |
+| Parcial | só Devolução, das peças que ainda não voltaram (o modal já limita) |
+| Devolvido (total), Cancelado | nenhum |
+
+Botões da NF-e e dos boletos só aparecem quando o pedido tem de fato a nota ou
+o boleto; "Gerar boletos" só depois que o pedido saiu e só em pedido pago com
+boleto. A tabela de itens não tem mais a coluna de ações, e a etiqueta roxa
+"N dev." vai na frente do nome do item. A trava também está no backend
 (`PUT /api/pedidos/:id/status` responde 409 `USE_DEVOLUCAO`): pedido que já
 teve devolução jamais passa pelo estorno do cancelamento, que devolveria ao
 estoque peças que já voltaram.

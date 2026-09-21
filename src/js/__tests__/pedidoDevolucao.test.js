@@ -160,25 +160,65 @@ test('script do modal: prévia e registro em /api/devolucoes, XML junto, confirm
   assert.ok(FONTE.includes('if (arquivo.size > TAMANHO_MAXIMO_DO_XML)'));
 });
 
-test('Visualizar pedido: o botão roxo "Devolução" toma o lugar do "Cancelar" em pedido enviado, entregue ou com NF-e autorizada', () => {
-  assert.ok(/id="cancelarVisualizarPedido"[^>]*data-perm="ped\.cancel"/.test(VIS_HTML));
+test('Visualizar pedido: Cancelar, Enviar e Devolução conforme a situação (regra do dono, 21/09/2026)', () => {
+  // Os três nascem escondidos (hidden na frente): o script mostra os que valem.
+  assert.ok(/id="cancelarVisualizarPedido"[^>]*data-perm="ped\.cancel"[^>]*class="hidden btn-danger[^"]*"/.test(VIS_HTML));
+  assert.ok(/id="enviarVisualizarPedido"[^>]*data-perm="ped\.status\.ship"[^>]*class="hidden btn-success[^"]*"[^>]*>Enviar<\/button>/.test(VIS_HTML), 'Enviar: verde, pede a mesma permissão do "Concluir" da tabela');
   assert.ok(/id="devolucaoVisualizarPedido"[^>]*data-perm="ped\.devolucao"[^>]*class="hidden btn-devolucao[^"]*"[^>]*>Devolução<\/button>/.test(VIS_HTML), 'nasce escondido, roxo, com a guarda própria e só com texto');
+  const ordem = ['cancelarVisualizarPedido', 'enviarVisualizarPedido', 'devolucaoVisualizarPedido', 'voltarVisualizarPedidoFooter'].map(i => VIS_HTML.indexOf(`id="${i}"`));
+  assert.ok(ordem.every((p, i) => p > 0 && (i === 0 || p > ordem[i - 1])), 'Enviar no lugar da Devolução, antes do Voltar');
   assert.ok(/id="devolvidoPedidoChip" class="hidden badge-purple/.test(VIS_HTML));
 
-  const seDevolve = recortar(VISUALIZAR, 'pedidoSeDevolve');
-  assert.strictEqual(seDevolve({ situacao: 'Enviado' }, []), true);
-  assert.strictEqual(seDevolve({ situacao: 'Entregue' }, []), true);
-  assert.strictEqual(seDevolve({ situacao: 'Produção' }, []), false, 'em produção e sem nota: cancela');
-  assert.strictEqual(seDevolve({ situacao: 'Produção' }, [{ status_fiscal: 'autorizada' }]), true, 'com NF-e autorizada: devolve');
-  assert.strictEqual(seDevolve({ situacao: 'Produção' }, [{ status_fiscal: 'cancelada' }]), false, 'nota cancelada na SEFAZ: volta a cancelar');
-  assert.strictEqual(seDevolve({ situacao: 'Cancelado' }, [{ status_fiscal: 'autorizada' }]), false);
+  const botoes = recortar(VISUALIZAR, 'botoesDoPedido');
+  const quais = p => Object.entries(plano(botoes(p))).filter(([, v]) => v).map(([k]) => k).join(',');
+  assert.strictEqual(quais({ situacao: 'Produção' }), 'cancelar,enviar', 'em produção: Cancelar e Enviar, nada de devolução');
+  assert.strictEqual(quais({ situacao: 'Enviado' }), 'devolucao', 'enviado: só Devolução, sem Cancelar');
+  assert.strictEqual(quais({ situacao: 'Entregue' }), 'devolucao', 'entregue: só Devolução');
+  assert.strictEqual(quais({ situacao: 'Entregue', devolucao: 'parcial' }), 'devolucao', 'parcial: só Devolução (das peças que faltam)');
+  assert.strictEqual(quais({ situacao: 'Enviado', devolucao: 'total' }), '', 'devolvido por inteiro: nem Cancelar nem Devolução');
+  assert.strictEqual(quais({ situacao: 'Cancelado' }), '');
+  assert.strictEqual(quais({ situacao: 'Pendente' }), 'cancelar');
+  assert.strictEqual(quais({ situacao: 'Em Produção' }), 'cancelar,enviar', 'grafias antigas da produção');
+  const quaisComNotas = (p, notas) => Object.entries(plano(botoes(p, notas))).filter(([, v]) => v).map(([k]) => k).join(',');
+  assert.strictEqual(quaisComNotas({ situacao: 'Produção' }, [{ status_fiscal: 'autorizada' }]), 'enviar', 'em produção com NF-e viva: o backend não cancela (409); só Enviar');
+  assert.strictEqual(quaisComNotas({ situacao: 'Produção' }, [{ status_fiscal: 'cancelada' }]), 'cancelar,enviar', 'nota cancelada na SEFAZ: o Cancelar volta');
+  assert.strictEqual(quaisComNotas({ situacao: 'Enviado' }, [{ status_fiscal: 'autorizada' }]), 'devolucao');
+
+  // Enviar = o "Concluir" da tabela em produção: a conferência da NF-e, por cima do Visualizar.
+  assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido');"));
+  assert.ok(VISUALIZAR.includes("'emitirNfePedido'") && VISUALIZAR.includes("'pedido:enviado'") && VISUALIZAR.includes("'nfe:emitida'"), 'ao enviar, o Visualizar volta atualizado');
+
+  // Gerar boletos só depois que o pedido saiu.
+  const saiu = recortar(VISUALIZAR, 'pedidoJaSaiu');
+  assert.strictEqual(saiu({ situacao: 'Produção' }), false);
+  assert.strictEqual(saiu({ situacao: 'Enviado' }), true);
+  assert.strictEqual(saiu({ situacao: 'Entregue', devolucao: 'parcial' }), true);
+  assert.strictEqual(saiu({ situacao: 'Entregue', devolucao: 'total' }), false);
+  assert.strictEqual(saiu({ situacao: 'Cancelado' }), false);
+  const deBoleto = recortar(VISUALIZAR, 'pagaComBoleto');
+  assert.strictEqual(deBoleto({ forma_pagamento: 'boleto' }), true);
+  assert.strictEqual(deBoleto({ forma_pagamento: 'Boleto' }), true);
+  assert.strictEqual(deBoleto({ forma_pagamento: 'pix' }), false, 'pedido em Pix: sem "Gerar boletos"');
+  assert.strictEqual(deBoleto({}), false);
 
   const etiqueta = recortar(VISUALIZAR, 'etiquetaDaDevolucao');
   assert.deepStrictEqual(plano(etiqueta({ devolucao: 'total' })), { rotulo: 'Devolvido', badge: 'badge-purple', dateKey: 'data_devolucao' });
   assert.deepStrictEqual(plano(etiqueta({ devolucao: 'parcial' })), { rotulo: 'Parcial', badge: 'badge-purple', dateKey: 'data_devolucao' });
   assert.strictEqual(etiqueta({ devolucao: null }), null);
 
-  assert.ok(VISUALIZAR.includes("overlay.querySelector('#cancelarVisualizarPedido')?.classList.add('hidden');") && VISUALIZAR.includes("devolver.classList.remove('hidden');"));
+  assert.ok(VISUALIZAR.includes("overlay.querySelector('#cancelarVisualizarPedido')?.classList.toggle('hidden', !quais.cancelar);") && VISUALIZAR.includes("devolver.classList.remove('hidden');"));
+
+  // Itens: sem a coluna de ações, e o "N dev." na frente do nome.
+  assert.ok(!/<th[^>]*>AÇ\.<\/th>/.test(VIS_HTML), 'a coluna de ações saiu');
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'pedidos.css'), 'utf8');
+  assert.match(css, /#pedidoItens th:first-child,\s*#pedidoItens td:first-child\s*\{\s*width:\s*46%;/, 'o nome fica com o espaço da coluna que saiu');
+  assert.doesNotMatch(css, /#pedidoItens th:last-child/, 'a última coluna agora é o TOT R$: nada de centralizar');
+  assert.ok(!VISUALIZAR.includes('actions-cell'), 'as linhas também não têm mais a célula de ações');
+  const tag = recortar(VISUALIZAR, 'tagDeDevolucaoDoItem');
+  assert.strictEqual(tag({ quantidade: 2, quantidade_devolvida: 0 }), '');
+  assert.match(tag({ quantidade: 2, quantidade_devolvida: 1 }), /badge-purple[^>]*>1 dev\.<\/span>$/);
+  assert.ok(VISUALIZAR.includes('${tagDeDevolucaoDoItem(item)}${item.nome || \'\'}</td>'), 'a etiqueta vem antes do nome');
+  assert.ok(!/fmtNumber\(qtd\)\}\$\{Number\(item\.quantidade_devolvida\)/.test(VISUALIZAR), 'e não mais na quantidade');
   // Por cima do Visualizar, que não fecha (o voltar da devolução cai de novo nele).
   assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/devolucao.html', '../js/modals/pedido-devolucao.js', 'devolucaoPedido');"));
   assert.ok(VISUALIZAR.includes("'data_devolucao'"), 'a data da devolução é DATE: cortada como texto');

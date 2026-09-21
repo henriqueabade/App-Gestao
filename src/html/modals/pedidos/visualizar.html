@@ -79,6 +79,8 @@
           </div>
 
           <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll items-table-scroll modal-scroll">
+            <!-- Sem a coluna de ações: no Visualizar os itens não se editam, e o
+                 espaço dela vai para o nome (#pedidoItens, pedidos.css). -->
             <table id="pedidoItens" class="w-full items-table">
               <thead class="sticky top-0">
                 <tr class="border-b">
@@ -88,7 +90,6 @@
                   <th data-perm-col="col_ped_it_preco_desc" class="text-left uppercase">UN C/DSC</th>
                   <th data-perm-col="col_ped_it_desc" class="text-left uppercase">DSC%</th>
                   <th data-perm-col="col_ped_it_subtotal" class="text-left uppercase">TOT R$</th>
-                  <th class="text-left uppercase">AÇ.</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -115,8 +116,11 @@
         <button id="visualizarPedidoBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Gerar o PDF de todos os boletos a pagar do pedido">Boletos (PDF)</button>
       </div>
       <div class="ctl-acoes">
-        <button id="cancelarVisualizarPedido" data-sem-guarda data-perm="ped.cancel" class="btn-danger ctl-botao text-white">Cancelar</button>
-        <!-- Pedido enviado, entregue ou com NF-e autorizada não se cancela: devolve-se. O script troca um botão pelo outro. -->
+        <!-- Os três nascem escondidos; o script mostra os que a situação pede
+             (botoesDoPedido): em produção, Cancelar e Enviar; enviado ou
+             entregue, só Devolução; devolvido por inteiro ou cancelado, nenhum. -->
+        <button id="cancelarVisualizarPedido" data-sem-guarda data-perm="ped.cancel" class="hidden btn-danger ctl-botao text-white">Cancelar</button>
+        <button id="enviarVisualizarPedido" data-sem-guarda data-perm="ped.status.ship" class="hidden btn-success ctl-botao" title="Conferir a NF-e e marcar o pedido como enviado">Enviar</button>
         <button id="devolucaoVisualizarPedido" data-sem-guarda data-perm="ped.devolucao" class="hidden btn-devolucao ctl-botao text-white" title="Registrar a devolução de peças deste pedido">Devolução</button>
         <button id="voltarVisualizarPedidoFooter" class="btn-neutral ctl-botao text-white">Voltar</button>
       </div>
