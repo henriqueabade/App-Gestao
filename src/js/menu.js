@@ -103,6 +103,9 @@ const MODULES_WITHOUT_SCROLL = new Set([
     'calendario',
     'tarefas',
     'usuarios',
+    // Clientes tem o layout de Pedidos (título, filtros, tabela): a tabela
+    // rola por dentro. Rolando o módulo, ela passava do fim da tela (19/09).
+    'clientes',
     // Prospecções cabe na tela com o funil e os filtros avançados retraídos.
     // O próprio módulo tira o `no-scroll` quando um deles é aberto.
     'prospeccoes',

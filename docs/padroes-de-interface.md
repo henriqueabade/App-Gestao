@@ -349,6 +349,18 @@ filtros mudava de altura) nem passa por cima do vizinho — e volta sozinha
 quando sobra espaço (menu lateral recolhido, janela maior). É só CSS: nada a
 recalcular em JS. Contêiner novo de etiquetas de resumo usa a mesma classe.
 
+### Tabela da tela principal cabe na tela
+
+Nos módulos de "título, filtros e tabela" o módulo não rola: quem rola é a
+tabela (`MODULES_WITHOUT_SCROLL` em `src/js/menu.js` + a lista de
+`#content.no-scroll .table-scroll` em `src/styles/scroll.css`). Pedidos,
+Orçamentos e Produtos usam a conta fixa `altura do módulo − 260px`.
+Clientes (19/09/2026) usa o jeito que não depende da altura dos filtros: o
+módulo vira coluna flexível e a tabela ocupa **o que sobra**
+(`src/css/clientes.css`) — com o menu aberto ou numa janela menor os filtros
+quebram em duas linhas e a conta fixa deixava as últimas linhas fora da
+tela. Módulo novo nesse formato: prefira o jeito de Clientes.
+
 ### Menu lateral: o conteúdo desliza, não recalcula
 
 Abrir/recolher o menu muda a margem do `#mainContent` **de uma vez** e o
@@ -357,11 +369,25 @@ Animar a própria margem (`transition-all` no `<main>`, como era) recalcula o
 módulo inteiro a cada quadro e travava as telas de lista longa. **Não ponha
 `transition` de margem, largura ou `all` no `#mainContent`.**
 
-### Caixas de diálogo: vidro sólido
+### O vidro dos modais e das caixas
 
-O cartão da `DialogPadrao` (`.dlg-cartao`) é vidro **sólido** na cor do
-programa (bordô translúcido com desfoque), sem degradê — decisão do dono em
-18/09/2026. No tema claro, vidro branco. Não volte a pôr degradê no fundo.
+Todo modal e toda caixa de diálogo usam **o mesmo vidro**: o da caixa
+"Confirmar exclusão" de Pedidos, escolhida pelo dono como padrão em
+19/09/2026 — `glass-surface backdrop-blur-xl rounded-3xl border
+border-white/10 ring-1 ring-white/5 shadow-2xl`, sobre o véu `bg-black/50`
+(sem desfoque no véu). É branco a 8% com desfoque de 24 px: transparente,
+deixando ver o que está atrás.
+
+- `DialogPadrao` (`.dlg-cartao`, `src/styles/dialogo-padrao.css`): esse vidro;
+  as caixas de erro/exclusão ganham a moldura vermelha
+  (`border-red-500/20 ring-red-500/30`). Nem degradê nem bordô escuro — os
+  dois foram tentados e recusados em 18/09.
+- Modais de Tarefas e Calendário (`.tui-cartao`, `src/styles/tarefas-ui.css`):
+  o mesmo vidro e os degraus de tamanho do padrão — grande 72rem
+  (`max-w-6xl`), pequeno 48rem (`max-w-3xl`), altura até 90vh; o editor, que
+  tem abas, com altura fixa. O rodapé é só a linha de cima, sem faixa escura.
+  **Os botões desses modais ainda não foram mexidos**: ficam para a rodada dos
+  botões de módulos e modais, quando o dono pedir.
 
 ### `.hidden` e a folha do módulo
 

@@ -19,10 +19,10 @@
    classe do Tailwind — o pré-compilado não tem todas.
    --------------------------------------------------------------------------- */
 
+/* O véu é o mesmo das caixas de Pedidos (`bg-black/50`): escurece sem
+   desfocar — o desfoque é do cartão, não da tela inteira. */
 dialog[data-dialog-padrao]::backdrop {
     background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
 }
 
 .dlg-cartao {
@@ -33,15 +33,17 @@ dialog[data-dialog-padrao]::backdrop {
     flex-direction: column;
     width: 100%;
     max-height: min(86vh, 46rem);
-    border-radius: 1.25rem;
-    border: 1px solid var(--menu-surface-border-strong, rgba(255, 255, 255, 0.12));
-    /* Vidro na cor do programa, sem degradê (pedido do dono, 18/09/2026): o
-       mesmo "glass" dos modais (a caixa de excluir prospecção), um pouco mais
-       escuro para o texto continuar legível sobre o que estiver atrás. */
-    background: rgba(38, 4, 20, 0.55);
-    backdrop-filter: blur(24px) saturate(120%);
-    -webkit-backdrop-filter: blur(24px) saturate(120%);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    border-radius: 1rem;
+    /* O vidro PADRÃO do programa — o da caixa "Confirmar exclusão" de Pedidos
+       (`glass-surface backdrop-blur-xl rounded-2xl border ring-1
+       shadow-2xl`), escolhido pelo dono em 19/09/2026: branco a 8% sobre
+       desfoque, transparente, deixando ver o que está atrás. Nem degradê
+       (18/09) nem bordô escuro (tentativa de 18/09, recusada). */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-surface, rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 25px 50px -12px rgba(0, 0, 0, 0.25);
     color: var(--menu-text-primary, rgba(255, 255, 255, 0.88));
     overflow: hidden;
     animation: dlgEntrar 160ms ease-out;
@@ -59,6 +61,12 @@ dialog[data-dialog-padrao]::backdrop {
 .dlg-cartao--sucesso { --dlg-tom: var(--color-green, #a2ffa6); --dlg-tom-fundo: rgba(162, 255, 166, 0.13); --dlg-tom-borda: rgba(162, 255, 166, 0.35); }
 .dlg-cartao--aviso { --dlg-tom: #fbbf24; --dlg-tom-fundo: rgba(251, 191, 36, 0.13); --dlg-tom-borda: rgba(251, 191, 36, 0.38); }
 .dlg-cartao--erro { --dlg-tom: #ff7a7a; --dlg-tom-fundo: rgba(255, 88, 88, 0.15); --dlg-tom-borda: rgba(255, 88, 88, 0.4); }
+/* Erro e exclusão ganham a moldura vermelha da caixa de Pedidos
+   (`border-red-500/20 ring-red-500/30`). */
+.dlg-cartao--erro {
+    border-color: rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3), 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
 .dlg-cartao--pergunta { --dlg-tom: var(--color-blue, #8aa7f3); --dlg-tom-fundo: rgba(138, 167, 243, 0.14); --dlg-tom-borda: rgba(138, 167, 243, 0.38); }
 
 /* ---------------------------------------------------------------- topo */

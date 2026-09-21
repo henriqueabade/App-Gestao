@@ -349,3 +349,33 @@ body {
 #clientesTableBody tr:hover {
     background: rgba(163, 148, 167, 0.05);
 }
+
+/* A tabela cabe na tela e rola por dentro, como em Pedidos: o módulo não
+   rola (menu.js, MODULES_WITHOUT_SCROLL) — rolando, a tabela passava do fim
+   da tela (19/09/2026).
+   Em vez da conta fixa de Pedidos (altura − 260px), a tabela ocupa O QUE
+   SOBRA: com o menu aberto ou numa janela menor os filtros quebram em duas
+   linhas, e a conta fixa deixava as últimas linhas fora da tela. A folga de
+   baixo é a mesma de Pedidos.
+   Tudo preso a `data-current-module="clientes"`: esta folha também é
+   injetada fora do módulo (a IA abre o formulário de cliente). */
+body[data-current-module="clientes"] #content.no-scroll > .modulo-container {
+    display: flex;
+    flex-direction: column;
+    height: var(--module-height);
+    padding-bottom: 1.25rem;
+    box-sizing: border-box;
+}
+
+body[data-current-module="clientes"] #content.no-scroll > .modulo-container > div {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+body[data-current-module="clientes"] #content.no-scroll #clientesTableWrapper.table-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+}
