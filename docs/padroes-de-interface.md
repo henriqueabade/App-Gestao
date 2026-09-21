@@ -265,6 +265,14 @@ correção ocupando a tela inteira (`max-w-xl`).
   nova que falhar ali: acrescente em `utilitarios.css` com o valor do Tailwind
   (1 unidade = 0,25rem; quebras sm 640, md 768, lg 1024, xl 1280).
 
+### Tamanho dos botões, dos campos e das letras
+
+Um padrão só para o programa inteiro — botão principal de 40 px com letra de
+14 px, campo de 40 px, tabela com letra de 14/12 px — em
+`src/styles/controles.css`, com as classes `ctl-*`. Regra completa, o que
+fica de fora (etiquetas!) e a fila dos módulos em
+`docs/padrao-visual-controles.md`.
+
 ### Cores dos botões
 
 | Botão | Classe |

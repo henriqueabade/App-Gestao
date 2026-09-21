@@ -1,0 +1,167 @@
+/* ---------------------------------------------------------------------------
+   Padrão visual dos controles: tamanho dos BOTÕES PRINCIPAIS, dos CAMPOS e
+   das LETRAS dos textos. Regra escrita em docs/padrao-visual-controles.md.
+
+   A referência é o que o dono escolheu em 21/09/2026 (prints de Financeiro,
+   Calendário e Tarefas, e os modais de Tarefas): botões menores, letra de
+   14 px, peso 600. Os módulos antigos tinham botão de 48 px com letra de
+   16 px, campos de 50 px e tabela com letra de 15 px.
+
+   COMO SE USA — a folha não muda nada sozinha. Cada tela passa para o padrão
+   na vez dela (módulo a módulo, com os modais dele), trocando as classes
+   de tamanho do Tailwind pelas daqui:
+
+     botão principal ....... ctl-botao            (+ a classe de cor: btn-*)
+     botão de barra ........ ctl-botao ctl-botao--pequeno
+     botão só com ícone .... ctl-botao ctl-botao--icone
+     campo / select ........ ctl-campo            (+ o fundo: input-glass…)
+     rótulo de campo ....... ctl-rotulo
+     título de seção ....... ctl-secao            (caixa alta, pequeno)
+     título de modal ....... ctl-modal-titulo
+     letras das tabelas .... ctl-padrao na RAIZ da tela ou do modal
+
+   Cor NÃO é daqui: continua nas classes btn-* de cada módulo.
+   FORA do padrão (não mexer): etiquetas e botões em forma de etiqueta —
+   status, DANFE/CC-e, "Hoje / Amanhã", "7 dias / 30 dias", marcadores,
+   filtros em pílula — e os ícones de ação das linhas de tabela.
+
+   Global (menu.html): um modal abre fora do módulo dele, e a folha de um
+   módulo só existe enquanto ele está aberto.
+   --------------------------------------------------------------------------- */
+
+:root {
+    /* Botões — referência: .tarefas-botao / .cal-botao (40,8 px) e .tui-botao
+       dos modais de Tarefas (37,4 px). Uma altura só para tela e modal. */
+    --ctl-altura: 2.5rem;              /* 40 px */
+    --ctl-altura-pequena: 2rem;        /* 32 px — barras de ferramentas */
+    --ctl-pad-x: 1.1rem;               /* 17,6 px de cada lado do texto */
+    --ctl-pad-x-pequeno: 0.8rem;
+    --ctl-fonte: 0.875rem;             /* 14 px */
+    --ctl-fonte-pequena: 0.8125rem;    /* 13 px */
+    --ctl-peso: 600;
+    --ctl-raio: 0.7rem;                /* 11,2 px */
+    --ctl-espaco-icone: 0.45rem;       /* entre o ícone e o texto */
+    --ctl-espaco-entre: 0.6rem;        /* entre botões lado a lado */
+
+    /* Campos — referência: .tui-campo. Mesma altura do botão: um select ao
+       lado do "Filtrar" fica alinhado. */
+    --ctl-campo-altura: 2.5rem;        /* 40 px */
+    --ctl-campo-pad-x: 0.75rem;
+    --ctl-campo-fonte: 0.875rem;       /* 14 px */
+    --ctl-campo-raio: 0.6rem;
+
+    /* Textos */
+    --txt-rotulo: 0.8125rem;           /* 13 px, peso 500 — rótulo de campo */
+    --txt-secao: 0.7rem;               /* 11,2 px, caixa alta — .tui-rotulo */
+    --txt-modal-titulo: 1.125rem;      /* 18 px, peso 600 */
+    --txt-corpo: 0.875rem;             /* 14 px — texto corrido */
+    --txt-apoio: 0.8125rem;            /* 13 px — dica, texto de apoio */
+    /* Tabelas: acompanham a largura da tela, mas param em 14/12 px (antes
+       iam até 15,2 px nas duas). */
+    --txt-tabela: clamp(0.75rem, 0.7rem + 0.2vw, 0.875rem);
+    --txt-tabela-cabecalho: clamp(0.68rem, 0.64rem + 0.15vw, 0.75rem);
+}
+
+/* ------------------------------------------------------------ botões */
+
+.ctl-botao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ctl-espaco-icone);
+    height: var(--ctl-altura);
+    padding: 0 var(--ctl-pad-x);
+    border-radius: var(--ctl-raio);
+    font-size: var(--ctl-fonte);
+    font-weight: var(--ctl-peso);
+    line-height: 1;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* O ícone acompanha a letra do botão (havia `w-4 h-4`, `text-lg`…). */
+.ctl-botao > i,
+.ctl-botao > svg {
+    font-size: 1em;
+    width: auto;
+    height: auto;
+    margin: 0;
+}
+
+.ctl-botao[hidden] { display: none; }
+
+.ctl-botao--pequeno {
+    height: var(--ctl-altura-pequena);
+    padding: 0 var(--ctl-pad-x-pequeno);
+    font-size: var(--ctl-fonte-pequena);
+}
+
+.ctl-botao--icone { width: var(--ctl-altura); padding: 0; }
+.ctl-botao--icone.ctl-botao--pequeno { width: var(--ctl-altura-pequena); }
+
+/* Grupo de botões lado a lado (cabeçalho do módulo, rodapé do modal). */
+.ctl-acoes {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ctl-espaco-entre);
+}
+
+/* ------------------------------------------------------------ campos */
+
+.ctl-campo {
+    height: var(--ctl-campo-altura);
+    padding: 0 var(--ctl-campo-pad-x);
+    border-radius: var(--ctl-campo-raio);
+    font-size: var(--ctl-campo-fonte);
+    line-height: 1.25;
+}
+
+textarea.ctl-campo {
+    height: auto;
+    min-height: 5rem;
+    padding: 0.55rem var(--ctl-campo-pad-x);
+    line-height: 1.45;
+}
+
+/* ------------------------------------------------------------ textos */
+
+.ctl-rotulo {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: var(--txt-rotulo);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.ctl-secao {
+    font-size: var(--txt-secao);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    line-height: 1.4;
+}
+
+.ctl-modal-titulo {
+    font-size: var(--txt-modal-titulo);
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.ctl-texto { font-size: var(--txt-corpo); line-height: 1.55; }
+.ctl-apoio { font-size: var(--txt-apoio); line-height: 1.5; }
+
+/* ------------------------------------------------------------ tabelas
+   `ctl-padrao` vai na raiz da tela (.modulo-container) ou do modal (o véu
+   `…Overlay`). As medidas de espaço continuam as de scroll.css; só a letra
+   muda. As grades de edição (itens do orçamento/pedido, revisão da IA) têm
+   campos nas células e ficam de fora, como em scroll.css 3e. */
+.ctl-padrao .table-scroll th,
+.ctl-padrao table:not(.rp-tabela) th {
+    font-size: var(--txt-tabela-cabecalho);
+}
+
+.ctl-padrao .table-scroll td,
+.ctl-padrao table:not(.rp-tabela, .items-table, .ia-grade-revisao table) td {
+    font-size: var(--txt-tabela);
+}
