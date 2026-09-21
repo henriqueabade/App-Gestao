@@ -107,6 +107,9 @@ const PADRONIZADOS = [
   // 22/09/2026. Sem modais próprios (as ações ainda mostram "Função
   // indisponível" pela DialogPadrao).
   { modulo: 'contatos', arquivos: ['html/contatos.html'] },
+  // 22/09/2026 — referência: só alinhados os centésimos (40,8 → 40 px; barra
+  // de 32,7–34,3 → 32 px). Os modais são os do TarefasUI (teste abaixo).
+  { modulo: 'calendario', arquivos: ['html/calendario.html'] },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -247,6 +250,11 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'calendario',
+    arquivos: ['js/calendario.js'],
+    ignorar: []
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -259,8 +267,10 @@ function botoesJsForaDoPadrao(js, ignorar) {
     ...[...js.matchAll(/class="([^"]*)"/g)].map(m => m[1]),
     ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1])
   ];
+  // `tui-botao` (modais de Tarefas e Calendário) já usa as medidas do padrão
+  // na própria regra (tarefas-ui.css) — conta como padronizado.
   return classes.filter(c => COR_DE_BOTAO.test(c)
-    && !/\bctl-botao\b/.test(c) && !ignorar.some(re => re.test(c)));
+    && !/\b(ctl-botao|tui-botao)\b/.test(c) && !ignorar.some(re => re.test(c)));
 }
 
 for (const { modulo, arquivos, ignorar } of JS_PADRONIZADOS) {
@@ -291,6 +301,24 @@ test('dashboard: o "Atualizar" do cartão com erro é o botão pequeno do padrã
   const css = ler('css/dashboard.css');
   for (const classe of ['.dash-botao-leve', '.dash-botao-atualizar']) {
     assert.deepStrictEqual(regrasComTamanho(css, classe), [], `${classe} não pode fixar tamanho em dashboard.css`);
+  }
+});
+
+test('modais de Tarefas e Calendário (TarefasUI): botão e campo com as medidas do padrão', () => {
+  const css = ler('styles/tarefas-ui.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const botao = (css.match(/\.tui-botao\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(botao, /height:\s*var\(--ctl-altura\b/);
+  assert.match(botao, /font-size:\s*var\(--ctl-fonte\b/);
+  assert.match(botao, /border-radius:\s*var\(--ctl-raio/);
+  const campo = (css.match(/\.tui-campo\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(campo, /font-size:\s*var\(--ctl-campo-fonte/);
+  assert.match(css, /input\.tui-campo,\s*select\.tui-campo\s*\{[^}]*height:\s*var\(--ctl-campo-altura/);
+});
+
+test('calendário: a barra (Mês/Semana, ícones, Hoje, agenda) no botão pequeno do padrão', () => {
+  const css = ler('css/calendario.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const sel of [/\.cal-visoes button\s*\{([^}]*)\}/, /\.cal-icone-botao\s*\{([^}]*)\}/, /\.cal-hoje\s*\{([^}]*)\}/]) {
+    assert.match((css.match(sel) || [])[1] || '', /height:\s*var\(--ctl-altura-pequena\)/, String(sel));
   }
 });
 

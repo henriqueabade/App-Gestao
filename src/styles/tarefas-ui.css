@@ -39,7 +39,8 @@
        dos formulários do Financeiro;
      - altura até 90vh (e não menos que os min(92vh, 56rem) de antes).
    O editor tem abas: altura FIXA, como todo modal com abas, para trocar de
-   aba não mudar o tamanho. Os botões ficam para outra rodada. */
+   aba não mudar o tamanho. Botões e campos seguem o padrão de controles
+   (controles.css, 22/09/2026). */
 :root { --tui-altura: max(90vh, min(92vh, 56rem)); }
 
 dialog.tui-dialogo {
@@ -117,13 +118,16 @@ dialog.tui-dialogo--editor .tui-cartao { height: var(--tui-altura); }
 .tui-rotulo:first-child { margin-top: 0; }
 .tui-rotulo__extra { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--tui-destaque-claro); }
 
+/* Medidas do campo do padrão (controles.css): 40 px, letra de 14 px. O
+   textarea cresce pelas linhas. */
 .tui-campo {
-    width: 100%; min-width: 0; padding: 0.5rem 0.7rem; border-radius: 0.6rem; font-size: 0.85rem; color: var(--tui-texto-forte);
+    width: 100%; min-width: 0; padding: 0.5rem var(--ctl-campo-pad-x, 0.75rem); border-radius: var(--ctl-campo-raio, 0.6rem); font-size: var(--ctl-campo-fonte, 0.875rem); color: var(--tui-texto-forte);
     background: var(--tui-campo); border: 1px solid var(--tui-campo-borda); transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 .tui-campo:focus { outline: none; border-color: var(--tui-destaque); box-shadow: 0 0 0 2px rgba(182, 160, 62, 0.3); }
 .tui-campo:disabled { opacity: 0.5; cursor: not-allowed; }
 .tui-campo::placeholder { color: var(--tui-texto-suave); }
+input.tui-campo, select.tui-campo { height: var(--ctl-campo-altura, 2.5rem); padding-top: 0; padding-bottom: 0; }
 .tui-campo--curto { width: 4.5rem; flex: 0 0 auto; }
 input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark; }
 .tui-descricao { resize: vertical; min-height: 4.5rem; line-height: 1.5; }
@@ -282,7 +286,8 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
     border-top: 1px solid rgba(255, 255, 255, 0.1); flex-shrink: 0; background: transparent;
 }
 .tui-rodape__lado { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.tui-botao { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1.05rem; border-radius: 0.65rem; font-size: 0.85rem; font-weight: 600; color: #fff; }
+/* O botão principal do padrão (controles.css): 40 px, letra de 14 px, 600. */
+.tui-botao { display: inline-flex; align-items: center; justify-content: center; gap: var(--ctl-espaco-icone, 0.45rem); height: var(--ctl-altura, 2.5rem); padding: 0 var(--ctl-pad-x, 1.1rem); border-radius: var(--ctl-raio, 0.7rem); font-size: var(--ctl-fonte, 0.875rem); font-weight: 600; color: #fff; white-space: nowrap; }
 .tui-dialogo .btn-success, .tui-escopo .btn-success { background: #16a34a; color: #fff; transition: all 150ms ease; }
 .tui-dialogo .btn-success:hover, .tui-escopo .btn-success:hover { background: #22c55e; transform: translateY(-1px); }
 .tui-dialogo .btn-neutral, .tui-escopo .btn-neutral { background: rgba(255, 255, 255, 0.1); color: #fff; transition: all 150ms ease; }

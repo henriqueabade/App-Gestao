@@ -186,9 +186,9 @@ Quando o dono mandar o módulo:
 | 5 | Pedidos | **feito em 22/09** — tela e os 12 modais (Visualizar, Pagamento, Emitir NF-e, Relatório de produção, Converter orçamentos, Cancelar pedido com a realocação, Cancelar NF-e, Carta de correção, E-mail da NF-e, Boletos, Detalhe do boleto, Devolução); o Datas já tinha entrado com Orçamentos. **Aprovado pelo dono.** |
 | 6 | CRM › Clientes | **feito em 22/09** — tela (com o "Ações Rápidas") e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato); a Transportadora já tinha entrado com Orçamentos. O botão da linha do tempo (`.hs-botao`, compartilhado com Prospecções) passou para as medidas do botão pequeno. **Aprovado pelo dono.** |
 | 7 | CRM › Prospecções | **feito em 22/09** — tela (filtros, filtros avançados com os falsos selects de país/estado, Funil) e os 13 modais (Detalhes, Novo, Editar, Excluir, Contato, Interação, Nota, Campanha, Próximo passo, Concluir passo, Mover no funil, Responsável, Converter). O seletor de estados/cidades (`geo-multiselect`, usado também em Relatórios) ficou no padrão nos dois módulos. O nome da pessoa e da empresa no topo do Detalhes e do Converter (24/20 px) ficou: é a identidade da ficha, como valor em destaque. **Aprovado pelo dono.** |
-| 8 | CRM › Contatos | **feito em 22/09** — tela (cartão "Ações Rápidas" com os 4 botões, filtros); sem modais próprios. A folha tinha a regra de 48 px nos controles do filtro e o empurrão de 1vw: saíram. Aguardando o "ok" do dono. |
-| 9 | CRM › Calendário | referência — só conferir — **próximo** |
-| 10 | CRM › Tarefas | referência — só conferir |
+| 8 | CRM › Contatos | **feito em 22/09** — tela (cartão "Ações Rápidas" com os 4 botões, filtros); sem modais próprios. A folha tinha a regra de 48 px nos controles do filtro e o empurrão de 1vw: saíram. **Aprovado pelo dono.** |
+| 9 | CRM › Calendário | **conferido em 22/09** (referência) — só os centésimos: cabeçalho de 40,8 → 40 px (`ctl-botao`), barra de 32,7–34,3 → 32 px (Mês/Semana, ícones, Hoje, agenda). Os modais (Atividade/Marco, Nova tarefa, Exportar e o editor) usam o TarefasUI, que passou para as medidas do padrão: `tui-botao` 37,4 → 40 px e `tui-campo` 37,8 → 40 px, letra 13,6 → 14 px (vale também para Tarefas e para as tarefas das fichas). Aguardando o "ok" do dono. |
+| 10 | CRM › Tarefas | referência — só conferir — **próximo** |
 | 11 | Laminação › Clientes | a fazer |
 | 12 | Laminação › Serviços | a fazer |
 | 13 | IA | a fazer |
