@@ -280,6 +280,20 @@ test('DEV: o pedido e a troca correm no banco local, com o código só no e-mail
   }
 });
 
+test('e-mail do código (DEV): o modelo dos e-mails da Santíssimo, com a logo e o código na faixa dourada', () => {
+  const fs = require('node:fs');
+  const { htmlDoCodigo, LOGO_ARQUIVO } = require('../src/email/sendResetEmail');
+  assert.ok(fs.existsSync(LOGO_ARQUIVO), 'a logo redonda (Logo SideBar.png) precisa existir');
+  const html = htmlDoCodigo({ nome: '<i>Maria</i> Souza', codigo: '24681357', validadeMin: 30 });
+  assert.match(html, /src="cid:logo-sidebar"/);
+  assert.match(html, /Código para Nova Senha/);
+  assert.match(html, /2468 1357/);
+  assert.match(html, /30 minutos/);
+  assert.match(html, /#b6a03e 0%,#7f6a27 100%/);
+  assert.strictEqual(html.includes('<i>Maria'), false, 'o nome entra escapado');
+  assert.doesNotMatch(htmlDoCodigo({ codigo: '1', validadeMin: 30 }, { comLogo: false }), /cid:/);
+});
+
 test('cadastro pela tela de login recusa senha fraca antes de gravar', async () => {
   const backend = require('./backend');
   await assert.rejects(backend.registrarUsuario('Maria Souza', 'maria@loja.com', 'senha123'),

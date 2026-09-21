@@ -55,6 +55,13 @@ o e-mail.
 Sem a API atualizada, o app instalado mostra: "O servidor ainda não tem a
 troca de senha pelo código. Avise o administrador para atualizar a API."
 
+**O e-mail** segue o modelo dos e-mails do Monitoramento Túnel Bancos Físicos
+(fundo vinho, cartão com a logo redonda no topo, título dourado, código na
+faixa dourada como o PIN). A logo vai anexa (`cid:logo-sidebar`): na API é
+`senha/logo-email.png`; no app, `src/assets/Logo SideBar.png`. O mesmo HTML
+está em `senha/email.js` (API) e `src/email/sendResetEmail.js` (DEV): mudou
+um, mude o outro.
+
 ## A regra da senha
 
 Mínimo de **8 caracteres**, com **uma letra maiúscula**, **um número** e **um
@@ -76,8 +83,10 @@ A lista é desenhada por `SenhaForte.ligarLista(campo, <ul>)` com o estilo de
 
 ## Para colocar em produção
 
-1. **API** (Santissimo-db-API): atualizar o código (`senha/`, `server.js`,
-   `package.json`), rodar `npm install` (entra o `nodemailer`), pôr no `.env`
+1. **API** (Santissimo-db-API): atualizar o código (`senha/` inteira, com a
+   `logo-email.png`, `server.js`, `package.json`), instalar o `nodemailer`
+   (`npm install`, ou copiar a pasta `node_modules/nodemailer` do app — ele não
+   tem dependências), pôr no `.env`
    da API `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` e `FROM_EMAIL`
    (os mesmos do `.env` do app) e reiniciar.
 2. Conferir: `POST https://<api>/senha/esqueci` com um e-mail que não existe
