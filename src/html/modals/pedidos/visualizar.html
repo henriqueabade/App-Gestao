@@ -1,15 +1,15 @@
-<div id="visualizarPedidoOverlay" class="hidden fixed inset-0 z-[1002] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="visualizarPedidoOverlay" class="hidden fixed inset-0 z-[1002] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div class="flex items-center gap-3">
-        <button id="voltarVisualizarPedido" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <button id="voltarVisualizarPedido" class="btn-neutral ctl-botao text-white">← Voltar</button>
         <div class="relative">
-          <select id="visualizarPedidoDono" data-perm-col="col_ped_campo_dono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-          <label for="visualizarPedidoDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
+          <select id="visualizarPedidoDono" data-perm-col="col_ped_campo_dono" class="peer w-48 appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+          <label for="visualizarPedidoDono" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
           <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
         </div>
       </div>
-      <h2 id="tituloVisualizarPedido" class="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-white">VISUALIZAR PEDIDO</h2>
+      <h2 id="tituloVisualizarPedido" class="absolute left-1/2 -translate-x-1/2 ctl-modal-titulo text-white">VISUALIZAR PEDIDO</h2>
       <div class="flex items-center gap-3">
         <span id="dataStatusPedidoTag" class="text-sm text-gray-300 hidden"></span>
         <span id="statusPedidoTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Pendente</span>
@@ -19,46 +19,46 @@
       <div class="px-8 py-6 h-full min-h-0 flex flex-col gap-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
-            <select id="visualizarPedidoCliente" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarPedidoCliente" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Cliente</label>
+            <select id="visualizarPedidoCliente" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarPedidoCliente" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Cliente</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoContato" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarPedidoContato" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Contato</label>
+            <select id="visualizarPedidoContato" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarPedidoContato" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Contato</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <input id="visualizarPedidoValidade" type="date" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled />
-            <label for="visualizarPedidoValidade" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Validade</label>
+            <input id="visualizarPedidoValidade" type="date" placeholder=" " class="peer w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled />
+            <label for="visualizarPedidoValidade" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Validade</label>
             <i class="fas fa-calendar-alt absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoCondicao" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
+            <select id="visualizarPedidoCondicao" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
               <option value="vista">À vista</option>
               <option value="prazo">À prazo</option>
             </select>
-            <label for="visualizarPedidoCondicao" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Condição de pagamento</label>
+            <label for="visualizarPedidoCondicao" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Condição de pagamento</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoTransportadora" data-perm-col="col_ped_campo_transportadora" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarPedidoTransportadora" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
+            <select id="visualizarPedidoTransportadora" data-perm-col="col_ped_campo_transportadora" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarPedidoTransportadora" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoFormaPagamento" data-perm-col="col_ped_campo_pagamento" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
+            <select id="visualizarPedidoFormaPagamento" data-perm-col="col_ped_campo_pagamento" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
               <option value="" disabled hidden></option>
               <option value="boleto">Boleto</option>
               <option value="pix">Pix</option>
               <option value="cartao">Cartão de Crédito</option>
             </select>
-            <label for="visualizarPedidoFormaPagamento" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Forma de Pagamento</label>
+            <label for="visualizarPedidoFormaPagamento" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Forma de Pagamento</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative lg:col-span-2">
-            <textarea id="visualizarPedidoObservacoes" data-perm-col="col_ped_campo_observacoes" rows="2" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
-            <label for="visualizarPedidoObservacoes" class="absolute left-4 top-3 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-placeholder-shown:text-base peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs peer-data-[filled=true]:-top-2 peer-data-[filled=true]:text-xs">Observações</label>
+            <textarea id="visualizarPedidoObservacoes" data-perm-col="col_ped_campo_observacoes" rows="2" placeholder=" " class="peer w-full ctl-campo bg-input border border-inputBorder text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
+            <label for="visualizarPedidoObservacoes" class="absolute left-3 top-3 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs peer-data-[filled=true]:-top-2 peer-data-[filled=true]:text-xs">Observações</label>
           </div>
         </div>
 
@@ -66,7 +66,7 @@
 
         <div class="flex-1 min-h-0 flex flex-col">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="text-lg font-semibold text-white">Itens</h3>
+            <h3 class="ctl-secao text-white">Itens</h3>
             <div class="flex flex-wrap gap-2 text-sm ml-4">
               <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="subtotalPedido">R$ 0,00</span></span>
               <span class="badge-warning px-3 py-1 rounded-full font-medium">Desc. Pagamento: <span id="descontoPagPedido">R$ 0,00</span></span>
@@ -105,20 +105,20 @@
            escritas no HTML; o script só tira o `hidden`. -->
       <div id="visualizarPedidoTags" class="flex flex-wrap items-center justify-center gap-2 flex-1 min-w-0">
         <span id="visualizarPedidoTagsLista" class="contents"></span>
-        <button id="visualizarPedidoDanfe" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Gerar o DANFE em PDF">DANFE</button>
-        <button id="visualizarPedidoXml" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Salvar o XML da NF-e">XML</button>
-        <button id="visualizarPedidoEmailNfe" type="button" data-perm="financeiro.nfe.emit" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Enviar DANFE e XML por e-mail">E-mail</button>
-        <button id="visualizarPedidoCartaNfe" type="button" data-perm="financeiro.nfe.emit" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Carta de correção eletrônica">Carta de correção</button>
-        <button id="visualizarPedidoCancelarNfe" type="button" data-perm="financeiro.nfe.cancel" class="hidden btn-danger px-3 py-1 rounded-lg text-white text-xs font-medium" title="Cancelar a NF-e na SEFAZ">Cancelar NF-e</button>
-        <button id="visualizarPedidoGerarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Registrar os boletos das parcelas no Banco do Brasil">Gerar boletos</button>
-        <button id="visualizarPedidoBoletos" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Boletos do pedido: situação no BB, prorrogar, abatimento e baixa">Boletos</button>
-        <button id="visualizarPedidoBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium" title="Gerar o PDF de todos os boletos a pagar do pedido">Boletos (PDF)</button>
+        <button id="visualizarPedidoDanfe" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Gerar o DANFE em PDF">DANFE</button>
+        <button id="visualizarPedidoXml" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Salvar o XML da NF-e">XML</button>
+        <button id="visualizarPedidoEmailNfe" type="button" data-perm="financeiro.nfe.emit" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Enviar DANFE e XML por e-mail">E-mail</button>
+        <button id="visualizarPedidoCartaNfe" type="button" data-perm="financeiro.nfe.emit" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Carta de correção eletrônica">Carta de correção</button>
+        <button id="visualizarPedidoCancelarNfe" type="button" data-perm="financeiro.nfe.cancel" class="hidden btn-danger ctl-botao ctl-botao--pequeno text-white" title="Cancelar a NF-e na SEFAZ">Cancelar NF-e</button>
+        <button id="visualizarPedidoGerarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Registrar os boletos das parcelas no Banco do Brasil">Gerar boletos</button>
+        <button id="visualizarPedidoBoletos" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Boletos do pedido: situação no BB, prorrogar, abatimento e baixa">Boletos</button>
+        <button id="visualizarPedidoBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Gerar o PDF de todos os boletos a pagar do pedido">Boletos (PDF)</button>
       </div>
-      <div class="flex gap-3">
-        <button id="cancelarVisualizarPedido" data-sem-guarda data-perm="ped.cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <div class="ctl-acoes">
+        <button id="cancelarVisualizarPedido" data-sem-guarda data-perm="ped.cancel" class="btn-danger ctl-botao text-white">Cancelar</button>
         <!-- Pedido enviado, entregue ou com NF-e autorizada não se cancela: devolve-se. O script troca um botão pelo outro. -->
-        <button id="devolucaoVisualizarPedido" data-sem-guarda data-perm="ped.devolucao" class="hidden btn-devolucao px-4 py-2 rounded-lg text-white font-medium" title="Registrar a devolução de peças deste pedido">Devolução</button>
-        <button id="voltarVisualizarPedidoFooter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Voltar</button>
+        <button id="devolucaoVisualizarPedido" data-sem-guarda data-perm="ped.devolucao" class="hidden btn-devolucao ctl-botao text-white" title="Registrar a devolução de peças deste pedido">Devolução</button>
+        <button id="voltarVisualizarPedidoFooter" class="btn-neutral ctl-botao text-white">Voltar</button>
       </div>
     </footer>
   </div>

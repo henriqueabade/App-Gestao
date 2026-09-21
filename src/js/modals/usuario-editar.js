@@ -229,7 +229,7 @@
           radio.addEventListener('change', () => { modo = valor; pessoas.hidden = modo !== 'alguns'; });
           return h('label', { class: 'usr-vis__opcao' }, radio, h('span', {}, h('strong', { text: titulo }), h('small', { text: dica })));
         };
-        const salvar = h('button', { type: 'button', class: 'btn-primary px-5 py-2 rounded-lg text-white font-semibold' }, icone('fa-floppy-disk'), ' Salvar visão de tarefas');
+        const salvar = h('button', { type: 'button', class: 'btn-primary ctl-botao text-white' }, icone('fa-floppy-disk'), 'Salvar visão de tarefas');
         salvar.addEventListener('click', async () => {
           try {
             const r = await fetch(`${base}/api/tarefas/visibilidade/${usuarioBase.id}`, {

@@ -1,10 +1,10 @@
-<div id="proximaEtapaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+<div id="proximaEtapaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
       <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
-        <button id="voltarProximaEtapa" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-        <h2 id="proximaEtapaTitulo" class="text-lg font-semibold text-white flex-1 text-center"></h2>
+        <button id="voltarProximaEtapa" class="btn-neutral ctl-botao text-white">← Voltar</button>
+        <h2 id="proximaEtapaTitulo" class="ctl-modal-titulo text-white flex-1 text-center"></h2>
         <div class="flex items-center gap-3">
-          <button id="registrarProximaEtapa" data-perm="prod.stage.insert" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Registrar</button>
+          <button id="registrarProximaEtapa" data-perm="prod.stage.insert" class="btn-primary ctl-botao text-white">Registrar</button>
         </div>
       </header>
     <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -12,18 +12,18 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div class="md:col-span-2">
             <!-- carga filtrada conforme título -->
-            <select id="proximaEtapaItem" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <select id="proximaEtapaItem" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
               <option value="">Nome do Item</option>
             </select>
           </div>
           <div class="relative">
-            <input id="proximaEtapaQuantidade" type="number" placeholder="Quantidade" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-16 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            <span id="proximaEtapaUnidade" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-300 pointer-events-none"></span>
+            <input id="proximaEtapaQuantidade" type="number" placeholder="Quantidade" min="1" class="w-full ctl-campo ctl-campo--sufixo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <span id="proximaEtapaUnidade" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-300 pointer-events-none"></span>
           </div>
         </div>
-        <div class="flex flex-wrap gap-4">
-          <button id="inserirProximaEtapa" data-perm="prod.stage.item.add" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Inserir</button>
-          <button id="limparProximaEtapa" data-perm="prod.stage.clear" class="btn-danger-light px-6 py-3 rounded-lg font-medium">Limpar Tudo</button>
+        <div class="ctl-acoes">
+          <button id="inserirProximaEtapa" data-perm="prod.stage.item.add" class="btn-primary ctl-botao text-white">+ Inserir</button>
+          <button id="limparProximaEtapa" data-perm="prod.stage.clear" class="btn-danger-light ctl-botao">Limpar Tudo</button>
         </div>
       </div>
         <div class="px-8 py-6 flex-1 min-h-0">

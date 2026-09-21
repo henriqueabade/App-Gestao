@@ -5,12 +5,12 @@
   linhas de GET /api/financeiro/relatorios/:chave.
   Script: src/js/modals/financeiro-modais.js (montarRelatorios).
 -->
-<div id="finRelatoriosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finRelatoriosOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRelatoriosTitulo" class="w-full max-w-3xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finRelatoriosTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Relatórios</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finRelatoriosTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i>Relatórios</h2>
       <span></span>
     </header>
 
@@ -43,36 +43,36 @@
         <!-- Filtro: por competência (padrão) ou por período -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finRelFiltro" class="block text-sm font-medium text-gray-300 mb-2">Filtrar por</label>
-            <select id="finRelFiltro" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finRelFiltro" class="ctl-rotulo text-gray-300">Filtrar por</label>
+            <select id="finRelFiltro" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="competencia">Competência</option>
               <option value="periodo">Período</option>
             </select>
           </div>
           <div id="finRelCompetenciaBloco">
-            <label for="finRelCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <label for="finRelCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finRelCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finRelCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finRelCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finRelCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finRelCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finRelCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finRelCompetencia" />
             </div>
           </div>
           <div id="finRelPeriodoBloco" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label for="finRelPeriodoInicio" class="block text-sm font-medium text-gray-300 mb-2">De</label>
-              <input id="finRelPeriodoInicio" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label for="finRelPeriodoInicio" class="ctl-rotulo text-gray-300">De</label>
+              <input id="finRelPeriodoInicio" type="date" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label for="finRelPeriodoFim" class="block text-sm font-medium text-gray-300 mb-2">Até</label>
-              <input id="finRelPeriodoFim" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label for="finRelPeriodoFim" class="ctl-rotulo text-gray-300">Até</label>
+              <input id="finRelPeriodoFim" type="date" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
           </div>
         </div>
 
         <div role="radiogroup" aria-labelledby="finRelFormatoTitulo">
-          <p id="finRelFormatoTitulo" class="block text-sm font-medium text-gray-300 mb-2">Formato</p>
+          <p id="finRelFormatoTitulo" class="ctl-rotulo text-gray-300">Formato</p>
           <div class="fin-segmento">
             <label><input type="radio" name="finRelFormato" value="visualizar" checked /><span><i class="fas fa-eye mr-2" aria-hidden="true"></i>Visualizar</span></label>
             <label><input type="radio" name="finRelFormato" value="pdf" /><span><i class="fas fa-file-pdf mr-2" aria-hidden="true"></i>PDF</span></label>
@@ -84,9 +84,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finRelGerar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Gerar relatório</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finRelGerar" type="button" class="btn-success ctl-botao min-w-[120px]">Gerar relatório</button>
     </footer>
   </div>
 </div>

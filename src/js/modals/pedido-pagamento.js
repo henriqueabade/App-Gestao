@@ -295,7 +295,7 @@
     botao.type = 'button';
     botao.id = 'pagamentoPedidoDatasBtn';
     botao.setAttribute('data-perm', 'ped.dates.edit');
-    botao.className = 'btn-neutral border border-white/10 px-4 py-2 rounded-lg text-white text-sm font-medium inline-flex items-center gap-2 flex-shrink-0';
+    botao.className = 'btn-neutral ctl-botao border border-white/10 text-white';
     // A margem automática empurra o botão para a ponta direita da linha.
     botao.style.marginLeft = 'auto';
     botao.innerHTML = '<i class="fas fa-calendar-alt" aria-hidden="true"></i><span>Embarque e faturamento</span>';
@@ -347,8 +347,8 @@
         <div class="flex flex-wrap items-center gap-4" data-linha-prazo-vista>
           <div class="relative w-48">
             <input id="pagamentoPedidoPrazoVista" type="number" min="0" step="1" placeholder=" "
-                   class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            <label for="pagamentoPedidoPrazoVista" class="absolute left-4 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Prazo (dias)</label>
+                   class="peer w-full ctl-campo bg-input border border-inputBorder text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label for="pagamentoPedidoPrazoVista" class="absolute left-3 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Prazo (dias)</label>
           </div>
         </div>`;
       const input = el('pagamentoPedidoPrazoVista');

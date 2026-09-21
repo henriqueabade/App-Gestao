@@ -4,13 +4,13 @@
   Não fecha clicando fora (docs/padroes-de-interface.md).
   Script: src/js/modals/pedido-cancelar-nfe.js.
 -->
-<div id="cancelarNfeOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+<div id="cancelarNfeOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="cancelarNfeTitulo" class="w-full max-w-lg max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
-      <button id="voltarCancelarNfe" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button id="voltarCancelarNfe" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="cancelarNfeTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-ban mr-2" aria-hidden="true"></i>Cancelar NF-e</h2>
+        <h2 id="cancelarNfeTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-ban mr-2" aria-hidden="true"></i>Cancelar NF-e</h2>
         <p id="cancelarNfeSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span></span>
@@ -23,17 +23,17 @@
           <span class="text-sm text-gray-200">O cancelamento é registrado na SEFAZ e não pode ser desfeito. A nota só pode ser cancelada dentro do prazo (24 horas da autorização em MG) e se a mercadoria não circulou. A situação do pedido não muda.</span>
         </div>
         <div>
-          <label for="cancelarNfeJustificativa" class="block text-sm font-medium text-gray-300 mb-2">Justificativa <span style="color: var(--color-red)">*</span></label>
-          <textarea id="cancelarNfeJustificativa" rows="4" maxlength="255" placeholder="Ex.: Pedido cancelado pelo cliente antes do embarque" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          <label for="cancelarNfeJustificativa" class="ctl-rotulo text-gray-300">Justificativa <span style="color: var(--color-red)">*</span></label>
+          <textarea id="cancelarNfeJustificativa" rows="4" maxlength="255" placeholder="Ex.: Pedido cancelado pelo cliente antes do embarque" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           <p id="cancelarNfeContador" class="mt-2 text-xs text-gray-400">0 / 255 — mínimo de 15 caracteres</p>
         </div>
         <div id="cancelarNfeMensagem" class="hidden text-sm" role="alert"></div>
       </div>
     </div>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
-      <button id="desistirCancelarNfe" type="button" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Desistir</button>
-      <button id="confirmarCancelarNfe" type="button" data-perm="financeiro.nfe.cancel" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[160px]"><i class="fas fa-ban mr-2" aria-hidden="true"></i>Cancelar NF-e</button>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="desistirCancelarNfe" type="button" class="btn-neutral ctl-botao text-white min-w-[120px]">Desistir</button>
+      <button id="confirmarCancelarNfe" type="button" data-perm="financeiro.nfe.cancel" class="btn-danger ctl-botao text-white min-w-[160px]"><i class="fas fa-ban mr-2" aria-hidden="true"></i>Cancelar NF-e</button>
     </footer>
   </div>
 </div>

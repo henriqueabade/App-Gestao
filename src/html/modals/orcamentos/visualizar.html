@@ -1,15 +1,15 @@
-<div id="visualizarOrcamentoOverlay" class="hidden fixed inset-0 z-[1002] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="visualizarOrcamentoOverlay" class="hidden fixed inset-0 z-[1002] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div class="flex items-center gap-3">
-        <button id="voltarVisualizarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <button id="voltarVisualizarOrcamento" class="btn-neutral ctl-botao text-white">← Voltar</button>
         <div class="relative">
-          <select id="visualizarDono" data-perm-col="col_orc_campo_dono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-          <label for="visualizarDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
+          <select id="visualizarDono" data-perm-col="col_orc_campo_dono" class="peer w-48 appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+          <label for="visualizarDono" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
           <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
         </div>
       </div>
-      <h2 id="tituloVisualizarOrcamento" class="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-white">VISUALIZAR ORÇAMENTO</h2>
+      <h2 id="tituloVisualizarOrcamento" class="absolute left-1/2 -translate-x-1/2 ctl-modal-titulo text-white">VISUALIZAR ORÇAMENTO</h2>
       <div class="flex items-center gap-3">
         <span id="dataAprovacaoTag" class="text-sm text-gray-300 hidden"></span>
         <span id="statusTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Pendente</span>
@@ -19,46 +19,46 @@
       <div class="px-8 py-6 h-full min-h-0 flex flex-col gap-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
-            <select id="visualizarCliente" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarCliente" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Cliente</label>
+            <select id="visualizarCliente" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarCliente" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Cliente</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarContato" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarContato" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Contato</label>
+            <select id="visualizarContato" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarContato" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Contato</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <input id="visualizarValidade" type="date" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled />
-            <label for="visualizarValidade" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Validade</label>
+            <input id="visualizarValidade" type="date" placeholder=" " class="peer w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled />
+            <label for="visualizarValidade" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Validade</label>
             <i class="fas fa-calendar-alt absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarCondicao" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
+            <select id="visualizarCondicao" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
               <option value="vista">À vista</option>
               <option value="prazo">À prazo</option>
             </select>
-            <label for="visualizarCondicao" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Condição de pagamento</label>
+            <label for="visualizarCondicao" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Condição de pagamento</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarTransportadora" data-perm-col="col_orc_campo_transportadora" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
-            <label for="visualizarTransportadora" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
+            <select id="visualizarTransportadora" data-perm-col="col_orc_campo_transportadora" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <label for="visualizarTransportadora" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarFormaPagamento" data-perm-col="col_orc_campo_pagamento" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
+            <select id="visualizarFormaPagamento" data-perm-col="col_orc_campo_pagamento" class="peer w-full appearance-none ctl-campo ctl-campo--icone bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
               <option value="" disabled hidden></option>
               <option value="boleto">Boleto</option>
               <option value="pix">Pix</option>
               <option value="cartao">Cartão de Crédito</option>
             </select>
-            <label for="visualizarFormaPagamento" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Forma de Pagamento</label>
+            <label for="visualizarFormaPagamento" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Forma de Pagamento</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative lg:col-span-2">
-            <textarea id="visualizarObservacoes" data-perm-col="col_orc_campo_observacoes" rows="2" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
-            <label for="visualizarObservacoes" class="absolute left-4 top-3 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-placeholder-shown:text-base peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs peer-data-[filled=true]:-top-2 peer-data-[filled=true]:text-xs">Observações</label>
+            <textarea id="visualizarObservacoes" data-perm-col="col_orc_campo_observacoes" rows="2" placeholder=" " class="peer w-full ctl-campo bg-input border border-inputBorder text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
+            <label for="visualizarObservacoes" class="absolute left-3 top-3 text-sm text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs peer-data-[filled=true]:-top-2 peer-data-[filled=true]:text-xs">Observações</label>
           </div>
         </div>
 
@@ -66,7 +66,7 @@
 
         <div class="flex-1 min-h-0 flex flex-col">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="text-lg font-semibold text-white">Itens</h3>
+            <h3 class="ctl-secao text-white">Itens</h3>
             <div class="flex flex-wrap gap-2 text-sm ml-4">
               <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></span>
               <span class="badge-warning px-3 py-1 rounded-full font-medium">Desc. Pagamento: <span id="descontoPagOrcamento">R$ 0,00</span></span>
@@ -98,9 +98,9 @@
     </div>
     <footer class="flex items-center justify-between gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <span class="badge-success px-6 py-3 rounded-full text-lg font-semibold">Valor Total: <span id="totalOrcamentoFooter">R$ 0,00</span></span>
-      <div class="flex gap-3">
-        <button id="clonarVisualizarOrcamento" data-perm="orc.clone" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
-        <button id="voltarVisualizarOrcamentoFooter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Voltar</button>
+      <div class="ctl-acoes">
+        <button id="clonarVisualizarOrcamento" data-perm="orc.clone" class="btn-secondary ctl-botao text-white">Clonar</button>
+        <button id="voltarVisualizarOrcamentoFooter" class="btn-neutral ctl-botao text-white">Voltar</button>
       </div>
     </footer>
   </div>

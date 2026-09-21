@@ -1584,7 +1584,7 @@
 
     const copiarTudo = document.createElement('button');
     copiarTudo.type = 'button';
-    copiarTudo.className = 'ia-btn-transparente rounded-lg px-3 py-1.5 text-xs';
+    copiarTudo.className = 'ia-btn-transparente ctl-botao ctl-botao--pequeno';
     copiarTudo.textContent = 'Copiar tudo para cá';
     copiarTudo.title = 'Traz o texto inteiro para recortar aqui';
     copiarTudo.addEventListener('click', () => {
@@ -1594,7 +1594,7 @@
 
     const salvar = document.createElement('button');
     salvar.type = 'button';
-    salvar.className = 'btn-primary text-white rounded-lg px-3 py-1.5 text-xs font-medium';
+    salvar.className = 'btn-primary ctl-botao ctl-botao--pequeno text-white';
     salvar.textContent = 'Salvar recorte';
     const gravarRecorte = async () => {
       try {
@@ -1758,7 +1758,7 @@
 
       const botao = document.createElement('button');
       botao.type = 'button';
-      botao.className = 'btn-neutral text-white rounded-lg px-3 py-1.5 text-xs font-medium flex-shrink-0';
+      botao.className = 'btn-neutral ctl-botao ctl-botao--pequeno text-white';
       botao.textContent = 'Ver o que foi lido';
       acoes.appendChild(botao);
 

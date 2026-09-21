@@ -1,8 +1,8 @@
-<div id="responsavelProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+<div id="responsavelProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
-      <button id="voltarResponsavel" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 class="text-lg font-semibold text-white text-center">Alterar Responsável</h2>
+      <button id="voltarResponsavel" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 class="ctl-modal-titulo text-white text-center">Alterar Responsável</h2>
       <span></span>
     </header>
 
@@ -23,16 +23,16 @@
       </div>
 
       <div>
-        <label for="responsavelNovo" class="block text-sm font-medium text-gray-300 mb-2">Novo responsável</label>
-        <select id="responsavelNovo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+        <label for="responsavelNovo" class="ctl-rotulo text-gray-300">Novo responsável</label>
+        <select id="responsavelNovo" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
           <option value="">Sem responsável</option>
         </select>
       </div>
 
       <div>
-        <label for="responsavelObservacao" class="block text-sm font-medium text-gray-300 mb-2">Motivo da troca</label>
+        <label for="responsavelObservacao" class="ctl-rotulo text-gray-300">Motivo da troca</label>
         <textarea id="responsavelObservacao" rows="2" placeholder="Redistribuição de carteira, férias, desligamento..."
-                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
       </div>
 
       <p class="text-xs text-gray-400 rounded-lg border border-white/10 bg-white/5 p-3">
@@ -42,9 +42,9 @@
       </p>
     </form>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
-      <button id="cancelarResponsavel" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
-      <button type="button" id="salvarResponsavel" data-perm="pros.edit" class="btn-success px-6 py-2 rounded-lg font-medium">Alterar</button>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10">
+      <button id="cancelarResponsavel" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
+      <button type="button" id="salvarResponsavel" data-perm="pros.edit" class="btn-success ctl-botao">Alterar</button>
     </footer>
   </div>
 </div>

@@ -4,19 +4,19 @@
   grava por POST /api/financeiro/pagamentos (financeiro.pagamento.confirmar).
   Script: src/js/modals/financeiro-modais.js (montarConfirmarPagamento).
 -->
-<div id="finConfirmarPagamentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finConfirmarPagamentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finPagamentoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finPagamentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-check-circle mr-2" aria-hidden="true"></i>Confirmar pagamento</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finPagamentoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-check-circle mr-2" aria-hidden="true"></i>Confirmar pagamento</h2>
       <span id="finPagamentoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
         <div role="radiogroup" aria-labelledby="finPagamentoTipoTitulo">
-          <p id="finPagamentoTipoTitulo" class="block text-sm font-medium text-gray-300 mb-3">Tipo</p>
+          <p id="finPagamentoTipoTitulo" class="ctl-rotulo text-gray-300">Tipo</p>
           <div class="grid grid-cols-2 gap-4">
             <label class="fin-opcao">
               <input type="radio" name="finPagamentoTipo" value="comissao" checked style="accent-color: var(--color-primary)" />
@@ -31,19 +31,19 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finPagamentoCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+            <label for="finPagamentoCompetenciaMes" class="ctl-rotulo text-gray-300">Competência <span class="fin-obrigatorio">*</span></label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finPagamentoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finPagamentoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finPagamentoCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finPagamentoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finPagamentoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finPagamentoCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finPagamentoCompetencia" />
             </div>
           </div>
           <div>
-            <label for="finPagamentoValor" class="block text-sm font-medium text-gray-300 mb-2">Valor</label>
+            <label for="finPagamentoValor" class="ctl-rotulo text-gray-300">Valor</label>
             <input id="finPagamentoValor" type="text" readonly value="—"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white fin-somente-leitura" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white fin-somente-leitura" />
           </div>
           <div class="md:col-span-2">
             <p id="finPagamentoInfo" class="text-xs text-gray-400"></p>
@@ -67,13 +67,13 @@
             <div id="finPagamentoLegenda" class="fin-benef__legenda"></div>
           </div>
           <div>
-            <label for="finPagamentoData" class="block text-sm font-medium text-gray-300 mb-2">Data do pagamento <span class="fin-obrigatorio">*</span></label>
+            <label for="finPagamentoData" class="ctl-rotulo text-gray-300">Data do pagamento <span class="fin-obrigatorio">*</span></label>
             <input id="finPagamentoData" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finPagamentoForma" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento <span class="fin-obrigatorio">*</span></label>
-            <select id="finPagamentoForma" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finPagamentoForma" class="ctl-rotulo text-gray-300">Forma de pagamento <span class="fin-obrigatorio">*</span></label>
+            <select id="finPagamentoForma" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
               <option value="Pix">Pix</option>
               <option value="Transferência">Transferência</option>
@@ -84,9 +84,9 @@
             </select>
           </div>
           <div class="md:col-span-2">
-            <label for="finPagamentoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+            <label for="finPagamentoObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
             <textarea id="finPagamentoObservacoes" rows="3" maxlength="500" placeholder="Opcional"
-                      class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
 
@@ -94,9 +94,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finPagamentoConfirmar" type="button" data-perm="financeiro.pagamento.confirmar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Confirmar pagamento</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finPagamentoConfirmar" type="button" data-perm="financeiro.pagamento.confirmar" class="btn-success ctl-botao min-w-[160px]">Confirmar pagamento</button>
     </footer>
   </div>
 </div>

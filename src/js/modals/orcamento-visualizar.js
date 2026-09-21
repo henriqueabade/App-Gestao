@@ -191,7 +191,7 @@
         return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela}ª</td><td class="px-6 py-4 text-left text-sm text-white">${fmt(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazo} dias</td></tr>`;
       }).join('');
       pgBox.innerHTML = `
-        <h4 class="text-white font-medium mb-4">Parcelas</h4>
+        <h4 class="ctl-secao text-white mb-4">Parcelas</h4>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50 sticky top-0">

@@ -405,7 +405,7 @@
       if (l.podeTentarDeNovo) {
         const botao = document.createElement('button');
         botao.type = 'button';
-        botao.className = 'btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium';
+        botao.className = 'btn-neutral ctl-botao ctl-botao--pequeno text-white';
         botao.dataset.perm = 'ped.devolucao';
         botao.textContent = 'Tentar de novo';
         botao.title = 'Refaz o que ficou pendente (estoque, abatimento ou baixa no BB)';

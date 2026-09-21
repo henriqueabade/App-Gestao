@@ -141,6 +141,7 @@
             const searchInput = document.createElement('input');
             searchInput.type = 'search';
             searchInput.placeholder = 'Buscar...';
+            searchInput.className = 'ctl-campo';
             searchInput.setAttribute('aria-label', 'Buscar item na lista');
             searchWrapper.appendChild(searchInput);
             modal.appendChild(searchWrapper);
@@ -178,11 +179,11 @@
             actions.className = 'geo-multiselect-actions';
             const cancelBtn = document.createElement('button');
             cancelBtn.type = 'button';
-            cancelBtn.className = 'geo-multiselect-btn cancel';
+            cancelBtn.className = 'geo-multiselect-btn cancel ctl-botao';
             cancelBtn.textContent = 'Cancelar';
             const confirmBtn = document.createElement('button');
             confirmBtn.type = 'button';
-            confirmBtn.className = 'geo-multiselect-btn confirm';
+            confirmBtn.className = 'geo-multiselect-btn confirm ctl-botao';
             confirmBtn.textContent = 'Aplicar';
             actions.appendChild(cancelBtn);
             actions.appendChild(confirmBtn);

@@ -5,12 +5,12 @@
   preço cheio da tabela fixa. O que se escolhe aqui é gravado junto com a peça.
   Script: src/js/modals/produto-regra-producao.js.
 -->
-<div id="regraProducaoPecaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="regraProducaoPecaOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div role="dialog" aria-modal="true" aria-labelledby="regraProducaoTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" id="regraProducaoVoltar" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" id="regraProducaoVoltar" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="regraProducaoTitulo" class="text-lg font-semibold text-white truncate">REGRA PRODUÇÃO</h2>
+        <h2 id="regraProducaoTitulo" class="ctl-modal-titulo text-white truncate">REGRA PRODUÇÃO</h2>
         <p id="regraProducaoPeca" class="text-xs text-gray-300 truncate"></p>
       </div>
       <div class="justify-self-end text-right">
@@ -46,9 +46,9 @@
       <p id="regraProducaoVazio" class="hidden text-sm text-gray-400 text-center py-6">A peça ainda não tem insumos: inclua os processos pelo "+ Começar" antes de definir a regra.</p>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" id="regraProducaoCancelar" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button type="button" id="regraProducaoAplicar" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Aplicar</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" id="regraProducaoCancelar" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button type="button" id="regraProducaoAplicar" class="btn-success ctl-botao text-white min-w-[120px]">Aplicar</button>
     </footer>
   </div>
 </div>

@@ -7,12 +7,12 @@
   O overlay nasce `hidden`: quem revela é o `openModalWithSpinner`, ao receber
   `modalSpinnerLoaded`.
 -->
-<div id="iaNovaOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+<div id="iaNovaOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4 ctl-padrao">
   <div class="modal-ia glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
 
     <!-- Topo -->
     <div class="modal-ia__topo px-6 pt-6 pb-4 border-b border-white/10">
-      <h3 class="text-lg font-semibold text-white flex items-center gap-3">
+      <h3 class="ctl-modal-titulo text-white flex items-center gap-3">
         <i class="fas fa-wand-magic-sparkles text-[var(--color-primary)]"></i>
         Nova leitura
       </h3>
@@ -56,7 +56,7 @@
         <h4 class="text-sm font-semibold text-white mb-1">3. Como chamar esta leitura? <span class="text-white/40 font-normal">(opcional)</span></h4>
         <input id="iaNovaTitulo" type="text" maxlength="200"
                placeholder="Ex.: Lista de chapas do fornecedor Bralux"
-               class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50 mt-2">
+               class="ctl-campo input-glass text-white w-full placeholder-white/50 mt-2">
       </section>
 
     </div>
@@ -81,11 +81,11 @@
         </p>
       </div>
 
-      <div id="iaNovaAcoes" class="flex items-center justify-end gap-3">
+      <div id="iaNovaAcoes" class="ctl-acoes justify-end">
         <button id="iaNovaCancelar" type="button"
-                class="btn-danger text-white rounded-lg px-5 py-2 text-sm font-medium">Cancelar</button>
+                class="btn-danger ctl-botao text-white">Cancelar</button>
         <button id="iaNovaEnviar" type="button" data-perm="ia.extract"
-                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium">
+                class="btn-primary ctl-botao text-white">
           <i class="fas fa-wand-magic-sparkles mr-2"></i>Ler arquivos
         </button>
       </div>

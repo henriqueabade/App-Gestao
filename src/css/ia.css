@@ -120,20 +120,8 @@ body {
     transform: scale(1.05);
 }
 
-/*
-   Botões da barra de filtros: altura fixa (`h-12`) alinha as caixas, mas o
-   conteúdo continuava no fluxo inline — o ícone e o rótulo assentavam pela
-   linha de base, deixando "Funil" fora do centro. O flex centra nos dois eixos.
-*/
-#bt-actions > button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    line-height: 1;
-    flex-shrink: 0;
-    white-space: nowrap;
-}
+/* Os botões da barra de filtros centravam o conteúdo aqui; agora é o
+   `ctl-botao` (controles.css) que faz isso, com a altura do padrão. */
 
 .btn-neutral {
     background: rgba(255,255,255,0.1);
@@ -227,14 +215,11 @@ body {
     }
 }
 
-.filter-bar input:not([type="checkbox"]),
-.filter-bar select,
-.filter-bar button {
-    height: 48px;
-}
+/* A altura de 48 px dos campos e botões do filtro saiu: carregava depois de
+   controles.css e venceria o padrão. Campos e botões têm a mesma altura e a
+   barra alinha pela base (`items-end`), então o empurrão de 1vw também saiu. */
 
 #bt-actions {
-    margin-top: 1vw;
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
@@ -607,8 +592,8 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: var(--ctl-altura-pequena);
+    height: var(--ctl-altura-pequena);
     padding: 0;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1383,8 +1368,8 @@ body {
 }
 
 .ia-btn-copiar {
-    width: 32px;
-    height: 32px;
+    width: var(--ctl-altura-pequena);
+    height: var(--ctl-altura-pequena);
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.05);
@@ -1510,6 +1495,25 @@ body {
     color: rgba(255, 255, 255, 0.6);
 }
 
+/* O nome do campo é rótulo: a letra do `ctl-rotulo`. As notas embaixo
+   continuam pequenas. */
+.ia-config-campo > span:first-child {
+    font-size: var(--txt-rotulo);
+}
+
+/* `.ia-campo` com `ctl-campo` é campo de formulário (Configuração, escolha do
+   destino), não célula da grade: as medidas dos campos do programa
+   (controles.css) vencem as da célula, que esta folha escreve depois. */
+.ia-campo.ctl-campo {
+    padding: 0 var(--ctl-campo-pad-x);
+    font-size: var(--ctl-campo-fonte);
+    border-radius: var(--ctl-campo-raio);
+}
+
+.ia-campo--lista.ctl-campo {
+    padding-right: 1.5rem;
+}
+
 /* Valor que vem do .env é marcado: quem edita precisa saber que está
    sobrescrevendo uma escolha da instalação, não um padrão qualquer. */
 .ia-config-campo > span[data-origem="env"]::after {
@@ -1627,7 +1631,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ctl-espaco-entre);
 }
 
 /* ---------------------------------------------------------------------------

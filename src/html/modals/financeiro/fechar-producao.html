@@ -9,13 +9,13 @@
   Fecha:    POST /api/financeiro/fechamentos { tipo: 'producao' } (financeiro.competencia.fechar)
   Script: src/js/modals/financeiro-modais.js (montarFecharProducao).
 -->
-<div id="finFecharProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finFecharProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finFecharProducaoTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finFecharProducaoTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Fechar competência — produção</h2>
+        <h2 id="finFecharProducaoTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Fechar competência — produção</h2>
         <p class="text-xs text-gray-300 truncate">Confirme, peça a peça, o que ficou pronto no mês</p>
       </div>
       <span id="finFecharProducaoSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -31,12 +31,12 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
           <div>
-            <label for="finFecharProducaoCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência <span class="fin-obrigatorio">*</span></label>
+            <label for="finFecharProducaoCompetenciaMes" class="ctl-rotulo text-gray-300">Competência <span class="fin-obrigatorio">*</span></label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finFecharProducaoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finFecharProducaoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finFecharProducaoCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finFecharProducaoCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finFecharProducaoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finFecharProducaoCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finFecharProducaoCompetencia" />
             </div>
           </div>
@@ -91,9 +91,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finFecharProducaoConfirmar" type="button" data-perm="financeiro.competencia.fechar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Fechar competência</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finFecharProducaoConfirmar" type="button" data-perm="financeiro.competencia.fechar" class="btn-success ctl-botao min-w-[160px]">Fechar competência</button>
     </footer>
   </div>
 </div>

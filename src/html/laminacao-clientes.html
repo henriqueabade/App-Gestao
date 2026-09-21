@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container">
+  <div class="modulo-container ctl-padrao">
     <div>
         <!-- Header -->
         <div class="flex justify-between items-center mb-8 animate-fade-in-up">
@@ -22,30 +22,30 @@
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Laminação - Clientes</h1>
                 <p class="module-header__description">Gerencie informações e relacionamento com clientes da laminação</p>
             </div>
-            <button id="btnNovoCliente" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <button id="btnNovoCliente" class="btn-primary ctl-botao text-white">
                 <i class="fas fa-plus mr-2"></i>Novo Cliente
             </button>
         </div>
 
         <!-- Quick Actions -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <h3 class="text-lg font-medium mb-4 text-white">Ações Rápidas</h3>
+            <h3 class="ctl-secao-tela mb-4 text-white">Ações Rápidas</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Left Column -->
                 <div class="space-y-3">
-                    <button id="btnExportarCSV" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button id="btnExportarCSV" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-download mr-2"></i>Exportar CSV
                     </button>
-                    <button id="btnImportarCSV" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button id="btnImportarCSV" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-upload mr-2"></i>Importar CSV
                     </button>
                 </div>
                 <!-- Right Column -->
                 <div class="space-y-3">
-                    <button id="btnGerarRelatorio" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button id="btnGerarRelatorio" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-file-alt mr-2"></i>Gerar Relatório
                     </button>
-                    <button id="btnEnviarEmailMassa" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button id="btnEnviarEmailMassa" class="btn-secondary ctl-botao w-full text-white">
                         <i class="fas fa-envelope mr-2"></i>Enviar E-mail em Massa
                     </button>
                 </div>
@@ -54,39 +54,39 @@
 
         <!-- Filters & Statistics Panel -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-end">
                 <!-- Search -->
                 <div class="flex-1 min-w-[250px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Buscar Cliente</label>
-                    <input id="filtroBusca" type="text" placeholder="Estado, CNPJ ou Nome" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Buscar Cliente</label>
+                    <input id="filtroBusca" type="text" placeholder="Estado, CNPJ ou Nome" class="ctl-campo input-glass text-white w-full">
                 </div>
 
                 <!-- Dono Select -->
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                    <select id="filtroDono" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Dono</label>
+                    <select id="filtroDono" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
                 <!-- Status Select -->
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select id="filtroStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Status</label>
+                    <select id="filtroStatus" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
                 <!-- Totals -->
                  <div class="flex flex-col">
-                    <label class="block text-sm font-medium mb-1 text-white">Totais por Tipo</label>
+                    <label class="ctl-rotulo text-white">Totais por Tipo</label>
                     <div id="totaisBadges" class="tags-uma-linha"></div>
                 </div>
 
                 <!-- Actions -->
-                <div id="bt-actions" class="flex items-center gap-2">
-                    <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
-                    <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
+                <div id="bt-actions" class="ctl-acoes">
+                    <button id="btnFiltrar" class="btn-secondary ctl-botao text-white">Filtrar</button>
+                    <button id="btnLimpar" class="btn-warning ctl-botao text-white">Limpar</button>
                 </div>
             </div>
         </div>
@@ -122,7 +122,7 @@
             <button
               id="clientesEmptyNew"
               type="button"
-              class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+              class="btn-primary ctl-botao text-white"
             >
               <i class="fas fa-plus w-4 h-4 mr-2"></i>
               Novo Cliente

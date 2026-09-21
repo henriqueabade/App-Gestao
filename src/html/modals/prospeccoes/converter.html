@@ -1,10 +1,10 @@
-<div id="converterProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+<div id="converterProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade text-white">
 
     <header class="modal-prospeccao__topo px-8 py-5 border-b border-white/10">
       <div class="relative flex items-center justify-center">
-        <button id="voltarConverterProspeccao" type="button" class="absolute left-0 top-1/2 -translate-y-1/2 btn-neutral px-4 py-2 rounded-lg text-white font-medium">← Voltar</button>
-        <h2 class="text-lg font-semibold text-center text-white">CONVERTER EM CLIENTE</h2>
+        <button id="voltarConverterProspeccao" type="button" class="btn-neutral ctl-botao absolute left-0 top-1/2 -translate-y-1/2 text-white">← Voltar</button>
+        <h2 class="ctl-modal-titulo text-center text-white">CONVERTER EM CLIENTE</h2>
       </div>
     </header>
 
@@ -24,7 +24,7 @@
 
       <!-- Campos fiscais faltando: some quando está tudo certo -->
       <div id="converterPendencias" class="hidden rounded-xl border border-[var(--color-red)]/40 bg-[rgba(255,88,88,0.08)] p-5">
-        <h4 class="text-sm font-semibold text-[var(--color-red)] mb-2">
+        <h4 class="ctl-secao text-[var(--color-red)] mb-2">
           <i class="fas fa-triangle-exclamation mr-2"></i>Complete a ficha antes de converter
         </h4>
         <p class="text-xs text-gray-300 mb-3">
@@ -36,7 +36,7 @@
 
       <div id="converterFormulario" class="space-y-6">
         <div class="cartao-prospeccao">
-          <h4 class="text-sm font-semibold text-white mb-3">O que vai acontecer</h4>
+          <h4 class="ctl-secao text-white mb-3">O que vai acontecer</h4>
           <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside">
             <li>Um cliente é criado com os dados da empresa e o endereço replicado nos três (registro, cobrança e entrega)</li>
             <li><span id="converterQtdContatos">Os contatos</span> são copiados para o cadastro do cliente</li>
@@ -45,18 +45,18 @@
         </div>
 
         <div class="cartao-prospeccao">
-          <h4 class="text-sm font-semibold text-white mb-4">Dados do novo cliente</h4>
+          <h4 class="ctl-secao text-white mb-4">Dados do novo cliente</h4>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label for="converterStatus" class="block text-sm font-medium text-gray-300 mb-2">Status do cliente</label>
-              <select id="converterStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label for="converterStatus" class="ctl-rotulo text-gray-300">Status do cliente</label>
+              <select id="converterStatus" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="Ativo">Ativo</option>
                 <option value="Pendente">Pendente</option>
               </select>
             </div>
             <div>
-              <label for="converterDono" class="block text-sm font-medium text-gray-300 mb-2">Dono do cliente</label>
-              <select id="converterDono" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label for="converterDono" class="ctl-rotulo text-gray-300">Dono do cliente</label>
+              <select id="converterDono" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione</option>
               </select>
             </div>
@@ -65,9 +65,9 @@
       </div>
     </div>
 
-    <footer class="modal-prospeccao__rodape flex justify-end gap-4 px-8 py-5 border-t border-white/10">
-      <button id="cancelarConverterProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
-      <button type="button" id="confirmarConverterProspeccao" data-perm="pros.convert" class="btn-success px-6 py-2 rounded-lg font-medium">Converter</button>
+    <footer class="modal-prospeccao__rodape ctl-acoes justify-end px-8 py-5 border-t border-white/10">
+      <button id="cancelarConverterProspeccao" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
+      <button type="button" id="confirmarConverterProspeccao" data-perm="pros.convert" class="btn-success ctl-botao">Converter</button>
     </footer>
   </div>
 </div>

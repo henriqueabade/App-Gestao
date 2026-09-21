@@ -1,20 +1,20 @@
-<div id="converterOrcamentosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+<div id="converterOrcamentosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarConverterOrcamentos" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+      <button id="voltarConverterOrcamentos" class="btn-neutral ctl-botao text-white">← Voltar</button>
       <div class="flex-1 text-center">
-        <h2 class="text-lg font-semibold text-white">Converter Orçamento</h2>
+        <h2 class="ctl-modal-titulo text-white">Converter Orçamento</h2>
         <p class="text-sm text-gray-300">Selecione os orçamentos que devem virar pedido</p>
       </div>
-      <div class="flex items-center gap-3">
-        <button id="cancelarConverterOrcamentos" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
-        <button id="confirmarConverterOrcamentos" data-perm="orc.convert" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Converter</button>
+      <div class="ctl-acoes">
+        <button id="cancelarConverterOrcamentos" class="btn-danger ctl-botao text-white">Cancelar</button>
+        <button id="confirmarConverterOrcamentos" data-perm="orc.convert" class="btn-primary ctl-botao text-white">Converter</button>
       </div>
     </header>
 
     <div class="px-8 py-4 border-b border-white/10 flex-shrink-0 flex flex-wrap items-center justify-between gap-4">
       <div class="relative w-full sm:w-80">
-        <input id="buscaConverterOrcamentos" type="text" placeholder="Buscar por código ou cliente" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2.5 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        <input id="buscaConverterOrcamentos" type="text" placeholder="Buscar por código ou cliente" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
       </div>
       <span id="resumoConverterOrcamentos" class="badge-info px-3 py-1 rounded-full text-xs font-medium">Nenhum orçamento selecionado</span>
     </div>

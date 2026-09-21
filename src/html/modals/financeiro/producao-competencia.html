@@ -6,13 +6,13 @@
   competência" abre o fechamento por cima.
   Script: src/js/modals/financeiro-modais.js (montarProducaoCompetencia).
 -->
-<div id="finProducaoCompetenciaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finProducaoCompetenciaOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finProdCompTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finProdCompTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Produção — <span id="finProdCompCompetencia">—</span></h2>
+        <h2 id="finProdCompTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-industry mr-2" aria-hidden="true"></i>Produção — <span id="finProdCompCompetencia">—</span></h2>
         <p id="finProdCompSubtitulo" class="text-xs text-gray-300 truncate">Peças finalizadas que entram no fechamento produtivo</p>
       </div>
       <span id="finProdCompStatus" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">Em aberto</span>
@@ -22,12 +22,12 @@
       <section class="px-8 py-6 space-y-6">
         <div class="flex flex-wrap items-end gap-4">
           <div>
-            <label for="finProdCompMesMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <label for="finProdCompMesMes" class="ctl-rotulo text-gray-300">Competência</label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finProdCompMesMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finProdCompMesAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finProdCompMesIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finProdCompMesMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finProdCompMesAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finProdCompMesIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finProdCompMes" />
             </div>
           </div>
@@ -41,24 +41,24 @@
 
         <div class="fin-filtros fin-filtros--4">
           <div>
-            <label for="finProdCompSetor" class="block text-sm font-medium text-gray-300 mb-2">Processo</label>
-            <select id="finProdCompSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finProdCompSetor" class="ctl-rotulo text-gray-300">Processo</label>
+            <select id="finProdCompSetor" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
             </select>
           </div>
           <div>
-            <label for="finProdCompPedido" class="block text-sm font-medium text-gray-300 mb-2">Pedido</label>
+            <label for="finProdCompPedido" class="ctl-rotulo text-gray-300">Pedido</label>
             <input id="finProdCompPedido" type="text" placeholder="Número" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finProdCompProduto" class="block text-sm font-medium text-gray-300 mb-2">Produto</label>
+            <label for="finProdCompProduto" class="ctl-rotulo text-gray-300">Produto</label>
             <input id="finProdCompProduto" type="text" placeholder="Código ou nome" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finProdCompItemStatus" class="block text-sm font-medium text-gray-300 mb-2">Status do item</label>
-            <select id="finProdCompItemStatus" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finProdCompItemStatus" class="ctl-rotulo text-gray-300">Status do item</label>
+            <select id="finProdCompItemStatus" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
               <option value="Finalizado">Finalizado</option>
               <option value="Parcial">Parcial</option>
@@ -98,10 +98,10 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button type="button" id="finProdCompRelatorio" class="btn-secondary px-6 py-2 rounded-lg text-white font-medium min-w-[140px]">Ver relatório</button>
-      <button type="button" id="finProdCompFechar" data-perm="financeiro.competencia.fechar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Fechar competência</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button type="button" id="finProdCompRelatorio" class="btn-secondary ctl-botao text-white min-w-[140px]">Ver relatório</button>
+      <button type="button" id="finProdCompFechar" data-perm="financeiro.competencia.fechar" class="btn-success ctl-botao min-w-[160px]">Fechar competência</button>
     </footer>
   </div>
 </div>

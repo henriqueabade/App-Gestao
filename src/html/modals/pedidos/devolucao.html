@@ -10,13 +10,13 @@
   Contexto: window.devolucaoPedidoContext = { pedidoId, numero, cliente }.
   Script: src/js/modals/pedido-devolucao.js.
 -->
-<div id="devolucaoPedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+<div id="devolucaoPedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="devolucaoTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
-      <button id="voltarDevolucao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button id="voltarDevolucao" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="devolucaoTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-undo-alt mr-2" aria-hidden="true"></i>Devolução</h2>
+        <h2 id="devolucaoTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-undo-alt mr-2" aria-hidden="true"></i>Devolução</h2>
         <p id="devolucaoSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span id="devolucaoTipo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -37,13 +37,13 @@
           <section class="glass-surface rounded-xl border border-white/10 px-4 py-4 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="min-w-0">
-                <h3 class="text-sm font-semibold text-white">Nota de devolução do cliente (XML)</h3>
+                <h3 class="ctl-secao text-white">Nota de devolução do cliente (XML)</h3>
                 <p id="devolucaoXmlResumo" class="text-xs text-gray-400">Opcional: o XML preenche as quantidades e fica guardado com o pedido.</p>
               </div>
-              <div class="flex gap-2">
+              <div class="ctl-acoes">
                 <input id="devolucaoXmlArquivo" type="file" accept=".xml,text/xml,application/xml" class="hidden" />
-                <button id="devolucaoXmlEscolher" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white text-sm font-medium">Carregar XML</button>
-                <button id="devolucaoXmlRemover" type="button" class="hidden btn-neutral px-4 py-2 rounded-lg text-white text-sm font-medium">Remover nota</button>
+                <button id="devolucaoXmlEscolher" type="button" class="btn-neutral ctl-botao text-white">Carregar XML</button>
+                <button id="devolucaoXmlRemover" type="button" class="hidden btn-neutral ctl-botao text-white">Remover nota</button>
               </div>
             </div>
             <ul id="devolucaoXmlAvisos" class="hidden space-y-1 text-xs" style="color: var(--color-primary-light)"></ul>
@@ -52,10 +52,10 @@
 
           <section class="glass-surface rounded-xl border border-white/10 overflow-hidden">
             <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
-              <h3 class="text-sm font-semibold text-white">Peças devolvidas</h3>
-              <div class="flex gap-2">
-                <button id="devolucaoTudo" type="button" class="btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium">Devolver tudo</button>
-                <button id="devolucaoLimpar" type="button" class="btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium">Limpar</button>
+              <h3 class="ctl-secao text-white">Peças devolvidas</h3>
+              <div class="ctl-acoes">
+                <button id="devolucaoTudo" type="button" class="btn-neutral ctl-botao ctl-botao--pequeno text-white">Devolver tudo</button>
+                <button id="devolucaoLimpar" type="button" class="btn-neutral ctl-botao ctl-botao--pequeno text-white">Limpar</button>
               </div>
             </div>
             <div class="overflow-x-auto">
@@ -77,22 +77,22 @@
 
           <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label for="devolucaoData" class="block text-sm font-medium text-gray-300 mb-2">Data da devolução <span style="color: var(--color-red)">*</span></label>
-              <input id="devolucaoData" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label for="devolucaoData" class="ctl-rotulo text-gray-300">Data da devolução <span style="color: var(--color-red)">*</span></label>
+              <input id="devolucaoData" type="date" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div class="md:col-span-2">
-              <label for="devolucaoMotivo" class="block text-sm font-medium text-gray-300 mb-2">Motivo <span style="color: var(--color-red)">*</span></label>
-              <input id="devolucaoMotivo" type="text" maxlength="200" placeholder="Ex.: peça com avaria no transporte" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label for="devolucaoMotivo" class="ctl-rotulo text-gray-300">Motivo <span style="color: var(--color-red)">*</span></label>
+              <input id="devolucaoMotivo" type="text" maxlength="200" placeholder="Ex.: peça com avaria no transporte" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div class="md:col-span-3">
-              <label for="devolucaoObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-              <textarea id="devolucaoObservacao" rows="2" maxlength="500" placeholder="Opcional" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+              <label for="devolucaoObservacao" class="ctl-rotulo text-gray-300">Observações</label>
+              <textarea id="devolucaoObservacao" rows="2" maxlength="500" placeholder="Opcional" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
             </div>
           </section>
 
           <section id="devolucaoPrevia" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
             <div class="px-4 py-3 border-b border-white/10">
-              <h3 class="text-sm font-semibold text-white">O que vai acontecer</h3>
+              <h3 class="ctl-secao text-white">O que vai acontecer</h3>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 px-4 py-4">
               <div><p class="text-xs text-gray-400">Valor devolvido</p><p id="devolucaoValor" class="text-base font-semibold text-white">—</p></div>
@@ -121,14 +121,14 @@
         </div>
 
         <section id="devolucaoResultado" class="hidden glass-surface rounded-xl border border-white/10 px-4 py-4 space-y-2" role="status">
-          <h3 id="devolucaoResultadoTitulo" class="text-sm font-semibold text-white"></h3>
+          <h3 id="devolucaoResultadoTitulo" class="ctl-secao text-white"></h3>
           <ul id="devolucaoResultadoLinhas" class="space-y-1 text-sm text-gray-200"></ul>
           <ul id="devolucaoResultadoAvisos" class="hidden space-y-1 text-xs" style="color: var(--color-primary-light)"></ul>
         </section>
 
         <section id="devolucaoHistorico" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
           <div class="px-4 py-3 border-b border-white/10">
-            <h3 class="text-sm font-semibold text-white">Devoluções deste pedido</h3>
+            <h3 class="ctl-secao text-white">Devoluções deste pedido</h3>
           </div>
           <ul id="devolucaoHistoricoLinhas" class="divide-y divide-white/10"></ul>
         </section>
@@ -138,8 +138,8 @@
     </div>
 
     <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
-      <button id="desistirDevolucao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="confirmarDevolucao" type="button" data-perm="ped.devolucao" class="hidden btn-devolucao px-6 py-2 rounded-lg text-white font-medium min-w-[180px]">Confirmar devolução</button>
+      <button id="desistirDevolucao" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="confirmarDevolucao" type="button" data-perm="ped.devolucao" class="hidden btn-devolucao ctl-botao text-white min-w-[180px]">Confirmar devolução</button>
     </footer>
   </div>
 </div>

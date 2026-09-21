@@ -1,16 +1,16 @@
-<div id="novoProdutoOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="novoProdutoOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div class="flex-1 flex items-center gap-4">
-        <button id="voltarNovoProduto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">
+        <button id="voltarNovoProduto" class="btn-neutral ctl-botao text-white">
           ← Voltar
         </button>
         <span id="precoVendaTag" class="bg-green-500 text-white px-4 py-2 rounded-lg text-lg font-bold">R$ 0,00</span>
       </div>
-      <h2 class="text-lg font-semibold text-white flex-1 text-center">INSERIR NOVO PRODUTO</h2>
-        <div class="flex-1 flex items-center justify-end gap-3">
-          <button type="submit" form="novoProdutoForm" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Registrar</button>
-          <button type="button" id="limparNovoProduto" data-perm="prod.clear" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
+      <h2 class="ctl-modal-titulo text-white flex-1 text-center">INSERIR NOVO PRODUTO</h2>
+        <div class="flex-1 ctl-acoes justify-end">
+          <button type="submit" form="novoProdutoForm" class="btn-success ctl-botao text-white">Registrar</button>
+          <button type="button" id="limparNovoProduto" data-perm="prod.clear" class="btn-danger ctl-botao text-white">Limpar Tudo</button>
         </div>
       </header>
       <form id="novoProdutoForm" class="flex-1 overflow-y-auto modal-scroll">
@@ -27,13 +27,13 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="md:col-span-2">
-              <input id="nomeInput" name="nome" type="text" placeholder="Nome do Produto" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <input id="nomeInput" name="nome" type="text" placeholder="Nome do Produto" required class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <input id="codigoInput" name="codigo" type="text" placeholder="Código" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <input id="codigoInput" name="codigo" type="text" placeholder="Código" required class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
           <div class="relative">
-            <select id="colecaoSelect" name="categoria" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <select id="colecaoSelect" name="categoria" required class="w-full ctl-campo ctl-campo--dois-icones bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecionar Coleção</option>
             </select>
             <button type="button" id="delColecaoNovo" data-perm="prod.collection.delete" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir coleção">
@@ -49,7 +49,7 @@
           </div>
           <!-- Desenhado por: um nome da lista de desenhistas (é para ele que vai o Royalty). Obrigatório. -->
           <div class="relative">
-            <select id="desenhistaSelect" name="desenhado_por" required title="Desenhado por" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <select id="desenhistaSelect" name="desenhado_por" required title="Desenhado por" class="w-full ctl-campo ctl-campo--dois-icones bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Desenhado por (selecionar)</option>
             </select>
             <button type="button" id="delDesenhistaNovo" data-perm="prod.designer.delete" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir desenhista">
@@ -74,12 +74,12 @@
             <div id="dadosFiscaisNovo" data-secao-corpo class="secao-retratil__corpo" role="region" aria-labelledby="dadosFiscaisBarraNovo" hidden>
               <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-3 pt-4">
                 <div>
-                  <label for="ncmInput" class="block text-xs text-gray-400 mb-1">NCM <span class="text-red-400">*</span></label>
-                  <input id="ncmInput" name="ncm" type="text" placeholder="00000000" maxlength="8" required class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="ncmInput" class="ctl-rotulo text-gray-400">NCM <span class="text-red-400">*</span></label>
+                  <input id="ncmInput" name="ncm" type="text" placeholder="00000000" maxlength="8" required class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="origemMercadoriaInput" class="block text-xs text-gray-400 mb-1">Origem (NF-e)</label>
-                  <select id="origemMercadoriaInput" name="origem_mercadoria" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <label for="origemMercadoriaInput" class="ctl-rotulo text-gray-400">Origem (NF-e)</label>
+                  <select id="origemMercadoriaInput" name="origem_mercadoria" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                     <option value="0">0 — Nacional</option>
                     <option value="1">1 — Estrangeira, importação direta</option>
                     <option value="2">2 — Estrangeira, mercado interno</option>
@@ -92,42 +92,42 @@
                   </select>
                 </div>
                 <div>
-                  <label for="unidadeComercialInput" class="block text-xs text-gray-400 mb-1">Unidade (NF-e)</label>
-                  <input id="unidadeComercialInput" name="unidade_comercial" type="text" maxlength="6" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="unidadeComercialInput" class="ctl-rotulo text-gray-400">Unidade (NF-e)</label>
+                  <input id="unidadeComercialInput" name="unidade_comercial" type="text" maxlength="6" placeholder="padrão" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="cestInput" class="block text-xs text-gray-400 mb-1">CEST</label>
-                  <input id="cestInput" name="cest" type="text" inputmode="numeric" maxlength="7" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="cestInput" class="ctl-rotulo text-gray-400">CEST</label>
+                  <input id="cestInput" name="cest" type="text" inputmode="numeric" maxlength="7" placeholder="opcional" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="gtinInput" class="block text-xs text-gray-400 mb-1">GTIN/EAN</label>
-                  <input id="gtinInput" name="gtin" type="text" maxlength="14" placeholder="opcional" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="gtinInput" class="ctl-rotulo text-gray-400">GTIN/EAN</label>
+                  <input id="gtinInput" name="gtin" type="text" maxlength="14" placeholder="opcional" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="cfopDentroInput" class="block text-xs text-gray-400 mb-1">CFOP dentro de MG</label>
-                  <input id="cfopDentroInput" name="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="cfopDentroInput" class="ctl-rotulo text-gray-400">CFOP dentro de MG</label>
+                  <input id="cfopDentroInput" name="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="cfopForaInput" class="block text-xs text-gray-400 mb-1">CFOP fora de MG</label>
-                  <input id="cfopForaInput" name="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="cfopForaInput" class="ctl-rotulo text-gray-400">CFOP fora de MG</label>
+                  <input id="cfopForaInput" name="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" placeholder="padrão" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="csosnInput" class="block text-xs text-gray-400 mb-1">CSOSN</label>
-                  <input id="csosnInput" name="csosn" type="text" inputmode="numeric" maxlength="3" placeholder="padrão" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="csosnInput" class="ctl-rotulo text-gray-400">CSOSN</label>
+                  <input id="csosnInput" name="csosn" type="text" inputmode="numeric" maxlength="3" placeholder="padrão" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
               </div>
             </div>
           </section>
           <!-- Linha do processo: a mesma do Editar produto (mesmos tamanhos). -->
-          <div class="md:col-span-3 flex flex-wrap items-center gap-3">
-            <select id="etapaSelect" class="flex-1 min-w-[200px] bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+          <div class="md:col-span-3 ctl-acoes">
+            <select id="etapaSelect" class="flex-1 min-w-[200px] ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option>Selecionar Processo</option>
             </select>
-            <button id="comecarNovoProduto" data-perm="prod.item.add" type="button" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Começar</button>
-            <button id="regraProducaoNovo" type="button" class="btn-regra-producao px-6 py-3 rounded-lg font-medium" title="Quanto cada processo paga por esta peça">Regra Produção</button>
+            <button id="comecarNovoProduto" data-perm="prod.item.add" type="button" class="btn-primary ctl-botao text-white">+ Começar</button>
+            <button id="regraProducaoNovo" type="button" class="btn-regra-producao ctl-botao" title="Quanto cada processo paga por esta peça">Regra Produção</button>
             <!-- O (i) aparece quando a regra está completa. A caixa é quem some: o .icon-only força display:flex. -->
             <span id="regraProducaoInfoCaixaNovo" class="hidden">
-              <button id="regraProducaoInfoNovo" type="button" class="btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Resumo da regra de produção" title="Resumo da regra de produção">
+              <button id="regraProducaoInfoNovo" type="button" class="btn-neutral ctl-botao ctl-botao--pequeno ctl-botao--icone text-gray-300 hover:text-white" aria-label="Resumo da regra de produção" title="Resumo da regra de produção">
                 <i class="fas fa-info-circle"></i>
               </button>
             </span>
@@ -138,73 +138,73 @@
       <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
         <div class="space-y-6 h-full flex flex-col">
           <div class="bg-surface/40 rounded-xl p-6 border border-white/10 h-full">
-            <h3 class="text-lg font-semibold mb-4 text-white">PERCENTAGENS</h3>
+            <h3 class="ctl-secao mb-4 text-white">PERCENTAGENS</h3>
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Marcenaria</span>
-                  <input id="fabricacaoInput" name="fabricacao" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Marcenaria</span>
+                  <input id="fabricacaoInput" name="fabricacao" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Acabamento</span>
-                  <input id="acabamentoInput" name="acabamento" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Acabamento</span>
+                  <input id="acabamentoInput" name="acabamento" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Montagem</span>
-                  <input id="montagemInput" name="montagem" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Montagem</span>
+                  <input id="montagemInput" name="montagem" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Embalagem</span>
-                  <input id="embalagemInput" name="embalagem" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Embalagem</span>
+                  <input id="embalagemInput" name="embalagem" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Markup</span>
-                  <input id="markupInput" data-perm="prod.percent.edit" name="markup" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Markup</span>
+                  <input id="markupInput" data-perm="prod.percent.edit" name="markup" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Comissão</span>
-                  <input id="commissionInput" data-perm="prod.percent.edit" name="commission" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Comissão</span>
+                  <input id="commissionInput" data-perm="prod.percent.edit" name="commission" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
-                  <span class="text-gray-300">Imposto</span>
-                  <input id="taxInput" data-perm="prod.percent.edit" name="tax" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <span class="text-sm text-gray-300">Imposto</span>
+                  <input id="taxInput" data-perm="prod.percent.edit" name="tax" type="number" value="0" required class="w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
             </div>
           </div>
         </div>
         <div class="space-y-6 h-full flex flex-col">
           <div class="bg-surface/40 rounded-xl p-6 border border-white/10 h-full">
-            <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
+            <h3 class="ctl-secao mb-4 text-white">SOMAS</h3>
             <div class="space-y-3 text-sm flex-1">
               <div class="flex justify-between">
-                <span class="text-gray-300">Total Insumos</span>
+                <span class="text-sm text-gray-300">Total Insumos</span>
                 <span id="totalInsumos" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-300">Total Mão-de-obra</span>
+                <span class="text-sm text-gray-300">Total Mão-de-obra</span>
                 <span id="totalMaoObra" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-300">Sub-Total</span>
+                <span class="text-sm text-gray-300">Sub-Total</span>
                 <span id="subTotal" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-300">Markup</span>
+                <span class="text-sm text-gray-300">Markup</span>
                 <span id="markupValor" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between border-t border-white/10 pt-3">
-                <span class="text-gray-300">Custo Total</span>
+                <span class="text-sm text-gray-300">Custo Total</span>
                 <span id="custoTotal" class="text-white font-semibold">R$ 0,00</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-300">Comissão</span>
+                <span class="text-sm text-gray-300">Comissão</span>
                 <span id="comissaoValor" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-300">Imposto</span>
+                <span class="text-sm text-gray-300">Imposto</span>
                 <span id="impostoValor" class="text-white font-medium">R$ 0,00</span>
               </div>
               <div class="flex justify-between border-t border-white/10 pt-3">
-                <span class="text-gray-300">Valor de Venda da Peça</span>
+                <span class="text-sm text-gray-300">Valor de Venda da Peça</span>
                 <span id="valorVenda" class="text-white font-semibold">R$ 0,00</span>
               </div>
             </div>
@@ -214,7 +214,7 @@
       <div class="px-8 py-6 border-t border-white/10">
         <div class="glass-surface rounded-xl p-6 border border-white/10">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">ITENS</h3>
+            <h3 class="ctl-secao text-white">ITENS</h3>
             <span id="totalInsumosTitulo" class="flex flex-wrap justify-end gap-2"></span>
           </div>
           <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up mt-6 table-scroll">

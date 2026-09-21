@@ -119,7 +119,8 @@ dialog.csv-janela::backdrop { background: rgba(0, 0, 0, 0.5); backdrop-filter: b
 .csv-motivos--erro li::before { background: #ff7a7a; opacity: 1; }
 .csv-motivos--aviso li::before { background: #fbbf24; opacity: 1; }
 
-.csv-janela .dlg-rodape button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+/* Ícone e rótulo dos botões do rodapé: o alinhamento e o espaço vêm da regra
+   `.dlg-rodape button` (dialogo-padrao.css), com as medidas do padrão. */
 
 /* ------------------------------------------------------------ tema claro */
 

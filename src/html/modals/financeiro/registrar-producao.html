@@ -7,45 +7,45 @@
   POST /api/financeiro/producao/:id/estornar (financeiro.producao.registrar).
   Script: src/js/modals/financeiro-modais.js (montarProducao).
 -->
-<div id="finRegistrarProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finRegistrarProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finProducaoTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finProducaoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-hammer mr-2" aria-hidden="true"></i>Registrar produção</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finProducaoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-hammer mr-2" aria-hidden="true"></i>Registrar produção</h2>
       <span id="finProducaoContexto" class="text-sm text-gray-300 justify-self-end truncate"></span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
         <div>
-          <label for="finProducaoPedidoBusca" class="block text-sm font-medium text-gray-300 mb-2">Buscar pedido</label>
+          <label for="finProducaoPedidoBusca" class="ctl-rotulo text-gray-300">Buscar pedido</label>
           <input id="finProducaoPedidoBusca" type="text" placeholder="Número do pedido ou cliente" autocomplete="off"
-                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                 class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finProducaoPedido" class="block text-sm font-medium text-gray-300 mb-2">Pedido <span class="fin-obrigatorio">*</span></label>
-            <select id="finProducaoPedido" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finProducaoPedido" class="ctl-rotulo text-gray-300">Pedido <span class="fin-obrigatorio">*</span></label>
+            <select id="finProducaoPedido" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
           <div>
-            <label for="finProducaoProduto" class="block text-sm font-medium text-gray-300 mb-2">Peça do pedido <span class="fin-obrigatorio">*</span></label>
-            <select id="finProducaoProduto" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finProducaoProduto" class="ctl-rotulo text-gray-300">Peça do pedido <span class="fin-obrigatorio">*</span></label>
+            <select id="finProducaoProduto" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
         </div>
         <p id="finProducaoCarregando" class="hidden text-xs text-gray-400">Carregando dados...</p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finProducaoSetor" class="block text-sm font-medium text-gray-300 mb-2">Processo <span class="fin-obrigatorio">*</span></label>
-            <select id="finProducaoSetor" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finProducaoSetor" class="ctl-rotulo text-gray-300">Processo <span class="fin-obrigatorio">*</span></label>
+            <select id="finProducaoSetor" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
             </select>
           </div>
           <div>
-            <label for="finProducaoStatus" class="block text-sm font-medium text-gray-300 mb-2">Status após registro</label>
+            <label for="finProducaoStatus" class="ctl-rotulo text-gray-300">Status após registro</label>
             <input id="finProducaoStatus" type="text" readonly value="—"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white fin-somente-leitura" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white fin-somente-leitura" />
           </div>
         </div>
 
@@ -72,19 +72,19 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finProducaoQuantidade" class="block text-sm font-medium text-gray-300 mb-2">Quantidade finalizada agora <span class="fin-obrigatorio">*</span></label>
+            <label for="finProducaoQuantidade" class="ctl-rotulo text-gray-300">Quantidade finalizada agora <span class="fin-obrigatorio">*</span></label>
             <input id="finProducaoQuantidade" type="number" min="1" step="1" placeholder="0" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finProducaoData" class="block text-sm font-medium text-gray-300 mb-2">Data da finalização <span class="fin-obrigatorio">*</span></label>
+            <label for="finProducaoData" class="ctl-rotulo text-gray-300">Data da finalização <span class="fin-obrigatorio">*</span></label>
             <input id="finProducaoData" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="md:col-span-2">
-            <label for="finProducaoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+            <label for="finProducaoObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
             <textarea id="finProducaoObservacoes" rows="2" maxlength="500" placeholder="Opcional"
-                      class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
 
@@ -134,9 +134,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finProducaoRegistrar" type="button" data-perm="financeiro.producao.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar produção</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finProducaoRegistrar" type="button" data-perm="financeiro.producao.registrar" class="btn-success ctl-botao min-w-[120px]">Registrar produção</button>
     </footer>
   </div>
 </div>

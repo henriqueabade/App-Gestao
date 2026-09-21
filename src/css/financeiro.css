@@ -228,29 +228,18 @@ body {
     margin: 0;
 }
 
+/* A lupa é `ctl-botao ctl-botao--icone` (controles.css): quadrada, na altura
+   dos campos. */
 .fin-competencia-campo__ir {
     flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.75rem;
 }
 
 .fin-competencia-campo--desligado { opacity: 0.55; }
 
-/* No cabeçalho do módulo o seletor tem a MESMA altura dos botões da linha
-   (Hoje, engrenagens, Conciliar BB, Atualizar: py-3 + text-sm = 2,75rem).
-   Com o texto base e a borda do input ele ficava mais alto que eles. */
-.fin-cabecalho .fin-competencia-campo > select,
-.fin-cabecalho .fin-competencia-campo > input:not([type="hidden"]),
-.fin-cabecalho .fin-competencia-campo > button {
-    box-sizing: border-box;
-    height: 2.75rem;
-    padding-top: 0;
-    padding-bottom: 0;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-}
+/* No cabeçalho o seletor tem a MESMA altura dos botões da linha (Hoje,
+   engrenagens, Conciliar BB, Atualizar): campos e botões são `ctl-campo` /
+   `ctl-botao`, 40 px os dois (controles.css). A regra de 2,75rem que
+   igualava tudo à mão saiu. */
 
 /* Nos modais o seletor CABE na coluna do filtro: antes ele passava da largura
    da célula e a lupa encostava no campo vizinho (Recebimentos, Aguardando
@@ -261,7 +250,6 @@ div:has(> .fin-competencia-campo--modal) { min-width: 0; }
 .fin-competencia-campo--modal .fin-competencia-campo__mes {
     flex: 1 1 auto;
     min-width: 0;
-    padding-left: 0.85rem;
 }
 .fin-competencia-campo--modal .fin-competencia-campo__ano {
     flex: 0 0 5.25rem;
@@ -703,20 +691,17 @@ div:has(> .fin-competencia-campo--modal) { min-width: 0; }
 
 .fin-filtro-benef > label {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: var(--txt-rotulo);
     font-weight: 500;
     line-height: 1;
     color: var(--menu-text-secondary, #d1d5db);
     white-space: nowrap;
 }
 
+/* Altura e recuo vêm do `ctl-campo`. */
 .fin-filtro-benef > select {
-    box-sizing: border-box;
-    height: 2.5rem;
     min-width: 13rem;
     margin: 0;
-    padding-top: 0;
-    padding-bottom: 0;
 }
 
 .fin-filtro-benef .fin-legenda { margin-left: auto; }
@@ -988,6 +973,8 @@ label.fin-benef__nome { cursor: pointer; }
     display: flex;
     align-items: center;
     gap: 0.85rem;
+    /* o nome da opção sem classe herdava 16 px: a letra do texto do padrão */
+    font-size: var(--txt-corpo);
     padding: 0.85rem 1rem;
     border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1026,11 +1013,14 @@ label.fin-benef__nome { cursor: pointer; }
 .fin-segmento label { position: relative; cursor: pointer; }
 .fin-segmento input { position: absolute; opacity: 0; pointer-events: none; }
 
+/* Cada opção na altura do botão do padrão (a moldura de 1 px do grupo fica
+   por fora). */
 .fin-segmento span {
     display: flex;
     align-items: center;
-    padding: 0.65rem 1.1rem;
-    font-size: 0.875rem;
+    height: calc(var(--ctl-altura) - 2px);
+    padding: 0 var(--ctl-pad-x);
+    font-size: var(--ctl-fonte);
     color: #d1d5db;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     transition: background 150ms ease, color 150ms ease;
@@ -1052,8 +1042,12 @@ label.fin-benef__nome { cursor: pointer; }
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    font-size: 1rem;
-    font-weight: 600;
+    /* as medidas do `ctl-secao` (controles.css): título de seção de modal */
+    font-size: var(--txt-secao);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    line-height: 1.4;
     color: var(--menu-text-strong, #fff);
     margin: 0 0 0.5rem;
 }
@@ -1312,8 +1306,10 @@ label.fin-benef__nome { cursor: pointer; }
 }
 
 .fin-dl__linha:last-child { border-bottom: 0; }
-.fin-dl__linha dt { font-size: 0.9rem; color: #9ca3af; }
-.fin-dl__linha dd { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--menu-text-strong, #fff); font-variant-numeric: tabular-nums; }
+/* Rótulo e valor só de leitura dos modais: as letras do padrão (13 e 14 px).
+   O destaque (total) continua maior. */
+.fin-dl__linha dt { font-size: var(--txt-rotulo); color: #9ca3af; }
+.fin-dl__linha dd { margin: 0; font-size: var(--txt-corpo); font-weight: 600; color: var(--menu-text-strong, #fff); font-variant-numeric: tabular-nums; }
 .fin-dl__linha dd.fin-dl__destaque { font-size: 1.15rem; color: var(--color-green); }
 
 /* Indicadores no topo dos modais de lista. */

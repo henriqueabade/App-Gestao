@@ -9,14 +9,14 @@
   O overlay nasce `hidden`: quem revela é o `openModalWithSpinner`, ao receber
   `modalSpinnerLoaded`.
 -->
-<div id="iaConfiguracaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+<div id="iaConfiguracaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4 ctl-padrao">
   <div class="modal-ia glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
 
     <!-- Topo -->
     <div class="modal-ia__topo px-6 pt-6 pb-4 border-b border-white/10">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h3 class="text-lg font-semibold text-white flex items-center gap-3">
+          <h3 class="ctl-modal-titulo text-white flex items-center gap-3">
             <i class="fas fa-sliders text-[var(--color-primary)]"></i>
             Configuração da IA
           </h3>
@@ -36,7 +36,7 @@
       <section class="ia-provedor" data-provedor="gemini">
         <div class="flex items-start justify-between gap-4 mb-3">
           <div>
-            <h4 class="text-white font-medium flex items-center gap-2">
+            <h4 class="ctl-secao text-white flex items-center gap-2">
               <i class="fas fa-file-lines text-[var(--color-primary)]"></i>
               Gemini
             </h4>
@@ -72,7 +72,7 @@
       <section class="ia-provedor" data-provedor="groq">
         <div class="flex items-start justify-between gap-4 mb-3">
           <div>
-            <h4 class="text-white font-medium flex items-center gap-2">
+            <h4 class="ctl-secao text-white flex items-center gap-2">
               <i class="fas fa-table-list text-[var(--color-primary)]"></i>
               Groq
             </h4>
@@ -115,19 +115,19 @@
         O mesmo provedor pode fazer as duas.
       -->
       <section class="ia-provedor">
-        <h4 class="text-white font-medium flex items-center gap-2 mb-3">
+        <h4 class="ctl-secao text-white flex items-center gap-2 mb-3">
           <i class="fas fa-diagram-project text-[var(--color-primary)]"></i>
           Quem faz cada etapa
         </h4>
         <div class="grid grid-cols-2 gap-4 text-sm">
           <label class="ia-config-campo">
             <span>Ler o arquivo</span>
-            <select id="iaProvedorLeitura" data-config="provedor_leitura" class="ia-campo"></select>
+            <select id="iaProvedorLeitura" data-config="provedor_leitura" class="ia-campo ctl-campo"></select>
             <span id="iaProvedorLeituraAviso" class="ia-config-nota"></span>
           </label>
           <label class="ia-config-campo">
             <span>Extrair os dados</span>
-            <select id="iaProvedorExtracao" data-config="provedor_extracao" class="ia-campo"></select>
+            <select id="iaProvedorExtracao" data-config="provedor_extracao" class="ia-campo ctl-campo"></select>
             <span class="ia-config-nota">
               É esta etapa que monta a lista. Trocar aqui é o primeiro remédio
               quando o modelo vem perdendo itens.
@@ -138,7 +138,7 @@
 
       <!-- Limites -->
       <section class="ia-provedor">
-        <h4 class="text-white font-medium flex items-center gap-2 mb-3">
+        <h4 class="ctl-secao text-white flex items-center gap-2 mb-3">
           <i class="fas fa-gauge-high text-[var(--color-primary)]"></i>
           Limites de envio
         </h4>
@@ -148,27 +148,27 @@
         <div class="grid grid-cols-2 gap-4 text-sm">
           <label class="ia-config-campo">
             <span>Tamanho por arquivo (MB)</span>
-            <input type="number" id="iaLimiteArquivoMb" data-config="arquivo_mb" class="ia-campo">
+            <input type="number" id="iaLimiteArquivoMb" data-config="arquivo_mb" class="ia-campo ctl-campo">
           </label>
           <label class="ia-config-campo">
             <span>Arquivos por leitura</span>
-            <input type="number" id="iaLimiteArquivos" data-config="arquivos" class="ia-campo">
+            <input type="number" id="iaLimiteArquivos" data-config="arquivos" class="ia-campo ctl-campo">
           </label>
           <label class="ia-config-campo">
             <span>Tempo máximo (ms)</span>
-            <input type="number" id="iaLimiteTimeout" data-config="timeout_ms" class="ia-campo">
+            <input type="number" id="iaLimiteTimeout" data-config="timeout_ms" class="ia-campo ctl-campo">
           </label>
           <label class="ia-config-campo">
             <span>Texto guardado (caracteres)</span>
-            <input type="number" id="iaLimiteTexto" data-config="texto_max_chars" class="ia-campo">
+            <input type="number" id="iaLimiteTexto" data-config="texto_max_chars" class="ia-campo ctl-campo">
           </label>
           <label class="ia-config-campo">
             <span>Itens por leitura</span>
-            <input type="number" id="iaLimiteItens" data-config="max_itens" class="ia-campo">
+            <input type="number" id="iaLimiteItens" data-config="max_itens" class="ia-campo ctl-campo">
           </label>
           <label class="ia-config-campo">
             <span>Teto da resposta (tokens)</span>
-            <input type="number" id="iaLimiteSaida" data-config="max_saida_tokens" class="ia-campo">
+            <input type="number" id="iaLimiteSaida" data-config="max_saida_tokens" class="ia-campo ctl-campo">
           </label>
         </div>
         <p class="text-xs text-white/45 mt-3">
@@ -190,22 +190,22 @@
       <p id="iaConfigRodapeAviso" class="text-xs text-white/45">
         A credencial fica no <span class="ia-chave-env">.env</span>; o resto se configura aqui.
       </p>
-      <div class="flex items-center gap-3">
+      <div class="ctl-acoes">
         <!-- Fechar vermelho e Testar amarelo, como em todo o programa. -->
         <button id="iaConfigFechar" type="button"
-                class="btn-danger text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+                class="btn-danger ctl-botao text-white">Fechar</button>
         <!-- `fa-plug-circle-check` não existe no Font Awesome 6.0 free, que é
              o que o programa carrega: o ícone saía como um quadrado vazio.
              `fa-plug` existe desde a v5 e diz a mesma coisa. -->
         <button id="iaConfigTestar" type="button" data-perm="ia.config"
-                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium">
+                class="btn-primary ctl-botao text-white">
           <i class="fas fa-plug mr-2"></i>Testar conexão
         </button>
         <!-- Só o Sup Admin vê este botão. Ver a configuração ajuda a entender
              por que uma leitura saiu como saiu; MUDAR o modelo altera o
              resultado, o custo e o limite de todo mundo. -->
         <button id="iaConfigSalvar" type="button"
-                class="btn-success rounded-lg px-5 py-2 text-sm font-medium hidden">
+                class="btn-success ctl-botao hidden">
           <i class="fas fa-check mr-2"></i>Salvar
         </button>
       </div>

@@ -137,12 +137,18 @@ body {
     font-size: 0.85rem;
 }
 
+/* Abas de categoria e de visão: o botão de barra do padrão (32 px, 13 px),
+   como Mês/Semana do Calendário. */
 .relatorios-module [data-relatorios-tab],
 .relatorios-module [data-relatorios-result] {
-    padding: 0.5rem 1rem;
-    border-radius: 0.75rem;
-    font-weight: 500;
-    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    height: var(--ctl-altura-pequena);
+    padding: 0 var(--ctl-pad-x-pequeno);
+    border-radius: var(--ctl-raio);
+    font-weight: var(--ctl-peso);
+    font-size: var(--ctl-fonte-pequena);
+    white-space: nowrap;
     transition: all 150ms ease;
 }
 
@@ -160,10 +166,9 @@ body {
     background: rgba(255, 255, 255, 0.2);
 }
 
+/* Altura, recuo e cantos vêm do `ctl-campo` (controles.css). */
 .relatorios-module .input-glass {
     width: 100%;
-    padding: 0.75rem 0.9rem;
-    border-radius: 0.75rem;
     border: 1px solid var(--color-input-border);
     background: var(--color-input);
     color: #fff;
@@ -255,7 +260,7 @@ body {
 }
 
 .relatorios-filter-label {
-    font-size: 0.85rem;
+    font-size: var(--txt-rotulo);
     font-weight: 500;
     color: #f3f4f6;
 }
@@ -268,12 +273,7 @@ body {
     margin-left: auto;
 }
 
-.relatorios-filter-actions .btn-primary,
-.relatorios-filter-actions .btn-secondary {
-    padding: 0.6rem 1rem;
-    font-size: 0.85rem;
-    border-radius: 0.65rem;
-}
+/* O tamanho dos botões do filtro vem do `ctl-botao`. */
 
 .relatorios-filter-checkbox-group {
     display: flex;
@@ -287,7 +287,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    font-size: 0.85rem;
+    font-size: var(--txt-rotulo);
 }
 
 .relatorios-filter-checkbox {
@@ -320,7 +320,7 @@ body {
     gap: 1rem;
     padding: 0.25rem 0;
     color: #fff;
-    font-size: 0.85rem;
+    font-size: var(--txt-rotulo);
 }
 
 .relatorios-filter-toggle-label {
@@ -499,8 +499,9 @@ body {
 }
 
 .section-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 600;
+    line-height: 1.4;
     margin-bottom: 1.5rem;
 }
 
@@ -1035,13 +1036,12 @@ body {
     padding: 0 1.5rem 1rem;
 }
 
+/* Altura, letra e cantos: ctl-campo (controles.css). */
 .geo-multiselect-search input {
     width: 100%;
-    border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    padding: 0.6rem 0.9rem;
     transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -1127,10 +1127,8 @@ body {
     gap: 0.5rem;
 }
 
+/* Tamanho: ctl-botao (controles.css). Aqui só a aparência. */
 .geo-multiselect-btn {
-    border-radius: 0.75rem;
-    padding: 0.55rem 1.2rem;
-    font-weight: 500;
     border: none;
     cursor: pointer;
     transition: background 150ms ease, transform 150ms ease;

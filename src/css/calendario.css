@@ -28,26 +28,29 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 .calendario-modulo { display: flex; flex-direction: column; gap: 0.85rem; height: calc(var(--module-height, 90vh) - 0.5rem); min-height: 0; }
 .cal-cabecalho { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .cal-cabecalho__acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
-.cal-botao { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1.1rem; border-radius: 0.7rem; font-size: 0.9rem; font-weight: 600; color: #fff; }
+/* Tamanho: ctl-botao (controles.css) — era 40,8 px com letra de 14,4 px. */
+.cal-botao { color: #fff; }
 .cal-botao[hidden] { display: none; }
 
 /* ------------------------------------------------------------ barra */
 
 .cal-barra { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
 .cal-visoes { display: inline-flex; padding: 0.2rem; border-radius: 0.75rem; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.1); }
-.cal-visoes button { padding: 0.4rem 0.85rem; border-radius: 0.55rem; font-size: 0.83rem; font-weight: 600; color: rgba(255, 255, 255, 0.6); transition: all 150ms ease; }
+/* Barra: todos os controles na altura do botão pequeno do padrão (controles.css). */
+.cal-visoes button { height: var(--ctl-altura-pequena); padding: 0 0.85rem; border-radius: 0.55rem; font-size: var(--ctl-fonte-pequena); font-weight: 600; color: rgba(255, 255, 255, 0.6); transition: all 150ms ease; }
 .cal-visoes button:hover { color: #fff; }
 .cal-visoes button[aria-selected="true"] { background: var(--color-primary); color: #fff; }
 .cal-visoes button[hidden] { display: none; }
 .cal-navegacao { display: flex; align-items: center; gap: 0.35rem; flex: 1; min-width: 0; }
-.cal-icone-botao { width: 2.1rem; height: 2.1rem; border-radius: 0.6rem; display: grid; place-items: center; color: rgba(255, 255, 255, 0.75); background: rgba(0, 0, 0, 0.2); flex-shrink: 0; }
+.cal-icone-botao { width: var(--ctl-altura-pequena); height: var(--ctl-altura-pequena); border-radius: var(--ctl-raio); display: grid; place-items: center; color: rgba(255, 255, 255, 0.75); background: rgba(0, 0, 0, 0.2); flex-shrink: 0; }
 .cal-icone-botao:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
-.cal-icone-botao--p { width: 1.6rem; height: 1.6rem; font-size: 0.7rem; }
-.cal-hoje { padding: 0.4rem 0.9rem; border-radius: 0.6rem; font-size: 0.83rem; font-weight: 700; color: var(--color-primary-light); border: 1px solid rgba(212, 193, 105, 0.4); }
+.cal-icone-botao--p { width: 1.6rem; height: 1.6rem; font-size: 0.7rem; border-radius: 0.6rem; }
+.cal-hoje { display: inline-flex; align-items: center; height: var(--ctl-altura-pequena); padding: 0 0.9rem; border-radius: var(--ctl-raio); font-size: var(--ctl-fonte-pequena); font-weight: 700; color: var(--color-primary-light); border: 1px solid rgba(212, 193, 105, 0.4); }
 .cal-hoje:hover { background: rgba(182, 160, 62, 0.15); }
 .cal-titulo { margin: 0 0 0 0.6rem; font-size: 1.15rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-barra__direita { display: flex; align-items: center; gap: 0.5rem; }
-.cal-select { padding: 0.45rem 0.65rem; border-radius: 0.6rem; font-size: 0.83rem; color: #fff; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); }
+/* Tamanho: ctl-campo ctl-campo--pequeno (controles.css). */
+.cal-select { color: #fff; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); }
 .cal-select[hidden] { display: none; }
 .cal-zoom { display: inline-flex; align-items: center; gap: 0.2rem; }
 .cal-zoom[hidden] { display: none; }

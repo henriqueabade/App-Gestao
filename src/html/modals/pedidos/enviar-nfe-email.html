@@ -4,13 +4,13 @@
   Não fecha clicando fora (docs/padroes-de-interface.md).
   Script: src/js/modals/pedido-enviar-nfe-email.js.
 -->
-<div id="enviarNfeEmailOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+<div id="enviarNfeEmailOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="enviarNfeEmailTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
-      <button id="voltarEnviarNfeEmail" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button id="voltarEnviarNfeEmail" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="enviarNfeEmailTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-envelope mr-2" aria-hidden="true"></i>Enviar NF-e por e-mail</h2>
+        <h2 id="enviarNfeEmailTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-envelope mr-2" aria-hidden="true"></i>Enviar NF-e por e-mail</h2>
         <p id="enviarNfeEmailSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span></span>
@@ -19,13 +19,13 @@
     <div class="flex-1 overflow-y-auto modal-scroll">
       <div class="p-6 space-y-5">
         <div>
-          <label for="enviarNfeEmailPara" class="block text-sm font-medium text-gray-300 mb-2">Para <span style="color: var(--color-red)">*</span></label>
-          <input id="enviarNfeEmailPara" type="text" autocomplete="off" placeholder="cliente@empresa.com.br; outro@empresa.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <label for="enviarNfeEmailPara" class="ctl-rotulo text-gray-300">Para <span style="color: var(--color-red)">*</span></label>
+          <input id="enviarNfeEmailPara" type="text" autocomplete="off" placeholder="cliente@empresa.com.br; outro@empresa.com.br" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           <p class="mt-2 text-xs text-gray-400">Vários e-mails separados por ponto e vírgula. Vem preenchido com o e-mail da NF-e do cliente.</p>
         </div>
         <div>
-          <label for="enviarNfeEmailMensagem" class="block text-sm font-medium text-gray-300 mb-2">Mensagem</label>
-          <textarea id="enviarNfeEmailMensagem" rows="5" maxlength="2000" placeholder="Opcional — sem texto, vai a mensagem padrão da configuração" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          <label for="enviarNfeEmailMensagem" class="ctl-rotulo text-gray-300">Mensagem</label>
+          <textarea id="enviarNfeEmailMensagem" rows="5" maxlength="2000" placeholder="Opcional — sem texto, vai a mensagem padrão da configuração" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
         </div>
         <div class="flex flex-wrap gap-6">
           <label class="flex items-center gap-3 cursor-pointer"><input id="enviarNfeEmailDanfe" type="checkbox" checked class="w-4 h-4" style="accent-color: var(--color-primary)" /><span class="text-sm text-gray-300">Anexar DANFE (PDF)</span></label>
@@ -35,9 +35,9 @@
       </div>
     </div>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
-      <button id="cancelarEnviarNfeEmail" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="confirmarEnviarNfeEmail" type="button" data-perm="financeiro.nfe.emit" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Enviar</button>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarEnviarNfeEmail" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="confirmarEnviarNfeEmail" type="button" data-perm="financeiro.nfe.emit" class="btn-success ctl-botao min-w-[140px]"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Enviar</button>
     </footer>
   </div>
 </div>

@@ -1593,9 +1593,9 @@
         const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
         caixa.setAttribute('role', 'dialog');
         caixa.setAttribute('aria-modal', 'true');
-        caixa.appendChild(criar('h3', 'text-lg font-semibold text-white', 'Estornar o recebimento?'));
+        caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Estornar o recebimento?'));
         caixa.appendChild(criar('p', 'text-sm text-gray-300', `${formatarMoeda(l.valor)} de ${formatarData(l.data)} — pedido ${l.pedido}, parcela ${l.numero_parcela}. A parcela volta a ficar em aberto${l.origem === 'quitado_por_fora' ? ' e pode ganhar um boleto novo (o boleto baixado continua baixado)' : ''}.`));
-        const campo = criar('textarea', 'w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+        const campo = criar('textarea', 'w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
         campo.rows = 3;
         campo.maxLength = 500;
         campo.placeholder = 'Motivo do estorno (obrigatório)';
@@ -1603,9 +1603,9 @@
         const erroEl = criar('p', 'hidden text-sm', 'Diga o motivo (ao menos 5 letras).');
         erroEl.style.color = 'var(--color-red)';
         caixa.appendChild(erroEl);
-        const rodape = criar('div', 'flex justify-end gap-3');
-        const voltar = criar('button', 'btn-neutral px-5 py-2 rounded-lg text-white font-medium', 'Voltar');
-        const confirmar = criar('button', 'btn-danger px-5 py-2 rounded-lg text-white font-medium', 'Estornar');
+        const rodape = criar('div', 'ctl-acoes justify-end');
+        const voltar = criar('button', 'btn-neutral ctl-botao text-white', 'Voltar');
+        const confirmar = criar('button', 'btn-danger ctl-botao text-white', 'Estornar');
         voltar.type = 'button';
         confirmar.type = 'button';
         rodape.append(voltar, confirmar);
@@ -1735,9 +1735,9 @@
       const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
       caixa.setAttribute('role', 'dialog');
       caixa.setAttribute('aria-modal', 'true');
-      caixa.appendChild(criar('h3', 'text-lg font-semibold text-white', titulo));
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', titulo));
       if (mensagem) caixa.appendChild(criar('p', 'text-sm text-gray-300', mensagem));
-      const campo = criar('textarea', 'w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      const campo = criar('textarea', 'w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
       campo.rows = 3;
       campo.maxLength = 500;
       campo.placeholder = placeholder;
@@ -1745,9 +1745,9 @@
       const erroEl = criar('p', 'hidden text-sm', `Escreva o motivo (ao menos ${minimo} letras).`);
       erroEl.style.color = 'var(--color-red)';
       caixa.appendChild(erroEl);
-      const rodape = criar('div', 'flex justify-end gap-3');
-      const voltar = criar('button', 'btn-neutral px-5 py-2 rounded-lg text-white font-medium', 'Voltar');
-      const ok = criar('button', 'btn-danger px-5 py-2 rounded-lg text-white font-medium', confirmar);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-neutral ctl-botao text-white', 'Voltar');
+      const ok = criar('button', 'btn-danger ctl-botao text-white', confirmar);
       voltar.type = 'button';
       ok.type = 'button';
       rodape.append(voltar, ok);
@@ -2397,7 +2397,7 @@
       }
 
       const controles = criar('div', 'flex items-center gap-2');
-      const campo = criar('input', 'w-20 bg-input border border-inputBorder rounded-lg px-3 py-2 text-sm text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      const campo = criar('input', 'w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
       campo.type = 'number';
       campo.min = '0';
       campo.max = String(limite(processo));
@@ -2411,11 +2411,11 @@
         campo.value = String(valor);
         pintarCabecaDaPeca(pedido, peca);
       };
-      const tudo = criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo');
+      const tudo = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo');
       tudo.type = 'button';
       tudo.title = 'Todas as unidades ficaram prontas';
       tudo.addEventListener('click', () => marcar(limite(processo)));
-      const nada = criar('button', 'btn-danger text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada');
+      const nada = criar('button', 'btn-danger ctl-botao ctl-botao--pequeno text-white', 'Nada');
       nada.type = 'button';
       nada.title = 'Nada ficou pronto: tudo fica pendente para o mês seguinte';
       nada.addEventListener('click', () => marcar(0));
@@ -2468,7 +2468,7 @@
       const corpo = criar('div', 'px-4 pb-4 space-y-2');
       for (const processo of peca.processos) corpo.appendChild(linhaDoProcesso(pedido, peca, processo));
       const rodape = criar('div', 'flex justify-end pt-1');
-      const confirmar = criar('button', 'btn-success px-5 py-2 rounded-lg font-medium', 'Confirmar peça');
+      const confirmar = criar('button', 'btn-success ctl-botao', 'Confirmar peça');
       confirmar.type = 'button';
       confirmar.dataset.perm = 'financeiro.producao.registrar';
       acionar(confirmar, () => confirmarPeca(pedido, peca));
@@ -2502,7 +2502,7 @@
       const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
       etiquetas.appendChild(tagG(`Pendente: ${formatarMoeda(pedido.valor_pendente)}`, 'badge-neutral'));
       if (pedido.sem_valor) etiquetas.appendChild(tagG('Peça sem regra de produção', 'badge-danger', 'Acerte em "Regras" ou no cadastro da peça: sem valor a competência não fecha'));
-      const tudoPronto = criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido');
+      const tudoPronto = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo pronto neste pedido');
       tudoPronto.type = 'button';
       tudoPronto.dataset.perm = 'financeiro.producao.registrar';
       acionar(tudoPronto, () => confirmarPedidoInteiro(pedido));

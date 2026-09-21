@@ -1,31 +1,31 @@
 <!-- Página de serviços: lista e filtros -->
-<div class="modulo-container">
+<div class="modulo-container ctl-padrao">
     <!-- Header -->
     <div class="flex justify-between items-center mb-8 animate-fade-in-up">
         <div>
             <h1 class="text-2xl font-semibold mb-2 module-header__title">Serviços</h1>
             <p class="module-header__description">Acompanhe o status de produção e entrega dos serviços</p>
         </div>
-        <button id="btnNovoServico" class="btn-primary glass-surface text-white rounded-md px-6 py-3 font-medium">
+        <button id="btnNovoServico" class="btn-primary ctl-botao glass-surface text-white">
             <i class="fas fa-plus mr-2"></i>Serviço
         </button>
     </div>
 
     <!-- Filters -->
     <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
+        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-end">
             <!-- Status Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                <select id="filterStatusServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Status</label>
+                <select id="filterStatusServicos" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Status</option>
                 </select>
             </div>
 
             <!-- Period Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Período</label>
-                <select id="filterPeriodServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Período</label>
+                <select id="filterPeriodServicos" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Períodos</option>
                     <option value="Semana">Semana</option>
                     <option value="Mês">Mês</option>
@@ -37,26 +37,26 @@
 
             <!-- Salesperson Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                <select id="filterOwnerServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Dono</label>
+                <select id="filterOwnerServicos" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Donos</option>
                 </select>
             </div>
 
             <!-- Client Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
-                <select id="filterClientServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <label class="ctl-rotulo text-white">Cliente</label>
+                <select id="filterClientServicos" class="ctl-campo input-glass text-white w-full">
                     <option value="">Todos os Clientes</option>
                 </select>
             </div>
 
             <!-- Action Buttons -->
-            <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                <button id="btnFiltrarServicos" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+            <div id="bt-actions" class="ctl-acoes flex-shrink-0">
+                <button id="btnFiltrarServicos" class="btn-secondary ctl-botao text-white">
                     Filtrar
                 </button>
-                <button id="btnLimparServicos" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                <button id="btnLimparServicos" class="btn-warning ctl-botao text-white">
                     Limpar
                 </button>
             </div>

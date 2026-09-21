@@ -177,9 +177,9 @@ test('Ver relatório / Ver itens: azul claro (btn-secondary)', () => {
 
 test('Fechar competência — produção: Tudo verde, Nada vermelho, Tudo pronto verde e o código da peça em etiqueta bordô', () => {
   const js = ler('js/modals/financeiro-modais.js');
-  assert.ok(js.includes("criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo')"), 'Tudo verde');
-  assert.ok(js.includes("criar('button', 'btn-danger text-white px-3 py-1 rounded-md text-xs font-medium', 'Nada')"), 'Nada vermelho');
-  assert.ok(js.includes("criar('button', 'btn-success px-3 py-1 rounded-md text-xs font-medium', 'Tudo pronto neste pedido')"), 'Tudo pronto verde');
+  assert.ok(js.includes("criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo')"), 'Tudo verde');
+  assert.ok(js.includes("criar('button', 'btn-danger ctl-botao ctl-botao--pequeno text-white', 'Nada')"), 'Nada vermelho');
+  assert.ok(js.includes("criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo pronto neste pedido')"), 'Tudo pronto verde');
   assert.match(js, /const codigo = criar\('span', 'fin-tag-produto fin-tag-produto--bordo', peca\.codigo \|\| nomeInteiro\);\s*codigo\.title = nomeInteiro;/, 'só o código; o nome inteiro no hover');
   assert.match(ler('css/financeiro.css'), /\.fin-tag-produto--bordo \{[^}]*background: #6a152c;/);
 });

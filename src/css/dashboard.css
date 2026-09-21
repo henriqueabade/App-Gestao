@@ -147,11 +147,8 @@
     color: var(--color-primary);
 }
 
-.dash-botao-atualizar {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
+/* O tamanho do "Atualizar" (altura, letra, espaço do ícone) é do padrão:
+   ctl-botao, em src/styles/controles.css. Aqui ficam só o foco e o giro. */
 
 /* Dourado puro no anel de foco dá 2,1-2,5:1 sobre a página clara (menos que os
    3:1 de um indicador de foco). Misturado à cor forte do tema: 4,4-6,1:1. */
@@ -1333,14 +1330,9 @@
     color: var(--dash-texto-apoio);
 }
 
+/* O "Atualizar" do cartão com erro. Tamanho: ctl-botao ctl-botao--pequeno
+   (controles.css) — aqui só a aparência de botão leve. */
 .dash-botao-leve {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.4rem 0.85rem;
-    border-radius: 0.55rem;
-    font-size: 0.8rem;
-    font-weight: 600;
     color: var(--menu-text-strong);
     background: var(--menu-surface-strong);
     border: 1px solid var(--menu-surface-border-strong);

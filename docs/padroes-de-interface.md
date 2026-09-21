@@ -265,6 +265,14 @@ correção ocupando a tela inteira (`max-w-xl`).
   nova que falhar ali: acrescente em `utilitarios.css` com o valor do Tailwind
   (1 unidade = 0,25rem; quebras sm 640, md 768, lg 1024, xl 1280).
 
+### Tamanho dos botões, dos campos e das letras
+
+Um padrão só para o programa inteiro — botão principal de 40 px com letra de
+14 px, campo de 40 px, tabela com letra de 14/12 px — em
+`src/styles/controles.css`, com as classes `ctl-*`. Regra completa, o que
+fica de fora (etiquetas!) e a fila dos módulos em
+`docs/padrao-visual-controles.md`.
+
 ### Cores dos botões
 
 | Botão | Classe |
@@ -293,6 +301,20 @@ rótulo → valor ou `lista`), `alerta` (o que não tem volta) e `nota`. Caixa
 antiga que só manda `message` é organizada sozinha (linhas "Rótulo: valor",
 listas com "•", o "não tem volta" no quadro vermelho). Coberto por
 `src/js/__tests__/dialogPadrao.test.js`.
+
+### Avisos rápidos (`showToast`) por cima de todo modal
+
+O aviso que aparece e some sozinho ("Tarefa criada.", "Não foi possível
+salvar…") é sempre `window.showToast(texto, tipo)`
+(`src/js/utils/notifications.js`). Ele fica **por cima de qualquer modal**,
+inclusive dos que abrem com `<dialog>.showModal()` e entram na top layer
+(editor de tarefa, Calendário, Tarefas, importação de planilha, DialogPadrao):
+a caixa dos avisos é um popover manual e é reposta no topo a cada aviso e
+quando um diálogo abre com aviso na tela. Antes ela tinha só z-index e ficava
+**atrás** desses modais, borrada pelo vidro. Não monte aviso próprio com
+z-index — ele cai no mesmo buraco. O aviso não tem clique (`pointer-events:
+none`), então nunca toma o botão do modal que estiver embaixo, nem o foco do
+campo. Coberto por `src/js/__tests__/avisosAcimaDosModais.test.js`.
 
 ### Modal que abre outro por cima
 

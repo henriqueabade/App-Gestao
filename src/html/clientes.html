@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-  <div class="modulo-container">
+  <div class="modulo-container ctl-padrao">
     <div>
         <!-- Header -->
         <div class="clientes-header flex justify-between items-center mb-8 animate-fade-in-up">
@@ -22,9 +22,9 @@
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Clientes</h1>
                 <p class="module-header__description">Gerencie informações e relacionamento com clientes</p>
             </div>
-            <div class="clientes-header__actions flex items-center gap-3">
+            <div class="clientes-header__actions ctl-acoes">
                 <div id="acoesRapidasContainer" class="acoes-rapidas">
-                    <button id="btnAcoesRapidas" type="button" class="btn-bordo text-white rounded-md px-4 py-3 font-medium flex items-center gap-2" aria-haspopup="menu" aria-expanded="false" aria-controls="menuAcoesRapidas">
+                    <button id="btnAcoesRapidas" type="button" class="btn-bordo ctl-botao text-white" aria-haspopup="menu" aria-expanded="false" aria-controls="menuAcoesRapidas">
                         <i class="fas fa-bolt" aria-hidden="true"></i>
                         Ações Rápidas
                         <i class="fas fa-chevron-down acoes-rapidas__chevron" aria-hidden="true"></i>
@@ -47,7 +47,7 @@
                         </button>
                     </div>
                 </div>
-                <button id="btnNovoCliente" data-perm="cli.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+                <button id="btnNovoCliente" data-perm="cli.create" class="btn-primary ctl-botao text-white">
                     <i class="fas fa-plus mr-2"></i>Novo Cliente
                 </button>
             </div>
@@ -55,39 +55,39 @@
 
         <!-- Filters & Statistics Panel -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-end">
                 <!-- Search -->
                 <div class="flex-1 min-w-[250px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Buscar Cliente</label>
-                    <input id="filtroBusca" data-perm="cli.search" type="text" placeholder="Estado, CNPJ ou Nome" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Buscar Cliente</label>
+                    <input id="filtroBusca" data-perm="cli.search" type="text" placeholder="Estado, CNPJ ou Nome" class="ctl-campo input-glass text-white w-full">
                 </div>
 
                 <!-- Dono Select -->
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                    <select id="filtroDono" data-perm="cli.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Dono</label>
+                    <select id="filtroDono" data-perm="cli.search" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
                 <!-- Status Select -->
                 <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select id="filtroStatus" data-perm="cli.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <label class="ctl-rotulo text-white">Status</label>
+                    <select id="filtroStatus" data-perm="cli.search" class="ctl-campo input-glass text-white w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
                 <!-- Totals -->
                  <div class="flex flex-col">
-                    <label class="block text-sm font-medium mb-1 text-white">Totais por Tipo</label>
+                    <label class="ctl-rotulo text-white">Totais por Tipo</label>
                     <div id="totaisBadges" class="tags-uma-linha"></div>
                 </div>
 
                 <!-- Actions -->
-                <div id="bt-actions" class="flex items-center gap-2">
-                    <button id="btnFiltrar" data-perm="cli.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
-                    <button id="btnLimpar" data-perm="cli.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
+                <div id="bt-actions" class="ctl-acoes">
+                    <button id="btnFiltrar" data-perm="cli.search" class="btn-secondary ctl-botao text-white">Filtrar</button>
+                    <button id="btnLimpar" data-perm="cli.search" class="btn-warning ctl-botao text-white">Limpar</button>
                 </div>
             </div>
         </div>
@@ -123,7 +123,7 @@
             <button
               id="clientesEmptyNew" data-perm="cli.create"
               type="button"
-              class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+              class="btn-primary ctl-botao text-white"
             >
               <i class="fas fa-plus w-4 h-4 mr-2"></i>
               Novo Cliente

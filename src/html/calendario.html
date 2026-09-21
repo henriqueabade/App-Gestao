@@ -1,15 +1,15 @@
 <!-- Tela de Calendário (CRM) — src/js/calendario.js -->
-<div class="modulo-container calendario-modulo tui-escopo">
+<div class="modulo-container calendario-modulo tui-escopo ctl-padrao">
     <header class="cal-cabecalho animate-fade-in-up">
         <div>
             <h1 class="text-2xl font-semibold mb-1 module-header__title">Calendário</h1>
             <p class="module-header__description">Tarefas, atividades feitas e marcos dos clientes e prospecções, num lugar só</p>
         </div>
         <div class="cal-cabecalho__acoes">
-            <button id="calBtnExportar" type="button" data-perm="tarefas.export" class="btn-neutral cal-botao">
+            <button id="calBtnExportar" type="button" data-perm="tarefas.export" class="btn-neutral ctl-botao cal-botao">
                 <i class="fas fa-file-export" aria-hidden="true"></i> Google / Outlook
             </button>
-            <button id="calBtnNova" type="button" data-perm="tarefas.create" class="btn-primary cal-botao">
+            <button id="calBtnNova" type="button" data-perm="tarefas.create" class="btn-primary ctl-botao cal-botao">
                 <i class="fas fa-plus" aria-hidden="true"></i> Nova tarefa
             </button>
         </div>
@@ -41,7 +41,7 @@
                 <span id="calZoomRotulo" class="cal-zoom__rotulo" title="De quanto em quanto aparece o horário">1 h</span>
                 <button id="calZoomMais" type="button" class="cal-icone-botao" title="Aproximar (Ctrl + rolar para cima)" aria-label="Aproximar"><i class="fas fa-magnifying-glass-plus" aria-hidden="true"></i></button>
             </div>
-            <select id="calPessoa" class="cal-select" aria-label="De quem" hidden></select>
+            <select id="calPessoa" class="ctl-campo ctl-campo--pequeno cal-select" aria-label="De quem" hidden></select>
             <button id="calAjuda" type="button" class="cal-icone-botao" title="Atalhos ( ? )" aria-label="Atalhos de teclado"><i class="fas fa-keyboard" aria-hidden="true"></i></button>
         </div>
     </div>

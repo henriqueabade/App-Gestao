@@ -153,7 +153,7 @@
       for (const [rotulo, fn] of [['PDF', () => window.NfeDocumentos.gerarCartaCorrecaoPdf(ctx.notaId, carta.nSeqEvento)], ['XML', () => window.NfeDocumentos.salvarXmlCartaCorrecao(ctx.notaId, carta.nSeqEvento)]]) {
         const botao = document.createElement('button');
         botao.type = 'button';
-        botao.className = 'btn-neutral px-3 py-1 rounded-lg text-white text-xs font-medium';
+        botao.className = 'btn-neutral ctl-botao ctl-botao--pequeno text-white';
         botao.textContent = rotulo;
         if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, fn);
         else botao.addEventListener('click', fn);

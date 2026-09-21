@@ -1,8 +1,8 @@
-<div id="novoClienteOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="novoClienteOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarNovoCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
-      <h2 id="clienteNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Cliente</h2>
+      <button id="voltarNovoCliente" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="clienteNovoTitulo" class="ctl-modal-titulo text-white text-center">Novo Cliente</h2>
       <span></span>
     </header>
 
@@ -25,49 +25,49 @@
           <div class="md:col-span-9">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Razão Social</label>
-                <input id="empresaRazaoSocial" data-perm-col="col_cli_razao_social" type="text" placeholder="João Silva Comércio Ltda" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Razão Social</label>
+                <input id="empresaRazaoSocial" data-perm-col="col_cli_razao_social" type="text" placeholder="João Silva Comércio Ltda" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Nome Fantasia</label>
-                <input id="empresaNomeFantasia" data-perm-col="col_cli_nome_fantasia" type="text" placeholder="Silva & Cia" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Nome Fantasia</label>
+                <input id="empresaNomeFantasia" data-perm-col="col_cli_nome_fantasia" type="text" placeholder="Silva & Cia" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Tipo de pessoa</label>
-                <select id="empresaTipoPessoa" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label class="ctl-rotulo text-gray-300">Tipo de pessoa</label>
+                <select id="empresaTipoPessoa" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="PJ">Pessoa jurídica (CNPJ)</option>
                   <option value="PF">Pessoa física (CPF)</option>
                 </select>
               </div>
               <div id="empresaCnpjBloco">
-                <label class="block text-sm font-medium text-gray-300 mb-2">CNPJ</label>
-                <input id="empresaCnpj" data-perm-col="col_cli_cnpj" type="text" placeholder="00.000.000/0001-00" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">CNPJ</label>
+                <input id="empresaCnpj" data-perm-col="col_cli_cnpj" type="text" placeholder="00.000.000/0001-00" maxlength="18" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div id="empresaCpfBloco" class="hidden">
-                <label class="block text-sm font-medium text-gray-300 mb-2">CPF</label>
-                <input id="empresaCpf" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="14" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">CPF</label>
+                <input id="empresaCpf" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="14" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Dono</label>
-                <select id="empresaDono" data-perm-col="col_cli_owner" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label class="ctl-rotulo text-gray-300">Dono</label>
+                <select id="empresaDono" data-perm-col="col_cli_owner" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="">Selecione o dono</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Inscrição Estadual</label>
-                <input id="empresaInscricaoEstadual" data-perm-col="col_cli_insc_estadual" type="text" placeholder="000.000.000.000" maxlength="15" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Inscrição Estadual</label>
+                <input id="empresaInscricaoEstadual" data-perm-col="col_cli_insc_estadual" type="text" placeholder="000.000.000.000" maxlength="15" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Indicador de IE (NF-e)</label>
-                <select id="empresaIndicadorIe" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label class="ctl-rotulo text-gray-300">Indicador de IE (NF-e)</label>
+                <select id="empresaIndicadorIe" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="1">1 — Contribuinte do ICMS (tem IE)</option>
                   <option value="2">2 — Contribuinte isento de IE</option>
                   <option value="9">9 — Não contribuinte</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">E-mail para a NF-e</label>
-                <input id="empresaEmailNfe" type="email" placeholder="fiscal@cliente.com.br" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">E-mail para a NF-e</label>
+                <input id="empresaEmailNfe" type="email" placeholder="fiscal@cliente.com.br" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="flex items-end pb-3">
                 <label class="flex items-center gap-3 cursor-pointer">
@@ -76,20 +76,20 @@
                 </label>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
-                <input id="empresaSite" data-perm-col="col_cli_site" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Site</label>
+                <input id="empresaSite" data-perm-col="col_cli_site" type="url" placeholder="https://www.exemplo.com.br" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Status</label>
-                <select id="empresaStatus" data-perm-col="col_cli_status" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label class="ctl-rotulo text-gray-300">Status</label>
+                <select id="empresaStatus" data-perm-col="col_cli_status" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="">Selecione o status</option>
                   <option value="Ativo">Ativo</option>
                   <option value="Inativo">Inativo</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Origem Captação</label>
-                <input id="empresaOrigemCaptacao" data-perm-col="col_cli_origem" type="text" placeholder="Origem do contato" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Origem Captação</label>
+                <input id="empresaOrigemCaptacao" data-perm-col="col_cli_origem" type="text" placeholder="Origem do contato" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -98,8 +98,8 @@
 
       <section id="panel-contatos" role="tabpanel" aria-labelledby="tab-contatos" class="px-8 py-6 hidden">
         <div class="flex justify-between items-center mb-6">
-          <h3 class="text-lg font-semibold text-white">Contatos</h3>
-          <button id="addContatoBtn" data-perm="cli.contact.add" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Novo Contato</button>
+          <h3 class="ctl-secao text-white">Contatos</h3>
+          <button id="addContatoBtn" data-perm="cli.contact.add" class="btn-primary ctl-botao text-white">+ Novo Contato</button>
         </div>
         <div class="glass-surface rounded-xl border border-white/10 table-scroll">
           <div class="overflow-x-auto">
@@ -126,49 +126,49 @@
 
       <section id="panel-enderecos" role="tabpanel" aria-labelledby="tab-enderecos" class="px-8 py-6 hidden">
         <div class="mb-8">
-          <h3 class="text-lg font-semibold text-white mb-4">Endereço de Registro</h3>
+          <h3 class="ctl-secao text-white mb-4">Endereço de Registro</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
-              <input id="regRua" data-perm-col="col_end_logradouro" type="text" placeholder="Nome da rua" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Rua</label>
+              <input id="regRua" data-perm-col="col_end_logradouro" type="text" placeholder="Nome da rua" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Número</label>
-              <input id="regNumero" data-perm-col="col_end_numero" type="text" placeholder="123" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Número</label>
+              <input id="regNumero" data-perm-col="col_end_numero" type="text" placeholder="123" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
-              <input id="regComplemento" data-perm-col="col_end_complemento" type="text" placeholder="Sala 101" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Complemento</label>
+              <input id="regComplemento" data-perm-col="col_end_complemento" type="text" placeholder="Sala 101" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Bairro</label>
-              <input id="regBairro" data-perm-col="col_end_bairro" type="text" placeholder="Centro" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Bairro</label>
+              <input id="regBairro" data-perm-col="col_end_bairro" type="text" placeholder="Centro" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
-              <input id="regCidade" data-perm-col="col_end_cidade" type="text" placeholder="São Paulo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Cidade</label>
+              <input id="regCidade" data-perm-col="col_end_cidade" type="text" placeholder="São Paulo" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">País</label>
-              <select id="regPais" data-perm-col="col_end_pais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">País</label>
+              <select id="regPais" data-perm-col="col_end_pais" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Estado</label>
-              <select id="regEstado" data-perm-col="col_end_uf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
+              <label class="ctl-rotulo text-gray-300">Estado</label>
+              <select id="regEstado" data-perm-col="col_end_uf" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
                 <option value="">Selecione o país</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
-              <input id="regCep" data-perm-col="col_end_cep" type="text" placeholder="00000-000" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">CEP</label>
+              <input id="regCep" data-perm-col="col_end_cep" type="text" placeholder="00000-000" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Código IBGE (NF-e)</label>
+              <label class="ctl-rotulo text-gray-300">Código IBGE (NF-e)</label>
               <div class="flex gap-2">
-                <input id="regCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                <button id="regBuscarIbge" type="button" class="btn-neutral px-4 py-3 rounded-lg text-white font-medium whitespace-nowrap" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
+                <input id="regCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="regBuscarIbge" type="button" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
               </div>
             </div>
           </div>
@@ -176,7 +176,7 @@
 
         <div class="mb-8">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Endereço de Cobrança</h3>
+            <h3 class="ctl-secao text-white">Endereço de Cobrança</h3>
             <label class="flex items-center gap-3">
               <input id="cobrancaIgual" type="checkbox" class="component-toggle" />
               <span class="text-sm text-gray-300">Igual ao de Registro</span>
@@ -184,47 +184,47 @@
           </div>
           <div id="cobrancaFields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
-              <input id="cobRua" data-perm-col="col_end_logradouro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Rua</label>
+              <input id="cobRua" data-perm-col="col_end_logradouro" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Número</label>
-              <input id="cobNumero" data-perm-col="col_end_numero" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Número</label>
+              <input id="cobNumero" data-perm-col="col_end_numero" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
-              <input id="cobComplemento" data-perm-col="col_end_complemento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Complemento</label>
+              <input id="cobComplemento" data-perm-col="col_end_complemento" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Bairro</label>
-              <input id="cobBairro" data-perm-col="col_end_bairro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Bairro</label>
+              <input id="cobBairro" data-perm-col="col_end_bairro" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
-              <input id="cobCidade" data-perm-col="col_end_cidade" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Cidade</label>
+              <input id="cobCidade" data-perm-col="col_end_cidade" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">País</label>
-              <select id="cobPais" data-perm-col="col_end_pais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">País</label>
+              <select id="cobPais" data-perm-col="col_end_pais" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Estado</label>
-              <select id="cobEstado" data-perm-col="col_end_uf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
+              <label class="ctl-rotulo text-gray-300">Estado</label>
+              <select id="cobEstado" data-perm-col="col_end_uf" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
                 <option value="">Selecione o país</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
-              <input id="cobCep" data-perm-col="col_end_cep" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">CEP</label>
+              <input id="cobCep" data-perm-col="col_end_cep" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
           </div>
         </div>
 
         <div>
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Endereço de Entrega</h3>
+            <h3 class="ctl-secao text-white">Endereço de Entrega</h3>
             <label class="flex items-center gap-3">
               <input id="entregaIgual" type="checkbox" class="component-toggle" />
               <span class="text-sm text-gray-300">Igual ao de Registro</span>
@@ -232,46 +232,46 @@
           </div>
           <div id="entregaFields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
-              <input id="entRua" data-perm-col="col_end_logradouro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Rua</label>
+              <input id="entRua" data-perm-col="col_end_logradouro" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Número</label>
-              <input id="entNumero" data-perm-col="col_end_numero" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Número</label>
+              <input id="entNumero" data-perm-col="col_end_numero" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
-              <input id="entComplemento" data-perm-col="col_end_complemento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Complemento</label>
+              <input id="entComplemento" data-perm-col="col_end_complemento" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Bairro</label>
-              <input id="entBairro" data-perm-col="col_end_bairro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Bairro</label>
+              <input id="entBairro" data-perm-col="col_end_bairro" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
-              <input id="entCidade" data-perm-col="col_end_cidade" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">Cidade</label>
+              <input id="entCidade" data-perm-col="col_end_cidade" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">País</label>
-              <select id="entPais" data-perm-col="col_end_pais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <label class="ctl-rotulo text-gray-300">País</label>
+              <select id="entPais" data-perm-col="col_end_pais" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Estado</label>
-              <select id="entEstado" data-perm-col="col_end_uf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
+              <label class="ctl-rotulo text-gray-300">Estado</label>
+              <select id="entEstado" data-perm-col="col_end_uf" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
                 <option value="">Selecione o país</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
-              <input id="entCep" data-perm-col="col_end_cep" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="ctl-rotulo text-gray-300">CEP</label>
+              <input id="entCep" data-perm-col="col_end_cep" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Código IBGE (NF-e)</label>
+              <label class="ctl-rotulo text-gray-300">Código IBGE (NF-e)</label>
               <div class="flex gap-2">
-                <input id="entCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                <button id="entBuscarIbge" type="button" class="btn-neutral px-4 py-3 rounded-lg text-white font-medium whitespace-nowrap" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
+                <input id="entCodigoMunicipio" type="text" inputmode="numeric" maxlength="7" placeholder="7 dígitos" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="entBuscarIbge" type="button" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Buscar pelo nome da cidade e do estado"><i class="fas fa-search"></i></button>
               </div>
             </div>
           </div>
@@ -280,8 +280,8 @@
 
       <section id="panel-ordens" role="tabpanel" aria-labelledby="tab-ordens" class="px-8 py-6 hidden">
         <div class="flex justify-between items-center mb-6">
-          <h3 class="text-lg font-semibold text-white">Ordens</h3>
-          <button data-perm="cli.order.add" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Nova Ordem</button>
+          <h3 class="ctl-secao text-white">Ordens</h3>
+          <button data-perm="cli.order.add" class="btn-primary ctl-botao text-white">+ Nova Ordem</button>
         </div>
         <div class="glass-surface rounded-xl border border-white/10 table-scroll">
           <div class="overflow-x-auto">
@@ -308,15 +308,15 @@
 
       <section id="panel-notas" role="tabpanel" aria-labelledby="tab-notas" class="px-8 py-6 hidden">
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-          <textarea id="clienteNotas" rows="12" placeholder="Digite suas observações sobre o cliente..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+          <label class="ctl-rotulo text-gray-300">Observações</label>
+          <textarea id="clienteNotas" rows="12" placeholder="Digite suas observações sobre o cliente..." class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
         </div>
       </section>
     </div>
 
-    <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
-      <button id="cancelarNovoCliente" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="registrarCliente" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Registrar</button>
+    <footer class="ctl-acoes justify-end px-8 py-5 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarNovoCliente" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="registrarCliente" class="btn-success ctl-botao text-white min-w-[120px]">Registrar</button>
     </footer>
   </div>
 </div>

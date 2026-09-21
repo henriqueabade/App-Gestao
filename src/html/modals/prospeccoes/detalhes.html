@@ -1,4 +1,4 @@
-<div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+<div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 ctl-padrao">
   <!--
     Sem `transform` aqui. O `translateY(3vh)` que existia antes resolvia para
     um valor fracionário (28,5px numa janela de 950) e criava uma camada de
@@ -9,19 +9,19 @@
 
     <header class="modal-prospeccao__topo px-8 py-5 border-b border-white/10 flex flex-col gap-4">
       <div class="relative flex items-center justify-center">
-        <button id="voltarDetalhesProspeccao" type="button" class="absolute left-0 top-1/2 -translate-y-1/2 btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-        <h2 class="text-lg font-semibold text-center text-white">DETALHES DA PROSPECÇÃO</h2>
+        <button id="voltarDetalhesProspeccao" type="button" class="btn-neutral ctl-botao absolute left-0 top-1/2 -translate-y-1/2 text-white">← Voltar</button>
+        <h2 class="ctl-modal-titulo text-center text-white">DETALHES DA PROSPECÇÃO</h2>
       </div>
       <div class="flex items-center gap-4">
         <div class="flex-1 min-w-0">
           <h1 id="detProspNome" class="text-2xl font-bold text-white truncate"></h1>
           <p id="detProspSubtitulo" class="text-gray-300 truncate text-sm"></p>
         </div>
-        <div class="flex items-center gap-2 justify-end flex-shrink-0 flex-wrap">
-          <button id="detProspMoverFunil" data-perm="pros.stage.update" class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">Mover no funil</button>
-          <button id="detProspConverter" data-perm="pros.convert" class="btn-success px-4 py-2 rounded-lg font-medium">Converter</button>
-          <button id="detProspEditar" data-perm="pros.edit" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Editar</button>
-          <button id="detProspExcluir" data-perm="pros.delete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
+        <div class="ctl-acoes justify-end flex-shrink-0">
+          <button id="detProspMoverFunil" data-perm="pros.stage.update" class="btn-dark-blue ctl-botao text-white">Mover no funil</button>
+          <button id="detProspConverter" data-perm="pros.convert" class="btn-success ctl-botao">Converter</button>
+          <button id="detProspEditar" data-perm="pros.edit" class="btn-primary ctl-botao text-white">Editar</button>
+          <button id="detProspExcluir" data-perm="pros.delete" class="btn-danger ctl-botao text-white">Excluir</button>
         </div>
       </div>
     </header>
@@ -75,9 +75,9 @@
 
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-white">Oportunidade</h3>
+            <h3 class="ctl-secao text-white">Oportunidade</h3>
             <div class="flex flex-col items-end gap-2">
-              <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap">
+              <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary ctl-botao text-white">
                 <i class="fas fa-calendar-check mr-2"></i>Próximo passo
               </button>
               <!--
@@ -86,7 +86,7 @@
                 Só aparece quando existe passo em aberto — sem combinado, não
                 há o que concluir.
               -->
-              <button id="detProspConcluirPasso" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap hidden">
+              <button id="detProspConcluirPasso" data-perm="pros.interaction.add" class="btn-primary ctl-botao text-white hidden">
                 <i class="fas fa-circle-check mr-2"></i>Concluir passo planejado
               </button>
             </div>
@@ -95,17 +95,17 @@
         </div>
 
         <div class="cartao-prospeccao">
-          <h3 class="text-lg font-semibold text-white mb-4">Empresa</h3>
+          <h3 class="ctl-secao text-white mb-4">Empresa</h3>
           <div id="detProspEmpresaDados" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>
 
         <div class="cartao-prospeccao">
-          <h3 class="text-lg font-semibold text-white mb-4">Endereço</h3>
+          <h3 class="ctl-secao text-white mb-4">Endereço</h3>
           <div id="detProspEndereco" class="text-white"></div>
         </div>
 
         <div id="detProspAnotacoesCard" class="cartao-prospeccao hidden">
-          <h3 class="text-lg font-semibold text-white mb-4">Anotações</h3>
+          <h3 class="ctl-secao text-white mb-4">Anotações</h3>
           <p id="detProspAnotacoes" class="text-gray-300 whitespace-pre-wrap"></p>
         </div>
       </section>
@@ -113,8 +113,8 @@
       <section data-panel="contatos" class="space-y-6 hidden">
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-white">Contatos da empresa</h3>
-            <button id="detProspNovoContato" data-perm="pros.contact.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Novo contato</button>
+            <h3 class="ctl-secao text-white">Contatos da empresa</h3>
+            <button id="detProspNovoContato" data-perm="pros.contact.add" class="btn-primary ctl-botao text-white">+ Novo contato</button>
           </div>
           <div id="detProspContatos"></div>
         </div>
@@ -126,8 +126,8 @@
         <div id="detProspTarefas" class="cartao-prospeccao"></div>
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold text-white">Atividades realizadas</h3>
-            <button id="detProspNovaInteracao" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium" title="O que já aconteceu: ligação feita, reunião realizada, e-mail enviado. Para algo futuro, agende uma tarefa.">+ Registrar atividade</button>
+            <h3 class="ctl-secao text-white">Atividades realizadas</h3>
+            <button id="detProspNovaInteracao" data-perm="pros.interaction.add" class="btn-primary ctl-botao text-white" title="O que já aconteceu: ligação feita, reunião realizada, e-mail enviado. Para algo futuro, agende uma tarefa.">+ Registrar atividade</button>
           </div>
           <div id="detProspInteracoes" class="space-y-6"></div>
         </div>
@@ -136,13 +136,13 @@
       <section data-panel="notas" class="space-y-6 hidden">
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-white">Notas</h3>
-            <button id="detProspNovaNota" data-perm="pros.note.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova nota</button>
+            <h3 class="ctl-secao text-white">Notas</h3>
+            <button id="detProspNovaNota" data-perm="pros.note.add" class="btn-primary ctl-botao text-white">+ Nova nota</button>
           </div>
           <div id="detProspNotas" class="space-y-4"></div>
         </div>
         <div class="cartao-prospeccao">
-          <h3 class="text-lg font-semibold text-white mb-4">Anexos</h3>
+          <h3 class="ctl-secao text-white mb-4">Anexos</h3>
           <div id="detProspAnexos"></div>
         </div>
       </section>
@@ -150,8 +150,8 @@
       <section data-panel="campanhas" class="space-y-6 hidden">
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-white">Campanhas</h3>
-            <button id="detProspNovaCampanha" data-perm="pros.campaign.manage" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova campanha</button>
+            <h3 class="ctl-secao text-white">Campanhas</h3>
+            <button id="detProspNovaCampanha" data-perm="pros.campaign.manage" class="btn-primary ctl-botao text-white">+ Nova campanha</button>
           </div>
           <div id="detProspCampanhas"></div>
         </div>
@@ -161,13 +161,13 @@
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="text-lg font-semibold text-white">Orçamentos vinculados</h3>
+              <h3 class="ctl-secao text-white">Orçamentos vinculados</h3>
               <p class="text-xs text-gray-400 mt-1">
                 Propostas emitidas para esta prospecção. Recebem numeração
                 <strong>OCRP</strong>, para não se misturarem com as de cliente.
               </p>
             </div>
-            <button id="detProspNovoOrcamento" data-perm="orc.create" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap">+ Novo orçamento</button>
+            <button id="detProspNovoOrcamento" data-perm="orc.create" class="btn-primary ctl-botao text-white">+ Novo orçamento</button>
           </div>
           <div id="detProspOrcamentos"></div>
         </div>
@@ -175,7 +175,7 @@
 
       <section data-panel="historico" class="space-y-6 hidden">
         <div class="cartao-prospeccao">
-          <h3 class="text-lg font-semibold text-white mb-1">Linha do tempo</h3>
+          <h3 class="ctl-secao text-white mb-1">Linha do tempo</h3>
           <p class="text-xs text-white/50 mb-4">Tudo o que aconteceu com esta prospecção, com quem fez. Curta, comente, responda e publique observações; quem criou a prospecção e quem fez a ação recebem aviso no sino.</p>
           <!-- Montado por src/js/utils/historico-social.js (ver prospeccao-detalhes.js, renderHistorico). -->
           <div id="detProspHistorico"></div>

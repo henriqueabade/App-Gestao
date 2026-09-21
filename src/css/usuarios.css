@@ -123,7 +123,6 @@ body {
     background: var(--color-bordeaux);
     color: #fff;
     transition: all 150ms ease;
-    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .btn-bordo:hover {
@@ -595,11 +594,8 @@ body {
     }
 }
 
-.filter-bar input:not([type="checkbox"]),
-.filter-bar select,
-.filter-bar button {
-    height: 48px;
-}
+/* A altura de 48 px dos campos e botões do filtro saiu: carregava depois de
+   controles.css e venceria o padrão (40 px). */
 
 /* Ícone de informações ao lado do título */
 .info-icon {
@@ -663,9 +659,8 @@ body {
     pointer-events: auto;
 }
 
-#bt-actions {
-    margin-top: 1.5vw;
-}
+/* O empurrão de 1,5vw que alinhava "Filtrar/Limpar" com os campos saiu: agora
+   têm a mesma altura (controles.css) e a barra alinha pela base. */
 
 .usuario-detalhes-trigger {
     display: inline-flex;

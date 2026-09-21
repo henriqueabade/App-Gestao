@@ -91,7 +91,6 @@ body {
    src/styles/acoes-csv.css). */
 .btn-bordo {
     background: var(--color-bordeaux);
-    border: 1px solid rgba(255, 255, 255, 0.15);
     transition: all 150ms ease;
 }
 
@@ -361,11 +360,8 @@ body {
     }
 }
 
-.filter-bar input:not([type="checkbox"]),
-.filter-bar select,
-.filter-bar button {
-    height: 48px;
-}
+/* A altura dos campos e botões do filtro é a do padrão (ctl-campo e
+   ctl-botao, controles.css). A regra de 48 px que ficava aqui vencia o padrão. */
 
 #bt-actions {
     margin-top: 1vw;
@@ -987,13 +983,12 @@ body {
     padding: 0 1.5rem 1rem;
 }
 
+/* Altura, letra e cantos: ctl-campo (controles.css). */
 .geo-multiselect-search input {
     width: 100%;
-    border-radius: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    padding: 0.6rem 0.9rem;
     transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -1079,10 +1074,8 @@ body {
     gap: 0.5rem;
 }
 
+/* Tamanho: ctl-botao (controles.css). Aqui só a aparência. */
 .geo-multiselect-btn {
-    border-radius: 0.75rem;
-    padding: 0.55rem 1.2rem;
-    font-weight: 500;
     border: none;
     cursor: pointer;
     transition: background 150ms ease, transform 150ms ease;

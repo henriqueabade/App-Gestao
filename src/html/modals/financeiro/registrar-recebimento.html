@@ -7,12 +7,12 @@
   "Conciliar com o BB". A competência é o mês do recebimento.
   Script compartilhado: src/js/modals/financeiro-modais.js.
 -->
-<div id="finRegistrarRecebimentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finRegistrarRecebimentoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finRecebimentoTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 id="finRecebimentoTitulo" class="text-lg font-semibold text-white text-center truncate"><i class="fas fa-money-bill-wave mr-2" aria-hidden="true"></i>Registrar recebimento</h2>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="finRecebimentoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-money-bill-wave mr-2" aria-hidden="true"></i>Registrar recebimento</h2>
       <span id="finRecebimentoContexto" class="text-sm text-gray-300 justify-self-end truncate"></span>
     </header>
 
@@ -22,13 +22,13 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="md:col-span-1">
-            <label for="finRecebimentoBusca" class="block text-sm font-medium text-gray-300 mb-2">Procurar</label>
+            <label for="finRecebimentoBusca" class="ctl-rotulo text-gray-300">Procurar</label>
             <input id="finRecebimentoBusca" type="text" placeholder="Pedido, cliente ou NF" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="md:col-span-2">
-            <label for="finRecebimentoParcela" class="block text-sm font-medium text-gray-300 mb-2">Parcela <span class="fin-obrigatorio">*</span></label>
-            <select id="finRecebimentoParcela" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <label for="finRecebimentoParcela" class="ctl-rotulo text-gray-300">Parcela <span class="fin-obrigatorio">*</span></label>
+            <select id="finRecebimentoParcela" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           </div>
         </div>
 
@@ -52,18 +52,18 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label for="finRecebimentoData" class="block text-sm font-medium text-gray-300 mb-2">Data do recebimento <span class="fin-obrigatorio">*</span></label>
+            <label for="finRecebimentoData" class="ctl-rotulo text-gray-300">Data do recebimento <span class="fin-obrigatorio">*</span></label>
             <input id="finRecebimentoData" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finRecebimentoValor" class="block text-sm font-medium text-gray-300 mb-2">Valor recebido <span class="fin-obrigatorio">*</span></label>
+            <label for="finRecebimentoValor" class="ctl-rotulo text-gray-300">Valor recebido <span class="fin-obrigatorio">*</span></label>
             <input id="finRecebimentoValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" data-numeric="false"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finRecebimentoForma" class="block text-sm font-medium text-gray-300 mb-2">Como foi recebido <span class="fin-obrigatorio">*</span></label>
-            <select id="finRecebimentoForma" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finRecebimentoForma" class="ctl-rotulo text-gray-300">Como foi recebido <span class="fin-obrigatorio">*</span></label>
+            <select id="finRecebimentoForma" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
               <option value="Pix">Pix</option>
               <option value="Transferência">Transferência</option>
@@ -75,9 +75,9 @@
             </select>
           </div>
           <div>
-            <label for="finRecebimentoObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+            <label for="finRecebimentoObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
             <input id="finRecebimentoObservacoes" type="text" maxlength="500" placeholder="Opcional" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
 
@@ -118,9 +118,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="finRecebimentoRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar recebimento</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="finRecebimentoRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success ctl-botao min-w-[120px]">Registrar recebimento</button>
     </footer>
   </div>
 </div>

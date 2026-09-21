@@ -6,13 +6,13 @@
   e "Consultar na SEFAZ" para a nota parada. Só texto nos botões.
   Script: src/js/modals/financeiro-modais.js.
 -->
-<div id="finNotasFiscaisOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finNotasFiscaisOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finNotasTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finNotasTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-alt mr-2" aria-hidden="true"></i>Notas fiscais</h2>
+        <h2 id="finNotasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-alt mr-2" aria-hidden="true"></i>Notas fiscais</h2>
         <p class="text-xs text-gray-300 truncate">NF-e emitidas pelo sistema na SEFAZ</p>
       </div>
       <span id="finNotasAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -41,18 +41,18 @@
 
         <div class="fin-filtros fin-filtros--4">
           <div>
-            <label for="finNotasCompetenciaMes" class="block text-sm font-medium text-gray-300 mb-2">Competência</label>
+            <label for="finNotasCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
             <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
             <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
-              <select id="finNotasCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-              <input id="finNotasCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano bg-input border border-inputBorder rounded-lg px-3 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <button id="finNotasCompetenciaIr" data-competencia-ir type="button" class="fin-competencia-campo__ir btn-neutral text-white rounded-lg px-4 py-3" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <select id="finNotasCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finNotasCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finNotasCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
               <input type="hidden" id="finNotasCompetencia" />
             </div>
           </div>
           <div>
-            <label for="finNotasStatus" class="block text-sm font-medium text-gray-300 mb-2">Situação</label>
-            <select id="finNotasStatus" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finNotasStatus" class="ctl-rotulo text-gray-300">Situação</label>
+            <select id="finNotasStatus" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todas</option>
               <option value="autorizada">Autorizadas</option>
               <option value="cancelada">Canceladas</option>
@@ -61,17 +61,17 @@
             </select>
           </div>
           <div>
-            <label for="finNotasAmbienteFiltro" class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
-            <select id="finNotasAmbienteFiltro" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+            <label for="finNotasAmbienteFiltro" class="ctl-rotulo text-gray-300">Ambiente</label>
+            <select id="finNotasAmbienteFiltro" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Todos</option>
               <option value="producao">Produção</option>
               <option value="homologacao">Homologação</option>
             </select>
           </div>
           <div>
-            <label for="finNotasBusca" class="block text-sm font-medium text-gray-300 mb-2">Nota, pedido ou cliente</label>
+            <label for="finNotasBusca" class="ctl-rotulo text-gray-300">Nota, pedido ou cliente</label>
             <input id="finNotasBusca" type="text" placeholder="Nº da nota, do pedido ou cliente" autocomplete="off"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
 
@@ -103,9 +103,9 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="finNotasAtualizar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[140px]">Atualizar lista</button>
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="finNotasAtualizar" type="button" class="btn-success ctl-botao min-w-[140px]">Atualizar lista</button>
     </footer>
   </div>
 </div>

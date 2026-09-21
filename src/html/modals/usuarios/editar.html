@@ -1,8 +1,8 @@
-<div id="editarUsuarioOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+<div id="editarUsuarioOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
   <div class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarEditarUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
-      <h2 id="usuarioEditarTitulo" class="text-lg font-semibold text-white text-center truncate">Editar usuário</h2>
+      <button id="voltarEditarUsuario" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="usuarioEditarTitulo" class="ctl-modal-titulo text-white text-center truncate">Editar usuário</h2>
       <div class="flex items-center justify-end gap-3">
         <span id="usuarioEditarStatusBadge" class="hidden text-xs px-3 py-1 rounded-full uppercase tracking-wide"></span>
       </div>
@@ -28,20 +28,20 @@
           <div class="md:col-span-9">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label for="usuarioNome" class="block text-sm font-medium text-gray-300 mb-2">Nome completo</label>
-                <input id="usuarioNome" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Nome do usuário" />
+                <label for="usuarioNome" class="ctl-rotulo text-gray-300">Nome completo</label>
+                <input id="usuarioNome" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Nome do usuário" />
               </div>
               <div>
-                <label for="usuarioEmail" class="block text-sm font-medium text-gray-300 mb-2">E-mail</label>
-                <input id="usuarioEmail" type="email" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="email@empresa.com" />
+                <label for="usuarioEmail" class="ctl-rotulo text-gray-300">E-mail</label>
+                <input id="usuarioEmail" type="email" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="email@empresa.com" />
               </div>
               <div>
-                <label for="usuarioTelefone" class="block text-sm font-medium text-gray-300 mb-2">Telefone</label>
-                <input id="usuarioTelefone" type="tel" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="(11) 99999-0000" />
+                <label for="usuarioTelefone" class="ctl-rotulo text-gray-300">Telefone</label>
+                <input id="usuarioTelefone" type="tel" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="(11) 99999-0000" />
               </div>
               <div>
-                <label for="usuarioPerfil" class="block text-sm font-medium text-gray-300 mb-2">Perfil</label>
-                <select id="usuarioPerfil" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label for="usuarioPerfil" class="ctl-rotulo text-gray-300">Perfil</label>
+                <select id="usuarioPerfil" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="">Selecione</option>
                   <option value="Sup Admin">Sup Admin</option>
                   <option value="Admin">Admin</option>
@@ -51,16 +51,16 @@
                 </select>
               </div>
               <div>
-                <label for="usuarioStatus" class="block text-sm font-medium text-gray-300 mb-2">Status de acesso</label>
-                <select id="usuarioStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label for="usuarioStatus" class="ctl-rotulo text-gray-300">Status de acesso</label>
+                <select id="usuarioStatus" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="Ativo">Ativo</option>
                   <option value="Inativo">Inativo</option>
                   <option value="Não confirmado">Não confirmado</option>
                 </select>
               </div>
               <div>
-                <label for="usuarioObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-                <textarea id="usuarioObservacoes" rows="3" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none" placeholder="Notas internas sobre o usuário"></textarea>
+                <label for="usuarioObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
+                <textarea id="usuarioObservacoes" rows="3" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none" placeholder="Notas internas sobre o usuário"></textarea>
               </div>
             </div>
           </div>
@@ -76,9 +76,9 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
       <div id="usuarioEditarMensagem" class="hidden text-sm"></div>
-      <div class="flex items-center gap-3 justify-end w-full md:w-auto">
-        <button id="cancelarEditarUsuario" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
-        <button id="salvarEditarUsuario" class="btn-primary px-6 py-2.5 rounded-lg text-white font-semibold flex items-center gap-2">
+      <div class="ctl-acoes justify-end w-full md:w-auto">
+        <button id="cancelarEditarUsuario" class="btn-danger ctl-botao text-white">Cancelar</button>
+        <button id="salvarEditarUsuario" class="btn-primary ctl-botao text-white">
           <span>Salvar alterações</span>
         </button>
       </div>

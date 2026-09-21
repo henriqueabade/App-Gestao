@@ -1,8 +1,8 @@
-<div id="editarProspeccaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+<div id="editarProspeccaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <header class="modal-prospeccao__topo grid grid-cols-3 items-center px-8 py-5 border-b border-white/10">
-      <button id="voltarEditarProspeccao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
-      <h2 id="prospeccaoTitulo" class="text-lg font-semibold text-white text-center">Editar Prospecção</h2>
+      <button id="voltarEditarProspeccao" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="prospeccaoTitulo" class="ctl-modal-titulo text-white text-center">Editar Prospecção</h2>
       <span></span>
     </header>
 
@@ -27,28 +27,28 @@
           <div class="md:col-span-9">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-300 mb-2">Nome Fantasia <span class="text-[var(--color-red)]">*</span></label>
-                <input id="prosNomeFantasia" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Nome Fantasia <span class="text-[var(--color-red)]">*</span></label>
+                <input id="prosNomeFantasia" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Razão Social</label>
-                <input id="prosRazaoSocial" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Razão Social</label>
+                <input id="prosRazaoSocial" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Segmento</label>
-                <input id="prosSegmento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Segmento</label>
+                <input id="prosSegmento" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">CNPJ</label>
-                <input id="prosCnpj" type="text" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">CNPJ</label>
+                <input id="prosCnpj" type="text" maxlength="18" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Inscrição Estadual</label>
-                <input id="prosInscricaoEstadual" type="text" maxlength="20" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Inscrição Estadual</label>
+                <input id="prosInscricaoEstadual" type="text" maxlength="20" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Responsável</label>
-                <select id="prosResponsavel" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <label class="ctl-rotulo text-gray-300">Responsável</label>
+                <select id="prosResponsavel" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                   <option value="">Selecione o responsável</option>
                 </select>
                 <p id="prosResponsavelAviso" class="hidden mt-2 text-xs text-gray-400">
@@ -56,8 +56,8 @@
                 </p>
               </div>
               <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
-                <input id="prosSite" type="url" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="ctl-rotulo text-gray-300">Site</label>
+                <input id="prosSite" type="url" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -68,10 +68,10 @@
       <section id="panel-pros-contatos" role="tabpanel" aria-labelledby="tab-pros-contatos" class="px-8 py-6 hidden">
         <div class="flex justify-between items-center mb-6">
           <div>
-            <h3 class="text-lg font-semibold text-white">Contatos da empresa</h3>
+            <h3 class="ctl-secao text-white">Contatos da empresa</h3>
             <p class="text-sm text-gray-400">Quem decide, quem compra e quem atende. Marque o contato principal.</p>
           </div>
-          <button id="addContatoProspeccaoBtn" data-perm="pros.contact.add" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Novo Contato</button>
+          <button id="addContatoProspeccaoBtn" data-perm="pros.contact.add" class="btn-primary ctl-botao text-white">+ Novo Contato</button>
         </div>
         <div class="glass-surface rounded-xl border border-white/10 table-scroll">
           <div class="overflow-x-auto">
@@ -93,43 +93,43 @@
 
       <!-- ------------------------------------------------ ENDEREÇO -->
       <section id="panel-pros-endereco" role="tabpanel" aria-labelledby="tab-pros-endereco" class="px-8 py-6 hidden">
-        <h3 class="text-lg font-semibold text-white mb-4">Endereço da empresa</h3>
+        <h3 class="ctl-secao text-white mb-4">Endereço da empresa</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
-            <input id="endRua" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Rua</label>
+            <input id="endRua" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Número</label>
-            <input id="endNumero" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Número</label>
+            <input id="endNumero" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
-            <input id="endComplemento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Complemento</label>
+            <input id="endComplemento" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Bairro</label>
-            <input id="endBairro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Bairro</label>
+            <input id="endBairro" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
-            <input id="endCidade" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Cidade</label>
+            <input id="endCidade" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">País</label>
-            <select id="endPais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <label class="ctl-rotulo text-gray-300">País</label>
+            <select id="endPais" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
               <option value="">Selecione</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Estado</label>
-            <select id="endEstado" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
+            <label class="ctl-rotulo text-gray-300">Estado</label>
+            <select id="endEstado" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
               <option value="">Selecione o país</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
-            <input id="endCep" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">CEP</label>
+            <input id="endCep" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
       </section>
@@ -138,8 +138,8 @@
       <section id="panel-pros-oportunidade" role="tabpanel" aria-labelledby="tab-pros-oportunidade" class="px-8 py-6 hidden">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Origem</label>
-            <input id="prosOrigem" type="text" list="prosOrigemSugestoes" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Origem</label>
+            <input id="prosOrigem" type="text" list="prosOrigemSugestoes" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             <datalist id="prosOrigemSugestoes">
               <option value="Website"></option>
               <option value="Redes Sociais"></option>
@@ -151,8 +151,8 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Etapa do funil</label>
-            <select id="prosEtapa" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white opacity-60 cursor-not-allowed select-arrow appearance-none"></select>
+            <label class="ctl-rotulo text-gray-300">Etapa do funil</label>
+            <select id="prosEtapa" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white opacity-60 cursor-not-allowed select-arrow appearance-none"></select>
             <p class="mt-2 text-xs text-gray-400">
               A etapa não muda por aqui — mover no funil é uma ação própria, que exige
               permissão separada e registra quem moveu, quando e por quê.
@@ -160,38 +160,38 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Valor estimado (R$)</label>
-            <input id="prosValorEstimado" type="text" data-numeric="true" data-numeric-decimals="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Valor estimado (R$)</label>
+            <input id="prosValorEstimado" type="text" data-numeric="true" data-numeric-decimals="2" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Probabilidade (%)</label>
-            <input id="prosProbabilidade" type="text" data-numeric="true" data-numeric-decimals="0" data-numeric-min="0" data-numeric-max="100" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Probabilidade (%)</label>
+            <input id="prosProbabilidade" type="text" data-numeric="true" data-numeric-decimals="0" data-numeric-min="0" data-numeric-max="100" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
 
 
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Próximo passo</label>
-            <input id="prosProximoPasso" data-perm="pros.next.step" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Próximo passo</label>
+            <input id="prosProximoPasso" data-perm="pros.next.step" type="text" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Para quando</label>
-            <input id="prosProximoPassoData" data-perm="pros.next.step" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <label class="ctl-rotulo text-gray-300">Para quando</label>
+            <input id="prosProximoPassoData" data-perm="pros.next.step" type="date" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
       </section>
 
       <!-- ------------------------------------------------ NOTAS -->
       <section id="panel-pros-notas" role="tabpanel" aria-labelledby="tab-pros-notas" class="px-8 py-6 hidden">
-        <label class="block text-sm font-medium text-gray-300 mb-2">Anotações</label>
-        <textarea id="prosAnotacoes" rows="12" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        <label class="ctl-rotulo text-gray-300">Anotações</label>
+        <textarea id="prosAnotacoes" rows="12" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
       </section>
     </div>
 
-    <footer class="modal-prospeccao__rodape flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10">
-      <button id="cancelarEditarProspeccao" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="salvarProspeccao" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Salvar</button>
+    <footer class="modal-prospeccao__rodape ctl-acoes justify-end px-8 py-5 border-t border-white/10">
+      <button id="cancelarEditarProspeccao" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="salvarProspeccao" class="btn-success ctl-botao min-w-[120px]">Salvar</button>
     </footer>
   </div>
 </div>

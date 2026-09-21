@@ -6,13 +6,13 @@
   campos embaixo. Não fecha clicando fora (docs/padroes-de-interface.md).
   Script: src/js/modals/pedido-emitir-nfe.js.
 -->
-<div id="emitirNfePedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="emitirNfePedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="emitirNfeTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarEmitirNfe" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button id="voltarEmitirNfe" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="emitirNfeTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</h2>
+        <h2 id="emitirNfeTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</h2>
         <p id="emitirNfeSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span id="emitirNfeAmbiente" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -28,7 +28,7 @@
             <p class="text-xs text-gray-400 mb-1">NF-e deste pedido</p>
             <p id="emitirNfeNotaTexto" class="text-sm text-white"></p>
             <div class="mt-3 flex flex-wrap gap-3">
-              <button id="emitirNfeConsultar" type="button" class="hidden btn-neutral px-4 py-2 rounded-lg text-white font-medium"><i class="fas fa-sync-alt mr-2" aria-hidden="true"></i>Consultar na SEFAZ</button>
+              <button id="emitirNfeConsultar" type="button" class="hidden btn-neutral ctl-botao text-white"><i class="fas fa-sync-alt mr-2" aria-hidden="true"></i>Consultar na SEFAZ</button>
             </div>
           </div>
 
@@ -87,11 +87,11 @@
 
           <!-- Transporte: o que se sabe na hora do embarque. -->
           <div data-emitir-nfe-campos>
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-truck mr-2" aria-hidden="true"></i>Transporte</h3>
+            <h3 class="ctl-secao text-white mb-3"><i class="fas fa-truck mr-2" aria-hidden="true"></i>Transporte</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label for="emitirNfeFrete" class="block text-sm font-medium text-gray-300 mb-2">Modalidade do frete</label>
-                <select id="emitirNfeFrete" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="emitirNfeFrete" class="ctl-rotulo text-gray-300">Modalidade do frete</label>
+                <select id="emitirNfeFrete" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="0">0 — Por conta do emitente (CIF)</option>
                   <option value="1">1 — Por conta do destinatário (FOB)</option>
                   <option value="2">2 — Por conta de terceiros</option>
@@ -101,25 +101,25 @@
                 </select>
               </div>
               <div class="md:col-span-2">
-                <label for="emitirNfeTransportadora" class="block text-sm font-medium text-gray-300 mb-2">Transportadora</label>
-                <input id="emitirNfeTransportadora" type="text" maxlength="60" placeholder="Nome da transportadora (opcional)" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="emitirNfeTransportadora" class="ctl-rotulo text-gray-300">Transportadora</label>
+                <input id="emitirNfeTransportadora" type="text" maxlength="60" placeholder="Nome da transportadora (opcional)" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="emitirNfeVolumes" class="block text-sm font-medium text-gray-300 mb-2">Volumes (qtd)</label>
-                <input id="emitirNfeVolumes" type="text" inputmode="numeric" placeholder="ex.: 2" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="emitirNfeVolumes" class="ctl-rotulo text-gray-300">Volumes (qtd)</label>
+                <input id="emitirNfeVolumes" type="text" inputmode="numeric" placeholder="ex.: 2" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="emitirNfeEspecie" class="block text-sm font-medium text-gray-300 mb-2">Espécie</label>
-                <input id="emitirNfeEspecie" type="text" maxlength="60" placeholder="ex.: Caixa, Volume, Peça" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="emitirNfeEspecie" class="ctl-rotulo text-gray-300">Espécie</label>
+                <input id="emitirNfeEspecie" type="text" maxlength="60" placeholder="ex.: Caixa, Volume, Peça" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label for="emitirNfePesoBruto" class="block text-sm font-medium text-gray-300 mb-2">Peso bruto (kg)</label>
-                  <input id="emitirNfePesoBruto" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="emitirNfePesoBruto" class="ctl-rotulo text-gray-300">Peso bruto (kg)</label>
+                  <input id="emitirNfePesoBruto" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div>
-                  <label for="emitirNfePesoLiquido" class="block text-sm font-medium text-gray-300 mb-2">Peso líq. (kg)</label>
-                  <input id="emitirNfePesoLiquido" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="emitirNfePesoLiquido" class="ctl-rotulo text-gray-300">Peso líq. (kg)</label>
+                  <input id="emitirNfePesoLiquido" type="text" inputmode="decimal" placeholder="0,000" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
               </div>
             </div>
@@ -145,11 +145,11 @@
 
           <!-- Pagamento e informações da nota. -->
           <div data-emitir-nfe-campos>
-            <h3 class="text-sm font-semibold text-white mb-3"><i class="fas fa-money-check-alt mr-2" aria-hidden="true"></i>Pagamento e informações</h3>
+            <h3 class="ctl-secao text-white mb-3"><i class="fas fa-money-check-alt mr-2" aria-hidden="true"></i>Pagamento e informações</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label for="emitirNfePagamento" class="block text-sm font-medium text-gray-300 mb-2">Forma de pagamento (NF-e)</label>
-                <select id="emitirNfePagamento" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="emitirNfePagamento" class="ctl-rotulo text-gray-300">Forma de pagamento (NF-e)</label>
+                <select id="emitirNfePagamento" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="15">15 — Boleto bancário</option>
                   <option value="17">17 — PIX</option>
                   <option value="01">01 — Dinheiro</option>
@@ -165,8 +165,8 @@
                 <p id="emitirNfePagamentoOrigem" class="mt-2 text-xs text-gray-400"></p>
               </div>
               <div class="md:col-span-2">
-                <label for="emitirNfeInformacoes" class="block text-sm font-medium text-gray-300 mb-2">Informações complementares</label>
-                <textarea id="emitirNfeInformacoes" rows="3" maxlength="2000" placeholder="Opcional — sai no DANFE (ex.: número do pedido do cliente, referência da obra)" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                <label for="emitirNfeInformacoes" class="ctl-rotulo text-gray-300">Informações complementares</label>
+                <textarea id="emitirNfeInformacoes" rows="3" maxlength="2000" placeholder="Opcional — sai no DANFE (ex.: número do pedido do cliente, referência da obra)" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
               </div>
             </div>
           </div>
@@ -176,12 +176,12 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex flex-wrap items-center justify-end gap-4 flex-shrink-0">
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
       <span id="emitirNfeRodapeAviso" class="text-xs text-gray-400 mr-auto"></span>
-      <button id="cancelarEmitirNfe" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button id="cancelarEmitirNfe" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
       <!-- As guardas ficam ESCRITAS no HTML (o permissoes.js só aplica em nó inserido). -->
-      <button id="enviarSemNfe" type="button" data-perm="ped.status.ship" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Enviar sem NF-e</button>
-      <button id="emitirNfeConfirmar" type="button" data-perm="financeiro.nfe.emit" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[200px]"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</button>
+      <button id="enviarSemNfe" type="button" data-perm="ped.status.ship" class="btn-neutral ctl-botao text-white">Enviar sem NF-e</button>
+      <button id="emitirNfeConfirmar" type="button" data-perm="financeiro.nfe.emit" class="btn-success ctl-botao min-w-[200px]"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</button>
     </footer>
   </div>
 </div>

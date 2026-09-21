@@ -1,4 +1,4 @@
-<div id="concluirPassoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+<div id="concluirPassoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
   <!--
     Mesmo tamanho fixo do modal de Detalhes (72rem x 90vh), pela classe
     .modal-prospeccao. As utilitarias que estavam aqui — max-w-xl, max-h-[90vh],
@@ -7,8 +7,8 @@
   -->
   <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <header class="modal-prospeccao__topo grid grid-cols-3 items-center px-8 py-5 border-b border-white/10">
-      <button id="voltarConcluirPasso" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
-      <h2 class="text-lg font-semibold text-white text-center">Concluir Passo Planejado</h2>
+      <button id="voltarConcluirPasso" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 class="ctl-modal-titulo text-white text-center">Concluir Passo Planejado</h2>
       <span></span>
     </header>
 
@@ -20,11 +20,11 @@
       </div>
 
       <div>
-        <label for="concluirNota" class="block text-sm font-medium text-gray-300 mb-2">
+        <label for="concluirNota" class="ctl-rotulo text-gray-300">
           O que aconteceu? <span class="text-[var(--color-red)]">*</span>
         </label>
         <textarea id="concluirNota" rows="3" placeholder="Reunião realizada. Cliente aprovou o escopo e pediu a proposta formal."
-                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
         <p class="mt-2 text-xs text-gray-400">
           Entra na timeline como <strong>Atividade realizada</strong>, guardando o passo combinado ao lado do que foi feito.
         </p>
@@ -32,15 +32,15 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label for="concluirContato" class="block text-sm font-medium text-gray-300 mb-2">Com quem</label>
-          <select id="concluirContato" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+          <label for="concluirContato" class="ctl-rotulo text-gray-300">Com quem</label>
+          <select id="concluirContato" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
             <option value="">Não especificado</option>
           </select>
         </div>
         <div>
-          <label for="concluirData" class="block text-sm font-medium text-gray-300 mb-2">Quando aconteceu</label>
+          <label for="concluirData" class="ctl-rotulo text-gray-300">Quando aconteceu</label>
           <input id="concluirData" type="datetime-local"
-                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                 class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
         </div>
       </div>
 
@@ -62,9 +62,9 @@
             <span class="block text-sm font-medium text-white">Avança no funil</span>
             <span class="block text-xs text-gray-400 mb-2">Move para outra etapa</span>
             <select id="concluirEtapa" disabled
-                    class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
+                    class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
             <textarea id="concluirMotivoPerda" rows="2" placeholder="Motivo da perda"
-                      class="hidden mt-2 w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white text-sm placeholder-gray-400 resize-none"></textarea>
+                      class="hidden mt-2 w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 resize-none"></textarea>
           </span>
         </label>
 
@@ -81,22 +81,22 @@
         <p class="text-sm text-gray-400">Já combinou o próximo passo? Registre agora.</p>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="concluirProximoPasso" class="block text-sm font-medium text-gray-300 mb-2">Próximo passo</label>
+            <label for="concluirProximoPasso" class="ctl-rotulo text-gray-300">Próximo passo</label>
             <input id="concluirProximoPasso" data-perm="pros.next.step" type="text" maxlength="255" placeholder="Enviar proposta revisada"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="concluirProximoPassoData" class="block text-sm font-medium text-gray-300 mb-2">Para quando</label>
+            <label for="concluirProximoPassoData" class="ctl-rotulo text-gray-300">Para quando</label>
             <input id="concluirProximoPassoData" data-perm="pros.next.step" type="date"
-                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
       </div>
     </form>
 
-    <footer class="modal-prospeccao__rodape flex justify-end gap-4 px-8 py-4 border-t border-white/10">
-      <button id="cancelarConcluirPasso" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
-      <button type="button" id="confirmarConcluirPasso" data-perm="pros.interaction.add" class="btn-success px-6 py-2 rounded-lg font-medium">Concluir</button>
+    <footer class="modal-prospeccao__rodape ctl-acoes justify-end px-8 py-4 border-t border-white/10">
+      <button id="cancelarConcluirPasso" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
+      <button type="button" id="confirmarConcluirPasso" data-perm="pros.interaction.add" class="btn-success ctl-botao">Concluir</button>
     </footer>
   </div>
 </div>

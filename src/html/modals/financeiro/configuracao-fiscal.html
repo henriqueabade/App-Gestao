@@ -5,13 +5,13 @@
   demais). Dados reais de GET/PUT /api/fiscal/configuracao.
   Script: src/js/modals/financeiro-modais.js (montador finConfiguracaoFiscal).
 -->
-<div id="finConfiguracaoFiscalOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true">
+<div id="finConfiguracaoFiscalOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="finCfgTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button type="button" data-fin-fechar class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="finCfgTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-cog mr-2" aria-hidden="true"></i>Configuração fiscal</h2>
+        <h2 id="finCfgTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-cog mr-2" aria-hidden="true"></i>Configuração fiscal</h2>
         <p class="text-xs text-gray-300 truncate">Emitente, numeração, certificado e SEFAZ</p>
       </div>
       <span id="finCfgAmbienteTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -35,25 +35,25 @@
             <p class="text-xs text-gray-400 mb-4">A SEFAZ numera homologação e produção em separado. Em homologação as notas não têm valor fiscal.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="finCfg_ambiente" class="block text-sm font-medium text-gray-300 mb-2">Ambiente (vale para todos)</label>
-                <select id="finCfg_ambiente" data-fin-cfg="ambiente" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCfg_ambiente" class="ctl-rotulo text-gray-300">Ambiente (vale para todos)</label>
+                <select id="finCfg_ambiente" data-fin-cfg="ambiente" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="homologacao">Homologação (testes, sem valor fiscal)</option>
                   <option value="producao">Produção (notas reais)</option>
                 </select>
                 <p id="finCfgTravaMaquina" class="hidden mt-2 text-xs" style="color: var(--color-primary-light)">Esta máquina está presa em homologação pelo .env (NFE_AMBIENTE).</p>
               </div>
               <div>
-                <label for="finCfg_serie_homologacao" class="block text-sm font-medium text-gray-300 mb-2">Homologação: série / próximo nº</label>
+                <label for="finCfg_serie_homologacao" class="ctl-rotulo text-gray-300">Homologação: série / próximo nº</label>
                 <div class="flex gap-2">
-                  <input id="finCfg_serie_homologacao" data-fin-cfg="serie_homologacao" type="number" min="1" max="999" class="w-24 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  <input id="finCfg_proximo_numero_homologacao" data-fin-cfg="proximo_numero_homologacao" type="number" min="1" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <input id="finCfg_serie_homologacao" data-fin-cfg="serie_homologacao" type="number" min="1" max="999" class="w-24 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <input id="finCfg_proximo_numero_homologacao" data-fin-cfg="proximo_numero_homologacao" type="number" min="1" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
               </div>
               <div>
-                <label for="finCfg_serie_producao" class="block text-sm font-medium text-gray-300 mb-2">Produção: série / próximo nº</label>
+                <label for="finCfg_serie_producao" class="ctl-rotulo text-gray-300">Produção: série / próximo nº</label>
                 <div class="flex gap-2">
-                  <input id="finCfg_serie_producao" data-fin-cfg="serie_producao" type="number" min="1" max="999" class="w-24 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  <input id="finCfg_proximo_numero_producao" data-fin-cfg="proximo_numero_producao" type="number" min="1" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <input id="finCfg_serie_producao" data-fin-cfg="serie_producao" type="number" min="1" max="999" class="w-24 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <input id="finCfg_proximo_numero_producao" data-fin-cfg="proximo_numero_producao" type="number" min="1" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <p class="mt-2 text-xs text-gray-400">Continue a numeração do emissor anterior: a última NF autorizada lá + 1 (ex.: última 361 → próximo 362).</p>
               </div>
@@ -62,7 +62,7 @@
               <i class="fas fa-lock" aria-hidden="true"></i>
               <div class="flex-1 min-w-0">
                 <p class="mb-2">Ligar a produção passa a emitir notas com valor fiscal para todos os usuários. Digite <strong>PRODUCAO</strong> para confirmar ao salvar.</p>
-                <input id="finCfgConfirmacao" type="text" placeholder="PRODUCAO" autocomplete="off" class="w-full md:w-64 bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="finCfgConfirmacao" type="text" placeholder="PRODUCAO" autocomplete="off" class="w-full md:w-64 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -88,15 +88,15 @@
               </div>
               <div id="finCfgCertEditar" class="space-y-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-300 mb-2">Arquivo (.pfx)</label>
+                  <label class="ctl-rotulo text-gray-300">Arquivo (.pfx)</label>
                   <div class="flex gap-2">
-                    <input id="finCfgCertCaminho" type="text" readonly placeholder="Nenhum arquivo escolhido" class="flex-1 min-w-0 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 fin-somente-leitura" />
-                    <button id="finCfgCertEscolher" type="button" class="btn-neutral px-4 py-3 rounded-lg text-white font-medium whitespace-nowrap"><i class="fas fa-folder-open mr-2" aria-hidden="true"></i>Escolher</button>
+                    <input id="finCfgCertCaminho" type="text" readonly placeholder="Nenhum arquivo escolhido" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 fin-somente-leitura" />
+                    <button id="finCfgCertEscolher" type="button" class="btn-neutral ctl-botao text-white"><i class="fas fa-folder-open mr-2" aria-hidden="true"></i>Escolher</button>
                   </div>
                 </div>
                 <div>
-                  <label for="finCfgCertSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do certificado</label>
-                  <input id="finCfgCertSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCfgCertSenha" class="ctl-rotulo text-gray-300">Senha do certificado</label>
+                  <input id="finCfgCertSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div role="radiogroup" aria-label="Onde guardar o certificado" class="flex flex-wrap gap-5">
                   <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgCertDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco — todas as máquinas</label>
@@ -104,8 +104,8 @@
                 </div>
                 <p id="finCfgCertDestinoAviso" class="hidden text-xs" style="color: var(--color-primary-light)">Para guardar no banco, defina SEGREDOS_CHAVE_MESTRA no .env desta máquina (veja .env.example).</p>
                 <div class="flex flex-wrap gap-3">
-                  <button id="finCfgCertGuardar" type="button" class="btn-success px-5 py-2 rounded-lg font-medium"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar certificado</button>
-                  <button id="finCfgCertRemover" type="button" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Remover</button>
+                  <button id="finCfgCertGuardar" type="button" class="btn-success ctl-botao"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar certificado</button>
+                  <button id="finCfgCertRemover" type="button" class="btn-danger ctl-botao text-white">Remover</button>
                 </div>
               </div>
             </div>
@@ -116,7 +116,7 @@
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-satellite-dish" aria-hidden="true"></i>Conexão com a SEFAZ-MG</h3>
             <p class="text-xs text-gray-400 mb-4">Consulta o Status do Serviço com o certificado deste computador. É a prova de que certificado, senha e endereço estão certos.</p>
             <div class="flex flex-wrap items-center gap-3">
-              <button id="finCfgTestarSefaz" type="button" class="btn-primary text-white px-5 py-2 rounded-lg font-medium"><i class="fas fa-plug mr-2" aria-hidden="true"></i>Testar conexão</button>
+              <button id="finCfgTestarSefaz" type="button" class="btn-primary ctl-botao text-white"><i class="fas fa-plug mr-2" aria-hidden="true"></i>Testar conexão</button>
               <span id="finCfgSefazResultado" class="text-sm text-gray-300"></span>
             </div>
             <dl id="finCfgSefazDetalhe" class="hidden fin-dl mt-3 max-w-md">
@@ -132,10 +132,10 @@
               <p class="text-xs text-gray-400 mb-4">Monta, assina e envia a NF-e de um pedido real para a SEFAZ de <strong>testes</strong> — sem valor fiscal. Serve para conferir cadastro, certificado e numeração antes de ligar a produção. A nota fica registrada no pedido como homologação.</p>
               <div class="flex flex-wrap items-end gap-3">
                 <div>
-                  <label for="finCfgTestePedido" class="block text-sm font-medium text-gray-300 mb-2">Nº do pedido</label>
-                  <input id="finCfgTestePedido" type="text" inputmode="numeric" placeholder="ex.: 2548" autocomplete="off" class="w-40 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCfgTestePedido" class="ctl-rotulo text-gray-300">Nº do pedido</label>
+                  <input id="finCfgTestePedido" type="text" inputmode="numeric" placeholder="ex.: 2548" autocomplete="off" class="w-40 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
-                <button id="finCfgTesteEmitir" type="button" data-perm="financeiro.nfe.emit" class="btn-primary text-white px-5 py-3 rounded-lg font-medium"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e de teste</button>
+                <button id="finCfgTesteEmitir" type="button" data-perm="financeiro.nfe.emit" class="btn-primary ctl-botao text-white"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Emitir NF-e de teste</button>
               </div>
               <div id="finCfgTesteResultado" class="hidden mt-4 text-sm" role="status"></div>
             </div>
@@ -146,32 +146,32 @@
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-building" aria-hidden="true"></i>Emitente</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div class="md:col-span-2">
-                <label for="finCfg_razao_social" class="block text-sm font-medium text-gray-300 mb-2">Razão social <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_razao_social" data-fin-cfg="razao_social" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_razao_social" class="ctl-rotulo text-gray-300">Razão social <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_razao_social" data-fin-cfg="razao_social" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_nome_fantasia" class="block text-sm font-medium text-gray-300 mb-2">Nome fantasia</label>
-                <input id="finCfg_nome_fantasia" data-fin-cfg="nome_fantasia" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_nome_fantasia" class="ctl-rotulo text-gray-300">Nome fantasia</label>
+                <input id="finCfg_nome_fantasia" data-fin-cfg="nome_fantasia" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cnpj" class="block text-sm font-medium text-gray-300 mb-2">CNPJ <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_cnpj" data-fin-cfg="cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cnpj" class="ctl-rotulo text-gray-300">CNPJ <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_cnpj" data-fin-cfg="cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_inscricao_estadual" class="block text-sm font-medium text-gray-300 mb-2">Inscrição estadual <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_inscricao_estadual" data-fin-cfg="inscricao_estadual" type="text" inputmode="numeric" maxlength="14" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_inscricao_estadual" class="ctl-rotulo text-gray-300">Inscrição estadual <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_inscricao_estadual" data-fin-cfg="inscricao_estadual" type="text" inputmode="numeric" maxlength="14" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_inscricao_municipal" class="block text-sm font-medium text-gray-300 mb-2">Inscrição municipal</label>
-                <input id="finCfg_inscricao_municipal" data-fin-cfg="inscricao_municipal" type="text" maxlength="15" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_inscricao_municipal" class="ctl-rotulo text-gray-300">Inscrição municipal</label>
+                <input id="finCfg_inscricao_municipal" data-fin-cfg="inscricao_municipal" type="text" maxlength="15" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cnae" class="block text-sm font-medium text-gray-300 mb-2">CNAE</label>
-                <input id="finCfg_cnae" data-fin-cfg="cnae" type="text" inputmode="numeric" maxlength="7" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cnae" class="ctl-rotulo text-gray-300">CNAE</label>
+                <input id="finCfg_cnae" data-fin-cfg="cnae" type="text" inputmode="numeric" maxlength="7" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_crt" class="block text-sm font-medium text-gray-300 mb-2">Regime tributário (CRT) <span class="fin-obrigatorio">*</span></label>
-                <select id="finCfg_crt" data-fin-cfg="crt" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCfg_crt" class="ctl-rotulo text-gray-300">Regime tributário (CRT) <span class="fin-obrigatorio">*</span></label>
+                <select id="finCfg_crt" data-fin-cfg="crt" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="1">1 — Simples Nacional</option>
                   <option value="2">2 — Simples Nacional, excesso de sublimite</option>
                   <option value="3">3 — Regime normal</option>
@@ -179,44 +179,44 @@
                 </select>
               </div>
               <div>
-                <label for="finCfg_telefone" class="block text-sm font-medium text-gray-300 mb-2">Telefone</label>
-                <input id="finCfg_telefone" data-fin-cfg="telefone" type="text" inputmode="numeric" maxlength="14" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_telefone" class="ctl-rotulo text-gray-300">Telefone</label>
+                <input id="finCfg_telefone" data-fin-cfg="telefone" type="text" inputmode="numeric" maxlength="14" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_logradouro" class="block text-sm font-medium text-gray-300 mb-2">Logradouro <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_logradouro" data-fin-cfg="logradouro" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_logradouro" class="ctl-rotulo text-gray-300">Logradouro <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_logradouro" data-fin-cfg="logradouro" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_numero" class="block text-sm font-medium text-gray-300 mb-2">Número <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_numero" data-fin-cfg="numero" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_numero" class="ctl-rotulo text-gray-300">Número <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_numero" data-fin-cfg="numero" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_complemento" class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
-                <input id="finCfg_complemento" data-fin-cfg="complemento" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_complemento" class="ctl-rotulo text-gray-300">Complemento</label>
+                <input id="finCfg_complemento" data-fin-cfg="complemento" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_bairro" class="block text-sm font-medium text-gray-300 mb-2">Bairro <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_bairro" data-fin-cfg="bairro" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_bairro" class="ctl-rotulo text-gray-300">Bairro <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_bairro" data-fin-cfg="bairro" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cep" class="block text-sm font-medium text-gray-300 mb-2">CEP <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_cep" data-fin-cfg="cep" type="text" inputmode="numeric" maxlength="9" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cep" class="ctl-rotulo text-gray-300">CEP <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_cep" data-fin-cfg="cep" type="text" inputmode="numeric" maxlength="9" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_municipio" class="block text-sm font-medium text-gray-300 mb-2">Município <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_municipio" data-fin-cfg="municipio" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_municipio" class="ctl-rotulo text-gray-300">Município <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_municipio" data-fin-cfg="municipio" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_codigo_municipio" class="block text-sm font-medium text-gray-300 mb-2">Código IBGE <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_codigo_municipio" data-fin-cfg="codigo_municipio" type="text" inputmode="numeric" maxlength="7" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_codigo_municipio" class="ctl-rotulo text-gray-300">Código IBGE <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_codigo_municipio" data-fin-cfg="codigo_municipio" type="text" inputmode="numeric" maxlength="7" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_uf" class="block text-sm font-medium text-gray-300 mb-2">UF <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_uf" data-fin-cfg="uf" type="text" maxlength="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white uppercase focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_uf" class="ctl-rotulo text-gray-300">UF <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_uf" data-fin-cfg="uf" type="text" maxlength="2" class="w-full ctl-campo bg-input border border-inputBorder text-white uppercase focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_email" class="block text-sm font-medium text-gray-300 mb-2">E-mail do emitente</label>
-                <input id="finCfg_email" data-fin-cfg="email" type="email" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_email" class="ctl-rotulo text-gray-300">E-mail do emitente</label>
+                <input id="finCfg_email" data-fin-cfg="email" type="email" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -227,40 +227,40 @@
             <p class="text-xs text-gray-400 mb-4">Valores confirmados pelo contador. A peça pode sobrepor CFOP e CSOSN no próprio cadastro.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div class="md:col-span-3">
-                <label for="finCfg_natureza_operacao" class="block text-sm font-medium text-gray-300 mb-2">Natureza da operação <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_natureza_operacao" data-fin-cfg="natureza_operacao" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_natureza_operacao" class="ctl-rotulo text-gray-300">Natureza da operação <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_natureza_operacao" data-fin-cfg="natureza_operacao" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cfop_dentro_uf" class="block text-sm font-medium text-gray-300 mb-2">CFOP dentro de MG <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_cfop_dentro_uf" data-fin-cfg="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cfop_dentro_uf" class="ctl-rotulo text-gray-300">CFOP dentro de MG <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_cfop_dentro_uf" data-fin-cfg="cfop_dentro_uf" type="text" inputmode="numeric" maxlength="4" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cfop_fora_uf" class="block text-sm font-medium text-gray-300 mb-2">CFOP fora de MG <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_cfop_fora_uf" data-fin-cfg="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cfop_fora_uf" class="ctl-rotulo text-gray-300">CFOP fora de MG <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_cfop_fora_uf" data-fin-cfg="cfop_fora_uf" type="text" inputmode="numeric" maxlength="4" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_csosn" class="block text-sm font-medium text-gray-300 mb-2">CSOSN (ICMS) <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_csosn" data-fin-cfg="csosn" type="text" inputmode="numeric" maxlength="3" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_csosn" class="ctl-rotulo text-gray-300">CSOSN (ICMS) <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_csosn" data-fin-cfg="csosn" type="text" inputmode="numeric" maxlength="3" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_pcred_sn" class="block text-sm font-medium text-gray-300 mb-2">Alíquota de crédito do Simples (%)</label>
-                <input id="finCfg_pcred_sn" data-fin-cfg="pcred_sn" type="text" inputmode="decimal" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_pcred_sn" class="ctl-rotulo text-gray-300">Alíquota de crédito do Simples (%)</label>
+                <input id="finCfg_pcred_sn" data-fin-cfg="pcred_sn" type="text" inputmode="decimal" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_pis_cst" class="block text-sm font-medium text-gray-300 mb-2">CST PIS <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_pis_cst" data-fin-cfg="pis_cst" type="text" inputmode="numeric" maxlength="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_pis_cst" class="ctl-rotulo text-gray-300">CST PIS <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_pis_cst" data-fin-cfg="pis_cst" type="text" inputmode="numeric" maxlength="2" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_cofins_cst" class="block text-sm font-medium text-gray-300 mb-2">CST COFINS <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_cofins_cst" data-fin-cfg="cofins_cst" type="text" inputmode="numeric" maxlength="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_cofins_cst" class="ctl-rotulo text-gray-300">CST COFINS <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_cofins_cst" data-fin-cfg="cofins_cst" type="text" inputmode="numeric" maxlength="2" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_unidade_padrao" class="block text-sm font-medium text-gray-300 mb-2">Unidade padrão <span class="fin-obrigatorio">*</span></label>
-                <input id="finCfg_unidade_padrao" data-fin-cfg="unidade_padrao" type="text" maxlength="6" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_unidade_padrao" class="ctl-rotulo text-gray-300">Unidade padrão <span class="fin-obrigatorio">*</span></label>
+                <input id="finCfg_unidade_padrao" data-fin-cfg="unidade_padrao" type="text" maxlength="6" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_modalidade_frete_padrao" class="block text-sm font-medium text-gray-300 mb-2">Frete padrão</label>
-                <select id="finCfg_modalidade_frete_padrao" data-fin-cfg="modalidade_frete_padrao" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCfg_modalidade_frete_padrao" class="ctl-rotulo text-gray-300">Frete padrão</label>
+                <select id="finCfg_modalidade_frete_padrao" data-fin-cfg="modalidade_frete_padrao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="0">0 — Por conta do emitente</option>
                   <option value="1">1 — Por conta do destinatário</option>
                   <option value="2">2 — Por conta de terceiros</option>
@@ -270,8 +270,8 @@
                 </select>
               </div>
               <div class="md:col-span-3">
-                <label for="finCfg_informacoes_complementares" class="block text-sm font-medium text-gray-300 mb-2">Informações complementares (saem em toda NF-e)</label>
-                <textarea id="finCfg_informacoes_complementares" data-fin-cfg="informacoes_complementares" rows="3" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                <label for="finCfg_informacoes_complementares" class="ctl-rotulo text-gray-300">Informações complementares (saem em toda NF-e)</label>
+                <textarea id="finCfg_informacoes_complementares" data-fin-cfg="informacoes_complementares" rows="3" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
               </div>
             </div>
           </div>
@@ -282,54 +282,54 @@
             <p class="text-xs text-gray-400 mb-4">O DANFE (PDF) e o XML vão para o cliente pelo servidor abaixo. O servidor vale para todos; a senha fica só neste computador, cifrada pelo Windows.</p>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div class="md:col-span-2">
-                <label for="finCfg_smtp_host" class="block text-sm font-medium text-gray-300 mb-2">Servidor SMTP</label>
-                <input id="finCfg_smtp_host" data-fin-cfg="smtp_host" type="text" maxlength="120" placeholder="smtp.gmail.com" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_smtp_host" class="ctl-rotulo text-gray-300">Servidor SMTP</label>
+                <input id="finCfg_smtp_host" data-fin-cfg="smtp_host" type="text" maxlength="120" placeholder="smtp.gmail.com" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_smtp_porta" class="block text-sm font-medium text-gray-300 mb-2">Porta</label>
-                <input id="finCfg_smtp_porta" data-fin-cfg="smtp_porta" type="number" min="1" max="65535" placeholder="587" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_smtp_porta" class="ctl-rotulo text-gray-300">Porta</label>
+                <input id="finCfg_smtp_porta" data-fin-cfg="smtp_porta" type="number" min="1" max="65535" placeholder="587" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_smtp_seguro" class="block text-sm font-medium text-gray-300 mb-2">Conexão</label>
-                <select id="finCfg_smtp_seguro" data-fin-cfg="smtp_seguro" class="w-full appearance-none select-arrow bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <label for="finCfg_smtp_seguro" class="ctl-rotulo text-gray-300">Conexão</label>
+                <select id="finCfg_smtp_seguro" data-fin-cfg="smtp_seguro" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
                   <option value="false">STARTTLS (porta 587)</option>
                   <option value="true">TLS direto (porta 465)</option>
                 </select>
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_smtp_usuario" class="block text-sm font-medium text-gray-300 mb-2">Usuário (login)</label>
-                <input id="finCfg_smtp_usuario" data-fin-cfg="smtp_usuario" type="text" maxlength="120" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_smtp_usuario" class="ctl-rotulo text-gray-300">Usuário (login)</label>
+                <input id="finCfg_smtp_usuario" data-fin-cfg="smtp_usuario" type="text" maxlength="120" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_smtp_remetente" class="block text-sm font-medium text-gray-300 mb-2">E-mail remetente</label>
-                <input id="finCfg_smtp_remetente" data-fin-cfg="smtp_remetente" type="email" maxlength="120" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_smtp_remetente" class="ctl-rotulo text-gray-300">E-mail remetente</label>
+                <input id="finCfg_smtp_remetente" data-fin-cfg="smtp_remetente" type="email" maxlength="120" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_smtp_nome_remetente" class="block text-sm font-medium text-gray-300 mb-2">Nome do remetente</label>
-                <input id="finCfg_smtp_nome_remetente" data-fin-cfg="smtp_nome_remetente" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_smtp_nome_remetente" class="ctl-rotulo text-gray-300">Nome do remetente</label>
+                <input id="finCfg_smtp_nome_remetente" data-fin-cfg="smtp_nome_remetente" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-2">
-                <label for="finCfg_email_copia" class="block text-sm font-medium text-gray-300 mb-2">Cópia de toda NF-e para</label>
-                <input id="finCfg_email_copia" data-fin-cfg="email_copia" type="text" maxlength="120" placeholder="financeiro@empresa.com.br (opcional)" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_email_copia" class="ctl-rotulo text-gray-300">Cópia de toda NF-e para</label>
+                <input id="finCfg_email_copia" data-fin-cfg="email_copia" type="text" maxlength="120" placeholder="financeiro@empresa.com.br (opcional)" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="md:col-span-4">
-                <label for="finCfg_email_mensagem_padrao" class="block text-sm font-medium text-gray-300 mb-2">Mensagem padrão do e-mail</label>
-                <textarea id="finCfg_email_mensagem_padrao" data-fin-cfg="email_mensagem_padrao" rows="3" placeholder="Opcional — se vazio, o sistema escreve uma mensagem simples com o número da nota" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+                <label for="finCfg_email_mensagem_padrao" class="ctl-rotulo text-gray-300">Mensagem padrão do e-mail</label>
+                <textarea id="finCfg_email_mensagem_padrao" data-fin-cfg="email_mensagem_padrao" rows="3" placeholder="Opcional — se vazio, o sistema escreve uma mensagem simples com o número da nota" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
               </div>
             </div>
             <div id="finCfgEmailSenhaBloco" class="mt-5 pt-4 border-t border-inputBorder">
               <div class="flex flex-wrap items-end gap-3">
                 <div>
-                  <label for="finCfgEmailSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha do e-mail</label>
-                  <input id="finCfgEmailSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-72 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                  <label for="finCfgEmailSenha" class="ctl-rotulo text-gray-300">Senha do e-mail</label>
+                  <input id="finCfgEmailSenha" type="password" autocomplete="off" placeholder="••••••••" class="w-72 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
                 </div>
                 <div role="radiogroup" aria-label="Onde guardar a senha do e-mail" class="flex flex-wrap gap-4 pb-3">
                   <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgEmailDestino" value="banco" style="accent-color: var(--color-primary)" /> No banco</label>
                   <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300"><input type="radio" name="finCfgEmailDestino" value="computador" style="accent-color: var(--color-primary)" /> Só aqui</label>
                 </div>
-                <button id="finCfgEmailGuardar" type="button" class="btn-success px-5 py-3 rounded-lg font-medium"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar senha</button>
-                <button id="finCfgEmailRemover" type="button" class="btn-danger px-5 py-3 rounded-lg text-white font-medium">Remover</button>
-                <button id="finCfgEmailTestar" type="button" class="btn-primary text-white px-5 py-3 rounded-lg font-medium"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Enviar e-mail de teste</button>
+                <button id="finCfgEmailGuardar" type="button" class="btn-success ctl-botao"><i class="fas fa-save mr-2" aria-hidden="true"></i>Guardar senha</button>
+                <button id="finCfgEmailRemover" type="button" class="btn-danger ctl-botao text-white">Remover</button>
+                <button id="finCfgEmailTestar" type="button" class="btn-primary ctl-botao text-white"><i class="fas fa-paper-plane mr-2" aria-hidden="true"></i>Enviar e-mail de teste</button>
               </div>
               <p id="finCfgEmailEstado" class="mt-3 text-xs text-gray-400" role="status"></p>
             </div>
@@ -341,22 +341,22 @@
             <p class="text-xs text-gray-400 mb-4">Números pulados (uma nota que nunca foi autorizada e não será) precisam ser inutilizados na SEFAZ. Vale no ambiente atual (<span id="finCfgInutAmbiente">—</span>). Não dá para inutilizar número que já tem nota.</p>
             <div class="flex flex-wrap items-end gap-3">
               <div>
-                <label for="finCfgInutSerie" class="block text-sm font-medium text-gray-300 mb-2">Série</label>
-                <input id="finCfgInutSerie" type="text" inputmode="numeric" class="w-20 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfgInutSerie" class="ctl-rotulo text-gray-300">Série</label>
+                <input id="finCfgInutSerie" type="text" inputmode="numeric" class="w-20 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfgInutInicio" class="block text-sm font-medium text-gray-300 mb-2">Do nº</label>
-                <input id="finCfgInutInicio" type="text" inputmode="numeric" class="w-32 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfgInutInicio" class="ctl-rotulo text-gray-300">Do nº</label>
+                <input id="finCfgInutInicio" type="text" inputmode="numeric" class="w-32 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfgInutFim" class="block text-sm font-medium text-gray-300 mb-2">Até o nº</label>
-                <input id="finCfgInutFim" type="text" inputmode="numeric" class="w-32 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfgInutFim" class="ctl-rotulo text-gray-300">Até o nº</label>
+                <input id="finCfgInutFim" type="text" inputmode="numeric" class="w-32 ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="flex-1 min-w-[16rem]">
-                <label for="finCfgInutJustificativa" class="block text-sm font-medium text-gray-300 mb-2">Justificativa (15 a 255 caracteres)</label>
-                <input id="finCfgInutJustificativa" type="text" maxlength="255" placeholder="Ex.: Numeração pulada por falha na emissão" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfgInutJustificativa" class="ctl-rotulo text-gray-300">Justificativa (15 a 255 caracteres)</label>
+                <input id="finCfgInutJustificativa" type="text" maxlength="255" placeholder="Ex.: Numeração pulada por falha na emissão" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
-              <button id="finCfgInutilizar" type="button" data-perm="financeiro.nfe.cancel" class="btn-danger px-5 py-3 rounded-lg text-white font-medium"><i class="fas fa-eraser mr-2" aria-hidden="true"></i>Inutilizar</button>
+              <button id="finCfgInutilizar" type="button" data-perm="financeiro.nfe.cancel" class="btn-danger ctl-botao text-white"><i class="fas fa-eraser mr-2" aria-hidden="true"></i>Inutilizar</button>
             </div>
             <div id="finCfgInutResultado" class="hidden mt-3 text-sm" role="status"></div>
             <div id="finCfgInutLista" class="hidden mt-4 glass-surface rounded-xl border border-white/10 overflow-hidden">
@@ -375,20 +375,20 @@
             <h3 class="fin-cfg-secao__titulo"><i class="fas fa-user-cog" aria-hidden="true"></i>Responsável técnico (opcional)</h3>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
-                <label for="finCfg_resp_tec_cnpj" class="block text-sm font-medium text-gray-300 mb-2">CNPJ</label>
-                <input id="finCfg_resp_tec_cnpj" data-fin-cfg="resp_tec_cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_resp_tec_cnpj" class="ctl-rotulo text-gray-300">CNPJ</label>
+                <input id="finCfg_resp_tec_cnpj" data-fin-cfg="resp_tec_cnpj" type="text" inputmode="numeric" maxlength="18" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_resp_tec_contato" class="block text-sm font-medium text-gray-300 mb-2">Contato</label>
-                <input id="finCfg_resp_tec_contato" data-fin-cfg="resp_tec_contato" type="text" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_resp_tec_contato" class="ctl-rotulo text-gray-300">Contato</label>
+                <input id="finCfg_resp_tec_contato" data-fin-cfg="resp_tec_contato" type="text" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_resp_tec_email" class="block text-sm font-medium text-gray-300 mb-2">E-mail</label>
-                <input id="finCfg_resp_tec_email" data-fin-cfg="resp_tec_email" type="email" maxlength="60" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_resp_tec_email" class="ctl-rotulo text-gray-300">E-mail</label>
+                <input id="finCfg_resp_tec_email" data-fin-cfg="resp_tec_email" type="email" maxlength="60" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label for="finCfg_resp_tec_fone" class="block text-sm font-medium text-gray-300 mb-2">Telefone</label>
-                <input id="finCfg_resp_tec_fone" data-fin-cfg="resp_tec_fone" type="text" inputmode="numeric" maxlength="14" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label for="finCfg_resp_tec_fone" class="ctl-rotulo text-gray-300">Telefone</label>
+                <input id="finCfg_resp_tec_fone" data-fin-cfg="resp_tec_fone" type="text" inputmode="numeric" maxlength="14" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -400,9 +400,9 @@
 
     <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-between gap-4 flex-shrink-0">
       <span id="finCfgRodapeAviso" class="text-xs text-gray-400"></span>
-      <div class="flex items-center gap-4">
-        <button type="button" data-fin-fechar class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-        <button id="finCfgSalvar" type="button" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]"><i class="fas fa-save mr-2" aria-hidden="true"></i>Salvar</button>
+      <div class="ctl-acoes">
+        <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+        <button id="finCfgSalvar" type="button" class="btn-success ctl-botao min-w-[120px]"><i class="fas fa-save mr-2" aria-hidden="true"></i>Salvar</button>
       </div>
     </footer>
   </div>

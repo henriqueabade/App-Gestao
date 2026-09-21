@@ -102,13 +102,14 @@ body {
 }
 
 .settings-card-title {
-    font-size: 1.25rem;
+    font-size: 1.05rem;
     font-weight: 600;
+    line-height: 1.4;
 }
 
 .settings-card-description {
     margin-top: 0.5rem;
-    font-size: 0.9rem;
+    font-size: var(--txt-corpo);
     color: rgba(255, 255, 255, 0.65);
 }
 
@@ -272,19 +273,20 @@ body {
     justify-content: center;
     gap: 0.5rem;
     width: 100%;
-    padding: 0.65rem 1rem;
-    border-radius: 9999px;
+    height: var(--ctl-altura);
+    padding: 0 var(--ctl-pad-x);
+    border-radius: var(--ctl-raio);
     border: 1px dashed rgba(255, 255, 255, 0.4);
     color: rgba(255, 255, 255, 0.85);
     background: rgba(255, 255, 255, 0.05);
     cursor: pointer;
     transition: all 200ms ease;
-    font-size: 0.95rem;
-    font-weight: 500;
+    font-size: var(--ctl-fonte);
+    font-weight: var(--ctl-peso);
 }
 
 .personal-avatar-upload-button i {
-    font-size: 1.1rem;
+    font-size: 1em;
 }
 
 .personal-avatar-upload-button:hover,
@@ -328,15 +330,14 @@ body {
 }
 
 .personal-data-label {
-    font-size: 0.9rem;
+    font-size: var(--txt-rotulo);
     color: rgba(255, 255, 255, 0.7);
     font-weight: 500;
 }
 
+/* Altura, recuo e cantos vêm do `ctl-campo` (controles.css). */
 .personal-data-input {
     width: 100%;
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
     color: white;
 }
 
@@ -376,10 +377,7 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 9999px;
-    padding: 0.75rem 1.75rem;
-    font-size: 0.95rem;
-    font-weight: 600;
+    /* altura, recuo, cantos e letra vêm do `ctl-botao` (controles.css) */
     cursor: pointer;
     border: 1px solid transparent;
     transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;

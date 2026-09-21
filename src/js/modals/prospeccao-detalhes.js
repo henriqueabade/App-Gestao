@@ -117,8 +117,8 @@
 
   const campo = (rotulo, valorHtml) => `
     <div>
-      <label class="block text-sm text-gray-400 mb-1">${esc(rotulo)}</label>
-      <div class="text-white break-words">${valorHtml || VAZIO}</div>
+      <label class="ctl-rotulo text-gray-400">${esc(rotulo)}</label>
+      <div class="text-sm text-white break-words">${valorHtml || VAZIO}</div>
     </div>`;
 
   const texto = v => (v === null || v === undefined || String(v).trim() === '' ? null : esc(v));

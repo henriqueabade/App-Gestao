@@ -8,13 +8,13 @@
   Contexto: window.gerarBoletosContext = { pedidoId, numero, cliente }.
   Script: src/js/modals/pedido-gerar-boletos.js.
 -->
-<div id="gerarBoletosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" aria-hidden="true">
+<div id="gerarBoletosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="gerarBoletosTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
-      <button id="voltarGerarBoletos" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <button id="voltarGerarBoletos" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
-        <h2 id="gerarBoletosTitulo" class="text-lg font-semibold text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i><span id="gerarBoletosTituloTexto">Gerar boletos</span></h2>
+        <h2 id="gerarBoletosTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i><span id="gerarBoletosTituloTexto">Gerar boletos</span></h2>
         <p id="gerarBoletosSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
       <span id="gerarBoletosAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
@@ -53,11 +53,11 @@
       </div>
     </div>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
-      <button id="desistirGerarBoletos" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Fechar</button>
-      <button id="consultarBoletosBB" type="button" data-perm="financeiro.boleto.view" class="hidden btn-bb px-6 py-2 rounded-lg text-white font-medium min-w-[160px]" title="Atualiza a situação dos boletos a pagar com o Banco do Brasil">Consultar no BB</button>
-      <button id="baixarBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-primary text-white px-6 py-2 rounded-lg font-medium min-w-[160px]">Boletos (PDF)</button>
-      <button id="confirmarGerarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-success px-6 py-2 rounded-lg font-medium min-w-[160px]">Gerar boletos</button>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="desistirGerarBoletos" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="consultarBoletosBB" type="button" data-perm="financeiro.boleto.view" class="hidden btn-bb ctl-botao text-white min-w-[160px]" title="Atualiza a situação dos boletos a pagar com o Banco do Brasil">Consultar no BB</button>
+      <button id="baixarBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-primary ctl-botao text-white min-w-[160px]">Boletos (PDF)</button>
+      <button id="confirmarGerarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-success ctl-botao min-w-[160px]">Gerar boletos</button>
     </footer>
   </div>
 </div>

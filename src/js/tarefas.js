@@ -512,7 +512,8 @@ async function abrirEstatisticas() {
           kpi('Tempo médio', horasLegiveis(e.horas_medias), 'da criação à conclusão', 'info')),
         h('section', { class: 'tarefas-est__bloco' }, h('h4', { class: 'tui-rotulo', text: 'Concluídas por semana' }), barras),
         h('section', { class: 'tarefas-est__bloco' }, h('h4', { class: 'tui-rotulo', text: 'Por tipo' }), tipos),
-        tabela ? h('section', { class: 'tarefas-est__bloco' }, h('h4', { class: 'tui-rotulo', text: 'Por pessoa' }), h('div', { class: 'tarefas-tabela-moldura' }, tabela)) : null
+        // Sem a tabela, nada entra: `replaceChildren(null)` escreveria "null" na tela.
+        ...(tabela ? [h('section', { class: 'tarefas-est__bloco' }, h('h4', { class: 'tui-rotulo', text: 'Por pessoa' }), h('div', { class: 'tarefas-tabela-moldura' }, tabela))] : [])
       );
     } catch (err) {
       corpo.replaceChildren(h('p', { class: 'tui-dica tui-dica--aviso', text: err.message }));

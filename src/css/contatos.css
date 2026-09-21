@@ -116,7 +116,8 @@ body {
     .filtro-contatos {
         flex-direction: row;
         flex-wrap: wrap;
-        align-items: center;
+        /* botões e campos têm a mesma altura (controles.css): alinha pela base */
+        align-items: flex-end;
     }
 }
 
@@ -126,12 +127,6 @@ body {
     }
 }
 
-.filtro-contatos .input-glass,
-.filtro-contatos select,
-.filtro-contatos button {
-    height: 48px;
-}
-
-#bt-actions {
-    margin-top: 1vw;
-}
+/* A altura dos campos e botões do filtro é a do padrão (ctl-campo e
+   ctl-botao, controles.css). A regra de 48 px e o empurrão de 1vw que
+   ficavam aqui venciam o padrão. */

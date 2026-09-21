@@ -1038,7 +1038,7 @@ function montarVazio(texto, { icone = 'fa-circle-check', tom = 'verde', grande =
  * achando que é um segundo clique — o botão simplesmente não faria nada.
  */
 function montarBotaoAtualizar(texto = 'Atualizar') {
-    const botao = criarEl('button', 'dash-botao-leve');
+    const botao = criarEl('button', 'dash-botao-leve ctl-botao ctl-botao--pequeno');
     botao.type = 'button';
     botao.dataset.dashAcao = 'atualizar';
     botao.dataset.acaoGerida = 'true';
