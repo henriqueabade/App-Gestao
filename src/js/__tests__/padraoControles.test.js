@@ -121,10 +121,14 @@ const PADRONIZADOS = [
       .map(m => `html/modals/laminacao-clientes/${m}.html`)]
   },
   { modulo: 'laminacao-servicos', arquivos: ['html/laminacao-servicos.html', 'html/modals/laminacao-servicos/servico-novo.html'] },
+  {
+    modulo: 'ia',
+    arquivos: ['html/ia.html', ...['acao', 'configuracao', 'detalhes', 'excluir', 'nova'].map(m => `html/modals/ia/${m}.html`)]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
-const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela|devolucao|ghost|violet|dark-blue)\b/;
+const COR_DE_BOTAO = /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green|regra-producao|preco-tabela|devolucao|ghost|violet|dark-blue|transparente)\b/;
 /** Classes de tamanho que o padrão substitui num botão ou campo. */
 const TAMANHO_ANTIGO = /(^|\s)(text-(base|lg|xl)|py-3|py-4|px-6|px-8|h-12|h-14)(?=\s|$)/;
 
@@ -274,6 +278,11 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'ia',
+    arquivos: ['js/ia.js', 'js/modals/ia-acao.js', 'js/modals/ia-configuracao.js', 'js/modals/ia-detalhes.js', 'js/modals/ia-excluir.js', 'js/modals/ia-nova.js'],
+    ignorar: []
+  },
+  {
     modulo: 'orcamentos (converter)',
     arquivos: ['js/modals/orcamento-converter.js'],
     // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
@@ -349,7 +358,7 @@ test('linha do tempo (Clientes e Prospecções): o botão é o pequeno do padrã
   assert.match(regra, /border-radius:\s*var\(--ctl-raio/);
 });
 
-for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contatos.css']) {
+for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contatos.css', 'css/ia.css']) {
   test(`${folha}: a folha não prende mais os controles do filtro em 48 px`, () => {
     const css = ler(folha).replace(/\/\*[\s\S]*?\*\//g, '');
     for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -359,6 +368,16 @@ for (const folha of ['css/materia-prima.css', 'css/prospeccoes.css', 'css/contat
     }
   });
 }
+
+test('IA: campos da Configuração e da escolha de destino com as medidas do padrão', () => {
+  const css = ler('css/ia.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  // `.ia-campo` (a célula da grade) vem depois de controles.css: sem esta
+  // regra ele devolveria ao campo de formulário o recuo e a letra da célula.
+  const regra = (css.match(/\.ia-campo\.ctl-campo\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(regra, /padding:\s*0 var\(--ctl-campo-pad-x\)/);
+  assert.match(regra, /font-size:\s*var\(--ctl-campo-fonte\)/);
+  assert.doesNotMatch(css, /#bt-actions > button\s*\{/, 'o ctl-botao já centra o conteúdo dos botões do filtro');
+});
 
 test('seletor de estados/cidades (Prospecções e Relatórios): botões e busca no padrão', () => {
   const js = ler('js/utils/geo-multiselect.js');

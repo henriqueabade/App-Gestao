@@ -145,6 +145,14 @@ Regras:
 - Modal montado em JavaScript usa as mesmas classes no código que monta.
 - Componentes globais que já seguem o padrão por conta própria
   (`TarefasUI`, `DialogPadrao`) não precisam das classes.
+- **Abas dentro do modal** ("Itens lidos"/"Arquivos" na leitura da IA) são
+  botão de barra: `ctl-botao ctl-botao--pequeno`, como Mês/Semana.
+- **Campo com classe própria do módulo** que a folha dele escreve depois
+  (`.ia-campo`, feito para a célula da grade de revisão): o campo de
+  formulário ganha `ctl-campo` e a folha tem uma regra de duas classes
+  (`.ia-campo.ctl-campo`) com os tokens de recuo, letra e cantos, senão a
+  célula vence. A grade de revisão em si (`.ia-grade-revisao`) fica como
+  está: são campos de linha, como os ícones das linhas.
 
 ---
 
@@ -191,8 +199,8 @@ Quando o dono mandar o módulo:
 | 10 | CRM › Tarefas | **conferido em 22/09** (referência) — cabeçalho 40,8 → 40 px (`ctl-botao`); barra (busca, "De quem"/ordem, Lista/Quadro, atalhos) em 32 px; tarefa rápida com a letra do campo (15,2 → 14 px). Os modais já tinham entrado com o TarefasUI. Commitado direto (o dono liberou o commit automático em 22/09). |
 | 11 | Laminação › Clientes | **feito em 22/09** — clone de Clientes: tela (com o cartão "Ações Rápidas" em `ctl-secao-tela`) e os 5 modais (Detalhes, Novo, Editar, Excluir, Novo contato). Commitado direto. |
 | 12 | Laminação › Serviços | **feito em 22/09** — tela e o modal Novo serviço (com Peças e Dados do amarrado). O modal é montado em partes (véu vazio + `data-modal-dialog`/`data-modal-slot` encaixados pelo JS): para medir na prévia, encaixar o diálogo no véu antes. Commitado direto. |
-| 13 | IA | a fazer — **próximo** |
-| 14 | Usuários | a fazer |
+| 13 | IA | **feito em 22/09** — tela e os 5 modais (Nova leitura, Configuração, Detalhes da leitura com as abas e a vista do texto, O que fazer com a linha, Excluir). O "Transparente" da IA (`ia-btn-transparente`: "O que fazer", "Descartar selecionados", "Copiar tudo para cá") conta como cor de botão. Nos cartões de arquivo, "Ver o que foi lido" e os ícones de reler/copiar ficam todos em 32 px. A grade de revisão continua com os campos de linha. Commitado direto. |
+| 14 | Usuários | a fazer — **próximo** |
 | 15 | Financeiro | referência — alinhar a diferença do §2 e os modais |
 | 16 | Relatórios | a fazer |
 | 17 | Configurações | a fazer |
