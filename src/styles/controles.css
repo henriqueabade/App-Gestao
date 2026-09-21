@@ -117,10 +117,15 @@
     line-height: 1.25;
 }
 
+/* Campo com ícone por cima do lado direito (a seta desenhada dos selects,
+   o calendário): o texto para antes do ícone. Substitui o `pr-12`. */
+.ctl-campo--icone { padding-right: 2.5rem; }
+
+/* A altura sai das linhas (`rows`). O espaço de cima é o `top-3` do rótulo
+   flutuante: rótulo e primeira linha ficam na mesma altura. */
 textarea.ctl-campo {
     height: auto;
-    min-height: 5rem;
-    padding: 0.55rem var(--ctl-campo-pad-x);
+    padding: 0.75rem var(--ctl-campo-pad-x);
     line-height: 1.45;
 }
 
@@ -154,14 +159,15 @@ textarea.ctl-campo {
 /* ------------------------------------------------------------ tabelas
    `ctl-padrao` vai na raiz da tela (.modulo-container) ou do modal (o véu
    `…Overlay`). As medidas de espaço continuam as de scroll.css; só a letra
-   muda. As grades de edição (itens do orçamento/pedido, revisão da IA) têm
-   campos nas células e ficam de fora, como em scroll.css 3e. */
+   muda. A grade de itens do orçamento/pedido entra: as células são texto, e
+   os campos que aparecem nelas ao editar têm letra própria (`text-xs`). A
+   revisão da IA fica de fora até a vez dela. */
 .ctl-padrao .table-scroll th,
 .ctl-padrao table:not(.rp-tabela) th {
     font-size: var(--txt-tabela-cabecalho);
 }
 
 .ctl-padrao .table-scroll td,
-.ctl-padrao table:not(.rp-tabela, .items-table, .ia-grade-revisao table) td {
+.ctl-padrao table:not(.rp-tabela, .ia-grade-revisao table) td {
     font-size: var(--txt-tabela);
 }

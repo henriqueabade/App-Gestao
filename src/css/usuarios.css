@@ -123,7 +123,6 @@ body {
     background: var(--color-bordeaux);
     color: #fff;
     transition: all 150ms ease;
-    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .btn-bordo:hover {

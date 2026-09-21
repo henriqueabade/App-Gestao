@@ -66,13 +66,13 @@ principais** e o tamanho das **letras dos textos**.
 As alturas das linhas e o espaço dentro das células das tabelas **não**
 mudam — só a letra.
 
-**Diferença aberta — Financeiro:** o módulo é referência, mas os botões do
-cabeçalho dele têm 44 px, peso 500 e cantos de 6 px (os de Tarefas e
-Calendário têm 40,8 px, 600 e 11,2 px). O padrão seguiu Tarefas/Calendário,
-que também são o desenho dos modais de referência. Quando chegar a vez do
-Financeiro, ele encosta nesses números (diferença pequena). Se o dono
-preferir os cantos ou o peso do Financeiro, muda-se **uma variável** em
-`controles.css` e vale para tudo.
+**Financeiro:** o módulo é referência, mas os botões do cabeçalho dele têm
+44 px, peso 500 e cantos de 6 px (os de Tarefas e Calendário têm 40,8 px,
+600 e 11,2 px). O padrão seguiu Tarefas/Calendário, que também são o desenho
+dos modais de referência — **aprovado pelo dono em 22/09**, junto com os
+campos e a letra das tabelas dentro do padrão. Na vez do Financeiro, ele
+encosta nesses números. Mudar cantos ou peso depois é **uma variável** em
+`controles.css`, e vale para tudo.
 
 ---
 
@@ -85,6 +85,8 @@ preferir os cantos ou o peso do Financeiro, muda-se **uma variável** em
 | Botão só com ícone | `ctl-botao ctl-botao--icone` | `p-2`, `w-10 h-10`… |
 | Grupo de botões | `ctl-acoes` | `flex gap-4`, `space-x-3`… |
 | Campo / select / textarea | `ctl-campo` + o fundo (`input-glass`…) | `px-* py-* rounded-md` |
+| Campo com ícone por cima à direita (a seta desenhada, o calendário) | `ctl-campo ctl-campo--icone` | o `pr-12` |
+| Rótulo flutuante (dentro do campo, sobe ao preencher) | fica o Tailwind: `left-4`→`left-3`, `text-base`→`text-sm`; **sai** o `peer-placeholder-shown:text-base` | — |
 | Rótulo | `ctl-rotulo` | `block text-sm font-medium mb-2` |
 | Título de seção | `ctl-secao` | — |
 | Título do modal | `ctl-modal-titulo` | `text-lg`/`text-xl font-semibold` |
@@ -95,6 +97,15 @@ Regras:
 
 - **Nunca** `text-base`, `text-lg`, `py-3`, `px-6` em botão principal ou
   campo de tela já padronizada (o teste acusa).
+- **Rótulo flutuante**: não crie `peer-placeholder-shown:text-sm` (nem outra
+  variante nova em utilitarios.css). No Tailwind a variante de "vazio" perde
+  para as de focado/válido/preenchido; escrita depois, em outra folha, ela
+  passa a VENCER e o rótulo sobe sem diminuir (aconteceu em Orçamentos).
+- **Barra de filtros**: botões e selects têm a mesma altura — alinhe pela
+  base (`items-end`) e tire o empurrão que compensava a diferença
+  (`#bt-actions { margin-top: 1vw }` e parecidos).
+- Títulos de seção dentro do modal ("Itens", "Peças", "Parcelas") viram
+  `ctl-secao`; o título do modal, `ctl-modal-titulo`.
 - A cor é da classe `btn-*`; o tamanho é do `ctl-botao`. Não escreva
   `padding`/`font-size` de botão na folha do módulo.
 - Modal montado em JavaScript usa as mesmas classes no código que monta.
@@ -134,10 +145,10 @@ Quando o dono mandar o módulo:
 
 | # | Módulo | Situação |
 | --- | --- | --- |
-| 1 | Dashboard | a fazer |
+| 1 | Dashboard | a fazer — **próximo** (o dono pediu Orçamentos antes) |
 | 2 | Matéria-prima | a fazer |
 | 3 | Produtos | a fazer |
-| 4 | Orçamentos | a fazer |
+| 4 | Orçamentos | **feito em 22/09** — tela, Novo, Editar, Visualizar, Converter, Substituir peça, as caixas de confirmação feitas à mão, parcelamento e o balão de período (ambos compartilhados), e os modais de outros módulos que ele abre: Datas (Pedidos) e Transportadora (Clientes). Aguardando o "ok" do dono. |
 | 5 | Pedidos | a fazer |
 | 6 | CRM › Clientes | a fazer |
 | 7 | CRM › Prospecções | a fazer |

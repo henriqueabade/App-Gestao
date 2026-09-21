@@ -934,7 +934,7 @@
             <input type="number" inputmode="numeric" min="0" class="${quantityClasses.join(' ')}" data-role="quantity-input" data-variant-key="${variant.key}" value="${displayedQty}" max="${inputMax}" aria-label="Quantidade em edição para ${variantLabel}"${quantityAttributeString} />
             <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center ${plusDisabled ? 'opacity-40 cursor-not-allowed' : ''}" data-role="increment" ${plusDisabled ? 'disabled' : ''} aria-label="${plusAriaLabel}">+</button>
           </div>
-          <button type="button" class="px-3 py-1 rounded-lg text-xs font-medium text-white ${confirmDisabled ? 'btn-primary opacity-60 cursor-not-allowed' : 'btn-primary'}" data-role="confirm" data-variant-key="${variant.key}" ${confirmDisabled ? 'disabled' : ''} aria-label="${confirmAria}">${confirmText}</button>
+          <button type="button" class="ctl-botao ctl-botao--pequeno text-white ${confirmDisabled ? 'btn-primary opacity-60 cursor-not-allowed' : 'btn-primary'}" data-role="confirm" data-variant-key="${variant.key}" ${confirmDisabled ? 'disabled' : ''} aria-label="${confirmAria}">${confirmText}</button>
           <span class="text-xs text-gray-400 ml-auto">${limitHint}</span>
         </div>`;
 

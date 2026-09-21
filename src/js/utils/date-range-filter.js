@@ -79,11 +79,11 @@
         const startWrapper = document.createElement('div');
         startWrapper.className = 'flex-1';
         const startLabel = document.createElement('label');
-        startLabel.className = 'block text-xs font-semibold tracking-wide uppercase mb-2 text-white/70';
+        startLabel.className = 'block ctl-secao mb-2 text-white/70';
         startLabel.textContent = 'Data inicial';
         const startInput = document.createElement('input');
         startInput.type = 'date';
-        startInput.className = 'input-glass w-full text-white rounded-lg px-3 py-2 bg-white/10 focus:outline-none';
+        startInput.className = 'ctl-campo input-glass w-full text-white bg-white/10 focus:outline-none';
         startInput.setAttribute('aria-label', 'Data inicial do período');
         startInput.setAttribute('autocomplete', 'off');
         startWrapper.appendChild(startLabel);
@@ -92,11 +92,11 @@
         const endWrapper = document.createElement('div');
         endWrapper.className = 'flex-1';
         const endLabel = document.createElement('label');
-        endLabel.className = 'block text-xs font-semibold tracking-wide uppercase mb-2 text-white/70';
+        endLabel.className = 'block ctl-secao mb-2 text-white/70';
         endLabel.textContent = 'Data final';
         const endInput = document.createElement('input');
         endInput.type = 'date';
-        endInput.className = 'input-glass w-full text-white rounded-lg px-3 py-2 bg-white/10 focus:outline-none';
+        endInput.className = 'ctl-campo input-glass w-full text-white bg-white/10 focus:outline-none';
         endInput.setAttribute('aria-label', 'Data final do período');
         endInput.setAttribute('autocomplete', 'off');
         endWrapper.appendChild(endLabel);
@@ -114,14 +114,14 @@
         errorMessage.setAttribute('role', 'alert');
 
         const actions = document.createElement('div');
-        actions.className = 'flex justify-end gap-2 mt-4';
+        actions.className = 'ctl-acoes justify-end mt-4';
         const cancelButton = document.createElement('button');
         cancelButton.type = 'button';
-        cancelButton.className = 'btn-neutral text-white px-4 py-2 rounded-lg';
+        cancelButton.className = 'btn-neutral ctl-botao text-white';
         cancelButton.textContent = 'Cancelar';
         const confirmButton = document.createElement('button');
         confirmButton.type = 'button';
-        confirmButton.className = 'btn-primary text-white px-4 py-2 rounded-lg';
+        confirmButton.className = 'btn-primary ctl-botao text-white';
         confirmButton.textContent = 'Confirmar';
         confirmButton.disabled = true;
         confirmButton.setAttribute('aria-disabled', 'true');

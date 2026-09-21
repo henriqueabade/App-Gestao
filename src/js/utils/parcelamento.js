@@ -109,14 +109,14 @@
     container.innerHTML = `
       <div class="grid grid-cols-3 gap-4 mb-4">
         <div>
-          <label class="block text-sm font-medium mb-2 text-white">Parcelas</label>
-          <select id="${containerId}_count" class="input-glass text-white rounded-md px-4 py-3 w-full">
+          <label class="ctl-rotulo text-white">Parcelas</label>
+          <select id="${containerId}_count" class="ctl-campo input-glass text-white w-full">
             <option value="">Selecione</option>
             ${Array.from({length:MAX_PARCELAS},(_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('')}
           </select>
         </div>
         <div class="col-span-2">
-          <label class="block text-sm font-medium mb-2 text-white">Modo</label>
+          <label class="ctl-rotulo text-white">Modo</label>
           <div class="flex items-center gap-6">
             <label class="flex items-center gap-2"><input type="radio" name="${containerId}_mode" value="equal" disabled><span>Iguais</span></label>
             <label class="flex items-center gap-2"><input type="radio" name="${containerId}_mode" value="custom" disabled><span>Diferentes</span></label>
@@ -194,12 +194,12 @@
       row.className='grid grid-cols-3 gap-4';
       row.innerHTML=`
         <div class="relative col-span-2">
-          <input type="text" id="${id}_amount_${idx}" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 text-white text-right ${s.mode==='equal'?'bg-gray-800/40':''}" ${s.mode==='equal'?'readonly':''} value="${formatCentsBRL(it.amount)}">
-          <label class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none">Valor</label>
+          <input type="text" id="${id}_amount_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${s.mode==='equal'?'bg-gray-800/40':''}" ${s.mode==='equal'?'readonly':''} value="${formatCentsBRL(it.amount)}">
+          <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Valor</label>
         </div>
         <div class="relative">
-          <input type="number" min="0" id="${id}_due_${idx}" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 text-white text-right" value="${it.dueInDays??''}">
-          <label class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none">Prazo (dias)</label>
+          <input type="number" min="0" id="${id}_due_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right" value="${it.dueInDays??''}">
+          <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Prazo (dias)</label>
         </div>`;
       rowsDiv.appendChild(row);
       const campoValor=row.querySelector(`#${id}_amount_${idx}`);

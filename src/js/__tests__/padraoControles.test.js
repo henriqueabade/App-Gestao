@@ -33,7 +33,21 @@ const CONTROLES = ler('styles/controles.css');
  * Modal montado em JavaScript entra com o teste próprio do módulo.
  */
 const PADRONIZADOS = [
-  // { modulo: 'dashboard', arquivos: ['html/dashboard.html'] },
+  {
+    // 22/09/2026 — o primeiro, a pedido do dono (o mais significativo).
+    // Datas (de Pedidos) e Transportadora (de Clientes) abrem de dentro dele.
+    modulo: 'orcamentos',
+    arquivos: [
+      'html/orcamentos.html',
+      'html/modals/orcamentos/novo.html',
+      'html/modals/orcamentos/editar.html',
+      'html/modals/orcamentos/visualizar.html',
+      'html/modals/orcamentos/converter.html',
+      'html/modals/orcamentos/substituir-peca.html',
+      'html/modals/pedidos/datas.html',
+      'html/modals/clientes/transportadora.html'
+    ]
+  },
 ];
 
 /** Botão principal = <button> com uma classe de cor btn-*. */
@@ -54,6 +68,7 @@ function problemasDoPadrao(html) {
     } else {
       if (['hidden', 'checkbox', 'radio', 'file', 'range', 'color'].includes(tipo)) continue;
       if (/\bsr-only\b/.test(classe)) continue;
+      if (/\baria-hidden="true"/.test(tag)) continue; // campo invisível que só abre o calendário
       if (!/\bctl-campo\b/.test(classe)) problemas.push(`campo sem ctl-campo: ${tag}`);
       if (TAMANHO_ANTIGO.test(classe)) problemas.push(`campo com tamanho antigo: ${tag}`);
     }
@@ -119,6 +134,48 @@ test('o conferidor acusa botão e campo fora do padrão e aceita os que estão n
   ];
   for (const html of dentro) assert.deepStrictEqual(problemasDoPadrao(html), [], html);
 });
+
+/**
+ * O que o módulo monta em JavaScript: toda classe com cor de botão (btn-*)
+ * tem de ter ctl-botao. `ignorar` lista, com o motivo, o que fica de fora
+ * de propósito (ícone de linha de tabela, etiqueta).
+ */
+const JS_PADRONIZADOS = [
+  {
+    modulo: 'orcamentos',
+    arquivos: [
+      'js/orcamentos.js',
+      'js/modals/orcamento-novo.js',
+      'js/modals/orcamento-editar.js',
+      'js/modals/orcamento-visualizar.js',
+      'js/modals/orcamento-substituir-peca.js',
+      'js/utils/parcelamento.js',
+      'js/utils/date-range-filter.js'
+    ],
+    ignorar: []
+  },
+  {
+    modulo: 'orcamentos (converter)',
+    arquivos: ['js/modals/orcamento-converter.js'],
+    // o botão de ícone de cada linha da tabela de peças: fica fora do padrão
+    ignorar: [/\bw-8 h-8\b/]
+  }
+];
+
+function botoesJsForaDoPadrao(js, ignorar) {
+  const classes = [
+    ...[...js.matchAll(/class="([^"]*)"/g)].map(m => m[1]),
+    ...[...js.matchAll(/className\s*=\s*'([^']*)'/g)].map(m => m[1])
+  ];
+  return classes.filter(c => /\bbtn-(primary|secondary|neutral|danger|warning|success|bb|bordo|purple|dark-green)\b/.test(c)
+    && !/\bctl-botao\b/.test(c) && !ignorar.some(re => re.test(c)));
+}
+
+for (const { modulo, arquivos, ignorar } of JS_PADRONIZADOS) {
+  test(`${modulo}: botões montados em JavaScript no padrão`, () => {
+    for (const rel of arquivos) assert.deepStrictEqual(botoesJsForaDoPadrao(ler(rel), ignorar), [], rel);
+  });
+}
 
 for (const { modulo, arquivos } of PADRONIZADOS) {
   test(`${modulo}: botões principais e campos no padrão (tela e modais)`, () => {
