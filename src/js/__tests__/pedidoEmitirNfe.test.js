@@ -372,3 +372,32 @@ test('pedidos.js: o ✓ de Produção → Enviado abre o modal da NF-e; Enviado 
   assert.ok(PEDIDOS.includes("openPedidoModal('modals/pedidos/emitir-nfe.html', '../js/modals/pedido-emitir-nfe.js', 'emitirNfePedido')"));
   assert.ok(PEDIDOS.includes('window.emitirNfeContext = { pedidoId: p.id, numero: p.numero, cliente: obterNomeCliente(p.cliente_id) }'));
 });
+
+/**
+ * Ação que começa DEPOIS de uma caixa de diálogo não tem botão carregando:
+ * o clique que abriu a caixa já terminou. Sem o véu da casa, "Enviar sem
+ * NF-e" deixava a tela parada por segundos (a troca de status vai à API
+ * remota) e parecia travada — o dono pegou isso em produção em 24/09/2026.
+ */
+test('Enviar sem NF-e: guarda de clique no botão e véu de carregamento depois da confirmação', () => {
+  assert.ok(FONTE.includes('window.BotaoAcao.bind(semNfeBtn, enviarSemNfe)'), 'o botão entra na guarda de duplo clique');
+
+  const inicio = FONTE.indexOf('async function enviarSemNfe');
+  const fim = FONTE.indexOf('if (typeof window.BotaoAcao?.bind', inicio);
+  assert.ok(inicio > 0 && fim > inicio);
+  const corpo = FONTE.slice(inicio, fim);
+  assert.ok(corpo.includes('window.DialogPadrao?.confirm'), 'a confirmação continua na caixa da casa');
+  assert.ok(corpo.includes('comVeu(() => marcarEnviado(null)'), 'o trabalho depois da caixa roda sob o véu');
+  assert.ok(corpo.indexOf('DialogPadrao') < corpo.indexOf('comVeu'), 'o véu entra DEPOIS da confirmação, não por cima dela');
+
+  assert.ok(FONTE.includes("window.BotaoAcao?.comCarregamento === 'function'"), 'o véu é o da casa (BotaoAcao), não um spinner próprio');
+  assert.ok(FONTE.includes('await window.carregarPedidos?.()'), 'a lista termina de recarregar antes de o carregando sair');
+});
+
+test('NF-e e boletos de fora: remover nota e remover boleto também rodam sob o véu', () => {
+  const EXTERNOS = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-dados-externos.js'), 'utf8');
+  assert.ok(EXTERNOS.includes("comVeu(async () => {") , 'as remoções confirmadas por caixa usam o véu');
+  assert.ok(EXTERNOS.includes("}, 'Removendo a NF-e de fora...')"));
+  assert.ok(EXTERNOS.includes("}, 'Removendo o boleto de fora...')"));
+  assert.ok(EXTERNOS.includes("window.BotaoAcao?.comCarregamento === 'function'"));
+});

@@ -487,6 +487,33 @@ Promise.resolve(carregar())
 Revelar antes e chamar `carregar()` solto faz o modal piscar vazio e os dados
 caírem nele depois — é o defeito que esta seção existe para evitar.
 
+#### Ação que começa DEPOIS de uma caixa de diálogo
+
+Quando a caixa fecha, o clique que a abriu já terminou: não há botão
+carregando nem rastreador do `BotaoAcao` segurando nada. Se a requisição só
+sai aí, a tela fica parada, sem sinal de vida, e a pessoa clica de novo
+achando que travou. Para esse caso existe o **véu da casa**:
+
+```js
+const comVeu = (fn, texto) => (typeof window.BotaoAcao?.comCarregamento === 'function'
+  ? window.BotaoAcao.comCarregamento(fn, texto)
+  : fn());
+
+const ok = await window.DialogPadrao?.confirm?.({ ... });
+if (!ok) return;
+await comVeu(() => marcarEnviado(null), `Enviando o pedido ${ctx.numero} sem NF-e...`);
+```
+
+O véu cobre a tela (z-index 3000, acima dos modais), mostra o que está
+acontecendo e impede o segundo clique. Quem NÃO abre caixa de diálogo não
+precisa dele: basta `BotaoAcao.bind(botao, acao)`, que segura o carregando no
+próprio botão enquanto a promessa não resolve. Foi a falta disso em "Enviar
+sem NF-e" que deixou a tela travada por segundos em 24/09/2026.
+
+E o que recarrega a lista no fim **espera** (`await window.carregarPedidos?.()`):
+solta, ela termina depois de o carregando sumir e a pessoa volta para a tabela
+ainda com o dado antigo.
+
 ### Modais com abas
 
 Tamanho fixo, o da Nova prospecção: `max-w-6xl` (72rem) × `h-[90vh]`, em

@@ -293,12 +293,14 @@
     if (!ok) return;
     emAndamento = true;
     try {
-      const resp = await fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa`, { method: 'DELETE' });
-      const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
-      window.showToast?.('NF-e de fora removida.', 'success');
-      avisarQuemEstaAberto('nfe:externa');
-      await carregar();
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa`, { method: 'DELETE' });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.('NF-e de fora removida.', 'success');
+        avisarQuemEstaAberto('nfe:externa');
+        await carregar();
+      }, 'Removendo a NF-e de fora...');
     } finally {
       emAndamento = false;
     }
@@ -309,6 +311,16 @@
     if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(elemento, fn);
     else elemento.addEventListener('click', fn);
   };
+
+  /**
+   * O véu de "ação em andamento" da casa, para o trabalho que começa DEPOIS
+   * de uma caixa de diálogo: ali o clique que abriu a caixa já terminou e
+   * nenhum botão fica carregando sozinho, então a tela parava sem sinal de
+   * vida enquanto a API respondia.
+   */
+  const comVeu = (fn, texto) => (typeof window.BotaoAcao?.comCarregamento === 'function'
+    ? window.BotaoAcao.comCarregamento(fn, texto)
+    : fn());
   botao(el('gravarNotaExterna'), gravarNota);
   botao(el('removerNotaExterna'), removerNota);
 
@@ -485,12 +497,14 @@
     if (!ok) return;
     emAndamento = true;
     try {
-      const resp = await fetchApi(`/api/cobranca/boletos-externos/${encodeURIComponent(b.id)}`, { method: 'DELETE' });
-      const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
-      window.showToast?.('Boleto de fora removido.', 'success');
-      avisarQuemEstaAberto('boletos:alterados');
-      await carregar();
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/cobranca/boletos-externos/${encodeURIComponent(b.id)}`, { method: 'DELETE' });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.('Boleto de fora removido.', 'success');
+        avisarQuemEstaAberto('boletos:alterados');
+        await carregar();
+      }, 'Removendo o boleto de fora...');
     } finally {
       emAndamento = false;
     }

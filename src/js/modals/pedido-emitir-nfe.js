@@ -290,6 +290,15 @@
   let emAndamento = false;
   let fechado = false;
 
+  /**
+   * O véu de "ação em andamento" da casa (BotaoAcao.comCarregamento), para o
+   * trabalho que começa DEPOIS de uma caixa de diálogo: ali o clique original
+   * já acabou e nenhum botão fica carregando sozinho.
+   */
+  const comVeu = (fn, texto) => (typeof window.BotaoAcao?.comCarregamento === 'function'
+    ? window.BotaoAcao.comCarregamento(fn, texto)
+    : fn());
+
   // ------------------------------------------------------------ fechar
   function desligarOuvintes() {
     document.removeEventListener('keydown', aoEsc);
@@ -623,7 +632,10 @@
     window.showToast?.(nota ? `NF-e nº ${nota.numero} autorizada e pedido ${ctx.numero} enviado.` : `Pedido ${ctx.numero} marcado como enviado sem nota fiscal.`, 'success');
     mensagens.forEach(m => window.showToast?.(m.texto, m.tipo));
     window.dispatchEvent(new CustomEvent('pedido:enviado', { detail: { pedidoId, resposta: corpo, nota: nota || null } }));
-    window.carregarPedidos?.();
+    // Esperar a lista: solta, ela terminava depois do carregando sumir, e a
+    // pessoa voltava para a tabela ainda com o pedido no estado antigo.
+    // Erro aqui não segura o fechamento — a lista se refaz no próximo filtro.
+    try { await window.carregarPedidos?.(); } catch (err) { console.error('Erro ao recarregar a lista de pedidos:', err); }
     fechar();
     return true;
   }
@@ -741,17 +753,30 @@
     });
     if (!ok) return;
     emAndamento = true;
-    try { await marcarEnviado(null); } finally { emAndamento = false; }
+    // Depois que a caixa fecha, o clique que a abriu já terminou: não há botão
+    // carregando nem rastreador segurando nada. E marcar o pedido como enviado
+    // é uma ida e volta à API (mais a dispensa da nota), que com a latência do
+    // servidor leva segundos — a tela ficava parada, sem sinal de vida, e
+    // parecia travada. O véu da casa mostra o que está acontecendo e impede o
+    // segundo clique.
+    try {
+      await comVeu(() => marcarEnviado(null), ctx.numero ? `Enviando o pedido ${ctx.numero} sem NF-e...` : 'Enviando o pedido sem NF-e...');
+    } finally {
+      emAndamento = false;
+    }
   }
 
   if (typeof window.BotaoAcao?.bind === 'function') {
     window.BotaoAcao.bind(confirmarBtn, principal);
     window.BotaoAcao.bind(consultarBtn, consultar);
+    // "Enviar sem NF-e" ficava de fora da guarda: aceitava o segundo clique e
+    // não acendia carregando nenhum.
+    window.BotaoAcao.bind(semNfeBtn, enviarSemNfe);
   } else {
     confirmarBtn.addEventListener('click', principal);
     consultarBtn.addEventListener('click', consultar);
+    semNfeBtn.addEventListener('click', enviarSemNfe);
   }
-  semNfeBtn.addEventListener('click', enviarSemNfe);
   Object.values(campos).forEach(input => input?.addEventListener('input', limparMensagem));
   campos.volumes_quantidade.addEventListener('input', renderizarVolumes);
   campos.volumes_quantidade.addEventListener('change', renderizarVolumes);
