@@ -28,7 +28,7 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const contexto = vm.createContext({});
   return vm.runInContext(
-    `${FONTE.slice(inicio, fim)}\n({ diaCurto, moeda, nossoNumeroLegivel, documentoLegivel, textoDaParcela, escolhidosParaEnviar, resumoDaImportacao, mensagemDeErro })`,
+    `${FONTE.slice(inicio, fim)}\n({ diaCurto, moeda, nossoNumeroLegivel, documentoLegivel, textoDaParcela, marcadosDeSaida, textoDoResumo, escolhidosParaEnviar, resumoDaImportacao, mensagemDeErro })`,
     contexto
   );
 }
@@ -36,7 +36,8 @@ function puras() {
 const LINHA = {
   nosso_numero: '00034534810000000393', seu_numero: 'PED120P1', valor: 1500, vencimento: '2026-10-15',
   situacao_texto: 'NORMAL', pagador_nome: 'MAG CONFECCOES LTDA', pagador_documento: '98765432000110',
-  ja_importado: false, sugestao: { parcela_id: 71, numero_parcela: 1, pedido_id: 12, pedido_numero: 'PED120', motivo: 'Seu número PED120P1.' }
+  ja_importado: false,
+  sugestao: { parcela_id: 71, numero_parcela: 1, pedido_id: 12, pedido_numero: 'PED120', motivo: 'Seu número PED120P1.', confianca: 'alta' }
 };
 
 test('a coluna Parcela: sugestão, escolha do usuário, "sem relacionar" e o que já está no app', () => {
@@ -50,9 +51,41 @@ test('a coluna Parcela: sugestão, escolha do usuário, "sem relacionar" e o que
   assert.strictEqual(escolhida.texto, 'PED121 · parcela 2');
   assert.strictEqual(escolhida.classe, 'badge-success');
 
+  const conferir = f.textoDaParcela({ ...LINHA, sugestao: { ...LINHA.sugestao, confianca: 'media' } }, undefined);
+  assert.strictEqual(conferir.texto, 'PED120 · parcela 1 (confira)', 'sugestão de confiança média pede conferência');
+  assert.strictEqual(conferir.classe, 'badge-warning');
+
   assert.strictEqual(f.textoDaParcela(LINHA, { sem_parcela: true }).texto, 'sem relacionar');
   assert.strictEqual(f.textoDaParcela({ ...LINHA, sugestao: null }, undefined).texto, 'escolher');
   assert.strictEqual(f.textoDaParcela({ ...LINHA, ja_importado: true, boleto_status: 'pago' }, undefined).texto, 'já importado (pago)');
+});
+
+test('a busca já entrega marcado o que o app casou com segurança', () => {
+  const f = puras();
+  const linhas = [
+    { ...LINHA, nosso_numero: 'A' },
+    { ...LINHA, nosso_numero: 'B', sugestao: { ...LINHA.sugestao, confianca: 'media' } },
+    { ...LINHA, nosso_numero: 'C', sugestao: null },
+    { ...LINHA, nosso_numero: 'D', ja_importado: true },
+    { ...LINHA, nosso_numero: 'E', sugestao: { ...LINHA.sugestao, parcela_id: null } }
+  ];
+  const marcados = f.marcadosDeSaida(linhas);
+  assert.deepStrictEqual([...marcados], ['A'], 'só a sugestão de confiança alta, e nunca o que já está no app');
+
+  // O que vem marcado já sai com a parcela sugerida, sem o usuário tocar.
+  const saida = f.escolhidosParaEnviar(linhas, marcados, new Map());
+  assert.strictEqual(saida.length, 1);
+  assert.strictEqual(saida[0].parcela_id, 71);
+});
+
+test('o resumo conta o que veio marcado, o que pede conferência e o que não casou', () => {
+  const f = puras();
+  const texto = f.textoDoResumo({ resumo: { total: 9, ja_importados: 1, com_sugestao: 5, certos: 3, a_conferir: 2 } });
+  assert.match(texto, /9 boleto\(s\) no BB/);
+  assert.match(texto, /1 já no app/);
+  assert.match(texto, /3 já marcado\(s\)/);
+  assert.match(texto, /2 parecido\(s\), para conferir/);
+  assert.match(texto, /3 sem parcela encontrada/);
 });
 
 test('o que vai para o backend: só o marcado e ainda não importado, com a parcela que vale', () => {

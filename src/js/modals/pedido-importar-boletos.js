@@ -59,11 +59,41 @@
     const alvo = escolha?.parcela_id ? escolha : linha?.sugestao;
     if (!alvo?.parcela_id) return { texto: 'escolher', classe: 'badge-warning' };
     const rotulo = `${alvo.pedido_numero || `pedido ${alvo.pedido_id}`} · parcela ${alvo.numero_parcela}`;
+    if (escolha?.parcela_id) return { texto: rotulo, classe: 'badge-success' };
+    // Sugestão do app: a de confiança alta (valor e vencimento batendo) já
+    // vem marcada; a de confiança média pede conferência antes.
+    const certa = linha?.sugestao?.confianca === 'alta';
     return {
-      texto: escolha?.parcela_id ? rotulo : `${rotulo} (sugerida)`,
-      classe: escolha?.parcela_id ? 'badge-success' : 'badge-info',
-      titulo: escolha?.parcela_id ? '' : (linha?.sugestao?.motivo || '')
+      texto: `${rotulo} ${certa ? '(sugerida)' : '(confira)'}`,
+      classe: certa ? 'badge-info' : 'badge-warning',
+      titulo: linha?.sugestao?.motivo || ''
     };
+  }
+
+  /**
+   * Quais linhas a tela já entrega MARCADAS quando a busca volta (decisão do
+   * dono, 24/09/2026): as que o app casou com segurança — mesmo valor e mesmo
+   * vencimento de uma parcela só, ou o "seu número" do próprio app. O que fica
+   * "a conferir" espera o clique. Importar continua sendo ato do usuário. Pura.
+   */
+  function marcadosDeSaida(linhas) {
+    return new Set((linhas || [])
+      .filter(l => !l.ja_importado && l.sugestao?.confianca === 'alta' && l.sugestao?.parcela_id)
+      .map(l => l.nosso_numero));
+  }
+
+  /** A linha de resumo acima da tabela. Pura. */
+  function textoDoResumo(corpo) {
+    const r = corpo?.resumo || {};
+    const total = Number(r.total) || 0;
+    const partes = [`${total} boleto(s) no BB`];
+    if (r.ja_importados) partes.push(`${r.ja_importados} já no app`);
+    if (r.certos) partes.push(`${r.certos} já marcado(s): valor e vencimento batem com uma parcela`);
+    if (r.a_conferir) partes.push(`${r.a_conferir} parecido(s), para conferir`);
+    const semCasar = total - (Number(r.ja_importados) || 0) - (Number(r.com_sugestao) || 0);
+    if (semCasar > 0) partes.push(`${semCasar} sem parcela encontrada`);
+    if (corpo?.aviso) partes.push(corpo.aviso);
+    return partes.join(' · ');
   }
 
   /** O que sai para o backend a partir do que está marcado na tela. Pura. */
@@ -417,15 +447,13 @@
       estado = corpo || { boletos: [] };
       marcados.clear();
       escolhas.clear();
+      // O que o app casou com segurança já vem marcado: marcar um por um o
+      // que o valor e o vencimento resolvem sozinhos era trabalho à toa.
+      for (const nn of marcadosDeSaida(estado.boletos)) marcados.add(nn);
       if (todosEl) todosEl.checked = false;
       el('importarBoletosDe').value = corpo?.de || el('importarBoletosDe').value;
       el('importarBoletosAte').value = corpo?.ate || el('importarBoletosAte').value;
-      resumoEl.textContent = [
-        `${corpo?.resumo?.total || 0} boleto(s) no BB`,
-        corpo?.resumo?.ja_importados ? `${corpo.resumo.ja_importados} já no app` : '',
-        corpo?.resumo?.com_sugestao ? `${corpo.resumo.com_sugestao} com parcela sugerida` : '',
-        corpo?.aviso || ''
-      ].filter(Boolean).join(' · ');
+      resumoEl.textContent = textoDoResumo(corpo);
       pintarCabecalho();
       pintarLinhas();
       // Sem o SQL da fase, a tela mostra o que há no BB mas não deixa importar.

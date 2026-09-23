@@ -172,11 +172,57 @@ test('parcela sugerida: pelo seu número (PED120P1), depois por documento + valo
   assert.equal(importacao.sugerirParcela(semEtiqueta, { parcelas, pedidos, clientes }), null, 'duas parcelas combinam: não escolhe por conta própria');
   const soUma = importacao.sugerirParcela(semEtiqueta, { parcelas: parcelas.slice(0, 1), pedidos, clientes });
   assert.equal(soUma.parcela.id, 71);
-  assert.equal(soUma.confianca, 'media');
+  assert.equal(soUma.confianca, 'alta');
 
   assert.deepEqual(importacao.lerSeuNumero('PED120P1'), { pedido: 'PED120', parcela: 1 });
   assert.equal(importacao.lerSeuNumero('NF 123'), null);
   assert.equal(importacao.lerSeuNumero('P1'), null);
+});
+
+test('parcela sugerida sem pagador nenhum: valor e vencimento bastam (é o que a lista do BB manda)', () => {
+  const pedidos = [{ id: 12, numero: 'PED120', cliente_id: 3 }, { id: 13, numero: 'PED121', cliente_id: 4 }];
+  const clientes = [{ id: 3, nome_fantasia: 'MAG Confecções' }, { id: 4, nome_fantasia: 'Figo Casa' }];
+  const parcelas = [
+    { id: 71, pedido_id: 12, numero_parcela: 1, valor: 2006.68, data_vencimento: '2026-10-12' },
+    { id: 72, pedido_id: 12, numero_parcela: 2, valor: 3327, data_vencimento: '2026-10-20' },
+    { id: 81, pedido_id: 13, numero_parcela: 1, valor: 1750, data_vencimento: '2026-11-04' }
+  ];
+  // A lista do BB vem SEM seu número e SEM pagador — foi assim em produção.
+  const semNada = { valor: 2006.68, vencimento: '2026-10-12', seu_numero: null, pagador_documento: null };
+
+  const casado = importacao.sugerirParcela(semNada, { parcelas, pedidos, clientes });
+  assert.equal(casado.parcela.id, 71, 'mesmo valor e mesmo vencimento casam sozinhos');
+  assert.equal(casado.confianca, 'alta', 'confiança alta é o que a tela entrega marcado');
+  assert.match(casado.motivo, /PED120/);
+
+  // Vencimento perto (boleto corrido para o dia útil): sugere, mas para conferir.
+  const perto = importacao.sugerirParcela({ ...semNada, valor: 1750, vencimento: '2026-11-09' }, { parcelas, pedidos, clientes });
+  assert.equal(perto.parcela.id, 81);
+  assert.equal(perto.confianca, 'media');
+  assert.match(perto.motivo, /Confira/);
+
+  // Longe demais: não inventa.
+  assert.equal(importacao.sugerirParcela({ ...semNada, valor: 1750, vencimento: '2026-12-20' }, { parcelas, pedidos, clientes }), null);
+
+  // Parcela que já tem boleto vivo sai da disputa — ninguém cobra duas vezes.
+  assert.equal(
+    importacao.sugerirParcela(semNada, { parcelas, pedidos, clientes, ocupadas: new Set(['71']) }),
+    null,
+    'a única candidata estava ocupada'
+  );
+
+  // Pedido cancelado também não recebe sugestão.
+  assert.equal(
+    importacao.sugerirParcela(semNada, { parcelas, pedidos: [{ ...pedidos[0], situacao: 'Cancelado' }, pedidos[1]], clientes }),
+    null
+  );
+
+  // Duas parcelas idênticas: empate não vira palpite.
+  const empate = [...parcelas, { id: 91, pedido_id: 13, numero_parcela: 2, valor: 2006.68, data_vencimento: '2026-10-12' }];
+  assert.equal(importacao.sugerirParcela(semNada, { parcelas: empate, pedidos, clientes }), null);
+
+  assert.equal(importacao.distanciaEmDias('2026-11-04', '2026-11-09'), 5);
+  assert.equal(importacao.distanciaEmDias('2026-11-04', null), null);
 });
 
 test('faixa padrão de 12 meses para trás e para frente, quebrada em pedaços de 90 dias', () => {

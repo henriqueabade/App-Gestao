@@ -204,18 +204,52 @@ function lerSeuNumero(texto) {
 
 const mesmoValor = (a, b) => a !== null && b !== null && Math.abs(Number(a) - Number(b)) <= 0.01;
 
+/** Quantos dias separam dois dias ISO (null quando algum não é dia). Pura. */
+function distanciaEmDias(a, b) {
+  const x = Date.parse(`${a}T12:00:00Z`);
+  const y = Date.parse(`${b}T12:00:00Z`);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return Math.round(Math.abs(x - y) / 86400000);
+}
+
 /**
- * A parcela que combina com o boleto do BB, na ordem que o dono pediu:
- * primeiro o "seu número" no padrão do app (PED120P1) e, se não houver,
- * documento do pagador + valor + vencimento. Devolve { parcela, pedido,
- * motivo } ou null. Pura.
- *
- * @param {object} p.candidatos { parcelas, pedidos, clientes } já lidos
+ * Vencimento "quase igual": o boleto antigo às vezes foi registrado com a
+ * data corrida para o dia útil seguinte, ou prorrogado no banco. Até esta
+ * distância a parcela ainda é sugerida — mas com confiança MÉDIA, que não
+ * vem marcada: quem confirma é o usuário.
  */
-function sugerirParcela(linha, { parcelas = [], pedidos = [], clientes = [] } = {}) {
+const DIAS_DE_FOLGA_NO_VENCIMENTO = 5;
+
+/**
+ * A parcela que combina com o boleto do BB. Devolve { parcela, pedido,
+ * motivo, confianca } ou null. Pura.
+ *
+ * Ordem das regras (a primeira que fecha, ganha):
+ *   1. o "seu número" no padrão do app (PED120P1) — confiança ALTA;
+ *   2. documento do pagador + valor + vencimento — ALTA (o BB só manda o
+ *      pagador no detalhe; na lista ele vem vazio, daí a regra 3);
+ *   3. mesmo valor e mesmo vencimento, uma parcela só — ALTA;
+ *   4. mesmo valor e vencimento a até 5 dias, uma parcela só — MÉDIA.
+ *
+ * Empate nunca vira sugestão: com duas parcelas iguais não há como escolher
+ * e o palpite errado criaria recebimento no pedido errado.
+ *
+ * Confiança ALTA é o que a tela já deixa **marcado** (decisão do dono,
+ * 24/09/2026): o valor e o dia batendo, marcar à mão um por um é trabalho à
+ * toa. Importar, mesmo assim, só quando ele clicar.
+ *
+ * @param {object} p.candidatos { parcelas, pedidos, clientes, ocupadas }
+ *   `ocupadas` são as parcelas que já têm boleto vivo: não se sugere cobrar
+ *   duas vezes a mesma parcela.
+ */
+function sugerirParcela(linha, { parcelas = [], pedidos = [], clientes = [], ocupadas = new Set() } = {}) {
   const pedidoPorId = new Map(pedidos.map(p => [String(p.id), p]));
   const clientePorId = new Map(clientes.map(c => [String(c.id), c]));
   const doPedido = pedido => (pedido ? pedidoPorId.get(String(pedido)) || null : null);
+  const nomeDoPedido = pedido => {
+    const cliente = clientePorId.get(String(pedido?.cliente_id));
+    return cliente?.nome_fantasia || cliente?.razao_social || cliente?.nome || null;
+  };
 
   const seu = lerSeuNumero(linha?.seu_numero);
   if (seu) {
@@ -226,22 +260,49 @@ function sugerirParcela(linha, { parcelas = [], pedidos = [], clientes = [] } = 
     if (parcela) return { parcela, pedido, motivo: `Seu número ${linha.seu_numero}: pedido ${pedido.numero}, parcela ${seu.parcela}.`, confianca: 'alta' };
   }
 
+  // Só parcela livre e de pedido que não foi cancelado entra nas regras de
+  // valor/vencimento — o resto não pode receber boleto de todo jeito.
+  const livres = parcelas.filter(p => {
+    if (ocupadas.has(String(p.id))) return false;
+    const pedido = doPedido(p.pedido_id);
+    if (!pedido) return false;
+    return String(pedido.situacao || '').toLowerCase() !== 'cancelado';
+  });
+  const mesmoDia = livres.filter(p => mesmoValor(numero(p.valor), linha?.valor) && dia(p.data_vencimento) === linha?.vencimento);
+
   const doc = digitos(linha?.pagador_documento);
   if (doc) {
-    const clientesDoDoc = clientes.filter(c => digitos(c.cnpj) === doc || digitos(c.cpf) === doc);
-    const ids = new Set(clientesDoDoc.map(c => String(c.id)));
-    const candidatas = parcelas.filter(p => {
-      const pedido = doPedido(p.pedido_id);
-      if (!pedido || !ids.has(String(pedido.cliente_id))) return false;
-      return mesmoValor(numero(p.valor), linha.valor) && dia(p.data_vencimento) === linha.vencimento;
-    });
-    if (candidatas.length === 1) {
-      const pedido = doPedido(candidatas[0].pedido_id);
-      const cliente = clientePorId.get(String(pedido?.cliente_id));
-      const nome = cliente?.nome_fantasia || cliente?.razao_social || cliente?.nome || 'o pagador';
-      return { parcela: candidatas[0], pedido, motivo: `${nome}, mesmo valor e mesmo vencimento (pedido ${pedido?.numero || '—'}).`, confianca: 'media' };
+    const ids = new Set(clientes.filter(c => digitos(c.cnpj) === doc || digitos(c.cpf) === doc).map(c => String(c.id)));
+    const doPagador = mesmoDia.filter(p => ids.has(String(doPedido(p.pedido_id)?.cliente_id)));
+    if (doPagador.length === 1) {
+      const pedido = doPedido(doPagador[0].pedido_id);
+      return {
+        parcela: doPagador[0], pedido, confianca: 'alta',
+        motivo: `${nomeDoPedido(pedido) || 'O pagador'}, mesmo valor e mesmo vencimento (pedido ${pedido?.numero || '—'}).`
+      };
     }
-    if (candidatas.length > 1) return null;
+    if (doPagador.length > 1) return null;
+  }
+
+  if (mesmoDia.length === 1) {
+    const pedido = doPedido(mesmoDia[0].pedido_id);
+    return {
+      parcela: mesmoDia[0], pedido, confianca: 'alta',
+      motivo: `Mesmo valor e mesmo vencimento: pedido ${pedido?.numero || '—'}, parcela ${mesmoDia[0].numero_parcela}${nomeDoPedido(pedido) ? ` (${nomeDoPedido(pedido)})` : ''}.`
+    };
+  }
+  if (mesmoDia.length > 1) return null;
+
+  const perto = livres
+    .map(p => ({ parcela: p, distancia: distanciaEmDias(dia(p.data_vencimento), linha?.vencimento) }))
+    .filter(c => mesmoValor(numero(c.parcela.valor), linha?.valor) && c.distancia !== null && c.distancia <= DIAS_DE_FOLGA_NO_VENCIMENTO);
+  if (perto.length === 1) {
+    const pedido = doPedido(perto[0].parcela.pedido_id);
+    const dias = perto[0].distancia;
+    return {
+      parcela: perto[0].parcela, pedido, confianca: 'media',
+      motivo: `Mesmo valor, vencimento ${dias === 1 ? 'a 1 dia' : `a ${dias} dias`} de distância: pedido ${pedido?.numero || '—'}, parcela ${perto[0].parcela.numero_parcela}. Confira antes de importar.`
+    };
   }
   return null;
 }
@@ -266,11 +327,17 @@ async function estadoDoSql(api) {
   return { pronto: sqlPronto(algum[0]), desconhecido: false };
 }
 
-/** Os boletos já gravados cujo nosso número está na lista. */
-async function jaImportados(api, ambiente, nossosNumeros = []) {
+/**
+ * Os boletos já gravados cujo nosso número está na lista.
+ *
+ * `gravados` evita reler a tabela quando quem chama já a tem na mão (a tela
+ * da importação precisa dela também para saber quais parcelas estão
+ * ocupadas).
+ */
+async function jaImportados(api, ambiente, nossosNumeros = [], gravados = null) {
   const alvo = new Set(nossosNumeros.filter(Boolean).map(String));
   if (!alvo.size) return new Map();
-  const todos = await api.get('/api/boletos', { query: { ambiente } }).then(lista).catch(() => []);
+  const todos = gravados || await api.get('/api/boletos', { query: { ambiente } }).then(lista).catch(() => []);
   const mapa = new Map();
   for (const b of todos) {
     if (String(b?.ambiente) !== String(ambiente)) continue;
@@ -365,18 +432,22 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
   const conta = configuracao.dadosDaConta(cfg, ambiente);
   const { boletos: doBB, aviso, pedacos } = await listarNoBB({ bb, conexao, conta, situacao, de, ate });
 
-  const [parcelas, pedidos, clientes, sql] = await Promise.all([
+  const [parcelas, pedidos, clientes, gravados] = await Promise.all([
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/clientes').then(lista).catch(() => []),
-    estadoDoSql(api)
+    api.get('/api/boletos').then(lista).catch(() => [])
   ]);
-  const existentes = await jaImportados(api, ambiente, doBB.map(b => b.nosso_numero));
+  const sql = gravados.length ? { pronto: sqlPronto(gravados[0]), desconhecido: false } : { pronto: true, desconhecido: true };
+  const existentes = await jaImportados(api, ambiente, doBB.map(b => b.nosso_numero), gravados);
+  // Parcela que já tem boleto vivo não entra na sugestão: ninguém cobra a
+  // mesma parcela duas vezes, e o `vincular` recusaria assim mesmo.
+  const ocupadas = new Set(gravados.filter(b => boletos.ocupaParcela(b)).map(b => String(b.parcela_id)));
 
   const doPedido = pedidoId ? pedidos.find(p => Number(p.id) === Number(pedidoId)) || null : null;
   const linhas = doBB.map(linha => {
     const existente = existentes.get(linha.nosso_numero) || null;
-    const sugestao = existente ? null : sugerirParcela(linha, { parcelas, pedidos, clientes });
+    const sugestao = existente ? null : sugerirParcela(linha, { parcelas, pedidos, clientes, ocupadas });
     return {
       ...linha,
       situacao_texto: situacaoLegivel(linha),
@@ -412,7 +483,11 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
     resumo: {
       total: linhas.length,
       ja_importados: linhas.filter(l => l.ja_importado).length,
-      com_sugestao: linhas.filter(l => l.sugestao).length
+      com_sugestao: linhas.filter(l => l.sugestao).length,
+      // Os que a tela já entrega marcados: valor e vencimento batem com uma
+      // parcela só. O resto o usuário resolve à mão.
+      certos: linhas.filter(l => l.sugestao?.confianca === 'alta').length,
+      a_conferir: linhas.filter(l => l.sugestao?.confianca === 'media').length
     }
   };
 }
@@ -835,7 +910,7 @@ module.exports = {
   SQL_ARQUIVO, ORIGEM_APP, ORIGEM_IMPORTADO, MESES_PARA_TRAS, MESES_PARA_FRENTE, DIAS_POR_PEDACO,
   faixaPadrao, pedacosDaFaixa, diaParaBB, somarMeses, somarDias,
   nossoNumeroDoCampoLivre, sequencialDoNossoNumero, normalizarDoBB, situacaoLegivel,
-  lerSeuNumero, sugerirParcela, linhaDoBoleto, sequencialDepoisDaImportacao, avisosDoRecebimentoQueJaExistia,
+  lerSeuNumero, sugerirParcela, distanciaEmDias, DIAS_DE_FOLGA_NO_VENCIMENTO, linhaDoBoleto, sequencialDepoisDaImportacao, avisosDoRecebimentoQueJaExistia,
   sqlPronto, exigirSql, estadoDoSql, jaImportados, listarNoBB, listarParaImportar, importarUm, importar, vincular,
   consultarNoBB, reconhecerLinhas, informarPelaLinha, parcelasParaEscolher, buscarEscolhidos
 };

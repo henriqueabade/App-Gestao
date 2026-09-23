@@ -20,6 +20,7 @@ quebra.
 | A lista traz o quê | **Em aberto** por padrão; um seletor mostra os **pagos e baixados** |
 | Faixa de vencimento padrão | **12 meses atrás até 12 meses à frente** (editável; se o BB recusar a janela, o app quebra em pedaços de 90 dias sozinho) |
 | Importado já pago cuja parcela já tinha recebimento à mão | **Vincula e mantém o lançamento à mão**; se o valor ou a data do BB diferirem, fica o alerta |
+| Casamento certo (valor e vencimento batendo) | **Já vem marcado** na tabela (24/09) — importar continua sendo clique do usuário |
 
 ## Duas entradas, um destino
 
@@ -29,10 +30,22 @@ primeiro). A tela busca `GET /boletos` por faixa de vencimento e situação,
 seguindo as páginas do banco, e mostra: nosso número, seu número, vencimento,
 valor, situação no BB, pagador e a **parcela sugerida**.
 
-O casamento tenta, nesta ordem:
-1. o **seu número** no padrão do app (`PED120P1` → pedido PED120, parcela 1);
-2. **documento do pagador + valor + vencimento** — e só quando fecha com uma
-   parcela só; com empate, não sugere nada.
+O casamento tenta, nesta ordem (a primeira que fecha, ganha):
+
+| Regra | Confiança | Na tela |
+|---|---|---|
+| **Seu número** no padrão do app (`PED120P1` → pedido PED120, parcela 1) | alta | **já vem marcado** |
+| **Documento do pagador + valor + vencimento** (o BB só manda o pagador no detalhe; na lista ele vem vazio) | alta | **já vem marcado** |
+| **Mesmo valor e mesmo vencimento**, uma parcela só | alta | **já vem marcado** |
+| **Mesmo valor e vencimento a até 5 dias** (boleto corrido para o dia útil, ou prorrogado no banco), uma parcela só | média | "confira" — marcar é do usuário |
+
+Só entram parcelas **livres** (sem boleto vivo) e de pedido não cancelado.
+**Empate nunca vira sugestão**: com duas parcelas idênticas não há como
+escolher, e o palpite errado criaria recebimento no pedido errado.
+
+A marcação automática é só isso — marcação. **Importar continua sendo o
+clique do usuário** (decisão do dono, 24/09/2026: "obviamente a decisão final
+de salvar e importar é do usuário").
 
 Cada linha pode ir com a sugestão, com outra parcela escolhida na busca, ou
 **sem relacionar**. O que já está no app aparece como "já importado" e não se
