@@ -24,7 +24,7 @@ function puras() {
   const fim = FONTE.indexOf('// ------------------------------------------------- fim das funções puras');
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const contexto = vm.createContext({});
-  return vm.runInContext(`${FONTE.slice(inicio, fim)}\n({ linhaDaParcela, resumoDosResultados, mensagemDeErro, estadoDoRodape, resumoDaConsulta })`, contexto);
+  return vm.runInContext(`${FONTE.slice(inicio, fim)}\n({ linhaDaParcela, resumoDosResultados, mensagemDeErro, estadoDoRodape, resumoDaConsulta, avisoDoEmbarque })`, contexto);
 }
 
 test('linhaDaParcela: só a parcela sem boleto vivo pode ser marcada; a tag e o detalhe seguem o boleto', () => {
@@ -132,11 +132,29 @@ test('script: lê e grava em /api/cobranca, confirma na caixa da casa, marca só
   assert.ok(HTML.includes('<span id="gerarBoletosTituloTexto">Gerar boletos</span>'));
 });
 
+test('boleto antes do embarque: o pedido "ao embarcar" avisa que o vencimento ainda pode mudar', () => {
+  const f = puras();
+  const emProducao = { situacao: 'Produção', faturamento_regra: 'ao_embarcar' };
+  assert.match(f.avisoDoEmbarque(emProducao), /ao embarcar/);
+  assert.match(f.avisoDoEmbarque(emProducao), /prorrogue/);
+  // Já saiu: os vencimentos são os definitivos. Outra regra: não dependem do envio.
+  assert.strictEqual(f.avisoDoEmbarque({ situacao: 'Enviado', faturamento_regra: 'ao_embarcar' }), '');
+  assert.strictEqual(f.avisoDoEmbarque({ situacao: 'Entregue', faturamento_regra: 'ao_embarcar' }), '');
+  assert.strictEqual(f.avisoDoEmbarque({ situacao: 'Produção', faturamento_regra: 'data' }), '');
+  assert.strictEqual(f.avisoDoEmbarque({ situacao: 'Produção' }), '');
+  assert.strictEqual(f.avisoDoEmbarque(null), '');
+  assert.ok(FONTE.includes("rodapeTexto.dataset.textoBase"), 'o aviso entra junto do texto fixo do rodapé');
+});
+
 test('Visualizar pedido: "Boletos" abre a lista quando está tudo gerado, para quem só vê, e no pedido cancelado', () => {
   const VISUALIZAR = fs.readFileSync(path.join(RAIZ, 'js', 'modals', 'pedido-visualizar.js'), 'utf8');
   const VIS_HTML = fs.readFileSync(path.join(RAIZ, 'html', 'modals', 'pedidos', 'visualizar.html'), 'utf8');
   assert.ok(/id="visualizarPedidoBoletos"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(VIS_HTML));
-  assert.ok(VISUALIZAR.includes('if (botao && falta && !cancelado && podeGerar && pedidoJaSaiu(pedido) && pagaComBoleto(pedido)) ligar(botao);') && VISUALIZAR.includes('else if (lista && temBoleto) ligar(lista);'), 'gerar só depois que o pedido saiu, e só em pedido pago com boleto');
+  // Gerar em qualquer pedido que não esteja cancelado (nem devolvido por
+  // inteiro) e pago com boleto — inclusive em produção, para quem paga
+  // adiantado (decisão do dono, 23/09/2026).
+  assert.ok(VISUALIZAR.includes('if (botao && falta && !cancelado && podeGerar && pagaComBoleto(pedido)) ligar(botao);') && VISUALIZAR.includes('else if (lista && temBoleto) ligar(lista);'), 'gerar em pedido não cancelado e pago com boleto');
+  assert.ok(VISUALIZAR.includes('const cancelado = pedidoCancelado(pedido);'), 'cancelado ou devolvido por inteiro não gera');
   assert.ok(VISUALIZAR.includes("window.Permissoes.pode('financeiro.boleto.emit')"));
   assert.ok(VISUALIZAR.includes("const MOTIVO = { quitado_por_fora: 'quitado por fora'"), 'a tag do baixado diz o motivo');
 });

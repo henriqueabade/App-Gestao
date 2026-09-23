@@ -241,6 +241,8 @@
     await setupEndereco('reg', cli.endereco_registro);
     await setupEndereco('cob', cli.endereco_cobranca);
     await setupEndereco('ent', cli.endereco_entrega);
+    // CEP preenche rua, bairro, cidade, estado e o código IBGE do bloco.
+    ['reg','cob','ent'].forEach(p => window.CepBusca?.ligar(p));
   }
 
   function renderContatos(){

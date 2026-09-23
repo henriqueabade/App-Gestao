@@ -1,9 +1,14 @@
 # NF-e e boletos emitidos fora do sistema
 
-Fase 3 das correções de 21/09/2026. Para o pedido que **saiu** (Enviado ou
-Entregue) com a nota fiscal e/ou o boleto feitos em outro lugar — contador,
-outro sistema, outro banco —, o usuário informa **só os dados**. Nenhum arquivo
-fica guardado (decisão do dono).
+Fase 3 das correções de 21/09/2026. Para o pedido com a nota fiscal e/ou o
+boleto feitos em outro lugar — contador, outro sistema, outro banco —, o
+usuário informa **só os dados**. Nenhum arquivo fica guardado (decisão do dono).
+
+Quando cada um entra (decisão do dono, 23/09/2026): a **NF-e de fora** só
+depois que o pedido **saiu** (Enviado ou Entregue) — a nota acompanha a
+mercadoria. O **boleto de fora** não espera o embarque: o cliente que paga
+adiantado recebe o boleto antes, e a nota só sai no embarque. Pedido cancelado
+ou devolvido por inteiro não recebe nenhum dos dois.
 
 ## Decisões do dono
 

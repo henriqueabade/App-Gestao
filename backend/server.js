@@ -103,6 +103,9 @@ app.use('/api/financeiro', require('./financeiroController'));
 app.use('/api/devolucoes', require('./devolucoesController'));
 // Desenhistas das peças (o royalty vai para o desenhista de cada peça do pedido).
 app.use('/api/desenhistas', require('./desenhistasController'));
+// Endereço pelo CEP (clientes e prospecções). Antes do proxy genérico: "cep"
+// não é tabela.
+app.use('/api/cep', require('./cepController'));
 // Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
 // ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
 // conferir permissão e com o cache que nunca expira.

@@ -217,6 +217,31 @@ test('boletos de fora: cada parcela por si, troca o anterior, recusa a que tem b
   assert.equal((await externas.listarBoletos(api, 7)).length, 0);
 });
 
+test('boleto de fora não espera o embarque; pedido cancelado ou devolvido por inteiro não recebe', async () => {
+  // Cliente que paga adiantado recebe o boleto antes de a mercadoria sair — a
+  // NOTA de fora continua só para quem já saiu (decisão do dono, 23/09/2026).
+  const emProducao = base({
+    pedidos: [{ id: 8, numero: 'PED008', situacao: 'Produção', cliente_id: 3, valor_final: 1500, forma_pagamento: 'boleto' }],
+    pedido_parcelas: [{ id: 81, pedido_id: 8, numero_parcela: 1, valor: 1500, data_vencimento: '2026-10-15' }]
+  });
+  const l = linha({ vencimento: '2026-10-15', valor: 1500 });
+  const r = await externas.informarBoletos({ api: emProducao, pedidoId: 8, linhas: [{ parcela_id: 81, linha: l.texto }], usuarioId: 5, hoje: '2026-09-21' });
+  assert.equal(r.resultados[0].ok, true);
+  assert.equal(emProducao.tabelas.boletos_externos.length, 1);
+
+  for (const pedido of [
+    { id: 9, numero: 'PED009', situacao: 'Cancelado', cliente_id: 3, valor_final: 1500, forma_pagamento: 'boleto' },
+    { id: 9, numero: 'PED009', situacao: 'Enviado', devolucao: 'total', cliente_id: 3, valor_final: 1500, forma_pagamento: 'boleto' }
+  ]) {
+    const api = base({ pedidos: [pedido], pedido_parcelas: [{ id: 91, pedido_id: 9, numero_parcela: 1, valor: 1500, data_vencimento: '2026-10-15' }] });
+    await assert.rejects(
+      () => externas.informarBoletos({ api, pedidoId: 9, linhas: [{ parcela_id: 91, linha: l.texto }], hoje: '2026-09-21' }),
+      e => e.status === 409 && /não recebe boleto de fora/.test(e.message),
+      JSON.stringify(pedido)
+    );
+  }
+});
+
 test('boleto de fora da parcela: pelo id, e pelo número nos antigos', () => {
   const lista = [{ id: 1, parcela_id: 71, ativo: true }, { id: 2, parcela_id: null, numero_parcela: 2, ativo: true }, { id: 3, parcela_id: 73, ativo: false }];
   assert.equal(externas.boletoExternoDaParcela(lista, { id: 71, numero_parcela: 1 }).id, 1);

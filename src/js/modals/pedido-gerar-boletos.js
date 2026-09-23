@@ -106,6 +106,20 @@
     return { texto: `${partes.join(' · ')}.`, tipo: erros ? 'error' : 'success' };
   }
 
+  /**
+   * O aviso do pedido que ainda não embarcou. Gerar boleto antes do embarque
+   * é legítimo (cliente que paga adiantado), mas no pedido "ao embarcar" os
+   * vencimentos são refeitos no envio — e o boleto já registrado no banco
+   * precisa então ser prorrogado. Pura.
+   */
+  function avisoDoEmbarque(pedido) {
+    const situacao = String(pedido?.situacao || '').trim().toLowerCase();
+    if (['enviado', 'entregue', 'cancelado'].includes(situacao)) return '';
+    if (String(pedido?.faturamento_regra || '').trim() !== 'ao_embarcar') return '';
+    return 'Este pedido fatura "ao embarcar": os vencimentos são refeitos no dia do envio. '
+      + 'Boleto gerado agora fica com o vencimento de hoje — depois do envio, confira e prorrogue pelo "Detalhes" do boleto.';
+  }
+
   function mensagemDeErro(status, corpo) {
     if (status === 403) return 'Você não tem permissão para gerar boletos.';
     if (status === 404) return 'Pedido não encontrado.';
@@ -186,6 +200,16 @@
     ambiente.className = `${producao ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium justify-self-end`;
     ambiente.textContent = producao ? 'Produção' : 'Homologação (teste, sem valor)';
     el('gerarBoletosSubtitulo').textContent = [ctx.numero ? `Pedido ${ctx.numero}` : '', estado?.pedido?.cliente || ctx.cliente, estado?.nota_fiscal ? `NF-e ${estado.nota_fiscal.serie}/${estado.nota_fiscal.numero}` : ''].filter(Boolean).join(' · ');
+
+    // Pedido que ainda não embarcou e fatura "ao embarcar": o vencimento de
+    // hoje pode mudar no envio. Avisa junto do texto fixo do rodapé.
+    const rodapeTexto = el('gerarBoletosAviso');
+    if (rodapeTexto) {
+      const embarque = avisoDoEmbarque(estado?.pedido);
+      if (!rodapeTexto.dataset.textoBase) rodapeTexto.dataset.textoBase = rodapeTexto.textContent.trim();
+      rodapeTexto.textContent = [rodapeTexto.dataset.textoBase, embarque].filter(Boolean).join(' ');
+      rodapeTexto.style.color = embarque ? 'var(--color-primary-light)' : '';
+    }
 
     const pend = el('gerarBoletosPendencias');
     const lista = Array.isArray(estado?.pendencias) ? estado.pendencias : [];

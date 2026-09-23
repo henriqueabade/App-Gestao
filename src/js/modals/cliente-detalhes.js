@@ -438,6 +438,8 @@ async function carregarContatos(idCliente) {
     await fill('reg', cli.endereco_registro);
     await fill('cob', cli.endereco_cobranca);
     await fill('ent', cli.endereco_entrega);
+    // CEP preenche rua, bairro, cidade, estado e o código IBGE do bloco.
+    ['reg','cob','ent'].forEach(p => window.CepBusca?.ligar(p));
   }
 
   /** Transportadoras do cliente. O backend já devolve {id, nome}. */

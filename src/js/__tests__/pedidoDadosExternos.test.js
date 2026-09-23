@@ -105,12 +105,15 @@ test('modal: confere antes de gravar, XML descartado, remover pede confirmação
   assert.match(HTML, /id="gravarBoletosExternos"[^>]*data-perm="financeiro\.boleto\.emit"/);
 });
 
-test('Visualizar: o botão só em pedido que saiu e com algo a informar (ou a ver); tags e "Gerar boletos" sabem do boleto de fora', () => {
-  const dependencias = ['pagaComBoleto', 'pedidoJaSaiu'].map(n => textoDaFuncao(VISUALIZAR, n)).join('\n');
+test('Visualizar: o botão com algo a informar (ou a ver); a NOTA de fora só depois do embarque, o BOLETO não espera', () => {
+  const dependencias = ['pagaComBoleto', 'pedidoJaSaiu', 'pedidoCancelado'].map(n => textoDaFuncao(VISUALIZAR, n)).join('\n');
   const precisa = recortar(VISUALIZAR, 'precisaDeDadosDeFora', dependencias);
   const enviado = { situacao: 'Enviado', forma_pagamento: 'boleto' };
   const livre = { parcelas: [{ tem_boleto_vivo: false }] };
-  assert.strictEqual(precisa({ pedido: { situacao: 'Produção' }, notas: [], boletos: livre }), false, 'não saiu: nada de nota de fora');
+  assert.strictEqual(precisa({ pedido: { situacao: 'Produção' }, notas: [], boletos: livre }), false, 'sem forma boleto e sem ter saído: nada a informar');
+  // Cliente que paga adiantado: o boleto entra antes do embarque (23/09/2026).
+  assert.strictEqual(precisa({ pedido: { situacao: 'Produção', forma_pagamento: 'boleto' }, notas: [], boletos: livre }), true, 'em produção, falta boleto');
+  assert.strictEqual(precisa({ pedido: { situacao: 'Cancelado', forma_pagamento: 'boleto' }, notas: [], boletos: livre }), false, 'cancelado não recebe nada');
   assert.strictEqual(precisa({ pedido: enviado, notas: [], boletos: livre }), true, 'sem nota nenhuma');
   assert.strictEqual(precisa({ pedido: enviado, notas: [{ status_fiscal: 'autorizada' }], boletos: { parcelas: [{ tem_boleto_vivo: true }] } }), false, 'nota daqui e boletos do BB: nada a informar');
   assert.strictEqual(precisa({ pedido: enviado, notas: [{ status_fiscal: 'autorizada' }], boletos: livre }), true, 'falta boleto numa parcela');

@@ -324,7 +324,14 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
     const linhas = boletos.parcelasComBoletos(dados);
     return {
-      pedido: { id: dados.pedido.id, numero: dados.pedido.numero, situacao: dados.pedido.situacao, cliente: dados.cliente ? (dados.cliente.nome_fantasia || dados.cliente.razao_social || dados.cliente.nome || null) : null },
+      // `faturamento_regra` vai junto: boleto gerado antes do embarque num
+      // pedido "ao embarcar" pode ter o vencimento mudado no envio, e a tela
+      // avisa isso (decisão do dono, 23/09/2026).
+      pedido: {
+        id: dados.pedido.id, numero: dados.pedido.numero, situacao: dados.pedido.situacao,
+        faturamento_regra: dados.pedido.faturamento_regra || null,
+        cliente: dados.cliente ? (dados.cliente.nome_fantasia || dados.cliente.razao_social || dados.cliente.nome || null) : null
+      },
       ambiente,
       nota_fiscal: dados.notaViva ? { id: dados.notaViva.id, serie: dados.notaViva.serie, numero: dados.notaViva.numero } : null,
       parcelas: linhas,

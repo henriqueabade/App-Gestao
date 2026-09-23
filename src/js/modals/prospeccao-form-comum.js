@@ -312,6 +312,9 @@
       } else {
         await carregarEstados(null);
       }
+
+      // CEP preenche rua, bairro, cidade e estado do bloco de endereço.
+      window.CepBusca?.ligar('end');
     }
 
     // -----------------------------------------------------------------

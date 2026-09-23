@@ -164,6 +164,8 @@
     });
   }
   ['reg','cob','ent'].forEach(setupEndereco);
+  // CEP preenche rua, bairro, cidade, estado e o código IBGE do bloco.
+  ['reg','cob','ent'].forEach(p => window.CepBusca?.ligar(p));
 
   // contatos management
   const contatos = [];

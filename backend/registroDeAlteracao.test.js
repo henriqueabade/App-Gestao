@@ -263,6 +263,29 @@ test('pedido "ao embarcar" leva o dia real do embarque como início, no mesmo pa
   }
 });
 
+test('a data de envio escolhida na tela vence o "hoje" — e puxa o início do faturamento junto', () => {
+  const agora = new Date('2026-09-23T15:00:00Z');
+  // Embarque registrado dois dias depois: o dia que vale é o digitado.
+  assert.equal(payloadDeStatus('Enviado', agora, null, '2026-09-21').embarcar_real, '2026-09-21');
+
+  const pedido = { faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-09-30', inicio_faturamento: '2026-09-30' };
+  assert.deepEqual(payloadDeStatus('Enviado', agora, pedido, '2026-09-21'), {
+    situacao: 'Enviado',
+    embarcar_real: '2026-09-21',
+    inicio_faturamento: '2026-09-21'
+  });
+
+  // Sem data, ou com lixo no lugar dela, continua valendo o dia de hoje em
+  // São Paulo (a rota recusa o lixo antes; aqui a função não inventa).
+  for (const entrada of [null, '', 'ontem', '2026-02-30', '21/09/2026']) {
+    assert.equal(payloadDeStatus('Enviado', agora, null, entrada).embarcar_real, '2026-09-23', JSON.stringify(entrada));
+  }
+
+  // A data só vale para o envio: entregar e cancelar seguem no instante.
+  assert.equal(payloadDeStatus('Entregue', agora, null, '2026-09-21').data_entrega, agora.toISOString());
+  assert.ok(!('embarcar_real' in payloadDeStatus('Entregue', agora, null, '2026-09-21')));
+});
+
 test('um status sem data própria não inventa coluna', () => {
   const payload = payloadDeStatus('Produção', new Date());
   assert.deepEqual(Object.keys(payload), ['situacao']);

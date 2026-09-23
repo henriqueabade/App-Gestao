@@ -163,11 +163,14 @@
    * pedido pago com boleto, ou já há dado de fora para ver ou tirar. Pura.
    */
   function precisaDeDadosDeFora({ pedido, notas = [], notaExterna = null, boletos = null }) {
-    if (!pedidoJaSaiu(pedido)) return false;
+    if (pedidoCancelado(pedido)) return false;
     const temNotaPropria = (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
     const linhas = Array.isArray(boletos?.parcelas) ? boletos.parcelas : [];
     const temDeFora = Boolean(notaExterna) || linhas.some(l => l?.boleto_externo);
-    const faltaNota = !temNotaPropria && !notaExterna;
+    // A NOTA de fora só depois que o pedido saiu (a nota acompanha a mercadoria).
+    // O BOLETO não espera o embarque: cliente que pagou adiantado já tem o
+    // boleto na mão antes da nota (decisão do dono, 23/09/2026).
+    const faltaNota = pedidoJaSaiu(pedido) && !temNotaPropria && !notaExterna;
     const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
     return faltaNota || faltaBoleto || temDeFora;
   }
@@ -224,6 +227,11 @@
   /** A forma de pagamento do pedido é boleto? Pura. */
   function pagaComBoleto(pedido) {
     return String(pedido?.forma_pagamento || '').trim().toLowerCase() === 'boleto';
+  }
+
+  /** Pedido que não se cobra mais: cancelado ou devolvido por inteiro. Pura. */
+  function pedidoCancelado(pedido) {
+    return String(pedido?.situacao || '').trim().toLowerCase() === 'cancelado' || pedido?.devolucao === 'total';
   }
 
   /** O pedido já saiu para o cliente (enviado ou entregue, e não devolvido por inteiro)? Pura. */
@@ -398,7 +406,7 @@
     if (!estado || !Array.isArray(estado.parcelas)) return;
     // Parcela com boleto emitido fora já está cobrada: não conta como faltando.
     const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
-    const cancelado = String(pedido?.situacao || '').toLowerCase() === 'cancelado';
+    const cancelado = pedidoCancelado(pedido);
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
       abrirPorCima('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos');
@@ -411,11 +419,13 @@
     const temBoleto = estado.parcelas.some(l => l?.boleto?.id);
     // Quem só vê boletos (ou pedido cancelado, cujos boletos ainda se baixam) entra pela lista.
     const podeGerar = typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode('financeiro.boleto.emit') : true;
-    // Gerar só depois que o pedido saiu (antes disso ele "não foi nem
-    // enviado", regra do dono, e o embarque ainda reprograma os vencimentos)
-    // e só em pedido pago com boleto — num pedido em Pix ou cartão o botão
-    // aparecia só porque as parcelas não tinham boleto.
-    if (botao && falta && !cancelado && podeGerar && pedidoJaSaiu(pedido) && pagaComBoleto(pedido)) ligar(botao);
+    // Gerar em qualquer pedido que não esteja cancelado, inclusive em produção:
+    // há cliente que paga adiantado, antes do embarque, e a nota só sai no
+    // embarque (decisão do dono, 23/09/2026). Só em pedido pago com boleto —
+    // num pedido em Pix ou cartão o botão aparecia só porque as parcelas não
+    // tinham boleto. No pedido "ao embarcar" o modal avisa que os vencimentos
+    // ainda podem mudar no envio.
+    if (botao && falta && !cancelado && podeGerar && pagaComBoleto(pedido)) ligar(botao);
     else if (lista && temBoleto) ligar(lista);
   }
 

@@ -59,6 +59,42 @@
     return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
   }
 
+  /** Só os números, no formato dd/mm/aaaa, enquanto se digita. Pura. */
+  function mascararData(texto) {
+    const n = String(texto ?? '').replace(/\D/g, '').slice(0, 8);
+    if (n.length <= 2) return n;
+    if (n.length <= 4) return `${n.slice(0, 2)}/${n.slice(2)}`;
+    return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`;
+  }
+
+  /**
+   * "15/09/2026" → { iso: '2026-09-15', erro: '' }. Vazio devolve iso null sem
+   * erro; dia que não existe (31/02) é recusado. Pura.
+   */
+  function lerDataDigitada(texto) {
+    const t = String(texto ?? '').trim();
+    if (!t) return { iso: null, erro: '' };
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+    if (!m) return { iso: null, erro: 'Use o formato dd/mm/aaaa.' };
+    const [, d, mes, ano] = m;
+    const data = new Date(Date.UTC(Number(ano), Number(mes) - 1, Number(d)));
+    const confere = data.getUTCFullYear() === Number(ano) && data.getUTCMonth() === Number(mes) - 1 && data.getUTCDate() === Number(d);
+    if (!confere) return { iso: null, erro: 'Esse dia não existe.' };
+    return { iso: `${ano}-${mes}-${d}`, erro: '' };
+  }
+
+  /**
+   * O aviso da data de envio — nunca trava, só chama a atenção: registrar um
+   * embarque de ontem é legítimo; ano digitado errado, não. Pura.
+   */
+  function avisoDaDataDeEnvio(iso, hoje) {
+    if (!iso || !hoje) return '';
+    if (iso > hoje) return `A data de envio (${diaDoTexto(iso)}) ainda não chegou. Confira se é isso mesmo.`;
+    const dias = Math.round((Date.parse(`${hoje}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`)) / 86400000);
+    if (dias > 30) return `A data de envio (${diaDoTexto(iso)}) tem ${dias} dias. Confira se é isso mesmo.`;
+    return '';
+  }
+
   /** "NF-e série 1 nº 2 — autorizada em 15/09/2026 · protocolo … · chave …". */
   function textoDaNota(nota) {
     if (!nota) return '';
@@ -248,6 +284,7 @@
     volumes_especie: el('emitirNfeEspecie'), peso_bruto: el('emitirNfePesoBruto'), peso_liquido: el('emitirNfePesoLiquido'),
     tPag: el('emitirNfePagamento'), informacoes_complementares: el('emitirNfeInformacoes')
   };
+  const envio = { bloco: el('emitirNfeEnvioBloco'), texto: el('emitirNfeEnvio'), nativo: el('emitirNfeEnvioNativo'), botao: el('emitirNfeEnvioCalendario') };
 
   let estado = { pronto: false, pendencias: [], resumo: null, ambiente: 'homologacao', notas: [], jaEnviado: false };
   let emAndamento = false;
@@ -288,6 +325,72 @@
   function limparMensagem() {
     mensagemEl.textContent = '';
     mensagemEl.classList.add('hidden');
+  }
+
+  // ----------------------------------------------------- data de envio
+  /** Hoje em São Paulo — o mesmo dia que o backend grava sozinho. */
+  function hojeEmSaoPaulo() {
+    const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(new Date());
+    const v = tipo => partes.find(p => p.type === tipo)?.value;
+    return `${v('year')}-${v('month')}-${v('day')}`;
+  }
+
+  /** O dia escolhido no campo: { iso, erro }. Vazio vale como hoje. */
+  function dataDeEnvioEscolhida() {
+    if (!envio.texto || envio.bloco?.classList.contains('hidden')) return { iso: null, erro: '' };
+    const lido = lerDataDigitada(envio.texto.value);
+    if (lido.erro) return lido;
+    return { iso: lido.iso || hojeEmSaoPaulo(), erro: '' };
+  }
+
+  function abrirCalendarioDoEnvio() {
+    if (!envio.nativo || envio.texto?.disabled) return;
+    envio.nativo.value = lerDataDigitada(envio.texto.value).iso || '';
+    try {
+      // Síncrono, dentro do clique: o showPicker exige o gesto do usuário.
+      if (typeof envio.nativo.showPicker !== 'function') throw new Error('showPicker indisponível');
+      envio.nativo.showPicker();
+    } catch (_) {
+      try { envio.nativo.focus(); envio.nativo.click(); } catch (__) { /* sem seletor, o texto continua valendo */ }
+    }
+  }
+
+  /** Acusa no campo o que está errado (ou o aviso) e devolve o dia, ou null. */
+  function conferirDataDeEnvio({ calado = false } = {}) {
+    const { iso, erro } = dataDeEnvioEscolhida();
+    envio.texto?.classList.toggle('border-red-500', Boolean(erro));
+    if (erro) {
+      if (!calado) exibirMensagem('erro', `Data de envio: ${erro}`);
+      return null;
+    }
+    const aviso = avisoDaDataDeEnvio(iso, hojeEmSaoPaulo());
+    if (aviso && !calado) exibirMensagem('info', aviso);
+    return iso;
+  }
+
+  function ligarCampoDoEnvio() {
+    if (!envio.texto || !envio.botao || !envio.nativo) return;
+    envio.texto.value = diaDoTexto(hojeEmSaoPaulo());
+    envio.texto.addEventListener('input', () => {
+      const mascarado = mascararData(envio.texto.value);
+      if (mascarado !== envio.texto.value) envio.texto.value = mascarado;
+      const fim = envio.texto.value.length;
+      try { envio.texto.setSelectionRange(fim, fim); } catch (_) { /* campo sem seleção */ }
+      // Enquanto se digita, o erro só SAI; acusar no meio da digitação é do blur.
+      if (!lerDataDigitada(envio.texto.value).erro) {
+        envio.texto.classList.remove('border-red-500');
+        limparMensagem();
+      }
+    });
+    envio.texto.addEventListener('blur', () => conferirDataDeEnvio());
+    envio.botao.addEventListener('click', abrirCalendarioDoEnvio);
+    envio.nativo.addEventListener('change', () => {
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(envio.nativo.value) ? envio.nativo.value : '';
+      if (!iso) return;
+      envio.texto.value = diaDoTexto(iso);
+      conferirDataDeEnvio();
+    });
   }
 
   // ------------------------------------------------------------ pintar
@@ -374,6 +477,9 @@
       aguardar: 'Consulte a SEFAZ para saber se a nota foi autorizada.'
     };
     rodapeAviso.textContent = avisos[acao.acao] || '';
+    // A data de envio só vale para quem AINDA vai sair: pedido já enviado não
+    // muda de situação por aqui.
+    envio.bloco?.classList.toggle('hidden', estado.jaEnviado || acao.acao === 'concluido');
   }
 
   /** Título do modal: "Emitir NF-e e enviar" no embarque; só "Emitir NF-e" para pedido que já saiu. */
@@ -494,9 +600,13 @@
 
   async function marcarEnviado(nota) {
     let resp;
+    // O dia escolhido no cabeçalho é o do embarque (`embarcar_real` no pedido).
+    const dataEnvio = conferirDataDeEnvio({ calado: true });
     try {
       resp = await fetchApi(`/api/pedidos/${encodeURIComponent(pedidoId)}/status`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'Enviado' })
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataEnvio ? { status: 'Enviado', data_envio: dataEnvio } : { status: 'Enviado' })
       });
     } catch (err) {
       console.error('Erro de rede ao marcar o pedido como enviado:', err);
@@ -597,6 +707,12 @@
   async function principal() {
     if (emAndamento || fechado) return;
     limparMensagem();
+    // Data de envio errada trava ANTES de emitir: a nota sairia e a situação
+    // não mudaria (e é a data que reprograma os vencimentos).
+    if (!estado.jaEnviado && dataDeEnvioEscolhida().erro) {
+      conferirDataDeEnvio();
+      return;
+    }
     emAndamento = true;
     try {
       const acao = confirmarBtn.dataset.acao;
@@ -613,6 +729,10 @@
   async function enviarSemNfe() {
     if (emAndamento || fechado) return;
     limparMensagem();
+    if (dataDeEnvioEscolhida().erro) {
+      conferirDataDeEnvio();
+      return;
+    }
     // A caixa de diálogo da casa (DialogPadrao), nunca o confirm() do navegador.
     const ok = await window.DialogPadrao?.confirm?.({
       title: 'Enviar sem NF-e?',
@@ -698,6 +818,7 @@
     };
     await carregarBoleto();
     preencherCampos();
+    ligarCampoDoEnvio();
     renderizarVolumes();
     pintar();
     carregandoEl.classList.add('hidden');

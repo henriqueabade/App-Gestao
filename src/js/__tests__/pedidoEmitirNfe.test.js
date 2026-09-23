@@ -25,7 +25,7 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const trecho = FONTE.slice(inicio, fim);
   const contexto = vm.createContext({});
-  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos })`, contexto);
+  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos, mascararData, lerDataDigitada, avisoDaDataDeEnvio })`, contexto);
 }
 
 test('mais de um volume: uma linha por volume, guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
@@ -214,11 +214,35 @@ test('acaoPrincipal, classificarPendencias, rotuloAmbiente e mensagemDeErro', ()
   assert.strictEqual(f.mensagemDeErro(500, null), 'Não foi possível emitir a NF-e.');
 });
 
+test('data de envio: máscara dd/mm/aaaa, dia que não existe recusado e aviso (nunca trava) para data à frente ou antiga', () => {
+  const f = puras();
+  assert.strictEqual(f.mascararData('2'), '2');
+  assert.strictEqual(f.mascararData('2309'), '23/09');
+  assert.strictEqual(f.mascararData('23092026'), '23/09/2026');
+  assert.strictEqual(f.mascararData('23/09/2026999'), '23/09/2026', 'não passa de 8 números');
+  assert.strictEqual(f.mascararData('a2b3'), '23');
+
+  // Objeto vindo do vm: compara campo a campo (o protótipo é de lá).
+  assert.deepEqual({ ...f.lerDataDigitada('23/09/2026') }, { iso: '2026-09-23', erro: '' });
+  assert.deepEqual({ ...f.lerDataDigitada('') }, { iso: null, erro: '' }, 'vazio vale como hoje');
+  assert.strictEqual(f.lerDataDigitada('23/09').erro, 'Use o formato dd/mm/aaaa.');
+  assert.strictEqual(f.lerDataDigitada('31/02/2026').erro, 'Esse dia não existe.');
+  assert.strictEqual(f.lerDataDigitada('23/09/26').erro, 'Use o formato dd/mm/aaaa.');
+
+  const hoje = '2026-09-23';
+  assert.strictEqual(f.avisoDaDataDeEnvio(hoje, hoje), '');
+  assert.strictEqual(f.avisoDaDataDeEnvio('2026-09-21', hoje), '', 'ontem ou anteontem é rotina');
+  assert.match(f.avisoDaDataDeEnvio('2026-09-25', hoje), /ainda não chegou/);
+  assert.match(f.avisoDaDataDeEnvio('2025-09-23', hoje), /365 dias/, 'ano digitado errado salta aos olhos');
+  assert.strictEqual(f.avisoDaDataDeEnvio(null, hoje), '');
+});
+
 test('HTML: conferência, campos do embarque, pendências, botões com as guardas escritas e sem fechar clicando fora', () => {
   for (const id of ['emitirNfePedidoOverlay', 'emitirNfeAmbiente', 'emitirNfeSubtitulo', 'emitirNfeCliente', 'emitirNfeValor', 'emitirNfeParcelas', 'emitirNfeItens',
     'emitirNfePendencias', 'emitirNfePendenciasLista', 'emitirNfeNotaExistente', 'emitirNfeConsultar', 'emitirNfeFrete', 'emitirNfeTransportadora', 'emitirNfeVolumes',
     'emitirNfeEspecie', 'emitirNfePesoBruto', 'emitirNfePesoLiquido', 'emitirNfePagamento', 'emitirNfeInformacoes', 'emitirNfeMensagem',
-    'voltarEmitirNfe', 'cancelarEmitirNfe', 'enviarSemNfe', 'emitirNfeConfirmar']) {
+    'voltarEmitirNfe', 'cancelarEmitirNfe', 'enviarSemNfe', 'emitirNfeConfirmar',
+    'emitirNfeEnvioBloco', 'emitirNfeEnvio', 'emitirNfeEnvioNativo', 'emitirNfeEnvioCalendario']) {
     assert.ok(HTML.includes(`id="${id}"`), `sem #${id}`);
   }
   assert.ok(/id="emitirNfeConfirmar"[^>]*data-perm="financeiro\.nfe\.emit"/.test(HTML), 'emitir pede financeiro.nfe.emit');
@@ -233,7 +257,8 @@ test('HTML: conferência, campos do embarque, pendências, botões com as guarda
 test('script: carrega a prontidão, emite antes de mudar a situação, solta os ouvintes e não usa innerHTML', () => {
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/prontidao'));
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/emitir'));
-  assert.ok(FONTE.includes("body: JSON.stringify({ status: 'Enviado' })"));
+  // O envio leva a data escolhida no cabeçalho; sem data, o backend usa hoje.
+  assert.ok(FONTE.includes("JSON.stringify(dataEnvio ? { status: 'Enviado', data_envio: dataEnvio } : { status: 'Enviado' })"));
   // Linha a linha (o arquivo pode ter CRLF): emitir → autorizada → boletos (se marcado) → situação.
   const emitirEm = FONTE.indexOf('async function emitir()');
   const boletosEm = FONTE.indexOf('await gerarBoletosSeMarcado(corpo.nota);', emitirEm);

@@ -15,7 +15,24 @@
         <h2 id="emitirNfeTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</h2>
         <p id="emitirNfeSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
-      <span id="emitirNfeAmbiente" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+      <div class="flex items-center gap-2 justify-self-end">
+        <!-- Data de envio: o dia em que o pedido sai. Vem com hoje e pode ser
+             trocada (embarque registrado depois, ou adiantado). É a data que o
+             pedido grava ao virar "Enviado" — e, no pedido "ao embarcar", a que
+             reprograma os vencimentos. Some quando o pedido já saiu. -->
+        <div id="emitirNfeEnvioBloco" class="hidden flex items-center gap-1">
+          <i class="fas fa-truck text-xs text-gray-400" aria-hidden="true" title="Data de envio"></i>
+          <input id="emitirNfeEnvio" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off"
+                 aria-label="Data de envio do pedido" title="Data de envio: o dia em que o pedido sai"
+                 class="w-28 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <span class="relative inline-flex flex-shrink-0">
+            <button id="emitirNfeEnvioCalendario" type="button" class="btn-neutral ctl-botao ctl-botao--icone border border-white/10 text-white" title="Escolher a data de envio no calendário" aria-label="Escolher a data de envio no calendário"><i class="fas fa-calendar-alt" aria-hidden="true"></i></button>
+            <input id="emitirNfeEnvioNativo" type="date" tabindex="-1" aria-hidden="true" data-no-restore="true"
+                   style="position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0;" />
+          </span>
+        </div>
+        <span id="emitirNfeAmbiente" class="badge-warning px-3 py-1 rounded-full text-xs font-medium">—</span>
+      </div>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">

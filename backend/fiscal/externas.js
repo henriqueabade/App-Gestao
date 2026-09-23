@@ -223,6 +223,11 @@ function pedidoSaiu(pedido) {
   return SITUACOES_QUE_SAIRAM.has(String(pedido?.situacao || '').trim().toLowerCase());
 }
 
+/** Pedido que não se cobra mais: cancelado ou devolvido por inteiro. Pura. */
+function pedidoCancelado(pedido) {
+  return String(pedido?.situacao || '').trim().toLowerCase() === 'cancelado' || pedido?.devolucao === 'total';
+}
+
 // ------------------------------------------------------------------ API
 
 /** Tabela desta fase ausente: API remota (404 "Tabela 'x' não encontrada") ou Postgres local (42P01). */
@@ -297,7 +302,10 @@ async function estadoDaNota(api, pedidoId) {
   else if (propria) motivo = `O pedido já tem a NF-e ${propria.serie}/${propria.numero} emitida por aqui.`;
   else if (externa) motivo = 'O pedido já tem uma NF-e de fora. Remova a que está para informar outra.';
   return {
-    pedido: { id: pedido.id, numero: pedido.numero, situacao: pedido.situacao, valor: Number(pedido.valor_final) || null, forma_pagamento: pedido.forma_pagamento || null },
+    pedido: {
+      id: pedido.id, numero: pedido.numero, situacao: pedido.situacao, devolucao: pedido.devolucao || null,
+      valor: Number(pedido.valor_final) || null, forma_pagamento: pedido.forma_pagamento || null
+    },
     nota_propria: propria ? { id: propria.id, serie: propria.serie, numero: propria.numero } : null,
     nota_externa: externa,
     pode_informar: !motivo,
@@ -381,7 +389,10 @@ function boletoParaTela(b) {
  */
 async function informarBoletos({ api, pedidoId, linhas = [], usuarioId = null, apenasPrevia = false, hoje, ocupadaPeloBB = () => false }) {
   const pedido = await lerPedido(api, pedidoId);
-  if (!pedidoSaiu(pedido)) throw erro('Só pedido enviado ou entregue recebe boleto de fora.', 409);
+  // O boleto NÃO espera o embarque (a nota, sim): há cliente que paga
+  // adiantado e recebe o boleto antes da mercadoria sair (decisão do dono,
+  // 23/09/2026). Só o pedido cancelado fica de fora.
+  if (pedidoCancelado(pedido)) throw erro('Pedido cancelado ou devolvido por inteiro não recebe boleto de fora.', 409);
   const [parcelas, externos] = await Promise.all([
     api.get('/api/pedido_parcelas', { query: { pedido_id: pedido.id } }).then(lista).catch(() => []),
     ler(api, 'boletos_externos', { pedido_id: pedido.id })
@@ -431,7 +442,7 @@ async function removerBoleto({ api, id, usuarioId = null }) {
 module.exports = {
   SQL_ARQUIVO, BANCOS,
   dvDaChave, lerChave, lerValor, notaDaEntrada, conferirNota,
-  vencimentoDoFator, linhaImpressa, lerLinhaDigitavel, conferirBoleto, pedidoSaiu,
+  vencimentoDoFator, linhaImpressa, lerLinhaDigitavel, conferirBoleto, pedidoSaiu, pedidoCancelado,
   boletoExternoDaParcela, boletoParaTela, tabelaAusente,
   listarNotas, estadoDaNota, informarNota, removerNota, listarBoletos, informarBoletos, removerBoleto
 };

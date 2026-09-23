@@ -335,10 +335,13 @@
     el('dadosExternosParcelasCaixa').classList.remove('hidden');
     const podeInformar = pode('financeiro.boleto.emit');
     const situacao = String(estadoBoletos?.pedido?.situacao || estadoNota?.pedido?.situacao || '').toLowerCase();
-    const saiu = situacao === 'enviado' || situacao === 'entregue';
+    // O boleto de fora não espera o embarque (a NOTA, sim): há cliente que paga
+    // adiantado e recebe o boleto antes de a mercadoria sair (decisão do dono,
+    // 23/09/2026). Só o pedido cancelado fica de fora.
+    const cancelado = situacao === 'cancelado' || estadoNota?.pedido?.devolucao === 'total';
     const motivo = el('dadosExternosBoletosMotivo');
     const textoMotivo = !linhas.length ? 'O pedido não tem parcelas cadastradas.'
-      : (!saiu ? 'Só pedido enviado ou entregue recebe boleto de fora.' : (!podeInformar ? 'Informar boleto pede a permissão de gerar boletos.' : ''));
+      : (cancelado ? 'Pedido cancelado ou devolvido por inteiro não recebe boleto de fora.' : (!podeInformar ? 'Informar boleto pede a permissão de gerar boletos.' : ''));
     motivo.textContent = textoMotivo;
     motivo.classList.toggle('hidden', !textoMotivo);
 
@@ -382,7 +385,7 @@
         tag.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap self-start';
         tag.textContent = estado.texto;
         conteudo.appendChild(tag);
-      } else if (saiu && podeInformar) {
+      } else if (!cancelado && podeInformar) {
         livres += 1;
         const campo = document.createElement('input');
         campo.type = 'text';

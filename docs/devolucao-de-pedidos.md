@@ -13,12 +13,31 @@ rodapé do Visualizar seguem a situação (regra do dono, 21/09/2026 —
 | Devolvido (total), Cancelado | nenhum |
 
 Botões da NF-e e dos boletos só aparecem quando o pedido tem de fato a nota ou
-o boleto; "Gerar boletos" só depois que o pedido saiu e só em pedido pago com
-boleto. A tabela de itens não tem mais a coluna de ações, e a etiqueta roxa
+o boleto; "Gerar boletos" aparece em qualquer pedido pago com boleto que não
+esteja cancelado (nem devolvido por inteiro) — **inclusive em produção**, para
+o cliente que paga adiantado, já que a nota só sai no embarque (decisão do
+dono, 23/09/2026). No pedido que fatura "ao embarcar", o modal avisa que os
+vencimentos são refeitos no envio e o boleto já registrado precisa ser
+prorrogado. A tabela de itens não tem mais a coluna de ações, e a etiqueta roxa
 "N dev." vai na frente do nome do item. A trava também está no backend
 (`PUT /api/pedidos/:id/status` responde 409 `USE_DEVOLUCAO`): pedido que já
 teve devolução jamais passa pelo estorno do cancelamento, que devolveria ao
 estoque peças que já voltaram.
+
+## Data de envio (decisão do dono, 23/09/2026)
+
+No cabeçalho do modal **"Emitir NF-e e enviar"**, à esquerda da etiqueta do
+ambiente, há um campo de data que já vem com **hoje** e pode ser trocado (com
+calendário, como os outros campos de data). É o dia que o pedido grava como
+embarque (`embarcar_real`) quando vira "Enviado" — e, no pedido que fatura
+"ao embarcar", é dele que saem os vencimentos das parcelas. Serve para o
+embarque registrado depois, ou adiantado.
+
+Dia que não existe trava antes de emitir (a nota sairia e a situação não
+mudaria); data à frente ou muito antiga só avisa. O campo some quando o pedido
+já saiu — aí o modal só emite a nota, sem mexer na situação. O backend confere
+de novo: `PUT /api/pedidos/:id/status` aceita `data_envio` e recusa com 400 o
+que não for um dia de verdade.
 
 ## Decisões do dono (17/09/2026)
 

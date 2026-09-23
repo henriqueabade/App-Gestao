@@ -131,11 +131,13 @@ function permissaoDeStatus(req) {
  * transação, um PUT só é a única atomicidade que existe. Os vencimentos são
  * refeitos em seguida, na rota.
  */
-function payloadDeStatus(status, agora = new Date(), pedido = null) {
+function payloadDeStatus(status, agora = new Date(), pedido = null, dataEnvio = null) {
   const payload = { situacao: status };
   const quando = agora.toISOString();
   if (status === 'Enviado') {
-    payload.embarcar_real = hojeEmSaoPaulo(agora);
+    // O dia do embarque vem da tela (campo no modal da NF-e) quando o usuário
+    // troca a data — embarque registrado depois, ou adiantado. Sem ele, hoje.
+    payload.embarcar_real = diaValido(dataEnvio) || hojeEmSaoPaulo(agora);
     const novoInicio = inicioAposEmbarque(pedido, payload.embarcar_real);
     if (novoInicio) payload.inicio_faturamento = novoInicio;
   } else if (status === 'Entregue') {
@@ -175,6 +177,16 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
   const { status } = req.body;
   const { id } = req.params;
   try {
+    // Data de envio escolhida na tela. Um dia inválido PARA aqui: cair no
+    // silêncio para "hoje" gravaria um embarque que ninguém pediu — e o
+    // embarque reprograma os vencimentos do pedido "ao embarcar".
+    const dataDeEnvio = req.body?.data_envio === undefined || req.body?.data_envio === null || req.body?.data_envio === ''
+      ? null
+      : diaValido(req.body.data_envio);
+    if (req.body?.data_envio && !dataDeEnvio) {
+      return res.status(400).json({ error: 'Data de envio inválida. Use dd/mm/aaaa.' });
+    }
+
     const api = createApiClient(req);
 
     // O pedido é lido antes das duas travas abaixo. No envio ele também traz o
@@ -288,7 +300,7 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       }
     }
 
-    const payload = payloadDeStatus(status, new Date(), atual);
+    const payload = payloadDeStatus(status, new Date(), atual, dataDeEnvio);
     await api.put(`/api/pedidos/${id}`, payload);
 
     // Cancelado: a produção pendente não vai para o mês seguinte — paga-se só o
