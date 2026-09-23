@@ -1,0 +1,101 @@
+<!--
+  Importar boletos do BB (Financeiro → Configuração de cobrança, e Pedidos →
+  Visualizar → Importar do BB). Busca no Banco do Brasil os boletos da conta
+  por faixa de vencimento, mostra o que já está no app e o que não está, e
+  traz os escolhidos para a tabela `boletos` — com PDF, sincronização e aviso
+  de pagamento. Cada linha pode ir com a parcela sugerida, com outra escolhida
+  à mão, ou sem parcela nenhuma. Não fecha clicando fora
+  (docs/padroes-de-interface.md).
+  Contexto: window.importarBoletosContext = { pedidoId?, numero?, cliente? }.
+  Script: src/js/modals/pedido-importar-boletos.js. Doc: docs/importar-boletos-do-bb.md.
+-->
+<div id="importarBoletosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="importarBoletosTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarImportarBoletos" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="importarBoletosTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>Importar boletos do BB</h2>
+        <p id="importarBoletosSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="importarBoletosAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="p-6 space-y-5">
+
+        <!-- Busca: situação e faixa de vencimento (12 meses para trás e para frente). -->
+        <div class="glass-surface rounded-xl border border-white/10 p-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label for="importarBoletosSituacao" class="ctl-rotulo text-gray-300">Situação no BB</label>
+              <select id="importarBoletosSituacao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="A">Em aberto</option>
+                <option value="B">Pagos e baixados</option>
+              </select>
+            </div>
+            <div>
+              <label for="importarBoletosDe" class="ctl-rotulo text-gray-300">Vencimento de</label>
+              <input id="importarBoletosDe" type="date" data-no-restore="true" style="color-scheme: dark" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="importarBoletosAte" class="ctl-rotulo text-gray-300">até</label>
+              <input id="importarBoletosAte" type="date" data-no-restore="true" style="color-scheme: dark" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <button id="importarBoletosBuscar" type="button" data-perm="financeiro.boleto.view" class="btn-bb ctl-botao text-white w-full"><i class="fas fa-search mr-2" aria-hidden="true"></i>Buscar no BB</button>
+          </div>
+          <p id="importarBoletosResumo" class="mt-3 text-xs text-gray-400"></p>
+        </div>
+
+        <div id="importarBoletosCarregando" class="hidden text-sm text-gray-400"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Falando com o Banco do Brasil…</div>
+
+        <div id="importarBoletosTabela" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">
+                    <input id="importarBoletosTodos" type="checkbox" class="w-4 h-4 rounded border-inputBorder bg-input" style="accent-color: var(--color-primary)" aria-label="Marcar todos" />
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs">Nosso número</th>
+                  <th class="px-4 py-3 text-left text-xs">Seu número</th>
+                  <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                  <th class="px-4 py-3 text-right text-xs">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-left text-xs">Pagador</th>
+                  <th class="px-4 py-3 text-left text-xs">Parcela</th>
+                </tr>
+              </thead>
+              <tbody id="importarBoletosLinhas" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <p id="importarBoletosVazio" class="hidden text-sm text-gray-400">Nenhum boleto do Banco do Brasil nessa faixa de vencimento.</p>
+
+        <!-- Escolher a parcela à mão: busca por pedido ou cliente. -->
+        <div id="importarBoletosEscolha" class="hidden glass-surface rounded-xl border border-white/10 p-4 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <p id="importarBoletosEscolhaTitulo" class="text-sm text-white">Escolher a parcela</p>
+            <button id="importarBoletosEscolhaFechar" type="button" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Sair da escolha" aria-label="Sair da escolha"><i class="fas fa-times" aria-hidden="true"></i></button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="importarBoletosBusca" type="text" placeholder="Número do pedido ou nome do cliente" autocomplete="off" class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <button id="importarBoletosBuscarParcela" type="button" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Procurar"><i class="fas fa-search" aria-hidden="true"></i></button>
+            <button id="importarBoletosSemParcela" type="button" class="btn-neutral ctl-botao text-white">Importar sem relacionar</button>
+          </div>
+          <ul id="importarBoletosResultadoBusca" class="space-y-2 text-sm max-h-60 overflow-y-auto modal-scroll"></ul>
+        </div>
+
+        <p class="text-xs text-gray-400">Boleto importado passa a ter PDF, consulta no BB e aviso de pagamento, igual aos gerados aqui. O que não for relacionado a uma parcela entra assim mesmo e pode ser ligado depois, nesta mesma tela.</p>
+        <div id="importarBoletosMensagem" class="hidden text-sm" role="alert"></div>
+        <ul id="importarBoletosResultado" class="hidden space-y-1 text-sm"></ul>
+      </div>
+    </div>
+
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="fecharImportarBoletos" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="confirmarImportarBoletos" type="button" data-perm="financeiro.boleto.emit" class="hidden btn-success ctl-botao min-w-[180px]">Importar boletos</button>
+    </footer>
+  </div>
+</div>

@@ -345,6 +345,15 @@ async function sincronizar({ api, bb, conexao, boleto, cfg = null, hoje, usuario
   // Pago no banco: o dinheiro entra no Financeiro (fase E). Falha aqui não desfaz a consulta.
   const avisos = [];
   let recebimento = null;
+  // Boleto importado do BB que ainda não foi ligado a uma parcela: o
+  // recebimento não tem a quem pertencer. Fica o alerta — nunca um
+  // lançamento solto no Financeiro (decisão do dono, 23/09/2026).
+  if (campos.status === 'pago' && !atualizado.pedido_id) {
+    const alerta = `Boleto ${atualizado.nosso_numero} está pago no BB, mas não tem parcela vinculada: nada foi lançado no Financeiro. Ligue-o a uma parcela em "Importar boletos do BB".`;
+    avisos.push(alerta);
+    await evento(api, atualizado, usuarioId, 'alerta', alerta, null, origem);
+    return { boleto: atualizado, lido, mudou, divergencias, recebimento: null, avisos };
+  }
   if (campos.status === 'pago') {
     try {
       recebimento = await recebimentos.doBoleto({

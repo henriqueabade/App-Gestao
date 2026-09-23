@@ -360,22 +360,18 @@ function hideStatusTooltip() {
 }
 
 
+/**
+ * Abre um modal de Pedidos com o spinner da casa, que só sai quando o modal
+ * avisa que está pronto. A mecânica mora em Modal.openWithSpinner — a mesma
+ * usada pelos modais que abrem por cima do Visualizar — e de lá vem também o
+ * relógio de segurança, para o spinner nunca ficar preso na tela.
+ */
 function openPedidoModal(htmlPath, scriptPath, overlayId) {
-    Modal.closeAll();
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
-    spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
-    document.body.appendChild(spinner);
-    function handleLoaded(e) {
-        if (e.detail !== overlayId) return;
-        const overlay = document.getElementById(`${overlayId}Overlay`);
-        spinner.remove();
-        overlay?.classList.remove('hidden');
-        window.removeEventListener('pedidoModalLoaded', handleLoaded);
+    if (typeof Modal.openWithSpinner === 'function') {
+        Modal.openWithSpinner(htmlPath, scriptPath, overlayId);
+        return;
     }
-    window.addEventListener('pedidoModalLoaded', handleLoaded);
+    Modal.closeAll();
     Modal.open(htmlPath, scriptPath, overlayId, true);
 }
 

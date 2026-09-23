@@ -198,6 +198,10 @@ function lerLinhaDigitavel(texto, hoje) {
     codigo_barras: `${banco}${l[3]}${l[32]}${fatorValor}${livre}`,
     banco,
     banco_nome: BANCOS[banco] || `Banco ${banco}`,
+    // O campo livre (25 posições) é de onde sai o nosso número quando o
+    // boleto é do nosso convênio no BB — aí ele não é "de fora": é importado
+    // de verdade (backend/cobranca/importacao.js).
+    campo_livre: livre,
     valor: valor > 0 ? valor : null,
     vencimento: vencimentoDoFator(fatorValor.slice(0, 4), hoje)
   };

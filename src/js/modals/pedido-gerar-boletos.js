@@ -305,6 +305,10 @@
   function abrirDetalhe(l) {
     if (!l?.boletoId || document.getElementById('boletoDetalheOverlay')) return;
     window.boletoDetalheContext = { boletoId: l.boletoId, pedidoId: ctx.pedidoId, numero: ctx.numero, parcela: l.numero };
+    if (typeof Modal.openWithSpinner === 'function') {
+      Modal.openWithSpinner('modals/pedidos/boleto-detalhe.html', '../js/modals/pedido-boleto-detalhe.js', 'boletoDetalhe', { keepExisting: true });
+      return;
+    }
     Modal.open('modals/pedidos/boleto-detalhe.html', '../js/modals/pedido-boleto-detalhe.js', 'boletoDetalhe', true);
   }
 
@@ -415,8 +419,15 @@
     consultarBtn?.addEventListener('click', consultarNoBB);
   }
 
-  overlay.classList.remove('hidden');
-  overlay.removeAttribute('aria-hidden');
-  window.Modal?.signalReady?.(overlayId);
-  carregar();
+  // Revela só depois da PRIMEIRA leitura, como os modais do Financeiro: até
+  // lá fica o spinner de quem abriu (Modal.openWithSpinner). Antes o modal
+  // aparecia vazio e os dados caíam nele depois, com cara de travamento.
+  const revelar = () => {
+    overlay.classList.remove('hidden');
+    overlay.removeAttribute('aria-hidden');
+    window.Modal?.signalReady?.(overlayId);
+  };
+  Promise.resolve(carregar())
+    .catch(erro => console.error('[pedido] falha ao carregar o modal', overlayId, erro))
+    .finally(revelar);
 })();

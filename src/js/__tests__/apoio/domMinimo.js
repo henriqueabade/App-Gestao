@@ -385,7 +385,14 @@ class Elemento extends No {
         const quer = forcar === undefined ? !ler().includes(c) : Boolean(forcar);
         if (quer) api.add(c); else api.remove(c);
         return quer;
-      }
+      },
+      // O classList do navegador é uma LISTA: dá para percorrer e espalhar.
+      // O utils/modal.js faz os dois para achar a classe de camada (z-...).
+      forEach: (fn, alvo) => ler().forEach(fn, alvo),
+      item: i => (ler()[i] === undefined ? null : ler()[i]),
+      get length() { return ler().length; },
+      [Symbol.iterator]: () => ler()[Symbol.iterator](),
+      toString: () => ler().join(' ')
     };
     return api;
   }
@@ -426,6 +433,11 @@ class Elemento extends No {
   removeChild(no) { this._retirar(no); return no; }
   append(...nos) {
     nos.forEach(n => this._inserir(typeof n === 'string' ? this.ownerDocument.createTextNode(n) : n));
+  }
+  /** Troca tudo o que está dentro — é como os modais redesenham as listas. */
+  replaceChildren(...nos) {
+    [...this.childNodes].forEach(n => this._retirar(n));
+    this.append(...nos);
   }
 
   contains(outro) {

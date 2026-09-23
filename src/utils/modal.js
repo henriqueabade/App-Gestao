@@ -127,6 +127,37 @@ const ModalManager = (() => {
     return wrapper;
   }
 
+  /**
+   * Tira da página a cópia anterior DESTE mesmo modal, antes de pendurar a
+   * nova.
+   *
+   * Abrir duas vezes o mesmo modal (o "Enviar" do Visualizar, por exemplo)
+   * deixava a primeira cópia para trás: o mapa só guarda a última, e a antiga
+   * ficava órfã no corpo da página. Com dois elementos de mesmo id, o script
+   * do modal novo pegava o FANTASMA no getElementById — os botões eram
+   * ligados nele — e o `close` tirava o invisível: era daí que vinha o modal
+   * que "não fecha" no Voltar/Cancelar.
+   *
+   * Não dispara `modalFechado`: não é o usuário desistindo da tela, é a mesma
+   * tela sendo trocada — quem ouve o fechamento (o Visualizar, por exemplo)
+   * não pode reagir como se o filho tivesse sido fechado.
+   */
+  function descartarCopiaAntiga(overlayId) {
+    const anterior = modals.get(overlayId);
+    if (anterior) {
+      anterior.remove();
+      modals.delete(overlayId);
+    }
+    if (!overlayId) return;
+    document.querySelectorAll(`#${overlayId}Overlay`).forEach(elemento => {
+      // Só o que o `open` pendurou tem a forma <body> › wrapper › overlay.
+      // Overlay que veio no HTML da página (o `exitOverlay` do menu) não é
+      // nosso e não se mexe.
+      const wrapper = elemento.parentElement;
+      if (wrapper && wrapper !== document.body && wrapper.parentElement === document.body) wrapper.remove();
+    });
+  }
+
   async function open(htmlPath, scriptPath, overlayId, keepExisting = false) {
     if (arguments.length === 1) {
       const cfg = modalConfigs[htmlPath];
@@ -151,6 +182,7 @@ const ModalManager = (() => {
     wrapper.innerHTML = html;
     ensureHighZIndex(wrapper.firstElementChild);
     if (token !== openToken) return;
+    descartarCopiaAntiga(overlayId);
     document.body.appendChild(wrapper);
     document.body.classList.add('overflow-hidden');
     setupEmptyStates(wrapper);
@@ -201,6 +233,7 @@ const ModalManager = (() => {
 
     const mergedHtml = mergeModalTemplate(templateHtml, contentHtml);
     if (token !== openToken) return;
+    descartarCopiaAntiga(overlayId);
     const wrapper = await buildModalWrapper(mergedHtml);
 
     if (scriptPath) {
@@ -211,6 +244,94 @@ const ModalManager = (() => {
     }
 
     modals.set(overlayId, wrapper);
+  }
+
+  /** O spinner da casa (o mesmo de openModalWithSpinner), sem innerHTML. */
+  function criarSpinner() {
+    const caixa = document.createElement('div');
+    caixa.id = 'modalLoading';
+    caixa.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    caixa.style.zIndex = 'var(--z-dialog)';
+    const indicador = document.createElement('div');
+    indicador.className = 'app-loading-indicator app-loading-indicator--compact';
+    indicador.setAttribute('aria-hidden', 'true');
+    const orbita = document.createElement('span');
+    orbita.className = 'module-loading-orbit';
+    const nucleo = document.createElement('span');
+    nucleo.className = 'module-loading-core';
+    const logo = document.createElement('img');
+    logo.src = '../assets/Logo.ico';
+    logo.alt = '';
+    nucleo.appendChild(logo);
+    indicador.append(orbita, nucleo);
+    caixa.appendChild(indicador);
+    return caixa;
+  }
+
+  /**
+   * Abre um modal com o spinner da casa e só o revela quando ele avisa que
+   * está PRONTO — `pedidoModalLoaded` (Pedidos) ou `Modal.signalReady`.
+   *
+   * É o que pedidos.js já fazia no openPedidoModal. Faltava para os modais
+   * que abrem POR CIMA de outro: lá eles ou nasciam na tela vazios ("um
+   * pedaço do modal e depois os dados") ou, quando esperavam o aviso — o
+   * Emitir NF-e e o Importar boletos —, ficavam escondidos para sempre e o
+   * botão parecia morto.
+   *
+   * `minSpinnerMs` segura a revelação para o spinner não "piscar"; o relógio
+   * de segurança revela assim mesmo se o aviso nunca vier, para ninguém ficar
+   * preso atrás de uma tela escura.
+   */
+  function openWithSpinner(htmlPath, scriptPath, overlayId, {
+    keepExisting = false,
+    minSpinnerMs = 500,
+    timeoutMs = 15000
+  } = {}) {
+    const spinner = criarSpinner();
+    document.body.appendChild(spinner);
+    const inicio = Date.now();
+    let encerrado = false;
+    let relogio = null;
+
+    const desligar = () => {
+      window.removeEventListener('pedidoModalLoaded', aoAvisar);
+      window.removeEventListener('modal-ready', aoAvisar);
+      window.removeEventListener('modalFechado', aoFechar);
+      if (relogio) clearTimeout(relogio);
+    };
+    const revelar = () => {
+      if (encerrado) return;
+      encerrado = true;
+      desligar();
+      const aplicar = () => {
+        spinner.remove();
+        const alvo = document.getElementById(`${overlayId}Overlay`);
+        alvo?.classList.remove('hidden');
+        alvo?.removeAttribute('aria-hidden');
+      };
+      const resta = Math.max(0, minSpinnerMs - (Date.now() - inicio));
+      if (resta <= 0) aplicar();
+      else setTimeout(aplicar, resta);
+    };
+    function aoAvisar(evento) {
+      if (evento?.detail === overlayId) revelar();
+    }
+    function aoFechar(evento) {
+      if (evento?.detail !== overlayId || encerrado) return;
+      encerrado = true;
+      desligar();
+      spinner.remove();
+    }
+
+    // Os ouvintes entram DEPOIS da chamada: o trecho síncrono de `open` pode
+    // fechar este mesmo id (closeAll ao reabrir), e esse fechamento não é o
+    // nosso — ouvi-lo tiraria o spinner antes da hora.
+    const aberto = open(htmlPath, scriptPath, overlayId, keepExisting);
+    window.addEventListener('pedidoModalLoaded', aoAvisar);
+    window.addEventListener('modal-ready', aoAvisar);
+    window.addEventListener('modalFechado', aoFechar);
+    relogio = setTimeout(revelar, timeoutMs);
+    return aberto;
   }
 
   function close(overlayId) {
@@ -287,7 +408,7 @@ const ModalManager = (() => {
     });
   }
 
-  return { open, openWithTemplate, close, closeAll, signalReady, waitForReady };
+  return { open, openWithTemplate, openWithSpinner, close, closeAll, signalReady, waitForReady };
 })();
 
 window.ModalManager = ModalManager;

@@ -328,6 +328,21 @@ Visualizar pedido isso fica em `abrirPorCima()`, que também relê o pedido
 quando o filho muda alguma coisa (nota cancelada, boleto gerado…). O Esc só
 fecha o modal de cima.
 
+**Abra sempre por `Modal.openWithSpinner(html, script, id, { keepExisting })`**
+— `openPedidoModal` (Pedidos), `abrirPorCima` (Visualizar) e
+`abrirModalDePedido` (Financeiro) são só três apelidos dele. Ele põe o spinner
+da casa, espera o modal avisar que está pronto (`pedidoModalLoaded` ou
+`Modal.signalReady`) e só então tira o `hidden`. Chamar o `Modal.open` cru num
+modal que espera esse aviso deixa a tela **escondida para sempre**, e o botão
+parece morto: foi o que aconteceu com o "Enviar" e o "Importar do BB" do
+Visualizar em 23/09/2026.
+
+Abrir o **mesmo** modal duas vezes não deixa mais cópia para trás: o
+`Modal.open` descarta a anterior antes de pendurar a nova. Duas cópias de
+mesmo id faziam o script ligar os botões no fantasma (o `getElementById`
+devolve o primeiro) e o `close` tirar o invisível — o Voltar/Cancelar do
+"Emitir NF-e e enviar" não fechava nada.
+
 ### Barra de rolagem: uma só, em todo lugar
 
 Toda área que rola usa a barra fina e dourada (6 px, sem trilho): a regra
@@ -454,6 +469,23 @@ e o modal aparece já preenchido. No Financeiro, `finSpinnerDoModal()`
 (`src/js/financeiro.js`) põe o spinner e `window.FinanceiroModalPronto()` o
 troca pelo modal quando a primeira leitura termina (no máximo 15 s). Trocar um
 filtro dentro do modal mostra uma linha com o mesmo spinner no lugar da tabela.
+
+Nos modais de Pedidos quem faz isso é `Modal.openWithSpinner`. Do lado do
+modal, a regra é **revelar depois de carregar**:
+
+```js
+const revelar = () => {
+  overlay.classList.remove('hidden');
+  overlay.removeAttribute('aria-hidden');
+  window.Modal?.signalReady?.(overlayId);
+};
+Promise.resolve(carregar())
+  .catch(erro => console.error('[pedido] falha ao carregar o modal', overlayId, erro))
+  .finally(revelar);
+```
+
+Revelar antes e chamar `carregar()` solto faz o modal piscar vazio e os dados
+caírem nele depois — é o defeito que esta seção existe para evitar.
 
 ### Modais com abas
 

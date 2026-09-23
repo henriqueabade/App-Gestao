@@ -113,6 +113,14 @@ async function confirmarPagamento({ api, boleto, aviso, eventoId, hoje, usuarioI
       mensagem: `Pago${aviso.data ? ` em ${calculo.dataImpressa(aviso.data)}` : ''}${aviso.valor ? `: R$ ${calculo.valorImpresso(aviso.valor)}` : ''}${aviso.canal ? ` (${aviso.canal})` : ''} — aviso do BB.`
     });
   }
+  // Boleto importado do BB e ainda sem parcela: marca o pagamento e avisa —
+  // recebimento sem parcela não existe (decisão do dono, 23/09/2026).
+  if (!atual.pedido_id) {
+    const mensagem = `O BB avisou o pagamento do boleto ${atual.nosso_numero}, que não tem parcela vinculada: o boleto ficou pago, mas nada foi lançado no Financeiro. Ligue-o a uma parcela em "Importar boletos do BB".`;
+    await boletos.registrarEvento(api, atual.id, { origem: 'webhook', tipo: 'alerta', nosso_numero: atual.nosso_numero, mensagem, payload: aviso, usuario_id: usuarioId });
+    return { alerta: mensagem };
+  }
+
   const r = await recebimentos.doBoleto({
     api, boleto: atual, origem: 'boleto', usuarioId, hoje,
     dados: { data: aviso.data, valor: aviso.valor, canal: aviso.canal, eventoId }
@@ -189,6 +197,8 @@ async function acertarRecebimentos({ api, todos, hoje, usuarioId = null }) {
   const confirmados = new Set(existentes.filter(r => r.status === 'confirmado').map(r => `${r.pedido_id}:${r.numero_parcela}`));
   const resumo = { lancados: 0, erros: 0, mensagens: [] };
   for (const b of alvo) {
+    // Importado do BB e ainda sem parcela: não há a quem lançar o dinheiro.
+    if (!b.pedido_id) continue;
     if (confirmados.has(`${b.pedido_id}:${b.numero_parcela}`)) continue;
     // Quitação por fora anterior à fase: a forma estava só no canal ("Fora do boleto · Pix").
     const forma = b.status === 'baixado' ? String(b.canal_pagamento || '').split('·').pop().trim() || null : null;

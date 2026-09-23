@@ -656,6 +656,9 @@
         };
         window.addEventListener('modalSpinnerLoaded', revelarAoCarregar);
         window.addEventListener('orcamentoModalLoaded', revelarAoCarregar);
+        // Os modais de Pedidos avisam com outro nome: sem isto eles só
+        // apareciam pelo desbloqueio por tempo do `aguardarModal`.
+        window.addEventListener('pedidoModalLoaded', revelarAoCarregar);
 
         if (ab && ab.htmlPath && window.Modal?.open) {
             try {
@@ -674,6 +677,7 @@
         const overlay = await aguardarModal(modal.overlayId);
         window.removeEventListener('modalSpinnerLoaded', revelarAoCarregar);
         window.removeEventListener('orcamentoModalLoaded', revelarAoCarregar);
+        window.removeEventListener('pedidoModalLoaded', revelarAoCarregar);
         if (!overlay) {
             console.warn('[estado] o modal ' + modal.overlayId + ' nao reapareceu; conteudo nao restaurado.');
             return;

@@ -429,6 +429,25 @@
     else if (lista && temBoleto) ligar(lista);
   }
 
+  /**
+   * "Importar do BB": boleto deste pedido que já existe no banco (emitido
+   * antes, pelo Gerenciador Financeiro) e ainda não está no app. Aparece para
+   * pedido pago com boleto que não esteja cancelado — é lá que falta boleto.
+   */
+  function ligarImportarBoletos(pedido) {
+    const botao = overlay.querySelector('#visualizarPedidoImportarBoletos');
+    if (!botao || pedidoCancelado(pedido) || !pagaComBoleto(pedido)) return;
+    const pode = typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode('financeiro.boleto.view') : true;
+    if (!pode) return;
+    const abrir = () => {
+      window.importarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
+      abrirPorCima('modals/pedidos/importar-boletos.html', '../js/modals/pedido-importar-boletos.js', 'importarBoletos');
+    };
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
+    else botao.addEventListener('click', abrir);
+  }
+
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
@@ -439,12 +458,19 @@
   // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
   // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
   // Antes cada um fechava o Visualizar primeiro.
-  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos'];
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos', 'importarBoletos'];
   const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa'];
   let filhoMudouOPedido = false;
 
   function abrirPorCima(htmlPath, scriptPath, filhoId) {
-    Modal.open(htmlPath, scriptPath, filhoId, true);
+    // Com o spinner da casa, como a lista faz no openPedidoModal: o filho só
+    // aparece depois de carregado. Sem isso, o "Enviar" e o "Importar do BB"
+    // — que esperam o aviso de pronto em vez de se revelarem sozinhos —
+    // ficavam escondidos para sempre, e os outros piscavam vazios na tela.
+    if (typeof Modal.openWithSpinner === 'function') {
+      return Modal.openWithSpinner(htmlPath, scriptPath, filhoId, { keepExisting: true });
+    }
+    return Modal.open(htmlPath, scriptPath, filhoId, true);
   }
 
   /** O Visualizar é o modal de cima? (Esc de um filho não pode fechar os dois.) */
@@ -484,20 +510,10 @@
   function reabrirAtualizado() {
     desligarFilhos();
     document.removeEventListener('keydown', esc);
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
-    spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
-    document.body.appendChild(spinner);
-    const aoCarregar = e => {
-      if (e?.detail !== overlayId) return;
-      window.removeEventListener('pedidoModalLoaded', aoCarregar);
-      spinner.remove();
-      document.getElementById(`${overlayId}Overlay`)?.classList.remove('hidden');
-    };
-    window.addEventListener('pedidoModalLoaded', aoCarregar);
-    setTimeout(() => spinner.remove(), 15000);
+    if (typeof Modal.openWithSpinner === 'function') {
+      Modal.openWithSpinner('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', overlayId);
+      return;
+    }
     Modal.open('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', overlayId);
   }
 
@@ -838,6 +854,7 @@
     }
     ligarGerarBoletos(boletosEstado, data);
     ligarBoletosPdf(boletosEstado);
+    ligarImportarBoletos(data);
     ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';

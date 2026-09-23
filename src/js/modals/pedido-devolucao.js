@@ -578,8 +578,15 @@
   if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(confirmarBtn, confirmar);
   else confirmarBtn.addEventListener('click', confirmar);
 
-  overlay.classList.remove('hidden');
-  overlay.removeAttribute('aria-hidden');
-  window.Modal?.signalReady?.(overlayId);
-  carregar();
+  // Revela só depois da PRIMEIRA leitura, como os modais do Financeiro: até
+  // lá fica o spinner de quem abriu (Modal.openWithSpinner). Antes o modal
+  // aparecia vazio e os dados caíam nele depois, com cara de travamento.
+  const revelar = () => {
+    overlay.classList.remove('hidden');
+    overlay.removeAttribute('aria-hidden');
+    window.Modal?.signalReady?.(overlayId);
+  };
+  Promise.resolve(carregar())
+    .catch(erro => console.error('[pedido] falha ao carregar o modal', overlayId, erro))
+    .finally(revelar);
 })();

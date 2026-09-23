@@ -86,6 +86,12 @@
     if (!r) return { tom: 'neutro', texto: '' };
     if (!r.ok) return { tom: 'erro', texto: r.erro || 'Não foi possível ler a linha.' };
     const b = r.boleto || {};
+    // Boleto do NOSSO convênio no BB: não é "de fora", é importado de verdade
+    // (com PDF, consulta e aviso de pagamento). Ver importacao.js.
+    if (r.no_bb) {
+      const dados = [b.vencimento ? `vence ${diaBR(b.vencimento)}` : '', b.valor ? moedaBR(b.valor) : '', b.situacao_bb || ''].filter(Boolean).join(' · ');
+      return { tom: 'ok', texto: `Reconhecido no Banco do Brasil${dados ? ` (${dados})` : ''} — entra como boleto de verdade, não como boleto de fora.` };
+    }
     const texto = [b.banco_nome, b.vencimento ? `vence ${diaBR(b.vencimento)}` : 'sem vencimento', b.valor ? moedaBR(b.valor) : 'valor em aberto'].filter(Boolean).join(' · ');
     return { tom: (r.avisos || []).length ? 'aviso' : 'ok', texto: [texto, ...(r.avisos || [])].join(' — ') };
   }
@@ -523,8 +529,15 @@
     if (problemas.length) exibirMensagem('erro', problemas.join(' '));
   }
 
-  overlay.classList.remove('hidden');
-  overlay.removeAttribute('aria-hidden');
-  window.Modal?.signalReady?.(overlayId);
-  carregar();
+  // Revela só depois da PRIMEIRA leitura, como os modais do Financeiro: até
+  // lá fica o spinner de quem abriu (Modal.openWithSpinner). Antes o modal
+  // aparecia vazio e os dados caíam nele depois, com cara de travamento.
+  const revelar = () => {
+    overlay.classList.remove('hidden');
+    overlay.removeAttribute('aria-hidden');
+    window.Modal?.signalReady?.(overlayId);
+  };
+  Promise.resolve(carregar())
+    .catch(erro => console.error('[pedido] falha ao carregar o modal', overlayId, erro))
+    .finally(revelar);
 })();

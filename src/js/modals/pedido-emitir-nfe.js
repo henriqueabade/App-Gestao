@@ -829,6 +829,11 @@
     exibirMensagem('erro', err?.message || 'Não foi possível conferir o pedido.');
     confirmarBtn.disabled = true;
   } finally {
+    // Revela por si e avisa das duas formas: quem abriu com spinner some com
+    // ele aqui, e quem abriu sem spinner não fica com a tela escondida.
+    overlay.classList.remove('hidden');
+    overlay.removeAttribute('aria-hidden');
+    window.Modal?.signalReady?.(overlayId);
     window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }));
   }
 })();

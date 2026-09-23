@@ -960,46 +960,30 @@
   });
 
   /**
-   * Abre um modal de Pedidos POR CIMA deste, como pedidos.js faz
-   * (openPedidoModal): spinner até o `pedidoModalLoaded` de quem o dispara
-   * (`esperar`), ou o próprio modal se revela. Ao fechar, `aoFechar` relê a
-   * lista daqui.
+   * Abre um modal de Pedidos POR CIMA deste, com o spinner da casa
+   * (Modal.openWithSpinner): ele espera o aviso de pronto — o
+   * `pedidoModalLoaded` de quem o dispara ou o `signalReady` do próprio modal
+   * — e só então revela a tela. Ao fechar, `aoFechar` relê a lista daqui.
+   *
+   * O `esperar` que algumas chamadas ainda passam é ignorado: hoje TODO modal
+   * daqui abre com spinner, porque abrir vazio e preencher depois é
+   * justamente o defeito que se queria tirar.
    */
-  function abrirModalDePedido(htmlPath, scriptPath, id, { esperar = false, aoFechar = null } = {}) {
+  function abrirModalDePedido(htmlPath, scriptPath, id, opcoes = {}) {
     if (typeof window.Modal?.open !== 'function') return;
+    const aoFechar = opcoes.aoFechar || null;
     filhoAberto = true;
-    let spinner = null;
-    if (esperar) {
-      spinner = criar('div', 'fixed inset-0 bg-black/50 flex items-center justify-center');
-      spinner.id = 'modalLoading';
-      spinner.style.zIndex = 'var(--z-dialog)';
-      const indicador = criar('div', 'app-loading-indicator app-loading-indicator--compact');
-      indicador.setAttribute('aria-hidden', 'true');
-      const nucleo = criar('span', 'module-loading-core');
-      const logo = document.createElement('img');
-      logo.src = '../assets/Logo.ico';
-      logo.alt = '';
-      nucleo.appendChild(logo);
-      indicador.append(criar('span', 'module-loading-orbit'), nucleo);
-      spinner.appendChild(indicador);
-      document.body.appendChild(spinner);
-    }
-    const aoCarregar = e => {
-      if (e?.detail !== id) return;
-      window.removeEventListener('pedidoModalLoaded', aoCarregar);
-      spinner?.remove();
-      document.getElementById(`${id}Overlay`)?.classList.remove('hidden');
-    };
     const aoFecharFilho = e => {
       if (e?.detail !== id) return;
       window.removeEventListener('modalFechado', aoFecharFilho);
-      window.removeEventListener('pedidoModalLoaded', aoCarregar);
-      spinner?.remove();
       filhoAberto = false;
       aoFechar?.();
     };
-    if (esperar) window.addEventListener('pedidoModalLoaded', aoCarregar);
     window.addEventListener('modalFechado', aoFecharFilho);
+    if (typeof window.Modal.openWithSpinner === 'function') {
+      window.Modal.openWithSpinner(htmlPath, scriptPath, id, { keepExisting: true });
+      return;
+    }
     window.Modal.open(htmlPath, scriptPath, id, true);
   }
 
@@ -5269,6 +5253,17 @@
     ligar('finCobSecretGuardar', guardarSecret);
     ligar('finCobSecretRemover', removerSecret);
     ligar('finCobTestar', testar);
+    // Trazer para o app os boletos que já existem no BB (emitidos antes, pelo
+    // Gerenciador Financeiro). Abre POR CIMA: a configuração continua aberta.
+    ligar('finCobImportar', () => {
+      window.importarBoletosContext = {};
+      // Com o spinner da casa: a tela só aparece depois de falar com o BB.
+      if (typeof window.Modal.openWithSpinner === 'function') {
+        window.Modal.openWithSpinner('modals/pedidos/importar-boletos.html', '../js/modals/pedido-importar-boletos.js', 'importarBoletos', { keepExisting: true });
+        return;
+      }
+      window.Modal.open('modals/pedidos/importar-boletos.html', '../js/modals/pedido-importar-boletos.js', 'importarBoletos', true);
+    });
     ligar('finCobWebhookAtualizar', carregarWebhook);
     ligar('finCobWebhookProcessar', () => conciliarDaConfiguracao(true));
     ligar('finCobWebhookConciliar', () => conciliarDaConfiguracao(false));

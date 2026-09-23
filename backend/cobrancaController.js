@@ -64,6 +64,7 @@ const conciliacao = require('./cobranca/conciliacao');
 const execucoes = require('./cobranca/execucoes');
 const webhookEstado = require('./cobranca/webhookEstado');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+const importacao = require('./cobranca/importacao');
 const externas = require('./fiscal/externas');
 
 /** Quem lê a parcela mínima: quem monta orçamento, mexe em pedido ou está no financeiro. */
@@ -386,13 +387,43 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     return parcela => boletos.ocupaParcela(boletos.boletoDaParcela(dados.boletos, parcela));
   }
 
+  /**
+   * A linha digitável colada em "boletos de fora" pode ser de um boleto NOSSO
+   * no BB (emitido antes pelo Gerenciador Financeiro). Nesse caso ela não é
+   * "de fora": o boleto é importado de verdade (importacao.informarPelaLinha).
+   * Sem cobrança em produção configurada, tudo segue como era.
+   */
+  async function conexaoParaReconhecer(api, cfg) {
+    try {
+      const ambiente = configuracao.ambienteEfetivo(cfg, env);
+      if (ambiente !== configuracao.PRODUCAO) return { ambiente, conexao: null };
+      return { ambiente, conexao: await conexaoDoAmbiente(api, cfg, ambiente) };
+    } catch (_) {
+      return { ambiente: configuracao.SANDBOX, conexao: null };
+    }
+  }
+
+  async function informarBoletosDoPedido(req, apenasPrevia) {
+    const api = createApiClient(req);
+    const pedidoId = req.params.id;
+    const cfg = await configuracao.carregar(api, { forcar: true });
+    const { ambiente, conexao } = await conexaoParaReconhecer(api, cfg);
+    const deFora = await ocupadaPeloBB(api, pedidoId);
+    return importacao.informarPelaLinha({
+      api, bb: cliente, conexao, cfg, ambiente, pedidoId,
+      linhas: req.body?.linhas, apenasPrevia, hoje: hojeEmBrasilia(),
+      usuarioId: usuarioDaRequisicao(req),
+      informarDeFora: ({ linhas, apenasPrevia: previa }) => externas.informarBoletos({
+        api, pedidoId, linhas, apenasPrevia: previa,
+        usuarioId: previa ? null : usuarioDaRequisicao(req), hoje: hojeEmBrasilia(), ocupadaPeloBB: deFora
+      })
+    });
+  }
+
   /** Confere sem gravar: `linhas: [{ parcela_id, linha }]`, cada parcela com o seu resultado. */
   router.post('/pedidos/:id/boletos-externos/previa', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
     try {
-      const api = createApiClient(req);
-      res.json(await externas.informarBoletos({
-        api, pedidoId: req.params.id, linhas: req.body?.linhas, apenasPrevia: true, hoje: hojeEmBrasilia(), ocupadaPeloBB: await ocupadaPeloBB(api, req.params.id)
-      }));
+      res.json(await informarBoletosDoPedido(req, true));
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos-externos/previa');
     }
@@ -400,10 +431,7 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
 
   router.post('/pedidos/:id/boletos-externos', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
     try {
-      const api = createApiClient(req);
-      res.json(await externas.informarBoletos({
-        api, pedidoId: req.params.id, linhas: req.body?.linhas, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia(), ocupadaPeloBB: await ocupadaPeloBB(api, req.params.id)
-      }));
+      res.json(await informarBoletosDoPedido(req, false));
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos-externos');
     }
@@ -415,6 +443,85 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       res.json(await externas.removerBoleto({ api: createApiClient(req), id: req.params.id, usuarioId: usuarioDaRequisicao(req) }));
     } catch (err) {
       responder(res, err, 'DELETE /api/cobranca/boletos-externos/:id');
+    }
+  });
+
+  // ------------------------------------------ importar boletos do BB
+  //
+  // Boleto emitido antes do app (Gerenciador Financeiro) vira linha na tabela
+  // `boletos` — com PDF, sincronização e webhook. Só com a produção valendo:
+  // a conta de teste da homologação não é a da empresa.
+  // Ver backend/cobranca/importacao.js e docs/importar-boletos-do-bb.md.
+
+  /** A conexão da IMPORTAÇÃO: sempre o ambiente que vale, e só produção. */
+  async function conexaoDaImportacao(api, cfg) {
+    const ambiente = configuracao.ambienteEfetivo(cfg, env);
+    if (ambiente !== configuracao.PRODUCAO) {
+      throw erro('A importação de boletos só funciona com a cobrança em produção: na homologação o BB usa a conta de teste dele, não a sua.', 409);
+    }
+    return { ambiente, conexao: await conexaoDoAmbiente(api, cfg, ambiente) };
+  }
+
+  router.get('/importacao/boletos', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      const { ambiente, conexao } = await conexaoDaImportacao(api, cfg);
+      const padrao = importacao.faixaPadrao(hojeEmBrasilia());
+      res.json(await importacao.listarParaImportar({
+        api, bb: cliente, conexao, cfg, ambiente,
+        situacao: String(req.query?.situacao || 'A').toUpperCase() === 'B' ? 'B' : 'A',
+        de: String(req.query?.de || padrao.de), ate: String(req.query?.ate || padrao.ate),
+        pedidoId: req.query?.pedido_id || null
+      }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/importacao/boletos');
+    }
+  });
+
+  /** Os pedidos/parcelas que a tela oferece para relacionar um boleto à mão. */
+  router.get('/importacao/parcelas', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      res.json(await importacao.parcelasParaEscolher({ api, busca: req.query?.busca || '', pedidoId: req.query?.pedido_id || null }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/importacao/parcelas');
+    }
+  });
+
+  router.post('/importacao/boletos', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      const { ambiente, conexao } = await conexaoDaImportacao(api, cfg);
+      const escolhidos = Array.isArray(req.body?.escolhidos) ? req.body.escolhidos : [];
+      if (!escolhidos.length) throw erro('Marque ao menos um boleto para importar.');
+      const doBB = await importacao.buscarEscolhidos({
+        bb: cliente, conexao, cfg, ambiente, escolhidos,
+        situacao: String(req.body?.situacao || 'A').toUpperCase() === 'B' ? 'B' : 'A',
+        de: req.body?.de || null, ate: req.body?.ate || null
+      });
+      res.json(await importacao.importar({
+        api, bb: cliente, conexao, cfg, ambiente, escolhidos, doBB,
+        usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia()
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/importacao/boletos');
+    }
+  });
+
+  /** Relaciona (ou solta) um boleto importado a uma parcela, depois de importado. */
+  router.post('/boletos/:id/vincular', exigirPermissao('financeiro.boleto.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const boleto = await boletos.ler(api, req.params.id);
+      res.json(await importacao.vincular({
+        api, boleto,
+        pedidoId: req.body?.pedido_id ?? null, parcelaId: req.body?.parcela_id ?? null,
+        usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/boletos/:id/vincular');
     }
   });
 
