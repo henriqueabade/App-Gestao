@@ -2,7 +2,12 @@
 
 Fase 3 das correções de 21/09/2026. Para o pedido com a nota fiscal e/ou o
 boleto feitos em outro lugar — contador, outro sistema, outro banco —, o
-usuário informa **só os dados**. Nenhum arquivo fica guardado (decisão do dono).
+usuário informa os dados.
+
+> **Mudou em 24/09/2026:** o XML da nota passou a ser **guardado**. Antes ele
+> era lido para conferir e jogado fora, e por isso a nota de fora não tinha
+> DANFE nem carta de correção — os dois documentos são desenhados em cima do
+> `nfeProc`. Ver "Documentos da nota de fora", no fim.
 
 Quando cada um entra (decisão do dono, 23/09/2026): a **NF-e de fora** só
 depois que o pedido **saiu** (Enviado ou Entregue) — a nota acompanha a
@@ -66,8 +71,42 @@ da parcela; parcela com boleto do BB vivo não recebe boleto de fora.
   e não se marca; o backend também a pula (e a geração automática ao emitir a
   NF-e).
 
-Nota de fora **não** tem DANFE, XML, carta de correção nem cancelamento aqui:
-não foi emitida por aqui e o arquivo não fica guardado.
+Nota de fora **não se emite e não se cancela** aqui: ela já aconteceu lá fora,
+e o app só registra. DANFE, XML e carta de correção, sim — ver abaixo.
+
+## Documentos da nota de fora (24/09/2026)
+
+A DANFE e a carta de correção são desenhadas em cima do `nfeProc` (emitente,
+destinatário, itens, impostos, duplicatas, protocolo). **Sem o XML não existe
+documento nenhum** — e a SEFAZ não devolve o XML de uma nota que você emitiu
+por fora: a consulta por chave traz só a situação e o protocolo.
+
+SQL desta parte: `sql/nfe_externa_xml_cce.sql` (coluna `xml` na nota e a
+tabela `notas_fiscais_externas_eventos`). Rode e **reinicie a API**; sem ele a
+tela avisa e nada quebra.
+
+| Decisão do dono | Escolha |
+|---|---|
+| Nota informada só pela chave | **Anexar o XML depois**, na mesma tela — não precisa remover e cadastrar de novo |
+| Carta de correção de fora | **Registro e documento**: sequência, texto, protocolo e data guardados; o PDF sai igual ao das notas daqui, quando o XML da nota estiver anexado |
+| Subir XML de carta | **Sempre disponível** — tendo a nota cartas registradas ou nenhuma |
+
+**Como funciona**
+
+- **Anexar o XML**: a chave do arquivo tem de ser a mesma da nota gravada
+  (senão é outra nota, e trocar o conteúdo por baixo seria pior que recusar).
+  O que estava em branco no cadastro (protocolo, nome do emitente, documento
+  do destinatário, emissão) é preenchido; o que já estava e diverge vira
+  **aviso**, nunca sobrescrita silenciosa.
+- **DANFE e XML** aparecem no modal "NF-e e boletos de fora" e, no Visualizar
+  pedido, nos **mesmos botões** da nota daqui — ou o pedido tem nota própria,
+  ou tem a de fora, nunca as duas.
+- **Cartas de correção**: uma por sequência (1 a 20, como a SEFAZ). Entram
+  pelo **XML do evento** (`procEventoNFe`, que preenche tudo e confere o
+  `cStat` 135/136 e a chave) ou **à mão** (sequência, texto de 15 a 1000,
+  protocolo e data). Sequência repetida é recusada; remover só desliga, e a
+  sequência volta a ficar livre. A tag `CC-e ×N` do Visualizar conta as duas
+  origens.
 
 ## Código
 
@@ -76,6 +115,13 @@ não foi emitida por aqui e o arquivo não fica guardado.
 - Rotas: `GET/POST/DELETE /api/fiscal/pedidos/:id/nfe-externa` (+ `/previa`),
   `GET /api/fiscal/notas-externas`, `POST /api/cobranca/pedidos/:id/boletos-externos`
   (+ `/previa`) e `DELETE /api/cobranca/boletos-externos/:id`.
+- Documentos: `POST/GET /api/fiscal/pedidos/:id/nfe-externa/xml`,
+  `GET …/nfe-externa/danfe`, `GET/POST …/nfe-externa/cartas`,
+  `GET …/cartas/:seq/documento`, `GET …/cartas/:seq/xml` e
+  `DELETE …/cartas/:seq`. O desenho é o mesmo das notas daqui
+  (`fiscal/danfe.js` e `fiscal/cartaCorrecaoDoc.js`); no renderer,
+  `NfeDocumentos.gerarDanfeExterna / salvarXmlExterna / gerarCartaExternaPdf /
+  salvarXmlCartaExterna` recebem o id do **pedido**.
 - `backend/fiscal/painel.js` (Aguardando NF-e) e `backend/cobranca/boletos.js`
   (`boleto_externo` em cada parcela; o `tem_boleto_vivo` continua só do BB).
 - Tela: `src/html/modals/pedidos/dados-externos.html` +

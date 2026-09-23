@@ -1,17 +1,24 @@
 /**
- * NF-e e boletos emitidos FORA do sistema, informados pelo usuário — só os
- * dados, nenhum arquivo guardado (decisão do dono, 21/09/2026).
+ * NF-e e boletos emitidos FORA do sistema, informados pelo usuário.
  *
- *   NF-e ...... pelo XML (lido por devolucoes/xmlDevolucao.lerNota e
- *               descartado) ou pela chave de acesso (44 números) + o valor.
+ *   NF-e ...... pelo XML (lido por devolucoes/xmlDevolucao.lerNota) ou pela
+ *               chave de acesso (44 números) + o valor.
  *   Boleto .... pela linha digitável (47 números) de cada parcela: os
  *               dígitos verificadores pegam erro de digitação, e dela saem
  *               banco, valor e vencimento.
  *
- * Nada disso passa pela SEFAZ nem pelo BB: nota de fora não tem DANFE, carta
- * de correção nem cancelamento aqui. As tabelas são próprias
- * (sql/nfe_boletos_externos.sql), separadas de notas_fiscais e boletos, para
- * a emissão e a cobrança continuarem lendo só as delas.
+ * O XML da nota é GUARDADO desde 24/09/2026 (antes era lido e descartado):
+ * sem ele não existem DANFE nem carta de correção, porque os dois documentos
+ * são desenhados em cima do `nfeProc`. Quem informou a nota só pela chave
+ * pode ANEXAR o XML depois, na mesma tela — e as cartas de correção emitidas
+ * de fora entram pelo XML do evento (procEventoNFe) ou à mão. SQL:
+ * sql/nfe_externa_xml_cce.sql.
+ *
+ * Nada disso passa pela SEFAZ nem pelo BB: nota de fora não se emite, não se
+ * corrige e não se cancela por aqui — só se registra o que já aconteceu lá
+ * fora. As tabelas são próprias (sql/nfe_boletos_externos.sql), separadas de
+ * notas_fiscais e boletos, para a emissão e a cobrança continuarem lendo só
+ * as delas.
  *
  * As contas são funções puras (testáveis sem rede); as de baixo falam com a API.
  */
@@ -311,10 +318,24 @@ async function estadoDaNota(api, pedidoId) {
       valor: Number(pedido.valor_final) || null, forma_pagamento: pedido.forma_pagamento || null
     },
     nota_propria: propria ? { id: propria.id, serie: propria.serie, numero: propria.numero } : null,
-    nota_externa: externa,
+    nota_externa: notaParaTela(externa),
     pode_informar: !motivo,
     motivo
   };
+}
+
+/**
+ * A nota de fora como a TELA vê: sem o XML (que é o arquivo inteiro e não
+ * tem por que trafegar a cada leitura) e com as duas marcas que a tela usa
+ * para decidir o que mostrar. Pura.
+ *
+ *   `tem_xml`   — dá para gerar DANFE e carta de correção;
+ *   `guarda_xml`— a coluna existe (o SQL da fase rodou).
+ */
+function notaParaTela(nota) {
+  if (!nota) return null;
+  const { xml, ...resto } = nota;
+  return { ...resto, tem_xml: Boolean(xml), guarda_xml: Object.prototype.hasOwnProperty.call(nota, 'xml') };
 }
 
 /**
@@ -346,9 +367,14 @@ async function informarNota({ api, pedidoId, entrada, usuarioId = null, apenasPr
   if (mesmaChave.length) throw erro('Esta chave já foi informada em outro pedido.', 409);
 
   const { codigo_status: _status, ...campos } = nota;
+  const quando = new Date().toISOString();
+  // O XML entra junto quando veio dele: é o que permite DANFE e carta de
+  // correção depois. Sem a coluna (SQL da fase não rodado) a API ignora o
+  // campo em silêncio e a nota entra igual — só sem os documentos.
+  const doXml = entrada?.xml ? { xml: String(entrada.xml), xml_em: quando, xml_por: usuarioId } : {};
   const criada = await gravar(api, 'post', '/api/notas_fiscais_externas', {
-    pedido_id: pedido.id, ...campos, observacao: String(entrada?.observacao || '').trim().slice(0, 300) || null,
-    ativo: true, criado_por: usuarioId, criado_em: new Date().toISOString()
+    pedido_id: pedido.id, ...campos, ...doXml, observacao: String(entrada?.observacao || '').trim().slice(0, 300) || null,
+    ativo: true, criado_por: usuarioId, criado_em: quando
   });
   return { nota: criada, ...conferencia };
 }
@@ -358,6 +384,216 @@ async function removerNota({ api, pedidoId, usuarioId = null }) {
   const estado = await estadoDaNota(api, pedidoId);
   if (!estado.nota_externa) throw erro('O pedido não tem NF-e de fora.', 404);
   await gravar(api, 'put', `/api/notas_fiscais_externas/${estado.nota_externa.id}`, { ativo: false, removido_por: usuarioId, removido_em: new Date().toISOString() });
+  return { ok: true };
+}
+
+// ------------------------------------------------- XML e cartas de correção
+
+const SQL_DOCUMENTOS = 'sql/nfe_externa_xml_cce.sql';
+const SQL_DOCUMENTOS_FALTANDO = `Falta rodar ${SQL_DOCUMENTOS} no banco e reiniciar a API.`;
+/** A SEFAZ aceita de 1 a 20 cartas de correção por nota. */
+const MAXIMO_DE_CARTAS = 20;
+const TP_EVENTO_CCE = '110110';
+
+function sqlDocumentosPendente() {
+  return erro(SQL_DOCUMENTOS_FALTANDO, 409, { sql_pendente: true, arquivo: SQL_DOCUMENTOS });
+}
+
+/** A coluna/tabela desta fase já existe? (sem ela a tela avisa e não quebra) */
+const guardaXml = nota => Boolean(nota) && Object.prototype.hasOwnProperty.call(nota, 'xml');
+
+/**
+ * O que o procEventoNFe de uma carta de correção diz. Só leitura, sem rede:
+ * as mesmas regras do XML da nota (nada de DOCTYPE/ENTITY, tamanho travado).
+ * Pura.
+ */
+function lerCartaCorrecaoXml(xmlBruto) {
+  const xml = String(xmlBruto ?? '').replace(/^﻿/, '');
+  if (!xml.trim()) throw erro('O arquivo está vazio.');
+  if (xml.length > xmlNota.TAMANHO_MAXIMO) throw erro('O arquivo é grande demais para ser o XML de uma carta de correção.');
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw erro('Este arquivo não é o XML de uma carta de correção.');
+
+  const infEvento = xmlNota.bloco(xml, 'infEvento');
+  const tpEvento = digitos(xmlNota.campo(xml, 'tpEvento'));
+  if (!infEvento || !tpEvento) throw erro('Este arquivo não é o XML de um evento da NF-e.');
+  if (tpEvento !== TP_EVENTO_CCE) {
+    throw erro(`Este evento é do tipo ${tpEvento}; aqui entra carta de correção (110110).`);
+  }
+  const chave = digitos(xmlNota.campo(xml, 'chNFe'));
+  if (chave.length !== 44) throw erro('O XML do evento não traz a chave da nota.');
+  const correcao = xmlNota.campo(xml, 'xCorrecao');
+  if (!correcao) throw erro('O XML do evento não traz o texto da correção (xCorrecao).');
+
+  // O retorno da SEFAZ (retEvento) é o que prova o registro. Sem ele o
+  // arquivo é só o pedido de evento — entra, mas sem protocolo.
+  const retorno = xmlNota.bloco(xml, 'retEvento');
+  const status = digitos(xmlNota.campo(retorno, 'cStat')) || null;
+  if (retorno && status && !['135', '136'].includes(status)) {
+    throw erro(`A SEFAZ não registrou esta carta (cStat ${status}: ${xmlNota.campo(retorno, 'xMotivo') || 'sem motivo'}).`);
+  }
+  return {
+    chave_acesso: chave,
+    sequencia: Number(xmlNota.campo(xml, 'nSeqEvento')) || 1,
+    correcao,
+    protocolo: xmlNota.campo(retorno, 'nProt') || null,
+    data_evento: xmlNota.campo(retorno, 'dhRegEvento') || xmlNota.campo(xml, 'dhEvento') || null,
+    codigo_status: status
+  };
+}
+
+/** O que a tela mostra de uma carta (sem o XML, que é pesado). Pura. */
+function cartaParaTela(linha) {
+  if (!linha) return null;
+  return {
+    id: linha.id,
+    sequencia: Number(linha.sequencia) || 1,
+    correcao: linha.correcao || '',
+    protocolo: linha.protocolo || null,
+    data_evento: linha.data_evento || null,
+    origem: linha.origem || 'manual',
+    tem_xml: Boolean(linha.xml),
+    criado_em: linha.criado_em || null
+  };
+}
+
+/**
+ * A nota de fora viva do pedido, CRUA (com o XML) — `estadoDaNota` entrega a
+ * versão da tela, sem o arquivo. Erra quando não há nota ou quando o SQL da
+ * fase não rodou.
+ */
+async function notaViva(api, pedidoId) {
+  const pedido = await lerPedido(api, pedidoId);
+  const nota = (await ler(api, 'notas_fiscais_externas', { pedido_id: pedido.id }))
+    .filter(n => ativo(n.ativo))
+    .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+  if (!nota) throw erro('O pedido não tem NF-e de fora.', 404);
+  if (!guardaXml(nota)) throw sqlDocumentosPendente();
+  return nota;
+}
+
+/**
+ * Anexa (ou troca) o XML da nota de fora já gravada.
+ *
+ * É o caminho de quem informou a nota só pela chave + valor: sem o XML não há
+ * DANFE nem carta de correção, porque os dois documentos são desenhados em
+ * cima do `nfeProc`. A chave do arquivo tem de ser a MESMA da nota gravada —
+ * senão é outra nota, e trocar o conteúdo por baixo seria pior que recusar.
+ *
+ * O que estava em branco no cadastro (protocolo, nome do emitente, documento
+ * do destinatário, data de emissão) é preenchido a partir do XML; o que já
+ * estava e diverge vira AVISO, nunca sobrescrita silenciosa.
+ */
+async function anexarXmlDaNota({ api, pedidoId, xml, usuarioId = null }) {
+  const nota = await notaViva(api, pedidoId);
+  const lida = xmlNota.lerNota(xml);
+  if (digitos(lida.chave_acesso) !== digitos(nota.chave_acesso)) {
+    throw erro('Este XML é de outra nota: a chave de acesso não bate com a que está informada neste pedido.');
+  }
+  if (lida.modelo && String(lida.modelo) !== '55') throw erro(`Esta nota é modelo ${lida.modelo}; aqui entra NF-e (modelo 55).`);
+
+  const avisos = [];
+  const valorDoXml = centavos(lida.valor_total);
+  const valorGravado = nota.valor_total === null || nota.valor_total === undefined ? null : centavos(nota.valor_total);
+  if (valorGravado !== null && valorDoXml && Math.abs(valorGravado - valorDoXml) >= 0.01) {
+    avisos.push(`O valor do XML (${valorDoXml.toFixed(2)}) é diferente do que estava informado (${valorGravado.toFixed(2)}).`);
+  }
+  const quando = new Date().toISOString();
+  const campos = { xml: String(xml), xml_em: quando, xml_por: usuarioId, origem: 'xml' };
+  // Só completa o que faltava — o que o usuário informou continua valendo.
+  if (!nota.protocolo && lida.protocolo) campos.protocolo = lida.protocolo;
+  if (!nota.emitente_nome && lida.emitente_nome) campos.emitente_nome = lida.emitente_nome;
+  if (!nota.destinatario_documento && lida.destinatario_documento) campos.destinatario_documento = lida.destinatario_documento;
+  if (!nota.data_emissao && dia(lida.data_emissao)) campos.data_emissao = dia(lida.data_emissao);
+  if (!lida.protocolo) avisos.push('O XML não tem o protocolo de autorização: é o arquivo de envio, não o de distribuição (nfeProc).');
+
+  const atualizada = await gravar(api, 'put', `/api/notas_fiscais_externas/${nota.id}`, campos);
+  return { nota: { ...nota, ...campos, ...(atualizada && typeof atualizada === 'object' ? atualizada : {}) }, avisos };
+}
+
+/** O XML guardado da nota de fora (erra com explicação quando não há). */
+async function xmlDaNota(api, pedidoId) {
+  const nota = await notaViva(api, pedidoId);
+  if (!nota.xml) {
+    throw erro('Esta nota de fora não tem o XML guardado. Anexe o XML na tela "NF-e e boletos de fora" para gerar a DANFE.', 409, { falta_xml: true });
+  }
+  return nota;
+}
+
+/** As cartas de correção vivas da nota de fora do pedido. Nunca quebra a tela. */
+async function listarCartas(api, pedidoId) {
+  let nota;
+  try {
+    nota = await notaViva(api, pedidoId);
+  } catch (e) {
+    if (e?.extra?.sql_pendente) return { nota: null, cartas: [], sql_pendente: true, arquivo: SQL_DOCUMENTOS };
+    if (e?.status === 404) return { nota: null, cartas: [], sql_pendente: false };
+    throw e;
+  }
+  const linhas = (await lerSePuder(api, 'notas_fiscais_externas_eventos', { nota_externa_id: Number(nota.id) }))
+    .filter(c => ativo(c.ativo) && String(c.tipo || 'cce') === 'cce');
+  return {
+    nota: { id: nota.id, serie: nota.serie, numero: nota.numero, tem_xml: Boolean(nota.xml) },
+    cartas: linhas.map(cartaParaTela).sort((a, b) => a.sequencia - b.sequencia),
+    sql_pendente: false
+  };
+}
+
+/**
+ * Registra uma carta de correção emitida de fora.
+ *
+ * Duas portas, como a nota: o XML do evento (procEventoNFe, que preenche
+ * tudo) ou os dados à mão (sequência, texto, protocolo e data). A opção de
+ * subir XML vale SEMPRE — tendo a nota já cartas registradas ou nenhuma
+ * (decisão do dono, 24/09/2026).
+ */
+async function informarCarta({ api, pedidoId, entrada = {}, usuarioId = null }) {
+  const nota = await notaViva(api, pedidoId);
+  const doXml = entrada?.xml ? lerCartaCorrecaoXml(entrada.xml) : null;
+  if (doXml && digitos(doXml.chave_acesso) !== digitos(nota.chave_acesso)) {
+    throw erro('Esta carta de correção é de outra nota: a chave do evento não bate com a da nota deste pedido.');
+  }
+  const correcao = String(doXml ? doXml.correcao : (entrada?.correcao || '')).trim();
+  if (correcao.length < 15) throw erro('A correção precisa de pelo menos 15 caracteres, como a SEFAZ exige.');
+  if (correcao.length > 1000) throw erro('A correção passa de 1000 caracteres.');
+  const sequencia = Number(doXml ? doXml.sequencia : entrada?.sequencia) || 1;
+  if (!Number.isInteger(sequencia) || sequencia < 1 || sequencia > MAXIMO_DE_CARTAS) {
+    throw erro(`A sequência vai de 1 a ${MAXIMO_DE_CARTAS}.`);
+  }
+
+  const existentes = (await lerSePuder(api, 'notas_fiscais_externas_eventos', { nota_externa_id: Number(nota.id) }))
+    .filter(c => ativo(c.ativo) && String(c.tipo || 'cce') === 'cce');
+  if (existentes.some(c => (Number(c.sequencia) || 1) === sequencia)) {
+    throw erro(`A carta de correção ${sequencia} já está registrada nesta nota. Remova-a antes de informar outra com a mesma sequência.`, 409);
+  }
+
+  const criada = await gravar(api, 'post', '/api/notas_fiscais_externas_eventos', {
+    nota_externa_id: nota.id, tipo: 'cce', sequencia, correcao,
+    protocolo: (doXml ? doXml.protocolo : String(entrada?.protocolo || '').trim()) || null,
+    data_evento: (doXml ? doXml.data_evento : entrada?.data_evento) || null,
+    origem: doXml ? 'xml' : 'manual',
+    xml: doXml ? String(entrada.xml) : null,
+    ativo: true, criado_por: usuarioId, criado_em: new Date().toISOString()
+  });
+  return { carta: cartaParaTela(criada && typeof criada === 'object' ? criada : { id: null, sequencia, correcao, origem: doXml ? 'xml' : 'manual', xml: doXml ? '1' : null }) };
+}
+
+/** Uma carta pela sequência, crua (com o XML). */
+async function lerCarta(api, pedidoId, sequencia) {
+  const nota = await notaViva(api, pedidoId);
+  const seq = Number(sequencia);
+  const achada = (await lerSePuder(api, 'notas_fiscais_externas_eventos', { nota_externa_id: Number(nota.id) }))
+    .filter(c => ativo(c.ativo) && String(c.tipo || 'cce') === 'cce')
+    .find(c => (Number(c.sequencia) || 1) === seq);
+  if (!achada) throw erro(`Carta de correção ${seq} não encontrada nesta nota.`, 404);
+  return { nota, carta: achada };
+}
+
+/** Tira uma carta de correção de fora (só desliga: fica o rastro). */
+async function removerCarta({ api, pedidoId, sequencia, usuarioId = null }) {
+  const { carta } = await lerCarta(api, pedidoId, sequencia);
+  await gravar(api, 'put', `/api/notas_fiscais_externas_eventos/${carta.id}`, {
+    ativo: false, removido_por: usuarioId, removido_em: new Date().toISOString()
+  });
   return { ok: true };
 }
 
@@ -444,9 +680,10 @@ async function removerBoleto({ api, id, usuarioId = null }) {
 }
 
 module.exports = {
-  SQL_ARQUIVO, BANCOS,
+  SQL_ARQUIVO, SQL_DOCUMENTOS, BANCOS, MAXIMO_DE_CARTAS, TP_EVENTO_CCE,
   dvDaChave, lerChave, lerValor, notaDaEntrada, conferirNota,
   vencimentoDoFator, linhaImpressa, lerLinhaDigitavel, conferirBoleto, pedidoSaiu, pedidoCancelado,
   boletoExternoDaParcela, boletoParaTela, tabelaAusente,
-  listarNotas, estadoDaNota, informarNota, removerNota, listarBoletos, informarBoletos, removerBoleto
+  listarNotas, estadoDaNota, informarNota, removerNota, listarBoletos, informarBoletos, removerBoleto,
+  lerCartaCorrecaoXml, cartaParaTela, notaParaTela, anexarXmlDaNota, xmlDaNota, listarCartas, informarCarta, lerCarta, removerCarta
 };

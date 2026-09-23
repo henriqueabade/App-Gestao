@@ -42,8 +42,66 @@
           <!-- A nota já informada -->
           <div id="dadosExternosNotaAtual" class="hidden space-y-3">
             <dl id="dadosExternosNotaDados" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm"></dl>
+
+            <!-- Documentos: só saem com o XML da nota guardado (é dele que o
+                 DANFE e a carta de correção são desenhados). Quem informou a
+                 nota só pela chave anexa o XML aqui. -->
+            <p id="dadosExternosNotaSemXml" class="hidden text-xs text-gray-400">Sem o XML da nota não dá para gerar o DANFE nem a carta de correção — os dois são desenhados em cima dele. Anexe o XML autorizado (o "procNFe") para liberar.</p>
+            <input id="notaExternaXmlAnexo" type="file" accept=".xml,text/xml,application/xml" class="hidden" data-no-restore="true" />
             <div class="ctl-acoes justify-end">
+              <button id="anexarXmlExterno" type="button" data-perm="financeiro.nfe.emit" class="btn-neutral ctl-botao ctl-botao--pequeno text-white">Anexar o XML</button>
+              <button id="danfeNotaExterna" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">DANFE</button>
+              <button id="xmlNotaExterna" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">XML</button>
               <button id="removerNotaExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-danger ctl-botao ctl-botao--pequeno text-white">Remover a nota</button>
+            </div>
+
+            <!-- ================================= cartas de correção -->
+            <div id="dadosExternosCartas" class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <h4 class="ctl-secao text-white">Cartas de correção emitidas fora</h4>
+                <span id="dadosExternosCartasTag" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">nenhuma</span>
+              </div>
+              <p id="dadosExternosCartasAviso" class="hidden text-xs" style="color: var(--color-primary-light)"></p>
+              <ul id="dadosExternosCartasLista" class="space-y-2 text-sm"></ul>
+
+              <!-- Subir o XML do evento vale SEMPRE: tendo a nota cartas
+                   registradas ou nenhuma (decisão do dono, 24/09/2026). -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="space-y-2">
+                  <p class="text-sm text-white font-medium">Pelo XML do evento <span class="text-xs text-gray-400 font-normal">— preenche tudo</span></p>
+                  <p class="text-xs text-gray-400">O "procEventoNFe" da CC-e traz a sequência, o texto, o protocolo e a data do registro.</p>
+                  <input id="cartaExternaXml" type="file" accept=".xml,text/xml,application/xml" class="hidden" data-no-restore="true" />
+                  <button id="escolherXmlCartaExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-neutral ctl-botao text-white">Escolher o XML da carta</button>
+                </div>
+                <div class="space-y-2">
+                  <p class="text-sm text-white font-medium">Ou à mão</p>
+                  <div class="grid grid-cols-3 gap-3">
+                    <div>
+                      <label for="cartaExternaSequencia" class="ctl-rotulo text-gray-300">Sequência</label>
+                      <input id="cartaExternaSequencia" type="text" inputmode="numeric" maxlength="2" autocomplete="off"
+                             class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="1" />
+                    </div>
+                    <div>
+                      <label for="cartaExternaProtocolo" class="ctl-rotulo text-gray-300">Protocolo</label>
+                      <input id="cartaExternaProtocolo" type="text" inputmode="numeric" maxlength="20" autocomplete="off"
+                             class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="opcional" />
+                    </div>
+                    <div>
+                      <label for="cartaExternaData" class="ctl-rotulo text-gray-300">Registro</label>
+                      <input id="cartaExternaData" type="date" data-no-restore="true"
+                             class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                    </div>
+                  </div>
+                  <div>
+                    <label for="cartaExternaTexto" class="ctl-rotulo text-gray-300">A correção (15 a 1000 caracteres)</label>
+                    <textarea id="cartaExternaTexto" rows="3" maxlength="1000"
+                              class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
+                              placeholder="O mesmo texto que foi registrado na SEFAZ"></textarea>
+                    <p id="cartaExternaContador" class="mt-1 text-xs text-gray-400">0 caracteres</p>
+                  </div>
+                  <button id="gravarCartaExterna" type="button" data-perm="financeiro.nfe.emit" class="btn-success ctl-botao">Registrar a carta</button>
+                </div>
+              </div>
             </div>
           </div>
 

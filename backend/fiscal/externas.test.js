@@ -154,7 +154,7 @@ function base(extra = {}) {
   });
 }
 
-test('nota de fora: grava sem o XML, uma por pedido, e sai com "remover" (só desliga)', async () => {
+test('nota de fora: guarda o XML quando veio dele, uma por pedido, e sai com "remover" (só desliga)', async () => {
   const api = base();
   const previa = await externas.informarNota({ api, pedidoId: 7, entrada: { xml: xmlDaNota() }, apenasPrevia: true });
   assert.equal(previa.nota.numero, 123);
@@ -163,7 +163,9 @@ test('nota de fora: grava sem o XML, uma por pedido, e sai com "remover" (só de
   const { nota } = await externas.informarNota({ api, pedidoId: 7, entrada: { xml: xmlDaNota() }, usuarioId: 5 });
   assert.equal(nota.origem, 'xml');
   assert.equal(nota.criado_por, 5);
-  assert.ok(!('xml' in nota), 'o arquivo não é guardado');
+  // Desde 24/09/2026 o arquivo FICA: sem ele não há DANFE nem carta de correção.
+  assert.ok(nota.xml.includes('<nfeProc>'), 'o XML é guardado com a nota');
+  assert.equal(nota.xml_por, 5);
 
   const estado = await externas.estadoDaNota(api, 7);
   assert.equal(estado.nota_externa.id, nota.id);
@@ -247,4 +249,136 @@ test('boleto de fora da parcela: pelo id, e pelo número nos antigos', () => {
   assert.equal(externas.boletoExternoDaParcela(lista, { id: 71, numero_parcela: 1 }).id, 1);
   assert.equal(externas.boletoExternoDaParcela(lista, { id: 72, numero_parcela: 2 }).id, 2);
   assert.equal(externas.boletoExternoDaParcela(lista, { id: 73, numero_parcela: 3 }), null, 'desligado não vale');
+});
+
+// ------------------------------------------------ XML e cartas de correção
+// A DANFE e a carta de correção são desenhadas em cima do `nfeProc`: sem o
+// XML guardado não existe documento nenhum. Daí o caminho de anexar depois.
+
+/** Um procEventoNFe de carta de correção, como a SEFAZ devolve. */
+function xmlDaCarta({ ch = chave(), seq = 1, correcao = 'Corrigido o nome do transportador da nota', status = '135', tipo = '110110', prot = '131260000000999' } = {}) {
+  return `<?xml version="1.0"?><procEventoNFe versao="1.00"><evento><infEvento Id="ID${tipo}${ch}0${seq}">`
+    + `<chNFe>${ch}</chNFe><dhEvento>2026-09-20T10:00:00-03:00</dhEvento><tpEvento>${tipo}</tpEvento><nSeqEvento>${seq}</nSeqEvento>`
+    + `<detEvento versao="1.00"><descEvento>Carta de Correcao</descEvento><xCorrecao>${correcao}</xCorrecao></detEvento>`
+    + `</infEvento></evento><retEvento><infEvento><cStat>${status}</cStat><xMotivo>Evento registrado</xMotivo>`
+    + `<nProt>${prot}</nProt><dhRegEvento>2026-09-20T10:00:05-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>`;
+}
+
+/** Como `base`, mas com a nota de fora já gravada e o SQL desta fase rodado. */
+function comNota({ xml = null } = {}) {
+  const api = base({ notas_fiscais_externas_eventos: [] });
+  api.tabelas.notas_fiscais_externas.push({
+    id: 900, pedido_id: 7, origem: xml ? 'xml' : 'chave', chave_acesso: chave(), modelo: '55', serie: 2, numero: 123,
+    valor_total: 1500, emitente_documento: CNPJ_EMPRESA, emitente_nome: null, destinatario_documento: null,
+    data_emissao: null, protocolo: null, ativo: true,
+    // A coluna existe (SQL rodado): vem null quando ninguém anexou nada.
+    xml, xml_em: null, xml_por: null
+  });
+  return api;
+}
+
+test('carta de correção de fora: lê o procEventoNFe e recusa o que não é dela', () => {
+  const lida = externas.lerCartaCorrecaoXml(xmlDaCarta({ seq: 2 }));
+  assert.equal(lida.sequencia, 2);
+  assert.equal(lida.chave_acesso, chave());
+  assert.equal(lida.protocolo, '131260000000999');
+  assert.equal(lida.data_evento, '2026-09-20T10:00:05-03:00');
+  assert.match(lida.correcao, /transportador/);
+
+  assert.throws(() => externas.lerCartaCorrecaoXml(''), /vazio/);
+  assert.throws(() => externas.lerCartaCorrecaoXml('<!DOCTYPE x><procEventoNFe/>'), /não é o XML/);
+  assert.throws(() => externas.lerCartaCorrecaoXml(xmlDaCarta({ tipo: '110111' })), /tipo 110111/);
+  assert.throws(() => externas.lerCartaCorrecaoXml(xmlDaCarta({ correcao: '' })), /texto da correção/);
+  assert.throws(() => externas.lerCartaCorrecaoXml(xmlDaCarta({ status: '573' })), /não registrou/);
+  assert.throws(() => externas.lerCartaCorrecaoXml('<nfeProc><NFe/></nfeProc>'), /não é o XML de um evento/);
+});
+
+test('anexar o XML numa nota informada pela chave: completa o que faltava e avisa a divergência', async () => {
+  const api = comNota();
+  await assert.rejects(() => externas.xmlDaNota(api, 7), e => {
+    assert.equal(e.status, 409);
+    assert.equal(e.extra.falta_xml, true);
+    return true;
+  });
+
+  const { nota, avisos } = await externas.anexarXmlDaNota({ api, pedidoId: 7, xml: xmlDaNota(), usuarioId: 5 });
+  assert.ok(nota.xml.includes('<nfeProc>'));
+  assert.equal(nota.protocolo, '131260000012345', 'o que estava em branco é preenchido');
+  assert.equal(nota.emitente_nome, 'Santissimo Decor');
+  assert.equal(nota.data_emissao, '2026-09-10');
+  assert.equal(nota.xml_por, 5);
+  assert.deepEqual(avisos, []);
+
+  const guardada = await externas.xmlDaNota(api, 7);
+  assert.ok(guardada.xml.includes('<nfeProc>'));
+
+  // XML de outra nota não entra por baixo do pano.
+  await assert.rejects(
+    () => externas.anexarXmlDaNota({ api, pedidoId: 7, xml: xmlDaNota({ ch: chave({ numero: 124 }) }) }),
+    /é de outra nota/
+  );
+  // Valor diferente do informado vira aviso, nunca sobrescrita silenciosa.
+  const outra = comNota();
+  const r = await externas.anexarXmlDaNota({ api: outra, pedidoId: 7, xml: xmlDaNota({ vNF: '1400.00' }) });
+  assert.match(r.avisos.join(' '), /valor do XML/);
+  assert.equal(outra.tabelas.notas_fiscais_externas[0].valor_total, 1500, 'o valor informado continua valendo');
+});
+
+test('sem o SQL da fase, os documentos da nota de fora avisam em vez de quebrar', async () => {
+  const api = base();
+  // Nota gravada antes do SQL: a linha nem tem a coluna `xml`.
+  api.tabelas.notas_fiscais_externas.push({ id: 900, pedido_id: 7, chave_acesso: chave(), serie: 2, numero: 123, ativo: true });
+  await assert.rejects(() => externas.xmlDaNota(api, 7), e => {
+    assert.equal(e.status, 409);
+    assert.equal(e.extra.sql_pendente, true);
+    assert.match(e.message, /nfe_externa_xml_cce\.sql/);
+    return true;
+  });
+  const lista = await externas.listarCartas(api, 7);
+  assert.equal(lista.sql_pendente, true);
+  assert.deepEqual(lista.cartas, []);
+});
+
+test('cartas de correção de fora: pelo XML do evento ou à mão, sem repetir sequência', async () => {
+  const api = comNota({ xml: xmlDaNota() });
+
+  const pelaXml = await externas.informarCarta({ api, pedidoId: 7, entrada: { xml: xmlDaCarta({ seq: 1 }) }, usuarioId: 5 });
+  assert.equal(pelaXml.carta.sequencia, 1);
+  assert.equal(pelaXml.carta.origem, 'xml');
+  assert.equal(pelaXml.carta.tem_xml, true);
+  assert.equal(pelaXml.carta.protocolo, '131260000000999');
+
+  // A porta do XML continua aberta com a nota já tendo carta (decisão do dono).
+  const segunda = await externas.informarCarta({ api, pedidoId: 7, entrada: { xml: xmlDaCarta({ seq: 2, correcao: 'Ajustada a natureza da operacao' }) } });
+  assert.equal(segunda.carta.sequencia, 2);
+
+  // E a mão também: sequência, texto e protocolo digitados.
+  const aMao = await externas.informarCarta({
+    api, pedidoId: 7,
+    entrada: { sequencia: 3, correcao: 'Peso bruto corrigido para 12,5 kg', protocolo: '131260000001111', data_evento: '2026-09-21T09:00:00-03:00' }
+  });
+  assert.equal(aMao.carta.origem, 'manual');
+  assert.equal(aMao.carta.tem_xml, false);
+
+  await assert.rejects(() => externas.informarCarta({ api, pedidoId: 7, entrada: { sequencia: 3, correcao: 'Outra correcao qualquer aqui' } }), /já está registrada/);
+  await assert.rejects(() => externas.informarCarta({ api, pedidoId: 7, entrada: { sequencia: 4, correcao: 'curto' } }), /15 caracteres/);
+  await assert.rejects(() => externas.informarCarta({ api, pedidoId: 7, entrada: { sequencia: 99, correcao: 'Uma correcao bem grande aqui' } }), /de 1 a 20/);
+  await assert.rejects(
+    () => externas.informarCarta({ api, pedidoId: 7, entrada: { xml: xmlDaCarta({ ch: chave({ numero: 124 }), seq: 5 }) } }),
+    /de outra nota/
+  );
+
+  const lista = await externas.listarCartas(api, 7);
+  assert.deepEqual(lista.cartas.map(c => c.sequencia), [1, 2, 3], 'em ordem de sequência');
+  assert.equal(lista.nota.tem_xml, true);
+
+  const { carta } = await externas.lerCarta(api, 7, 2);
+  assert.ok(carta.xml.includes('procEventoNFe'));
+
+  await externas.removerCarta({ api, pedidoId: 7, sequencia: 2, usuarioId: 5 });
+  assert.equal(api.tabelas.notas_fiscais_externas_eventos.find(c => c.sequencia === 2).ativo, false, 'fica o rastro');
+  assert.deepEqual((await externas.listarCartas(api, 7)).cartas.map(c => c.sequencia), [1, 3]);
+  // Com a sequência 2 desligada, dá para informar outra no lugar.
+  await externas.informarCarta({ api, pedidoId: 7, entrada: { sequencia: 2, correcao: 'Correcao refeita com o texto certo' } });
+  assert.deepEqual((await externas.listarCartas(api, 7)).cartas.map(c => c.sequencia), [1, 2, 3]);
 });

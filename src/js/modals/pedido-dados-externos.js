@@ -124,6 +124,7 @@
   const id = encodeURIComponent(ctx.pedidoId);
   let estadoNota = null;
   let estadoBoletos = null;
+  let estadoCartas = null;
   let entradaNota = null;
   let emAndamento = false;
   let fechado = false;
@@ -196,6 +197,7 @@
     el('dadosExternosNotaAtual').classList.toggle('hidden', !temExterna);
     if (temExterna) pintarDl(el('dadosExternosNotaDados'), linhasDaNota(estadoNota.nota_externa));
     el('removerNotaExterna').classList.toggle('hidden', !temExterna || !pode('financeiro.nfe.emit'));
+    pintarDocumentosDaNota();
 
     const podeInformar = Boolean(estadoNota.pode_informar) && pode('financeiro.nfe.emit');
     el('dadosExternosNotaForm').classList.toggle('hidden', !podeInformar);
@@ -204,6 +206,95 @@
     el('dadosExternosNotaMotivo').textContent = motivo || '';
     el('dadosExternosNotaMotivo').classList.toggle('hidden', !motivo);
     if (!podeInformar) { entradaNota = null; el('dadosExternosNotaPrevia').classList.add('hidden'); }
+  }
+
+  // ------------------------------- documentos da nota de fora (XML e CC-e)
+  //
+  // DANFE e carta de correção são desenhados em cima do `nfeProc`: sem o XML
+  // guardado não sai nenhum dos dois. Quem informou a nota só pela chave
+  // anexa o XML aqui e libera tudo (decisão do dono, 24/09/2026).
+
+  function pintarDocumentosDaNota() {
+    const nota = estadoNota?.nota_externa || null;
+    const temXml = Boolean(nota?.tem_xml);
+    const semSql = Boolean(nota) && nota.guarda_xml === false;
+    const podeEmitir = pode('financeiro.nfe.emit');
+    const podeVer = pode('financeiro.nfe.view');
+
+    el('danfeNotaExterna').classList.toggle('hidden', !temXml || !podeVer);
+    el('xmlNotaExterna').classList.toggle('hidden', !temXml || !podeVer);
+    el('anexarXmlExterno').classList.toggle('hidden', !nota || !podeEmitir || semSql);
+    el('anexarXmlExterno').textContent = temXml ? 'Trocar o XML' : 'Anexar o XML';
+
+    const aviso = el('dadosExternosNotaSemXml');
+    aviso.textContent = semSql
+      ? 'Falta rodar sql/nfe_externa_xml_cce.sql no banco e reiniciar a API para guardar o XML e as cartas de correção.'
+      : 'Sem o XML da nota não dá para gerar o DANFE nem a carta de correção — os dois são desenhados em cima dele. Anexe o XML autorizado (o "procNFe") para liberar.';
+    aviso.classList.toggle('hidden', Boolean(temXml) || !nota);
+
+    el('dadosExternosCartas').classList.toggle('hidden', !nota || semSql);
+    pintarCartas();
+  }
+
+  /** Uma linha da lista de cartas, montada por createElement. */
+  function linhaDaCarta(carta) {
+    const li = document.createElement('li');
+    li.className = 'rounded-lg border border-white/10 bg-white/5 p-3 space-y-2';
+
+    const topo = document.createElement('div');
+    topo.className = 'flex items-center justify-between gap-3 flex-wrap';
+    const titulo = document.createElement('span');
+    titulo.className = 'text-white';
+    titulo.textContent = `Sequência ${carta.sequencia}${carta.protocolo ? ` · protocolo ${carta.protocolo}` : ''}`;
+    const marca = document.createElement('span');
+    marca.className = `${carta.origem === 'xml' ? 'badge-success' : 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+    marca.textContent = carta.origem === 'xml' ? 'do XML' : 'à mão';
+    marca.title = carta.data_evento ? `Registrada em ${diaBR(String(carta.data_evento).slice(0, 10))}` : '';
+    topo.append(titulo, marca);
+
+    const texto = document.createElement('p');
+    texto.className = 'text-xs text-gray-300 whitespace-pre-wrap';
+    texto.textContent = carta.correcao;
+
+    const acoes = document.createElement('div');
+    acoes.className = 'ctl-acoes justify-end';
+    const botao = (rotulo, fn, classe = 'btn-neutral ctl-botao ctl-botao--pequeno text-white') => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = classe;
+      b.textContent = rotulo;
+      if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(b, fn);
+      else b.addEventListener('click', fn);
+      acoes.appendChild(b);
+    };
+    if (estadoNota?.nota_externa?.tem_xml && pode('financeiro.nfe.view')) {
+      botao('PDF', () => window.NfeDocumentos?.gerarCartaExternaPdf?.(ctx.pedidoId, carta.sequencia));
+    }
+    if (carta.tem_xml && pode('financeiro.nfe.view')) {
+      botao('XML', () => window.NfeDocumentos?.salvarXmlCartaExterna?.(ctx.pedidoId, carta.sequencia));
+    }
+    if (pode('financeiro.nfe.emit')) {
+      botao('Remover', () => removerCarta(carta), 'btn-danger ctl-botao ctl-botao--pequeno text-white');
+    }
+
+    li.append(topo, texto, acoes);
+    return li;
+  }
+
+  function pintarCartas() {
+    const lista = el('dadosExternosCartasLista');
+    const cartas = estadoCartas?.cartas || [];
+    lista.replaceChildren(...cartas.map(linhaDaCarta));
+
+    const tag = el('dadosExternosCartasTag');
+    tag.className = `${cartas.length ? 'badge-info' : 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+    tag.textContent = cartas.length === 0 ? 'nenhuma' : (cartas.length === 1 ? '1 carta' : `${cartas.length} cartas`);
+
+    // Registrar a carta vale sempre; o PDF é que espera o XML da nota.
+    const aviso = el('dadosExternosCartasAviso');
+    const semXmlDaNota = Boolean(estadoNota?.nota_externa) && !estadoNota.nota_externa.tem_xml && cartas.length > 0;
+    aviso.textContent = semXmlDaNota ? 'As cartas estão registradas, mas o PDF só sai depois de anexar o XML da nota.' : '';
+    aviso.classList.toggle('hidden', !semXmlDaNota);
   }
 
   function pintarPrevia(resposta) {
@@ -323,6 +414,112 @@
     : fn());
   botao(el('gravarNotaExterna'), gravarNota);
   botao(el('removerNotaExterna'), removerNota);
+
+  // ---------------------- anexar o XML da nota e as cartas de correção
+
+  /** Lê um arquivo escolhido, com o limite de tamanho do XML da NF-e. */
+  async function lerArquivoEscolhido(campo, oQue) {
+    const arquivo = campo?.files?.[0];
+    if (campo) campo.value = '';
+    if (!arquivo) return null;
+    if (arquivo.size > TAMANHO_MAXIMO_DO_XML) { exibirMensagem('erro', `O arquivo é grande demais para ser o XML ${oQue}.`); return null; }
+    return arquivo.text();
+  }
+
+  const anexoEl = el('notaExternaXmlAnexo');
+  el('anexarXmlExterno')?.addEventListener('click', () => anexoEl?.click());
+  anexoEl?.addEventListener('change', async () => {
+    const xml = await lerArquivoEscolhido(anexoEl, 'de uma NF-e');
+    if (!xml || emAndamento) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa/xml`, comoJson({ xml }));
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        const avisos = corpo?.avisos || [];
+        window.showToast?.('XML anexado: o DANFE e a carta de correção já podem ser gerados.', 'success');
+        exibirMensagem(avisos.length ? 'info' : 'ok', avisos.join(' ') || '');
+        avisarQuemEstaAberto('nfe:externa');
+        await carregar();
+      }, 'Anexando o XML da nota...');
+    } finally {
+      emAndamento = false;
+    }
+  });
+
+  botao(el('danfeNotaExterna'), () => window.NfeDocumentos?.gerarDanfeExterna?.(ctx.pedidoId));
+  botao(el('xmlNotaExterna'), () => window.NfeDocumentos?.salvarXmlExterna?.(ctx.pedidoId));
+
+  async function gravarCarta(entrada, oQueDizer) {
+    if (emAndamento) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa/cartas`, comoJson(entrada));
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.(`Carta de correção ${corpo?.carta?.sequencia} registrada.`, 'success');
+        exibirMensagem('info', '');
+        el('cartaExternaSequencia').value = '';
+        el('cartaExternaProtocolo').value = '';
+        el('cartaExternaData').value = '';
+        el('cartaExternaTexto').value = '';
+        contarCarta();
+        avisarQuemEstaAberto('nfe:externa');
+        await carregar();
+      }, oQueDizer);
+    } finally {
+      emAndamento = false;
+    }
+  }
+
+  const cartaXmlEl = el('cartaExternaXml');
+  el('escolherXmlCartaExterna')?.addEventListener('click', () => cartaXmlEl?.click());
+  cartaXmlEl?.addEventListener('change', async () => {
+    const xml = await lerArquivoEscolhido(cartaXmlEl, 'de uma carta de correção');
+    if (!xml) return;
+    await gravarCarta({ xml }, 'Registrando a carta de correção...');
+  });
+
+  botao(el('gravarCartaExterna'), () => gravarCarta({
+    sequencia: el('cartaExternaSequencia').value || 1,
+    correcao: el('cartaExternaTexto').value,
+    protocolo: el('cartaExternaProtocolo').value,
+    data_evento: el('cartaExternaData').value || null
+  }, 'Registrando a carta de correção...'));
+
+  function contarCarta() {
+    const n = el('cartaExternaTexto').value.trim().length;
+    const contador = el('cartaExternaContador');
+    contador.textContent = n === 0 ? '0 caracteres' : `${n} de 15 a 1000 caracteres`;
+    contador.style.color = n > 0 && n < 15 ? 'var(--color-red)' : '';
+  }
+  el('cartaExternaTexto')?.addEventListener('input', contarCarta);
+
+  async function removerCarta(carta) {
+    if (emAndamento) return;
+    const ok = await window.DialogPadrao?.confirm?.({
+      title: 'Remover a carta de correção?', tom: 'aviso', icone: 'fa-file-signature',
+      subtitle: `Pedido ${ctx.numero} · sequência ${carta.sequencia}`,
+      nota: 'Isto tira o registro daqui; a carta continua valendo na SEFAZ. Fica o rastro de quem tirou.',
+      confirmText: 'Remover', confirmVariant: 'danger'
+    });
+    if (!ok) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa/cartas/${encodeURIComponent(carta.sequencia)}`, { method: 'DELETE' });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.('Carta de correção removida.', 'success');
+        avisarQuemEstaAberto('nfe:externa');
+        await carregar();
+      }, 'Removendo a carta de correção...');
+    } finally {
+      emAndamento = false;
+    }
+  }
 
   // --------------------------------------------------------- boletos
   function celula(conteudo, classe = 'px-4 py-3 text-left text-white') {
@@ -523,14 +720,17 @@
   }
 
   async function carregar() {
-    const [nota, boletos] = await Promise.all([
+    const [nota, boletos, cartas] = await Promise.all([
       lerJson(`/api/fiscal/pedidos/${id}/nfe-externa`),
-      lerJson(`/api/cobranca/pedidos/${id}/boletos`)
+      lerJson(`/api/cobranca/pedidos/${id}/boletos`),
+      lerJson(`/api/fiscal/pedidos/${id}/nfe-externa/cartas`)
     ]);
     el('dadosExternosCarregando').classList.add('hidden');
     // Sem permissão para ver notas (403) a seção da nota some; sem o SQL, a tela diz o que fazer.
     estadoNota = nota.ok ? nota.corpo : null;
     estadoBoletos = boletos.ok ? boletos.corpo : null;
+    // As cartas nunca derrubam a tela: sem a tabela (SQL da fase) vem vazio.
+    estadoCartas = cartas.ok ? cartas.corpo : null;
     const problemas = [];
     if (!nota.ok && nota.status !== 403) problemas.push(mensagemDeErro(nota.status, nota.corpo));
     if (!boletos.ok && boletos.status !== 403 && !problemas.length) problemas.push(mensagemDeErro(boletos.status, boletos.corpo));

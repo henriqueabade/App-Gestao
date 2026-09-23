@@ -191,4 +191,7 @@ function resumoDaNota(nota) {
   return { ...resto, quantidade_de_itens: itens.length };
 }
 
-module.exports = { TAMANHO_MAXIMO, FINALIDADE_DEVOLUCAO, lerNota, conferirNota, casarItens, resumoDaNota, normalizar };
+// `campo`/`bloco` saem daqui para quem mais precisa ler XML da NF-e sem
+// carregar biblioteca nenhuma (fiscal/externas.js lê o evento da carta de
+// correção de fora com as mesmas regras).
+module.exports = { TAMANHO_MAXIMO, FINALIDADE_DEVOLUCAO, lerNota, conferirNota, casarItens, resumoDaNota, normalizar, campo, bloco, blocos };

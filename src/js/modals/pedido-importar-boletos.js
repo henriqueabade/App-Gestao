@@ -54,19 +54,32 @@
    * sugestão do casamento, a escolha do usuário ou nada. Pura.
    */
   function textoDaParcela(linha, escolha) {
-    if (linha?.ja_importado) return { texto: `já importado${linha.boleto_status ? ` (${linha.boleto_status})` : ''}`, classe: 'badge-neutral' };
-    if (escolha?.sem_parcela) return { texto: 'sem relacionar', classe: 'badge-warning' };
+    if (linha?.ja_importado) {
+      return {
+        texto: 'já importado', classe: 'badge-neutral',
+        titulo: `Já está no app${linha.boleto_status ? ` (${linha.boleto_status})` : ''} — não entra de novo.`
+      };
+    }
+    if (escolha?.sem_parcela) {
+      return { texto: 'sem relacionar', classe: 'badge-warning', titulo: 'Entra sem parcela; dá para ligar depois, nesta mesma tela.' };
+    }
     const alvo = escolha?.parcela_id ? escolha : linha?.sugestao;
-    if (!alvo?.parcela_id) return { texto: 'escolher', classe: 'badge-warning' };
-    const rotulo = `${alvo.pedido_numero || `pedido ${alvo.pedido_id}`} · parcela ${alvo.numero_parcela}`;
-    if (escolha?.parcela_id) return { texto: rotulo, classe: 'badge-success' };
+    if (!alvo?.parcela_id) {
+      return { texto: 'escolher', classe: 'badge-warning', titulo: 'Nenhuma parcela bateu com este boleto: escolha no ícone ao lado.' };
+    }
+    // Etiqueta CURTA (PED107.1): escrita por extenso, a coluna esticava a
+    // tabela e trazia a barra de rolagem horizontal. O texto inteiro — e o
+    // porquê da sugestão — ficam no hover.
+    const curto = `${alvo.pedido_numero || `#${alvo.pedido_id}`}.${alvo.numero_parcela}`;
+    const longo = `${alvo.pedido_numero || `pedido ${alvo.pedido_id}`} · parcela ${alvo.numero_parcela}`;
+    if (escolha?.parcela_id) return { texto: curto, classe: 'badge-success', titulo: `${longo} — escolhida por você.` };
     // Sugestão do app: a de confiança alta (valor e vencimento batendo) já
     // vem marcada; a de confiança média pede conferência antes.
     const certa = linha?.sugestao?.confianca === 'alta';
     return {
-      texto: `${rotulo} ${certa ? '(sugerida)' : '(confira)'}`,
+      texto: curto,
       classe: certa ? 'badge-info' : 'badge-warning',
-      titulo: linha?.sugestao?.motivo || ''
+      titulo: `${longo} — ${certa ? 'sugerida' : 'confira'}. ${linha?.sugestao?.motivo || ''}`.trim()
     };
   }
 
@@ -487,6 +500,8 @@
     }
     emAndamento = true;
     limparMensagem();
+    let corpo = null;
+    let resumo = null;
     try {
       const resp = await fetchApi('/api/cobranca/importacao/boletos', {
         method: 'POST',
@@ -498,19 +513,33 @@
           ate: el('importarBoletosAte').value || null
         })
       });
-      const corpo = await resp.json().catch(() => null);
+      corpo = await resp.json().catch(() => null);
       if (!resp.ok) throw new Error(mensagemDeErro(resp.status, corpo));
-      const r = resumoDaImportacao(corpo);
-      exibirMensagem(r.tipo, r.texto);
-      pintarResultados(corpo?.resultados);
-      window.showToast?.(r.texto, r.tipo === 'erro' ? 'error' : 'success');
+      resumo = resumoDaImportacao(corpo);
+      window.showToast?.(resumo.texto, resumo.tipo === 'erro' ? 'error' : 'success');
       window.dispatchEvent(new CustomEvent('boletos:alterados', { detail: { pedidoId: ctx.pedidoId } }));
-      await buscar();
     } catch (e) {
       exibirMensagem('erro', e.message || 'Não foi possível importar.');
-    } finally {
       emAndamento = false;
+      return;
     }
+    // Solta a tranca ANTES de reler: `buscar` também desiste quando há algo em
+    // andamento, então a lista ficava intacta — o boleto recém-importado
+    // continuava lá, marcado, como se nada tivesse acontecido.
+    emAndamento = false;
+
+    // Aberto de dentro de um pedido e tudo entrou: o trabalho acabou aqui.
+    // Fecha e volta para o pedido, que se relê sozinho com o
+    // `boletos:alterados` e já mostra os boletos na tabela de parcelas.
+    if (ctx.pedidoId && !Number(corpo?.erros)) {
+      fechar();
+      return;
+    }
+    // A lista PRIMEIRO (o que entrou vira "já importado" e sai do caminho) e
+    // só então o recado: `buscar` limpa a mensagem e os resultados ao começar.
+    await buscar();
+    exibirMensagem(resumo.tipo, resumo.texto);
+    pintarResultados(corpo?.resultados);
   }
 
   if (typeof window.BotaoAcao?.bind === 'function') {

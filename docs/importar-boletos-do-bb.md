@@ -51,6 +51,25 @@ Cada linha pode ir com a sugestão, com outra parcela escolhida na busca, ou
 **sem relacionar**. O que já está no app aparece como "já importado" e não se
 marca.
 
+A etiqueta da coluna Parcela é **curta** (`PED107.1` = pedido.parcela): por
+extenso ela esticava a tabela e trazia barra de rolagem horizontal. O texto
+inteiro e o motivo do casamento ficam no hover (`title`).
+
+## Depois de importar
+
+- **Aberto de dentro de um pedido** e tudo entrou: a tela **fecha** e volta
+  para o Visualizar, que se relê sozinho (`boletos:alterados`) e já mostra os
+  boletos na tabela de parcelas.
+- **Aberto da Configuração de cobrança**, ou com algum erro: a tela **fica**,
+  relê a lista do BB (o que entrou vira "já importado" e sai do caminho) e
+  mostra o recado com o resultado boleto a boleto.
+
+Armadilha que já custou um defeito em produção: `importar` liga `emAndamento`
+e `buscar` desiste quando há algo em andamento — a tranca tem de ser solta
+**antes** da releitura, senão a lista fica intacta e o boleto recém-importado
+continua lá, marcado. E o recado vem **depois** do `buscar`, que limpa a
+mensagem ao começar.
+
 **2. A linha digitável** — em "NF-e e boletos de fora", ao colar a linha o app
 tira o nosso número do campo livre (`000000` + convênio + sequencial +
 carteira). Se o banco é o 001 e o convênio é o seu, ele consulta

@@ -50,10 +50,13 @@ test('visualizar: DANFE vai ao PDF em retrato, XML ao arquivo .xml (e o do cance
   const UTIL = ler('js', 'utils', 'nfe-documentos.js');
   const MENU = ler('html', 'menu.html');
   assert.ok(UTIL.includes('/api/fiscal/notas/${encodeURIComponent(notaId)}/danfe'));
-  assert.ok(UTIL.includes("salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar DANFE em PDF', retrato: true })"));
+  // O HTML do backend vai para o PDF em RETRATO (o helper `paraPdf` é o
+  // caminho único, usado também pela nota de fora).
+  assert.ok(UTIL.includes("salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo, retrato: true })"));
+  assert.ok(UTIL.includes("titulo: 'Salvar DANFE em PDF'"));
   assert.ok(UTIL.includes('/api/fiscal/notas/${encodeURIComponent(notaId)}/xml'));
   assert.ok(UTIL.includes("extensao: 'xml'") && UTIL.includes('corpo.xml_cancelamento'));
-  assert.ok(UTIL.includes('window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };'));
+  assert.ok(UTIL.includes('gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao,'));
   assert.ok(MENU.indexOf('js/utils/nfe-documentos.js') > MENU.indexOf('js/utils/cliente-fiscal.js'), 'o menu carrega o utilitário');
   assert.ok(VIS_JS.includes('window.NfeDocumentos.gerarDanfe(nota.id)') && VIS_JS.includes('window.NfeDocumentos.salvarXml(nota.id)'));
   // Por cima do Visualizar, que continua aberto embaixo.
@@ -118,8 +121,8 @@ test('modal E-mail: destinatários pré-preenchidos, DANFE gerado no app (base64
   assert.ok(CCE_JS.includes('window.NfeDocumentos.listarCartasCorrecao(ctx.notaId)') && CCE_JS.includes('gerarCartaCorrecaoPdf(ctx.notaId, carta.nSeqEvento)') && CCE_JS.includes('salvarXmlCartaCorrecao(ctx.notaId, carta.nSeqEvento)'));
   assert.ok(CCE_JS.includes('await pintarRegistradas();') && !CCE_JS.includes('fechar();\n    } finally'), 'depois de registrar, a lista é repintada');
   const UTIL2 = ler('js', 'utils', 'nfe-documentos.js');
-  assert.ok(UTIL2.includes('/cartas-correcao/${encodeURIComponent(seq)}/documento') && UTIL2.includes("titulo: 'Salvar carta de correção em PDF', retrato: true"));
-  assert.ok(UTIL2.includes('window.NfeDocumentos = { gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao };'));
+  assert.ok(UTIL2.includes('/cartas-correcao/${encodeURIComponent(seq)}/documento') && UTIL2.includes("titulo: 'Salvar carta de correção em PDF'"));
+  assert.ok(UTIL2.includes('gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao,'));
   assert.ok(!/innerHTML|insertAdjacentHTML|window\.confirm\(/.test(CCE_JS));
   assert.ok(MAIN.includes("ipcMain.handle('gerar-pdf-de-html'") && PRELOAD.includes("gerarPdfDeHtml: (payload) => ipcRenderer.invoke('gerar-pdf-de-html', payload)"));
 });

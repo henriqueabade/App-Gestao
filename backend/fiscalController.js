@@ -43,9 +43,12 @@ function usuarioDaRequisicao(req) {
   }
 }
 
-function erro(mensagem, status = 400) {
+function erro(mensagem, status = 400, extra = null) {
   const e = new Error(mensagem);
   e.status = status;
+  // `extra` viaja junto na resposta (ver `responder`): é o que deixa a tela
+  // reagir ao motivo, e não só mostrar o texto.
+  if (extra) e.extra = extra;
   return e;
 }
 
@@ -417,6 +420,108 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       res.json(await externas.removerNota({ api: createApiClient(req), pedidoId: req.params.id, usuarioId: usuarioDaRequisicao(req) }));
     } catch (err) {
       responder(res, err, 'DELETE /api/fiscal/pedidos/:id/nfe-externa');
+    }
+  });
+
+  // ---------------------------------------- documentos da NF-e de fora
+  // A DANFE e a carta de correção são desenhadas em cima do `nfeProc`. Nota
+  // informada só pela chave não tem conteúdo nenhum guardado: por isso o
+  // caminho de ANEXAR o XML depois.
+
+  /** Anexa (ou troca) o XML da nota de fora já informada. */
+  router.post('/pedidos/:id/nfe-externa/xml', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.anexarXmlDaNota({
+        api: createApiClient(req), pedidoId: req.params.id, xml: req.body?.xml, usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/nfe-externa/xml');
+    }
+  });
+
+  /** O XML guardado da nota de fora, para salvar em arquivo. */
+  router.get('/pedidos/:id/nfe-externa/xml', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const nota = await externas.xmlDaNota(createApiClient(req), req.params.id);
+      res.json({ nome: `${nota.chave_acesso || `NFe-${nota.serie}-${nota.numero}`}-procNFe`, xml: nota.xml });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa/xml');
+    }
+  });
+
+  /** DANFE da nota de fora, em HTML (o renderer manda para o PDF). */
+  router.get('/pedidos/:id/nfe-externa/danfe', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const nota = await externas.xmlDaNota(createApiClient(req), req.params.id);
+      res.json({
+        nome: `DANFE-NFe-${String(nota.serie)}-${String(nota.numero).padStart(9, '0')}`,
+        html: danfe.montarDanfeHtml(nota.xml)
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa/danfe');
+    }
+  });
+
+  /** As cartas de correção de fora registradas na nota do pedido. */
+  router.get('/pedidos/:id/nfe-externa/cartas', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      res.json(await externas.listarCartas(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa/cartas');
+    }
+  });
+
+  /** Registra uma carta de correção de fora: pelo XML do evento ou à mão. */
+  router.post('/pedidos/:id/nfe-externa/cartas', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.informarCarta({
+        api: createApiClient(req), pedidoId: req.params.id, entrada: req.body || {}, usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/nfe-externa/cartas');
+    }
+  });
+
+  /** A carta em HTML (a segunda via que vai junto com o DANFE). */
+  router.get('/pedidos/:id/nfe-externa/cartas/:seq/documento', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const { nota, carta } = await externas.lerCarta(api, req.params.id, req.params.seq);
+      if (!nota.xml) {
+        throw erro('Para imprimir a carta é preciso o XML da nota. Anexe o XML em "NF-e e boletos de fora".', 409, { falta_xml: true });
+      }
+      res.json({
+        nome: `CCe-${carta.sequencia}-NFe-${nota.serie}-${String(nota.numero).padStart(9, '0')}`,
+        html: cartaCorrecaoDoc.montarCartaCorrecaoHtml({
+          xmlNfeProc: nota.xml,
+          carta: { nSeqEvento: carta.sequencia, correcao: carta.correcao, protocolo: carta.protocolo, registradaEm: carta.data_evento || carta.criado_em }
+        }),
+        carta: externas.cartaParaTela(carta)
+      });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa/cartas/:seq/documento');
+    }
+  });
+
+  /** O XML do evento, quando a carta entrou por ele. */
+  router.get('/pedidos/:id/nfe-externa/cartas/:seq/xml', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
+    try {
+      const { nota, carta } = await externas.lerCarta(createApiClient(req), req.params.id, req.params.seq);
+      if (!carta.xml) throw erro('Esta carta foi registrada à mão: não há XML guardado.', 409);
+      res.json({ nome: `${nota.chave_acesso}-procEventoNFe-cce-${carta.sequencia}`, xml: carta.xml });
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/nfe-externa/cartas/:seq/xml');
+    }
+  });
+
+  /** Tira uma carta de correção de fora (só desliga). */
+  router.delete('/pedidos/:id/nfe-externa/cartas/:seq', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      res.json(await externas.removerCarta({
+        api: createApiClient(req), pedidoId: req.params.id, sequencia: req.params.seq, usuarioId: usuarioDaRequisicao(req)
+      }));
+    } catch (err) {
+      responder(res, err, 'DELETE /api/fiscal/pedidos/:id/nfe-externa/cartas/:seq');
     }
   });
 

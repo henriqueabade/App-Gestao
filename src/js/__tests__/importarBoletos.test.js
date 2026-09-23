@@ -40,24 +40,42 @@ const LINHA = {
   sugestao: { parcela_id: 71, numero_parcela: 1, pedido_id: 12, pedido_numero: 'PED120', motivo: 'Seu número PED120P1.', confianca: 'alta' }
 };
 
-test('a coluna Parcela: sugestão, escolha do usuário, "sem relacionar" e o que já está no app', () => {
+/**
+ * A etiqueta da coluna Parcela é CURTA (PED120.1) porque escrita por extenso
+ * ela esticava a tabela e trazia barra de rolagem horizontal — que o dono não
+ * aceita. Todo o texto, e o porquê da sugestão, ficam no hover.
+ */
+test('a coluna Parcela: etiqueta curta, texto inteiro no hover, e os estados sem parcela', () => {
   const f = puras();
   const sugerida = f.textoDaParcela(LINHA, undefined);
-  assert.strictEqual(sugerida.texto, 'PED120 · parcela 1 (sugerida)');
+  assert.strictEqual(sugerida.texto, 'PED120.1', 'etiqueta curta: pedido.parcela');
   assert.strictEqual(sugerida.classe, 'badge-info');
-  assert.match(sugerida.titulo, /Seu número/);
+  assert.match(sugerida.titulo, /PED120 · parcela 1 — sugerida/);
+  assert.match(sugerida.titulo, /Seu número/, 'o motivo do casamento continua no hover');
 
   const escolhida = f.textoDaParcela(LINHA, { parcela_id: 81, numero_parcela: 2, pedido_id: 13, pedido_numero: 'PED121' });
-  assert.strictEqual(escolhida.texto, 'PED121 · parcela 2');
+  assert.strictEqual(escolhida.texto, 'PED121.2');
   assert.strictEqual(escolhida.classe, 'badge-success');
+  assert.match(escolhida.titulo, /escolhida por você/);
 
   const conferir = f.textoDaParcela({ ...LINHA, sugestao: { ...LINHA.sugestao, confianca: 'media' } }, undefined);
-  assert.strictEqual(conferir.texto, 'PED120 · parcela 1 (confira)', 'sugestão de confiança média pede conferência');
-  assert.strictEqual(conferir.classe, 'badge-warning');
+  assert.strictEqual(conferir.texto, 'PED120.1');
+  assert.strictEqual(conferir.classe, 'badge-warning', 'a cor é o que separa "confira" de "sugerida"');
+  assert.match(conferir.titulo, /— confira/);
 
-  assert.strictEqual(f.textoDaParcela(LINHA, { sem_parcela: true }).texto, 'sem relacionar');
-  assert.strictEqual(f.textoDaParcela({ ...LINHA, sugestao: null }, undefined).texto, 'escolher');
-  assert.strictEqual(f.textoDaParcela({ ...LINHA, ja_importado: true, boleto_status: 'pago' }, undefined).texto, 'já importado (pago)');
+  const semNumero = f.textoDaParcela({ ...LINHA, sugestao: { ...LINHA.sugestao, pedido_numero: null } }, undefined);
+  assert.strictEqual(semNumero.texto, '#12.1', 'sem o número do pedido, sobra o id');
+
+  for (const estado of [
+    [{ ...LINHA }, { sem_parcela: true }, 'sem relacionar'],
+    [{ ...LINHA, sugestao: null }, undefined, 'escolher'],
+    [{ ...LINHA, ja_importado: true, boleto_status: 'pago' }, undefined, 'já importado']
+  ]) {
+    const r = f.textoDaParcela(estado[0], estado[1]);
+    assert.strictEqual(r.texto, estado[2]);
+    assert.ok(r.titulo, `"${estado[2]}" precisa explicar-se no hover`);
+  }
+  assert.match(f.textoDaParcela({ ...LINHA, ja_importado: true, boleto_status: 'pago' }, undefined).titulo, /\(pago\)/);
 });
 
 test('a busca já entrega marcado o que o app casou com segurança', () => {
@@ -184,4 +202,31 @@ test('boletos de fora: a linha reconhecida no BB avisa que entra como boleto de 
   const deFora = f.frasedaPrevia({ ok: true, boleto: { banco_nome: 'Itaú', vencimento: '2026-10-15', valor: 1500 }, avisos: [] });
   assert.match(deFora.texto, /Itaú/);
   assert.ok(!/Reconhecido/.test(deFora.texto));
+});
+
+/**
+ * Depois de importar, a tela tem de sair do caminho: o boleto que entrou não
+ * pode continuar lá, marcado, como se nada tivesse acontecido (o dono pegou
+ * isso em produção em 24/09/2026 — `buscar` desistia porque `emAndamento`
+ * ainda estava ligado quando `importar` o chamava).
+ */
+test('fluxo depois de importar: solta a tranca, relê a lista e volta para o pedido', () => {
+  const inicio = FONTE.indexOf('async function importar()');
+  const fim = FONTE.indexOf("if (typeof window.BotaoAcao?.bind === 'function')", inicio);
+  assert.ok(inicio > 0 && fim > inicio);
+  const corpo = FONTE.slice(inicio, fim);
+
+  assert.ok(corpo.includes('emAndamento = false;\n\n    // Aberto de dentro de um pedido'),
+    'a tranca sai ANTES da releitura, senão `buscar` desiste na porta');
+  assert.ok(corpo.indexOf('emAndamento = false;\n\n    // Aberto') < corpo.indexOf('await buscar()'),
+    'soltar antes de reler');
+  assert.ok(corpo.includes('if (ctx.pedidoId && !Number(corpo?.erros)) {') && corpo.includes('fechar();'),
+    'aberto de dentro do pedido e tudo certo: fecha e volta para o pedido');
+  assert.ok(corpo.indexOf('await buscar()') < corpo.indexOf('exibirMensagem(resumo.tipo'),
+    '`buscar` limpa a mensagem: o recado vem depois dela');
+  assert.ok(corpo.includes("new CustomEvent('boletos:alterados'"), 'o pedido de baixo se relê');
+
+  // O Visualizar precisa ouvir os dois lados para voltar atualizado.
+  assert.ok(VISUALIZAR.includes("'importarBoletos'];"), 'importarBoletos é filho do Visualizar');
+  assert.ok(VISUALIZAR.includes("'boletos:alterados'"), 'o evento entra na lista do que muda o pedido');
 });

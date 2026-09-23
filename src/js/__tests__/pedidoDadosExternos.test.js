@@ -92,7 +92,8 @@ test('modal: confere antes de gravar, XML descartado, remover pede confirmação
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/pedidos/${id}/boletos-externos/previa`"), 'confere a linha digitável ao colar');
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/pedidos/${id}/boletos-externos`, comoJson({ linhas }))"));
   assert.ok(FONTE.includes("{ method: 'DELETE' }"));
-  assert.ok((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length === 2, 'remover nota e remover boleto pedem confirmação');
+  // Remover a nota, remover um boleto e remover uma carta de correção.
+  assert.ok((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length === 3, 'toda remoção pede confirmação');
   assert.ok(FONTE.includes("avisarQuemEstaAberto('nfe:externa')") && FONTE.includes("avisarQuemEstaAberto('boletos:alterados')"));
   assert.ok(FONTE.includes('if (arquivo.size > TAMANHO_MAXIMO_DO_XML)'));
   assert.ok(!/innerHTML|window\.confirm\(/.test(FONTE), 'montado por createElement, sem confirm() do sistema');
@@ -140,4 +141,61 @@ test('Financeiro e "Gerar boletos": a linha do Aguardando NF-e abre o modal; par
   const l = plano(linha({ parcela: { id: 2, numero_parcela: 2, valor: 1000, data_vencimento: '2027-02-17' }, tem_boleto_vivo: false, boleto_externo: { banco_nome: 'Itaú', vencimento: '2027-02-17', linha_impressa: '34191...' } }));
   assert.deepStrictEqual([l.podeGerar, l.classe, l.rotulo], [false, 'badge-info', 'Boleto de fora · Itaú']);
   assert.match(l.detalhe, /vence 17\/02\/2027/);
+});
+
+/**
+ * DANFE e carta de correção da nota de fora (24/09/2026). Os dois documentos
+ * são desenhados em cima do `nfeProc`: sem o XML da nota guardado não sai
+ * nenhum deles — daí o "Anexar o XML" para quem informou só a chave.
+ */
+test('nota de fora: anexar o XML libera DANFE e XML, e a tela avisa quando ele falta', () => {
+  for (const id of ['notaExternaXmlAnexo', 'anexarXmlExterno', 'danfeNotaExterna', 'xmlNotaExterna', 'dadosExternosNotaSemXml']) {
+    assert.ok(HTML.includes(`id="${id}"`), `sem #${id}`);
+  }
+  assert.ok(/id="anexarXmlExterno"[^>]*data-perm="financeiro\.nfe\.emit"/.test(HTML), 'anexar pede a permissão de emitir');
+  assert.ok(/id="danfeNotaExterna"[^>]*data-perm="financeiro\.nfe\.view"[^>]*class="hidden/.test(HTML), 'o DANFE nasce escondido');
+  assert.ok(/id="xmlNotaExterna"[^>]*data-perm="financeiro\.nfe\.view"[^>]*class="hidden/.test(HTML));
+
+  assert.ok(FONTE.includes("fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa/xml`, comoJson({ xml }))"), 'anexa pelo POST');
+  assert.ok(FONTE.includes('window.NfeDocumentos?.gerarDanfeExterna?.(ctx.pedidoId)'));
+  assert.ok(FONTE.includes('window.NfeDocumentos?.salvarXmlExterna?.(ctx.pedidoId)'));
+  assert.ok(FONTE.includes("el('danfeNotaExterna').classList.toggle('hidden', !temXml || !podeVer)"), 'só com o XML guardado');
+  assert.ok(FONTE.includes("el('anexarXmlExterno').textContent = temXml ? 'Trocar o XML' : 'Anexar o XML'"));
+  assert.ok(FONTE.includes("aviso.classList.toggle('hidden', Boolean(temXml) || !nota)"), 'sem XML, a tela explica o que falta');
+  assert.ok(FONTE.includes('nfe_externa_xml_cce.sql'), 'sem o SQL da fase, a tela diz o que rodar');
+
+  // O utilitário compartilhado fala com as rotas da nota de fora.
+  const UTIL = ler('js', 'utils', 'nfe-documentos.js');
+  assert.ok(UTIL.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/nfe-externa'));
+  assert.ok(UTIL.includes('gerarDanfeExterna, salvarXmlExterna, gerarCartaExternaPdf, salvarXmlCartaExterna'));
+
+  // No Visualizar, sem nota daqui quem manda nos botões é a de fora.
+  assert.ok(VISUALIZAR.includes('if (!notaDocs) ligarDocumentosDaNotaDeFora(notaExterna);'));
+  assert.ok(VISUALIZAR.includes("if (!notaExterna?.tem_xml) return;"), 'sem XML anexado, nenhum botão aparece');
+  assert.ok(VISUALIZAR.includes('window.NfeDocumentos?.gerarDanfeExterna?.(id)') && VISUALIZAR.includes('window.NfeDocumentos?.salvarXmlExterna?.(id)'));
+});
+
+test('cartas de correção de fora: pelo XML do evento ou à mão, sempre, com PDF e remoção', () => {
+  for (const id of ['dadosExternosCartas', 'dadosExternosCartasLista', 'dadosExternosCartasTag', 'cartaExternaXml',
+    'escolherXmlCartaExterna', 'cartaExternaSequencia', 'cartaExternaProtocolo', 'cartaExternaData', 'cartaExternaTexto', 'gravarCartaExterna']) {
+    assert.ok(HTML.includes(`id="${id}"`), `sem #${id}`);
+  }
+  assert.ok(/id="gravarCartaExterna"[^>]*data-perm="financeiro\.nfe\.emit"/.test(HTML));
+  assert.ok(/id="escolherXmlCartaExterna"[^>]*data-perm="financeiro\.nfe\.emit"/.test(HTML));
+  assert.ok(HTML.includes('maxlength="1000"'), 'o limite da SEFAZ está no campo');
+
+  assert.ok(FONTE.includes("fetchApi(`/api/fiscal/pedidos/${id}/nfe-externa/cartas`, comoJson(entrada))"), 'registra pelo POST');
+  assert.ok(FONTE.includes('gravarCarta({ xml }'), 'a porta do XML do evento');
+  assert.ok(FONTE.includes("sequencia: el('cartaExternaSequencia').value || 1"), 'e a porta da mão');
+  assert.ok(FONTE.includes("/nfe-externa/cartas/${encodeURIComponent(carta.sequencia)}`, { method: 'DELETE' }"));
+  assert.ok(FONTE.includes('window.NfeDocumentos?.gerarCartaExternaPdf?.(ctx.pedidoId, carta.sequencia)'));
+  assert.ok(FONTE.includes('window.NfeDocumentos?.salvarXmlCartaExterna?.(ctx.pedidoId, carta.sequencia)'));
+  // O PDF da carta depende do XML da NOTA; registrar, não.
+  assert.ok(FONTE.includes("estadoNota?.nota_externa?.tem_xml && pode('financeiro.nfe.view')"), 'o PDF só com o XML da nota');
+  assert.ok(FONTE.includes('As cartas estão registradas, mas o PDF só sai depois de anexar o XML da nota.'));
+  assert.ok(!/innerHTML|insertAdjacentHTML/.test(FONTE), 'a lista é montada por createElement');
+
+  // A tag CC-e no Visualizar vale para a nota daqui e para a de fora.
+  assert.ok(VISUALIZAR.includes('if ((nota || notaExterna) && totalCartas > 0)'));
+  assert.ok(VISUALIZAR.includes('/nfe-externa/cartas`'), 'o Visualizar conta as cartas de fora');
 });

@@ -107,8 +107,10 @@
     } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
       tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
     }
+    // As cartas de correção contam para a nota daqui e para a de fora: nos
+    // dois casos é o mesmo documento, registrado num lugar ou no outro.
     const totalCartas = Number(cartas) || 0;
-    if (nota && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
+    if ((nota || notaExterna) && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
     // Devolução (roxo): o que voltou e a nota que o cliente emitiu.
     const devolvido = Number(p.valor_devolvido);
     if (p.devolucao && devolvido > 0) tags.push({ classe: 'badge-purple', texto: `${p.devolucao === 'total' ? 'Devolvido' : 'Devolução parcial'} · ${brl(devolvido)}` });
@@ -263,6 +265,25 @@
   function notaParaDocumentos(notas) {
     return (Array.isArray(notas) ? notas : []).filter(n => n && ['autorizada', 'cancelada'].includes(String(n.status_fiscal)))
       .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+  }
+
+  /**
+   * A NF-e emitida FORA também tem DANFE e XML — desde que o XML dela esteja
+   * anexado em "NF-e e boletos de fora" (é dele que os dois são desenhados).
+   * Reusa os MESMOS botões da nota daqui: ou o pedido tem nota própria, ou
+   * tem a de fora, nunca as duas.
+   */
+  function ligarDocumentosDaNotaDeFora(notaExterna) {
+    if (!notaExterna?.tem_xml) return;
+    const ligar = (botao, fn, titulo) => {
+      if (!botao) return;
+      botao.classList.remove('hidden');
+      botao.title = titulo;
+      if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, fn);
+      else botao.addEventListener('click', fn);
+    };
+    ligar(overlay.querySelector('#visualizarPedidoDanfe'), () => window.NfeDocumentos?.gerarDanfeExterna?.(id), 'Gerar o DANFE da NF-e emitida fora');
+    ligar(overlay.querySelector('#visualizarPedidoXml'), () => window.NfeDocumentos?.salvarXmlExterna?.(id), 'Salvar o XML da NF-e emitida fora');
   }
 
   function ligarDocumentosDaNota(nota, pedido) {
@@ -791,15 +812,22 @@
         if (respDev.ok) notasDevolucao = await respDev.json();
       } catch (_) { /* sem nota de devolução, sem tag */ }
     }
-    // A NF-e emitida fora e informada (só os dados): sem permissão ou sem o SQL, fica como era.
+    // A NF-e emitida fora e informada: sem permissão ou sem o SQL, fica como era.
     let notaExterna = null;
+    let cartasDeFora = 0;
     try {
       const respExt = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa`);
       if (respExt.ok) notaExterna = (await respExt.json())?.nota_externa || null;
+      if (notaExterna) {
+        const respCartas = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa/cartas`);
+        if (respCartas.ok) cartasDeFora = ((await respCartas.json())?.cartas || []).length;
+      }
     } catch (_) { /* sem nota de fora */ }
-    pintarTags(tagsDoEmbarque(data, notas, cartas.length, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));
+    pintarTags(tagsDoEmbarque(data, notas, notaDocs ? cartas.length : cartasDeFora, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));
     ligarBotoesDoPedido(data, clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '', notas);
     ligarDocumentosDaNota(notaDocs, data);
+    // Sem nota daqui, quem manda nos botões DANFE/XML é a nota de fora.
+    if (!notaDocs) ligarDocumentosDaNotaDeFora(notaExterna);
 
     if (pagamentoBox) {
       pagamentoBox.classList.add('hidden');
