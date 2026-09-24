@@ -32,8 +32,9 @@ permissão → a tela mostra só a contagem).
   cobrança.
 - **Em atraso** — etiquetas: há mais de 15 dias (o BB já não aceita o
   boleto) e a mais antiga.
-- **NF-e do mês** — autorizadas (nº e R$); etiquetas: recusadas, aguardando a
-  SEFAZ, canceladas.
+- **NF-e do mês** — autorizadas (nº e R$), inclusive as emitidas fora e
+  informadas nos pedidos; etiquetas: recusadas, aguardando a SEFAZ,
+  canceladas, emitidas fora.
 - **Comissões e produção a pagar** — o que falta pagar na competência;
   etiquetas: pagar até, pagas em parte, comissões atrasadas.
 - **Contas a receber por vencimento** — barras por faixa (atraso 31+,

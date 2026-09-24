@@ -1,9 +1,12 @@
 <!--
   Notas fiscais (Financeiro). Modal extra grande, REAL: as NF-e emitidas pelo
-  sistema (GET /api/fiscal/notas), com filtros por competência, situação,
-  ambiente e busca. Cada linha traz o que a nota permite — DANFE, XML,
-  e-mail, carta de correção, cancelar (modais dos Pedidos, abertos por cima)
-  e "Consultar na SEFAZ" para a nota parada. Só texto nos botões.
+  sistema (GET /api/fiscal/notas) e as emitidas fora e informadas nos pedidos
+  (GET /api/fiscal/notas-externas, desde 24/09/2026), com filtros por
+  competência, situação, ambiente ("Emitidas fora" separa as de fora) e
+  busca. Cada linha traz o que a nota permite — DANFE, XML, e-mail, carta de
+  correção, cancelar (modais dos Pedidos, abertos por cima) e "Consultar na
+  SEFAZ" para a nota parada; a de fora, DANFE e XML (do XML anexado) e o
+  "NF-e e boletos de fora" do pedido. Só texto nos botões.
   Script: src/js/modals/financeiro-modais.js.
 -->
 <div id="finNotasFiscaisOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
@@ -13,7 +16,7 @@
       <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
         <h2 id="finNotasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-alt mr-2" aria-hidden="true"></i>Notas fiscais</h2>
-        <p class="text-xs text-gray-300 truncate">NF-e emitidas pelo sistema na SEFAZ</p>
+        <p class="text-xs text-gray-300 truncate">NF-e emitidas pelo sistema e as emitidas fora, informadas nos pedidos</p>
       </div>
       <span id="finNotasAmbiente" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
@@ -24,6 +27,7 @@
           <div class="fin-indicador">
             <span class="fin-indicador__rotulo">Emitidas</span>
             <strong class="fin-indicador__valor" id="finNotasEmitidas">—</strong>
+            <span class="fin-indicador__nota" id="finNotasDeFora" hidden></span>
           </div>
           <div class="fin-indicador">
             <span class="fin-indicador__rotulo">Autorizadas</span>
@@ -66,6 +70,7 @@
               <option value="">Todos</option>
               <option value="producao">Produção</option>
               <option value="homologacao">Homologação</option>
+              <option value="fora">Emitidas fora</option>
             </select>
           </div>
           <div>

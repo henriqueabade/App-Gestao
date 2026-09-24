@@ -273,6 +273,13 @@ function resumirFiscal(tabelas = {}, { agora = new Date(), complemento = null } 
     externas: lista(tabelas.notas_fiscais_externas)
   });
   const doMes = fiscalPainel.resumoDasNotas(notas, mesAtual);
+  // As NF-e emitidas fora e informadas nos pedidos contam como autorizadas do
+  // mês (a lista de Notas fiscais do Financeiro também as mostra desde
+  // 24/09/2026). Sem o dia (informada pela chave), vale o mês da chave.
+  const deForaDoMes = lista(tabelas.notas_fiscais_externas)
+    .filter(n => n && n.ativo !== false && n.ativo !== 'false')
+    .filter(n => String(dia(n.data_emissao) || n.mes_emissao || '').startsWith(mesAtual));
+  const valorDeFora = somar(deForaDoMes, 'valor_total');
   const certificado = complemento?.certificado || null;
   const problemas = fiscalPainel.pendenciasFiscais({
     aguardando, notas,
@@ -286,11 +293,12 @@ function resumirFiscal(tabelas = {}, { agora = new Date(), complemento = null } 
 
   return {
     notasMes: {
-      emitidas: doMes.emitidas,
-      autorizadas: { quantidade: doMes.autorizadas, valor: doMes.valor_autorizado },
+      emitidas: doMes.emitidas + deForaDoMes.length,
+      autorizadas: { quantidade: doMes.autorizadas + deForaDoMes.length, valor: centavos(doMes.valor_autorizado + valorDeFora) },
       canceladas: doMes.canceladas,
       processando: doMes.processando,
-      rejeitadas: doMes.rejeitadas
+      rejeitadas: doMes.rejeitadas,
+      deFora: deForaDoMes.length
     },
     aguardandoNfe: {
       desde,

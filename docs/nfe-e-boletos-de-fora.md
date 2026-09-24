@@ -67,6 +67,16 @@ da parcela; parcela com boleto do BB vivo não recebe boleto de fora.
 - **Lista de Pedidos**: tag azul "NF fora" (a emitida aqui continua vencendo).
 - **Financeiro › Aguardando NF-e**: botão "NF-e de fora" na linha; com a nota
   informada, o pedido sai da lista (e do número do cartão).
+- **Financeiro › Notas fiscais** (pedido do dono, 24/09/2026): a nota de fora
+  entra na lista junto das emitidas aqui, com a etiqueta "Emitida fora" no
+  lugar do ambiente e a situação "Autorizada"; o filtro de ambiente ganhou
+  "Emitidas fora"; ela conta em Emitidas, Autorizadas e Valor autorizado
+  ("N emitidas fora" sob o número). Ações: DANFE e XML (com o XML anexado),
+  "Anexar XML" (sem ele) e "Carta de correção", que abrem o "NF-e e boletos de
+  fora" do pedido por cima. Cancelar e e-mail não: ela foi emitida em outro
+  sistema. Informada só pela chave, a emissão sai pelo mês da chave.
+- **Dashboard › NF-e do mês**: conta as de fora do mês entre as autorizadas,
+  com a etiqueta "N emitidas fora".
 - **Gerar boletos**: a parcela com boleto de fora aparece como "Boleto de fora"
   e não se marca; o backend também a pula (e a geração automática ao emitir a
   NF-e).

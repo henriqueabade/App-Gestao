@@ -37,6 +37,22 @@ test('fiscal: "sem NF-e" olha desde o 1º dia do mês passado — em janeiro, de
   assert.equal(f.certificado, null, 'sem o complemento, nada sobre o certificado');
 });
 
+test('fiscal: as NF-e emitidas fora e informadas nos pedidos contam entre as autorizadas do mês', () => {
+  const f = F.resumirFiscal({
+    pedidos: [],
+    notas_fiscais: [{ id: 1, pedido_id: 1, serie: 2, numero: 5, status_fiscal: 'autorizada', data_emissao: '2026-01-05T10:00:00-03:00', valor_total: 1000 }],
+    notas_fiscais_externas: [
+      { id: 1, pedido_id: 2, data_emissao: '2026-01-08', mes_emissao: '2026-01', valor_total: 500, ativo: true },
+      // Informada pela chave: sem o dia, vale o mês.
+      { id: 2, pedido_id: 3, data_emissao: null, mes_emissao: '2026-01', valor_total: 250.5, ativo: true },
+      { id: 3, pedido_id: 4, data_emissao: '2026-01-02', mes_emissao: '2026-01', valor_total: 999, ativo: false },
+      { id: 4, pedido_id: 5, data_emissao: '2025-12-30', mes_emissao: '2025-12', valor_total: 777, ativo: true }
+    ]
+  }, { agora: AGORA });
+  assert.deepEqual(f.notasMes.autorizadas, { quantidade: 3, valor: 1750.5 }, 'a removida (inativa) e a de dezembro ficam de fora');
+  assert.deepEqual([f.notasMes.emitidas, f.notasMes.deFora], [3, 2]);
+});
+
 test('pagar: o que falta é comissão + produção; a confirmar sem o que já foi pago, atrasados primeiro', () => {
   const p = F.resumirPagar({
     competencia: '2026-01',

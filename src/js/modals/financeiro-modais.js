@@ -362,7 +362,8 @@
     const termo = String(busca || '').trim().toLowerCase();
     return (Array.isArray(notas) ? notas : []).filter(n => {
       if (!n || n.status_fiscal === 'rascunho') return false;
-      if (competencia && !String(n.data_emissao || '').startsWith(competencia)) return false;
+      // A nota de fora informada só pela chave não tem o dia: vale o mês da chave.
+      if (competencia && !String(n.data_emissao || n.mes_emissao || '').startsWith(competencia)) return false;
       if (status && rotuloStatusNota(n.status_fiscal).grupo !== status) return false;
       if (ambiente && n.ambiente !== ambiente) return false;
       if (termo) {
@@ -380,8 +381,57 @@
       emitidas: lista.length,
       autorizadas: lista.filter(n => n.status_fiscal === 'autorizada').length,
       canceladas: lista.filter(n => n.status_fiscal === 'cancelada').length,
-      valor: centavos(lista.filter(n => n.status_fiscal === 'autorizada').reduce((s, n) => s + Number(n.valor_total || 0), 0))
+      valor: centavos(lista.filter(n => n.status_fiscal === 'autorizada').reduce((s, n) => s + Number(n.valor_total || 0), 0)),
+      // Quantas delas foram emitidas fora (o indicador diz, para o número não enganar).
+      deFora: lista.filter(n => n.de_fora).length
     };
+  }
+
+  /**
+   * A NF-e emitida FORA do sistema e informada no pedido (fiscal/externas.js)
+   * no formato da lista — pedido do dono em 24/09/2026: ela está no sistema e
+   * ligada a um pedido daqui, então consta na lista. É a nota que vale para o
+   * pedido e conta como autorizada. O ambiente é "fora": o filtro separa e a
+   * etiqueta diz de onde veio. Sem o dia (informada só pela chave), vale o mês
+   * da chave. Pura.
+   */
+  function notaDeForaNaLista(n) {
+    if (!n) return null;
+    return {
+      id: `fora-${n.id}`,
+      externa_id: n.id,
+      de_fora: true,
+      pedido_id: n.pedido_id,
+      serie: n.serie,
+      numero: n.numero,
+      chave_acesso: n.chave_acesso || null,
+      status_fiscal: 'autorizada',
+      ambiente: 'fora',
+      data_emissao: n.data_emissao || null,
+      mes_emissao: n.mes_emissao || String(n.data_emissao || '').slice(0, 7) || null,
+      valor_total: n.valor_total,
+      origem: n.origem || null,
+      protocolo: n.protocolo || null,
+      tem_xml: Boolean(n.tem_xml),
+      cartas_correcao: Number(n.cartas_correcao) || 0,
+      ultima_carta_seq: n.ultima_carta_seq ?? null
+    };
+  }
+
+  /**
+   * As notas do sistema e as de fora numa lista só, da emissão mais nova para
+   * a mais velha (a de fora sem o dia entra pelo mês). Pura.
+   */
+  function juntarNotas(proprias, deFora) {
+    const todas = [
+      ...(Array.isArray(proprias) ? proprias : []),
+      ...(Array.isArray(deFora) ? deFora : []).map(notaDeForaNaLista).filter(Boolean)
+    ];
+    const quando = n => String(n.data_emissao || n.mes_emissao || '');
+    return todas
+      .map((n, i) => ({ n, i }))
+      .sort((a, b) => quando(b.n).localeCompare(quando(a.n)) || a.i - b.i)
+      .map(({ n }) => n);
   }
 
   /** "3x · Boleto", "À vista · Pix": a condição do pedido que aguarda nota. */
@@ -861,7 +911,7 @@
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
     faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
     filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
-    rotuloStatusNota, filtrarNotas, resumoDeNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
+    rotuloStatusNota, filtrarNotas, resumoDeNotas, notaDeForaNaLista, juntarNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     textoDaConciliacao, BADGE_DO_AVISO,
     opcoesDeBeneficiario, filtrarPorBeneficiario, rotuloDoFiltroBenef,
@@ -5282,16 +5332,22 @@
       let lidas = [];
       let erro = null;
       try {
-        const [lista, pedidos, clientes] = await Promise.all([
+        const [lista, deFora, pedidos, clientes] = await Promise.all([
           fetchApi('/api/fiscal/notas'),
+          // As NF-e emitidas fora e informadas nos pedidos (24/09/2026). Sem o
+          // SQL delas, lista vazia: a tela fica como era.
+          fetchApi('/api/fiscal/notas-externas').catch(() => []),
           fetchApi('/api/pedidos').catch(() => []),
           fetchApi('/api/clientes/lista').catch(() => [])
         ]);
         const nomes = new Map((Array.isArray(clientes) ? clientes : []).map(c => [String(c.id), c.nome_fantasia || c.razao_social || c.nome || '']));
         const porId = new Map((Array.isArray(pedidos) ? pedidos : []).map(p => [String(p.id), p]));
-        lidas = (Array.isArray(lista) ? lista : []).map(n => {
+        lidas = juntarNotas(lista, deFora).map(n => {
           const p = porId.get(String(n.pedido_id));
-          return { ...n, pedido_numero: p?.numero ?? String(n.pedido_id ?? ''), cliente: nomes.get(String(p?.cliente_id)) || n.destinatario?.nome || '' };
+          return {
+            ...n, pedido_numero: p?.numero ?? String(n.pedido_id ?? ''), cliente: nomes.get(String(p?.cliente_id)) || n.destinatario?.nome || '',
+            forma_pagamento: p?.forma_pagamento || ''
+          };
         });
       } catch (e) {
         erro = e;
@@ -5316,6 +5372,11 @@
       const filtros = { competencia: competenciaSel.value, status: statusSel.value, ambiente: ambienteSel.value, busca: busca.value };
       const r = resumoDeNotas(filtrarNotas(notas, { competencia: filtros.competencia, ambiente: filtros.ambiente }));
       el('finNotasEmitidas').textContent = String(r.emitidas);
+      const notaDeFora = el('finNotasDeFora');
+      if (notaDeFora) {
+        notaDeFora.textContent = r.deFora ? `${r.deFora} ${r.deFora === 1 ? 'emitida fora' : 'emitidas fora'}` : '';
+        notaDeFora.hidden = !r.deFora;
+      }
       el('finNotasAutorizadas').textContent = String(r.autorizadas);
       el('finNotasCanceladas').textContent = String(r.canceladas);
       el('finNotasValor').textContent = formatarMoeda(r.valor);
@@ -5340,7 +5401,15 @@
       const s = rotuloStatusNota(n.status_fiscal);
       const situacao = criar('span', `${s.badge} px-3 py-1 rounded-full text-xs font-medium`, s.rotulo);
       if (n.motivo_sefaz) situacao.title = `${n.codigo_status_sefaz ? `${n.codigo_status_sefaz} — ` : ''}${n.motivo_sefaz}`;
-      const ambiente = criar('span', `${n.ambiente === 'producao' ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium`, n.ambiente === 'producao' ? 'Produção' : 'Homologação');
+      if (n.de_fora) {
+        situacao.title = n.origem === 'chave'
+          ? 'Emitida fora do sistema e informada no pedido pela chave de acesso (sem o XML, a autorização não foi conferida)'
+          : 'Emitida fora do sistema e informada no pedido';
+      }
+      const ambiente = n.de_fora
+        ? criar('span', 'badge-info px-3 py-1 rounded-full text-xs font-medium', 'Emitida fora')
+        : criar('span', `${n.ambiente === 'producao' ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium`, n.ambiente === 'producao' ? 'Produção' : 'Homologação');
+      if (n.de_fora) ambiente.title = 'NF-e emitida fora do sistema e informada no pedido (NF-e e boletos de fora)';
       const pedidoBtn = criar('button', 'fin-link-celula', String(n.pedido_numero || n.pedido_id || '—'));
       pedidoBtn.type = 'button';
       pedidoBtn.dataset.finPedidoId = String(n.pedido_id ?? '');
@@ -5354,13 +5423,26 @@
         acionar(b, fn);
         acoes.appendChild(b);
       };
-      const documentos = ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
+      if (n.de_fora) {
+        // Nota de fora: os documentos saem do XML anexado (pelo id do PEDIDO:
+        // uma nota de fora por pedido). Carta de correção e anexar o XML ficam
+        // no "NF-e e boletos de fora" do pedido, aberto por cima. Não se
+        // cancela nem se envia por e-mail daqui: ela foi emitida em outro sistema.
+        if (n.tem_xml) {
+          botao('DANFE', () => window.NfeDocumentos?.gerarDanfeExterna(n.pedido_id), { titulo: 'Gerar o DANFE em PDF (do XML anexado)' });
+          botao('XML', () => window.NfeDocumentos?.salvarXmlExterna(n.pedido_id), { titulo: 'Salvar o XML da nota' });
+        } else {
+          botao('Anexar XML', () => abrirDeFora(n), { perm: 'financeiro.nfe.emit', titulo: 'Sem o XML não há DANFE nem carta de correção em PDF: anexe no pedido' });
+        }
+        botao('Carta de correção', () => abrirDeFora(n), { perm: 'financeiro.nfe.emit', titulo: 'As cartas da nota de fora ficam em "NF-e e boletos de fora" do pedido' });
+      }
+      const documentos = !n.de_fora && ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
       if (documentos) {
         botao('DANFE', () => window.NfeDocumentos?.gerarDanfe(n.id), { titulo: 'Gerar o DANFE em PDF' });
         botao('XML', () => window.NfeDocumentos?.salvarXml(n.id), { titulo: 'Salvar o XML da nota' });
         botao('E-mail', () => abrirDaNota(n, 'modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail', 'emailNfeContext'), { perm: 'financeiro.nfe.emit', titulo: 'Enviar DANFE e XML por e-mail' });
       }
-      if (n.status_fiscal === 'autorizada') {
+      if (!n.de_fora && n.status_fiscal === 'autorizada') {
         botao('Carta de correção', () => abrirDaNota(n, 'modals/pedidos/carta-correcao-nfe.html', '../js/modals/pedido-carta-correcao-nfe.js', 'cartaCorrecaoNfe', 'cartaCorrecaoContext'), { perm: 'financeiro.nfe.emit' });
         botao('Cancelar NF-e', () => abrirDaNota(n, 'modals/pedidos/cancelar-nfe.html', '../js/modals/pedido-cancelar-nfe.js', 'cancelarNfe', 'cancelarNfeContext'), { classe: 'btn-danger text-white', perm: 'financeiro.nfe.cancel' });
       }
@@ -5368,9 +5450,11 @@
         botao('Consultar na SEFAZ', () => consultar(n), { classe: 'btn-success', perm: 'financeiro.nfe.view' });
       }
 
+      // Sem o dia (nota de fora informada pela chave): o mês da chave.
+      const emissao = n.data_emissao ? formatarData(n.data_emissao) : (n.mes_emissao ? rotuloCompetenciaCurto(n.mes_emissao) : '');
       tr.append(
         celula(`${n.serie}/${n.numero}`, 'px-4 py-3 text-white font-medium'), celula(ambiente), celula(pedidoBtn), celula(n.cliente),
-        celula(formatarData(n.data_emissao)), celula(formatarMoeda(n.valor_total), 'px-4 py-3 text-right'), celula(situacao),
+        celula(emissao), celula(formatarMoeda(n.valor_total), 'px-4 py-3 text-right'), celula(situacao),
         celula(n.cartas_correcao ? String(n.cartas_correcao) : '—', 'px-4 py-3 text-right'), celula(acoes)
       );
       return tr;
@@ -5380,6 +5464,12 @@
     function abrirDaNota(n, htmlPath, scriptPath, id, nomeDoContexto) {
       window[nomeDoContexto] = contextoDaNota(n);
       abrirModalDePedido(htmlPath, scriptPath, id, { aoFechar: carregarLista });
+    }
+
+    /** "NF-e e boletos de fora" do pedido da nota de fora (anexar XML, cartas de correção), por cima deste. */
+    function abrirDeFora(n) {
+      window.dadosExternosContext = { pedidoId: n.pedido_id, numero: n.pedido_numero || '', cliente: n.cliente || '', formaPagamento: n.forma_pagamento || '' };
+      abrirModalDePedido('modals/pedidos/dados-externos.html', '../js/modals/pedido-dados-externos.js', 'dadosExternos', { aoFechar: carregarLista });
     }
 
     async function consultar(n) {

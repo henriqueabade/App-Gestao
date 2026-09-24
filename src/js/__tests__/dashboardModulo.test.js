@@ -2190,6 +2190,12 @@ test('Financeiro: os indicadores dizem o recebido, o a receber, o atraso, as NF-
     assert.match(nfe, /^7notas autorizadas · R\$ 61 mil/);
     assert.match(nfe, /1 recusada pela SEFAZ/);
     assert.match(nfe, /1 cancelada/);
+    assert.doesNotMatch(nfe, /emitida fora/, 'sem nota de fora, nada a dizer');
+    const comDeFora = montarPainelFalso();
+    const dadosComDeFora = amostraComFinanceiro();
+    dadosComDeFora.secoes.fiscal.notasMes.deFora = 2;
+    comDeFora.avaliar('renderizarDashboard')(comDeFora.modulo, dadosComDeFora);
+    assert.match(comDeFora.texto('kpi-nfe'), /2 emitidas fora/);
 
     const aPagar = painel.texto('kpi-a-pagar');
     assert.match(aPagar, /R\$ 6\.200/);

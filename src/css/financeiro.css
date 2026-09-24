@@ -1334,6 +1334,9 @@ label.fin-benef__nome { cursor: pointer; }
 }
 
 .fin-indicador__rotulo { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: #9ca3af; }
+/* Nota pequena sob o número (Notas fiscais: "1 emitida fora"). */
+.fin-indicador__nota { font-size: 0.75rem; color: #9ca3af; }
+.fin-indicador__nota[hidden] { display: none; }
 
 .fin-indicador__valor {
     font-size: 1.35rem;

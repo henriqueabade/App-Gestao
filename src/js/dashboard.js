@@ -2402,6 +2402,7 @@ function desenharKpiNfe(corpo, s) {
     const rejeitadas = quantidadeDe(n.rejeitadas);
     const processando = quantidadeDe(n.processando);
     const canceladas = quantidadeDe(n.canceladas);
+    const deFora = quantidadeDe(n.deFora);
     const rotulo = autorizadas === 1 ? 'nota autorizada' : 'notas autorizadas';
     preencherKpi(corpo, {
         id: 'kpi-nfe',
@@ -2411,7 +2412,12 @@ function desenharKpiNfe(corpo, s) {
         notas: [
             rejeitadas > 0 && { tom: 'vermelho', icone: 'fa-ban', texto: `${pluralizar(rejeitadas, 'recusada', 'recusadas')} pela SEFAZ` },
             processando > 0 && { tom: 'ouro', icone: 'fa-hourglass-half', texto: `${formatarNumero(processando)} aguardando a SEFAZ` },
-            canceladas > 0 && { tom: 'neutro', icone: 'fa-xmark', texto: pluralizar(canceladas, 'cancelada', 'canceladas') }
+            canceladas > 0 && { tom: 'neutro', icone: 'fa-xmark', texto: pluralizar(canceladas, 'cancelada', 'canceladas') },
+            deFora > 0 && {
+                tom: 'azul', icone: 'fa-file-import',
+                texto: `${formatarNumero(deFora)} ${deFora === 1 ? 'emitida fora' : 'emitidas fora'}`,
+                dica: 'Emitidas em outro sistema e informadas nos pedidos: contam entre as autorizadas'
+            }
         ]
     });
 }

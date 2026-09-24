@@ -419,7 +419,7 @@ test('NF-e (puras): situação da nota, filtros da lista, indicadores, condiçã
     assert.deepStrictEqual(plano(f.filtrarNotas(notas, { busca: '2544' })).map(n => n.id), [2], 'busca pelo pedido');
     assert.deepStrictEqual(plano(f.filtrarNotas(notas, { busca: '3' })).map(n => n.id), [3], 'busca pelo nº da nota');
     assert.deepStrictEqual(plano(f.filtrarNotas(null)), []);
-    assert.deepStrictEqual(plano(f.resumoDeNotas(f.filtrarNotas(notas, { competencia: '2026-09' }))), { emitidas: 3, autorizadas: 1, canceladas: 0, valor: 800 });
+    assert.deepStrictEqual(plano(f.resumoDeNotas(f.filtrarNotas(notas, { competencia: '2026-09' }))), { emitidas: 3, autorizadas: 1, canceladas: 0, valor: 800, deFora: 0 });
 
     assert.strictEqual(f.condicaoDoPedido({ parcelas: 3, forma_pagamento: 'Boleto' }), '3x · Boleto');
     assert.strictEqual(f.condicaoDoPedido({ parcelas: 1 }), 'À vista');
@@ -429,6 +429,43 @@ test('NF-e (puras): situação da nota, filtros da lista, indicadores, condiçã
     assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { incluirDispensados: true })).map(l => l.numero), ['2540', '2543', '2544']);
     assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { busca: 'serrana' })).map(l => l.numero), ['2544']);
     assert.deepStrictEqual(plano(f.linhasAguardando(null)), []);
+});
+
+test('Notas fiscais: as NF-e emitidas fora e informadas nos pedidos entram na lista, nos filtros e nos indicadores', () => {
+    const f = puro();
+    const proprias = [
+        { id: 7, serie: 2, numero: 2, status_fiscal: 'autorizada', ambiente: 'homologacao', data_emissao: '2026-09-24T10:00:00-03:00', valor_total: 7320.85, pedido_id: 115 },
+        { id: 6, serie: 2, numero: 1, status_fiscal: 'autorizada', ambiente: 'homologacao', data_emissao: '2026-09-20T10:00:00-03:00', valor_total: 4335.56, pedido_id: 111 }
+    ];
+    const deFora = [
+        { id: 3, pedido_id: 104, serie: 1, numero: 8812, chave_acesso: '3126…', data_emissao: '2026-09-22', mes_emissao: '2026-09', valor_total: 2500, origem: 'xml', tem_xml: true, cartas_correcao: 1, ultima_carta_seq: 1 },
+        // Informada só pela chave: sem o dia, vale o mês da chave.
+        { id: 4, pedido_id: 99, serie: 1, numero: 8790, data_emissao: null, mes_emissao: '2026-08', valor_total: 900, origem: 'chave', tem_xml: false, cartas_correcao: 0 }
+    ];
+    const lista = plano(f.juntarNotas(proprias, deFora));
+    assert.deepStrictEqual(lista.map(n => n.id), [7, 'fora-3', 6, 'fora-4'], 'numa lista só, da emissão mais nova para a mais velha');
+    const fora = lista.find(n => n.id === 'fora-3');
+    assert.deepStrictEqual([fora.de_fora, fora.status_fiscal, fora.ambiente, fora.pedido_id, fora.tem_xml, fora.cartas_correcao], [true, 'autorizada', 'fora', 104, true, 1]);
+
+    assert.deepStrictEqual(plano(f.filtrarNotas(lista, { competencia: '2026-08' })).map(n => n.id), ['fora-4'], 'a de fora sem o dia entra pelo mês');
+    assert.deepStrictEqual(plano(f.filtrarNotas(lista, { ambiente: 'fora' })).map(n => n.id), ['fora-3', 'fora-4']);
+    assert.deepStrictEqual(plano(f.filtrarNotas(lista, { ambiente: 'homologacao' })).map(n => n.id), [7, 6]);
+    assert.deepStrictEqual(plano(f.filtrarNotas(lista, { status: 'autorizada' })).map(n => n.id), [7, 'fora-3', 6, 'fora-4']);
+    assert.deepStrictEqual(plano(f.resumoDeNotas(f.filtrarNotas(lista, { competencia: '2026-09' }))),
+        { emitidas: 3, autorizadas: 3, canceladas: 0, valor: 14156.41, deFora: 1 });
+    assert.deepStrictEqual(plano(f.juntarNotas(proprias, null)).map(n => n.id), [7, 6], 'sem as de fora (SQL por rodar), como era');
+
+    // A tela: lê as duas listas, diz quantas são de fora e dá a cada uma o que ela permite.
+    assert.match(SCRIPT, /fetchApi\('\/api\/fiscal\/notas-externas'\)\.catch\(\(\) => \[\]\)/);
+    assert.match(SCRIPT, /lidas = juntarNotas\(lista, deFora\)/);
+    assert.match(SCRIPT, /window\.NfeDocumentos\?\.gerarDanfeExterna\(n\.pedido_id\)/);
+    assert.match(SCRIPT, /window\.NfeDocumentos\?\.salvarXmlExterna\(n\.pedido_id\)/);
+    assert.match(SCRIPT, /abrirModalDePedido\('modals\/pedidos\/dados-externos\.html', '\.\.\/js\/modals\/pedido-dados-externos\.js', 'dadosExternos', \{ aoFechar: carregarLista \}\)/);
+    assert.match(SCRIPT, /const documentos = !n\.de_fora && /, 'cancelar e e-mail são só das notas daqui');
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'notas-fiscais.html'), 'utf8');
+    assert.ok(html.includes('<option value="fora">Emitidas fora</option>'));
+    assert.ok(html.includes('id="finNotasDeFora"'));
+    assert.ok(html.includes('NF-e emitidas pelo sistema e as emitidas fora, informadas nos pedidos'));
 });
 
 test('os modais fiscais são REAIS: aguardando NF-e e notas fiscais leem /api/fiscal e abrem os modais dos Pedidos por cima', () => {
