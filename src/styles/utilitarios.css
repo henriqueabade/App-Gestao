@@ -51,6 +51,8 @@
    rolagem de lado (Boletos de fora, Pagamentos das parcelas). */
 .table-fixed { table-layout: fixed; }
 .self-start { align-self: flex-start; }
+/* o aviso da parcela travada ocupa a linha inteira (parcelamento.js) */
+.col-span-3 { grid-column: span 3 / span 3; }
 
 /* texto */
 .break-all { word-break: break-all; }

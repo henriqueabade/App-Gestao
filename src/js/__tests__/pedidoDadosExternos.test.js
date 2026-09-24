@@ -126,7 +126,7 @@ test('Visualizar: o botão com algo a informar (ou a ver); a NOTA de fora só de
   assert.match(VIS_HTML, /id="visualizarPedidoDadosExternos" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno/);
   assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/dados-externos.html', '../js/modals/pedido-dados-externos.js', 'dadosExternos');"));
   assert.ok(VISUALIZAR.includes("'dadosExternos'") && VISUALIZAR.includes("'nfe:externa'"), 'ao informar, o Visualizar volta atualizado');
-  assert.ok(VISUALIZAR.includes('const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);'), 'parcela cobrada por fora (ou já paga) não conta como faltando');
+  assert.ok(VISUALIZAR.includes('const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem);'), 'parcela cobrada por fora (ou já paga, ou com ordem) não conta como faltando');
 
   const tags = recortar(VISUALIZAR, 'tagsDoEmbarque');
   const comFora = plano(tags({ nfe_dispensada: true }, [], 0, { parcelas: 2, registrados: 0, externos: 2 }, [], { serie: 2, numero: 700, valor_total: 1500 }));
@@ -294,7 +294,7 @@ test('boleto do BB importado (colado na parcela errada): muda de parcela levando
   assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { podeInformar: false, importado: true })), []);
 
   // Para onde vai: só as parcelas livres; a mudança e a desvinculação pedem confirmação e usam a rota de vínculo.
-  assert.ok(FONTE.includes("filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento)"));
+  assert.ok(FONTE.includes("filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem)"));
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({ pedido_id: Number(ctx.pedidoId), parcela_id: Number(alvo.parcela.id) }))"));
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({}))"));
   assert.ok(FONTE.includes("if (pago) avisarQuemEstaAberto('recebimentos:alterados');"), 'o Visualizar relê o pagamento que mudou');

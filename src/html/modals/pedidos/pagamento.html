@@ -52,6 +52,18 @@
         <!-- Prazo (à vista) ou parcelamento (a prazo) — trocado pelo script. -->
         <div id="pagamentoPedidoBox"></div>
 
+        <!-- Parcelas que somam MAIS (Adicional) ou MENOS (Desconto) que os itens:
+             o total do pedido passa a ser a soma, com a justificativa (decisões
+             do dono, 24/09/2026 — backend/pedidoParcelas.js). -->
+        <div id="pagamentoPedidoAjuste" class="hidden glass-surface rounded-xl border border-white/10 p-4 space-y-2">
+          <p id="pagamentoPedidoAjusteTexto" class="text-sm text-white"></p>
+          <label for="pagamentoPedidoJustificativa" class="ctl-rotulo text-gray-300">Justificativa da diferença <span style="color: var(--color-red)">*</span></label>
+          <textarea id="pagamentoPedidoJustificativa" rows="2" maxlength="1000" data-no-restore="true"
+                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
+                    placeholder="Ex.: frete combinado com o cliente; acerto por avaria"></textarea>
+          <p class="text-xs text-gray-400">Fica guardada no pedido, com quem mudou e quando. Na tabela de itens aparece uma linha a mais, "Adicional" ou "Desconto", com a diferença.</p>
+        </div>
+
         <!-- Vencimentos resultantes: o início do faturamento mais o prazo de
              cada parcela, em dias. O início é o do pedido
              (inicio_faturamento), definido na conversão ou em "Embarque e

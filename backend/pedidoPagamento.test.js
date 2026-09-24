@@ -30,8 +30,11 @@ const COLUNAS = {
     'id', 'numero', 'situacao', 'cliente_id', 'data_emissao', 'parcelas', 'tipo_parcela',
     'forma_pagamento', 'prazo', 'desconto_pagamento', 'desconto_especial',
     'desconto_total', 'valor_final',
-    'embarcar_previsao', 'embarcar_real', 'inicio_faturamento', 'faturamento_regra'
+    'embarcar_previsao', 'embarcar_real', 'inicio_faturamento', 'faturamento_regra',
+    // O ajuste da soma das parcelas (sql/pedido_ajuste_valor.sql).
+    'ajuste_valor', 'ajuste_motivo', 'ajuste_em', 'ajuste_por', 'ajuste_historico'
   ],
+  boletos: ['id', 'pedido_id', 'parcela_id', 'numero_parcela', 'status', 'valor'],
   pedidos_itens: [
     'id', 'pedido_id', 'produto_id', 'nome', 'quantidade', 'valor_unitario',
     'valor_unitario_desc', 'desconto_pagamento', 'desconto_pagamento_prc',
@@ -362,22 +365,60 @@ test('as parcelas antigas são substituídas, sem sobrar linha', async () => {
   }
 });
 
-test('recusa quando a soma das parcelas não fecha com o total', async () => {
+test('soma diferente dos itens: sem justificativa recusa; com ela, o total vira a soma e o ajuste fica guardado (dono, 24/09/2026)', async () => {
   const ctx = await montar(cenario());
   try {
-    const resposta = await alterarPagamento(ctx.porta, 1, {
-      condicao: 'vista',
-      forma_pagamento: 'pix',
-      prazo: '15',
-      // O total à vista é 364; gravar 384 deixaria o financeiro cobrando
-      // uma diferença de ninguém.
-      parcelas_detalhes: [{ valor: 384, data_vencimento: '2026-01-25', numero_parcela: 1 }]
-    });
-    assert.strictEqual(resposta.status, 422);
-    assert.strictEqual((await resposta.json()).code, 'PARCELAS_NAO_FECHAM');
+    // O total à vista é 364; a parcela de 384 é R$ 20 a MAIS (Adicional).
+    const corpo = { condicao: 'vista', forma_pagamento: 'pix', prazo: '15', parcelas_detalhes: [{ valor: 384, data_vencimento: '2026-01-25', numero_parcela: 1 }] };
+    const sem = await alterarPagamento(ctx.porta, 1, corpo);
+    assert.strictEqual(sem.status, 422);
+    const erro = await sem.json();
+    assert.strictEqual(erro.code, 'JUSTIFICATIVA_OBRIGATORIA');
+    assert.match(erro.error, /R\$\s20,00 a mais que os itens: escreva a justificativa/);
+    assert.strictEqual(ctx.tabelas.pedido_parcelas.length, 2, 'nada pode ter sido gravado');
 
-    assert.strictEqual(ctx.tabelas.pedidos[0].valor_final, 384, 'nada pode ter sido gravado');
-    assert.strictEqual(ctx.tabelas.pedido_parcelas.length, 2);
+    const com = await alterarPagamento(ctx.porta, 1, { ...corpo, justificativa: 'Frete combinado com o cliente' });
+    assert.strictEqual(com.status, 200);
+    const r = await com.json();
+    assert.deepStrictEqual([r.valor_final, r.valor_itens, r.ajuste, r.ajuste_rotulo], [384, 364, 20, 'Adicional']);
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.deepStrictEqual([pedido.valor_final, pedido.ajuste_valor, pedido.ajuste_motivo, pedido.ajuste_por], [384, 20, 'Frete combinado com o cliente', 1], 'o total do pedido é a soma; quem e por quê ficam guardados');
+    const historico = JSON.parse(pedido.ajuste_historico);
+    assert.deepStrictEqual([historico.length, historico[0].ajuste, historico[0].total_antes, historico[0].total_depois, historico[0].motivo], [1, 20, 384, 384, 'Frete combinado com o cliente']);
+
+    // Para menos: Desconto.
+    const menos = await alterarPagamento(ctx.porta, 1, { ...corpo, parcelas_detalhes: [{ valor: 350, numero_parcela: 1 }], justificativa: 'Acerto de avaria no transporte' });
+    const rm = await menos.json();
+    assert.deepStrictEqual([menos.status, rm.ajuste, rm.ajuste_rotulo, ctx.tabelas.pedidos[0].valor_final], [200, -14, 'Desconto', 350]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('parcela com boleto fica TRAVADA (só vai para o valor exato do boleto) e as parcelas são atualizadas no lugar (dono, 24/09/2026)', async () => {
+  const dados = cenario();
+  // A 1ª parcela tem boleto do BB de R$ 192,50.
+  dados.boletos = [{ id: 70, pedido_id: 1, parcela_id: 5, numero_parcela: 1, status: 'registrado', valor: '192.50' }];
+  const ctx = await montar(dados);
+  const aPrazo = valores => alterarPagamento(ctx.porta, 1, {
+    condicao: 'prazo', forma_pagamento: 'boleto', prazo: '30/60', tipo_parcela: 'diferente',
+    parcelas_detalhes: valores.map((valor, i) => ({ valor, numero_parcela: i + 1 }))
+  });
+  try {
+    const mexeu = await aPrazo([200, 184]);
+    assert.strictEqual(mexeu.status, 409);
+    const erro = await mexeu.json();
+    assert.strictEqual(erro.code, 'PARCELA_TRAVADA');
+    assert.match(erro.error, /A 1ª parcela tem boleto do BB de R\$\s192,50: o valor dela fica em R\$\s192,00 ou vai exatamente para R\$\s192,50/);
+
+    const vencimentoDaPrimeira = ctx.tabelas.pedido_parcelas.find(p => p.id === 5).data_vencimento;
+    const exato = await aPrazo([192.5, 191.5]);
+    assert.strictEqual(exato.status, 200, 'para o valor exato do boleto, pode');
+    assert.deepStrictEqual(ctx.tabelas.pedido_parcelas.map(p => [p.id, p.numero_parcela, Number(p.valor)]).sort((a, b) => a[0] - b[0]), [[5, 1, 192.5], [6, 2, 191.5]], 'as mesmas linhas (os ids), atualizadas no lugar');
+    assert.strictEqual(ctx.tabelas.pedido_parcelas.find(p => p.id === 5).data_vencimento, vencimentoDaPrimeira, 'a parcela travada mantém o vencimento');
+
+    const semAPrimeira = await alterarPagamento(ctx.porta, 1, { condicao: 'vista', forma_pagamento: 'pix', prazo: '0', parcelas_detalhes: [{ valor: 364, numero_parcela: 1 }] });
+    assert.strictEqual(semAPrimeira.status, 409, 'à vista mudaria o valor da parcela com boleto');
   } finally {
     await ctx.encerrar();
   }

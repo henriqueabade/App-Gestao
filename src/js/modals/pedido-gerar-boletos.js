@@ -31,6 +31,17 @@
   function linhaDaParcela(l) {
     // Já paga (Pix, cartão…) e sem boleto: não se marca — só depois de
     // estornar o pagamento em "Pagamentos" (decisão do dono, 24/09/2026).
+    // Ordem de pagamento aberta (Pix, cartão… para uma data): também não se marca.
+    if (l?.ordem && !l?.recebimento && !l?.tem_boleto_vivo && !l?.boleto_externo) {
+      const o = l.ordem;
+      return {
+        id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
+        vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        classe: 'badge-info', rotulo: `Ordem${o.forma ? ` · ${o.forma}` : ''}`,
+        detalhe: [o.data ? `para ${diaCurto(o.data)}` : '', 'para gerar boleto, cancele a ordem em "Pagamentos"'].filter(Boolean).join(' · ')
+      };
+    }
     if (l?.recebimento && !l?.tem_boleto_vivo && !l?.boleto_externo) {
       const r = l.recebimento;
       return {

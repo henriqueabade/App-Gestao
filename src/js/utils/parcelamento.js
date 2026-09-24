@@ -101,11 +101,31 @@
     select.appendChild(op);
   }
 
+  /**
+   * Opções do "Pagamento do pedido" (decisões do dono, 24/09/2026). O
+   * orçamento não as passa e continua exatamente como era.
+   *   - `permitirDiferenca`: a soma pode sair do total — para mais (Adicional)
+   *     ou para menos (Desconto); quem chama pede a justificativa. O resumo diz
+   *     qual é a diferença em vez de "Faltante".
+   *   - `travas`: por posição (índice da parcela), `{ atual, permitido, texto }`
+   *     em centavos — a parcela com boleto, pagamento ou ordem só fica no valor
+   *     atual ou vai exatamente para o `permitido`. O valor e o prazo dela ficam
+   *     só de leitura, com o aviso e o botão "Usar R$ X"; "Iguais" some (não dá
+   *     para repartir o total sem mexer nela) e a quantidade não desce abaixo
+   *     dela.
+   */
+  function travaDe(inst, idx){ return (inst.travas || [])[idx] || null; }
+  function minimoDeParcelas(inst){
+    const t = inst.travas || [];
+    for(let i = t.length - 1; i >= 0; i--) if(t[i]) return i + 1;
+    return 0;
+  }
+
   const instances = new Map();
   function init(containerId, opts){
     const container = document.getElementById(containerId);
     const getTotal = opts.getTotal;
-    const state = {total:getTotal(), count:null, mode:null, items:[], sum:0, remaining:0, canRegister:false};
+    const state = {total:getTotal(), count:null, mode:null, items:[], sum:0, remaining:0, canRegister:false, diferenca:0};
     container.innerHTML = `
       <div class="grid grid-cols-3 gap-4 mb-4">
         <div>
@@ -137,7 +157,7 @@
     };
     elements.count.addEventListener('change', ()=>onCountChange(containerId));
     elements.modeRadios.forEach(r=>r.addEventListener('change',()=>onModeChange(containerId)));
-    instances.set(containerId,{state,getTotal,elements});
+    instances.set(containerId,{state,getTotal,elements,permitirDiferenca:Boolean(opts.permitirDiferenca),travas:Array.isArray(opts.travas)?opts.travas:[]});
 
     if(opts.prefill){
       const pre = opts.prefill;
@@ -151,8 +171,11 @@
         onCountChange(containerId);
       }
       if(pre.mode){
-        Array.from(elements.modeRadios).forEach(r=>{r.disabled=false; if(r.value===pre.mode) r.checked=true;});
-        const inst=instances.get(containerId); if(inst) inst.state.mode=pre.mode;
+        // Com parcela travada, repartir por igual mexeria nela: fica "Diferentes".
+        const inst0=instances.get(containerId);
+        const modo = inst0 && minimoDeParcelas(inst0) ? 'custom' : pre.mode;
+        Array.from(elements.modeRadios).forEach(r=>{r.disabled=false; if(r.value===modo) r.checked=true;});
+        if(inst0) inst0.state.mode=modo;
       }
       if(pre.items){
         const inst=instances.get(containerId); if(inst) inst.state.items = pre.items.map(it=>({amount:it.amount,dueInDays:it.dueInDays}));
@@ -167,6 +190,18 @@
     const inst = instances.get(id); if(!inst) return;
     const n = parseInt(inst.elements.count.value) || null;
     const s = inst.state;
+    const minimo = minimoDeParcelas(inst);
+    if(minimo){
+      // Com parcela travada: a quantidade não desce abaixo dela, e o que já
+      // estava nas linhas continua (inclusive a travada).
+      if(!n || n < minimo){ inst.elements.count.value = String(s.count || minimo); return; }
+      s.count = n; s.mode = 'custom';
+      s.items = Array.from({length:n},(_,i)=>s.items[i] ? {...s.items[i]} : {amount:0,dueInDays:null});
+      inst.elements.modeRadios.forEach(r=>{r.checked = r.value==='custom'; r.disabled = r.value==='equal';});
+      renderRows(id);
+      recompute(id);
+      return;
+    }
     s.count = n; s.mode = null;
     s.items = n?Array.from({length:n},()=>({amount:0,dueInDays:null})) : [];
     inst.elements.rows.innerHTML='';
@@ -190,18 +225,38 @@
     const s = inst.state; const rowsDiv = inst.elements.rows;
     rowsDiv.innerHTML='';
     s.items.forEach((it,idx)=>{
+      const trava = travaDe(inst, idx);
+      const soLeitura = s.mode==='equal' || Boolean(trava);
       const row=document.createElement('div');
       row.className='grid grid-cols-3 gap-4';
       row.innerHTML=`
         <div class="relative col-span-2">
-          <input type="text" id="${id}_amount_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${s.mode==='equal'?'bg-gray-800/40':''}" ${s.mode==='equal'?'readonly':''} value="${formatCentsBRL(it.amount)}">
+          <input type="text" id="${id}_amount_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${soLeitura?'bg-gray-800/40':''}" ${soLeitura?'readonly':''} value="${formatCentsBRL(it.amount)}">
           <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Valor</label>
         </div>
         <div class="relative">
-          <input type="number" min="0" id="${id}_due_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right" value="${it.dueInDays??''}">
+          <input type="number" min="0" id="${id}_due_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${trava?'bg-gray-800/40':''}" ${trava?'readonly':''} value="${it.dueInDays??''}">
           <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Prazo (dias)</label>
         </div>`;
       rowsDiv.appendChild(row);
+      if(trava){
+        // O aviso da trava e, se o boleto/pagamento vale outro valor, o botão para usá-lo.
+        const aviso=document.createElement('div');
+        aviso.className='col-span-3 flex flex-wrap items-center gap-2 text-xs';
+        aviso.style.color='var(--color-primary-light)';
+        const texto=document.createElement('span');
+        texto.textContent=trava.texto||'Parcela travada.';
+        aviso.appendChild(texto);
+        if(trava.permitido!==null && trava.permitido!==undefined && trava.permitido!==it.amount){
+          const usar=document.createElement('button');
+          usar.type='button';
+          usar.className='btn-neutral ctl-botao ctl-botao--pequeno text-white';
+          usar.textContent=`Usar ${formatCentsBRL(trava.permitido)}`;
+          usar.addEventListener('click',()=>{ s.items[idx].amount=trava.permitido; renderRows(id); recompute(id); });
+          aviso.appendChild(usar);
+        }
+        row.appendChild(aviso);
+      }
       const campoValor=row.querySelector(`#${id}_amount_${idx}`);
       const campoPrazo=row.querySelector(`#${id}_due_${idx}`);
       campoValor.addEventListener('blur',e=>onAmountChange(id,idx,e.target.value));
@@ -218,6 +273,7 @@
   function onAmountChange(id,index,raw){
     const inst=instances.get(id); if(!inst) return;
     if(inst.state.mode!=='custom') return;
+    if(travaDe(inst, index)) return;
     const cents=parseCurrencyToCents(raw);
     inst.state.items[index].amount=cents;
     const input=inst.elements.rows.querySelector(`#${id}_amount_${index}`);
@@ -226,6 +282,7 @@
   }
   function onDueChange(id,index,raw){
     const inst=instances.get(id); if(!inst) return;
+    if(travaDe(inst, index)) return;
     const days=parseIntOnly(raw);
     inst.state.items[index].dueInDays=isNaN(days)?null:days;
     recompute(id);
@@ -245,7 +302,7 @@
       o.disabled = n > maxDiferentes && String(n) !== inst.elements.count.value;
     });
     Array.from(inst.elements.modeRadios).forEach(r => {
-      if(r.value === 'equal') r.disabled = !s.count || (s.count > 1 && s.count > maxIguais);
+      if(r.value === 'equal') r.disabled = !s.count || (s.count > 1 && s.count > maxIguais) || minimoDeParcelas(inst) > 0;
     });
     s.minimo = minimoCentavos;
     s.motivo = allFilled ? conferirMinimo(s.items) : null;
@@ -262,9 +319,19 @@
       aviso.style.color = s.motivo ? 'var(--color-red)' : '';
       aviso.classList.toggle('text-gray-400', !s.motivo);
     }
-    s.canRegister=Boolean(allFilled && s.remaining===0 && !s.motivo);
-    inst.elements.summary.textContent = s.remaining===0 ? 'Total ok' : `Faltante: ${formatCentsBRL(s.remaining)}`;
-    inst.elements.summary.className = s.remaining===0 ? 'badge-success px-3 py-1 rounded-full text-xs font-medium' : 'badge-danger px-3 py-1 rounded-full text-xs font-medium';
+    // A diferença para o total: + é Adicional, − é Desconto (só com `permitirDiferenca`).
+    s.diferenca = -s.remaining;
+    s.canRegister=Boolean(allFilled && (s.remaining===0 || inst.permitirDiferenca) && !s.motivo);
+    if(s.remaining===0){
+      inst.elements.summary.textContent = 'Total ok';
+      inst.elements.summary.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium';
+    } else if(inst.permitirDiferenca && allFilled){
+      inst.elements.summary.textContent = `${s.diferenca>0?'Adicional':'Desconto'}: ${formatCentsBRL(Math.abs(s.diferenca))}`;
+      inst.elements.summary.className = 'badge-warning px-3 py-1 rounded-full text-xs font-medium';
+    } else {
+      inst.elements.summary.textContent = `Faltante: ${formatCentsBRL(s.remaining)}`;
+      inst.elements.summary.className = 'badge-danger px-3 py-1 rounded-full text-xs font-medium';
+    }
   }
   function updateTotal(id,total){
     const inst=instances.get(id); if(!inst) return;

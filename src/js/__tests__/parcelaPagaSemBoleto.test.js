@@ -42,8 +42,8 @@ test('boletos de fora e importar: a parcela paga não recebe linha nem é escolh
   assert.deepStrictEqual(plano(f.estadoDaParcela({ recebimento: { forma: 'Pix', data: '2026-08-20' } })), { tipo: 'paga', texto: 'Paga · Pix · 20/08/2026' });
   assert.strictEqual(f.estadoDaParcela({ recebimento: { forma: 'Boleto' }, tem_boleto_vivo: true, boleto: { status: 'pago' } }).tipo, 'bb', 'paga pelo boleto: é o boleto que aparece');
   assert.ok(EXTERNOS.includes("} else if (estado.tipo === 'paga') {"), 'no lugar do campo, a tag e o aviso');
-  assert.ok(IMPORTAR.includes('const travada = Boolean(parcela.ocupada || parcela.paga);') && IMPORTAR.includes("' (paga)'"));
-  assert.ok(VISUALIZAR.includes('const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);'), '"Gerar boletos" não conta a paga como faltando');
+  assert.ok(IMPORTAR.includes('const travada = Boolean(parcela.ocupada || parcela.paga || parcela.com_ordem);') && IMPORTAR.includes("' (paga)'"));
+  assert.ok(VISUALIZAR.includes('const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem);'), '"Gerar boletos" não conta a paga (nem a com ordem) como faltando');
 });
 
 test('pagamentos: o lançado à mão ganha "Editar" (mesmo formulário, PUT), além de "Estornar"', () => {
@@ -53,7 +53,7 @@ test('pagamentos: o lançado à mão ganha "Editar" (mesmo formulário, PUT), al
   assert.deepStrictEqual(plano(f.acoesDaParcela({ situacao: 'paga', recebimento: { pode_editar: false, pode_estornar: true } }, todas)), ['estornar'], 'quitação por fora: só estorna');
   assert.deepStrictEqual(plano(f.acoesDaParcela({ situacao: 'paga', recebimento: { pode_editar: true, pode_estornar: true } }, { podeRegistrar: false, podeEstornar: true })), ['estornar'], 'editar pede a permissão de registrar');
   assert.ok(PAGAMENTOS.includes("fetchApi(`/api/cobranca/recebimentos/${encodeURIComponent(r.id)}`, comoJson({ data_recebimento: data, valor_recebido: valor, forma, observacao }, 'PUT'))"));
-  assert.ok(PAGAMENTOS.includes("el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : 'Registrar pagamento';"));
+  assert.ok(PAGAMENTOS.includes("el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : (baixando ? 'Dar baixa' : 'Registrar pagamento');"));
   assert.ok(PAGAMENTOS.includes('() => abrirRegistro(p, p.recebimento)'));
 });
 

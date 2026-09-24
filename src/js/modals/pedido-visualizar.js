@@ -185,6 +185,58 @@
     };
   }
 
+  /**
+   * O ajuste das parcelas como a linha diz: rótulo, sinal, justificativa e
+   * quem/quando (o último registro do histórico). Pura.
+   */
+  function textoDoAjuste(pedido, ajuste) {
+    let historico = [];
+    try { historico = JSON.parse(pedido?.ajuste_historico || '[]'); } catch (_) { historico = []; }
+    const ultimo = Array.isArray(historico) && historico.length ? historico[historico.length - 1] : null;
+    const quando = diaEmSaoPaulo(pedido?.ajuste_em || ultimo?.em);
+    const quem = ultimo?.por_nome || '';
+    return {
+      rotulo: ajuste > 0 ? 'Adicional' : 'Desconto',
+      valor: `${ajuste > 0 ? '+' : '−'} ${Math.abs(ajuste).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
+      motivo: String(pedido?.ajuste_motivo || ultimo?.motivo || '').trim(),
+      autoria: [quem, quando ? formatarDia(quando) : ''].filter(Boolean).join(' · ')
+    };
+  }
+
+  /** A linha a mais nos itens: "Adicional"/"Desconto", com a justificativa. */
+  function linhaDoAjuste(pedido, ajuste) {
+    const t = textoDoAjuste(pedido, ajuste);
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-white/10';
+    tr.dataset.ajuste = t.rotulo.toLowerCase();
+    const nome = document.createElement('td');
+    nome.dataset.permCol = 'col_ped_it_nome';
+    nome.className = 'text-left text-white';
+    const tag = document.createElement('span');
+    tag.className = `${ajuste > 0 ? 'badge-info' : 'badge-danger'} px-2 py-0.5 rounded-full text-xs font-medium mr-2`;
+    tag.textContent = t.rotulo;
+    nome.appendChild(tag);
+    const detalhe = document.createElement('span');
+    detalhe.className = 'text-xs text-gray-300';
+    detalhe.textContent = [t.motivo, t.autoria].filter(Boolean).join(' — ');
+    nome.appendChild(detalhe);
+    nome.title = `${t.rotulo} combinado nas parcelas: ${t.motivo || 'sem justificativa'}${t.autoria ? ` (${t.autoria})` : ''}`;
+    tr.appendChild(nome);
+    for (const coluna of ['col_ped_it_qtd', 'col_ped_it_preco', 'col_ped_it_preco_desc', 'col_ped_it_desc']) {
+      const vazio = document.createElement('td');
+      vazio.dataset.permCol = coluna;
+      vazio.className = 'text-left text-gray-400';
+      vazio.textContent = '—';
+      tr.appendChild(vazio);
+    }
+    const valor = document.createElement('td');
+    valor.dataset.permCol = 'col_ped_it_subtotal';
+    valor.className = 'text-left text-white font-medium';
+    valor.textContent = t.valor;
+    tr.appendChild(valor);
+    return tr;
+  }
+
   /** Como a parcela paga à mão (Pix, cartão…) aparece na coluna das parcelas. Pura. */
   function rotuloDoPagamento(r) {
     const [ano, mes, dia] = String(r?.data || '').split('-');
@@ -215,7 +267,7 @@
     // O BOLETO não espera o embarque: cliente que pagou adiantado já tem o
     // boleto na mão antes da nota (decisão do dono, 23/09/2026).
     const faltaNota = pedidoJaSaiu(pedido) && !temNotaPropria && !notaExterna;
-    const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
+    const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem);
     return faltaNota || faltaBoleto || temDeFora;
   }
 
@@ -417,6 +469,18 @@
       const td = document.createElement('td');
       td.className = 'px-6 py-4 text-left text-sm';
       const linha = porParcela.get(String(p.id)) || estado.parcelas.find(l => Number(l?.parcela?.numero_parcela) === Number(p.numero_parcela));
+      // Ordem de pagamento aberta (Pix, cartão… para uma data): a tag azul diz para quando.
+      if (linha?.ordem && !linha?.recebimento && !linha?.tem_boleto_vivo) {
+        const o = linha.ordem;
+        const [ano, mes, dia] = String(o.data || '').split('-');
+        const tagOrdem = document.createElement('span');
+        tagOrdem.className = 'badge-info px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap';
+        tagOrdem.textContent = `ordem · ${o.forma || 'pagamento'}${dia ? ` · para ${dia}/${mes}/${ano}` : ''}`;
+        tagOrdem.title = 'Ordem de pagamento aberta — dê a baixa ou cancele em "Pagamentos"';
+        td.appendChild(tagOrdem);
+        tr.appendChild(td);
+        return;
+      }
       // Paga à mão (Pix, cartão…): vale mais que o boleto que ficou para trás.
       if (linha?.recebimento?.origem === 'manual') {
         const pago = rotuloDoPagamento(linha.recebimento);
@@ -535,7 +599,7 @@
     if (!estado || !Array.isArray(estado.parcelas)) return;
     // Parcela com boleto emitido fora já está cobrada: não conta como faltando.
     // Parcela já paga (Pix, cartão…) também não falta (dono, 24/09/2026).
-    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
+    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem);
     const cancelado = pedidoCancelado(pedido);
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
@@ -902,7 +966,18 @@
     });
 
     const descontoTotal = descPag + descEsp;
-    const total = subtotal - descontoTotal;
+    // O ajuste pelas parcelas (decisões do dono, 24/09/2026): as parcelas
+    // somaram mais (Adicional) ou menos (Desconto) que os itens, com
+    // justificativa. Os produtos não mudam; a diferença é uma linha a mais.
+    const ajuste = Math.round((Number(data.ajuste_valor) || 0) * 100) / 100;
+    if (itensTbody && Math.abs(ajuste) > 0.005) itensTbody.appendChild(linhaDoAjuste(data, ajuste, fmtCurrency));
+    const chipAjuste = overlay.querySelector('#ajustePedidoChip');
+    if (chipAjuste) {
+      chipAjuste.classList.toggle('hidden', !(Math.abs(ajuste) > 0.005));
+      overlay.querySelector('#ajustePedidoRotulo').textContent = ajuste > 0 ? 'Adicional' : 'Desconto (acordo)';
+      overlay.querySelector('#ajustePedido').textContent = `${ajuste > 0 ? '+' : '−'} ${fmtCurrency(Math.abs(ajuste))}`;
+    }
+    const total = subtotal - descontoTotal + ajuste;
     overlay.querySelector('#subtotalPedido').textContent = fmtCurrency(subtotal);
     overlay.querySelector('#descontoPagPedido').textContent = fmtCurrency(descPag);
     overlay.querySelector('#descontoEspPedido').textContent = fmtCurrency(descEsp);

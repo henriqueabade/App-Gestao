@@ -85,7 +85,7 @@ test('grava e estorna pelas rotas de recebimentos; boleto do BB em aberto pergun
   assert.ok(FONTE.includes('/api/cobranca/recebimentos/${encodeURIComponent(p.recebimento.id)}/estornar'));
   assert.ok(FONTE.includes("...(baixar ? { baixar_boleto: true } : {})"));
   assert.ok(FONTE.includes("pode('financeiro.boleto.baixa')"), 'baixar pede a permissão de baixa');
-  assert.strictEqual((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length, 1, 'a baixa do boleto pede confirmação');
+  assert.strictEqual((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length, 2, 'a baixa do boleto e o cancelamento da ordem pedem confirmação');
   assert.ok(FONTE.includes("avisarQuemEstaAberto('recebimentos:alterados')"));
   assert.ok(!/innerHTML|window\.confirm\(/.test(FONTE), 'montado por createElement, sem confirm() do sistema');
   assert.ok(FONTE.includes('window.Modal?.signalReady?.(overlayId)'), 'revela depois da primeira leitura');

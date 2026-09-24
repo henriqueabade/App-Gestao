@@ -64,7 +64,9 @@ const agrupar = (linhas, campo) => {
 };
 
 /** Todas as parcelas dos pedidos faturados, cada uma com o seu estado. Pura. */
-function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = [], boletos: bols = [], notas = [], clientes = [], hoje, desde = null, feriados = [] }) {
+function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = [], boletos: bols = [], notas = [], clientes = [], hoje, desde = null, feriados = [], ordens = [] }) {
+  // Ordens de pagamento abertas (ordens.js): valem como o vencimento da parcela.
+  const ordensPor = agrupar(lista(ordens).filter(o => o && o.status === 'aberta'), 'pedido_id');
   const parcelasPor = agrupar(parcelas, 'pedido_id');
   const boletosPor = agrupar(bols, 'pedido_id');
   const notasPor = agrupar(notas, 'pedido_id');
@@ -89,7 +91,9 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
     const recsDoPedido = recebPor.get(chave) || [];
     // Pagamento registrado (Pix, cartão… no pedido ainda em produção) também
     // fatura: o dinheiro entrou e a comissão tem de contar (decisão do dono, 24/09/2026).
-    const faturado = SITUACOES_FATURADAS.has(situacao) || Boolean(nota) || temBoleto || recsDoPedido.length > 0;
+    const ordensDoPedido = ordensPor.get(chave) || [];
+    // Ordem de pagamento aberta também: a cobrança já foi combinada, como um boleto.
+    const faturado = SITUACOES_FATURADAS.has(situacao) || Boolean(nota) || temBoleto || recsDoPedido.length > 0 || ordensDoPedido.length > 0;
     if (!faturado) continue;
 
     for (const parcela of doPedido) {
@@ -99,7 +103,9 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
         || null;
       const recebimento = recsDoPedido.find(r => Number(r.numero_parcela) === numero) || null;
       const aPagar = boleto && boletos.STATUS_A_PAGAR.has(String(boleto.status));
-      const vencimento = (aPagar && dia(boleto.data_vencimento)) || dia(parcela.data_vencimento);
+      const ordem = ordensDoPedido.find(o => Number(o.parcela_id) === Number(parcela.id) || Number(o.numero_parcela) === numero) || null;
+      // O boleto a pagar manda no vencimento; sem ele, a ordem de pagamento aberta.
+      const vencimento = (aPagar && dia(boleto.data_vencimento)) || (ordem && dia(ordem.data_prevista)) || dia(parcela.data_vencimento);
       const valor = centavos(parcela.valor);
       const abatimento = aPagar ? centavos(boleto.valor_abatimento || 0) : 0;
 
@@ -137,7 +143,8 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
         recebimento: recebimento ? {
           id: recebimento.id, data: dia(recebimento.data_recebimento), valor: centavos(recebimento.valor_recebido),
           forma: recebimento.forma || null, origem: recebimento.origem, competencia: recebimento.competencia
-        } : null
+        } : null,
+        ordem: ordem && estado === 'a_receber' ? { id: ordem.id, data: dia(ordem.data_prevista), valor: centavos(ordem.valor), forma: ordem.forma || null } : null
       });
     }
   }
@@ -267,13 +274,15 @@ async function lerFeriados(api) {
 
 /** Lê tudo o que as contas precisam. Clientes só dos pedidos que aparecem. */
 async function lerBase(api, hoje) {
-  const [pedidos, parcelas, bols, notas, eventos, feriados] = await Promise.all([
+  const [pedidos, parcelas, bols, notas, eventos, feriados, ordens] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/boletos').then(lista).catch(() => []),
     api.get('/api/notas_fiscais').then(lista).catch(() => []),
     api.get('/api/boletos_eventos', { query: { origem: 'webhook' } }).then(lista).catch(() => []),
-    lerFeriados(api)
+    lerFeriados(api),
+    // Ordens de pagamento abertas (sql/ordens_pagamento.sql); sem a tabela, nenhuma.
+    api.get('/api/ordens_pagamento', { query: { status: 'aberta' } }).then(lista).catch(() => [])
   ]);
   let recs = [];
   let sqlPendente = false;
@@ -290,6 +299,7 @@ async function lerBase(api, hoje) {
   const execs = await execucoes.recentes(api, 1).catch(() => ({ linhas: [] }));
   return {
     pedidos, parcelas, boletos: bols, notas: notasLeves, recebimentos: recs, sqlPendente, feriados,
+    ordens: ordens.filter(o => o && o.status === 'aberta'),
     ultimaConciliacao: execs.linhas[0] || null,
     fila: doWebhook.filter(e => !e.processado_em).length,
     // Aviso conciliado com alerta (pagamento de boleto já baixado aqui), dos últimos dias.

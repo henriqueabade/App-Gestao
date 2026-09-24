@@ -58,6 +58,14 @@
   /** A etiqueta e o detalhe da coluna Situação. */
   function situacaoDaParcela(p) {
     const r = p?.recebimento;
+    // Ordem de pagamento aberta (Pix, cartão… para uma data): como um boleto à mão.
+    if (p?.ordem && !r) {
+      const o = p.ordem;
+      const detalhe = [moedaBR(o.valor), o.observacao || ''].filter(Boolean).join(' · ');
+      return p.situacao === 'atrasada'
+        ? { classe: 'badge-warning', texto: `Ordem atrasada · ${plural(Number(p.dias_atraso) || 0, 'dia', 'dias')}`, detalhe: `${o.forma || 'Pagamento'} para ${diaBR(o.data)} · ${detalhe}` }
+        : { classe: 'badge-info', texto: `Ordem · ${o.forma || 'pagamento'} · para ${diaBR(o.data)}`, detalhe };
+    }
     if (p?.situacao === 'paga' && r) {
       const partes = [
         moedaBR(r.valor), r.origem_rotulo,
@@ -96,6 +104,8 @@
    */
   function acoesDaParcela(p, { podeRegistrar = false, podeEstornar = false } = {}) {
     const acoes = [];
+    // Ordem de pagamento aberta: dar a baixa (o cliente pagou) ou cancelá-la.
+    if (p?.ordem && !p?.recebimento && podeRegistrar) acoes.push('baixar', 'cancelar_ordem');
     if (p?.pode_registrar && podeRegistrar) acoes.push('registrar');
     if (p?.situacao === 'paga' && p?.recebimento?.pode_editar && podeRegistrar) acoes.push('editar');
     if (p?.situacao === 'paga' && p?.recebimento?.pode_estornar && podeEstornar) acoes.push('estornar');
@@ -115,6 +125,18 @@
     if (!(Number(e.total) > 0)) return { texto: `${base} As regras dos boletos não cobram multa nem juros.`, somar: false };
     const partes = [Number(e.multa) > 0 ? `multa ${moedaBR(e.multa)}` : '', Number(e.juros) > 0 ? `juros ${moedaBR(e.juros)}` : ''].filter(Boolean);
     return { texto: `${base} Pelas regras dos boletos: ${partes.join(' + ')} = ${moedaBR(e.total)}.`, somar: true };
+  }
+
+  /**
+   * "Pago em ou para quando" (decisão do dono, 24/09/2026): até hoje é o
+   * pagamento que entrou; data futura — no máximo o vencimento da parcela — é
+   * uma ORDEM DE PAGAMENTO. Devolve o modo e a frase do formulário. Pura.
+   */
+  function modoDaData(data, { hoje, vencimentoParcela, podeOrdem }) {
+    if (!data || !hoje || data <= hoje) return { modo: 'pagamento', texto: '' };
+    if (!podeOrdem) return { modo: 'invalida', texto: 'Esta parcela não aceita ordem de pagamento (tem boleto, já venceu ou já está paga): use a data de hoje ou de antes.' };
+    if (vencimentoParcela && data > vencimentoParcela) return { modo: 'invalida', texto: `A ordem vai no máximo até o vencimento da parcela (${diaBR(vencimentoParcela)}).` };
+    return { modo: 'ordem', texto: `Ordem de pagamento para ${diaBR(data)}: a parcela fica cobrada por esta forma até lá (como um boleto, mas à mão). Quando o cliente pagar, dê a baixa em "Ações"; passou da data sem baixa, ela fica atrasada desde ${diaBR(data)}.` };
   }
 
   /** A mensagem de erro que a tela mostra, pelo status e o corpo da resposta. */
@@ -150,6 +172,8 @@
   let alvoEstorno = null;
   /** O pagamento em edição (o formulário serve para registrar e para editar). */
   let editando = null;
+  /** A ordem de pagamento que está recebendo a baixa. */
+  let baixando = null;
   let encargosAtuais = null;
   /** Descarta a resposta de encargos que chegou depois de outra data escolhida. */
   let vezDosEncargos = 0;
@@ -305,6 +329,8 @@
       const FAZ = {
         registrar: () => iconeDeAcao('fa-hand-holding-usd', 'Registrar o pagamento desta parcela', 'var(--color-green)', () => abrirRegistro(p)),
         editar: () => iconeDeAcao('fa-edit', 'Editar este pagamento (data, valor, forma)', 'var(--color-primary)', () => abrirRegistro(p, p.recebimento)),
+        baixar: () => iconeDeAcao('fa-check-circle', 'Dar baixa: o cliente pagou esta ordem', 'var(--color-green)', () => abrirRegistro(p, null, p.ordem)),
+        cancelar_ordem: () => iconeDeAcao('fa-ban', 'Cancelar a ordem de pagamento', 'var(--color-red)', () => cancelarOrdem(p)),
         estornar: () => iconeDeAcao('fa-undo', 'Estornar este pagamento', 'var(--color-red)', () => abrirEstorno(p))
       };
       for (const acao of acoesDaParcela(p, { podeRegistrar, podeEstornar })) acoes.appendChild(FAZ[acao]());
@@ -328,6 +354,7 @@
     alvo = null;
     alvoEstorno = null;
     editando = null;
+    baixando = null;
     encargosAtuais = null;
     vezDosEncargos += 1;
     el('pagamentosParcelasForm').classList.add('hidden');
@@ -341,26 +368,31 @@
   }
 
   /** O formulário: registrar um pagamento novo ou, com `recebimento`, editar o que foi lançado à mão. */
-  function abrirRegistro(p, recebimento = null) {
+  function abrirRegistro(p, recebimento = null, ordem = null) {
     if (emAndamento) return;
     fecharPaineis();
     exibirMensagem('', '');
     alvo = p;
     editando = recebimento;
+    baixando = ordem;
     el('pagamentosParcelasFormTituloTexto').textContent = editando
       ? `Editar o pagamento da ${p.numero_parcela}ª parcela`
-      : `Registrar o pagamento da ${p.numero_parcela}ª parcela`;
-    el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : 'Registrar pagamento';
+      : (baixando ? `Dar baixa na ordem de pagamento da ${p.numero_parcela}ª parcela` : `Registrar o pagamento da ${p.numero_parcela}ª parcela`);
+    el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : (baixando ? 'Dar baixa' : 'Registrar pagamento');
     el('pagamentosParcelasFormContexto').textContent = `vence ${diaBR(p.vencimento)} · ${moedaBR(p.a_receber)}`;
     const aviso = el('pagamentosParcelasAvisoBoleto');
-    const textoAviso = editando ? '' : p.boleto_aberto
+    const textoAviso = editando ? '' : baixando
+      ? `Ordem de ${baixando.forma || 'pagamento'} para ${diaBR(baixando.data)}, de ${moedaBR(baixando.valor)}: confirme o dia em que o cliente pagou, o valor e a forma.`
+      : p.boleto_aberto
       ? `Esta parcela tem boleto do BB em aberto${p.boleto?.nosso_numero ? ` (nº ${p.boleto.nosso_numero})` : ''}. Ao registrar, o app pergunta se pode baixá-lo no BB como "quitado por fora" — assim o cliente não paga duas vezes.`
       : (p.boleto_externo ? 'O boleto de fora desta parcela fica só como registro: quem cobra é o banco que o emitiu.' : '');
     aviso.textContent = textoAviso;
     aviso.classList.toggle('hidden', !textoAviso);
 
     const data = el('pagamentosParcelasData');
-    data.max = estado?.hoje || '';
+    // Registrar de verdade vai até hoje; a ordem de pagamento, até o vencimento da parcela.
+    const aceitaOrdem = !editando && !baixando && Boolean(p.pode_ordem);
+    data.max = aceitaOrdem && p.vencimento_parcela ? p.vencimento_parcela : (estado?.hoje || '');
     data.value = estado?.hoje || '';
     const forma = el('pagamentosParcelasForma');
     forma.replaceChildren();
@@ -374,9 +406,10 @@
       o.textContent = f;
       forma.appendChild(o);
     }
-    forma.value = editando?.forma && [...forma.options].some(o => o.value === editando.forma) ? editando.forma : '';
-    el('pagamentosParcelasValor').value = numeroBR(editando ? editando.valor : p.a_receber);
-    el('pagamentosParcelasObservacao').value = editando?.observacao || '';
+    const formaInicial = editando?.forma || baixando?.forma || '';
+    forma.value = formaInicial && [...forma.options].some(o => o.value === formaInicial) ? formaInicial : '';
+    el('pagamentosParcelasValor').value = numeroBR(editando ? editando.valor : (baixando ? baixando.valor : p.a_receber));
+    el('pagamentosParcelasObservacao').value = editando?.observacao || baixando?.observacao || '';
     if (editando?.data) data.value = editando.data;
     mostrarPainel(el('pagamentosParcelasForm'), forma);
     atualizarEncargos();
@@ -389,6 +422,15 @@
     encargosAtuais = null;
     const data = el('pagamentosParcelasData').value;
     if (!alvo || !data) { caixa.classList.add('hidden'); return; }
+    // Data futura: é uma ordem de pagamento (sem atraso nem encargos).
+    const modo = editando || baixando ? { modo: 'pagamento' } : modoDaData(data, { hoje: estado?.hoje, vencimentoParcela: alvo.vencimento_parcela, podeOrdem: alvo.pode_ordem });
+    el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : (baixando ? 'Dar baixa' : (modo.modo === 'ordem' ? 'Agendar pagamento' : 'Registrar pagamento'));
+    if (modo.modo !== 'pagamento') {
+      el('pagamentosParcelasEncargosTexto').textContent = modo.texto;
+      caixa.classList.remove('hidden');
+      somar.classList.add('hidden');
+      return;
+    }
     try {
       const resp = await fetchApi(`/api/cobranca/pedidos/${id}/pagamentos/encargos?numero_parcela=${encodeURIComponent(alvo.numero_parcela)}&data=${encodeURIComponent(data)}`);
       const corpo = await resp.json().catch(() => null);
@@ -422,13 +464,23 @@
     const forma = el('pagamentosParcelasForma').value;
     const valor = lerValor(el('pagamentosParcelasValor').value);
     const observacao = el('pagamentosParcelasObservacao').value.trim();
-    if (!data) { exibirMensagem('erro', 'Informe o dia em que o cliente pagou.'); return; }
-    if (estado?.hoje && data > estado.hoje) { exibirMensagem('erro', 'O dia do pagamento não pode ser futuro.'); return; }
+    if (!data) { exibirMensagem('erro', 'Informe o dia em que o cliente pagou (ou para quando é o pagamento).'); return; }
+    const modo = editando || baixando ? { modo: 'pagamento' } : modoDaData(data, { hoje: estado?.hoje, vencimentoParcela: p.vencimento_parcela, podeOrdem: p.pode_ordem });
+    if (modo.modo === 'invalida') { exibirMensagem('erro', modo.texto); return; }
+    if (modo.modo === 'pagamento' && estado?.hoje && data > estado.hoje) { exibirMensagem('erro', 'O dia do pagamento não pode ser futuro.'); return; }
     if (!forma) { exibirMensagem('erro', 'Diga como o cliente pagou (Pix, cartão, transferência…).'); return; }
-    if (!(valor > 0)) { exibirMensagem('erro', 'Informe o valor recebido.'); return; }
+    if (!(valor > 0)) { exibirMensagem('erro', 'Informe o valor.'); return; }
 
     if (editando) {
       await salvarEdicao(p, editando, { data, forma, valor, observacao });
+      return;
+    }
+    if (baixando) {
+      await darBaixa(p, baixando, { data, forma, valor, observacao });
+      return;
+    }
+    if (modo.modo === 'ordem') {
+      await agendar(p, { data, forma, valor, observacao });
       return;
     }
 
@@ -477,6 +529,74 @@
     }
   }
   botao(el('pagamentosParcelasRegistrar'), registrar);
+
+  /** Cria a ordem de pagamento (POST /api/cobranca/pedidos/:id/ordens). */
+  async function agendar(p, { data, forma, valor, observacao }) {
+    emAndamento = true;
+    try {
+      const resp = await fetchApi(`/api/cobranca/pedidos/${id}/ordens`, comoJson({ numero_parcela: p.numero_parcela, data_prevista: data, valor, forma, observacao }));
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) { exibirMensagem('erro', corpo?.sql_pendente ? 'Falta rodar sql/ordens_pagamento.sql no banco e reiniciar a API.' : mensagemDeErro(resp.status, corpo)); return; }
+      window.showToast?.(`Ordem de pagamento da ${p.numero_parcela}ª parcela para ${diaBR(data)}.`, 'success');
+      avisarQuemEstaAberto('recebimentos:alterados');
+      fecharPaineis();
+      await carregar();
+      exibirMensagem('ok', `Ordem de ${forma} para ${diaBR(data)} registrada na ${p.numero_parcela}ª parcela. Dê a baixa quando o cliente pagar.`);
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir o que foi gravado.');
+    } finally {
+      emAndamento = false;
+    }
+  }
+
+  /** O cliente pagou a ordem: vira recebimento (POST /api/cobranca/ordens/:id/baixar). */
+  async function darBaixa(p, o, { data, forma, valor, observacao }) {
+    emAndamento = true;
+    try {
+      const resp = await fetchApi(`/api/cobranca/ordens/${encodeURIComponent(o.id)}/baixar`, comoJson({ data_recebimento: data, valor_recebido: valor, forma, observacao }));
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+      window.showToast?.(`Baixa da ordem da ${p.numero_parcela}ª parcela registrada.`, 'success');
+      avisarQuemEstaAberto('recebimentos:alterados');
+      fecharPaineis();
+      await carregar();
+      exibirMensagem('ok', `Ordem baixada: pagamento da ${p.numero_parcela}ª parcela registrado — entra na comissão de ${rotuloDoMes(data)}.`);
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir o que foi gravado.');
+    } finally {
+      emAndamento = false;
+    }
+  }
+
+  /** Cancela a ordem (a parcela volta a ficar livre para boleto ou outra ordem). */
+  async function cancelarOrdem(p) {
+    const o = p?.ordem;
+    if (!o || emAndamento) return;
+    const ok = await window.DialogPadrao?.confirm?.({
+      title: 'Cancelar a ordem de pagamento?', tom: 'aviso', icone: 'fa-ban',
+      subtitle: `Pedido ${ctx.numero} · parcela ${p.numero_parcela}`,
+      secoes: [{ titulo: 'A ordem', itens: [{ rotulo: o.forma || 'Pagamento', valor: moedaBR(o.valor), detalhe: `para ${diaBR(o.data)}` }] }],
+      nota: 'A parcela volta a ficar em aberto, pelo vencimento dela, e pode receber boleto ou outra ordem.',
+      confirmText: 'Cancelar a ordem', confirmVariant: 'danger'
+    });
+    if (!ok) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/cobranca/ordens/${encodeURIComponent(o.id)}/cancelar`, comoJson({}));
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.('Ordem de pagamento cancelada.', 'success');
+        avisarQuemEstaAberto('recebimentos:alterados');
+        fecharPaineis();
+        await carregar();
+      }, 'Cancelando a ordem...');
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir.');
+    } finally {
+      emAndamento = false;
+    }
+  }
 
   /** Grava a edição do pagamento lançado à mão (PUT /api/cobranca/recebimentos/:id). */
   async function salvarEdicao(p, r, { data, forma, valor, observacao }) {

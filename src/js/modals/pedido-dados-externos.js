@@ -80,6 +80,11 @@
       const r = linha.recebimento;
       return { tipo: 'paga', texto: `Paga${r.forma ? ` · ${r.forma}` : ''}${r.data ? ` · ${diaBR(r.data)}` : ''}` };
     }
+    // Ordem de pagamento aberta: a parcela já está cobrada (por Pix, cartão…).
+    if (linha?.ordem && !linha?.boleto_externo && !linha?.tem_boleto_vivo) {
+      const o = linha.ordem;
+      return { tipo: 'paga', ordem: true, texto: `Ordem${o.forma ? ` · ${o.forma}` : ''}${o.data ? ` · para ${diaBR(o.data)}` : ''}` };
+    }
     if (linha?.boleto_externo) {
       const b = linha.boleto_externo;
       const partes = [b.banco_nome || (b.banco ? `Banco ${b.banco}` : 'Banco'), b.vencimento ? `vence ${diaBR(b.vencimento)}` : 'sem vencimento', b.valor ? moedaBR(b.valor) : null].filter(Boolean);
@@ -618,7 +623,7 @@
     tag.textContent = estado.texto;
     caixa.appendChild(tag);
     const livres = (Array.isArray(estadoBoletos?.parcelas) ? estadoBoletos.parcelas : [])
-      .filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
+      .filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento && !l?.ordem);
     if (!livres.length) {
       const aviso = document.createElement('span');
       aviso.className = 'text-xs text-gray-400';
@@ -765,7 +770,9 @@
       tag.textContent = estado.texto;
       const nota = document.createElement('span');
       nota.className = 'text-xs text-gray-400';
-      nota.textContent = 'Parcela já paga: para pôr um boleto nela, estorne o pagamento em "Pagamentos".';
+      nota.textContent = estado.ordem
+        ? 'Parcela com ordem de pagamento: para pôr um boleto nela, cancele a ordem em "Pagamentos".'
+        : 'Parcela já paga: para pôr um boleto nela, estorne o pagamento em "Pagamentos".';
       conteudo.append(tag, nota);
     } else if (!cancelado && podeInformar) {
       conteudo = campoDaLinha(p, 'Cole a linha digitável (47 números)');

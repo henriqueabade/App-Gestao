@@ -723,6 +723,18 @@ test('pagamentos do pedido: lista as parcelas, sugere multa e juros pelo vencime
     const aposEditar = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
     assert.deepEqual([aposEditar.corpo.parcelas[1].recebimento.forma, aposEditar.corpo.parcelas[1].recebimento.valor, aposEditar.corpo.parcelas[1].recebimento.pode_editar], ['Pix', 1010, true]);
 
+    // Ordem de pagamento na 3ª parcela (data futura até o vencimento dela): ocupa a parcela.
+    tabelas.ordens_pagamento = [];
+    const venc3 = tabelas.pedido_parcelas[2].data_vencimento;
+    const ordem = await t.chamar('POST', '/api/cobranca/pedidos/55/ordens', { numero_parcela: 3, data_prevista: venc3, valor: 1000, forma: 'Pix' });
+    assert.equal(ordem.status, 200, JSON.stringify(ordem.corpo));
+    const comOrdem = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
+    assert.deepEqual([comOrdem.corpo.parcelas[2].ordem.forma, comOrdem.corpo.parcelas[2].pode_registrar, comOrdem.corpo.parcelas[2].vencimento], ['Pix', false, venc3]);
+    const gerar3 = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', { parcelas: [3] });
+    assert.deepEqual([gerar3.corpo.resultados[0].ok, gerar3.corpo.resultados[0].com_ordem], [false, true], 'parcela com ordem não gera boleto');
+    assert.equal((await t.chamar('POST', `/api/cobranca/ordens/${ordem.corpo.ordem.id}/cancelar`, { motivo: 'vai de boleto' })).status, 200);
+    assert.equal(tabelas.ordens_pagamento[0].status, 'cancelada');
+
     // Estornar devolve a parcela para em aberto.
     t.estado.chaves.add('financeiro.recebimento.estornar');
     assert.equal((await t.chamar('POST', `/api/cobranca/recebimentos/${pago.corpo.recebimento.id}/estornar`, { motivo: 'parcela errada' })).status, 200);

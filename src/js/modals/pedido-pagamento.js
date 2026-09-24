@@ -21,6 +21,11 @@
  * emissão (ver "Datas do faturamento" abaixo). A previsão de embarque e esse
  * início se alteram pelo botão "Embarque e faturamento", que abre o modal de
  * datas (`pedido-datas.js`) e tem permissão própria, `ped.dates.edit`.
+ *
+ * Desde 24/09/2026 (decisões do dono): as parcelas podem somar MAIS
+ * (Adicional) ou MENOS (Desconto) que os itens, com justificativa — o total do
+ * pedido passa a ser a soma —; e a parcela com boleto, pagamento ou ordem de
+ * pagamento fica travada (só vai para o valor exato do boleto/pagamento).
  */
 (async () => {
   const overlayId = 'pagamentoPedido';
@@ -75,6 +80,43 @@
     () => ({ selectedOrderId: window.selectedOrderId }));
 
   const formatarMoeda = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  /**
+   * As travas das parcelas, na ordem do número, a partir do estado da
+   * cobrança (GET /api/cobranca/pedidos/:id/boletos): boleto do BB, pagamento
+   * registrado, boleto de fora ou ordem de pagamento. Centavos. Pura.
+   */
+  function travasDasLinhas(linhas) {
+    const reais = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const travas = [];
+    const ordenadas = (Array.isArray(linhas) ? linhas : []).slice()
+      .sort((a, b) => (Number(a?.parcela?.numero_parcela) || 0) - (Number(b?.parcela?.numero_parcela) || 0));
+    for (const l of ordenadas) {
+      const n = Number(l?.parcela?.numero_parcela);
+      if (!Number.isInteger(n) || n < 1) continue;
+      let origem = null;
+      let valor = null;
+      if (l.tem_boleto_vivo && l.boleto) { origem = 'boleto do BB'; valor = l.boleto.valor; } else if (l.recebimento) { origem = 'pagamento registrado'; valor = l.recebimento.valor; } else if (l.boleto_externo) { origem = 'boleto de fora'; valor = l.boleto_externo.valor; } else if (l.ordem) { origem = 'ordem de pagamento'; valor = l.ordem.valor; }
+      if (!origem) continue;
+      const atual = Math.round((Number(l.parcela.valor) || 0) * 100);
+      const permitido = valor === null || valor === undefined ? null : Math.round(Number(valor) * 100);
+      travas[n - 1] = {
+        atual, permitido,
+        texto: permitido !== null && permitido !== atual
+          ? `Tem ${origem} de ${reais(permitido)}: o valor fica em ${reais(atual)} ou vai exatamente para ${reais(permitido)}.`
+          : `Tem ${origem}: o valor e o prazo desta parcela não mudam.`
+      };
+    }
+    return travas;
+  }
+
+  /** A diferença das parcelas para os itens: + Adicional, − Desconto; centavos até 2 são arredondamento. Pura. */
+  function ajusteDasParcelas(somaCentavos, totalCentavos) {
+    const diferenca = Math.round(somaCentavos - totalCentavos);
+    return Math.abs(diferenca) <= 2 ? 0 : diferenca;
+  }
+
+  let travas = [];
 
   /**
    * Nome do cliente.
@@ -362,10 +404,15 @@
     return carregarParcelamento().then(() => {
       window.Parcelamento.init('pagamentoPedidoParcelamento', {
         getTotal: totalEmCentavos,
-        prefill
+        prefill,
+        // A soma pode sair dos itens (com justificativa) e a parcela com
+        // boleto/pagamento/ordem fica travada (decisões do dono, 24/09/2026).
+        permitirDiferenca: true,
+        travas
       });
       garantirBotaoDatas();
       pintarVencimentos();
+      pintarAjuste();
     });
   }
 
@@ -375,6 +422,8 @@
   // conteúdo, eles se acumulariam a cada ida e volta entre à vista e a prazo.
   box.addEventListener('input', pintarVencimentos);
   box.addEventListener('change', pintarVencimentos);
+  // A diferença (Adicional/Desconto) acompanha as mesmas mudanças.
+  for (const evento of ['input', 'change', 'focusout', 'click']) box.addEventListener(evento, () => setTimeout(pintarAjuste, 0));
   // O parcelamento só grava o prazo digitado no `blur` do campo, e no
   // Chromium o `change` vem ANTES do blur: repintando só em input/change, a
   // lista ficava uma edição atrasada. O `focusout` borbulha e chega depois do
@@ -392,7 +441,27 @@
     limparMensagem();
     await montarCampoCondicao();
     pintarTotais();
+    pintarAjuste();
   });
+
+  /** A soma das parcelas (centavos) — a prazo, do parcelamento; à vista, o total. */
+  function somaDasParcelas() {
+    if (condicaoSel.value !== 'prazo') return totalEmCentavos();
+    const dados = window.Parcelamento?.getData('pagamentoPedidoParcelamento');
+    return (dados?.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  }
+
+  /** Mostra a diferença para os itens e pede a justificativa quando ela existe. */
+  function pintarAjuste() {
+    const caixa = el('pagamentoPedidoAjuste');
+    if (!caixa) return;
+    const total = totalEmCentavos();
+    const soma = somaDasParcelas();
+    const ajuste = condicaoSel.value === 'prazo' ? ajusteDasParcelas(soma, total) : 0;
+    caixa.classList.toggle('hidden', !ajuste);
+    if (!ajuste) return;
+    el('pagamentoPedidoAjusteTexto').textContent = `As parcelas somam ${formatarMoeda(soma / 100)}: ${formatarMoeda(Math.abs(ajuste) / 100)} ${ajuste > 0 ? 'a mais' : 'a menos'} que os itens (${ajuste > 0 ? 'Adicional' : 'Desconto'}). O total do pedido passa a ser ${formatarMoeda(soma / 100)}.`;
+  }
 
   // ------------------------------------------------------ datas do pedido
   let abrindoDatas = false;
@@ -496,9 +565,18 @@
     // ordenadas pelo número antes de casar uma coisa com a outra.
     const prazos = String(pedido.prazo || '').split('/').map(p => parseInt(p, 10)).filter(n => !Number.isNaN(n));
     const detalhes = ordenarPorNumeroParcela(pedido.parcelas_detalhes);
+    // As travas: parcela com boleto, pagamento ou ordem (sem permissão de ver
+    // boletos, a tela não sabe — o backend confere assim mesmo).
+    try {
+      const respCobranca = await fetchApi(`/api/cobranca/pedidos/${pedidoId}/boletos`);
+      if (respCobranca.ok) travas = travasDasLinhas((await respCobranca.json())?.parcelas);
+    } catch (_) { travas = []; }
+    // Pedido já ajustado (soma ≠ itens) abre em "Diferentes", com a justificativa de antes.
+    const jaAjustado = Math.abs(Number(pedido.ajuste_valor) || 0) > 0.02;
+    if (el('pagamentoPedidoJustificativa')) el('pagamentoPedidoJustificativa').value = pedido.ajuste_motivo || '';
     const prefill = {
       count: Math.max(detalhes.length, 1),
-      mode: String(pedido.tipo_parcela) === 'diferente' ? 'custom' : 'equal',
+      mode: String(pedido.tipo_parcela) === 'diferente' || jaAjustado ? 'custom' : 'equal',
       items: detalhes.map((p, i) => ({
         amount: Math.round((Number(p.valor) || 0) * 100),
         dueInDays: prazos[i] ?? 0
@@ -550,9 +628,16 @@
 
     const dados = window.Parcelamento?.getData('pagamentoPedidoParcelamento');
     if (!dados || !dados.canRegister) {
-      return { erro: dados?.motivo || 'Complete o parcelamento: as parcelas precisam somar o total.' };
+      return { erro: dados?.motivo || 'Complete o parcelamento: informe o valor e o prazo de cada parcela.' };
+    }
+    const soma = dados.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+    const ajuste = ajusteDasParcelas(soma, totalEmCentavos());
+    const justificativa = (el('pagamentoPedidoJustificativa')?.value || '').trim();
+    if (ajuste && justificativa.length < 10) {
+      return { erro: `As parcelas somam ${formatarMoeda(Math.abs(ajuste) / 100)} ${ajuste > 0 ? 'a mais' : 'a menos'} que os itens: escreva a justificativa (ao menos 10 letras) para salvar.` };
     }
     return {
+      ajuste, soma, justificativa: ajuste ? justificativa : '',
       prazo: dados.items.map(it => it.dueInDays).join('/'),
       tipoParcela: dados.mode === 'equal' ? 'igual' : 'diferente',
       parcelas: dados.items.map((it, i) => ({
@@ -581,9 +666,12 @@
     emAndamento = true;
     travarBotao(true);
     try {
+      const totalNovo = montagem.ajuste ? montagem.soma / 100 : totais.total;
       const confirmou = await window.DialogPadrao.confirm({
         title: 'Alterar pagamento',
-        message: `O total do pedido passará para ${formatarMoeda(totais.total)}. Confirmar a alteração?`,
+        message: montagem.ajuste
+          ? `O total do pedido passará para ${formatarMoeda(totalNovo)} — itens ${formatarMoeda(totais.total)} ${montagem.ajuste > 0 ? '+ adicional' : '− desconto'} de ${formatarMoeda(Math.abs(montagem.ajuste) / 100)}. Justificativa: "${montagem.justificativa}". Confirmar a alteração?`
+          : `O total do pedido passará para ${formatarMoeda(totalNovo)}. Confirmar a alteração?`,
         confirmText: 'Sim',
         cancelText: 'Não'
       });
@@ -598,7 +686,8 @@
             forma_pagamento: formaSel.value,
             prazo: montagem.prazo,
             tipo_parcela: montagem.tipoParcela,
-            parcelas_detalhes: montagem.parcelas
+            parcelas_detalhes: montagem.parcelas,
+            justificativa: montagem.justificativa || undefined
           })
         });
 

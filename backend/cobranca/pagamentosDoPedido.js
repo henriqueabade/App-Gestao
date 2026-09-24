@@ -53,18 +53,23 @@ function parcelasParaPagamento({ linhas = [], parcelas = [], boletosExternos = [
     else if (l.estado === 'cancelada') situacao = 'cancelada';
     else if (l.dias_atraso > 0) situacao = 'atrasada';
     const origem = l.recebimento?.origem || null;
+    const ordem = l.ordem ? { ...l.ordem, vencida: Boolean(l.ordem.data && hoje && l.ordem.data < hoje) } : null;
+    const deFora = externoDaParcela(boletosExternos, crua);
     return {
       parcela_id: l.parcela_id, numero_parcela: l.numero_parcela, parcela: l.parcela,
       vencimento: l.vencimento,
       // O boleto prorrogado vence noutro dia: a tela mostra os dois.
       vencimento_original: vencPapel && vencPapel !== l.vencimento ? vencPapel : null,
+      // O vencimento do papel: a ordem de pagamento vai no máximo até ele (decisão do dono).
+      vencimento_parcela: vencPapel,
       limite_sem_encargos: vencimentos.limiteSemEncargos(l.vencimento, feriados),
       dias_atraso: l.dias_atraso,
       valor: l.valor, abatimento: l.abatimento, a_receber: l.a_receber,
       situacao,
       boleto: l.boleto ? { id: l.boleto.id, status: l.boleto.status, nosso_numero: l.boleto.nosso_numero, ambiente: l.boleto.ambiente, motivo_baixa: l.boleto.motivo_baixa } : null,
       boleto_aberto: boletoAberto,
-      boleto_externo: externoDaParcela(boletosExternos, crua),
+      boleto_externo: deFora,
+      ordem,
       recebimento: l.recebimento ? {
         id: l.recebimento.id, data: l.recebimento.data, valor: l.recebimento.valor, forma: l.recebimento.forma,
         origem, origem_rotulo: recebimentos.ORIGENS[origem] || origem,
@@ -76,7 +81,10 @@ function parcelasParaPagamento({ linhas = [], parcelas = [], boletosExternos = [
         // Só o registrado à mão se edita (data, valor, forma, observação).
         pode_editar: origem === 'manual'
       } : null,
-      pode_registrar: !cancelado && situacao !== 'paga' && situacao !== 'paga_no_banco' && situacao !== 'cancelada' && l.valor > 0
+      // Com ordem aberta, o registro é a BAIXA da ordem (ou cancelá-la).
+      pode_registrar: !cancelado && !ordem && situacao !== 'paga' && situacao !== 'paga_no_banco' && situacao !== 'cancelada' && l.valor > 0,
+      // Ordem de pagamento: parcela livre (sem boleto, sem ordem) que ainda não venceu.
+      pode_ordem: !cancelado && !ordem && !boletoAberto && !deFora && (situacao === 'aberta') && Boolean(vencPapel && hoje && vencPapel > hoje)
     };
   });
 }
@@ -118,7 +126,7 @@ async function estadoDosPagamentos({ api, pedidoId, hoje }) {
     pedidos: [{ ...dados.pedido, situacao: 'Entregue' }], parcelas: dados.parcelas,
     recebimentos: recs, boletos: dados.boletos,
     notas: dados.notaViva ? [{ ...dados.notaViva, pedido_id: dados.pedido.id }] : [],
-    hoje, feriados
+    hoje, feriados, ordens: dados.ordens || []
   });
   const parcelas = parcelasParaPagamento({
     linhas, parcelas: dados.parcelas, boletosExternos: dados.boletosExternos,

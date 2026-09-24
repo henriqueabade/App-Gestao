@@ -4,6 +4,7 @@ const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
 const parcelaMinima = require('./cobranca/parcelaMinima');
+const pedidoParcelas = require('./pedidoParcelas');
 // Tarefa automática "pedido entregue → pós-venda" (sql/tarefas_calendario.sql).
 const tarefas = require('./tarefasServico');
 const confirmacaoDaProducao = require('./financeiro/producaoConfirmacao');
@@ -456,6 +457,14 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
  * 2. Só pedidos em "Produção". Depois de enviado ou entregue o combinado com
  *    o cliente virou fato; e um pedido cancelado teve o estoque estornado com
  *    base nos números que ele tinha.
+ *
+ * 3. (24/09/2026, decisões do dono — backend/pedidoParcelas.js) As parcelas
+ *    podem ter valores diferentes e somar MAIS ou MENOS que os itens, com
+ *    `justificativa`: o total do pedido passa a ser a soma e a diferença vira
+ *    o ajuste ("Adicional"/"Desconto"), guardado com quem e quando. Parcela
+ *    com boleto, pagamento ou ordem de pagamento fica TRAVADA (só vai para o
+ *    valor exato do boleto/pagamento/ordem). E as parcelas são atualizadas NO
+ *    LUGAR, pelo número — boletos e pagamentos apontam para o id delas.
  */
 router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, res) => {
   const { id } = req.params;
@@ -522,17 +531,41 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
 
     const totais = descontos.totaisDoDocumento(linhas);
 
-    // As parcelas chegam da tela com o total antigo se o desconto mudou a
-    // conta. Recusar é melhor que gravar um parcelamento que não soma o
-    // pedido: o financeiro cobraria a diferença de ninguém.
-    const somaParcelas = parcelasDetalhes.reduce((s, p) => s + (Number(p?.valor) || 0), 0);
-    if (Math.abs(somaParcelas - totais.valor_final) > 0.02) {
+    // As parcelas que já existem e o que está pendurado nelas (boleto,
+    // pagamento, boleto de fora, ordem): elas ficam travadas.
+    const lerLista = (tabela, query) => api.get(`/api/${tabela}`, { query }).then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+    const [parcelasExistentes, boletosDoPedido, recebimentosDoPedido, externosDoPedido, ordensDoPedido] = await Promise.all([
+      lerLista('pedido_parcelas', { pedido_id: id }),
+      lerLista('boletos', { pedido_id: id }),
+      lerLista('recebimentos', { pedido_id: id }),
+      lerLista('boletos_externos', { pedido_id: id }),
+      lerLista('ordens_pagamento', { pedido_id: id, status: 'aberta' })
+    ]);
+    const doPedido = l => l.filter(x => Number(x?.pedido_id) === Number(id));
+    const travas = pedidoParcelas.travasDasParcelas({
+      parcelas: doPedido(parcelasExistentes), boletos: doPedido(boletosDoPedido), recebimentos: doPedido(recebimentosDoPedido),
+      externos: doPedido(externosDoPedido), ordens: doPedido(ordensDoPedido)
+    });
+    const numeradas = parcelasDetalhes.map((p, i) => ({ ...p, numero_parcela: Number(p?.numero_parcela) || i + 1 }));
+    const furo = pedidoParcelas.conferirTravas(numeradas, travas);
+    if (furo) {
+      return res.status(409).json({ error: furo, code: 'PARCELA_TRAVADA' });
+    }
+
+    // A soma pode sair do total dos itens — para mais (Adicional) ou para
+    // menos (Desconto) —, mas só com a justificativa. O total do pedido passa
+    // a ser a soma.
+    const somaParcelas = Math.round(numeradas.reduce((s, p) => s + (Number(p?.valor) || 0), 0) * 100) / 100;
+    const ajuste = pedidoParcelas.ajusteDaSoma(somaParcelas, totais.valor_final);
+    const justificativa = pedidoParcelas.conferirJustificativa(ajuste, body.justificativa);
+    if (!justificativa.ok) {
       return res.status(422).json({
-        error: 'A soma das parcelas não fecha com o total do pedido.',
-        code: 'PARCELAS_NAO_FECHAM',
-        detalhe: { soma_parcelas: somaParcelas, valor_final: totais.valor_final }
+        error: justificativa.erro,
+        code: 'JUSTIFICATIVA_OBRIGATORIA',
+        detalhe: { soma_parcelas: somaParcelas, valor_itens: totais.valor_final, ajuste }
       });
     }
+    const valorFinal = ajuste ? somaParcelas : totais.valor_final;
 
     // A parcela mínima (Configuração de cobrança): só a parcela única e a 1ª
     // à vista ficam abaixo dela. Nada foi gravado ainda.
@@ -555,6 +588,29 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
     const vencimentos = [];
     emOrdem.forEach((indice, posicao) => { vencimentos[indice] = vencimentoEmOrdem[posicao]; });
 
+    // O ajuste (e o histórico dele: quem, quando, de quanto para quanto e por
+    // quê). Sem o SQL (sql/pedido_ajuste_valor.sql) a API ignora as colunas.
+    const ajusteAnterior = Math.round((Number(pedido.ajuste_valor) || 0) * 100) / 100;
+    const camposDoAjuste = {};
+    if (ajuste || ajusteAnterior) {
+      const usuarioId = idDoUsuarioDaRequisicao(req);
+      const usuario = usuarioId ? await api.get(`/api/usuarios/${usuarioId}`).catch(() => null) : null;
+      const quando = new Date().toISOString();
+      Object.assign(camposDoAjuste, {
+        ajuste_valor: ajuste,
+        ajuste_motivo: justificativa.texto,
+        ajuste_em: ajuste ? quando : null,
+        ajuste_por: ajuste ? usuarioId : null
+      });
+      if (ajuste !== ajusteAnterior || justificativa.texto !== (pedido.ajuste_motivo || null)) {
+        camposDoAjuste.ajuste_historico = pedidoParcelas.historicoComMais(pedido.ajuste_historico, {
+          em: quando, por: usuarioId, por_nome: usuario && !usuario.error ? (usuario.nome || null) : null,
+          total_antes: Math.round((Number(pedido.valor_final) || 0) * 100) / 100, total_depois: valorFinal,
+          valor_itens: totais.valor_final, ajuste, motivo: justificativa.texto || (ajuste ? null : 'Ajuste retirado: as parcelas voltaram a fechar com os itens.')
+        });
+      }
+    }
+
     await api.put(`/api/pedidos/${id}`, {
       parcelas: condicao === 'prazo' ? parcelasDetalhes.length : 1,
       tipo_parcela: condicao === 'prazo' ? (body.tipo_parcela || 'igual') : 'a vista',
@@ -563,7 +619,8 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
       desconto_pagamento: totais.desconto_pagamento,
       desconto_especial: totais.desconto_especial,
       desconto_total: totais.desconto_total,
-      valor_final: totais.valor_final
+      valor_final: valorFinal,
+      ...camposDoAjuste
     });
 
     // Atualização no lugar — ver o comentário 1 no cabeçalho da rota.
@@ -572,36 +629,32 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
       await api.put(`/api/pedidos_itens/${itemId}`, valores);
     }
 
-    // Parcelas, ao contrário dos itens, não são referenciadas por nada: podem
-    // ser trocadas em bloco, que é o único jeito de refletir "de 3x para à
-    // vista" sem sobrar linha antiga.
-    const parcelasExistentes = await api
-      .get('/api/pedido_parcelas', { query: { pedido_id: id } })
-      .catch(() => []);
-    for (const parcela of Array.isArray(parcelasExistentes) ? parcelasExistentes : []) {
-      if (parcela?.id) await api.delete(`/api/pedido_parcelas/${parcela.id}`);
+    // Parcelas NO LUGAR, pelo número (backend/pedidoParcelas.js): boletos,
+    // pagamentos, boletos de fora e ordens apontam para o id delas. Antes a
+    // rota apagava e recriava tudo, e esses vínculos se perdiam.
+    const novas = numeradas.map((p, i) => {
+      const { id: _pid, pedido_id: _ppid, ...resto } = p || {};
+      return { ...resto, data_vencimento: vencimentos[i], pedido_id: Number(id) };
+    });
+    const plano = pedidoParcelas.planoDasParcelas(doPedido(parcelasExistentes), novas, travas);
+    for (const { id: parcelaId, campos } of plano.atualizar) {
+      await api.put(`/api/pedido_parcelas/${parcelaId}`, campos);
     }
-
+    for (const parcelaId of plano.apagar) {
+      await api.delete(`/api/pedido_parcelas/${parcelaId}`);
+    }
     let proximoId = (await getMaxId(api, 'pedido_parcelas')) + 1;
-    for (let i = 0; i < parcelasDetalhes.length; i++) {
-      const { id: _pid, pedido_id: _ppid, ...resto } = parcelasDetalhes[i] || {};
-      const usado = await inserirLinhaComId(
-        api,
-        'pedido_parcelas',
-        {
-          ...resto,
-          data_vencimento: vencimentos[i],
-          pedido_id: Number(id),
-          numero_parcela: resto.numero_parcela || i + 1
-        },
-        proximoId
-      );
+    for (const campos of plano.criar) {
+      const usado = await inserirLinhaComId(api, 'pedido_parcelas', campos, proximoId);
       proximoId = usado + 1;
     }
 
     res.json({
       ok: true,
-      valor_final: totais.valor_final,
+      valor_final: valorFinal,
+      valor_itens: totais.valor_final,
+      ajuste,
+      ajuste_rotulo: ajuste ? pedidoParcelas.rotuloDoAjuste(ajuste) : null,
       desconto_total: totais.desconto_total,
       parcelas: condicao === 'prazo' ? parcelasDetalhes.length : 1
     });

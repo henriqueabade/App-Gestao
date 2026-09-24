@@ -216,3 +216,24 @@ test('o que não dá para montar vira erro claro (NCM, CSOSN fora do Simples, mu
   assert.throws(() => x.montarNfe(base({ configuracao: { ...CONFIG, pis_cst: '01' } })), /PIS\/COFINS/);
   assert.throws(() => x.montarNfe(base({ cliente: { ...CLIENTE, reg_uf: 'Marte' } })), /Estado do cliente não reconhecido/);
 });
+
+test('ajuste do pedido nas parcelas (dono, 24/09/2026): o Adicional vai em outras despesas (vOutro), o Desconto no vDesc, e a nota fecha com as duplicatas', () => {
+  // Adicional de R$ 30: 294 + 30 = 324, em duas parcelas de 162.
+  const adicional = x.montarNfe(base({
+    pedido: { ...PEDIDO, ajuste_valor: '30.00' },
+    parcelas: [{ numero_parcela: 1, valor: 162, data_vencimento: '2026-10-14' }, { numero_parcela: 2, valor: 162, data_vencimento: '2026-11-13' }]
+  }));
+  assert.match(adicional.xml, /<vUnTrib>147\.0000000000<\/vUnTrib><vOutro>30\.00<\/vOutro><indTot>1<\/indTot>/, 'o item leva as outras despesas, sem mexer no preço');
+  assert.match(entre(adicional.xml, 'ICMSTot'), /<vDesc>0\.00<\/vDesc>.*<vOutro>30\.00<\/vOutro><vNF>324\.00<\/vNF>/);
+  assert.equal(adicional.totais.valor_total, 324);
+
+  // Desconto de R$ 24: 294 − 24 = 270.
+  const desconto = x.montarNfe(base({ pedido: { ...PEDIDO, ajuste_valor: -24 }, parcelas: [{ numero_parcela: 1, valor: 270, data_vencimento: '2026-10-14' }] }));
+  assert.match(desconto.xml, /<vDesc>24\.00<\/vDesc><indTot>1<\/indTot>/);
+  assert.match(entre(desconto.xml, 'ICMSTot'), /<vDesc>24\.00<\/vDesc>.*<vOutro>0\.00<\/vOutro><vNF>270\.00<\/vNF>/);
+
+  // Rateio proporcional ao valor de cada item; o último fica com o resto dos centavos.
+  assert.deepEqual(x.ratearAjuste(10, [{ valor_total: 294 }, { valor_total: 270 }]), [5.21, 4.79]);
+  assert.deepEqual(x.ratearAjuste(0, [{ valor_total: 294 }]), [0]);
+  assert.throws(() => x.montarNfe(base({ pedido: { ...PEDIDO, ajuste_valor: -300 }, parcelas: [{ numero_parcela: 1, valor: -6, data_vencimento: '2026-10-14' }] })), /passa do valor do item/);
+});

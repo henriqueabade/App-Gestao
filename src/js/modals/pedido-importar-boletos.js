@@ -402,11 +402,12 @@
         const botao = document.createElement('button');
         botao.type = 'button';
         // Com boleto ou já paga (Pix, cartão…): aparece, mas não se escolhe (dono, 24/09/2026).
-        const travada = Boolean(parcela.ocupada || parcela.paga);
+        const travada = Boolean(parcela.ocupada || parcela.paga || parcela.com_ordem);
         botao.className = `${travada ? 'btn-neutral' : 'btn-secondary'} ctl-botao ctl-botao--pequeno text-white`;
-        botao.textContent = `${parcela.numero_parcela}ª · ${moeda(parcela.valor)} · ${diaCurto(parcela.data_vencimento) || '—'}${parcela.paga ? ' (paga)' : (parcela.ocupada ? ' (com boleto)' : '')}`;
+        botao.textContent = `${parcela.numero_parcela}ª · ${moeda(parcela.valor)} · ${diaCurto(parcela.data_vencimento) || '—'}${parcela.paga ? ' (paga)' : (parcela.com_ordem ? ' (com ordem)' : (parcela.ocupada ? ' (com boleto)' : ''))}`;
         botao.disabled = travada;
         if (parcela.paga) botao.title = 'Parcela já paga: para ligar um boleto, estorne o pagamento em "Pagamentos".';
+        else if (parcela.com_ordem) botao.title = 'Parcela com ordem de pagamento: para ligar um boleto, cancele a ordem em "Pagamentos".';
         botao.addEventListener('click', () => {
           escolhas.set(escolhendo.nosso_numero, {
             pedido_id: pedido.id, pedido_numero: pedido.numero,

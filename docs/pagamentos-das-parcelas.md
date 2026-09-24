@@ -135,6 +135,65 @@ A pendência "parcelas vencidas há mais de 30 dias" continua sendo de hoje.
 - **Visualizar › Parcelas**: coluna **VENCIMENTO** (a data prevista de cada
   parcela); a de parcela virou **"PRC."**, com 4 caracteres.
 
+## Ordem de pagamento (24/09/2026, 4ª rodada)
+
+O campo do formulário virou **"Pago em ou para quando"**. Data de hoje ou de
+antes registra o pagamento, como antes. Data **futura** vira uma **ordem de
+pagamento**: o cliente combinou pagar naquele dia, por aquela forma.
+
+- A data vai **no máximo até o vencimento da parcela** (o seletor não deixa
+  passar e o backend recusa). Parcela que já venceu não recebe ordem.
+- **Parcela com boleto do BB em aberto não recebe ordem** (nem com boleto de
+  fora, nem já paga): quem cobra é o boleto.
+- **A ordem ocupa a parcela**: enquanto estiver aberta, a parcela não recebe
+  boleto (gerar, importar, colar a linha, boleto de fora, mudar de parcela) e
+  "Gerar boletos" não a conta como faltando.
+- Com data futura, o botão do formulário vira **"Agendar pagamento"**. Na
+  tabela, a parcela aparece "Ordem · Pix · para dd/mm/aaaa" e ganha dois
+  ícones em Ações: **Dar baixa** (✓ verde; abre o formulário já preenchido, e
+  a baixa confirma a data, o valor e a forma) e **Cancelar a ordem** (⊘
+  vermelho; pede confirmação).
+- A parcela com ordem **conta como faturada**. Se a data da ordem passar sem a
+  baixa, ela fica **atrasada desde a data da ordem**, com a regra do dia útil.
+- Registrar um pagamento pela rota comum na parcela com ordem também dá baixa
+  nela (`ordens.baixarPelaParcela`).
+
+Rotas (permissão de registrar pagamento): `POST
+/api/cobranca/pedidos/:id/ordens`, `POST /api/cobranca/ordens/:id/baixar`,
+`POST /api/cobranca/ordens/:id/cancelar`. Sem a tabela, o modal avisa qual SQL
+falta.
+
+## Valor das parcelas diferente dos itens (24/09/2026, 4ª rodada)
+
+Em **Pedidos › Pagamento** (só pedido **em Produção**), cada parcela pode ter
+qualquer valor — inclusive parcelas diferentes entre si — e a soma pode sair do
+total dos itens:
+
+- **Para mais** vira **Adicional**; **para menos** vira **Desconto**. O resumo
+  do parcelamento mostra a diferença na hora.
+- Com diferença, a **justificativa é obrigatória** (ao menos 10 letras); a
+  confirmação mostra o ajuste antes de salvar.
+- O **total do pedido passa a ser a soma das parcelas**; dashboard, relatórios
+  e comissões leem o novo total. O valor dos produtos **não muda**: no
+  Visualizar, a tabela de itens ganha uma **última linha "Adicional" ou
+  "Desconto"** com a diferença, e o chip do ajuste mostra a justificativa, quem
+  mudou e quando.
+- O pedido não tem linha do tempo de histórico (só prospecção, cliente e
+  tarefa têm). A justificativa fica guardada no próprio pedido (`ajuste_motivo`)
+  e cada mudança entra em `ajuste_historico` (as últimas 50, com quem e quando).
+- **Parcela travada** — com boleto do BB registrado, vencido, protestado ou
+  pago, com boleto de fora, com pagamento ou com ordem — fica só de leitura,
+  com aviso. Se o valor dela for diferente do boleto, aparece o botão **"Usar
+  R$ X"** para trocar pelo valor exato do boleto; qualquer outro valor é
+  recusado. A parcela travada mantém o vencimento, e "Iguais" fica desativado.
+- **Correção junto**: a rota apagava e recriava as parcelas, e com isso soltava
+  os boletos, pagamentos e ordens presos a elas. Agora as parcelas são
+  **atualizadas no lugar** pelo número; só as que sobram são apagadas e as que
+  faltam, criadas.
+- **NF-e**: o ajuste é repartido pelos itens (`ratearAjuste`) — o Desconto
+  aumenta o `vDesc`, o Adicional entra como `vOutro` em cada item e no total —,
+  para o valor da nota bater com as parcelas.
+
 ## Boleto na parcela errada
 
 O boleto do BB importado (colado aqui ou trazido pelo "Importar do BB") pode
@@ -143,8 +202,14 @@ mudar de parcela no "NF-e e boletos de fora", levando o pagamento junto — ver
 
 ## Banco
 
-Nenhum SQL novo: usa `recebimentos` (sql/cobranca_recebimentos.sql) e, para
-os feriados cadastrados, `financeiro_feriados` (sem ela, só os nacionais).
+Usa `recebimentos` (sql/cobranca_recebimentos.sql) e, para os feriados
+cadastrados, `financeiro_feriados` (sem ela, só os nacionais). Da 4ª rodada:
+
+- `sql/ordens_pagamento.sql` — a tabela das ordens (uma aberta por parcela);
+- `sql/pedido_ajuste_valor.sql` — `ajuste_valor`, `ajuste_motivo`,
+  `ajuste_em`, `ajuste_por` e `ajuste_historico` no pedido.
+
+Depois de rodar, reiniciar a API (coluna ou tabela nova só aparece depois).
 
 ## Código e testes
 
@@ -156,12 +221,19 @@ os feriados cadastrados, `financeiro_feriados` (sem ela, só os nacionais).
 | `backend/cobranca/pagamentosDoPedido.js` | a leitura do modal e os encargos |
 | `backend/cobrancaController.js` | `GET /pedidos/:id/pagamentos` e `/pagamentos/encargos`; o estado dos boletos leva o recebimento de cada parcela |
 | `src/html/modals/pedidos/pagamentos-parcelas.html` + `src/js/modals/pedido-pagamentos-parcelas.js` | o modal |
-| `src/js/modals/pedido-visualizar.js` | botão, coluna e etiqueta |
+| `src/js/modals/pedido-visualizar.js` | botão, coluna e etiqueta; linha e chip do Adicional/Desconto |
+| `backend/cobranca/ordens.js` | criar, baixar e cancelar a ordem de pagamento |
+| `backend/pedidoParcelas.js` | travas das parcelas, ajuste da soma, justificativa, histórico e o plano de atualizar no lugar (puro) |
+| `backend/pedidosController.js` | `PUT /api/pedidos/:id/pagamento` com as travas e o ajuste |
+| `backend/fiscal/xmlNfe.js` | `ratearAjuste`: o ajuste vira `vDesc`/`vOutro` na NF-e |
+| `src/js/modals/pedido-pagamento.js` + `src/js/utils/parcelamento.js` | parcelas livres, travadas, "Usar R$ X", justificativa |
 
 Gravar e estornar usam as rotas que já existiam:
 `POST /api/cobranca/recebimentos` (com `baixar_boleto`) e
 `POST /api/cobranca/recebimentos/:id/estornar`.
 
-Testes: `vencimento.test.js`, `pagamentosDoPedido.test.js`,
-`contasReceber.test.js`, `boletoOperacoes.test.js`, `cobrancaController.test.js`
-e, na tela, `pagamentosParcelas.test.js` e `pedidoDadosExternos.test.js`.
+Testes: `vencimento.test.js`, `pagamentosDoPedido.test.js`, `ordens.test.js`,
+`contasReceber.test.js`, `boletoOperacoes.test.js`, `xmlNfe.test.js`,
+`cobrancaController.test.js`, `pedidoPagamento.test.js` e, na tela,
+`pagamentosParcelas.test.js`, `parcelaPagaSemBoleto.test.js`,
+`ordensEAjusteDoPedido.test.js` e `pedidoDadosExternos.test.js`.

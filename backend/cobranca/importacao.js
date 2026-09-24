@@ -438,8 +438,9 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/clientes').then(lista).catch(() => []),
     api.get('/api/boletos').then(lista).catch(() => []),
-    parcelasPagas(api)
-  ]);
+    parcelasPagas(api),
+    parcelasComOrdem(api)
+  ]).then(([pa, pe, cl, gr, pg, comOrdem]) => [pa, pe, cl, gr, new Set([...pg, ...comOrdem])]);
   const sql = gravados.length ? { pronto: sqlPronto(gravados[0]), desconhecido: false } : { pronto: true, desconhecido: true };
   const existentes = await jaImportados(api, ambiente, doBB.map(b => b.nosso_numero), gravados);
   // Parcela que já tem boleto vivo não entra na sugestão: ninguém cobra a
@@ -503,12 +504,13 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
  */
 async function parcelasParaEscolher({ api, busca = '', pedidoId = null, limite = 20 }) {
   const termo = String(busca || '').trim().toLowerCase();
-  const [pedidos, parcelas, clientes, comBoleto, pagas] = await Promise.all([
+  const [pedidos, parcelas, clientes, comBoleto, pagas, comOrdem] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/clientes').then(lista).catch(() => []),
     api.get('/api/boletos').then(lista).catch(() => []),
-    parcelasPagas(api)
+    parcelasPagas(api),
+    parcelasComOrdem(api)
   ]);
   const nomeDoCliente = new Map(clientes.map(c => [String(c.id), c.nome_fantasia || c.razao_social || c.nome || '']));
   const ocupadas = new Set(comBoleto.filter(b => boletos.ocupaParcela(b)).map(b => String(b.parcela_id)));
@@ -533,8 +535,9 @@ async function parcelasParaEscolher({ api, busca = '', pedidoId = null, limite =
         .map(pa => ({
           id: pa.id, numero_parcela: pa.numero_parcela, valor: numero(pa.valor),
           data_vencimento: dia(pa.data_vencimento), ocupada: ocupadas.has(String(pa.id)),
-          // Paga (Pix, cartão…): a tela mostra, mas não deixa escolher.
-          paga: pagas.has(chaveDaParcela(pa))
+          // Paga (Pix, cartão…) ou com ordem de pagamento aberta: a tela mostra, mas não deixa escolher.
+          paga: pagas.has(chaveDaParcela(pa)),
+          com_ordem: comOrdem.has(chaveDaParcela(pa))
         }))
     }))
   };
@@ -754,6 +757,10 @@ async function importarUm({ api, bb, conexao, cfg, ambiente, doBB, vinculo = {},
     if (pagas.has(`${Number(vinculo.pedido_id)}:${Number(vinculo.numero_parcela)}`)) {
       throw erro(`A parcela ${vinculo.numero_parcela} do pedido ${vinculo.pedido_numero || vinculo.pedido_id} já tem pagamento registrado: estorne-o em "Pagamentos" ou importe sem relacionar.`, 409);
     }
+    const comOrdem = await parcelasComOrdem(api, { pedido_id: vinculo.pedido_id });
+    if (comOrdem.has(`${Number(vinculo.pedido_id)}:${Number(vinculo.numero_parcela)}`)) {
+      throw erro(`A parcela ${vinculo.numero_parcela} do pedido ${vinculo.pedido_numero || vinculo.pedido_id} tem ordem de pagamento aberta: cancele-a em "Pagamentos" ou importe sem relacionar.`, 409);
+    }
   }
 
   const linha = linhaDoBoleto({ doBB, ambiente, cfg, conta, vinculo, usuarioId });
@@ -894,6 +901,16 @@ async function parcelasPagas(api, query = {}) {
 const chaveDaParcela = p => `${Number(p?.pedido_id)}:${Number(p?.numero_parcela)}`;
 
 /**
+ * As parcelas com ORDEM DE PAGAMENTO aberta (Pix, cartão… para uma data —
+ * ordens.js), como "pedido:parcela": também não recebem boleto até a ordem
+ * ser cancelada. Sem a tabela, nenhuma.
+ */
+async function parcelasComOrdem(api, query = {}) {
+  const abertas = await api.get('/api/ordens_pagamento', { query: { ...query, status: 'aberta' } }).then(lista).catch(() => []);
+  return new Set(abertas.filter(o => o && o.status === 'aberta').map(o => `${Number(o.pedido_id)}:${Number(o.numero_parcela)}`));
+}
+
+/**
  * Os recebimentos confirmados que vieram deste boleto (pago no banco ou
  * quitado por fora): eles mudam de parcela junto com o boleto.
  */
@@ -965,6 +982,9 @@ async function vincular({ api, boleto, pedidoId = null, parcelaId = null, usuari
   const pagaNoDestino = recsDestino.find(r => r && r.status === 'confirmado' && Number(r.numero_parcela) === Number(parcela.numero_parcela)
     && !recs.some(x => Number(x.id) === Number(r.id)));
   if (pagaNoDestino) throw erro(`A parcela ${parcela.numero_parcela} já tem pagamento registrado: estorne-o antes, se foi engano.`, 409);
+  if ((await parcelasComOrdem(api, { pedido_id: pedidoId })).has(`${Number(pedidoId)}:${Number(parcela.numero_parcela)}`)) {
+    throw erro(`A parcela ${parcela.numero_parcela} tem ordem de pagamento aberta: cancele-a em "Pagamentos" antes de trazer um boleto para ela.`, 409);
+  }
 
   const fechada = await comissaoFechadaCom(api, recs);
   if (fechada) {
@@ -1000,6 +1020,6 @@ module.exports = {
   faixaPadrao, pedacosDaFaixa, diaParaBB, somarMeses, somarDias,
   nossoNumeroDoCampoLivre, sequencialDoNossoNumero, normalizarDoBB, situacaoLegivel,
   lerSeuNumero, sugerirParcela, distanciaEmDias, DIAS_DE_FOLGA_NO_VENCIMENTO, linhaDoBoleto, sequencialDepoisDaImportacao, avisosDoRecebimentoQueJaExistia,
-  sqlPronto, exigirSql, estadoDoSql, jaImportados, parcelasPagas, listarNoBB, listarParaImportar, importarUm, importar, vincular,
+  sqlPronto, exigirSql, estadoDoSql, jaImportados, parcelasPagas, parcelasComOrdem, listarNoBB, listarParaImportar, importarUm, importar, vincular,
   consultarNoBB, reconhecerLinhas, informarPelaLinha, parcelasParaEscolher, buscarEscolhidos
 };

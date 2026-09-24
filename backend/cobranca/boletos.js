@@ -80,7 +80,7 @@ async function registrarEvento(api, boletoId, { origem = 'app', tipo, nosso_nume
 async function lerPedidoCobranca(api, pedidoId) {
   const id = Number(pedidoId);
   if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
-  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos, recebimentos] = await Promise.all([
+  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos, recebimentos, ordens] = await Promise.all([
     api.get('/api/pedidos', { query: { id } }).then(lista),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),
@@ -90,7 +90,9 @@ async function lerPedidoCobranca(api, pedidoId) {
     externas.listarBoletos(api, id).catch(() => []),
     // Os pagamentos confirmados: parcela paga (Pix, cartão, boleto…) não
     // ganha boleto novo (decisão do dono, 24/09/2026). Sem a tabela, nenhum.
-    api.get('/api/recebimentos', { query: { pedido_id: id } }).then(lista).catch(() => [])
+    api.get('/api/recebimentos', { query: { pedido_id: id } }).then(lista).catch(() => []),
+    // As ordens de pagamento abertas (sql/ordens_pagamento.sql): ocupam a parcela como um boleto.
+    api.get('/api/ordens_pagamento', { query: { pedido_id: id, status: 'aberta' } }).then(lista).catch(() => [])
   ]);
   const pedido = pedidos.find(p => Number(p?.id) === id) || null;
   if (!pedido) throw erro('Pedido não encontrado.', 404);
@@ -105,8 +107,32 @@ async function lerPedidoCobranca(api, pedidoId) {
     parcelas: parcelas.filter(p => Number(p?.pedido_id) === id).sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0)),
     boletos: boletos.filter(b => Number(b?.pedido_id) === id).sort((a, b) => Number(b.id) - Number(a.id)),
     boletosExternos,
-    recebimentos: recebimentos.filter(r => r && Number(r.pedido_id) === id && r.status === 'confirmado')
+    recebimentos: recebimentos.filter(r => r && Number(r.pedido_id) === id && r.status === 'confirmado'),
+    ordens: ordens.filter(o => o && Number(o.pedido_id) === id && o.status === 'aberta')
   };
+}
+
+/** A ordem de pagamento ABERTA da parcela (ordens.js), ou null. Pura. */
+function ordemDaParcela(ordens, parcela) {
+  return (ordens || []).find(o => o && o.status === 'aberta'
+    && (Number(o.parcela_id) === Number(parcela?.id) || Number(o.numero_parcela) === Number(parcela?.numero_parcela))) || null;
+}
+
+/** A ordem como a tela mostra (com `hoje`, diz se já passou da data). Pura. */
+function ordemParaTela(o, hoje = null) {
+  if (!o) return null;
+  const data = String(o.data_prevista ?? '').slice(0, 10) || null;
+  return {
+    id: o.id, data, valor: Math.round(Number(o.valor || 0) * 100) / 100, forma: o.forma || null, observacao: o.observacao || null,
+    vencida: Boolean(data && hoje && data < hoje)
+  };
+}
+
+/** A frase do bloqueio de boleto numa parcela com ordem aberta. Pura. */
+function textoDaParcelaComOrdem(parcela, o) {
+  const dia = String(o?.data_prevista ?? '').slice(0, 10);
+  const quando = /^\d{4}-\d{2}-\d{2}$/.test(dia) ? ` para ${dia.split('-').reverse().join('/')}` : '';
+  return `A parcela ${parcela?.numero_parcela ?? '?'} tem ordem de pagamento aberta (${o?.forma || 'pagamento'}${quando}): cancele-a em "Pagamentos" antes de pôr um boleto nela.`;
 }
 
 /**
@@ -159,7 +185,7 @@ function boletoDaParcela(boletos, parcela) {
  * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
  * histórico; a parcela continua livre para gerar outro.
  */
-function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [] }) {
+function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [], ordens = [] }) {
   return (parcelas || []).map(p => {
     const b = boletoDaParcela(boletos, p)
       || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
@@ -169,7 +195,12 @@ function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimen
     const deFora = externas.boletoParaTela(externas.boletoExternoDaParcela(boletosExternos, p));
     // O pagamento de cada parcela: a coluna BOLETO do Visualizar mostra "pago"
     // também na parcela paga sem boleto, e parcela paga não recebe boleto.
-    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora, recebimento: pagamentoParaTela(pagamentoDaParcela(recebimentos, p)) };
+    return {
+      parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora,
+      recebimento: pagamentoParaTela(pagamentoDaParcela(recebimentos, p)),
+      // Ordem de pagamento aberta (Pix, cartão… para uma data): ocupa a parcela.
+      ordem: ordemParaTela(ordemDaParcela(ordens, p))
+    };
   });
 }
 
@@ -278,7 +309,7 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
 
   const pedidas = new Set((parcelaIds || []).map(Number).filter(Number.isFinite));
   // Sem escolha ("todas"), a parcela já paga fica de fora sem barulho; escolhida, responde com o motivo.
-  const alvo = dados.parcelas.filter(p => (pedidas.size ? pedidas.has(Number(p.id)) : !pagamentoDaParcela(dados.recebimentos, p)));
+  const alvo = dados.parcelas.filter(p => (pedidas.size ? pedidas.has(Number(p.id)) : !pagamentoDaParcela(dados.recebimentos, p) && !ordemDaParcela(dados.ordens, p)));
   if (!alvo.length) throw erro('Nenhuma parcela encontrada para gerar boleto.', 404);
 
   const notaId = notaFiscalId ?? dados.notaViva?.id ?? null;
@@ -300,6 +331,11 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
     const paga = pagamentoDaParcela(dados.recebimentos, parcela);
     if (paga) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, paga: true, erro: textoDaParcelaPaga(parcela, paga) });
+      continue;
+    }
+    const ordem = ordemDaParcela(dados.ordens, parcela);
+    if (ordem) {
+      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, com_ordem: true, erro: textoDaParcelaComOrdem(parcela, ordem) });
       continue;
     }
     const substitui = substituiBoletoId ?? existente?.substitui_boleto_id ?? null;
@@ -397,6 +433,6 @@ async function ler(api, boletoId) {
 module.exports = {
   STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, MOTIVOS_QUE_ENCERRAM, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
   enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, ocupaParcela, boletoDaParcela, parcelasComBoletos, resumo,
-  pagamentoDaParcela, pagamentoParaTela, textoDaParcelaPaga,
+  pagamentoDaParcela, pagamentoParaTela, textoDaParcelaPaga, ordemDaParcela, ordemParaTela, textoDaParcelaComOrdem,
   reservarBoleto, atualizarBoleto, registrar, listar, ler
 };

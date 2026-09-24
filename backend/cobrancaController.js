@@ -32,6 +32,9 @@
  *   POST   /recebimentos                              recebimento à mão (com baixar_boleto, baixa o boleto em aberto como quitado por fora)
  *   POST   /recebimentos/:id/estornar                 { motivo }
  *   PUT    /recebimentos/:id                          edita o pagamento registrado à mão (data, valor, forma, observação)
+ *   POST   /pedidos/:id/ordens                        ordem de pagamento (data futura, até o vencimento da parcela)
+ *   POST   /ordens/:id/baixar                         o cliente pagou: vira recebimento
+ *   POST   /ordens/:id/cancelar                       { motivo } — a parcela volta a ficar livre
  *   GET    /pedidos/:id/pagamentos                    as parcelas do pedido com o pagamento de cada uma (modal "Pagamentos")
  *   GET    /pedidos/:id/pagamentos/encargos?numero_parcela=&data=   multa e juros sugeridos para pagar naquele dia
  *   POST   /conciliar                                 fila do webhook + consulta dos boletos a pagar (so_fila: só a fila)
@@ -69,6 +72,7 @@ const webhookEstado = require('./cobranca/webhookEstado');
 const parcelaMinima = require('./cobranca/parcelaMinima');
 const importacao = require('./cobranca/importacao');
 const pagamentos = require('./cobranca/pagamentosDoPedido');
+const ordens = require('./cobranca/ordens');
 const externas = require('./fiscal/externas');
 
 /** Quem lê a parcela mínima: quem monta orçamento, mexe em pedido ou está no financeiro. */
@@ -397,6 +401,8 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     return parcela => {
       const paga = boletos.pagamentoDaParcela(dados.recebimentos, parcela);
       if (paga) return boletos.textoDaParcelaPaga(parcela, paga);
+      const ordem = boletos.ordemDaParcela(dados.ordens, parcela);
+      if (ordem) return boletos.textoDaParcelaComOrdem(parcela, ordem);
       return boletos.ocupaParcela(boletos.boletoDaParcela(dados.boletos, parcela));
     };
   }
@@ -786,6 +792,8 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       const entrada = req.body || {};
       try {
         const recebimento = await recebimentos.registrarManual({ api, entrada, usuarioId, hoje });
+        // Pagou direto numa parcela com ordem aberta: a ordem se cumpriu (baixada com ele).
+        await ordens.baixarPelaParcela(api, recebimento, usuarioId).catch(() => null);
         res.json({ recebimento, boleto: null, avisos: [] });
         return;
       } catch (e) {
@@ -803,6 +811,35 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       }
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/recebimentos');
+    }
+  });
+
+  /**
+   * Ordem de pagamento (decisões do dono, 24/09/2026): o "para quando" do
+   * modal Pagamentos — data futura, no máximo o vencimento da parcela. Ocupa a
+   * parcela como um boleto; a baixa é à mão e vira recebimento.
+   */
+  router.post('/pedidos/:id/ordens', exigirPermissao('financeiro.recebimento.registrar'), async (req, res) => {
+    try {
+      res.json(await ordens.criar({ api: createApiClient(req), pedidoId: req.params.id, entrada: req.body || {}, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia() }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/pedidos/:id/ordens');
+    }
+  });
+
+  router.post('/ordens/:id/baixar', exigirPermissao('financeiro.recebimento.registrar'), async (req, res) => {
+    try {
+      res.json(await ordens.baixar({ api: createApiClient(req), id: req.params.id, entrada: req.body || {}, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia() }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/ordens/:id/baixar');
+    }
+  });
+
+  router.post('/ordens/:id/cancelar', exigirPermissao('financeiro.recebimento.registrar'), async (req, res) => {
+    try {
+      res.json(await ordens.cancelar({ api: createApiClient(req), id: req.params.id, motivo: req.body?.motivo, usuarioId: usuarioDaRequisicao(req) }));
+    } catch (err) {
+      responder(res, err, 'POST /api/cobranca/ordens/:id/cancelar');
     }
   });
 
