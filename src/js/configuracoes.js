@@ -1789,6 +1789,96 @@ const MenuStartupPreferences = (() => {
         return true;
     }
 
+    // ---------------------------------------------------------------- tarefas automáticas
+
+    const TAREFAS_AUTOMATICAS_SQL = 'Para ligar e desligar só para você, rode sql/tarefas_automaticas_por_usuario.sql e reinicie a API.';
+
+    /**
+     * Uma regra: nome, o que faz, o módulo e o interruptor "Receber esta
+     * tarefa", que grava na hora (PUT /api/tarefas/automacoes/:chave/minha).
+     * Tudo por textContent: o nome e a descrição vêm do banco.
+     */
+    function linhaDaTarefaAutomatica(regra, { semPreferencias, status }) {
+        const item = document.createElement('li');
+        item.className = 'cfg-automatica';
+        item.dataset.regra = regra.chave;
+
+        const textos = document.createElement('div');
+        textos.className = 'cfg-automatica__textos';
+        const titulo = document.createElement('span');
+        titulo.className = 'category-title';
+        titulo.textContent = regra.nome || regra.chave;
+        const descricao = document.createElement('p');
+        descricao.className = 'category-description';
+        descricao.textContent = regra.descricao || '';
+        const modulo = document.createElement('span');
+        modulo.className = 'cfg-automatica__modulo';
+        modulo.textContent = regra.ativa ? (regra.modulo || 'Tarefas') : `${regra.modulo || 'Tarefas'} · desligada para todos agora`;
+        textos.append(titulo, descricao, modulo);
+
+        const interruptor = document.createElement('input');
+        interruptor.type = 'checkbox';
+        interruptor.className = 'toggle';
+        interruptor.checked = regra.minha !== false;
+        interruptor.disabled = Boolean(semPreferencias);
+        interruptor.setAttribute('role', 'switch');
+        interruptor.setAttribute('aria-label', `Receber a tarefa: ${regra.nome || regra.chave}`);
+        interruptor.addEventListener('change', async () => {
+            const ativa = interruptor.checked;
+            interruptor.disabled = true;
+            try {
+                const resposta = await fetchApi(`/api/tarefas/automacoes/${encodeURIComponent(regra.chave)}/minha`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ativa })
+                });
+                const corpo = await resposta.json().catch(() => ({}));
+                if (!resposta.ok) throw new Error(corpo?.error || 'Não foi possível salvar agora.');
+                if (status) {
+                    status.textContent = ativa
+                        ? `“${regra.nome}”: você volta a receber esta tarefa.`
+                        : `“${regra.nome}”: você não recebe mais esta tarefa.`;
+                }
+            } catch (erro) {
+                interruptor.checked = !ativa;
+                if (status) status.textContent = erro?.message || 'Não foi possível salvar agora.';
+            } finally {
+                interruptor.disabled = false;
+            }
+        });
+
+        item.append(textos, interruptor);
+        return item;
+    }
+
+    /**
+     * Configurações › Tarefas automáticas (decisão do dono, 24/09/2026). Só as
+     * regras das permissões da pessoa (o servidor filtra). Sem ver Tarefas
+     * (403), antes do SQL das tarefas (409) ou sem regra nenhuma, o quadro
+     * continua escondido. Não segura a abertura da tela.
+     */
+    async function initTarefasAutomaticasSection() {
+        const secao = moduleElement?.querySelector('#tarefasAutomaticasSettings');
+        const lista = moduleElement?.querySelector('#tarefasAutomaticasLista');
+        const status = moduleElement?.querySelector('#tarefasAutomaticasStatus');
+        if (!secao || !lista) return;
+        let dados = null;
+        try {
+            const resposta = await fetchApi('/api/tarefas/automacoes');
+            if (!resposta.ok) return;
+            dados = await resposta.json();
+        } catch (erro) {
+            console.warn('Não foi possível carregar as tarefas automáticas.', erro);
+            return;
+        }
+        const regras = Array.isArray(dados?.automacoes) ? dados.automacoes : [];
+        if (!regras.length) return;
+        const semPreferencias = Boolean(dados.preferencias_sql_pendente);
+        lista.replaceChildren(...regras.map(regra => linhaDaTarefaAutomatica(regra, { semPreferencias, status })));
+        if (status) status.textContent = semPreferencias ? TAREFAS_AUTOMATICAS_SQL : '';
+        secao.hidden = false;
+    }
+
     function init() {
         currentState = NotificationPreferences.load();
         currentTheme = MenuThemePreferences.getCurrent();
@@ -1799,6 +1889,7 @@ const MenuStartupPreferences = (() => {
         const profileReady = initProfileSection();
         applyStateToUI();
         handlePendingPersonalDataFocus();
+        initTarefasAutomaticasSection();
 
         // As permissões chegam de forma assíncrona; quando terminarem, refaz o
         // filtro do seletor (senão a tela abre listando módulo bloqueado).

@@ -820,10 +820,14 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
     }
   });
 
+  router.resumoDoCertificado = resumoDoCertificado;
   return router;
 }
 
 const router = criarRouter();
 module.exports = router;
 module.exports.criarRouter = criarRouter;
+// O Dashboard (card "NF-e com problema") lê o mesmo resumo do certificado que
+// o painel fiscal, com o certificado já aberto e guardado por este roteador.
+module.exports.resumoDoCertificado = (api, cfg) => router.resumoDoCertificado(api, cfg);
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;

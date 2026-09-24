@@ -171,6 +171,98 @@
                 </article>
             </div>
 
+            <!--
+              Financeiro (decisão do dono, 24/09/2026): contas a receber, NF-e e o
+              que falta pagar de comissões e produção. Cada cartão depende da seção
+              do Financeiro de onde o número vem (receber, fiscal, pagar); sem a
+              permissão ele some, e sem nenhuma a faixa inteira some junto.
+            -->
+            <section class="dash-bloco-financeiro animate-fade-in-up" data-dash-linha>
+                <h2 class="dash-secao-titulo">
+                    <i class="fas fa-hand-holding-usd" aria-hidden="true"></i>
+                    Financeiro
+                </h2>
+                <div class="dash-kpis dash-kpis--financeiro" data-dash-linha>
+                    <article class="dash-card dash-kpi" data-dash-cartao="kpi-recebido" data-secao="receber" data-estado="carregando" aria-busy="true">
+                        <header class="dash-kpi__topo">
+                            <span class="dash-pastilha" data-tom="verde"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span>
+                            <h2 class="dash-kpi__rotulo">Recebido no mês</h2>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--numero"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+
+                    <article class="dash-card dash-kpi" data-dash-cartao="kpi-a-receber" data-secao="receber" data-estado="carregando" aria-busy="true">
+                        <header class="dash-kpi__topo">
+                            <span class="dash-pastilha" data-tom="azul"><i class="fas fa-calendar-check" aria-hidden="true"></i></span>
+                            <h2 class="dash-kpi__rotulo">A receber no mês</h2>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--numero"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+
+                    <article class="dash-card dash-kpi" data-dash-cartao="kpi-atraso" data-secao="receber" data-estado="carregando" aria-busy="true">
+                        <header class="dash-kpi__topo">
+                            <span class="dash-pastilha" data-tom="vermelho"><i class="fas fa-exclamation-circle" aria-hidden="true"></i></span>
+                            <h2 class="dash-kpi__rotulo">Em atraso</h2>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--numero"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+
+                    <article class="dash-card dash-kpi" data-dash-cartao="kpi-nfe" data-secao="fiscal" data-estado="carregando" aria-busy="true">
+                        <header class="dash-kpi__topo">
+                            <span class="dash-pastilha" data-tom="ouro"><i class="fas fa-file-invoice" aria-hidden="true"></i></span>
+                            <h2 class="dash-kpi__rotulo">NF-e do mês</h2>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--numero"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+
+                    <article class="dash-card dash-kpi" data-dash-cartao="kpi-a-pagar" data-secao="pagar" data-estado="carregando" aria-busy="true">
+                        <header class="dash-kpi__topo">
+                            <span class="dash-pastilha" data-tom="vinho"><i class="fas fa-hand-holding-usd" aria-hidden="true"></i></span>
+                            <h2 class="dash-kpi__rotulo">Comissões e produção a pagar</h2>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--numero"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="dash-linha" data-dash-linha>
+                    <article class="dash-card" data-dash-cartao="vencimentos" data-secao="receber" data-estado="carregando" aria-busy="true">
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="azul"><i class="fas fa-calendar-alt" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">Contas a receber por vencimento</h2>
+                                <p class="dash-card__subtitulo">Parcelas em aberto, das mais atrasadas às que vencem depois de 30 dias</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha"></span>
+                            <span class="dash-esqueleto dash-esqueleto--linha dash-esqueleto--curta"></span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
             <!-- Precisa de atenção: cartões compactos com contagem e lista curta -->
             <section class="dash-bloco-atencao animate-fade-in-up" data-dash-linha>
                 <h2 class="dash-secao-titulo">
@@ -185,6 +277,62 @@
                             <div class="dash-card__titulos">
                                 <h2 class="dash-card__titulo">Aprovados sem pedido</h2>
                                 <p class="dash-card__subtitulo">Orçamento aprovado que não tem pedido ligado</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo></div>
+                    </article>
+
+                    <!-- Financeiro: cada um só aparece quando existe o que resolver -->
+                    <article class="dash-card dash-card--alerta" data-dash-cartao="nfe-problemas" data-secao="fiscal" data-estado="carregando" hidden>
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="vermelho"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">NF-e com problema</h2>
+                                <p class="dash-card__subtitulo">Notas recusadas ou paradas na SEFAZ e o certificado digital</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo></div>
+                    </article>
+
+                    <article class="dash-card" data-dash-cartao="sem-nfe" data-secao="fiscal" data-estado="carregando" hidden>
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="ouro"><i class="fas fa-file-invoice" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">Pedidos enviados sem NF-e</h2>
+                                <p class="dash-card__subtitulo" data-dash-subtitulo>Enviados desde o mês passado e ainda sem nota</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo></div>
+                    </article>
+
+                    <article class="dash-card" data-dash-cartao="a-confirmar" data-secao="pagar" data-estado="carregando" hidden>
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="vinho"><i class="fas fa-calendar-day" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">Pagamentos a confirmar</h2>
+                                <p class="dash-card__subtitulo">Competências fechadas que ainda não foram pagas</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo></div>
+                    </article>
+
+                    <article class="dash-card" data-dash-cartao="ordens" data-secao="receber" data-estado="carregando" hidden>
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="azul"><i class="fas fa-handshake" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">Ordens de pagamento</h2>
+                                <p class="dash-card__subtitulo">Pagamentos combinados para os próximos 7 dias e os que passaram da data</p>
+                            </div>
+                        </header>
+                        <div class="dash-card__corpo" data-dash-corpo></div>
+                    </article>
+
+                    <article class="dash-card" data-dash-cartao="conciliacao" data-secao="receber" data-estado="carregando" hidden>
+                        <header class="dash-card__cabeca">
+                            <span class="dash-pastilha dash-pastilha--pequena" data-tom="azul"><i class="fas fa-university" aria-hidden="true"></i></span>
+                            <div class="dash-card__titulos">
+                                <h2 class="dash-card__titulo">Conciliação com o BB</h2>
+                                <p class="dash-card__subtitulo">Pagamentos de boleto que ainda precisam entrar nos recebimentos</p>
                             </div>
                         </header>
                         <div class="dash-card__corpo" data-dash-corpo></div>

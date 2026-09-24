@@ -91,15 +91,47 @@ Só vale para **tarefas e calendário**. Clientes e prospecções não mudaram.
 | **Concluir** | Pede o resultado (Feito, Falou com o cliente, Não atendeu, Pediu retorno...) e uma nota. Tarefa ligada a cliente/prospecção vira **atividade** da ficha. Opção "Concluir e agendar a próxima" |
 | **Calendário** | Camadas: tarefas, atividades feitas (as registradas à mão; as que nasceram de tarefa aparecem como a tarefa concluída), marcos do histórico com data (mudança de etapa do funil, orçamento, conversão, arquivamento) e feriados |
 
-### Tarefas automáticas (Tarefas › Automáticas; liga/desliga e ajusta)
+### Tarefas automáticas (Tarefas › Automáticas e Configurações › Tarefas automáticas)
 
-| Gatilho | Tarefa | Para quem |
-| --- | --- | --- |
-| Orçamento sai do rascunho (Pendente) | "Follow-up do orçamento {orcamento} — {cliente}", em 3 dias, alta | Quem enviou |
-| Prospecção convertida em cliente | "Ligação de boas-vindas — {cliente}", em 1 dia | O responsável |
-| Pedido marcado como Entregue | "Pós-venda do pedido {pedido} — {cliente}", em 7 dias | O dono do cliente |
+| Gatilho | Tarefa | Para quem | Permissão da regra |
+| --- | --- | --- | --- |
+| Orçamento sai do rascunho (Pendente) | "Follow-up do orçamento {orcamento} — {cliente}", em 3 dias, alta | Quem enviou | Enviar orçamento |
+| Prospecção convertida em cliente | "Ligação de boas-vindas — {cliente}", em 1 dia | O responsável | Ver prospecções |
+| Pedido marcado como Entregue | "Pós-venda do pedido {pedido} — {cliente}", em 7 dias | O dono do cliente | Ver pedidos |
+| Comissões da competência fechadas | "Confirmar o pagamento das comissões de {competencia}", no dia do "pagar até" | Quem fechou | Confirmar pagamento |
+| Produção da competência fechada | "Confirmar o pagamento da produção de {competencia}", no dia do "pagar até" | Quem fechou | Confirmar pagamento |
 
 Não duplica: um índice único por gatilho + registro segura o segundo disparo.
+
+**Decisões do dono (24/09/2026):**
+
+- **Cada regra está ligada a uma permissão** (tabela acima, em
+  `backend/tarefasAutomaticas.js`). Só quem vê Tarefas e tem a permissão da
+  regra a enxerga nas telas **e recebe a tarefa** — senão chegaria uma tarefa
+  que a pessoa não consegue desligar. Admin e Sup Admin têm todas.
+- **Cada pessoa desliga a regra só para si**: interruptor "Receber esta
+  tarefa" em Tarefas › Automáticas (que agora abre para todos que veem
+  Tarefas) e em Configurações › Tarefas automáticas. Ligada por padrão
+  (sem linha em `tarefa_automacao_usuarios` = ligada). Quem tem "Configurar
+  tarefas automáticas" continua ajustando a regra para todos (ligada, título,
+  prazo, tipo, prioridade).
+- **Toda tarefa automática avisa** quem a recebeu, no sino e no Windows —
+  mesmo quando foi a própria pessoa que fez a ação: aviso
+  `tarefa_automatica`, "Tarefa automática criada", com o que aconteceu, a
+  tarefa e o prazo, e a dica pequena "Pode ser desativada em Tarefas ou em
+  Configurações." Substitui o "Nova tarefa para você" dessas tarefas.
+- **Competência fechada**: a tarefa só nasce se quem fechou pode "Confirmar
+  pagamento" e se há valor a pagar. O prazo das duas regras novas é a
+  **antecedência** em dias antes do "pagar até" (0 = no próprio dia; se o dia
+  já passou, a tarefa nasce atrasada). Ela vem com a ação "Confirmar o
+  pagamento das comissões/da produção (até quitar)": conclui sozinha quando a
+  competência fica **toda** paga — o pagamento por beneficiário deixa a tarefa
+  aberta até o último.
+
+Banco: `sql/tarefas_automaticas_por_usuario.sql` (tabela das preferências e
+as 2 regras novas). Rotas: `GET /api/tarefas/automacoes` (as regras que eu
+posso receber), `PUT /api/tarefas/automacoes/:chave/minha` e
+`PUT /api/tarefas/automacoes/:chave`.
 
 ### Ação no sistema: a tarefa que cobra algo de outro módulo (2ª rodada, 18/09)
 
@@ -119,7 +151,7 @@ agora** abre o registro no módulo.
 | Orçamentos | Enviar (sair do rascunho), Converter em pedido (Aprovado), Retorno: rejeitado |
 | Prospecções | Mover no funil (inclusive pelo "Concluir passo" com etapa), Converter em cliente, Registrar atividade, Registrar campanha |
 | Clientes | Registrar atividade, Atualizar o cadastro |
-| Financeiro (competência) | Fechar comissões, Fechar produção, Confirmar pagamento |
+| Financeiro (competência) | Fechar comissões, Fechar produção, Confirmar pagamento, Confirmar o pagamento das comissões / da produção (até quitar) |
 
 Como se percebe: cada ação do catálogo (`backend/tarefasAcoes.js`) diz a rota
 do servidor local que a executa (método + caminho + condição no corpo/na

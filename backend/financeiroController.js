@@ -51,6 +51,8 @@ const detalhes = require('./financeiro/detalhes');
 const base = require('./financeiro/base');
 const auditoria = require('./financeiro/auditoria');
 const rateios = require('./financeiro/rateios');
+// A tarefa "Confirmar o pagamento" de quem fecha a competência.
+const tarefas = require('./tarefasServico');
 
 const VER = 'financeiro.comissao.view';
 const EDITAR_REGRAS = 'financeiro.regras.editar';
@@ -95,6 +97,33 @@ function rota(contexto, fn) {
       responder(res, err, contexto);
     }
   };
+}
+
+/**
+ * Tarefa automática da competência fechada (decisão do dono, 24/09/2026):
+ * quem fechou — se pode "Confirmar pagamento" e não desligou a regra (a
+ * conferência é do tarefasServico) — ganha "Confirmar o pagamento…" para o
+ * dia marcado ("pagar até"), ligada à ação que a conclui quando a competência
+ * estiver toda paga. Sem valor a pagar, não há o que confirmar. Nunca desfaz
+ * nem atrasa o fechamento: a criação engole o próprio erro.
+ */
+async function tarefaDoFechamento(api, { tipo, competencia, resultado, usuarioId }) {
+  if (!usuarioId || !(Number(resultado?.total) > 0)) return null;
+  const comissao = tipo === 'comissao';
+  const rotulo = c.rotuloCompetencia(competencia);
+  return tarefas.criarTarefaAutomatica(api, comissao ? 'comissoes_fechadas' : 'producao_fechada', {
+    refId: competencia, responsavelId: usuarioId, usuarioId,
+    valores: { competencia: rotulo, valor: c.reais(resultado.total) },
+    base: resultado.pagar_ate,
+    descricao: `${c.reais(resultado.total)} a pagar até ${c.impressa(resultado.pagar_ate)}. `
+      + `Confirme em Financeiro › ${comissao ? 'Resumo de Comissões' : 'Resumo de Produção'} › Próximo pagamento: `
+      + 'a tarefa conclui sozinha quando a competência estiver toda paga.',
+    acao: {
+      acao_chave: comissao ? 'financeiro.pagar_comissoes' : 'financeiro.pagar_producao',
+      acao_registro: competencia,
+      acao_rotulo: `${comissao ? 'Comissões' : 'Produção'} de ${rotulo}`
+    }
+  });
 }
 
 const linhaDaParcela = p => ({
@@ -304,8 +333,13 @@ function criarRouter() {
     fechamentos.previa({ api, tipo: String(req.query?.tipo || ''), competencia: String(req.query?.competencia || ''), hoje, desde })));
   router.get('/fechamentos', exigirPermissao(VER), rota('GET /api/financeiro/fechamentos', async ({ api, req }) =>
     ({ fechamentos: await fechamentos.listar(api, String(req.query?.tipo || '')) })));
-  router.post('/fechamentos', exigirPermissao(FECHAR), rota('POST /api/financeiro/fechamentos', ({ api, req, usuarioId, hoje, desde }) =>
-    fechamentos.fechar({ api, tipo: String(req.body?.tipo || ''), competencia: String(req.body?.competencia || ''), hoje, desde, usuarioId })));
+  router.post('/fechamentos', exigirPermissao(FECHAR), rota('POST /api/financeiro/fechamentos', async ({ api, req, usuarioId, hoje, desde }) => {
+    const tipo = String(req.body?.tipo || '');
+    const competencia = String(req.body?.competencia || '');
+    const resultado = await fechamentos.fechar({ api, tipo, competencia, hoje, desde, usuarioId });
+    await tarefaDoFechamento(api, { tipo, competencia, resultado, usuarioId });
+    return resultado;
+  }));
   router.post('/pagamentos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos', ({ api, req, usuarioId, hoje }) =>
     fechamentos.pagar({ api, entrada: req.body, hoje, usuarioId })));
 
@@ -326,3 +360,4 @@ const router = criarRouter();
 module.exports = router;
 module.exports.criarRouter = criarRouter;
 module.exports.hojeEmBrasilia = hojeEmBrasilia;
+module.exports.tarefaDoFechamento = tarefaDoFechamento;

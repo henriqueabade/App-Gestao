@@ -236,6 +236,11 @@ async function carregar({ api, competencia, hoje, desde }) {
       colaboradores: visaoRateio.colaboradores.length, contagem: visaoRateio.contagem,
       pendentes: visaoRateio.pendentes, resumo: visaoRateio.resumo, total: visaoRateio.total
     } : null,
+    // As competências fechadas que esperam o pagamento (pago em parte conta
+    // pelo que falta). O Dashboard lista; a tela do Financeiro usa as pendências.
+    a_confirmar: lista
+      .filter(f => f.total > 0 && (f.falta_pagar ?? f.total) > 0)
+      .map(f => ({ tipo: f.tipo, competencia: f.competencia, total: f.total, falta_pagar: f.falta_pagar ?? f.total, pagar_ate: f.pagar_ate })),
     pendencias: [
       ...pendencias({ hoje, regrasTudo: b.regras, apuradas, estadoC, estadoP: prod.estado, pend: prod.pend, fechamentosLista: lista }),
       ...pendenciaDoRateio({ visao: visaoRateio, competencia: comp, hoje, fechado: Boolean(prodComp.fechado) }),

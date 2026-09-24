@@ -414,6 +414,11 @@
     font-size: 0.78rem; line-height: 1.4; color: rgba(255, 255, 255, 0.7);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* Tarefa automática: a mensagem diz o que aconteceu, a tarefa e o prazo — 3 linhas. */
+.sino-aviso__texto--longo { -webkit-line-clamp: 3; }
+/* O texto pequeno de alguns avisos (onde desligar a tarefa automática). */
+.sino-aviso__dica { font-size: 0.68rem; line-height: 1.35; font-style: italic; color: rgba(255, 255, 255, 0.5); }
+.sino-avatar__tipo--tarefa_automatica { background: #0f766e; }
 .sino-aviso__rodape { display: flex; align-items: center; gap: 0.45rem; font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); }
 .sino-aviso__origem {
     padding: 0.05rem 0.45rem; border-radius: 999px; font-weight: 600;
@@ -428,6 +433,7 @@
 [data-menu-theme="light"] .sino-topo__novos { color: #7a5c12; }
 [data-menu-theme="light"] .sino-topo__acao { color: #1d4ed8; }
 [data-menu-theme="light"] .sino-aviso__texto { color: #475569; }
+[data-menu-theme="light"] .sino-aviso__dica { color: #64748b; }
 [data-menu-theme="light"] .sino-aviso__rodape,
 [data-menu-theme="light"] .sino-vazio { color: #64748b; }
 [data-menu-theme="light"] .sino-aviso__origem { background: rgba(15, 23, 42, 0.06); color: #334155; }

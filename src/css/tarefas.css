@@ -240,6 +240,16 @@ dialog.tarefas-dialogo-automacoes { width: min(72rem, calc(100vw - 2rem)); }
 .tarefas-interruptor input:checked + span { background: #16a34a; }
 .tarefas-interruptor input:checked + span::after { transform: translateX(1.1rem); }
 .tarefas-interruptor input:focus-visible + span { box-shadow: 0 0 0 2px var(--color-primary); }
+.tarefas-interruptor input:disabled + span { opacity: 0.45; cursor: not-allowed; }
+/* Automáticas por pessoa (24/09/2026): "Receber esta tarefa" no topo e, para
+   quem configura, a linha "Ligada para todos" com os campos da regra. */
+.tarefas-regra__textos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.tarefas-regra__textos .tui-dica { margin: 0; }
+.tarefas-regra__modulo { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); }
+.tarefas-regra__minha { flex-shrink: 0; font-size: 0.72rem; font-weight: 600; color: rgba(255, 255, 255, 0.6); white-space: nowrap; margin-top: 0.25rem; }
+.tarefas-regra__geral { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.tarefas-regra__geral .tui-rotulo { margin: 0; }
+.tarefas-regra__aviso { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: #fcd34d; }
 
 /* ------------------------------------------------------------ tema claro */
 
@@ -255,6 +265,9 @@ dialog.tarefas-dialogo-automacoes { width: min(72rem, calc(100vw - 2rem)); }
 [data-menu-theme="light"] .tarefas-grupo__cabeca { color: #475569; }
 [data-menu-theme="light"] .tarefas-kpi, [data-menu-theme="light"] .tarefas-regra { background: #f8fafc; border-color: rgba(15, 23, 42, 0.08); }
 [data-menu-theme="light"] .tarefas-kpi__valor, [data-menu-theme="light"] .tarefas-regra__topo strong, [data-menu-theme="light"] .tarefas-hbarras__linha strong { color: #0f172a; }
+[data-menu-theme="light"] .tarefas-regra__modulo, [data-menu-theme="light"] .tarefas-regra__minha { color: #475569; }
+[data-menu-theme="light"] .tarefas-regra__geral { border-top-color: rgba(15, 23, 42, 0.08); }
+[data-menu-theme="light"] .tarefas-regra__aviso { color: #92400e; }
 [data-menu-theme="light"] .tarefas-tabela td, [data-menu-theme="light"] .tarefas-hbarras__rotulo { color: #334155; }
 [data-menu-theme="light"] .tarefas-tabela tbody { background: #fff; }
 /* o .module-header__title global tem cor clara fixa (ver dashboard.css) */

@@ -21,6 +21,7 @@ const {
   reprogramarParcelas
 } = require('./faturamentoPedido');
 const { montarAgrupamento } = require('./agrupamentoPedidos');
+const etiquetasProduto = require('./etiquetasProduto');
 
 /** Teto de pedidos por relatório agrupado — cada um custa 3 requisições. */
 const MAX_PEDIDOS_NO_AGRUPAMENTO = 60;
@@ -802,6 +803,47 @@ router.get('/agrupamento', exigirPermissao('ped.view.details'), async (req, res)
   } catch (err) {
     console.error('Erro ao montar o agrupamento de pedidos:', err);
     res.status(err.status || 500).json({ error: 'Erro ao montar o agrupamento de pedidos' });
+  }
+});
+
+/**
+ * GET /pedidos/:id/etiquetas-produto — a planilha "Etiqueta Produto" do
+ * Visualizar: uma linha por unidade de cada peça, com Nome (sem medidas) e
+ * Variação (backend/etiquetasProduto.js). Volta em base64, com o nome do
+ * arquivo; quem salva é a tela, pelo diálogo do Windows.
+ */
+router.get('/:id/etiquetas-produto', exigirPermissao('ped.view'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+    const pedido = await api.get(`/api/pedidos/${id}`).catch(err => {
+      if (err?.status === 404) return null;
+      throw err;
+    });
+    if (!pedido || pedido.error) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    const [itens, cliente] = await Promise.all([
+      api.get('/api/pedidos_itens', { query: { pedido_id: id } }),
+      pedido.cliente_id != null
+        ? api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null)
+        : Promise.resolve(null)
+    ]);
+    const doPedido = (Array.isArray(itens) ? itens : []).filter(it => String(it?.pedido_id) === String(id));
+    const linhas = etiquetasProduto.linhasDasEtiquetas(doPedido);
+    if (!linhas.length) {
+      return res.status(422).json({ error: 'O pedido não tem peças para gerar etiquetas.' });
+    }
+
+    const nomeCliente = cliente ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || '') : '';
+    const planilha = await etiquetasProduto.gerarPlanilha(linhas);
+    res.json({
+      nome: etiquetasProduto.nomeDoArquivo(pedido.numero, nomeCliente),
+      linhas: linhas.length,
+      base64: planilha.toString('base64')
+    });
+  } catch (err) {
+    console.error('Erro ao gerar a planilha de etiquetas de produto:', err);
+    res.status(err.status || 500).json({ error: 'Não foi possível gerar a planilha de etiquetas.' });
   }
 });
 

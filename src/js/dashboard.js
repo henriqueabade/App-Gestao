@@ -103,6 +103,25 @@ const DASH_PARTES_PRAZO = [
  */
 const DASH_RAIO_PRAZO = 19.9;
 
+/**
+ * Financeiro (decisão do dono, 24/09/2026). Faixas das contas a receber por
+ * vencimento (FAIXAS_VENCIMENTO em backend/dashboardFinanceiro.js), da mais
+ * grave para a mais tranquila. Até 15 dias de atraso o BB ainda recebe o
+ * boleto (ouro); de 16 em diante, vinho e vermelho: o boleto tem de ser
+ * reemitido ou o pagamento combinado de outro jeito.
+ */
+const DASH_FAIXAS_VENCIMENTO = {
+    atraso_30: { rotulo: 'Atraso de 31+ dias', tom: 'vermelho' },
+    atraso_16_30: { rotulo: 'Atraso de 16 a 30 dias', tom: 'vinho' },
+    atraso_1_15: { rotulo: 'Atraso de 1 a 15 dias', tom: 'ouro' },
+    vence_7: { rotulo: 'Vence em até 7 dias', tom: 'azul' },
+    vence_30: { rotulo: 'Vence em 8 a 30 dias', tom: 'verde' },
+    depois: { rotulo: 'Vence depois de 30 dias', tom: 'neutro' }
+};
+
+/** O que se paga numa competência fechada (tipo do fechamento no Financeiro). */
+const DASH_TIPOS_PAGAMENTO = { comissao: 'Comissões', producao: 'Produção' };
+
 const dashFormatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 // `minimumFractionDigits` explícito: sem ele algumas versões do V8 lançam
 // RangeError, porque o padrão do BRL (2 casas) passa do máximo pedido.
@@ -341,6 +360,62 @@ function formatarDataComAno(valor) {
     return casamento ? `${casamento[3]}/${casamento[2]}/${casamento[1].slice(2)}` : '';
 }
 
+/** Parcela vencida sem pagamento: "venceu há 1 dia", "venceu há 12 dias". */
+function textoAtrasoDaParcela(dias) {
+    const n = numeroOuNulo(dias);
+    if (n === null || n <= 0) return 'no prazo';
+    return n === 1 ? 'venceu há 1 dia' : `venceu há ${n} dias`;
+}
+
+/** Pedido enviado sem NF-e: "enviado hoje", "há 1 dia", "há 5 dias". */
+function textoDiasSemNota(dias) {
+    const n = numeroOuNulo(dias);
+    if (n === null) return '';
+    if (n <= 0) return 'enviado hoje';
+    return n === 1 ? 'há 1 dia' : `há ${n} dias`;
+}
+
+/** Ordem de pagamento: "passou há 2 dias" ou "para 30/09". A data é DATE: corte de texto. */
+function textoDaOrdem(item) {
+    if (item?.atrasada) {
+        const n = quantidadeDe(item.dias);
+        return n === 1 ? 'passou há 1 dia' : `passou há ${n} dias`;
+    }
+    const data = formatarDataCurta(item?.data);
+    return data ? `para ${data}` : 'sem data';
+}
+
+/**
+ * "paga" e "em atraso" das parcelas de um item do balão da previsão, a partir
+ * do estado que as contas a receber mandam (`receber.parcelas`, chave
+ * "pedido:parcela"). Sem a seção (perfil sem recebimentos), nada: a parcela
+ * continua só "programada".
+ */
+function marcasDasParcelas(item, estados) {
+    if (!estados || typeof estados !== 'object') return [];
+    const contagem = { paga: 0, atrasada: 0 };
+    listaDe(item?.parcelas).forEach(parcela => {
+        const estado = estados[`${item?.pedidoId}:${parcela?.numero}`];
+        if (estado === 'paga' || estado === 'atrasada') contagem[estado] += 1;
+    });
+    const marcas = [];
+    if (contagem.paga) marcas.push({ tipo: 'paga', texto: contagem.paga === 1 ? '1 paga' : `${formatarNumero(contagem.paga)} pagas` });
+    if (contagem.atrasada) marcas.push({ tipo: 'atrasada', texto: `${formatarNumero(contagem.atrasada)} em atraso` });
+    return marcas;
+}
+
+/** A linha "Recebido no mês" dos balões do gráfico, ou null sem a série (ou sem R$). */
+function linhaDoRecebido(recebido) {
+    const valor = numeroOuNulo(recebido?.valor);
+    if (!recebido || valor === null) return null;
+    return {
+        tipo: 'recebido',
+        nome: 'Recebido no mês',
+        valor: formatarMoeda(valor),
+        detalhe: pluralizar(recebido.quantidade, 'parcela recebida', 'parcelas recebidas')
+    };
+}
+
 /** Quanto falta para o embarque previsto. `dias` negativo é atraso — vem pronto do BFF. */
 function textoEmbarque(dias) {
     const n = numeroOuNulo(dias);
@@ -438,10 +513,10 @@ function caminhoBarra(x, y, largura, altura, raio = 5) {
  * Mês que não veio numa série fica `null` nela: no futuro não há venda
  * fechada, e sem a seção de previsão não há barra verde nenhuma.
  */
-function colunasDoGrafico(serie, meses) {
+function colunasDoGrafico(serie, meses, recebidos = []) {
     const porMes = new Map();
     const colunaDe = mes => {
-        if (!porMes.has(mes)) porMes.set(mes, { mes, vendas: null, previsao: null });
+        if (!porMes.has(mes)) porMes.set(mes, { mes, vendas: null, previsao: null, recebido: null });
         return porMes.get(mes);
     };
     listaDe(serie).forEach(item => {
@@ -449,6 +524,12 @@ function colunasDoGrafico(serie, meses) {
     });
     listaDe(meses).forEach(item => {
         if (partesDoMes(item?.mes)) colunaDe(String(item.mes).slice(0, 7)).previsao = item;
+    });
+    // O Recebido (linha azul, contas a receber) vive nos mesmos meses: só
+    // entra onde já há coluna — sem vendas nem previsão, não há gráfico.
+    listaDe(recebidos).forEach(item => {
+        const mes = partesDoMes(item?.mes) ? String(item.mes).slice(0, 7) : null;
+        if (mes && porMes.has(mes)) porMes.get(mes).recebido = item;
     });
     // 'YYYY-MM' ordena como texto; o BFF já manda as duas séries sem buracos.
     return [...porMes.values()].sort((a, b) => (a.mes < b.mes ? -1 : a.mes > b.mes ? 1 : 0));
@@ -482,11 +563,16 @@ function geometriaGrafico(colunas, opcoes = {}) {
     const chave = opcoes.chave || 'valor';
     // Vendas seguem o eixo (R$ ou contagem); a previsão é sempre R$ (`valor`).
     const medir = (item, campo) => (item ? Math.max(0, numeroOuNulo(item[campo]) ?? 0) : null);
-    const medidas = lista.map(coluna => ({ vendas: medir(coluna?.vendas, chave), previsao: medir(coluna?.previsao, 'valor') }));
+    // O Recebido é R$: só entra no eixo de R$ (contando pedidos, some).
+    const medidas = lista.map(coluna => ({
+        vendas: medir(coluna?.vendas, chave),
+        previsao: medir(coluna?.previsao, 'valor'),
+        recebido: chave === 'valor' && coluna?.recebido && numeroOuNulo(coluna.recebido.valor) !== null ? medir(coluna.recebido, 'valor') : null
+    }));
     const comVendas = medidas.some(medida => medida.vendas !== null);
     const comPrevisao = medidas.some(medida => medida.previsao !== null);
     const agrupado = comVendas && comPrevisao;
-    const maximo = Math.max(0, ...medidas.map(medida => Math.max(medida.vendas ?? 0, medida.previsao ?? 0)));
+    const maximo = Math.max(0, ...medidas.map(medida => Math.max(medida.vendas ?? 0, medida.previsao ?? 0, medida.recebido ?? 0)));
     // Nas vendas o que saiu segue o eixo (R$ ou contagem); na previsão é sempre R$.
     const medirSaidas = (item, ler) => (item
         ? DASH_SAIDAS.map(tipo => ({ tipo, valor: Math.max(0, numeroOuNulo(ler(item, tipo)) ?? 0) })).filter(saida => saida.valor > 0)
@@ -529,8 +615,9 @@ function geometriaGrafico(colunas, opcoes = {}) {
     // entre 34 e 40 px. Contado a partir do MÊS ATUAL, para o destacado nunca
     // perder o nome — com a previsão ele deixou de ser o último da fila.
     const passoRotulo = Math.max(1, Math.ceil(40 / banda));
+    const alturaDo = valor => (fundo > 0 ? valor * pxPorUnidade : (escala.topo > 0 ? (valor / escala.topo) * areaAltura : 0));
     const barra = (valor, x, alvo) => {
-        let alturaBarra = fundo > 0 ? valor * pxPorUnidade : (escala.topo > 0 ? (valor / escala.topo) * areaAltura : 0);
+        let alturaBarra = alturaDo(valor);
         // Mês com valor pequeno ainda precisa ser visto: 3 px de piso.
         if (valor > 0) alturaBarra = Math.max(alturaBarra, 3);
         return { valor, x, y: baseY - alturaBarra, largura: larguraBarra, altura: alturaBarra, alvo };
@@ -551,7 +638,7 @@ function geometriaGrafico(colunas, opcoes = {}) {
     };
 
     const colunasGeo = lista.map((coluna, indice) => {
-        const { vendas, previsao } = medidas[indice];
+        const { vendas, previsao, recebido } = medidas[indice];
         const inicioBanda = margem.esquerda + indice * banda;
         const inicioGrupo = inicioBanda + (banda - larguraGrupo) / 2;
         // Alvo do mouse e do foco: a banda inteira (a barra de 3 px de um mês
@@ -573,7 +660,9 @@ function geometriaGrafico(colunas, opcoes = {}) {
                     dupla ? { x: inicioBanda + banda / 2, largura: banda / 2 } : inteira),
             saidasVendas: vendas === null ? [] : penduradas(saidas[indice].vendas, inicioGrupo),
             saidasPrevisao: previsao === null ? []
-                : penduradas(saidas[indice].previsao, agrupado ? inicioGrupo + larguraBarra + vao : inicioGrupo)
+                : penduradas(saidas[indice].previsao, agrupado ? inicioGrupo + larguraBarra + vao : inicioGrupo),
+            // O ponto da linha do Recebido, no centro da coluna e na mesma escala.
+            recebido: recebido === null ? null : { valor: recebido, x: inicioBanda + banda / 2, y: baseY - alturaDo(recebido) }
         };
     });
 
@@ -590,7 +679,8 @@ function geometriaGrafico(colunas, opcoes = {}) {
 
     return {
         largura, altura, margem, baseY, topoY: margem.topo, areaAltura, escala, grade, maximo,
-        maximoSaida, fundo, banda, agrupado, indiceAtual, separadorX, colunas: colunasGeo
+        maximoSaida, fundo, banda, agrupado, indiceAtual, separadorX, colunas: colunasGeo,
+        comRecebido: medidas.some(medida => medida.recebido !== null)
     };
 }
 
@@ -732,8 +822,10 @@ function textoParcelasDoItem(item) {
 /**
  * Conteúdo do tooltip da barra verde: quais pedidos compõem a previsão do mês.
  * Puro (só texto), para o teste conferir exatamente o que a caixa mostra.
- * Parcela é "programada" — nunca "recebida" nem "vencida": o banco não tem
- * baixa de pagamento. Sem o nome (perfil sem a coluna Cliente) fica só o número.
+ * A parcela é "programada"; desde os recebimentos do Financeiro (24/09/2026),
+ * quem vê as contas a receber vê também, por pedido, quantas já foram pagas e
+ * quantas estão em atraso (`marcas`) e o que entrou no mês (`recebido`). Sem
+ * o nome (perfil sem a coluna Cliente) fica só o número.
  */
 /** As séries do que SAIU, na ordem em que penduram abaixo da linha de base. */
 const DASH_SAIDAS = ['cancelado', 'devolvido'];
@@ -770,7 +862,7 @@ function saidasDasVendas(item, { emDinheiro = true } = {}) {
         }));
 }
 
-function conteudoDicaPrevisao(mes) {
+function conteudoDicaPrevisao(mes, { parcelas: estados = null, recebido = null } = {}) {
     const valor = numeroOuNulo(mes?.valor);
     const parcelas = quantidadeDe(mes?.parcelas);
     const pedidos = quantidadeDe(mes?.pedidos);
@@ -783,7 +875,8 @@ function conteudoDicaPrevisao(mes) {
             nome: cliente ? `${numero} · ${cliente}` : numero,
             detalhe: estimada ? DASH_NOTA_ESTIMADA : textoParcelasDoItem(item),
             valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : '',
-            estimada
+            estimada,
+            marcas: estimada ? [] : marcasDasParcelas(item, estados)
         };
     });
     const vazio = parcelas === 0 && pedidos === 0 && !((valor ?? 0) > 0);
@@ -797,13 +890,14 @@ function conteudoDicaPrevisao(mes) {
                 pluralizar(parcelas, 'parcela', 'parcelas')].filter(Boolean).join(' · '),
         itens,
         saidas: saidasDaPrevisao(mes),
+        recebido: linhaDoRecebido(recebido),
         // O BFF lista até 8 pedidos por mês; o total do mês continua completo.
         rodape: outros > 0 ? `+${formatarNumero(outros)} ${outros === 1 ? 'outro pedido' : 'outros pedidos'}` : ''
     };
 }
 
 /** Tooltip da barra de ouro: o mesmo formato, só com o resumo do mês. */
-function conteudoDicaVendas(item, { emDinheiro = true } = {}) {
+function conteudoDicaVendas(item, { emDinheiro = true, recebido = null } = {}) {
     const quantidade = quantidadeDe(item?.quantidade);
     const valor = emDinheiro ? numeroOuNulo(item?.valor) : null;
     const vazio = quantidade === 0 && !((valor ?? 0) > 0);
@@ -816,6 +910,7 @@ function conteudoDicaVendas(item, { emDinheiro = true } = {}) {
             : [valor !== null ? formatarMoedaCompacta(valor) : '', pluralizar(quantidade, 'pedido', 'pedidos')].filter(Boolean).join(' · '),
         itens: [],
         saidas: saidasDasVendas(item, { emDinheiro }),
+        recebido: emDinheiro ? linhaDoRecebido(recebido) : null,
         rodape: ''
     };
 }
@@ -830,7 +925,9 @@ function rotuloAcessivelDica(conteudo) {
     const nome = DASH_NOMES_SERIE[conteudo.serie] || conteudo.titulo;
     const mes = partesDoMes(conteudo.mes) ? ` em ${rotuloMesLongo(conteudo.mes)}` : '';
     // O que saiu vai junto: para o leitor de tela as barras de baixo não existem à parte.
-    const saidas = listaDe(conteudo.saidas).map(saida => `${saida.nome}: ${[saida.valor, saida.detalhe].filter(Boolean).join(', ')}`);
+    // O Recebido do mês também: a linha azul não é focável.
+    const saidas = [...listaDe(conteudo.saidas), ...(conteudo.recebido ? [conteudo.recebido] : [])]
+        .map(saida => `${saida.nome}: ${[saida.valor, saida.detalhe].filter(Boolean).join(', ')}`);
     return [`${nome}${mes}: ${conteudo.resumo}`, ...saidas].join('. ');
 }
 
@@ -942,7 +1039,41 @@ const DASH_CARTOES = {
     'estoque': { secao: 'estoque', desenhar: desenharEstoque },
     'ia': { secao: 'ia', mostrar: s => quantidadeDe(s?.emRevisao) > 0, desenhar: desenharIa },
     'aprovacao': { secao: 'orcamentos', desenhar: desenharAprovacao },
-    'clientes': { secao: 'clientes', desenhar: desenharClientes }
+    'clientes': { secao: 'clientes', desenhar: desenharClientes },
+    // Financeiro (24/09/2026): cada cartão atrás da seção de onde vem. Os de
+    // "Precisa de atenção" só aparecem quando existe o que resolver.
+    'kpi-recebido': { secao: 'receber', desenhar: desenharKpiRecebido },
+    'kpi-a-receber': { secao: 'receber', desenhar: desenharKpiAReceber },
+    'kpi-atraso': { secao: 'receber', desenhar: desenharKpiAtraso },
+    'kpi-nfe': { secao: 'fiscal', desenhar: desenharKpiNfe },
+    'kpi-a-pagar': { secao: 'pagar', desenhar: desenharKpiAPagar },
+    'vencimentos': { secao: 'receber', desenhar: desenharVencimentos },
+    'nfe-problemas': {
+        secao: 'fiscal',
+        mostrar: s => quantidadeDe(s?.problemas?.quantidade) > 0,
+        desenhar: desenharNfeProblemas
+    },
+    'sem-nfe': {
+        secao: 'fiscal',
+        mostrar: s => quantidadeDe(s?.aguardandoNfe?.quantidade) > 0,
+        titulos: titulosDoSemNfe,
+        desenhar: desenharSemNfe
+    },
+    'a-confirmar': {
+        secao: 'pagar',
+        mostrar: s => quantidadeDe(s?.aConfirmar?.quantidade) > 0,
+        desenhar: desenharAConfirmar
+    },
+    'ordens': {
+        secao: 'receber',
+        mostrar: s => quantidadeDe(s?.ordens?.atrasadas) + quantidadeDe(s?.ordens?.proximas7) > 0,
+        desenhar: desenharOrdens
+    },
+    'conciliacao': {
+        secao: 'receber',
+        mostrar: s => listaDe(s?.conciliacao?.itens).length > 0,
+        desenhar: desenharConciliacao
+    }
 };
 
 function secoesDoCartao(cartao) {
@@ -1287,11 +1418,16 @@ function desenharKpiTicket(corpo, s) {
     });
 }
 
-function desenharKpiProducao(corpo, s) {
+function desenharKpiProducao(corpo, s, dados) {
     const quantidade = quantidadeDe(s?.quantidade);
     const valor = numeroOuNulo(s?.valor);
     const faixaAntiga = listaDe(s?.porIdade).find(faixa => faixa?.faixa === '60+');
     const antigos = quantidadeDe(faixaAntiga?.quantidade);
+    // Pagamento registrado (Pix, cartão…) em pedido que ainda está em produção:
+    // o dinheiro já entrou antes da nota. Só para quem vê as contas a receber.
+    const antecipado = estadoDaSecao(dados, 'receber') === 'ok' ? dados.secoes.receber.antecipadoEmProducao : null;
+    const valorAntecipado = numeroOuNulo(antecipado?.valor);
+    const pedidosAntecipados = quantidadeDe(antecipado?.pedidos);
     // Em dia × em atraso pela previsão de embarque. O `emDia` do BFF já inclui
     // quem embarca em menos de 7 dias (ainda no prazo). Sem o bloco (servidor
     // anterior à previsão) os chips não saem: "0 em atraso" seria afirmação
@@ -1334,6 +1470,12 @@ function desenharKpiProducao(corpo, s) {
                 tom: 'ouro',
                 icone: 'fa-hourglass-end',
                 texto: `${formatarNumero(antigos)} há mais de 60 dias`
+            },
+            pedidosAntecipados > 0 && valorAntecipado !== null && valorAntecipado > 0 && {
+                tom: 'verde',
+                icone: 'fa-money-bill-wave',
+                texto: `${formatarMoedaCompacta(valorAntecipado)} já recebidos antes da nota`,
+                dica: `${pluralizar(pedidosAntecipados, 'pedido', 'pedidos')} em produção com pagamento registrado (Pix, cartão…)`
             }
         ]
     });
@@ -1392,7 +1534,7 @@ function montarDadoPrevisao(previsao, mesAtual, ultimoMes) {
 }
 
 /** Legenda das séries desenhadas — sem a previsão no perfil, só o ouro. */
-function montarLegendaGrafico({ comVendas, comPrevisao, comCancelado = false, comDevolvido = false }) {
+function montarLegendaGrafico({ comVendas, comPrevisao, comCancelado = false, comDevolvido = false, comRecebido = false }) {
     const legenda = criarEl('ul', 'dash-grafico__legenda');
     legenda.setAttribute('aria-label', 'Legenda do gráfico');
     const item = (serie, texto) => {
@@ -1404,6 +1546,7 @@ function montarLegendaGrafico({ comVendas, comPrevisao, comCancelado = false, co
     };
     if (comVendas) legenda.append(item('vendas', 'Vendas fechadas'));
     if (comPrevisao) legenda.append(item('previsao', 'Previsão de faturamento (parcelas pelo vencimento)'));
+    if (comRecebido) legenda.append(item('recebido', 'Recebido (o que entrou no mês)'));
     // Só quando há o que mostrar: a legenda não promete barra que o gráfico não tem.
     if (comCancelado) legenda.append(item('cancelado', 'Cancelado (abaixo da linha)'));
     if (comDevolvido) legenda.append(item('devolvido', 'Devolvido (abaixo da linha)'));
@@ -1464,6 +1607,16 @@ function desenharGraficoVendas(corpo, s, dados) {
         );
     }
     if (previsao) resumo.append(montarDadoPrevisao(previsao, mesAtual, mesesPrevisao[mesesPrevisao.length - 1]?.mes));
+    // Recebido (contas a receber do Financeiro): a linha azul, só no eixo de R$.
+    const receber = emDinheiro && estadoDaSecao(dados, 'receber') === 'ok' ? dados.secoes.receber : null;
+    const recebidos = receber ? listaDe(receber.serie12m).filter(item => numeroOuNulo(item?.valor) !== null) : [];
+    if (recebidos.length) {
+        const totalRecebido = recebidos.reduce((soma, item) => soma + (numeroOuNulo(item.valor) ?? 0), 0);
+        const dado = montarDadoResumo('Recebido nos 12 meses', formatarMoedaCompacta(totalRecebido));
+        dado.classList.add('dash-grafico__dado--recebido');
+        dado.title = formatarMoeda(totalRecebido);
+        resumo.append(dado);
+    }
     resumo.append(montarDadoResumo('Eixo', emDinheiro ? 'valor em R$' : 'quantidade de pedidos'));
 
     const figura = criarEl('div', 'dash-grafico');
@@ -1471,14 +1624,17 @@ function desenharGraficoVendas(corpo, s, dados) {
     const saiu = tipo => serie.some(item => quantidadeDe(item?.[tipo]?.quantidade) > 0 || (numeroOuNulo(item?.[tipo]?.valor) ?? 0) > 0)
         || mesesPrevisao.some(item => (numeroOuNulo(item?.[tipo]) ?? 0) > 0);
     corpo.replaceChildren(resumo, montarLegendaGrafico({
-        comVendas, comPrevisao: Boolean(previsao), comCancelado: saiu('cancelado'), comDevolvido: saiu('devolvido')
+        comVendas, comPrevisao: Boolean(previsao), comCancelado: saiu('cancelado'), comDevolvido: saiu('devolvido'),
+        comRecebido: recebidos.length > 0
     }), ...notas, figura);
     // Guardado no elemento (não numa variável do script) porque quem redesenha
     // no redimensionamento pode ser o código de outra execução do arquivo.
     corpo.__dashGrafico = {
-        colunas: colunasDoGrafico(serie, mesesPrevisao),
+        colunas: colunasDoGrafico(serie, mesesPrevisao, recebidos),
         chave: emDinheiro ? 'valor' : 'quantidade',
-        mesAtual
+        mesAtual,
+        // "paga" / "em atraso" de cada parcela, para o balão da previsão.
+        parcelas: receber && receber.parcelas && typeof receber.parcelas === 'object' ? receber.parcelas : null
     };
     desenharBarrasNoCartao(corpo);
     observarLargura(corpo, () => desenharBarrasNoCartao(corpo));
@@ -1508,7 +1664,7 @@ function rotuloDoGrafico({ comVendas, comPrevisao, emDinheiro }) {
         : 'Pedidos fechados por mês nos últimos 12 meses';
 }
 
-function montarSvgBarras({ colunas, chave, mesAtual }, largura, corpo) {
+function montarSvgBarras({ colunas, chave, mesAtual, parcelas = null }, largura, corpo) {
     const emDinheiro = chave === 'valor';
     const geo = geometriaGrafico(colunas, {
         largura, altura: 240, chave, mesAtual, margem: { esquerda: emDinheiro ? 52 : 34 }
@@ -1576,8 +1732,8 @@ function montarSvgBarras({ colunas, chave, mesAtual }, largura, corpo) {
             class: 'dash-barras__faixa', x: colunaGeo.banda.x, y: geo.topoY, width: colunaGeo.banda.largura, height: geo.altura - geo.topoY
         }));
         const series = [
-            ['vendas', colunaGeo.vendas, () => conteudoDicaVendas(coluna.vendas, { emDinheiro }), colunaGeo.saidasVendas],
-            ['previsao', colunaGeo.previsao, () => conteudoDicaPrevisao(coluna.previsao), colunaGeo.saidasPrevisao]
+            ['vendas', colunaGeo.vendas, () => conteudoDicaVendas(coluna.vendas, { emDinheiro, recebido: coluna.recebido }), colunaGeo.saidasVendas],
+            ['previsao', colunaGeo.previsao, () => conteudoDicaPrevisao(coluna.previsao, { parcelas, recebido: coluna.recebido }), colunaGeo.saidasPrevisao]
         ];
         series.forEach(([serie, barra, montarConteudo, saidas]) => {
             if (!barra) return;
@@ -1639,6 +1795,27 @@ function montarSvgBarras({ colunas, chave, mesAtual }, largura, corpo) {
     svg.append(criarSvg('line', {
         class: 'dash-barras__base', x1: geo.margem.esquerda, x2: geo.largura - geo.margem.direita, y1: geo.baseY, y2: geo.baseY
     }));
+    // Recebido: linha azul por cima das barras, um ponto por mês. Não rouba o
+    // mouse (o balão de cada barra já diz o recebido do mês); o <title> do
+    // ponto fica para quem passa exatamente sobre ele.
+    const pontos = geo.colunas.filter(colunaGeo => colunaGeo.recebido);
+    if (pontos.length) {
+        const linha = criarSvg('g', { class: 'dash-barras__recebido', 'aria-hidden': 'true' });
+        if (pontos.length > 1) {
+            linha.append(criarSvg('polyline', {
+                class: 'dash-barras__recebido-linha',
+                points: pontos.map(p => `${p.recebido.x.toFixed(2)},${p.recebido.y.toFixed(2)}`).join(' ')
+            }));
+        }
+        pontos.forEach(p => {
+            const ponto = criarSvg('circle', { class: 'dash-barras__recebido-ponto', cx: p.recebido.x.toFixed(2), cy: p.recebido.y.toFixed(2), r: 3.5 });
+            const dica = criarSvg('title');
+            dica.textContent = `Recebido em ${rotuloMes(p.mes)}: ${formatarMoeda(p.recebido.valor)}`;
+            ponto.append(dica);
+            linha.append(ponto);
+        });
+        svg.append(linha);
+    }
     return svg;
 }
 
@@ -1655,7 +1832,7 @@ function montarPrazoDaLegenda(prazo) {
     return linha;
 }
 
-function desenharGraficoSituacao(corpo, s) {
+function desenharGraficoSituacao(corpo, s, dados) {
     const geo = geometriaDonut(listaDe(s?.porSituacao12m), { chave: 'quantidade' });
     if (!geo.total) {
         corpo.replaceChildren(montarVazio('Nenhum pedido emitido nos últimos 12 meses.', {
@@ -1734,6 +1911,19 @@ function desenharGraficoSituacao(corpo, s) {
 
     const bloco = criarEl('div', 'dash-donut-bloco');
     bloco.append(figura, legenda);
+    // Enviados sem nota (seção fiscal do Financeiro): quem vê as NF-e vê,
+    // junto das situações, quantos já saíram sem ela.
+    const fiscal = estadoDaSecao(dados, 'fiscal') === 'ok' ? dados.secoes.fiscal : null;
+    const semNota = quantidadeDe(fiscal?.aguardandoNfe?.quantidade);
+    if (semNota > 0) {
+        const chips = criarEl('div', 'dash-chips dash-donut-notas');
+        const chip = montarChip(`${formatarNumero(semNota)} ${semNota === 1 ? 'enviado' : 'enviados'} sem NF-e`, 'ouro', 'fa-file-invoice');
+        const desde = formatarDataComAno(fiscal.aguardandoNfe.desde);
+        chip.title = desde ? `Pedidos enviados desde ${desde} e ainda sem nota fiscal` : 'Pedidos enviados e ainda sem nota fiscal';
+        chips.append(chip);
+        corpo.replaceChildren(bloco, chips);
+        return;
+    }
     corpo.replaceChildren(bloco);
 }
 
@@ -2102,6 +2292,368 @@ function desenharClientes(corpo, s) {
 }
 
 // ---------------------------------------------------------------------------
+// Financeiro (decisão do dono, 24/09/2026) — seções receber, fiscal e pagar
+// (backend/dashboardFinanceiro.js). Todo dinheiro vem em `valor`: null é
+// "sem permissão", e aí o cartão mostra só a contagem, nunca "R$ 0".
+// ---------------------------------------------------------------------------
+
+function desenharKpiRecebido(corpo, s) {
+    const r = s?.recebido || {};
+    const quantidade = quantidadeDe(r.quantidade);
+    const valor = numeroOuNulo(r.valor);
+    const emDinheiro = valor !== null;
+    const referencia = r.mesAnteriorMesmoPeriodo || {};
+    const encargos = numeroOuNulo(r.encargos?.valor);
+    const estornados = quantidadeDe(r.estornados);
+    preencherKpi(corpo, {
+        id: 'kpi-recebido',
+        valor: emDinheiro ? valor : quantidade,
+        tipo: emDinheiro ? 'moeda' : 'numero',
+        exato: emDinheiro ? formatarMoeda(valor) : '',
+        sub: emDinheiro
+            ? pluralizar(quantidade, 'parcela recebida', 'parcelas recebidas')
+            : (quantidade === 1 ? 'parcela recebida no mês' : 'parcelas recebidas no mês'),
+        // O mesmo trecho do mês passado, como em "Vendas no mês".
+        variacao: emDinheiro
+            ? calcularVariacao(valor, numeroOuNulo(referencia.valor))
+            : calcularVariacao(quantidade, numeroOuNulo(referencia.quantidade)),
+        comparacao: 'vs. mesmo período do mês passado',
+        notas: [
+            encargos !== null && encargos > 0 && {
+                tom: 'verde', icone: 'fa-percent',
+                texto: `${formatarMoedaCompacta(encargos)} de multa e juros`,
+                dica: 'Pagamentos depois do prazo: a multa e os juros entram no recebido'
+            },
+            estornados > 0 && {
+                tom: 'neutro', icone: 'fa-rotate-left',
+                texto: `${pluralizar(estornados, 'estorno', 'estornos')} no mês`
+            }
+        ]
+    });
+}
+
+function desenharKpiAReceber(corpo, s) {
+    const a = s?.aReceber || {};
+    const quantidade = quantidadeDe(a.quantidade);
+    const valor = numeroOuNulo(a.valor);
+    const comBoleto = quantidadeDe(a.comBoleto);
+    const comOrdem = quantidadeDe(a.comOrdem);
+    const semCobranca = quantidadeDe(a.semCobranca);
+    const vencem = quantidade === 1 ? 'parcela vence no mês' : 'parcelas vencem no mês';
+    preencherKpi(corpo, {
+        id: 'kpi-a-receber',
+        valor: valor !== null ? valor : quantidade,
+        tipo: valor !== null ? 'moeda' : 'numero',
+        exato: valor !== null ? formatarMoeda(valor) : '',
+        sub: quantidade === 0
+            ? 'Nenhuma parcela a receber neste mês'
+            : (valor !== null ? `${formatarNumero(quantidade)} ${vencem} sem pagamento` : `${vencem} sem pagamento`),
+        notas: [
+            comBoleto > 0 && { tom: 'azul', icone: 'fa-barcode', texto: `${formatarNumero(comBoleto)} com boleto` },
+            comOrdem > 0 && {
+                tom: 'verde', icone: 'fa-handshake',
+                texto: `${formatarNumero(comOrdem)} com ordem de pagamento`,
+                dica: 'Pagamento combinado com o cliente para uma data (Pix, cartão…)'
+            },
+            semCobranca > 0 && {
+                tom: 'ouro', icone: 'fa-circle-question',
+                texto: `${formatarNumero(semCobranca)} sem cobrança`,
+                dica: 'Sem boleto e sem ordem de pagamento: combine como o cliente vai pagar'
+            }
+        ]
+    });
+}
+
+function desenharKpiAtraso(corpo, s) {
+    const e = s?.emAtraso || {};
+    const quantidade = quantidadeDe(e.quantidade);
+    if (quantidade === 0) {
+        preencherKpi(corpo, {
+            id: 'kpi-atraso', valor: 0, tipo: 'numero', sub: 'Nenhuma parcela vencida sem pagamento',
+            notas: [{ tom: 'verde', icone: 'fa-circle-check', texto: 'contas em dia' }]
+        });
+        return;
+    }
+    const valor = numeroOuNulo(e.valor);
+    const criticos = quantidadeDe(e.criticos);
+    const limite = numeroOuNulo(e.limiteCritico) ?? 15;
+    const maisAntigo = formatarDataComAno(e.maisAntigo);
+    preencherKpi(corpo, {
+        id: 'kpi-atraso',
+        valor: valor !== null ? valor : quantidade,
+        tipo: valor !== null ? 'moeda' : 'numero',
+        exato: valor !== null ? formatarMoeda(valor) : '',
+        sub: `${pluralizar(quantidade, 'parcela vencida', 'parcelas vencidas')} sem pagamento`,
+        notas: [
+            criticos > 0 && {
+                tom: 'vermelho', icone: 'fa-triangle-exclamation',
+                texto: `${formatarNumero(criticos)} há mais de ${formatarNumero(limite)} dias`,
+                dica: `Passados ${formatarNumero(limite)} dias o BB já não aceita o boleto: reemita ou combine outra forma de pagamento`
+            },
+            maisAntigo && { tom: 'neutro', icone: 'fa-calendar', texto: `a mais antiga venceu em ${maisAntigo}` }
+        ]
+    });
+}
+
+function desenharKpiNfe(corpo, s) {
+    const n = s?.notasMes || {};
+    const autorizadas = quantidadeDe(n.autorizadas?.quantidade);
+    const valor = numeroOuNulo(n.autorizadas?.valor);
+    const rejeitadas = quantidadeDe(n.rejeitadas);
+    const processando = quantidadeDe(n.processando);
+    const canceladas = quantidadeDe(n.canceladas);
+    const rotulo = autorizadas === 1 ? 'nota autorizada' : 'notas autorizadas';
+    preencherKpi(corpo, {
+        id: 'kpi-nfe',
+        valor: autorizadas,
+        tipo: 'numero',
+        sub: valor !== null && autorizadas > 0 ? `${rotulo} · ${formatarMoedaCompacta(valor)}` : `${rotulo} no mês`,
+        notas: [
+            rejeitadas > 0 && { tom: 'vermelho', icone: 'fa-ban', texto: `${pluralizar(rejeitadas, 'recusada', 'recusadas')} pela SEFAZ` },
+            processando > 0 && { tom: 'ouro', icone: 'fa-hourglass-half', texto: `${formatarNumero(processando)} aguardando a SEFAZ` },
+            canceladas > 0 && { tom: 'neutro', icone: 'fa-xmark', texto: pluralizar(canceladas, 'cancelada', 'canceladas') }
+        ]
+    });
+}
+
+function desenharKpiAPagar(corpo, s) {
+    const total = numeroOuNulo(s?.aPagar?.valor);
+    const comissoes = s?.comissoes || {};
+    const producao = s?.producao || {};
+    const valorComissoes = numeroOuNulo(comissoes.valor);
+    const valorProducao = numeroOuNulo(producao.valor);
+    const atrasadas = numeroOuNulo(s?.atrasadas?.valor);
+    // O prazo mais próximo entre os dois pagamentos que ainda faltam.
+    const prazos = [valorComissoes !== 0 && comissoes.pagarAte, valorProducao !== 0 && producao.pagarAte].filter(Boolean).sort();
+    let sub = `competência de ${rotuloMesLongo(s?.competencia)}`;
+    if (total === 0) sub = 'Nada a pagar nesta competência';
+    else if (valorComissoes !== null && valorProducao !== null) {
+        sub = `Comissões ${formatarMoedaCompacta(valorComissoes)} · Produção ${formatarMoedaCompacta(valorProducao)}`;
+    }
+    preencherKpi(corpo, {
+        id: 'kpi-a-pagar',
+        valor: total,
+        tipo: 'moeda',
+        exato: total !== null ? formatarMoeda(total) : '',
+        sub,
+        notas: [
+            prazos.length > 0 && { tom: 'neutro', icone: 'fa-calendar-alt', texto: `pagar até ${formatarDataCurta(prazos[0])}` },
+            comissoes.situacao === 'parcial' && {
+                tom: 'azul', icone: 'fa-circle-half-stroke', texto: 'comissões pagas em parte',
+                dica: 'Parte dos beneficiários já recebeu: o valor é o que ainda falta'
+            },
+            atrasadas !== null && atrasadas > 0 && {
+                tom: 'vermelho', icone: 'fa-triangle-exclamation',
+                texto: `${formatarMoedaCompacta(atrasadas)} em comissões atrasadas`,
+                dica: 'Comissão de parcelas vencidas e ainda não pagas pelo cliente: entra quando o pagamento chegar'
+            }
+        ]
+    });
+}
+
+/** Uma parcela da lista "Maiores em atraso". */
+function descreverParcelaEmAtraso(item) {
+    const dias = quantidadeDe(item?.dias);
+    const numero = item?.pedido ? String(item.pedido) : 'Pedido';
+    return {
+        titulo: item?.parcela ? `${numero} · parcela ${item.parcela}` : numero,
+        detalhe: textoInformado(item?.cliente),
+        etiqueta: { texto: textoAtrasoDaParcela(dias), tom: dias > 15 ? 'vermelho' : 'ouro' },
+        valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : '',
+        dica: item?.vencimento ? `Venceu em ${formatarDataComAno(item.vencimento)}` : ''
+    };
+}
+
+function desenharVencimentos(corpo, s) {
+    const pv = s?.porVencimento || {};
+    const quantidade = quantidadeDe(pv.quantidade);
+    if (quantidade === 0) {
+        corpo.replaceChildren(montarVazio('Nenhuma parcela em aberto.', { icone: 'fa-calendar-check', tom: 'verde', grande: true }));
+        return;
+    }
+    const valor = numeroOuNulo(pv.valor);
+    const destaques = criarEl('div', 'dash-destaques');
+    destaques.append(montarDestaque({
+        rotulo: quantidade === 1 ? 'Parcela em aberto' : 'Parcelas em aberto', id: 'vencimentos-abertas', numero: quantidade
+    }));
+    if (valor !== null) {
+        destaques.append(montarDestaque({
+            rotulo: 'Total em aberto', id: 'vencimentos-valor', numero: valor, tipo: 'compacta', tom: 'azul', exato: formatarMoeda(valor)
+        }));
+    }
+    const atrasadas = quantidadeDe(s?.emAtraso?.quantidade);
+    if (atrasadas > 0) {
+        const valorAtraso = numeroOuNulo(s.emAtraso.valor);
+        destaques.append(montarDestaque({
+            rotulo: 'Em atraso', id: 'vencimentos-atraso', tom: 'vermelho',
+            numero: valorAtraso !== null ? valorAtraso : atrasadas,
+            tipo: valorAtraso !== null ? 'compacta' : 'numero',
+            exato: valorAtraso !== null ? formatarMoeda(valorAtraso) : ''
+        }));
+    }
+
+    const faixas = listaDe(pv.faixas);
+    const maximo = Math.max(0, ...faixas.map(faixa => quantidadeDe(faixa?.quantidade)));
+    const barras = criarEl('div', 'dash-hbarras dash-hbarras--vencimento');
+    faixas.forEach(faixa => {
+        const definicao = DASH_FAIXAS_VENCIMENTO[faixa?.faixa];
+        if (!definicao) return;
+        const n = quantidadeDe(faixa.quantidade);
+        const v = numeroOuNulo(faixa.valor);
+        barras.append(montarBarraHorizontal({
+            rotulo: definicao.rotulo,
+            largura: larguraPercentual(n, maximo),
+            numero: formatarNumero(n),
+            complemento: v !== null && n > 0 ? formatarMoedaCompacta(v) : '',
+            tom: definicao.tom,
+            dica: `${definicao.rotulo}: ${pluralizar(n, 'parcela', 'parcelas')}` + (v !== null ? ` · ${formatarMoeda(v)}` : '')
+        }));
+    });
+    const colunas = criarEl('div', 'dash-vencimentos');
+    const colunaDasBarras = criarEl('div', 'dash-vencimentos__barras');
+    colunaDasBarras.append(barras);
+    colunas.append(colunaDasBarras);
+    const maiores = pv.maioresAtrasos || {};
+    const itens = listaDe(maiores.itens);
+    if (itens.length) {
+        const colunaDaLista = criarEl('div', 'dash-vencimentos__lista');
+        colunaDaLista.append(criarEl('p', 'dash-subtitulo-lista', 'Maiores em atraso'), montarLista(itens, descreverParcelaEmAtraso));
+        const mais = montarMais(maiores.total, itens.length);
+        if (mais) colunaDaLista.append(mais);
+        colunas.append(colunaDaLista);
+    }
+
+    const semData = quantidadeDe(pv.semData);
+    const desde = formatarDataComAno(s?.desde);
+    const rodape = ['Vencimento em fim de semana ou feriado vale até o próximo dia útil, como no Financeiro']
+        .concat(desde ? [`parcelas controladas a partir de ${desde}`] : [])
+        .concat(semData > 0 ? [`${pluralizar(semData, 'parcela', 'parcelas')} sem data de vencimento`] : [])
+        .join(' · ');
+    corpo.replaceChildren(destaques, colunas, montarRodape(`${rodape}.`, 'fa-circle-info'));
+}
+
+function desenharSemNfe(corpo, s) {
+    const a = s?.aguardandoNfe || {};
+    const total = quantidadeDe(a.quantidade);
+    const valor = numeroOuNulo(a.valor);
+    const itens = listaDe(a.itens);
+    const legenda = `${total === 1 ? 'pedido enviado' : 'pedidos enviados'} sem nota${valor !== null && total > 0 ? ` · ${formatarMoedaCompacta(valor)}` : ''}`;
+    const conteudo = [montarContagem({ id: 'sem-nfe', numero: total, legenda })];
+    if (itens.length) {
+        conteudo.push(montarLista(itens, item => {
+            const dias = quantidadeDe(item?.dias);
+            return {
+                titulo: item?.numero ? String(item.numero) : 'Pedido',
+                detalhe: textoInformado(item?.cliente),
+                etiqueta: { texto: textoDiasSemNota(dias), tom: dias >= 3 ? 'vermelho' : 'ouro' },
+                valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : '',
+                dica: item?.enviadoEm ? `Enviado em ${formatarDataComAno(item.enviadoEm)}` : ''
+            };
+        }));
+    }
+    const mais = montarMais(total, itens.length);
+    if (mais) conteudo.push(mais);
+    conteudo.push(montarRodape('Emita em Financeiro › Emitir NF-e, ou marque no pedido que ele saiu sem nota.', 'fa-file-invoice'));
+    corpo.replaceChildren(...conteudo);
+}
+
+/** O subtítulo diz de quando a lista começa (1º dia do mês passado). */
+function titulosDoSemNfe(dados) {
+    const desde = formatarDataComAno(dados?.secoes?.fiscal?.aguardandoNfe?.desde);
+    return desde ? { subtitulo: `Enviados desde ${desde} e ainda sem nota` } : null;
+}
+
+/** Pendência fiscal ou de cobrança (texto do próprio Financeiro), com a urgência na etiqueta. */
+function descreverPendenciaDoFinanceiro(item) {
+    const critico = item?.nivel === 'critico';
+    return {
+        titulo: item?.titulo || 'Pendência',
+        detalhe: item?.descricao || '',
+        etiqueta: { texto: critico ? 'urgente' : 'atenção', tom: critico ? 'vermelho' : 'ouro' }
+    };
+}
+
+function desenharNfeProblemas(corpo, s) {
+    const p = s?.problemas || {};
+    const total = quantidadeDe(p.quantidade);
+    const itens = listaDe(p.itens);
+    const conteudo = [montarContagem({ id: 'nfe-problemas', numero: total, legenda: total === 1 ? 'pendência fiscal' : 'pendências fiscais' })];
+    if (itens.length) conteudo.push(montarLista(itens, descreverPendenciaDoFinanceiro));
+    conteudo.push(montarRodape('Resolva em Financeiro › Notas fiscais ou na Configuração fiscal (engrenagem).', 'fa-circle-info'));
+    corpo.replaceChildren(...conteudo);
+}
+
+function desenharAConfirmar(corpo, s) {
+    const a = s?.aConfirmar || {};
+    const total = quantidadeDe(a.quantidade);
+    const atrasados = quantidadeDe(a.atrasados);
+    const valor = numeroOuNulo(a.valor);
+    const itens = listaDe(a.itens);
+    const legenda = `${total === 1 ? 'competência fechada espera' : 'competências fechadas esperam'} o pagamento${valor !== null && total > 0 ? ` · ${formatarMoedaCompacta(valor)}` : ''}`;
+    const conteudo = [montarContagem({ id: 'a-confirmar', numero: total, legenda })];
+    if (atrasados > 0) {
+        const chips = criarEl('div', 'dash-chips');
+        chips.append(montarChip(`${formatarNumero(atrasados)} depois do prazo`, 'vermelho', 'fa-triangle-exclamation'));
+        conteudo.push(chips);
+    }
+    if (itens.length) {
+        conteudo.push(montarLista(itens, item => ({
+            titulo: `${DASH_TIPOS_PAGAMENTO[item?.tipo] || 'Competência'} · ${rotuloMesLongo(item?.competencia)}`,
+            detalhe: item?.pagarAte ? `pagar até ${formatarDataComAno(item.pagarAte)}` : '',
+            etiqueta: { texto: item?.atrasado ? 'atrasado' : 'no prazo', tom: item?.atrasado ? 'vermelho' : 'neutro' },
+            valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : ''
+        })));
+    }
+    const mais = montarMais(total, itens.length);
+    if (mais) conteudo.push(mais);
+    conteudo.push(montarRodape('Confirme em Financeiro › Próximo pagamento. Quem fecha a competência recebe a tarefa de confirmar.', 'fa-circle-info'));
+    corpo.replaceChildren(...conteudo);
+}
+
+function desenharOrdens(corpo, s) {
+    const o = s?.ordens || {};
+    const atrasadas = quantidadeDe(o.atrasadas);
+    const proximas = quantidadeDe(o.proximas7);
+    const itens = listaDe(o.itens);
+    const total = atrasadas + proximas;
+    const chips = criarEl('div', 'dash-chips');
+    chips.append(
+        montarChip(`${formatarNumero(atrasadas)} ${atrasadas === 1 ? 'passou da data' : 'passaram da data'}`, atrasadas > 0 ? 'vermelho' : 'neutro'),
+        montarChip(`${formatarNumero(proximas)} nos próximos 7 dias`, proximas > 0 ? 'azul' : 'neutro')
+    );
+    const conteudo = [
+        montarContagem({ id: 'ordens', numero: total, legenda: total === 1 ? 'ordem de pagamento pede atenção' : 'ordens de pagamento pedem atenção' }),
+        chips
+    ];
+    if (itens.length) {
+        conteudo.push(montarLista(itens, item => {
+            const numero = item?.pedido ? String(item.pedido) : 'Pedido';
+            return {
+                titulo: item?.parcela ? `${numero} · parcela ${item.parcela}` : numero,
+                detalhe: [textoInformado(item?.cliente), item?.forma].filter(Boolean).join(' · '),
+                etiqueta: { texto: textoDaOrdem(item), tom: item?.atrasada ? 'vermelho' : 'azul' },
+                valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : '',
+                dica: item?.data ? `Combinado para ${formatarDataComAno(item.data)}` : ''
+            };
+        }));
+    }
+    const mais = montarMais(total, itens.length);
+    if (mais) conteudo.push(mais);
+    conteudo.push(montarRodape('Quando o cliente pagar, dê a baixa em Pedidos › Visualizar › Pagamentos.', 'fa-circle-info'));
+    corpo.replaceChildren(...conteudo);
+}
+
+function desenharConciliacao(corpo, s) {
+    const c = s?.conciliacao || {};
+    const itens = listaDe(c.itens);
+    const total = quantidadeDe(c.fila) + quantidadeDe(c.aLancar) + quantidadeDe(c.alertas) + quantidadeDe(c.boletosComErro);
+    const conteudo = [montarContagem({ id: 'conciliacao', numero: total, legenda: total === 1 ? 'aviso do banco a resolver' : 'avisos do banco a resolver' })];
+    if (itens.length) conteudo.push(montarLista(itens, descreverPendenciaDoFinanceiro));
+    conteudo.push(montarRodape('Use "Conciliar BB" no Financeiro: o que o banco já recebeu entra nos recebimentos e nas comissões.', 'fa-university'));
+    corpo.replaceChildren(...conteudo);
+}
+
+// ---------------------------------------------------------------------------
 // Tooltip do gráfico
 // ---------------------------------------------------------------------------
 
@@ -2147,8 +2699,25 @@ function montarConteudoDica(caixa, conteudo) {
             linha.append(criarEl('span', 'dash-balao__nome', item.nome));
             if (item.valor) linha.append(criarEl('span', 'dash-balao__valor', item.valor));
             if (item.detalhe) linha.append(criarEl('span', 'dash-balao__detalhe', item.detalhe));
+            // "1 paga", "1 em atraso": o que as contas a receber sabem das parcelas do pedido.
+            const marcas = listaDe(item.marcas);
+            if (marcas.length) {
+                const grupo = criarEl('span', 'dash-balao__marcas');
+                marcas.forEach(marca => grupo.append(criarEl('span', `dash-balao__marca dash-balao__marca--${marca.tipo}`, marca.texto)));
+                linha.append(grupo);
+            }
             lista.append(linha);
         });
+        filhos.push(lista);
+    }
+    // O que entrou de verdade no mês (a linha azul do gráfico).
+    if (conteudo.recebido) {
+        const lista = criarEl('ul', 'dash-balao__lista dash-balao__recebido');
+        const linha = criarEl('li', 'dash-balao__item dash-balao__item--saida dash-balao__item--recebido');
+        linha.append(criarEl('span', 'dash-balao__nome', conteudo.recebido.nome));
+        if (conteudo.recebido.valor) linha.append(criarEl('span', 'dash-balao__valor', conteudo.recebido.valor));
+        if (conteudo.recebido.detalhe) linha.append(criarEl('span', 'dash-balao__detalhe', conteudo.recebido.detalhe));
+        lista.append(linha);
         filhos.push(lista);
     }
     // O que saiu no mês: a bolinha tem a cor da barra pendurada (vermelho, roxo).
@@ -2526,7 +3095,7 @@ const DASH_ESTADOS_GERAIS = {
         icone: 'fa-user-lock',
         tom: 'neutro',
         titulo: 'Seu perfil ainda não tem indicadores liberados',
-        texto: 'Os números aparecem aqui conforme o administrador libera Pedidos, Orçamentos, Prospecções, Clientes ou Estoque para o seu perfil.'
+        texto: 'Os números aparecem aqui conforme o administrador libera Pedidos, Orçamentos, Prospecções, Clientes, Estoque ou Financeiro para o seu perfil.'
     },
     'tudo-em-dia': {
         icone: 'fa-circle-check',

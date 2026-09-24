@@ -128,6 +128,10 @@
         <!-- Pedido que saiu: as etiquetas das caixas em PDF (a de transporte e a
              "ATENÇÃO", uma de cada por volume — backend/fiscal/etiquetas.js). -->
         <button id="visualizarPedidoEtiquetas" type="button" data-perm="ped.view" class="hidden btn-etiquetas ctl-botao ctl-botao--pequeno text-white" title="Gerar em PDF as etiquetas das caixas (transporte e ATENÇÃO, uma de cada por volume)">Etiquetas</button>
+        <!-- Qualquer pedido com peças: a planilha (Excel) das etiquetas das
+             peças — uma linha por unidade, com Nome e Variação
+             (backend/etiquetasProduto.js). -->
+        <button id="visualizarPedidoEtiquetaProduto" type="button" data-perm="ped.view" class="hidden btn-primary ctl-botao ctl-botao--pequeno text-white" title="Gerar a planilha Excel das etiquetas das peças: uma linha por unidade, com nome e variação">Etiqueta Produto</button>
       </div>
       <div class="ctl-acoes">
         <!-- Os três nascem escondidos; o script mostra os que a situação pede

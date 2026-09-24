@@ -378,6 +378,12 @@ window.addEventListener('DOMContentLoaded', () => {
     convite_respondido: 'fa-user-check',
     mencao: 'fa-at',
     acao_concluida: 'fa-bolt',
+    tarefa_automatica: 'fa-robot',
+  };
+  // O texto pequeno, abaixo da mensagem, de cada tipo de aviso que tem um.
+  // Tarefa automática: onde desligar (decisão do dono, 24/09/2026).
+  const DICA_DO_TIPO = {
+    tarefa_automatica: 'Pode ser desativada em Tarefas ou em Configurações.',
   };
   const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', tarefa: 'Tarefa' };
   // O que vira notificação do Windows quando chega (não lido e novo): tudo,
@@ -441,7 +447,9 @@ window.addEventListener('DOMContentLoaded', () => {
     linha.appendChild(avatar(aviso));
     const corpo = criar('span', 'sino-aviso__corpo');
     corpo.appendChild(criar('span', 'sino-aviso__titulo', aviso.titulo || aviso.message || 'Aviso'));
-    if (aviso.mensagem) corpo.appendChild(criar('span', 'sino-aviso__texto', aviso.mensagem));
+    const dica = DICA_DO_TIPO[aviso.tipo];
+    if (aviso.mensagem) corpo.appendChild(criar('span', `sino-aviso__texto${dica ? ' sino-aviso__texto--longo' : ''}`, aviso.mensagem));
+    if (dica) corpo.appendChild(criar('span', 'sino-aviso__dica', dica));
     const rodape = criar('span', 'sino-aviso__rodape');
     if (ORIGEM[aviso.origem]) rodape.appendChild(criar('span', 'sino-aviso__origem', ORIGEM[aviso.origem]));
     rodape.appendChild(criar('span', null, quando(aviso.criado_em || aviso.date)));
@@ -665,7 +673,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
     for (const aviso of novos.filter((n) => vaiParaOWindows(n.tipo)).slice(0, 4)) {
       try {
-        const n = new Notification(aviso.titulo || 'Aviso', { body: aviso.mensagem || '', tag: `sd-aviso-${aviso.id}` });
+        const corpo = [aviso.mensagem, DICA_DO_TIPO[aviso.tipo]].filter(Boolean).join('\n');
+        const n = new Notification(aviso.titulo || 'Aviso', { body: corpo, tag: `sd-aviso-${aviso.id}` });
         n.onclick = () => { try { window.focus(); } catch (_) { /* segue */ } abrirAviso(aviso); n.close(); };
       } catch (err) {
         console.warn('Notificação do Windows indisponível.', err);

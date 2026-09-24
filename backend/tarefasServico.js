@@ -9,14 +9,18 @@
  *     numa tarefa (origem 'proximo_passo'); trocar, concluir ou apagar o passo
  *     lá mexe na tarefa aqui;
  *   - criarTarefaAutomatica: as regras de tarefa automática (orçamento
- *     enviado, prospecção convertida, pedido entregue).
+ *     enviado, prospecção convertida, pedido entregue, comissões e produção
+ *     fechadas) — só para quem pode recebê-las e não as desligou
+ *     (backend/tarefasAutomaticas.js).
  *
  * Nada aqui derruba quem chamou por falha de histórico/aviso, e sem o SQL
  * (sql/tarefas_calendario.sql) as integrações simplesmente não fazem nada.
  */
 
 const R = require('./tarefasRegras');
+const A = require('./tarefasAutomaticas');
 const social = require('./historicoSocial');
+const permissoesRepo = require('./permissionsRepository');
 
 const lista = r => (Array.isArray(r) ? r : []);
 const texto = v => (v === undefined || v === null ? '' : String(v).trim());
@@ -71,9 +75,10 @@ const avisar = (api, ids, aviso) => social.notificar(api, ids.filter(Boolean), a
 /**
  * Grava uma tarefa já normalizada (R.normalizarTarefa) e tudo o que vem com
  * ela. `extras`: { participantes: [ids] a convidar, checklist: [textos],
- * registrarFicha (padrão: sim), mensagem do convite }.
+ * registrarFicha (padrão: sim), mensagem do convite, gatilho: o que criou a
+ * tarefa automática ("Orçamento ORC-30 enviado") }.
  */
-async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participantes = [], checklist = [], registrarFicha = true, mensagem = null } = {}) {
+async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participantes = [], checklist = [], registrarFicha = true, mensagem = null, gatilho = null } = {}) {
   const payload = {
     ...dados,
     marcadores: dados.marcadores || [],
@@ -98,10 +103,20 @@ async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participa
   if (registrarFicha) await registrarNaFicha(api, t, eventoNaFicha('criou', t, { nomes }), usuarioId);
 
   const autor = nomes.get(Number(usuarioId)) || 'Alguém';
-  if (t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
+  if (t.origem === 'automacao' && t.responsavel_id) {
+    // Toda tarefa automática avisa quem a recebeu — mesmo quando foi a própria
+    // pessoa que fez a ação —, dizendo o que aconteceu e onde desligar (a dica
+    // é do tipo do aviso: o sino a mostra menor). Substitui o "Nova tarefa
+    // para você", para não chegarem dois avisos.
+    await avisar(api, [Number(t.responsavel_id)], {
+      tipo: 'tarefa_automatica', titulo: 'Tarefa automática criada',
+      mensagem: A.mensagemDoAviso({ gatilho, titulo: t.titulo, prazo: prazoLegivel(t) }),
+      origem: 'tarefa', registro_id: Number(t.id), autor_id: null
+    });
+  } else if (t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
     await avisar(api, [Number(t.responsavel_id)], {
       tipo: 'tarefa_atribuida', titulo: 'Nova tarefa para você',
-      mensagem: `${t.origem === 'automacao' ? 'Tarefa automática' : `${autor} atribuiu`}: ${t.titulo} — ${prazoLegivel(t)}`,
+      mensagem: `${autor} atribuiu: ${t.titulo} — ${prazoLegivel(t)}`,
       origem: 'tarefa', registro_id: Number(t.id), autor_id: usuarioId ?? null
     });
   }
@@ -231,30 +246,72 @@ async function cancelar(api, t, usuarioId, motivo) {
 // ------------------------------------------------------------ automações
 
 /**
- * Cria a tarefa de uma regra automática, se a regra estiver ligada e a
- * tarefa ainda não existir (`chave_origem` = regra:id do registro).
- * contexto: { refId, responsavelId, usuarioId, vinculos: {...}, valores: {...} }
+ * As regras que a pessoa desligou para si (Map chave → ligada). Sem a tabela
+ * (sql/tarefas_automaticas_por_usuario.sql ainda não rodou), nada desligado:
+ * o padrão é receber.
  */
-async function criarTarefaAutomatica(api, chave, { refId, responsavelId = null, usuarioId = null, vinculos = {}, valores = {} } = {}) {
+async function preferenciasDoUsuario(api, usuarioId) {
+  try {
+    const linhas = await api.get('/api/tarefa_automacao_usuarios', { query: { usuario_id: usuarioId } });
+    return { mapa: A.mapaDePreferencias(lista(linhas), usuarioId), sqlPendente: false };
+  } catch (err) {
+    if (social.semTabela(err)) return { mapa: new Map(), sqlPendente: true };
+    throw err;
+  }
+}
+
+/**
+ * Esta pessoa recebe a tarefa da regra? Precisa ver Tarefas, ter a permissão
+ * da regra (Admin e Sup Admin têm tudo, como no controller) e não a ter
+ * desligado para si.
+ */
+async function recebeAutomatica(api, usuarioId, chave) {
+  const [prefs, usuario] = await Promise.all([
+    preferenciasDoUsuario(api, usuarioId),
+    api.get(`/api/usuarios/${Number(usuarioId)}`).catch(() => null)
+  ]);
+  if (prefs.mapa.get(String(chave)) === false) return false;
+  if (!usuario || usuario.error) return false;
+  if (R.ehGestor(usuario)) return true;
+  const permissoes = await permissoesRepo.loadPermissionsForUsuario(api, usuario);
+  return A.podeReceber(chave, c => permissoesRepo.can(permissoes, c));
+}
+
+/**
+ * Cria a tarefa de uma regra automática, se a regra estiver ligada, a tarefa
+ * ainda não existir (`chave_origem` = regra:id do registro) e quem recebe
+ * puder recebê-la (`recebeAutomatica`).
+ * contexto: { refId, responsavelId, usuarioId, vinculos: {...}, valores: {...},
+ *   base: o dia marcado (regras "antes do pagamento"), descricao, acao:
+ *   { acao_chave, acao_registro, acao_rotulo } — a tarefa conclui sozinha
+ *   quando a ação acontece (backend/tarefasAcoes.js) }
+ */
+async function criarTarefaAutomatica(api, chave, { refId, responsavelId = null, usuarioId = null, vinculos = {}, valores = {}, base = null, descricao = null, acao = null } = {}) {
   try {
     const regra = lista(await api.get('/api/tarefa_automacoes', { query: { chave } }))[0];
     if (!regra || !regra.ativa) return null;
+    const responsavel = Number(responsavelId || usuarioId) || null;
+    if (!responsavel) return null;
     const chaveOrigem = `${chave}:${refId}`;
     const existe = lista(await api.get('/api/tarefas', { query: { chave_origem: chaveOrigem } })).length > 0;
     if (existe) return null;
+    if (!(await recebeAutomatica(api, responsavel, chave))) return null;
+    const catalogo = A.regraDoCatalogo(chave);
     const hoje = R.agoraEmBrasilia().dia;
     const tipo = R.TIPOS.includes(regra.tipo) ? regra.tipo : 'Follow-up';
     const prioridade = R.PRIORIDADES.includes(regra.prioridade) ? regra.prioridade : 'media';
     const limpos = Object.fromEntries(Object.entries(vinculos).filter(([, v]) => v !== null && v !== undefined));
+    const daAcao = acao?.acao_chave ? { acao_chave: acao.acao_chave, acao_registro: acao.acao_registro ?? null, acao_rotulo: acao.acao_rotulo ?? null } : {};
     return await criarTarefa(api, {
       titulo: R.tituloDaAutomacao(regra.titulo, valores) || regra.nome,
-      descricao: texto(regra.descricao) || null,
+      descricao: texto(descricao) || texto(regra.descricao) || null,
       tipo, prioridade, status: 'a_fazer',
-      data: R.somarDias(hoje, Number(regra.dias) || 0),
-      responsavel_id: responsavelId || usuarioId,
+      data: A.dataDaTarefa({ prazo: catalogo.prazo, dias: Number(regra.dias) || 0, hoje, base }),
+      responsavel_id: responsavel,
       ...limpos,
+      ...daAcao,
       origem: 'automacao', chave_origem: chaveOrigem
-    }, { usuarioId, nomes: await social.nomesDosUsuarios(api) });
+    }, { usuarioId, nomes: await social.nomesDosUsuarios(api), gatilho: catalogo.gatilho(valores) });
   } catch (err) {
     if (!social.semTabela(err)) console.error(`[tarefas] automação ${chave} não criou a tarefa:`, err?.message || err);
     return null;
@@ -273,5 +330,6 @@ async function usuarioPeloNome(api, nome) {
 module.exports = {
   prazoLegivel, retratoDaTarefa, eventoNaFicha, registrarNaFicha, registrarNaTarefa,
   criarTarefa, convidar, concluirTarefa, cancelar,
-  sincronizarPassoDaProspeccao, criarTarefaAutomatica, usuarioPeloNome
+  sincronizarPassoDaProspeccao, criarTarefaAutomatica, usuarioPeloNome,
+  preferenciasDoUsuario, recebeAutomatica
 };

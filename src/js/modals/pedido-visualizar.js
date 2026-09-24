@@ -577,6 +577,38 @@
     else botao.addEventListener('click', gerar);
   }
 
+  /**
+   * "Etiqueta Produto" (dourado) no rodapé de qualquer pedido com peças: a
+   * planilha Excel das etiquetas das peças, uma linha por unidade, com Nome e
+   * Variação. O arquivo vem pronto do backend (GET
+   * /api/pedidos/:id/etiquetas-produto) e é salvo pelo diálogo do Windows a
+   * cada clique, com o nome "PEDIDO_Cliente.xlsx".
+   */
+  function ligarEtiquetaProduto(pedido) {
+    const botao = overlay.querySelector('#visualizarPedidoEtiquetaProduto');
+    if (!botao || !Array.isArray(pedido?.itens) || !pedido.itens.length) return;
+    const gerar = async () => {
+      try {
+        const resp = await fetchApi(`/api/pedidos/${encodeURIComponent(id)}/etiquetas-produto`);
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok || !corpo?.base64) {
+          window.showToast?.(corpo?.error || 'Não foi possível gerar a planilha de etiquetas.', 'error');
+          return;
+        }
+        const salvar = window.electronAPI?.salvarArquivoBinario;
+        if (typeof salvar !== 'function') { window.showToast?.('Salvar arquivo indisponível nesta janela.', 'error'); return; }
+        const r = await salvar({ base64: corpo.base64, nomeSugerido: corpo.nome, titulo: 'Salvar etiquetas de produto (Excel)' });
+        if (r?.success) window.showToast?.(`Planilha salva: ${corpo.linhas} etiqueta${corpo.linhas === 1 ? '' : 's'}.`, 'success');
+        else if (!r?.canceled) window.showToast?.(r?.message || 'Não foi possível salvar a planilha.', 'error');
+      } catch (_) {
+        window.showToast?.('Não foi possível falar com o servidor.', 'error');
+      }
+    };
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, gerar);
+    else botao.addEventListener('click', gerar);
+  }
+
   /** "Boletos (PDF)" no rodapé: todos os boletos a pagar do pedido. */
   function ligarBoletosPdf(estado) {
     const botao = overlay.querySelector('#visualizarPedidoBoletosPdf');
@@ -1101,6 +1133,7 @@
     ligarImportarBoletos(data);
     ligarPagamentos(data, data.parcelas_detalhes, boletosEstado);
     ligarEtiquetas(data);
+    ligarEtiquetaProduto(data);
     ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';

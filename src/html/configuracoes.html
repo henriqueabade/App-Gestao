@@ -266,6 +266,24 @@
             </div>
             <p id="categorySummary" class="settings-status"></p>
         </section>
+
+        <!--
+          Tarefas automáticas (decisão do dono, 24/09/2026): cada pessoa desliga
+          para si as tarefas que nascem sozinhas — o mesmo interruptor de
+          Tarefas › Automáticas. Só aparecem as regras das permissões dela (o
+          servidor filtra); para quem não vê Tarefas o quadro nem aparece.
+          Preenchido por configuracoes.js (GET/PUT /api/tarefas/automacoes).
+        -->
+        <section id="tarefasAutomaticasSettings" class="settings-card glass-surface rounded-xl" hidden>
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Tarefas automáticas</h2>
+                    <p class="settings-card-description">Tarefas que nascem sozinhas quando algo acontece no sistema. Desligue as que você não quer receber — vale só para você.</p>
+                </div>
+            </div>
+            <ul id="tarefasAutomaticasLista" class="cfg-automaticas" aria-label="Tarefas automáticas"></ul>
+            <p id="tarefasAutomaticasStatus" class="settings-status" role="status"></p>
+        </section>
     </div>
 </body>
 </html>

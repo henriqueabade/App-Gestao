@@ -20,7 +20,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { fromSelections } = require('./permissionsRepository');
 const { resolvePermissionKey } = require('./permissionsCatalog');
-const { contextoDeTempo, somarDias, resumirPrevisao } = require('./dashboardResumo');
+const { contextoDeTempo, somarDias, deslocarMes, resumirPrevisao } = require('./dashboardResumo');
 
 // Carregados DENTRO de `montar`, depois de apontar API_BASE_URL para o duplo:
 // `apiHttpClient` congela a URL no require, e um require no topo deixaria o
@@ -251,9 +251,66 @@ function cenario() {
       { id: 1, titulo: 'Planilha de chapas', status: 'revisao' },
       { id: 2, titulo: 'Cartões da feira', status: 'aplicada' },
       { id: 3, titulo: 'Pedido escaneado', status: 'revisao' }
+    ],
+    // Financeiro (seções receber e fiscal, só para quem tem as permissões do
+    // módulo). A 1ª do PED103 foi paga há 38 dias; a 1ª do PED101 (ainda em
+    // produção) foi paga hoje por Pix — recebido antes da nota; a 2ª do PED103
+    // venceu há 10 dias sem pagamento; a 3ª tem ordem de pagamento para daqui
+    // a 5 dias. O PED105 saiu hoje e a nota dele foi recusada pela SEFAZ.
+    recebimentos: [
+      { id: 1, pedido_id: 103, numero_parcela: 1, status: 'confirmado', origem: 'manual', forma: 'Transferência', data_recebimento: dia(-38), competencia: dia(-38).slice(0, 7), valor_parcela: 4000, valor_recebido: 4000 },
+      { id: 2, pedido_id: 101, numero_parcela: 1, status: 'confirmado', origem: 'manual', forma: 'Pix', data_recebimento: dia(0), competencia: hoje.slice(0, 7), valor_parcela: 4100, valor_recebido: 4100 }
+    ],
+    boletos: [],
+    boletos_eventos: [],
+    ordens_pagamento: [
+      { id: 1, pedido_id: 103, parcela_id: 6, numero_parcela: 3, data_prevista: dia(5), valor: 4000, forma: 'Pix', status: 'aberta' }
+    ],
+    financeiro_feriados: [],
+    configuracao_cobranca: [{ id: 1, recebimentos_desde: null }],
+    notas_fiscais: [
+      { id: 1, pedido_id: 103, serie: 2, numero: 10, status_fiscal: 'autorizada', data_emissao: meioDia(-40), data_autorizacao: meioDia(-40), valor_total: 12000, xml_autorizado: '<nfeProc/>' },
+      { id: 2, pedido_id: 105, serie: 2, numero: 11, status_fiscal: 'rejeitada', data_emissao: meioDia(0), codigo_status_sefaz: '539', motivo_sefaz: 'Duplicidade de NF-e', valor_total: 1234.5 }
+    ],
+    notas_fiscais_externas: []
+  };
+}
+
+/**
+ * O painel do Financeiro (financeiro/painel.js) que a seção `pagar` apura —
+ * dublado: a apuração lê mais de dez tabelas e é provada nos testes dela.
+ */
+function painelFinanceiroFalso() {
+  const { hoje } = contextoDeTempo(new Date());
+  return {
+    competencia: hoje.slice(0, 7),
+    comissoes: { situacao: 'parcial', valor: 1200, total: 5400, pago: 4200, parcelas: 9, pagar_ate: somarDias(hoje, 10) },
+    producao: { situacao: 'aberta', valor: 3000, total: 3000, pago: 0, pecas: 40, pagar_ate: somarDias(hoje, 5) },
+    atrasadas: { valor: 350.5, parcelas: 2 },
+    a_confirmar: [
+      { tipo: 'producao', competencia: '2026-08', total: 2800, falta_pagar: 2800, pagar_ate: somarDias(hoje, -3) },
+      { tipo: 'comissao', competencia: '2026-08', total: 5000, falta_pagar: 0, pagar_ate: somarDias(hoje, -1) }
     ]
   };
 }
+
+/** Certificado que vence em 12 dias: vira pendência "vence em breve". */
+const COMPLEMENTO_FISCAL = {
+  certificado: { configurado: true, vencido: false, venceEmBreve: true, diasRestantes: 12, validoAte: '2026-12-31T23:59:59.000Z' },
+  pendenciasConfiguracao: []
+};
+
+/** O Financeiro dublado no controller desta montagem: conta quantas vezes cada um foi apurado. */
+function dublarFinanceiro(controller, { painel = painelFinanceiroFalso, complemento = async () => COMPLEMENTO_FISCAL } = {}) {
+  const contagem = { pagar: 0, complemento: 0 };
+  const secao = nome => controller.SECOES.find(s => s.nome === nome);
+  secao('pagar').carregar = async () => { contagem.pagar += 1; return painel(); };
+  secao('fiscal').complemento = async () => { contagem.complemento += 1; return complemento(); };
+  return contagem;
+}
+
+const CHAVES_DO_FINANCEIRO = ['financeiro.recebimento.view', 'financeiro.nfe.view', 'financeiro.comissao.view'];
+const SECOES_DO_FINANCEIRO = ['receber', 'fiscal', 'pagar'];
 
 // ---------------------------------------------------------------------------
 // Contrato
@@ -817,17 +874,19 @@ test('com as permissões de verdade, usuário não identificado (401) dá 503 �
   const falhar = { usuarios: 401 };
   const dados = { ...cenario(), usuarios: { id: 1, perfil: 'Sup Admin' } };
   const ctx = await montar(dados, { permissoesReais: true, falhar });
+  const contagem = dublarFinanceiro(ctx.controller);
   try {
     const recusada = await ctx.chamar();
     assert.equal(recusada.status, 503);
     assert.deepEqual(recusada.corpo, SEM_PERMISSOES);
     assert.deepEqual(ctx.upstream.leituras.map(l => l.tabela), ['usuarios'], 'nenhuma tabela do painel é lida');
+    assert.deepEqual(contagem, { pagar: 0, complemento: 0 }, 'nem o Financeiro é apurado');
 
     // A sessão volta: a mesma instância, sem reiniciar nada, abre o painel.
     delete falhar.usuarios;
     const aceita = await ctx.chamar();
     assert.equal(aceita.status, 200);
-    assert.deepEqual(Object.keys(aceita.corpo.secoes), TODAS_AS_SECOES, 'Sup Admin vê tudo');
+    assert.deepEqual(Object.keys(aceita.corpo.secoes), [...TODAS_AS_SECOES, ...SECOES_DO_FINANCEIRO], 'Sup Admin vê tudo, o Financeiro inclusive');
     assert.deepEqual(aceita.corpo.falhas, {});
   } finally {
     await ctx.encerrar();
@@ -1167,5 +1226,152 @@ test('a devolução chega ao painel: devolvido no mês, Parcial no donut e o des
     assert.ok(mesDoCancelado.cancelado >= 3200, 'a parcela do 104, cancelado, está na série vermelha');
   } finally {
     await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Financeiro (decisão do dono, 24/09/2026): contas a receber, NF-e e o que
+// falta pagar de comissões e produção — cada seção atrás da permissão do
+// Financeiro, com as contas do próprio módulo.
+// ---------------------------------------------------------------------------
+
+test('Financeiro: cada seção só com a permissão dela, e sem nenhuma o painel nem lê as tabelas do módulo', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom('financeiro.recebimento.view') });
+  const contagem = dublarFinanceiro(ctx.controller);
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(Object.keys(corpo.secoes), ['receber']);
+    assert.deepEqual(contagem, { pagar: 0, complemento: 0 }, 'sem as outras permissões, nada delas é apurado');
+    const lidas = [...new Set(ctx.upstream.leituras.map(l => l.tabela))].sort();
+    assert.deepEqual(lidas, ['boletos', 'boletos_eventos', 'clientes', 'configuracao_cobranca', 'financeiro_feriados', 'notas_fiscais', 'ordens_pagamento', 'pedido_parcelas', 'pedidos', 'recebimentos']);
+  } finally {
+    await ctx.encerrar();
+  }
+
+  const semFinanceiro = await montar(cenario());
+  try {
+    const { corpo } = await semFinanceiro.chamar();
+    for (const secao of SECOES_DO_FINANCEIRO) assert.equal(secao in corpo.secoes || secao in corpo.falhas, false);
+    for (const tabela of ['recebimentos', 'notas_fiscais', 'boletos', 'ordens_pagamento']) assert.equal(semFinanceiro.lidas(tabela), 0, tabela);
+  } finally {
+    await semFinanceiro.encerrar();
+  }
+});
+
+test('Financeiro › receber: recebido, a receber, atraso, faixas de vencimento, ordens, recebido antes da nota e o estado das parcelas', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom(...CHAVES_DO_PAINEL, 'financeiro.recebimento.view') });
+  try {
+    const { corpo } = await ctx.chamar();
+    const r = corpo.secoes.receber;
+    assert.deepEqual([r.recebido.quantidade, r.recebido.valor], [1, 4100], 'o Pix de hoje; a transferência foi em outro mês');
+    assert.deepEqual(r.antecipadoEmProducao, { pedidos: 1, valor: 4100 }, 'o PED101 ainda está em produção');
+    assert.deepEqual([r.emAtraso.quantidade, r.emAtraso.valor], [1, 4000], 'a 2ª do PED103 venceu há 10 dias');
+    const faixas = Object.fromEntries(r.porVencimento.faixas.map(f => [f.faixa, f.quantidade]));
+    assert.deepEqual(faixas, { atraso_30: 0, atraso_16_30: 0, atraso_1_15: 1, vence_7: 1, vence_30: 0, depois: 1 },
+      'a 3ª do PED103 vale pela ordem (daqui a 5 dias); a 2ª do PED101 vence daqui a 400 dias; o PED102, só em produção, não é conta a receber');
+    assert.deepEqual([r.porVencimento.quantidade, r.porVencimento.valor], [3, 12100]);
+    assert.deepEqual(r.porVencimento.maioresAtrasos.itens.map(i => [i.pedido, i.cliente, i.parcela, i.valor]), [['PED103', 'Móveis Aurora', '2/3', 4000]]);
+    assert.deepEqual([r.ordens.abertas, r.ordens.proximas7, r.ordens.atrasadas], [1, 1, 0]);
+    assert.deepEqual([r.ordens.itens[0].pedido, r.ordens.itens[0].forma, r.ordens.itens[0].data], ['PED103', 'Pix', somarDias(corpo.hoje, 5)]);
+    assert.deepEqual(r.parcelas, { '103:1': 'paga', '101:1': 'paga', '103:2': 'atrasada' });
+    assert.equal(r.serie12m.length, 12);
+    assert.deepEqual(r.serie12m.at(-1), { mes: corpo.mesAtual, quantidade: 1, valor: 4100 });
+    assert.deepEqual(r.conciliacao, { fila: 0, aLancar: 0, alertas: 0, boletosComErro: 0, itens: [] });
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Financeiro › fiscal: notas do mês, enviados sem nota desde o mês passado e as notas com problema, com o certificado', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom('financeiro.nfe.view') });
+  const contagem = dublarFinanceiro(ctx.controller);
+  try {
+    const { corpo } = await ctx.chamar();
+    const f = corpo.secoes.fiscal;
+    assert.deepEqual([f.notasMes.emitidas, f.notasMes.rejeitadas, f.notasMes.autorizadas.quantidade], [1, 1, 0], 'a autorizada do PED103 é de outro mês');
+    assert.equal(f.aguardandoNfe.desde, `${deslocarMes(corpo.mesAtual, -1)}-01`, 'desde o 1º dia do mês passado');
+    assert.deepEqual(f.aguardandoNfe.itens.map(i => [i.numero, i.dias]), [['PED105', 0]], 'a nota recusada não conta como nota');
+    assert.deepEqual(f.problemas.itens.map(p => p.chave).sort(), ['certificado', 'rejeitadas']);
+    assert.match(f.problemas.itens.find(p => p.chave === 'certificado').titulo, /vence em 12 dias/);
+    assert.deepEqual(f.certificado, { vencido: false, venceEmBreve: true, diasRestantes: 12, validoAte: '2026-12-31' });
+    assert.equal(contagem.complemento, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Financeiro › fiscal: sem o complemento (certificado ilegível) a seção sai sem afirmar nada sobre o certificado', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom('financeiro.nfe.view') });
+  dublarFinanceiro(ctx.controller, { complemento: async () => { throw new Error('cofre fechado'); } });
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(corpo.falhas, {});
+    assert.equal(corpo.secoes.fiscal.certificado, null);
+    assert.deepEqual(corpo.secoes.fiscal.problemas.itens.map(p => p.chave), ['rejeitadas'], 'nada de "certificado não configurado"');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Financeiro › pagar: o que falta pagar, as atrasadas e as competências fechadas esperando o pagamento — no cache de 60 s', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom('financeiro.comissao.view') });
+  const contagem = dublarFinanceiro(ctx.controller);
+  try {
+    const { corpo } = await ctx.chamar();
+    const p = corpo.secoes.pagar;
+    assert.deepEqual(p.aPagar, { valor: 4200 }, 'R$ 1.200 de comissões + R$ 3.000 de produção');
+    assert.deepEqual([p.comissoes.situacao, p.comissoes.total.valor, p.producao.pecas], ['parcial', 5400, 40]);
+    assert.deepEqual(p.atrasadas, { quantidade: 2, valor: 350.5 });
+    assert.deepEqual(p.aConfirmar.itens.map(i => [i.tipo, i.competencia, i.valor, i.atrasado]), [['producao', '2026-08', 2800, true]], 'a paga não aparece');
+    assert.deepEqual(ctx.upstream.leituras, [], 'a apuração é do módulo, não do painel');
+
+    await ctx.chamar();
+    assert.equal(contagem.pagar, 1, 'a segunda leitura vem do cache');
+    await ctx.chamar('?atualizar=1');
+    assert.equal(contagem.pagar, 2, '"Atualizar" apura de novo');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Financeiro: apuração que falha vira falha só da seção dela, e não fica guardada', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom(...CHAVES_DO_PAINEL, ...CHAVES_DO_FINANCEIRO) });
+  let quebrar = true;
+  const contagem = dublarFinanceiro(ctx.controller, {
+    painel: () => { if (quebrar) throw new Error('financeiro_regras fora do ar'); return painelFinanceiroFalso(); }
+  });
+  try {
+    const primeira = (await ctx.chamar()).corpo;
+    assert.deepEqual(primeira.falhas, { pagar: 'Não foi possível apurar as comissões e a produção agora.' });
+    assert.ok(primeira.secoes.receber && primeira.secoes.fiscal && primeira.secoes.vendas, 'o resto do painel sai');
+    quebrar = false;
+    const segunda = (await ctx.chamar()).corpo;
+    assert.ok(segunda.secoes.pagar, 'a falha não ficou no cache');
+    assert.equal(contagem.pagar, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Financeiro: as notas fiscais são extras das contas a receber e fonte da seção fiscal — falha derruba só a fiscal', async () => {
+  const ctx = await montar(cenario(), { permissoes: permissoesCom(...CHAVES_DO_FINANCEIRO), falhar: { notas_fiscais: 500 } });
+  dublarFinanceiro(ctx.controller);
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(Object.keys(corpo.falhas), ['fiscal'], 'a seção fiscal não pode sair com "nenhuma nota"');
+    assert.ok(corpo.secoes.receber, 'as contas a receber seguem sem as notas');
+    assert.equal(ctx.lidas('notas_fiscais'), 1, 'uma leitura só para as duas seções');
+  } finally {
+    await ctx.encerrar();
+  }
+
+  // Só com as contas a receber, a mesma tabela é extra: a falha vira lista vazia.
+  const soReceber = await montar(cenario(), { permissoes: permissoesCom('financeiro.recebimento.view'), falhar: { notas_fiscais: 500 } });
+  try {
+    const { corpo } = await soReceber.chamar();
+    assert.deepEqual(corpo.falhas, {});
+    assert.ok(corpo.secoes.receber);
+  } finally {
+    await soReceber.encerrar();
   }
 });

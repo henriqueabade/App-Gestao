@@ -36,6 +36,7 @@ const { getToken } = require('./tokenStore');
 const { obterPermissoesEfetivas } = require('./permissionsController');
 const { can } = require('./permissionsRepository');
 const resumo = require('./dashboardResumo');
+const financeiro = require('./dashboardFinanceiro');
 
 const router = express.Router();
 
@@ -86,6 +87,17 @@ const TEMPO_ESGOTADO = 'TEMPO_ESGOTADO';
  * insumo) seguem a mesma regra do R$, cada um pela coluna dele: `pode` vai
  * junto para a conta, e o texto sai `null` para quem não vê a coluna na
  * grade. As chaves estão em COLUNAS_DE_TEXTO, em dashboardResumo.js.
+ *
+ * FINANCEIRO (decisão do dono, 24/09/2026): `receber`, `fiscal` e `pagar`,
+ * cada uma atrás da permissão do Financeiro de onde vem, com as contas do
+ * próprio módulo (dashboardFinanceiro.js). O Financeiro não tem colunas na
+ * grade: quem vê a seção vê os R$ e os nomes, como no módulo.
+ *   `carregar`    a seção que não sai de tabelas cruas: o painel do
+ *                 Financeiro (comissões e produção) é apurado pelo próprio
+ *                 módulo. O resultado entra no mesmo cache (60 s, por
+ *                 identidade) e falha vira `falhas`, como a tabela.
+ *   `complemento` o que só ACRESCENTA à seção e não é tabela (o certificado
+ *                 digital da NF-e): falhou, a seção sai sem ele.
  */
 const SECOES = [
   { nome: 'vendas', exige: ['ped.view'], valores: 'col_ped_total', tabelas: ['pedidos'], extras: ['devolucoes'], montar: resumo.resumirVendas },
@@ -104,8 +116,60 @@ const SECOES = [
   { nome: 'prospeccao', exige: ['pros.view'], valores: 'col_pros_valor', tabelas: ['prospeccoes'], montar: resumo.resumirProspeccao },
   { nome: 'clientes', exige: ['cli.view'], tabelas: ['clientes'], montar: resumo.resumirClientes },
   { nome: 'estoque', exige: ['mp.view', 'col_mp_estoque_atual'], valores: 'col_mp_custo_medio', tabelas: ['materia_prima'], montar: resumo.resumirEstoque },
-  { nome: 'ia', exige: ['ia.view'], tabelas: ['ia_extracoes'], montar: resumo.resumirIa }
+  { nome: 'ia', exige: ['ia.view'], tabelas: ['ia_extracoes'], montar: resumo.resumirIa },
+  {
+    nome: 'receber',
+    exige: ['financeiro.recebimento.view'],
+    tabelas: ['pedidos', 'pedido_parcelas', 'recebimentos'],
+    // Sem boletos, notas, ordens ou feriados a conta continua: é o que o
+    // Financeiro faz quando a tabela ainda não existe.
+    extras: ['boletos', 'notas_fiscais', 'ordens_pagamento', 'financeiro_feriados', 'boletos_eventos', 'configuracao_cobranca'],
+    nomes: ['clientes'],
+    falha: 'Não foi possível ler as contas a receber agora.',
+    montar: financeiro.resumirReceber
+  },
+  {
+    nome: 'fiscal',
+    exige: ['financeiro.nfe.view'],
+    tabelas: ['pedidos', 'notas_fiscais'],
+    extras: ['notas_fiscais_externas'],
+    nomes: ['clientes'],
+    complemento: complementoFiscal,
+    falha: 'Não foi possível ler as notas fiscais agora.',
+    montar: financeiro.resumirFiscal
+  },
+  {
+    nome: 'pagar',
+    exige: ['financeiro.comissao.view'],
+    tabelas: [],
+    carregar: carregarPagar,
+    falha: 'Não foi possível apurar as comissões e a produção agora.',
+    montar: financeiro.resumirPagar
+  }
 ];
+
+/**
+ * O painel de comissões e produção do mês, apurado pelo Financeiro (o mesmo
+ * da tela do módulo). Carregado sob demanda: o require puxa o módulo inteiro.
+ */
+async function carregarPagar(api, { agora }) {
+  const { hoje, mesAtual } = resumo.contextoDeTempo(agora);
+  const cfg = await require('./cobranca/configuracaoCobranca').carregar(api).catch(() => null);
+  return require('./financeiro/painel').carregar({ api, competencia: mesAtual, hoje, desde: cfg?.recebimentos_desde || null });
+}
+
+/**
+ * O certificado digital e as pendências da configuração fiscal (o card "NF-e
+ * com problema"). O resumo é o do roteador fiscal, que já guarda o
+ * certificado aberto.
+ */
+async function complementoFiscal(api) {
+  const configuracao = require('./fiscal/configuracaoFiscal');
+  const fiscal = require('./fiscalController');
+  const cfg = await configuracao.carregar(api);
+  const certificado = typeof fiscal.resumoDoCertificado === 'function' ? await fiscal.resumoDoCertificado(api, cfg) : null;
+  return { certificado, pendenciasConfiguracao: configuracao.pendencias(cfg) };
+}
 
 /** Mensagem curta do card em erro. Nunca o erro cru: ele cita rota e status do upstream. */
 const FALHAS_DE_LEITURA = {
@@ -225,6 +289,30 @@ function lerTabela(api, identidade, tabela, { opcional = false } = {}) {
   return promessa;
 }
 
+/**
+ * O que não é tabela crua (o `carregar` e o `complemento` de uma seção), no
+ * mesmo cache e com o mesmo prazo. A chave leva `@` para nunca colidir com o
+ * nome de uma tabela. Falha não fica guardada.
+ */
+function lerCalculado(identidade, chave, calcular) {
+  const agora = Date.now();
+  varrerVencidos(agora);
+
+  const chaveCache = `${identidade}:@${chave}`;
+  const guardado = cache.get(chaveCache);
+  if (guardado) return guardado.promessa;
+
+  const promessa = comTempoLimite(Promise.resolve().then(calcular), TEMPO_LIMITE_MS, chave)
+    .then(dados => ({ dados, lidoEm: agora }))
+    .catch(err => {
+      if (cache.get(chaveCache)?.promessa === promessa) cache.delete(chaveCache);
+      throw err;
+    });
+
+  cache.set(chaveCache, { promessa, expiraEm: agora + VALIDADE_MS });
+  return promessa;
+}
+
 /** Descarta tudo o que está guardado, de todos os usuários. */
 function invalidar() {
   cache.clear();
@@ -290,14 +378,27 @@ router.get('/', async (req, res) => {
 
     const nomeDeProspeccao = pode('pros.view');
     const necessarias = [...new Set(visiveis.flatMap(secao => tabelasDaSecao(secao, nomeDeProspeccao)))];
-    const extras = new Set(visiveis.flatMap(secao => secao.extras || []));
+    // Opcional só a tabela que NENHUMA seção visível exige: as notas fiscais
+    // são extras das contas a receber e a fonte da seção fiscal — se a leitura
+    // falhar, a seção fiscal tem de ir para `falhas`, não sair com zero nota.
+    const obrigatorias = new Set(visiveis.flatMap(secao => secao.tabelas));
+    const extras = new Set(visiveis.flatMap(secao => secao.extras || []).filter(t => !obrigatorias.has(t)));
 
     if (String(req.query?.atualizar ?? '') === '1') invalidar();
 
     const api = createApiClient(req);
     const identidade = identidadeDe(req);
+    // O que não é tabela (Financeiro): em paralelo com as leituras.
+    const calculos = Promise.all(visiveis.map(async secao => {
+      const [carregado, complemento] = await Promise.allSettled([
+        secao.carregar ? lerCalculado(identidade, `${secao.nome}:carregar`, () => secao.carregar(api, { agora })) : Promise.resolve(null),
+        secao.complemento ? lerCalculado(identidade, `${secao.nome}:complemento`, () => secao.complemento(api, { agora })) : Promise.resolve(null)
+      ]);
+      return [secao.nome, { carregado, complemento }];
+    })).then(pares => new Map(pares));
     // allSettled: uma tabela fora do ar derruba SÓ as seções que dependem dela.
     const leituras = await Promise.allSettled(necessarias.map(t => lerTabela(api, identidade, t, { opcional: extras.has(t) })));
+    const calculados = await calculos;
 
     const linhas = {};
     const lidoEm = {};
@@ -316,20 +417,32 @@ router.get('/', async (req, res) => {
     const secoes = {};
     const falhas = {};
     const usadas = new Set();
+    const instantesCalculados = [];
     for (const secao of visiveis) {
       const tabelaQueFalhou = secao.tabelas.find(t => erros[t]);
       if (tabelaQueFalhou) {
         falhas[secao.nome] = secao.falha || mensagemDeFalha(tabelaQueFalhou, erros[tabelaQueFalhou]);
         continue;
       }
+      const { carregado, complemento } = calculados.get(secao.nome) || {};
+      if (secao.carregar && carregado?.status !== 'fulfilled') {
+        console.warn(`[dashboard] falha ao apurar ${secao.nome}:`, carregado?.reason?.message || carregado?.reason);
+        falhas[secao.nome] = secao.falha || FALHA_DE_MONTAGEM;
+        continue;
+      }
+      if (secao.complemento && complemento?.status === 'rejected') {
+        console.warn(`[dashboard] ${secao.nome} sai sem o complemento:`, complemento.reason?.message || complemento.reason);
+      }
       try {
-        secoes[secao.nome] = secao.montar(linhas, {
+        secoes[secao.nome] = secao.montar(secao.carregar ? carregado.value.dados : linhas, {
           agora,
           comValores: secao.valores ? pode(secao.valores) : true,
           nomeDeProspeccao,
           // Os nomes, coluna a coluna: a conta pergunta, o recorte é daqui.
-          pode
+          pode,
+          complemento: complemento?.status === 'fulfilled' ? complemento.value?.dados ?? null : null
         });
+        if (secao.carregar) instantesCalculados.push(carregado.value.lidoEm);
         tabelasDaSecao(secao, nomeDeProspeccao)
           .filter(t => lidoEm[t] !== undefined)
           .forEach(t => usadas.add(t));
@@ -344,7 +457,7 @@ router.get('/', async (req, res) => {
     // `geradoEm` é a leitura MAIS ANTIGA entre as tabelas usadas. Se veio do
     // cache, é a hora do cache: a hora da resposta mentiria sobre um dado de
     // até um minuto atrás.
-    const instantes = [...usadas].map(t => lidoEm[t]);
+    const instantes = [...[...usadas].map(t => lidoEm[t]), ...instantesCalculados];
     return responder(secoes, falhas, instantes.length ? new Date(Math.min(...instantes)) : agora);
   } catch (err) {
     console.error('[dashboard] erro inesperado ao montar o painel:', err?.message || err);

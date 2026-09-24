@@ -43,6 +43,14 @@ test('financeiro: a competência é o registro, e o tipo separa comissões de pr
   assert.deepStrictEqual(acoes({ metodo: 'POST', caminho: '/api/financeiro/pagamentos', corpo: { tipo: 'comissao', competencia: '2026-13' } }), [], 'competência inválida não casa');
 });
 
+test('financeiro: "até quitar" só conta quando a competência fica toda paga, e cada tipo o seu', () => {
+  const pagar = (tipo, faltaPagar) => acoes({ metodo: 'POST', caminho: '/api/financeiro/pagamentos', corpo: { tipo, competencia: '2026-09' }, resposta: { falta_pagar: faltaPagar } });
+  assert.deepStrictEqual(pagar('comissao', 0), ['financeiro.pagar:2026-09', 'financeiro.pagar_comissoes:2026-09']);
+  assert.deepStrictEqual(pagar('comissao', 350.5), ['financeiro.pagar:2026-09'], 'pagou só um beneficiário: a tarefa de quitar continua');
+  assert.deepStrictEqual(pagar('producao', 0), ['financeiro.pagar:2026-09', 'financeiro.pagar_producao:2026-09']);
+  assert.deepStrictEqual(acoes({ metodo: 'POST', caminho: '/api/financeiro/pagamentos', corpo: { tipo: 'producao', competencia: '2026-09' } }), ['financeiro.pagar:2026-09'], 'sem a resposta, não se sabe se quitou');
+});
+
 test('normalizarAcao: ação conhecida, registro no formato certo', () => {
   assert.deepStrictEqual(A.normalizarAcao({}), { acao_chave: null, acao_registro: null, acao_rotulo: null });
   assert.deepStrictEqual(A.normalizarAcao({ acao_chave: 'pedido.despachar', acao_registro: '040', acao_rotulo: ' PED-40 ' }), { acao_chave: 'pedido.despachar', acao_registro: '40', acao_rotulo: 'PED-40' });

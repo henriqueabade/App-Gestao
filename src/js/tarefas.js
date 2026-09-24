@@ -532,44 +532,85 @@ async function abrirEstatisticas() {
 
 // ------------------------------------------------------------ automações
 
+/**
+ * Tarefas automáticas (decisão do dono, 24/09/2026). Abre para todos que veem
+ * Tarefas, só com as regras das permissões da pessoa (o servidor filtra):
+ *   - "Receber esta tarefa": liga/desliga SÓ para quem está usando (o mesmo
+ *     interruptor de Configurações › Tarefas automáticas);
+ *   - quem tem "Configurar tarefas automáticas" ajusta também a regra para
+ *     todos: ligada, título, prazo, tipo e prioridade — como antes.
+ */
 async function abrirAutomacoes() {
-  let regras;
-  try { regras = (await T.api('/automacoes')).automacoes; } catch (err) { window.showToast?.(err.message, 'error'); return; }
+  let resposta;
+  try { resposta = await T.api('/automacoes'); } catch (err) { window.showToast?.(err.message, 'error'); return; }
+  const regras = resposta.automacoes || [];
+  const configura = Boolean(resposta.pode_configurar);
+  const semPreferencias = Boolean(resposta.preferencias_sql_pendente);
   const d = T.dialogo({ classe: 'tarefas-dialogo-automacoes', rotulo: 'Tarefas automáticas' });
   const alteradas = new Map();
+  const minhas = new Map();
   const linhas = regras.map(r => {
     const muda = (campo, valor) => { alteradas.set(r.chave, { ...(alteradas.get(r.chave) || {}), [campo]: valor }); };
-    const ativa = h('input', { type: 'checkbox', checked: Boolean(r.ativa), attrs: { role: 'switch', 'aria-label': `Ligar ${r.nome}` } });
-    ativa.addEventListener('change', () => { muda('ativa', ativa.checked); cartao.classList.toggle('tarefas-regra--desligada', !ativa.checked); });
-    const dias = h('input', { class: 'tui-campo tui-campo--curto', type: 'number', min: 0, max: 365, value: r.dias });
-    dias.addEventListener('change', () => muda('dias', Math.max(0, Math.min(365, Number(dias.value) || 0))));
-    const titulo = h('input', { class: 'tui-campo', type: 'text', maxLength: 200, value: r.titulo });
-    titulo.addEventListener('change', () => muda('titulo', titulo.value));
-    const tipo = h('select', { class: 'tui-campo' }, Object.keys(T.TIPOS).map(t => h('option', { value: t, text: t, selected: t === r.tipo })));
-    tipo.addEventListener('change', () => muda('tipo', tipo.value));
-    const prioridade = h('select', { class: 'tui-campo' }, Object.entries(T.PRIORIDADES).map(([v, p]) => h('option', { value: v, text: p.rotulo, selected: v === r.prioridade })));
-    prioridade.addEventListener('change', () => muda('prioridade', prioridade.value));
-    const cartao = h('article', { class: `tarefas-regra${r.ativa ? '' : ' tarefas-regra--desligada'}` },
-      h('header', { class: 'tarefas-regra__topo' }, h('label', { class: 'tarefas-interruptor' }, ativa, h('span')), h('div', {}, h('strong', { text: r.nome }), h('p', { class: 'tui-dica', text: r.descricao || '' }))),
-      h('div', { class: 'tarefas-regra__campos' },
-        h('label', { class: 'tarefas-regra__campo tarefas-regra__campo--largo' }, h('span', { class: 'tui-rotulo', text: 'Título da tarefa' }), titulo),
-        h('label', { class: 'tarefas-regra__campo' }, h('span', { class: 'tui-rotulo', text: 'Prazo (dias)' }), dias),
-        h('label', { class: 'tarefas-regra__campo' }, h('span', { class: 'tui-rotulo', text: 'Tipo' }), tipo),
-        h('label', { class: 'tarefas-regra__campo' }, h('span', { class: 'tui-rotulo', text: 'Prioridade' }), prioridade)));
+    const pintar = () => cartao.classList.toggle('tarefas-regra--desligada', !(minha.checked && (configura ? geral.checked : r.ativa)));
+    const minha = h('input', { type: 'checkbox', checked: Boolean(r.minha), disabled: semPreferencias, attrs: { role: 'switch', 'aria-label': `Receber a tarefa: ${r.nome}` } });
+    minha.addEventListener('change', () => { minhas.set(r.chave, minha.checked); pintar(); });
+    const geral = h('input', { type: 'checkbox', checked: Boolean(r.ativa), attrs: { role: 'switch', 'aria-label': `Ligar para todos: ${r.nome}` } });
+    geral.addEventListener('change', () => { muda('ativa', geral.checked); pintar(); });
+    const avisos = [];
+    if (!r.ativa) avisos.push(h('p', { class: 'tui-dica tarefas-regra__aviso' }, icone('fa-power-off'), ' Desligada para todos: ninguém recebe esta tarefa agora.'));
+    const topo = h('header', { class: 'tarefas-regra__topo' },
+      h('label', { class: 'tarefas-interruptor', title: 'Receber esta tarefa' }, minha, h('span')),
+      h('div', { class: 'tarefas-regra__textos' },
+        h('strong', { text: r.nome }),
+        h('p', { class: 'tui-dica', text: r.descricao || '' }),
+        h('span', { class: 'tarefas-regra__modulo' }, icone(r.icone || 'fa-robot'), ` ${r.modulo || 'Tarefas'}${r.permissao_rotulo ? ` · para quem pode "${r.permissao_rotulo}"` : ''}`)),
+      h('span', { class: 'tarefas-regra__minha', text: 'Receber esta tarefa' }));
+    const partes = [topo, ...avisos];
+    if (configura) {
+      const antecedencia = r.prazo_tipo === 'antes_do_pagamento';
+      const dias = h('input', { class: 'tui-campo tui-campo--curto', type: 'number', min: 0, max: 365, value: r.dias });
+      dias.addEventListener('change', () => muda('dias', Math.max(0, Math.min(365, Number(dias.value) || 0))));
+      const titulo = h('input', { class: 'tui-campo', type: 'text', maxLength: 200, value: r.titulo });
+      titulo.addEventListener('change', () => muda('titulo', titulo.value));
+      const tipo = h('select', { class: 'tui-campo' }, Object.keys(T.TIPOS).map(t => h('option', { value: t, text: t, selected: t === r.tipo })));
+      tipo.addEventListener('change', () => muda('tipo', tipo.value));
+      const prioridade = h('select', { class: 'tui-campo' }, Object.entries(T.PRIORIDADES).map(([v, p]) => h('option', { value: v, text: p.rotulo, selected: v === r.prioridade })));
+      prioridade.addEventListener('change', () => muda('prioridade', prioridade.value));
+      partes.push(
+        h('div', { class: 'tarefas-regra__geral' },
+          h('label', { class: 'tarefas-interruptor' }, geral, h('span')),
+          h('span', { class: 'tui-rotulo', text: 'Ligada para todos' })),
+        h('div', { class: 'tarefas-regra__campos' },
+          h('label', { class: 'tarefas-regra__campo tarefas-regra__campo--largo' }, h('span', { class: 'tui-rotulo', text: 'Título da tarefa' }), titulo),
+          h('label', { class: 'tarefas-regra__campo', title: antecedencia ? 'Quantos dias antes do dia marcado para pagar (0 = no próprio dia)' : 'Quantos dias depois do que aconteceu' },
+            h('span', { class: 'tui-rotulo', text: antecedencia ? 'Antecedência (dias)' : 'Prazo (dias)' }), dias),
+          h('label', { class: 'tarefas-regra__campo' }, h('span', { class: 'tui-rotulo', text: 'Tipo' }), tipo),
+          h('label', { class: 'tarefas-regra__campo' }, h('span', { class: 'tui-rotulo', text: 'Prioridade' }), prioridade)));
+    }
+    const cartao = h('article', { class: 'tarefas-regra', attrs: { 'data-regra': r.chave } }, ...partes);
+    pintar();
     return cartao;
   });
   const salvar = h('button', { type: 'button', class: 'btn-primary tui-botao', on: { click: async () => {
     try {
+      for (const [chave, ativa] of minhas) await T.api(`/automacoes/${chave}/minha`, { method: 'PUT', corpo: { ativa } });
       for (const [chave, patch] of alteradas) await T.api(`/automacoes/${chave}`, { method: 'PUT', corpo: patch });
-      window.showToast?.(alteradas.size ? 'Regras salvas.' : 'Nada mudou.', 'success');
+      const mudou = minhas.size + alteradas.size;
+      window.showToast?.(mudou ? 'Tarefas automáticas salvas.' : 'Nada mudou.', 'success');
       d.fechar();
     } catch (err) { window.showToast?.(err.message, 'error'); }
   } } }, icone('fa-floppy-disk'), ' Salvar');
+  const vazio = h('p', { class: 'tui-dica' }, icone('fa-circle-info'), ' Nenhuma tarefa automática ligada às suas permissões.');
+  const rodapeDica = configura
+    ? ' No título, {orcamento}, {cliente}, {pedido}, {prospeccao} e {competencia} viram os nomes. Cada registro gera a tarefa uma vez só.'
+    : ' Cada registro gera a tarefa uma vez só. O ajuste das regras para todos é de quem pode configurar as tarefas automáticas.';
   d.append(h('div', { class: 'tui-cartao' },
     h('header', { class: 'tui-concluir__topo' }, h('span', { class: 'tui-concluir__icone tarefas-icone-est' }, icone('fa-robot')),
-      h('div', {}, h('h3', { class: 'tui-concluir__titulo', text: 'Tarefas automáticas' }), h('p', { class: 'tui-concluir__sub', text: 'Quando algo acontece no CRM, a tarefa de acompanhamento nasce sozinha' }))),
-    h('div', { class: 'tui-concluir__corpo' }, ...linhas,
-      h('p', { class: 'tui-dica' }, icone('fa-circle-info'), ' No título, {orcamento}, {cliente}, {pedido} e {prospeccao} viram os nomes. Cada registro gera a tarefa uma vez só.')),
+      h('div', {}, h('h3', { class: 'tui-concluir__titulo', text: 'Tarefas automáticas' }), h('p', { class: 'tui-concluir__sub', text: 'Quando algo acontece no CRM, a tarefa de acompanhamento nasce sozinha. Desligue as que não quer receber.' }))),
+    h('div', { class: 'tui-concluir__corpo' },
+      ...(semPreferencias ? [h('p', { class: 'tui-dica tarefas-regra__aviso' }, icone('fa-database'), ' Para ligar e desligar só para você, rode sql/tarefas_automaticas_por_usuario.sql e reinicie a API.')] : []),
+      ...(linhas.length ? linhas : [vazio]),
+      h('p', { class: 'tui-dica' }, icone('fa-circle-info'), rodapeDica)),
     h('footer', { class: 'tui-rodape' }, h('div', { class: 'tui-rodape__lado' }), h('div', { class: 'tui-rodape__lado' }, h('button', { type: 'button', class: 'btn-neutral tui-botao', text: 'Cancelar', on: { click: () => d.fechar() } }), salvar))));
   d.addEventListener('cancel', e => { e.preventDefault(); d.fechar(); });
   d.showModal();
@@ -664,7 +705,8 @@ function iniciar() {
 
   desenhar();
   return carregar().then(() => {
-    $('tarefasBtnAutomacoes').hidden = !estado.ctx?.pode?.automacoes;
+    // Todos que veem Tarefas abrem as automáticas (para ligar/desligar as suas).
+    $('tarefasBtnAutomacoes').hidden = !estado.ctx?.pode?.ver;
     if (!estado.ctx?.pode?.criar) document.querySelector('.tarefas-rapida')?.setAttribute('hidden', '');
     if (pedido?.abrir) T.abrirEditor({ id: pedido.abrir, aba: pedido.aba || 'detalhes', foco: pedido.foco || null });
   });

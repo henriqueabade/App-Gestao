@@ -17,7 +17,10 @@
  *   DELETE /:id                      exclusão por marca
  *   POST   /:id/checklist | PUT/DELETE /:id/checklist/:itemId
  *   POST   /:id/participantes        convidar | POST /:id/convite { resposta: aceitar|recusar } | DELETE /:id/participantes/:usuarioId
- *   listas, marcadores, visibilidade (Sup Admin) e automações
+ *   listas, marcadores, visibilidade (Sup Admin) e automações:
+ *   GET    /automacoes               as regras que eu posso receber, ligadas ou não para mim
+ *   PUT    /automacoes/:chave/minha  { ativa } — liga/desliga só para mim
+ *   PUT    /automacoes/:chave        ajusta a regra para todos (Configurar tarefas automáticas)
  *
  * Quem vê o quê (backend/tarefasRegras.js): cada um vê as próprias tarefas
  * (criou, responde ou participa); Admin e Sup Admin veem todas; quem tem
@@ -35,6 +38,7 @@ const R = require('./tarefasRegras');
 const S = require('./tarefasServico');
 const social = require('./historicoSocial');
 const acoes = require('./tarefasAcoes');
+const automaticas = require('./tarefasAutomaticas');
 
 const router = express.Router();
 const { erro } = R;
@@ -255,7 +259,7 @@ router.get('/contexto', async (req, res) => {
       listas: lista(listas).sort((a, b) => Number(a.ordem) - Number(b.ordem) || Number(a.id) - Number(b.id)),
       marcadores: lista(marcadores).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')),
       convites: lista(participantes).filter(p => p.status === 'pendente').length,
-      automacoes: lista(automacoes).sort((a, b) => Number(a.id) - Number(b.id)),
+      automacoes: lista(automacoes).filter(r => automaticas.podeReceber(r?.chave, ctx.pode)).sort((a, b) => Number(a.id) - Number(b.id)),
       tipos: R.TIPOS, prioridades: R.PRIORIDADES, resultados: R.RESULTADOS,
       hoje: R.agoraEmBrasilia().dia,
       municipio
@@ -697,9 +701,61 @@ router.put('/visibilidade/:usuarioId', exigirSupAdmin, async (req, res) => {
 
 // ------------------------------------------------------------ automações
 
-router.get('/automacoes', precisa('tarefas.automations'), async (req, res) => {
+/**
+ * As regras que a pessoa pode receber (backend/tarefasAutomaticas.js), cada
+ * uma com `minha` (ligada para ela). Todo mundo que vê Tarefas abre a tela e
+ * liga/desliga para si; quem tem "Configurar tarefas automáticas" ajusta a
+ * regra para todos. Configurações › Tarefas automáticas usa a mesma rota.
+ */
+router.get('/automacoes', precisa('tarefas.view'), async (req, res) => {
   try {
-    res.json({ automacoes: lista(await req.ctxTarefas.api.get('/api/tarefa_automacoes')).sort((a, b) => Number(a.id) - Number(b.id)) });
+    const ctx = req.ctxTarefas;
+    const [regras, prefs] = await Promise.all([
+      ctx.api.get('/api/tarefa_automacoes'),
+      S.preferenciasDoUsuario(ctx.api, ctx.usuarioId)
+    ]);
+    const podeConfigurar = ctx.pode('tarefas.automations');
+    res.json({
+      automacoes: automaticas.paraTela(lista(regras), { pode: ctx.pode, preferencias: prefs.mapa, podeConfigurar }),
+      pode_configurar: podeConfigurar,
+      preferencias_sql_pendente: prefs.sqlPendente,
+      dica: automaticas.DICA_DO_AVISO
+    });
+  } catch (err) {
+    responderErro(res, err, 'automações');
+  }
+});
+
+/** A regra, se existe e a pessoa pode vê-la (senão 404, como se não existisse). */
+async function regraVisivel(ctx, chave) {
+  const regra = lista(await ctx.api.get('/api/tarefa_automacoes', { query: { chave } }))[0];
+  if (!regra || !automaticas.podeReceber(regra.chave, ctx.pode)) throw erro(404, 'Regra não encontrada.');
+  return regra;
+}
+
+/** Liga ou desliga a regra só para quem pediu: { ativa }. */
+router.put('/automacoes/:chave/minha', precisa('tarefas.view'), async (req, res) => {
+  try {
+    const ctx = req.ctxTarefas;
+    const regra = await regraVisivel(ctx, req.params.chave);
+    if (typeof req.body?.ativa !== 'boolean') throw erro(400, 'Diga se a regra fica ligada (ativa: true/false).');
+    let existentes;
+    try {
+      existentes = lista(await ctx.api.get('/api/tarefa_automacao_usuarios', { query: { usuario_id: ctx.usuarioId } }))
+        .filter(l => String(l.usuario_id) === String(ctx.usuarioId) && l.chave === regra.chave);
+    } catch (err) {
+      if (social.semTabela(err)) {
+        return res.status(409).json({ error: 'Ligar e desligar por pessoa ainda não está ativado: rode sql/tarefas_automaticas_por_usuario.sql e reinicie a API.', sql_pendente: true });
+      }
+      throw err;
+    }
+    const patch = { ativa: req.body.ativa, atualizado_em: agoraISO() };
+    if (existentes.length) {
+      await ctx.api.put(`/api/tarefa_automacao_usuarios/${existentes[0].id}`, patch);
+    } else {
+      await ctx.api.post('/api/tarefa_automacao_usuarios', { usuario_id: ctx.usuarioId, chave: regra.chave, ...patch });
+    }
+    res.json({ success: true, chave: regra.chave, minha: req.body.ativa });
   } catch (err) {
     responderErro(res, err, 'automações');
   }
@@ -708,8 +764,8 @@ router.get('/automacoes', precisa('tarefas.automations'), async (req, res) => {
 router.put('/automacoes/:chave', precisa('tarefas.automations'), async (req, res) => {
   try {
     const ctx = req.ctxTarefas;
-    const regra = lista(await ctx.api.get('/api/tarefa_automacoes', { query: { chave: req.params.chave } }))[0];
-    if (!regra) throw erro(404, 'Regra não encontrada.');
+    // Só as regras ligadas às permissões de quem ajusta (pedido do dono).
+    const regra = await regraVisivel(ctx, req.params.chave);
     const patch = { atualizado_por: ctx.usuarioId, atualizado_em: agoraISO() };
     if (req.body?.ativa !== undefined) patch.ativa = Boolean(req.body.ativa);
     if (req.body?.dias !== undefined) {

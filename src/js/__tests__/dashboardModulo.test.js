@@ -1096,6 +1096,79 @@ function amostraDoContrato() {
     };
 }
 
+/**
+ * As seções do Financeiro (24/09/2026, backend/dashboardFinanceiro.js), na
+ * forma do contrato. Ficam fora da amostra de sempre: os testes do gráfico e
+ * dos KPIs descrevem o perfil SEM recebimentos, e ele continua igual.
+ */
+function financeiroDaAmostra() {
+    const meses = ['2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03',
+        '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+    return {
+            receber: {
+                recebido: { quantidade: 8, valor: 42000, encargos: { valor: 120.5 }, estornados: 1, mesAnteriorMesmoPeriodo: { quantidade: 6, valor: 35000 } },
+                aReceber: { quantidade: 5, valor: 26000, comBoleto: 3, comOrdem: 1, semCobranca: 1 },
+                emAtraso: { quantidade: 2, valor: 9000, maisAntigo: '2026-08-10', diasMax: 34, criticos: 1, limiteCritico: 15 },
+                porVencimento: {
+                    faixas: [
+                        { faixa: 'atraso_30', quantidade: 1, valor: 5000 }, { faixa: 'atraso_16_30', quantidade: 0, valor: 0 },
+                        { faixa: 'atraso_1_15', quantidade: 1, valor: 4000 }, { faixa: 'vence_7', quantidade: 2, valor: 8000 },
+                        { faixa: 'vence_30', quantidade: 3, valor: 15000 }, { faixa: 'depois', quantidade: 4, valor: 20000 }
+                    ],
+                    quantidade: 11,
+                    valor: 52000,
+                    semData: 0,
+                    maioresAtrasos: {
+                        total: 2,
+                        itens: [{ pedidoId: 3, pedido: 'PED88', cliente: 'Casa Bela', parcela: '2/3', vencimento: '2026-08-10', dias: 34, valor: 5000 }]
+                    }
+                },
+                ordens: {
+                    abertas: 2, atrasadas: 1, proximas7: 1,
+                    itens: [{ pedidoId: 4, pedido: 'PED90', cliente: 'Móveis Aurora', parcela: '1/2', vencimento: '2026-09-10', dias: 3, valor: 3000, forma: 'Pix', data: '2026-09-10', atrasada: true }]
+                },
+                conciliacao: {
+                    fila: 2, aLancar: 1, alertas: 0, boletosComErro: 0,
+                    itens: [{ chave: 'conciliar', nivel: 'normal', titulo: 'Pagamentos a conciliar', descricao: '2 avisos de pagamento do BB na fila · 1 boleto pago ainda não lançado' }]
+                },
+                antecipadoEmProducao: { pedidos: 2, valor: 7800 },
+                serie12m: meses.map((mes, i) => ({ mes, quantidade: i, valor: i * 5000 })),
+                parcelas: { '1:1': 'paga' },
+                desde: '2026-01-01'
+            },
+            fiscal: {
+                notasMes: { emitidas: 9, autorizadas: { quantidade: 7, valor: 61000 }, canceladas: 1, processando: 0, rejeitadas: 1 },
+                aguardandoNfe: {
+                    desde: '2026-08-01', quantidade: 2, valor: 9800, dispensados: 0,
+                    itens: [{ pedidoId: 12, numero: 'PED12', cliente: 'Móveis Aurora', enviadoEm: '2026-09-10', dias: 3, valor: 8200 }]
+                },
+                problemas: {
+                    quantidade: 1, criticos: 1,
+                    itens: [{ chave: 'rejeitadas', nivel: 'critico', titulo: '1 nota recusada pela SEFAZ sem nova emissão', descricao: '539 — Duplicidade de NF-e' }]
+                },
+                certificado: { vencido: false, venceEmBreve: false, diasRestantes: 200, validoAte: '2027-03-31' }
+            },
+            pagar: {
+                competencia: '2026-09',
+                aPagar: { valor: 6200 },
+                comissoes: { valor: 3200, total: { valor: 5400 }, pago: { valor: 2200 }, situacao: 'parcial', pagarAte: '2026-10-05', parcelas: 9 },
+                producao: { valor: 3000, total: { valor: 3000 }, pago: { valor: 0 }, situacao: 'aberta', pagarAte: '2026-10-06', pecas: 40 },
+                atrasadas: { quantidade: 2, valor: 350.5 },
+                aConfirmar: {
+                    quantidade: 2, atrasados: 1, valor: 4100,
+                    itens: [{ tipo: 'producao', competencia: '2026-08', valor: 2800, total: { valor: 2800 }, pagarAte: '2026-09-08', atrasado: true }]
+                }
+            }
+    };
+}
+
+/** A amostra de sempre com o Financeiro: para os testes que passam por TODOS os cartões. */
+function amostraComFinanceiro() {
+    const dados = amostraDoContrato();
+    Object.assign(dados.secoes, financeiroDaAmostra());
+    return dados;
+}
+
 /** O que o backend manda quando o perfil não tem a coluna de valor (§2). */
 function anularDinheiro(no) {
     if (Array.isArray(no)) return no.map(anularDinheiro);
@@ -1107,7 +1180,7 @@ function anularDinheiro(no) {
 
 test('todos os cartões desenham a amostra do contrato sem cair no cartão de erro', () => {
     const painel = montarPainelFalso();
-    painel.avaliar('renderizarDashboard')(painel.modulo, amostraDoContrato());
+    painel.avaliar('renderizarDashboard')(painel.modulo, amostraComFinanceiro());
 
     assert.deepStrictEqual(painel.erros, [], 'nenhum desenhista pode lançar exceção');
     for (const [chave, cartao] of Object.entries(painel.cartoes)) {
@@ -1150,7 +1223,7 @@ test('todos os cartões desenham a amostra do contrato sem cair no cartão de er
 
 test('sem a coluna de valor nenhum cartão mostra R$ e o gráfico passa a contar pedidos', () => {
     const painel = montarPainelFalso();
-    painel.avaliar('renderizarDashboard')(painel.modulo, anularDinheiro(amostraDoContrato()));
+    painel.avaliar('renderizarDashboard')(painel.modulo, anularDinheiro(amostraComFinanceiro()));
 
     assert.deepStrictEqual(painel.erros, []);
     assert.strictEqual(painel.cartoes['kpi-ticket'].hidden, true, 'ticket médio é só dinheiro');
@@ -1285,7 +1358,7 @@ test('503 ao conferir permissões mostra o erro com "Tentar novamente", nunca "s
 
 test('nomes escondidos por permissão (null) não viram "null", "com —" nem título vazio', () => {
     const painel = montarPainelFalso();
-    const dados = amostraDoContrato();
+    const dados = amostraComFinanceiro();
     // O que o BFF manda quando o perfil não tem a coluna que mostra o nome.
     dados.secoes.producao.maisAntigos[0].cliente = null;
     Object.assign(dados.secoes.orcamentos.vencendo7d.itens[0], { destinatario: null, dono: null });
@@ -2079,4 +2152,168 @@ test('CSS: as barras penduradas e a legenda têm cor (vermelho e roxo), e o tom 
     assert.match(css, /\.dash-grafico__legenda-cor--devolvido\s*\{[^}]*var\(--dash-roxo\)/);
     assert.match(css, /\[data-tom="lilas"\]\s*\{\s*--dash-tom:\s*var\(--dash-lilas\)/);
     assert.match(css, /--dash-lilas:\s*color-mix\(in srgb, var\(--color-purple\)/);
+});
+
+// ------------------------------------------------ Financeiro (24/09/2026)
+//
+// Contas a receber, NF-e e o que falta pagar de comissões e produção
+// (backend/dashboardFinanceiro.js): indicadores novos, cartões de atenção e
+// o que entrou nos cartões de antes (Recebido no gráfico, recebido antes da
+// nota no KPI de produção, enviados sem NF-e no donut).
+
+const plano = valor => JSON.parse(JSON.stringify(valor));
+
+test('Financeiro: os indicadores dizem o recebido, o a receber, o atraso, as NF-e e o que falta pagar', () => {
+    const painel = montarPainelFalso();
+    painel.avaliar('renderizarDashboard')(painel.modulo, amostraComFinanceiro());
+    assert.deepStrictEqual(painel.erros, []);
+
+    const recebido = painel.texto('kpi-recebido');
+    assert.match(recebido, /R\$ 42\.000/);
+    assert.match(recebido, /8 parcelas recebidas/);
+    assert.match(recebido, /\+20%/, '42 mil contra 35 mil no mesmo período do mês passado');
+    assert.match(recebido, /R\$ 120,50 de multa e juros/);
+    assert.match(recebido, /1 estorno no mês/);
+
+    const aReceber = painel.texto('kpi-a-receber');
+    assert.match(aReceber, /R\$ 26\.000/);
+    assert.match(aReceber, /3 com boleto/);
+    assert.match(aReceber, /1 com ordem de pagamento/);
+    assert.match(aReceber, /1 sem cobrança/);
+
+    const atraso = painel.texto('kpi-atraso');
+    assert.match(atraso, /2 parcelas vencidas sem pagamento/);
+    assert.match(atraso, /1 há mais de 15 dias/);
+    assert.match(atraso, /a mais antiga venceu em 10\/08\/26/);
+
+    const nfe = painel.texto('kpi-nfe');
+    assert.match(nfe, /^7notas autorizadas · R\$ 61 mil/);
+    assert.match(nfe, /1 recusada pela SEFAZ/);
+    assert.match(nfe, /1 cancelada/);
+
+    const aPagar = painel.texto('kpi-a-pagar');
+    assert.match(aPagar, /R\$ 6\.200/);
+    assert.match(aPagar, /Comissões R\$ 3,2 mil · Produção R\$ 3 mil/);
+    assert.match(aPagar, /pagar até 05\/10/, 'o prazo mais próximo dos dois');
+    assert.match(aPagar, /comissões pagas em parte/);
+    assert.match(aPagar, /R\$ 350,50 em comissões atrasadas/);
+});
+
+test('Financeiro: vencimentos em faixas, as maiores em atraso e os cartões de atenção com a lista cortada', () => {
+    const painel = montarPainelFalso();
+    painel.avaliar('renderizarDashboard')(painel.modulo, amostraComFinanceiro());
+
+    const vencimentos = painel.texto('vencimentos');
+    for (const rotulo of ['Atraso de 31+ dias', 'Atraso de 16 a 30 dias', 'Atraso de 1 a 15 dias', 'Vence em até 7 dias', 'Vence em 8 a 30 dias', 'Vence depois de 30 dias']) {
+        assert.ok(vencimentos.includes(rotulo), rotulo);
+    }
+    assert.match(vencimentos, /Maiores em atraso/);
+    assert.match(vencimentos, /PED88 · parcela 2\/3/);
+    assert.match(vencimentos, /venceu há 34 dias/);
+    assert.match(vencimentos, /\+1 não listados/, '2 em atraso, 1 na lista');
+    assert.match(vencimentos, /parcelas controladas a partir de 01\/01\/26/);
+    const barras = painel.cartoes.vencimentos.querySelectorAll('.dash-hbarra');
+    assert.deepStrictEqual(barras.map(b => b.dataset.tom), ['vermelho', 'vinho', 'ouro', 'azul', 'verde', 'neutro']);
+
+    assert.match(painel.texto('nfe-problemas'), /1 nota recusada pela SEFAZ sem nova emissão/);
+    assert.match(painel.texto('nfe-problemas'), /urgente/);
+    assert.match(painel.texto('sem-nfe'), /PED12/);
+    assert.match(painel.texto('sem-nfe'), /há 3 dias/);
+    assert.match(painel.texto('sem-nfe'), /\+1 não listados/);
+    assert.match(painel.texto('a-confirmar'), /Produção · agosto de 2026/);
+    assert.match(painel.texto('a-confirmar'), /1 depois do prazo/);
+    assert.match(painel.texto('a-confirmar'), /\+1 não listados/);
+    assert.match(painel.texto('ordens'), /PED90 · parcela 1\/2/);
+    assert.match(painel.texto('ordens'), /Móveis Aurora · Pix/);
+    assert.match(painel.texto('ordens'), /passou há 3 dias/);
+    assert.match(painel.texto('conciliacao'), /3avisos do banco a resolver/);
+    assert.match(painel.texto('conciliacao'), /Pagamentos a conciliar/);
+});
+
+test('Financeiro: os cartões de atenção só aparecem com o que resolver; sem a seção, somem sem virar erro', () => {
+    const cartao = avaliar('estadoDoCartao');
+    const dados = amostraComFinanceiro();
+    Object.assign(dados.secoes.fiscal, { aguardandoNfe: { quantidade: 0, itens: [] }, problemas: { quantidade: 0, itens: [] } });
+    Object.assign(dados.secoes.receber, { ordens: { abertas: 3, atrasadas: 0, proximas7: 0, itens: [] }, conciliacao: { fila: 0, aLancar: 0, itens: [] } });
+    dados.secoes.pagar.aConfirmar = { quantidade: 0, itens: [] };
+    for (const chave of ['sem-nfe', 'nfe-problemas', 'ordens', 'conciliacao', 'a-confirmar']) {
+        assert.strictEqual(cartao(dados, chave), 'oculto', chave);
+    }
+    assert.strictEqual(cartao(dados, 'kpi-atraso'), 'ok', 'o indicador fica, mesmo zerado');
+
+    const semFinanceiro = amostraDoContrato();
+    for (const chave of ['kpi-recebido', 'kpi-nfe', 'kpi-a-pagar', 'vencimentos', 'sem-nfe']) {
+        assert.strictEqual(cartao(semFinanceiro, chave), 'oculto', `${chave}: sem permissão, some`);
+    }
+    assert.strictEqual(cartao({ secoes: {}, falhas: { pagar: 'fora do ar' } }, 'kpi-a-pagar'), 'falha');
+    assert.strictEqual(avaliar('estadoGeral')({ secoes: { receber: financeiroDaAmostra().receber }, falhas: {} }), 'ok');
+});
+
+test('Financeiro nos cartões de antes: Recebido no gráfico, recebido antes da nota e enviados sem NF-e', () => {
+    const painel = montarPainelFalso();
+    painel.avaliar('renderizarDashboard')(painel.modulo, amostraComFinanceiro());
+    const grafico = painel.cartoes['grafico-vendas'];
+    assert.deepStrictEqual(legendaDe(painel), ['Vendas fechadas', 'Recebido (o que entrou no mês)']);
+    assert.strictEqual(grafico.querySelectorAll('.dash-barras__recebido-ponto').length, 12, 'um ponto por mês');
+    assert.strictEqual(grafico.querySelectorAll('.dash-barras__recebido-linha').length, 1);
+    assert.match(painel.texto('grafico-vendas'), /Recebido nos 12 meses/);
+    assert.match(painel.texto('grafico-vendas'), /R\$ 330 mil/, '0 + 5 mil + … + 55 mil');
+
+    // O balão do mês conta o que entrou.
+    const ouroSet = grafico.querySelectorAll('.dash-barras__coluna')[11].querySelectorAll('.dash-barras__item--vendas')[0];
+    disparar(ouroSet, 'focus');
+    const { caixa } = painel.popover.aberturas.at(-1);
+    assert.match(semEspacoFixo(caixa.textContent), /Recebido no mêsR\$ 55\.000,0011 parcelas recebidas/);
+    assert.match(semEspacoFixo(ouroSet.getAttribute('aria-label')), /Recebido no mês: R\$ 55\.000,00, 11 parcelas recebidas$/);
+
+    assert.match(painel.texto('kpi-producao'), /R\$ 7,8 mil já recebidos antes da nota/);
+    assert.match(painel.texto('grafico-situacao'), /2 enviados sem NF-e/);
+
+    // Sem a coluna de valor (contando pedidos) a linha de R$ some.
+    const contagem = montarPainelFalso();
+    contagem.avaliar('renderizarDashboard')(contagem.modulo, anularDinheiro(amostraComFinanceiro()));
+    assert.strictEqual(contagem.cartoes['grafico-vendas'].querySelectorAll('.dash-barras__recebido-ponto').length, 0);
+    assert.deepStrictEqual(legendaDe(contagem), ['Vendas fechadas']);
+});
+
+test('balão da previsão: "1 paga" e "1 em atraso" por pedido e o recebido do mês; sem as contas a receber, como antes', () => {
+    const dica = avaliar('conteudoDicaPrevisao');
+    const mes = {
+        mes: '2026-10', valor: 100, parcelas: 2, pedidos: 1, outros: 0,
+        itens: [{
+            pedidoId: 7, numero: 'PED7', cliente: 'Loja Boa', totalParcelas: 3, valor: 100, estimada: false,
+            parcelas: [{ numero: 1, vencimento: '2026-10-02', valor: 50 }, { numero: 2, vencimento: '2026-10-20', valor: 50 }]
+        }]
+    };
+    const comEstado = dica(mes, { parcelas: { '7:1': 'paga', '7:2': 'atrasada', '8:1': 'paga' }, recebido: { mes: '2026-10', quantidade: 2, valor: 1500 } });
+    assert.deepStrictEqual(plano(comEstado.itens[0].marcas), [{ tipo: 'paga', texto: '1 paga' }, { tipo: 'atrasada', texto: '1 em atraso' }]);
+    assert.strictEqual(semEspacoFixo(comEstado.recebido.valor), 'R$ 1.500,00');
+    assert.strictEqual(comEstado.recebido.detalhe, '2 parcelas recebidas');
+
+    const semEstado = dica(mes);
+    assert.deepStrictEqual(plano(semEstado.itens[0].marcas), []);
+    assert.strictEqual(semEstado.recebido, null);
+    assert.match(avaliar('rotuloAcessivelDica')(semEstado), /^Previsão de faturamento em outubro de 2026: /);
+});
+
+test('Financeiro: textos de prazo das listas e as faixas iguais às do backend', () => {
+    assert.strictEqual(avaliar('textoAtrasoDaParcela')(1), 'venceu há 1 dia');
+    assert.strictEqual(avaliar('textoAtrasoDaParcela')(12), 'venceu há 12 dias');
+    assert.strictEqual(avaliar('textoDiasSemNota')(0), 'enviado hoje');
+    assert.strictEqual(avaliar('textoDiasSemNota')(1), 'há 1 dia');
+    assert.strictEqual(avaliar('textoDaOrdem')({ atrasada: true, dias: 2 }), 'passou há 2 dias');
+    assert.strictEqual(avaliar('textoDaOrdem')({ atrasada: false, data: '2026-09-30T00:00:00.000Z' }), 'para 30/09', 'DATE cortada como texto');
+    const { FAIXAS_VENCIMENTO } = require(path.join(SRC, '..', 'backend', 'dashboardFinanceiro'));
+    assert.deepStrictEqual(Object.keys(avaliar('DASH_FAIXAS_VENCIMENTO')), FAIXAS_VENCIMENTO);
+});
+
+test('Financeiro no HTML: a faixa some inteira sem permissão, e os cartões de atenção nascem escondidos', () => {
+    assert.match(FONTE_HTML, /<section class="dash-bloco-financeiro animate-fade-in-up" data-dash-linha>/);
+    assert.match(FONTE_HTML, /class="dash-kpis dash-kpis--financeiro" data-dash-linha/);
+    for (const chave of ['nfe-problemas', 'sem-nfe', 'a-confirmar', 'ordens', 'conciliacao']) {
+        assert.match(FONTE_HTML, new RegExp(`data-dash-cartao="${chave}"[^>]*\\bhidden>`), `${chave} nasce escondido`);
+    }
+    // Cinco indicadores: uma linha só na tela larga.
+    assert.match(REGRAS_CSS, /\.dash-kpis\.dash-kpis--financeiro\[data-visiveis="5"\]\s*\{[^}]*repeat\(5, minmax\(0, 1fr\)\)/);
+    assert.match(FONTE_JS, /Estoque ou Financeiro para o seu perfil/);
 });

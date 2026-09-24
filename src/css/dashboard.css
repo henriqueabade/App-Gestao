@@ -1572,11 +1572,137 @@
     }
 }
 
+/* ------------------------------------------------------------ financeiro */
+
+/* Faixa do Financeiro (24/09/2026): título, os indicadores e o cartão dos
+   vencimentos. Some inteira quando o perfil não vê nada do Financeiro
+   (data-dash-linha, como as outras linhas). */
+.dash-bloco-financeiro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dash-espaco);
+    min-width: 0;
+}
+
+/* Cinco indicadores: numa linha só na tela larga. */
+@media (min-width: 1280px) {
+    .dash-kpis.dash-kpis--financeiro[data-visiveis="5"] {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+/* Entre 768 e 1279 px a faixa tem 2 colunas: com os cinco à vista o 1º
+   (o recebido) ganha a linha inteira e os outros quatro fazem 2 × 2. */
+@media (min-width: 768px) and (max-width: 1279px) {
+    .dash-kpis[data-visiveis="5"] > .dash-card:first-child {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Contas a receber por vencimento: os rótulos das faixas são mais longos
+   ("Vence depois de 30 dias") e o número leva o valor ao lado. */
+.dash-hbarras--vencimento .dash-hbarra {
+    grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr) minmax(4.5rem, auto);
+}
+
+/* Barras à esquerda e "Maiores em atraso" à direita quando há largura. */
+.dash-vencimentos {
+    display: grid;
+    gap: 1.25rem 2rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+}
+
+.dash-vencimentos__lista {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+@media (min-width: 1024px) {
+    .dash-vencimentos:has(.dash-vencimentos__lista) {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    }
+}
+
+/* Recebido no gráfico de vendas: a linha azul por cima das barras. Não pega
+   o mouse — o balão de cada barra já diz o recebido do mês. */
+.dash-barras__recebido {
+    pointer-events: none;
+}
+
+.dash-barras__recebido-linha {
+    fill: none;
+    stroke: var(--color-blue);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.dash-barras__recebido-ponto {
+    fill: var(--color-blue);
+    stroke: var(--menu-surface-strong);
+    stroke-width: 1.5;
+    pointer-events: auto;
+}
+
+.dash-grafico__legenda-cor--recebido {
+    height: 0.2rem;
+    border-radius: 9999px;
+    background: var(--color-blue);
+}
+
+.dash-grafico__dado--recebido .dash-grafico__dado-valor {
+    color: color-mix(in srgb, var(--color-blue) 72%, var(--menu-text-strong));
+}
+
+/* No balão da previsão: "1 paga", "1 em atraso" por pedido, e a linha do
+   Recebido com a bolinha azul. O balão vai para o <body> (Popover): as
+   cores vêm direto dos tokens do tema. */
+.dash-balao__marcas {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.15rem;
+}
+
+.dash-balao__marca {
+    padding: 0.05rem 0.45rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.dash-balao__marca--paga {
+    color: color-mix(in srgb, var(--color-green) 72%, var(--menu-text-strong));
+    background: color-mix(in srgb, var(--color-green) 16%, transparent);
+}
+
+.dash-balao__marca--atrasada {
+    color: color-mix(in srgb, var(--color-red) 72%, var(--menu-text-strong));
+    background: color-mix(in srgb, var(--color-red) 16%, transparent);
+}
+
+.dash-balao__item--recebido .dash-balao__nome::before {
+    background: var(--color-blue);
+}
+
+/* Enviados sem NF-e, abaixo do donut. */
+.dash-donut-notas {
+    justify-content: center;
+}
+
 /* ------------------------------------------------------------ responsivo */
 
 @media (max-width: 479px) {
     .dash-card {
         padding: 1rem;
+    }
+
+    .dash-hbarras--vencimento .dash-hbarra {
+        grid-template-columns: minmax(0, 1fr) auto;
     }
 
     /* Barra horizontal ganha linha própria: rótulo e número em cima. */

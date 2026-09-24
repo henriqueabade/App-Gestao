@@ -38,6 +38,10 @@ const COLUNAS = {
   tarefa_marcadores: ['id', 'nome', 'cor', 'criado_por', 'criado_em'],
   tarefa_visibilidade: ['id', 'usuario_id', 'alvo_id', 'concedido_por', 'criado_em'],
   tarefa_automacoes: ['id', 'chave', 'nome', 'descricao', 'ativa', 'dias', 'titulo', 'tipo', 'prioridade', 'atualizado_por', 'atualizado_em'],
+  tarefa_automacao_usuarios: ['id', 'usuario_id', 'chave', 'ativa', 'atualizado_em'],
+  // As permissões das regras automáticas: enviar orçamento e confirmar pagamento.
+  perm_orc: ['id', 'modelo_id', 'modulo_ativo', 'acao_send'],
+  perm_financeiro: ['id', 'modelo_id', 'modulo_ativo', 'acao_pagamento_confirmar'],
   notificacoes: ['id', 'usuario_id', 'tipo', 'titulo', 'mensagem', 'origem', 'registro_id', 'item_id', 'comentario_id', 'autor_id', 'lida_em', 'criado_em', 'chave', 'excluida_em'],
   clientes: ['id', 'nome_fantasia', 'dono_cliente', 'criado_por'],
   cliente_interacoes: ['id', 'cliente_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id', 'tarefa_id', 'criado_em'],
@@ -121,7 +125,7 @@ function criarUpstream(dados) {
 const MODULOS = [
   './apiHttpClient', './permissionsController', './permissionsRepository', './tarefasController', './tarefasServico',
   './historicoSocial', './historicoSocialController', './prospeccoesController', './notificacoesController', './clienteHistorico',
-  './tarefasAcoes'
+  './tarefasAcoes', './tarefasAutomaticas', './financeiroController'
 ];
 
 async function montar(dados) {
@@ -134,6 +138,8 @@ async function montar(dados) {
   // O vigia das ações de módulo, como no server.js, e um "módulo de pedidos" de mentira.
   app.use('/api', require('./tarefasAcoes').observar);
   app.put('/api/pedidos/:id/status', (req, res) => res.json({ success: true }));
+  // E um "pagamento de competência" de mentira: devolve o que ainda falta pagar.
+  app.post('/api/financeiro/pagamentos', (req, res) => res.json({ falta_pagar: Number(req.body?.falta ?? 0) }));
   app.use('/api/tarefas', require('./tarefasController'));
   app.use('/api/prospeccoes', require('./prospeccoesController'));
   app.use('/api/notificacoes', require('./notificacoesController'));
@@ -185,8 +191,13 @@ function baseDados() {
     tarefa_marcadores: [], tarefa_visibilidade: [{ id: 1, usuario_id: 5, alvo_id: 3 }],
     tarefa_automacoes: [
       { id: 1, chave: 'orcamento_enviado', nome: 'Orçamento enviado', ativa: true, dias: 3, titulo: 'Follow-up do orçamento {orcamento} — {cliente}', tipo: 'Follow-up', prioridade: 'alta' },
-      { id: 2, chave: 'pedido_entregue', nome: 'Pós-venda', ativa: false, dias: 7, titulo: 'Pós-venda {pedido}', tipo: 'Ligação', prioridade: 'media' }
+      { id: 2, chave: 'pedido_entregue', nome: 'Pós-venda', ativa: false, dias: 7, titulo: 'Pós-venda {pedido}', tipo: 'Ligação', prioridade: 'media' },
+      { id: 3, chave: 'comissoes_fechadas', nome: 'Comissões fechadas → confirmar pagamento', ativa: true, dias: 0, titulo: 'Confirmar o pagamento das comissões de {competencia}', tipo: 'Tarefa', prioridade: 'alta' }
     ],
+    tarefa_automacao_usuarios: [],
+    // O perfil Vendedor (9) envia orçamento; ninguém além do Sup Admin confirma pagamento.
+    perm_orc: [{ id: 1, modelo_id: 9, modulo_ativo: true, acao_send: true }],
+    perm_financeiro: [{ id: 1, modelo_id: 9, modulo_ativo: true, acao_pagamento_confirmar: false }],
     notificacoes: [],
     clientes: [{ id: 7, nome_fantasia: 'Loja Boa', dono_cliente: 'Ana' }],
     cliente_interacoes: [], cliente_historico: [],
@@ -486,6 +497,125 @@ test('automação: cria uma vez, com o título preenchido; regra desligada não 
     assert.strictEqual(await S.criarTarefaAutomatica(api, 'pedido_entregue', { refId: 40, usuarioId: 2 }), null, 'desligada');
     assert.strictEqual(ctx.tabelas.tarefas.length, 1);
     assert.ok(ctx.tabelas.cliente_historico.some(h => h.tipo === 'tarefa' && h.acao === 'criou'));
+
+    // O aviso da tarefa automática sai SEMPRE — aqui a Ana enviou e a tarefa é dela —,
+    // dizendo o que aconteceu; o "Nova tarefa para você" não sai junto.
+    const avisos = avisosDe(ctx, 2);
+    assert.deepStrictEqual(avisos.map(a => a.tipo), ['tarefa_automatica']);
+    assert.strictEqual(avisos[0].titulo, 'Tarefa automática criada');
+    const prazo = dia(3).split('-').reverse().join('/');
+    assert.strictEqual(avisos[0].mensagem, `Orçamento ORC-30 enviado: “Follow-up do orçamento ORC-30 — Loja Boa”, para ${prazo}.`);
+    assert.deepStrictEqual([avisos[0].origem, avisos[0].registro_id, avisos[0].autor_id ?? null], ['tarefa', t.id, null]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('automação: só recebe quem tem a permissão da regra e não a desligou para si', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const S = require('./tarefasServico');
+    const { createApiClient } = require('./apiHttpClient');
+    const api = createApiClient({ headers: { authorization: `Bearer ${tokenDe(1)}` } });
+    const enviar = (refId, responsavelId) => S.criarTarefaAutomatica(api, 'orcamento_enviado', { refId, responsavelId, usuarioId: responsavelId, vinculos: { orcamento_id: 30 }, valores: { orcamento: `ORC-${refId}` } });
+
+    // A Bia (Supervisor) não envia orçamento: não recebe, nem é avisada.
+    assert.strictEqual(await enviar(31, 5), null);
+    assert.strictEqual(avisosDe(ctx, 5).length, 0);
+
+    // A Ana desliga para si pela tela; o João (mesmo perfil) continua recebendo.
+    const desligou = await chamar(ctx.porta, '/api/tarefas/automacoes/orcamento_enviado/minha', { usuario: 2, method: 'PUT', corpo: { ativa: false } });
+    assert.strictEqual(desligou.status, 200);
+    assert.deepStrictEqual(ctx.tabelas.tarefa_automacao_usuarios.map(l => [l.usuario_id, l.chave, l.ativa]), [[2, 'orcamento_enviado', false]]);
+    assert.strictEqual(await enviar(32, 2), null, 'desligada para a Ana');
+    assert.ok(await enviar(33, 3), 'o João continua recebendo');
+
+    // Religar atualiza a mesma linha (uma por pessoa e regra).
+    await chamar(ctx.porta, '/api/tarefas/automacoes/orcamento_enviado/minha', { usuario: 2, method: 'PUT', corpo: { ativa: true } });
+    assert.strictEqual(ctx.tabelas.tarefa_automacao_usuarios.length, 1);
+    assert.ok(await enviar(34, 2));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('automações na tela: cada um vê só as regras das suas permissões; configurar para todos continua restrito', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const daAna = await chamar(ctx.porta, '/api/tarefas/automacoes', { usuario: 2 });
+    assert.strictEqual(daAna.status, 200, 'quem vê Tarefas abre a tela (antes só quem configurava)');
+    assert.deepStrictEqual(daAna.json.automacoes.map(r => [r.chave, r.minha, r.permissao]), [['orcamento_enviado', true, 'orc.send']],
+      'a vendedora não vê pedidos (pós-venda) nem confirma pagamento');
+    assert.strictEqual(daAna.json.pode_configurar, false);
+    assert.strictEqual(daAna.json.dica, 'Pode ser desativada em Tarefas ou em Configurações.');
+
+    const doSup = await chamar(ctx.porta, '/api/tarefas/automacoes', { usuario: 1 });
+    assert.deepStrictEqual(doSup.json.automacoes.map(r => r.chave), ['orcamento_enviado', 'pedido_entregue', 'comissoes_fechadas']);
+    assert.strictEqual(doSup.json.pode_configurar, true);
+    assert.strictEqual(doSup.json.automacoes.find(r => r.chave === 'comissoes_fechadas').prazo_tipo, 'antes_do_pagamento');
+
+    // Regra fora das permissões: como se não existisse, para si e para todos.
+    assert.strictEqual((await chamar(ctx.porta, '/api/tarefas/automacoes/pedido_entregue/minha', { usuario: 2, method: 'PUT', corpo: { ativa: false } })).status, 404);
+    assert.strictEqual((await chamar(ctx.porta, '/api/tarefas/automacoes/orcamento_enviado', { usuario: 2, method: 'PUT', corpo: { dias: 5 } })).status, 403);
+    assert.strictEqual((await chamar(ctx.porta, '/api/tarefas/automacoes/orcamento_enviado/minha', { usuario: 2, method: 'PUT', corpo: { ativa: 'nao' } })).status, 400);
+    assert.strictEqual((await chamar(ctx.porta, '/api/tarefas/automacoes/comissoes_fechadas', { usuario: 1, method: 'PUT', corpo: { dias: 2 } })).status, 200);
+    assert.strictEqual(ctx.tabelas.tarefa_automacoes.find(r => r.chave === 'comissoes_fechadas').dias, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('automações sem o SQL por pessoa: a tela lista (todas ligadas) e o interruptor pede o SQL', async () => {
+  const dados = baseDados();
+  delete dados.tarefa_automacao_usuarios;
+  const ctx = await montar(dados);
+  try {
+    const lista = await chamar(ctx.porta, '/api/tarefas/automacoes', { usuario: 2 });
+    assert.strictEqual(lista.status, 200);
+    assert.strictEqual(lista.json.preferencias_sql_pendente, true);
+    assert.strictEqual(lista.json.automacoes[0].minha, true);
+    const desligar = await chamar(ctx.porta, '/api/tarefas/automacoes/orcamento_enviado/minha', { usuario: 2, method: 'PUT', corpo: { ativa: false } });
+    assert.strictEqual(desligar.status, 409);
+    assert.match(desligar.json.error, /tarefas_automaticas_por_usuario\.sql/);
+    // E a criação segue como antes: sem a tabela, ninguém desligou nada.
+    const S = require('./tarefasServico');
+    const { createApiClient } = require('./apiHttpClient');
+    const api = createApiClient({ headers: { authorization: `Bearer ${tokenDe(2)}` } });
+    assert.ok(await S.criarTarefaAutomatica(api, 'orcamento_enviado', { refId: 30, responsavelId: 2, usuarioId: 2, valores: { orcamento: 'ORC-30' } }));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('competência fechada: quem fecha e pode confirmar pagamento ganha a tarefa do dia marcado, que conclui quando tudo é pago', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const { tarefaDoFechamento } = require('./financeiroController');
+    const { createApiClient } = require('./apiHttpClient');
+    const apiDe = id => createApiClient({ headers: { authorization: `Bearer ${tokenDe(id)}` } });
+    const resultado = { total: 5400, pagar_ate: dia(10) };
+
+    // A Ana (sem "Confirmar pagamento") não ganha a tarefa; nada a pagar também não gera.
+    assert.strictEqual(await tarefaDoFechamento(apiDe(2), { tipo: 'comissao', competencia: '2026-09', resultado, usuarioId: 2 }), null);
+    assert.strictEqual(await tarefaDoFechamento(apiDe(1), { tipo: 'comissao', competencia: '2026-08', resultado: { total: 0, pagar_ate: dia(10) }, usuarioId: 1 }), null);
+    assert.strictEqual(ctx.tabelas.tarefas.length, 0);
+
+    const t = await tarefaDoFechamento(apiDe(1), { tipo: 'comissao', competencia: '2026-09', resultado, usuarioId: 1 });
+    assert.strictEqual(t.titulo, 'Confirmar o pagamento das comissões de setembro/2026');
+    assert.strictEqual(require('./tarefasRegras').diaISO(t.data), dia(10), 'o dia marcado ("pagar até")');
+    assert.deepStrictEqual([t.acao_chave, t.acao_registro, t.acao_rotulo], ['financeiro.pagar_comissoes', '2026-09', 'Comissões de setembro/2026']);
+    assert.match(t.descricao, /R\$\s5\.400,00 a pagar até/);
+    const aviso = avisosDe(ctx, 1, 'tarefa_automatica')[0];
+    assert.match(aviso.mensagem, /^Comissões de setembro\/2026 fechadas: “Confirmar o pagamento das comissões de setembro\/2026”, para /);
+
+    // Pagou só uma parte (por beneficiário): a tarefa continua; quitou: conclui sozinha.
+    const linha = ctx.tabelas.tarefas.find(x => x.id === t.id);
+    await chamar(ctx.porta, '/api/financeiro/pagamentos', { usuario: 1, corpo: { tipo: 'comissao', competencia: '2026-09', falta: 1200 } });
+    await new Promise(r => setTimeout(r, 150));
+    assert.strictEqual(linha.status, 'a_fazer');
+    await chamar(ctx.porta, '/api/financeiro/pagamentos', { usuario: 1, corpo: { tipo: 'comissao', competencia: '2026-09', falta: 0 } });
+    for (let i = 0; i < 40 && linha.status !== 'concluida'; i++) await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(linha.status, 'concluida');
   } finally {
     await ctx.encerrar();
   }

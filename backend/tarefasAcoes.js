@@ -109,7 +109,14 @@ const ACOES = [
   { chave: 'financeiro.fechar_producao', modulo: 'financeiro', permissao: 'financeiro.competencia.fechar', rotulo: 'Fechar a competência de produção', feito: 'fechou a produção da competência',
     rotas: [{ metodo: 'POST', caminho: /^\/api\/financeiro\/fechamentos$/, registro: (m, corpo) => corpo?.competencia, quando: corpo => corpo?.tipo === 'producao' }] },
   { chave: 'financeiro.pagar', modulo: 'financeiro', permissao: 'financeiro.pagamento.confirmar', rotulo: 'Confirmar o pagamento da competência', feito: 'confirmou o pagamento da competência',
-    rotas: [{ metodo: 'POST', caminho: /^\/api\/financeiro\/pagamentos$/, registro: (m, corpo) => corpo?.competencia }] }
+    rotas: [{ metodo: 'POST', caminho: /^\/api\/financeiro\/pagamentos$/, registro: (m, corpo) => corpo?.competencia }] },
+  // As da tarefa automática "competência fechada" (24/09/2026): cada tipo a
+  // sua, e só contam quando a competência fica TODA paga — o pagamento por
+  // beneficiário deixa a tarefa aberta até o último.
+  { chave: 'financeiro.pagar_comissoes', modulo: 'financeiro', permissao: 'financeiro.pagamento.confirmar', rotulo: 'Confirmar o pagamento das comissões (até quitar)', feito: 'quitou as comissões da competência',
+    rotas: [{ metodo: 'POST', caminho: /^\/api\/financeiro\/pagamentos$/, registro: (m, corpo) => corpo?.competencia, quando: corpo => corpo?.tipo === 'comissao', sucesso: r => r?.falta_pagar !== undefined && Number(r.falta_pagar) <= 0 }] },
+  { chave: 'financeiro.pagar_producao', modulo: 'financeiro', permissao: 'financeiro.pagamento.confirmar', rotulo: 'Confirmar o pagamento da produção (até quitar)', feito: 'quitou a produção da competência',
+    rotas: [{ metodo: 'POST', caminho: /^\/api\/financeiro\/pagamentos$/, registro: (m, corpo) => corpo?.competencia, quando: corpo => corpo?.tipo === 'producao', sucesso: r => r?.falta_pagar !== undefined && Number(r.falta_pagar) <= 0 }] }
 ];
 
 const PORCHAVE = new Map(ACOES.map(a => [a.chave, a]));

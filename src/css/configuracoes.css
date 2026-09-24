@@ -149,6 +149,55 @@ body {
     transform: translateX(1.5rem);
 }
 
+/* O quadro que só aparece quando tem o que mostrar (Tarefas automáticas):
+   o display: flex acima anularia o atributo hidden. */
+.settings-card[hidden] {
+    display: none;
+}
+
+/* Tarefas automáticas: uma linha por regra, o interruptor à direita. */
+.cfg-automaticas {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.cfg-automatica {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.9rem;
+    padding: 1rem 1.25rem;
+}
+
+.cfg-automatica__textos {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.cfg-automatica__modulo {
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.cfg-automatica .toggle {
+    flex-shrink: 0;
+}
+
+.cfg-automatica .toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .category-grid {
     display: grid;
     gap: 1rem;
