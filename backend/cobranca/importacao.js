@@ -34,6 +34,7 @@ const boletos = require('./boletos');
 const calculo = require('./boletoCalculo');
 const operacoes = require('./boletoOperacoes');
 const externas = require('../fiscal/externas');
+const recebimentos = require('./recebimentos');
 
 const SQL_ARQUIVO = 'sql/boletos_importados.sql';
 const ORIGEM_APP = 'app';
@@ -867,15 +868,61 @@ async function importar({ api, bb, conexao, cfg, ambiente, escolhidos = [], doBB
 }
 
 /**
- * Liga (ou desliga) um boleto já importado a uma parcela. É o "relacionar
- * depois" da tela: boleto que entrou sem vínculo.
+ * Os recebimentos confirmados que vieram deste boleto (pago no banco ou
+ * quitado por fora): eles mudam de parcela junto com o boleto.
+ */
+async function recebimentosDoBoleto(api, boleto) {
+  if (!boleto?.pedido_id) return [];
+  let doPedido = [];
+  try {
+    doPedido = await recebimentos.lerTodos(api, { pedido_id: boleto.pedido_id });
+  } catch (e) {
+    if (!e?.extra?.sql_pendente) throw e;
+  }
+  return doPedido.filter(r => r && r.status === 'confirmado' && Number(r.boleto_id) === Number(boleto.id));
+}
+
+/**
+ * A competência de comissão FECHADA que já congelou algum destes
+ * recebimentos (ou null). Mexer nele depois desmancharia o que foi fechado.
+ */
+async function comissaoFechadaCom(api, recs) {
+  if (!recs.length) return null;
+  const ids = new Set(recs.map(r => String(r.id)));
+  const [itens, fechamentos] = await Promise.all([
+    Promise.all(recs.map(r => api.get('/api/financeiro_fechamento_itens', { query: { recebimento_id: r.id } }).then(lista).catch(() => []))).then(l => l.flat()),
+    api.get('/api/financeiro_fechamentos', { query: { tipo: 'comissao' } }).then(lista).catch(() => [])
+  ]);
+  const fechados = new Map(fechamentos.filter(f => f && f.tipo === 'comissao' && String(f.status) === 'fechado').map(f => [String(f.id), f]));
+  const item = itens.find(i => i && ids.has(String(i.recebimento_id)) && fechados.has(String(i.fechamento_id)));
+  return item ? fechados.get(String(item.fechamento_id)) : null;
+}
+
+const competenciaImpressa = comp => String(comp || '').split('-').reverse().join('/');
+
+/**
+ * Relaciona um boleto importado a outra parcela — ou o solta, sem parcela.
+ * Serve para corrigir o boleto colado na parcela errada (decisão do dono,
+ * 24/09/2026):
+ *   - MUDAR de parcela leva junto o pagamento que veio dele (o recebimento
+ *     troca de parcela): a parcela nova fica paga e a antiga volta a ficar
+ *     em aberto. A parcela nova não pode ter boleto vivo, boleto de fora nem
+ *     pagamento;
+ *   - SOLTAR só o boleto que ainda não foi pago (o pago muda de parcela);
+ *   - nos dois casos, o pagamento que já entrou numa competência de comissão
+ *     FECHADA trava a mudança, com a explicação.
+ * Boleto que o app gerou não passa por aqui: ele nasce na parcela certa.
  */
 async function vincular({ api, boleto, pedidoId = null, parcelaId = null, usuarioId = null }) {
   exigirSql(boleto);
   if (String(boleto.origem) !== ORIGEM_IMPORTADO) {
     throw erro('Só boleto importado do BB pode trocar de parcela por aqui.', 409);
   }
+  const recs = await recebimentosDoBoleto(api, boleto);
+  const pago = String(boleto.status) === 'pago' || recs.length > 0;
+
   if (!pedidoId || !parcelaId) {
+    if (pago) throw erro('Este boleto já foi pago: em vez de soltá-lo, mude-o para a parcela certa (o pagamento vai junto).', 409);
     const limpo = await boletos.atualizarBoleto(api, boleto, { pedido_id: null, parcela_id: null, numero_parcela: null });
     await boletos.registrarEvento(api, boleto.id, {
       origem: 'importacao', tipo: 'desvinculado', nosso_numero: boleto.nosso_numero,
@@ -890,20 +937,49 @@ async function vincular({ api, boleto, pedidoId = null, parcelaId = null, usuari
   ]);
   const parcela = parcelas.find(p => Number(p.id) === Number(parcelaId) && Number(p.pedido_id) === Number(pedidoId)) || null;
   if (!parcela) throw erro('Parcela não encontrada neste pedido.', 404);
+  if (Number(boleto.parcela_id) === Number(parcela.id)) throw erro(`O boleto já está na parcela ${parcela.numero_parcela}.`, 409);
 
-  const doPedido = await api.get('/api/boletos', { query: { pedido_id: pedidoId } }).then(lista).catch(() => []);
+  const [doPedido, externos, recsDestino] = await Promise.all([
+    api.get('/api/boletos', { query: { pedido_id: pedidoId } }).then(lista).catch(() => []),
+    externas.listarBoletos(api, pedidoId).catch(() => []),
+    recebimentos.lerTodos(api, { pedido_id: pedidoId }).catch(() => [])
+  ]);
   const ocupada = doPedido.find(b => Number(b.parcela_id) === Number(parcelaId) && Number(b.id) !== Number(boleto.id) && boletos.ocupaParcela(b));
   if (ocupada) throw erro(`A parcela ${parcela.numero_parcela} já tem o boleto ${ocupada.nosso_numero} (${ocupada.status}).`, 409);
+  if (externas.boletoExternoDaParcela(externos, parcela)) {
+    throw erro(`A parcela ${parcela.numero_parcela} tem boleto de fora: remova-o antes de trazer este para ela.`, 409);
+  }
+  const pagaNoDestino = recsDestino.find(r => r && r.status === 'confirmado' && Number(r.numero_parcela) === Number(parcela.numero_parcela)
+    && !recs.some(x => Number(x.id) === Number(r.id)));
+  if (pagaNoDestino) throw erro(`A parcela ${parcela.numero_parcela} já tem pagamento registrado: estorne-o antes, se foi engano.`, 409);
+
+  const fechada = await comissaoFechadaCom(api, recs);
+  if (fechada) {
+    throw erro(`O pagamento deste boleto já entrou na comissão de ${competenciaImpressa(fechada.competencia)}, que está fechada: mudar de parcela desmancharia o fechamento.`, 409);
+  }
 
   const pedido = pedidos.find(p => Number(p.id) === Number(pedidoId)) || null;
+  const antes = boleto.numero_parcela;
   const atualizado = await boletos.atualizarBoleto(api, boleto, {
     pedido_id: Number(pedidoId), parcela_id: Number(parcelaId), numero_parcela: parcela.numero_parcela
   });
+  // O pagamento vai junto: a parcela nova fica paga e a antiga volta a ficar em aberto.
+  for (const r of recs) {
+    await api.put(`/api/recebimentos/${r.id}`, {
+      pedido_id: Number(pedidoId), parcela_id: Number(parcelaId), numero_parcela: parcela.numero_parcela,
+      atualizado_em: new Date().toISOString()
+    });
+  }
+  const deOnde = antes ? `da parcela ${antes} para a parcela ${parcela.numero_parcela}` : `à parcela ${parcela.numero_parcela}`;
   await boletos.registrarEvento(api, boleto.id, {
     origem: 'importacao', tipo: 'vinculado', nosso_numero: boleto.nosso_numero,
-    mensagem: `Ligado à parcela ${parcela.numero_parcela} do pedido ${pedido?.numero || pedidoId}.`, usuario_id: usuarioId
+    mensagem: `Ligado ${deOnde} do pedido ${pedido?.numero || pedidoId}.${recs.length ? ' O pagamento foi junto.' : ''}`, usuario_id: usuarioId
   });
-  return { boleto: boletos.enxuto(atualizado), parcela: { id: parcela.id, numero_parcela: parcela.numero_parcela }, pedido: pedido ? { id: pedido.id, numero: pedido.numero } : null };
+  return {
+    boleto: boletos.enxuto(atualizado), parcela: { id: parcela.id, numero_parcela: parcela.numero_parcela },
+    pedido: pedido ? { id: pedido.id, numero: pedido.numero } : null,
+    recebimentos_movidos: recs.length
+  };
 }
 
 module.exports = {

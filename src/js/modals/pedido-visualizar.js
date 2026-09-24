@@ -208,7 +208,9 @@
     if (pedidoCancelado(pedido)) return false;
     const temNotaPropria = (Array.isArray(notas) ? notas : []).some(n => n && String(n.status_fiscal) === 'autorizada');
     const linhas = Array.isArray(boletos?.parcelas) ? boletos.parcelas : [];
-    const temDeFora = Boolean(notaExterna) || linhas.some(l => l?.boleto_externo);
+    // Boleto importado (colado ou trazido do BB) também: é lá que ele muda de
+    // parcela quando foi ligado à errada (decisão do dono, 24/09/2026).
+    const temDeFora = Boolean(notaExterna) || linhas.some(l => l?.boleto_externo || l?.boleto?.origem === 'importado');
     // A NOTA de fora só depois que o pedido saiu (a nota acompanha a mercadoria).
     // O BOLETO não espera o embarque: cliente que pagou adiantado já tem o
     // boleto na mão antes da nota (decisão do dono, 23/09/2026).

@@ -24,6 +24,7 @@
  */
 const c = require('./comum');
 const regras = require('./regras');
+const vencimentos = require('../cobranca/vencimento');
 
 const FAIXAS = ['1–15', '16–30', '31–60', '61–90', '+90'];
 const TIPOS_AJUSTE = { devolucao: 'Devolução', desconto: 'Desconto comercial', abatimento: 'Abatimento', cancelamento: 'Cancelamento parcial', outros: 'Outros' };
@@ -408,7 +409,51 @@ function visoes(apuradas) {
   return { atrasadas, previstas, naoRealizadas };
 }
 
+/** 'YYYY-MM' → o último dia do mês ('YYYY-MM-DD'). */
+function ultimoDiaDoMes(competencia) {
+  const [a, m] = String(competencia).split('-').map(Number);
+  const dia = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  return `${competencia}-${String(dia).padStart(2, '0')}`;
+}
+
+/**
+ * Previstas e atrasadas de UMA competência (decisões do dono, 24/09/2026):
+ *
+ *   - a referência é o fim do mês escolhido — ou hoje, se o mês ainda não
+ *     acabou. O mês passado mostra a foto do fim daquele mês: o que foi pago
+ *     depois aparece lá como atrasado;
+ *   - ATRASADA: venceu até a referência, passou do último dia sem encargos
+ *     (vencimento em fim de semana ou feriado vale até o próximo dia útil —
+ *     cobranca/vencimento.js) e não estava paga nela. Passa para os meses
+ *     seguintes até alguém registrar o pagamento (boleto ou o modal
+ *     "Pagamentos"); aí vira apurada no mês em que o cliente pagou;
+ *   - PREVISTA: vence no mês e, na referência, não estava paga nem atrasada.
+ *
+ * "Previsto no mês" = previstas + atrasadas. Só as parcelas controladas: o
+ * corte "controlar a partir de" continua valendo. Pura.
+ */
+function visaoDoMes(apuradas, { competencia, hoje, feriados = [] }) {
+  const fim = ultimoDiaDoMes(competencia);
+  const referencia = hoje && hoje < fim ? hoje : fim;
+  const previstas = [];
+  const atrasadas = [];
+  for (const p of apuradas || []) {
+    if (!p || !p.controlada || !p.vencimento || p.situacao === 'nao_realizada') continue;
+    const pagaEm = p.recebimento?.data || null;
+    // Boleto pago no banco ainda sem lançamento (a_lancar): pago, sem data certa.
+    const paga = pagaEm ? pagaEm <= referencia : p.situacao === 'a_lancar';
+    if (paga) continue;
+    const dias = vencimentos.diasDeAtraso(p.vencimento, referencia, feriados);
+    if (dias > 0) atrasadas.push({ ...p, situacao_mes: 'atrasada', dias_atraso: dias, faixa: faixaDeAtraso(dias) });
+    else if (String(p.vencimento).startsWith(competencia)) previstas.push({ ...p, situacao_mes: 'prevista', dias_atraso: 0, faixa: null });
+  }
+  previstas.sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+  atrasadas.sort((a, b) => b.dias_atraso - a.dias_atraso);
+  return { referencia, previstas, atrasadas };
+}
+
 module.exports = {
   FAIXAS, TIPOS_AJUSTE, chaveDe, chaveBenef, faixaDeAtraso, diaEmBrasilia, somarBeneficiarios, totaisDe,
-  estadoDosFechamentos, competenciaAlvo, apurar, pendentesDe, saldosAnteriores, itemCongelado, montarFechamento, resumirItens, aging, visoes, soma
+  estadoDosFechamentos, competenciaAlvo, apurar, pendentesDe, saldosAnteriores, itemCongelado, montarFechamento, resumirItens, aging, visoes, soma,
+  ultimoDiaDoMes, visaoDoMes
 };

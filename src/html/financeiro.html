@@ -250,7 +250,10 @@
         <dl class="fin-resumo">
           <div class="fin-resumo__linha"><dt>Previstas</dt><dd data-fin="resumoComissoes.previstas">—</dd></div>
           <div class="fin-resumo__linha"><dt>Apuradas</dt><dd data-fin="resumoComissoes.apuradas">—</dd></div>
-          <div class="fin-resumo__linha"><dt>Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="Vencidas até este mês e ainda não pagas: passam para os meses seguintes até o pagamento ser registrado">Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
+          <!-- Previstas + atrasadas: a comissão que o mês ainda espera receber
+               (decisão do dono, 24/09/2026). -->
+          <div class="fin-resumo__linha"><dt title="Previstas + atrasadas: a comissão que o mês ainda espera">Previsto no mês</dt><dd data-fin="resumoComissoes.previstoMes">—</dd></div>
           <!-- Ajustes à mão: o quanto eles tiraram da comissão do mês (e quantos são). -->
           <div class="fin-resumo__linha"><dt title="Ajustes à mão: quantos são, quanto saiu da base e a comissão que isso tirou do mês">Ajustes <span class="fin-resumo__nota" data-fin="resumoComissoes.ajustesQuantidade"></span></dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
         </dl>

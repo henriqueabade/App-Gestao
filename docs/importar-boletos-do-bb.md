@@ -112,6 +112,25 @@ Enquanto estiver solto:
 Ligar um boleto a uma parcela que já tem boleto vivo é recusado (não se cobra
 duas vezes).
 
+## Boleto na parcela errada (24/09/2026)
+
+O boleto importado — trazido por esta tela ou colado em "NF-e e boletos de
+fora" — pode **mudar de parcela** pela coluna Ações daquele modal (a mesma
+rota `vincular`). O caso que originou: o boleto pago em 18/09 do PED104 era da
+2ª parcela e tinha sido colado na 1ª, e a 2ª aparecia atrasada.
+
+- **O pagamento vai junto:** o recebimento que veio do boleto troca de
+  parcela; a nova fica paga e a antiga volta a ficar em aberto.
+- A parcela de destino não pode ter boleto vivo, boleto de fora nem
+  pagamento registrado.
+- **Desvincular** só o boleto que ainda **não foi pago**; o pago muda de
+  parcela.
+- Pagamento que já entrou numa competência de comissão **fechada** trava a
+  mudança, com a explicação: mexer desmancharia o fechamento.
+- O boleto gerado pelo app não tem essas ações: ele nasce na parcela certa.
+- Nada muda no Banco do Brasil. O histórico do boleto guarda "da parcela 1
+  para a parcela 2 … O pagamento foi junto".
+
 ## Permissões
 
 | Ação | Permissão |

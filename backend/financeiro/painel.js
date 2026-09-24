@@ -159,16 +159,6 @@ function pendenciaDoRateio({ visao, competencia, hoje, fechado }) {
   }];
 }
 
-/**
- * As parcelas previstas que VENCEM na competência do painel. A lista de
- * `visoes` traz todas as a receber, de qualquer mês: sem este filtro o card de
- * setembro somava a previsão de outubro (e o relatório "Previsão de comissões"
- * do mesmo mês, que já filtrava, aparecia vazio). Pura.
- */
-function previstasDaCompetencia(previstas, competencia) {
-  return (previstas || []).filter(p => String(p.vencimento || '').startsWith(competencia));
-}
-
 async function carregar({ api, competencia, hoje, desde }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   const [dc, prod, recentes, daDevolucao] = await Promise.all([
@@ -178,8 +168,11 @@ async function carregar({ api, competencia, hoje, desde }) {
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
   const { b, estado: estadoC, apuradas, resumo } = dc;
-  const v = comissoes.visoes(apuradas);
-  const previstasDoMes = previstasDaCompetencia(v.previstas, comp);
+  // Previstas e atrasadas DO MÊS escolhido (comissoes.visaoDoMes): a atrasada
+  // passa para os meses seguintes até ser paga; o mês passado mostra a foto
+  // do fim dele. Antes as atrasadas eram as de hoje em qualquer mês.
+  const mes = comissoes.visaoDoMes(apuradas, { competencia: comp, hoje, feriados: b.receber?.feriados || [] });
+  const somaComissao = l => comissoes.soma(l, p => p.potencial.total);
   const prodComp = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp });
   // O rateio é da PRODUÇÃO e nunca derruba o painel: sem o SQL da fase,
   // `lerVisao` devolve `sql_pendente` e nada aparece.
@@ -200,7 +193,7 @@ async function carregar({ api, competencia, hoje, desde }) {
       parcelas: resumo.parcelas, pagar_ate: pagarComissao,
       pago_em: resumo.fechamento?.pagamento ? c.dia(resumo.fechamento.pagamento.data_pagamento) : null
     },
-    atrasadas: { valor: comissoes.soma(v.atrasadas, p => p.potencial.total), parcelas: v.atrasadas.length },
+    atrasadas: { valor: somaComissao(mes.atrasadas), parcelas: mes.atrasadas.length, referencia: mes.referencia },
     producao: {
       situacao: situacaoDe(prodComp), valor: faltaDe(prodComp), total: c.centavos(prodComp.a_pagar), pago: pagoDe(prodComp),
       pecas: prodComp.pecas, pagar_ate: pagarProducao,
@@ -208,11 +201,12 @@ async function carregar({ api, competencia, hoje, desde }) {
       pago_em: prodComp.fechamento?.pagamento ? c.dia(prodComp.fechamento.pagamento.data_pagamento) : null
     },
     resumo_comissoes: {
-      // Só o que vence no mês escolhido — o mesmo recorte do relatório
-      // "Previsão de comissões" que o "Ver detalhes" abre.
-      previstas: comissoes.soma(previstasDoMes, p => p.potencial.total),
+      // O mesmo recorte do relatório "Previsão de comissões" que o "Ver
+      // detalhes" abre: previstas + atrasadas = o previsto no mês.
+      previstas: somaComissao(mes.previstas),
       apuradas: resumo.comissao,
-      atrasadas: comissoes.soma(v.atrasadas, p => p.potencial.total),
+      atrasadas: somaComissao(mes.atrasadas),
+      previsto_mes: comissoes.soma([...mes.previstas, ...mes.atrasadas], p => p.potencial.total),
       ajustes: resumo.ajustes,
       // Ajustes à mão do mês: quantos, quanto saiu da base e quanta comissão
       // isso tirou (o card mostra para o número não mudar sozinho).
@@ -222,7 +216,7 @@ async function carregar({ api, competencia, hoje, desde }) {
       // Quem recebe o quê (CMS e Royalty, por pessoa): a tela mostra com
       // etiqueta colorida e legenda, e o pagamento pode ser feito por pessoa.
       beneficiarios: resumo.beneficiarios || [],
-      beneficiarios_previstos: [...comissoes.somarBeneficiarios(previstasDoMes.map(p => p.potencial.beneficiarios)).values()]
+      beneficiarios_previstos: [...comissoes.somarBeneficiarios([...mes.previstas, ...mes.atrasadas].map(p => p.potencial.beneficiarios)).values()]
         .sort((a, b) => Number(b.valor) - Number(a.valor)),
       pago: resumo.fechamento?.pago ?? 0,
       falta_pagar: resumo.fechamento ? resumo.fechamento.falta_pagar : null
@@ -254,4 +248,4 @@ async function carregar({ api, competencia, hoje, desde }) {
   };
 }
 
-module.exports = { instanteBR, pedidosParciais, pendencias, previstasDaCompetencia, carregar };
+module.exports = { instanteBR, pedidosParciais, pendencias, carregar };

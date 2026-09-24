@@ -1,7 +1,9 @@
 <!--
   Comissões atrasadas: parcelas vencidas e ainda não liquidadas, com a
   comissão que está parada. Modal extra grande. Dados:
-  GET /api/financeiro/parcelas?visao=atrasadas. Filtros funcionam sobre a
+  GET /api/financeiro/parcelas?visao=atrasadas&competencia= — as DO MÊS
+  escolhido no Financeiro (vencidas até ele e não pagas; o mês passado mostra
+  a foto do fim dele — decisão do dono, 24/09/2026). Filtros funcionam sobre a
   lista; clicar numa linha abre Detalhes da parcela por cima.
   Script: src/js/modals/financeiro-modais.js (montarComissoesAtrasadas).
 -->
@@ -12,7 +14,7 @@
       <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
         <h2 id="finAtrasadasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>Comissões atrasadas</h2>
-        <p class="text-xs text-gray-300 truncate">Parcelas vencidas e ainda não liquidadas</p>
+        <p id="finAtrasadasSubtitulo" class="text-xs text-gray-300 truncate">Parcelas vencidas e ainda não liquidadas</p>
       </div>
       <span></span>
     </header>

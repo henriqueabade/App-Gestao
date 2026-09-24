@@ -14,7 +14,7 @@
  *   POST   /feriados, DELETE /feriados/:id
  *   PUT    /configuracao                        dia do pagamento das comissões, dia útil da produção, sábado
  *   GET    /buscas/clientes|pedidos|produtos|donos   listas enxutas para escolher na tela de regras
- *   GET    /parcelas?visao=atrasadas|previstas|ajustaveis
+ *   GET    /parcelas?visao=atrasadas|previstas|ajustaveis[&competencia=]  (com a competência: as do mês, que passam para os seguintes até serem pagas)
  *   GET    /parcelas/:pedidoId/:numero          detalhes da parcela (valores, ajustes, histórico)
  *   POST   /ajustes, POST /ajustes/:id/cancelar
  *   GET    /producao/pedidos                    pedidos em que se registra produção
@@ -248,15 +248,20 @@ function criarRouter() {
     if (!['atrasadas', 'previstas', 'ajustaveis'].includes(visao)) throw c.erro('Visão desconhecida.', 400);
     const { b, apuradas } = await fechamentos.dadosComissao(api, { competencia: c.competenciaDe(hoje), hoje, desde });
     const v = comissoes.visoes(apuradas);
+    // Com a competência, previstas e atrasadas DO MÊS (decisões do dono,
+    // 24/09/2026: a atrasada passa para os meses seguintes até ser paga; o mês
+    // passado mostra a foto do fim dele). Sem ela, a posição de hoje.
+    const competencia = c.competenciaValida(req.query?.competencia) ? req.query.competencia : null;
+    const mes = competencia ? comissoes.visaoDoMes(apuradas, { competencia, hoje, feriados: b.receber?.feriados || [] }) : null;
     let escolhidas;
-    if (visao === 'atrasadas') escolhidas = v.atrasadas;
-    else if (visao === 'previstas') escolhidas = v.previstas;
+    if (visao === 'atrasadas') escolhidas = mes ? mes.atrasadas : v.atrasadas;
+    else if (visao === 'previstas') escolhidas = mes ? mes.previstas : v.previstas;
     else escolhidas = apuradas.filter(p => p.estado_parcela !== 'cancelada' && p.situacao !== 'nao_realizada')
       .sort((x, y) => String(y.pedido).localeCompare(String(x.pedido), 'pt-BR', { numeric: true }) || x.numero_parcela - y.numero_parcela);
     const nomes = await base.nomesDosClientes(api, escolhidas.map(p => p.cliente_id));
     const linhas = escolhidas.map(p => ({ ...linhaDaParcela(p), cliente: p.cliente || nomes.get(String(p.cliente_id)) || null }));
     return {
-      visao, hoje, linhas,
+      visao, hoje, linhas, competencia, referencia: mes ? mes.referencia : hoje,
       aging: visao === 'atrasadas' ? comissoes.aging(escolhidas) : null,
       tem_regras: b.regras.regras.some(r => regras.ativo(r.ativo))
     };

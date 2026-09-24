@@ -584,7 +584,8 @@ test('comissões e produção são REAIS (fase G): cada modal fala com /api/fina
         'fetchApi(`/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}`)',
         'fetchApi(`/api/financeiro/ajustes/${encodeURIComponent(a.id)}/cancelar`',
         'fetchApi(`/api/financeiro/pedidos/${encodeURIComponent(pedidoId)}`)',
-        "fetchApi('/api/financeiro/parcelas?visao=atrasadas')",
+        // As atrasadas DO MÊS escolhido (dono, 24/09/2026).
+        'fetchApi(`/api/financeiro/parcelas?visao=atrasadas&competencia=${encodeURIComponent(competencia)}`)',
         'fetchApi(`/api/financeiro/producao?competencia=${encodeURIComponent(mesSel.value)}`)',
         "fetchApi('/api/financeiro/regras')",
         "fetchApi('/api/financeiro/valores', {",
@@ -817,4 +818,17 @@ test('spinner da casa: o modal só aparece depois da primeira leitura, com tempo
     assert.match(SCRIPT, /\.finally\(\(\) => \{\s*if \(typeof window\.FinanceiroModalPronto === 'function'\) window\.FinanceiroModalPronto\(overlayId, revelar\);/);
     // A carga dentro do modal (trocar filtro) é uma linha só com o spinner, não esqueleto.
     assert.match(SCRIPT, /fin-linha-carregando/);
+});
+
+test('comissões do mês (dono, 24/09/2026): "Previsto no mês" = previstas + atrasadas; a previsão mostra a situação; o modal das atrasadas segue o mês', () => {
+    const TELA = fs.readFileSync(path.join(RAIZ, 'html', 'financeiro.html'), 'utf8');
+    assert.match(TELA, /<dt[^>]*>Previsto no mês<\/dt><dd data-fin="resumoComissoes\.previstoMes">/);
+    assert.ok(MODULO.includes("finPreencher(moduleEl, 'resumoComissoes.previstoMes', finFormatarMoeda(c.previstoMes));"));
+    assert.ok(MODULO.includes('rc.previsto_mes'), 'o valor vem do painel (previstas + atrasadas)');
+    const inicio = SCRIPT.indexOf("'previsao-comissoes': {");
+    const previsao = SCRIPT.slice(inicio, SCRIPT.indexOf("'comissoes-atrasadas': {", inicio));
+    assert.ok(previsao.includes("{ chave: 'situacao', rotulo: 'Situação' }"), 'prevista ou atrasada, com os dias');
+    assert.ok(SCRIPT.includes("el('finAtrasadasSubtitulo').textContent"), 'o modal diz de que mês e de quando é a foto');
+    const atrasadasHtml = fs.readFileSync(path.join(PASTA_HTML, 'comissoes-atrasadas.html'), 'utf8');
+    assert.ok(atrasadasHtml.includes('id="finAtrasadasSubtitulo"'));
 });

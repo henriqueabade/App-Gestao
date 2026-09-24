@@ -542,6 +542,8 @@
   });
 
   const RELATORIOS = {
+    // Previsto no mês = previstas + atrasadas (a atrasada passa para os meses
+    // seguintes até ser paga — decisão do dono, 24/09/2026).
     'previsao-comissoes': {
       titulo: 'Previsão de comissões',
       colunas: [
@@ -550,6 +552,7 @@
         { chave: 'nf', rotulo: 'NF' },
         { chave: 'parcela', rotulo: 'Parcela' },
         { chave: 'vencimento', rotulo: 'Vencimento', tipo: 'data' },
+        { chave: 'situacao', rotulo: 'Situação' },
         { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
         { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
         { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
@@ -3526,8 +3529,13 @@
       mostrarMensagem('finAtrasadasMensagem', '');
       const minha = carregamento.comecar();
       try {
-        const corpo = await fetchApi('/api/financeiro/parcelas?visao=atrasadas');
+        // As atrasadas DO MÊS escolhido no Financeiro: as que venceram até ele
+        // e não estavam pagas (o mês passado mostra a foto do fim dele).
+        const competencia = contexto.competencia || competenciaAtual();
+        const corpo = await fetchApi(`/api/financeiro/parcelas?visao=atrasadas&competencia=${encodeURIComponent(competencia)}`);
         todas = (Array.isArray(corpo?.linhas) ? corpo.linhas : []).map(l => ({ ...l, dias: l.dias_atraso, faixa: l.faixa || faixaDeAtraso(l.dias_atraso) }));
+        const fotoDoFim = corpo?.referencia && corpo?.hoje && corpo.referencia < corpo.hoje;
+        el('finAtrasadasSubtitulo').textContent = `${rotuloCompetenciaCurto(competencia)} · ${fotoDoFim ? `como estava no fim do mês (${formatarData(corpo.referencia)})` : `posição em ${formatarData(corpo?.referencia || corpo?.hoje)}`}`;
         el('finAtrasadasSemRegras').classList.toggle('hidden', corpo?.tem_regras !== false);
       } catch (e) {
         todas = [];

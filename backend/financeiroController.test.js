@@ -639,6 +639,27 @@ test('resumo de comissões: a previsão é só do que vence no mês escolhido, i
     const relFuturo = await t.chamar('GET', '/api/financeiro/relatorios/previsao-comissoes?competencia=2099-01');
     assert.equal(relFuturo.corpo.linhas.reduce((s, l) => s + l.comissao, 0), futuro.corpo.resumo_comissoes.previstas,
       'card e relatório somam o mesmo');
+
+    // Uma 3ª parcela (R$ 10.000) venceu no começo do mês passado e ninguém pagou
+    // (dono, 24/09/2026): atrasada no mês dela e em todos os seguintes; o mês
+    // anterior a ela não a vê.
+    t.tabelas.pedido_parcelas.push({ id: 3, pedido_id: 55, numero_parcela: 3, valor: '10000.00', data_vencimento: `${ant}-05` });
+    const atual = hoje.slice(0, 7);
+    const doMesDela = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.deepEqual(
+      [doMesDela.corpo.resumo_comissoes.previstas, doMesDela.corpo.resumo_comissoes.atrasadas, doMesDela.corpo.resumo_comissoes.previsto_mes, doMesDela.corpo.atrasadas.parcelas],
+      [0, 2000, 2000, 1], 'no mês dela: atrasada, e o previsto no mês a inclui'
+    );
+    assert.equal((await t.chamar('GET', `/api/financeiro/painel?competencia=${atual}`)).corpo.resumo_comissoes.atrasadas, 2000, 'passa para o mês seguinte');
+    assert.equal((await t.chamar('GET', `/api/financeiro/painel?competencia=${mesesAntes(ant, 1)}`)).corpo.resumo_comissoes.atrasadas, 0, 'o mês anterior não a vê');
+    const relAtrasada = await t.chamar('GET', `/api/financeiro/relatorios/previsao-comissoes?competencia=${ant}`);
+    assert.deepEqual(relAtrasada.corpo.linhas.map(l => [l.numero_parcela, /^Atrasada · \d+ dias$/.test(l.situacao)]), [[3, true]], 'a previsão do mês mostra a atrasada, com a situação');
+    const modal = await t.chamar('GET', `/api/financeiro/parcelas?visao=atrasadas&competencia=${ant}`);
+    assert.deepEqual([modal.corpo.linhas.map(l => l.numero_parcela), modal.corpo.referencia < hoje], [[3], true], 'o modal das atrasadas segue o mês: a foto do fim dele');
+
+    // Pagamento registrado: sai das atrasadas (vira apurada no mês em que o cliente pagou).
+    t.tabelas.recebimentos.push({ id: 2, pedido_id: 55, numero_parcela: 3, status: 'confirmado', origem: 'manual', forma: 'Pix', data_recebimento: hoje, competencia: atual, valor_parcela: '10000.00', valor_abatimento: '0', valor_recebido: '10000.00', valor_encargos: '0' });
+    assert.equal((await t.chamar('GET', `/api/financeiro/painel?competencia=${atual}`)).corpo.resumo_comissoes.atrasadas, 0);
   } finally {
     await t.fechar();
   }

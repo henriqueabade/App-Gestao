@@ -92,8 +92,9 @@ test('modal: confere antes de gravar, XML descartado, remover pede confirmação
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/pedidos/${id}/boletos-externos/previa`"), 'confere a linha digitável ao colar');
   assert.ok(FONTE.includes("fetchApi(`/api/cobranca/pedidos/${id}/boletos-externos`, comoJson({ linhas }))"));
   assert.ok(FONTE.includes("{ method: 'DELETE' }"));
-  // Remover a nota, remover um boleto e remover uma carta de correção.
-  assert.ok((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length === 3, 'toda remoção pede confirmação');
+  // Remover a nota, remover um boleto, remover uma carta de correção, mudar
+  // um boleto importado de parcela e desvinculá-lo.
+  assert.ok((FONTE.match(/window\.DialogPadrao\?\.confirm\?\.\(/g) || []).length === 5, 'toda remoção ou mudança pede confirmação');
   assert.ok(FONTE.includes("avisarQuemEstaAberto('nfe:externa')") && FONTE.includes("avisarQuemEstaAberto('boletos:alterados')"));
   assert.ok(FONTE.includes('if (arquivo.size > TAMANHO_MAXIMO_DO_XML)'));
   assert.ok(!/innerHTML|window\.confirm\(/.test(FONTE), 'montado por createElement, sem confirm() do sistema');
@@ -281,4 +282,26 @@ test('boletos de fora: coluna Ações (copiar, trocar, remover), modal largo e t
   assert.ok(HTML.includes('>Ações</th>'));
   assert.ok(!/id="dadosExternosParcelasCaixa" class="[^"]*overflow-x-auto/.test(HTML), 'sem rolagem de lado');
   assert.ok(!HTML.includes('lido e descartado') && !HTML.includes('o XML é lido e descartado'), 'o texto não diz mais que o XML é descartado');
+});
+
+test('boleto do BB importado (colado na parcela errada): muda de parcela levando o pagamento; sem pagamento, desvincula (dono, 24/09/2026)', () => {
+  const f = puras();
+  const pode = { podeInformar: true, cancelado: false };
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { ...pode, importado: true, pago: true })), ['mudar'], 'o pago só muda de parcela');
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { ...pode, importado: true, pago: false })), ['mudar', 'desvincular']);
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { ...pode, importado: false })), [], 'o que o app gerou nasce na parcela certa');
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { ...pode, importado: true, trocando: true })), ['desistir']);
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', { podeInformar: false, importado: true })), []);
+
+  // Para onde vai: só as parcelas livres; a mudança e a desvinculação pedem confirmação e usam a rota de vínculo.
+  assert.ok(FONTE.includes("filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento)"));
+  assert.ok(FONTE.includes("fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({ pedido_id: Number(ctx.pedidoId), parcela_id: Number(alvo.parcela.id) }))"));
+  assert.ok(FONTE.includes("fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({}))"));
+  assert.ok(FONTE.includes("if (pago) avisarQuemEstaAberto('recebimentos:alterados');"), 'o Visualizar relê o pagamento que mudou');
+
+  // O botão do Visualizar aparece para quem tem boleto importado (é ali que ele se corrige).
+  const dependencias = ['pagaComBoleto', 'pedidoJaSaiu', 'pedidoCancelado'].map(n => textoDaFuncao(VISUALIZAR, n)).join('\n');
+  const precisa = recortar(VISUALIZAR, 'precisaDeDadosDeFora', dependencias);
+  const tudoCoberto = { parcelas: [{ tem_boleto_vivo: true, boleto: { origem: 'importado', status: 'pago' } }] };
+  assert.strictEqual(precisa({ pedido: { situacao: 'Enviado', forma_pagamento: 'boleto' }, notas: [{ status_fiscal: 'autorizada' }], boletos: tudoCoberto }), true);
 });

@@ -87,12 +87,23 @@ async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }
   const v = comissoes.visoes(apuradas);
   let linhas = [];
 
+  // Previstas e atrasadas DO MÊS (decisões do dono, 24/09/2026): a atrasada
+  // passa para os meses seguintes até ser paga; o mês passado mostra a foto
+  // do fim dele (comissoes.visaoDoMes). Por período, a posição de hoje.
+  const mes = crit.periodo ? null : comissoes.visaoDoMes(apuradas, { competencia: comp, hoje, feriados: b.receber?.feriados || [] });
+  const posicao = mes ? (mes.referencia < hoje ? `foto do fim do mês (${c.impressa(mes.referencia)})` : `posição em ${c.impressa(mes.referencia)}`) : '';
+  const comSituacao = p => linhaDeParcela(p, {
+    situacao: p.situacao_mes === 'atrasada' || p.situacao === 'atrasada' ? `Atrasada · ${c.plural(p.dias_atraso, 'dia', 'dias')}` : 'Prevista'
+  });
   if (chave === 'previsao-comissoes') {
-    linhas = v.previstas.filter(p => crit.cabe(p.vencimento)).map(p => linhaDeParcela(p));
+    // Previsto no mês = previstas + atrasadas (a atrasada ainda não foi paga).
+    linhas = mes
+      ? [...mes.previstas, ...mes.atrasadas].map(comSituacao)
+      : [...v.previstas, ...v.atrasadas].filter(p => crit.cabe(p.vencimento)).map(comSituacao);
+    if (mes) crit.texto += ` · previstas e atrasadas — ${posicao}`;
   } else if (chave === 'comissoes-atrasadas') {
-    // Atraso é de hoje: o filtro só vale quando é por período (vencimento).
-    linhas = v.atrasadas.filter(p => !crit.periodo || crit.cabe(p.vencimento)).map(p => linhaDeParcela(p));
-    if (!crit.periodo) crit.texto = `Posição em ${c.impressa(hoje)}`;
+    linhas = (mes ? mes.atrasadas : v.atrasadas.filter(p => crit.cabe(p.vencimento))).map(p => linhaDeParcela(p));
+    if (mes) crit.texto += ` · ${posicao}`;
   } else if (chave === 'comissoes-apuradas' || chave === 'ajustes-anteriores') {
     const tipoItem = chave === 'comissoes-apuradas' ? (i => i.tipo_item === 'parcela') : (i => i.tipo_item !== 'parcela');
     let itens;

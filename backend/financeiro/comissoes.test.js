@@ -209,3 +209,44 @@ test('diaEmBrasilia e faixas de atraso', () => {
   assert.equal(m.diaEmBrasilia('2026-09-16'), '2026-09-16');
   assert.deepEqual([1, 15, 16, 30, 31, 60, 61, 90, 91].map(m.faixaDeAtraso), ['1–15', '1–15', '16–30', '16–30', '31–60', '31–60', '61–90', '61–90', '+90']);
 });
+
+test('visão do mês: a atrasada passa para os meses seguintes até ser paga; o mês passado é a foto do fim dele (dono, 24/09/2026)', () => {
+  const HOJE_VM = '2026-09-24';
+  const parcela = (chave, vencimento, extra = {}) => ({ chave, vencimento, controlada: true, situacao: 'prevista', recebimento: null, potencial: { total: 100 }, ...extra });
+  const apuradas = [
+    // Venceu em agosto e foi paga em setembro: em agosto, atrasada; em setembro, fora (apurada).
+    parcela('ago-paga-set', '2026-08-20', { situacao: 'apurada', recebimento: { data: '2026-09-18' } }),
+    // Vence no domingo 30/08: no fim de agosto (segunda 31/08) ainda está em dia → prevista de agosto.
+    parcela('ago-domingo', '2026-08-30', { situacao: 'apurada', recebimento: { data: '2026-08-31' } }),
+    parcela('ago-domingo-aberta', '2026-08-30'),
+    // Vence no domingo 20/09 e não foi paga: atrasada em setembro e em outubro.
+    parcela('set-atrasada', '2026-09-20', { situacao: 'atrasada' }),
+    parcela('set-prevista', '2026-09-28'),
+    parcela('out-prevista', '2026-10-19'),
+    parcela('fora-do-controle', '2026-09-01', { controlada: false }),
+    parcela('cancelada', '2026-09-02', { situacao: 'nao_realizada' }),
+    parcela('no-banco', '2026-09-03', { situacao: 'a_lancar' })
+  ];
+  const chaves = l => l.map(p => p.chave);
+
+  const ago = m.visaoDoMes(apuradas, { competencia: '2026-08', hoje: HOJE_VM });
+  assert.equal(ago.referencia, '2026-08-31', 'mês passado: a foto do fim dele');
+  assert.deepEqual(chaves(ago.atrasadas), ['ago-paga-set'], 'paga depois, estava atrasada no fim de agosto');
+  assert.equal(ago.atrasadas[0].dias_atraso, 11);
+  assert.deepEqual(chaves(ago.previstas), ['ago-domingo-aberta'], 'vence no domingo: vale até segunda, ainda prevista');
+
+  const set = m.visaoDoMes(apuradas, { competencia: '2026-09', hoje: HOJE_VM });
+  assert.equal(set.referencia, HOJE_VM, 'mês corrente: hoje');
+  assert.deepEqual(chaves(set.atrasadas), ['ago-domingo-aberta', 'set-atrasada'], 'a de agosto não paga continua atrasada em setembro');
+  assert.deepEqual(set.atrasadas.map(p => [p.dias_atraso, p.faixa]), [[25, '16–30'], [4, '1–15']]);
+  assert.deepEqual(chaves(set.previstas), ['set-prevista']);
+
+  const out = m.visaoDoMes(apuradas, { competencia: '2026-10', hoje: HOJE_VM });
+  assert.deepEqual(chaves(out.atrasadas), ['ago-domingo-aberta', 'set-atrasada'], 'passam para outubro enquanto não forem pagas');
+  assert.deepEqual(chaves(out.previstas), ['out-prevista']);
+
+  // Pagou (boleto ou o modal "Pagamentos"): sai das atrasadas.
+  const paga = apuradas.map(p => (p.chave === 'set-atrasada' ? { ...p, situacao: 'apurada', recebimento: { data: '2026-09-24' } } : p));
+  assert.deepEqual(chaves(m.visaoDoMes(paga, { competencia: '2026-09', hoje: HOJE_VM }).atrasadas), ['ago-domingo-aberta']);
+  assert.equal(m.ultimoDiaDoMes('2026-02'), '2026-02-28');
+});

@@ -462,7 +462,7 @@ function finMapearComissoes(painel, erro) {
         const vazio = { valor: null, auxiliar: '', rodape: motivo };
         return {
             kpis: { comissoes: vazio, atrasadas: vazio, producao: vazio },
-            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
+            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, previstoMes: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
             resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, proximoPagamento: '—' },
             pendencias: sqlPendente
                 ? [{ nivel: 'critico', titulo: 'Comissões e produção ainda não ativadas', descricao: motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
@@ -504,6 +504,10 @@ function finMapearComissoes(painel, erro) {
         },
         resumoComissoes: {
             previstas: Number(rc.previstas) || 0, apuradas: Number(rc.apuradas) || 0, atrasadas: Number(rc.atrasadas) || 0,
+            // Previstas + atrasadas do mês (a atrasada ainda não foi paga).
+            previstoMes: rc.previsto_mes === undefined || rc.previsto_mes === null
+                ? finCentavos((Number(rc.previstas) || 0) + (Number(rc.atrasadas) || 0))
+                : Number(rc.previsto_mes) || 0,
             // O efeito TOTAL dos ajustes no mês: o estorno do que já estava
             // fechado (rc.ajustes) mais a comissão que os ajustes à mão
             // tiraram das parcelas apuradas agora.
@@ -762,6 +766,7 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoComissoes.previstas', finFormatarMoeda(c.previstas));
     finPreencher(moduleEl, 'resumoComissoes.apuradas', finFormatarMoeda(c.apuradas));
     finPreencher(moduleEl, 'resumoComissoes.atrasadas', finFormatarMoeda(c.atrasadas));
+    finPreencher(moduleEl, 'resumoComissoes.previstoMes', finFormatarMoeda(c.previstoMes));
     // Ajustes: o que os ajustes à mão tiraram da comissão do mês mais os
     // estornos de competências já fechadas. Sem isto o card ficava em zero e a
     // comissão apenas aparecia menor, sem dizer por quê.

@@ -84,6 +84,41 @@ Na mesma entrega, o modal "NF-e e boletos de fora" ganhou a coluna Ações
 (copiar, trocar e remover) e ficou mais largo, sem rolagem de lado — ver
 `docs/nfe-e-boletos-de-fora.md`.
 
+## Comissões do mês: previstas, atrasadas e "Previsto no mês" (24/09/2026, 2ª rodada)
+
+Decisões do dono (2a recomendado, 2b, 2c ok, 2d recomendado, 2e sim). Para o
+mês escolhido no Financeiro (`comissoes.visaoDoMes`):
+
+- **Previstas:** vencem no mês e ainda não estão pagas nem atrasadas.
+- **Atrasadas:** venceram **até** o mês (passado o último dia sem encargos) e
+  não estão pagas. **Passam para os meses seguintes** até alguém registrar o
+  pagamento — pelo boleto ou pelo modal "Pagamentos". Pago, sai das atrasadas
+  e vira **apurada** no mês em que o cliente pagou.
+- **Mês passado** mostra a **foto do fim dele**: o que estava atrasado em
+  31/08 aparece em agosto, mesmo que tenha sido pago em setembro. O mês
+  corrente e os futuros usam hoje.
+- **"Previsto no mês"** (linha nova do card) = previstas + atrasadas: a
+  comissão que o mês ainda espera.
+- O corte "parcelas controladas a partir de…" continua valendo: o que venceu
+  antes dele fica fora de previstas e atrasadas.
+
+Antes, "Atrasadas" era a posição de hoje em qualquer mês — agosto mostrava a
+parcela de setembro — e a previsão do mês não mostrava a atrasada.
+
+Onde vale: o card "Resumo de Comissões", o cartão "Comissões atrasadas" do
+topo, o relatório **"Previsão de comissões"** (lista previstas e atrasadas,
+com a coluna **Situação**: "Prevista" ou "Atrasada · N dias"), o relatório
+"Comissões atrasadas" e o modal das atrasadas (`GET
+/api/financeiro/parcelas?visao=atrasadas&competencia=`), que diz de que mês é e
+de quando é a foto. Por período, os relatórios continuam na posição de hoje.
+A pendência "parcelas vencidas há mais de 30 dias" continua sendo de hoje.
+
+## Boleto na parcela errada
+
+O boleto do BB importado (colado aqui ou trazido pelo "Importar do BB") pode
+mudar de parcela no "NF-e e boletos de fora", levando o pagamento junto — ver
+`docs/importar-boletos-do-bb.md`.
+
 ## Banco
 
 Nenhum SQL novo: usa `recebimentos` (sql/cobranca_recebimentos.sql) e, para

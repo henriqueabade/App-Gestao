@@ -542,6 +542,44 @@ test('vincular depois: liga o importado à parcela, recusa parcela ocupada e des
   );
 });
 
+test('boleto colado na parcela errada: muda de parcela levando o pagamento; o pago não se solta; competência fechada trava (dono, 24/09/2026)', async () => {
+  // O caso do PED104: o boleto pago em 18/09 era da 2ª parcela e foi colado na 1ª.
+  const api = apiParaImportar({
+    pedido_parcelas: [
+      { id: 71, pedido_id: 12, numero_parcela: 1, valor: 3326.51, data_vencimento: '2026-08-20' },
+      { id: 72, pedido_id: 12, numero_parcela: 2, valor: 3326.51, data_vencimento: '2026-09-19' },
+      { id: 73, pedido_id: 12, numero_parcela: 3, valor: 3326.51, data_vencimento: '2026-10-19' },
+      { id: 74, pedido_id: 12, numero_parcela: 4, valor: 3326.51, data_vencimento: '2026-11-18' }
+    ],
+    boletos: [{ id: 901, ambiente: 'producao', nosso_numero: '00034534810000000393', origem: 'importado', status: 'pago', pedido_id: 12, parcela_id: 71, numero_parcela: 1 }],
+    recebimentos: [
+      { id: 50, pedido_id: 12, parcela_id: 71, numero_parcela: 1, boleto_id: 901, origem: 'boleto', status: 'confirmado', data_recebimento: '2026-09-18', valor_recebido: '3327.06' },
+      { id: 51, pedido_id: 12, parcela_id: 73, numero_parcela: 3, boleto_id: null, origem: 'manual', status: 'confirmado', data_recebimento: '2026-09-20', valor_recebido: '3326.51' }
+    ],
+    boletos_externos: [{ id: 5, pedido_id: 12, parcela_id: 74, numero_parcela: 4, banco: '341', ativo: true }],
+    financeiro_fechamentos: [],
+    financeiro_fechamento_itens: []
+  });
+  const boleto = () => api.dados.boletos[0];
+
+  await assert.rejects(() => importacao.vincular({ api, boleto: boleto(), usuarioId: 5 }), /já foi pago: em vez de soltá-lo, mude-o/, 'o pago não se solta');
+  await assert.rejects(() => importacao.vincular({ api, boleto: boleto(), pedidoId: 12, parcelaId: 73 }), /já tem pagamento registrado/, 'parcela paga não recebe o boleto');
+  await assert.rejects(() => importacao.vincular({ api, boleto: boleto(), pedidoId: 12, parcelaId: 74 }), /tem boleto de fora/);
+  await assert.rejects(() => importacao.vincular({ api, boleto: boleto(), pedidoId: 12, parcelaId: 71 }), /já está na parcela 1/);
+
+  // Competência de comissão fechada com esse pagamento: trava.
+  api.dados.financeiro_fechamentos.push({ id: 7, tipo: 'comissao', competencia: '2026-09', status: 'fechado' });
+  api.dados.financeiro_fechamento_itens.push({ id: 70, fechamento_id: 7, tipo_item: 'parcela', recebimento_id: 50 });
+  await assert.rejects(() => importacao.vincular({ api, boleto: boleto(), pedidoId: 12, parcelaId: 72 }), /comissão de 09\/2026, que está fechada/);
+  api.dados.financeiro_fechamentos[0].status = 'desfeito';
+
+  const movido = await importacao.vincular({ api, boleto: boleto(), pedidoId: 12, parcelaId: 72, usuarioId: 5 });
+  assert.deepEqual([movido.boleto.parcela_id, movido.boleto.numero_parcela, movido.recebimentos_movidos], [72, 2, 1]);
+  const r = api.dados.recebimentos.find(x => x.id === 50);
+  assert.deepEqual([r.parcela_id, r.numero_parcela], [72, 2], 'o pagamento foi junto: a 2ª fica paga e a 1ª volta a ficar em aberto');
+  assert.ok(api.dados.boletos_eventos.some(e => e.tipo === 'vinculado' && /da parcela 1 para a parcela 2 .*O pagamento foi junto/.test(e.mensagem)));
+});
+
 test('sem o SQL da fase, a tela avisa e a importação nem começa', async () => {
   assert.equal(importacao.sqlPronto({ id: 1, origem: 'app' }), true);
   assert.equal(importacao.sqlPronto({ id: 1 }), false);

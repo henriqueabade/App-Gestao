@@ -11,7 +11,10 @@
  *     (POST /api/cobranca/pedidos/:id/boletos-externos/previa) e gravada no
  *     "Gravar boletos". Parcela com boleto do BB não recebe boleto de fora.
  *     A coluna Ações copia a linha, TROCA o boleto por outro (a linha vira o
- *     campo; gravar desliga o anterior) e remove.
+ *     campo; gravar desliga o anterior) e remove. O boleto do BB IMPORTADO
+ *     (colado aqui ou trazido pelo "Importar do BB") pode MUDAR de parcela
+ *     — o pagamento vai junto — e, sem pagamento, ser desvinculado
+ *     (POST /api/cobranca/boletos/:id/vincular).
  * Remover só desliga (fica o rastro). Nada vai para a SEFAZ nem para o BB.
  *
  * Contexto: `window.dadosExternosContext = { pedidoId, numero, cliente, formaPagamento }`.
@@ -85,15 +88,21 @@
   }
 
   /**
-   * As ações de cada parcela na coluna Ações. Boleto de fora: copiar a linha
-   * e, para quem pode informar (pedido não cancelado), trocar por outro e
-   * remover; no meio de uma troca, só desistir dela. Parcela livre (recebe a
-   * linha no campo) e boleto do BB: nenhuma. Pura.
+   * As ações de cada parcela na coluna Ações:
+   *   - boleto de fora: copiar a linha e, para quem pode informar (pedido não
+   *     cancelado), trocar por outro e remover;
+   *   - boleto do BB IMPORTADO (colado aqui ou trazido pelo "Importar do BB"):
+   *     mudar de parcela (o pagamento vai junto) e, se ainda não foi pago,
+   *     desvincular (decisão do dono, 24/09/2026). O que o app gerou nasce na
+   *     parcela certa: nenhuma ação;
+   *   - no meio de uma troca ou mudança, só desistir dela;
+   *   - parcela livre (recebe a linha no campo): nenhuma. Pura.
    */
-  function acoesDaParcela(tipo, { podeInformar = false, cancelado = false, trocando = false } = {}) {
-    if (tipo !== 'externo') return [];
+  function acoesDaParcela(tipo, { podeInformar = false, cancelado = false, trocando = false, importado = false, pago = false } = {}) {
     if (trocando) return ['desistir'];
-    return podeInformar && !cancelado ? ['copiar', 'trocar', 'remover'] : ['copiar'];
+    if (tipo === 'externo') return podeInformar && !cancelado ? ['copiar', 'trocar', 'remover'] : ['copiar'];
+    if (tipo === 'bb' && importado && podeInformar && !cancelado) return pago ? ['mudar'] : ['mudar', 'desvincular'];
+    return [];
   }
 
   /** O que a prévia de uma linha digitável diz, numa frase. */
@@ -146,6 +155,8 @@
   const previasDasParcelas = new Map();
   /** Parcelas com boleto de fora em troca: a linha mostra o campo para o boleto novo. */
   const trocando = new Set();
+  /** Parcelas com boleto importado mudando de parcela: a linha mostra para onde. */
+  const mudando = new Set();
 
   function desligarOuvintes() {
     document.removeEventListener('keydown', aoEsc);
@@ -590,6 +601,113 @@
     return caixa;
   }
 
+  /**
+   * Para onde vai o boleto importado: só as parcelas livres (sem boleto, sem
+   * boleto de fora e sem pagamento). O backend confere de novo.
+   */
+  function campoDeMudanca(linha, estado) {
+    const caixa = document.createElement('div');
+    caixa.className = 'flex flex-col gap-2 min-w-0';
+    const tag = document.createElement('span');
+    tag.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap self-start';
+    tag.textContent = estado.texto;
+    caixa.appendChild(tag);
+    const livres = (Array.isArray(estadoBoletos?.parcelas) ? estadoBoletos.parcelas : [])
+      .filter(l => l !== linha && !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
+    if (!livres.length) {
+      const aviso = document.createElement('span');
+      aviso.className = 'text-xs text-gray-400';
+      aviso.textContent = 'Nenhuma parcela livre para receber este boleto (sem boleto, sem boleto de fora e sem pagamento).';
+      caixa.appendChild(aviso);
+      return caixa;
+    }
+    const linhaCampos = document.createElement('div');
+    linhaCampos.className = 'flex flex-wrap items-center gap-2';
+    const sel = document.createElement('select');
+    sel.dataset.mudar = String(linha.parcela?.id);
+    sel.className = 'flex-1 min-w-0 appearance-none select-arrow ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+    sel.setAttribute('aria-label', `Parcela para onde vai o boleto da parcela ${linha.parcela?.numero_parcela}`);
+    for (const l of livres) {
+      const o = document.createElement('option');
+      o.value = String(l.parcela?.id);
+      o.textContent = `${l.parcela?.numero_parcela}ª parcela · vence ${diaBR(l.parcela?.data_vencimento) || '—'} · ${moedaBR(l.parcela?.valor)}`;
+      sel.appendChild(o);
+    }
+    const mudar = document.createElement('button');
+    mudar.type = 'button';
+    mudar.className = 'btn-success ctl-botao ctl-botao--pequeno';
+    mudar.textContent = 'Mudar';
+    mudar.addEventListener('click', () => mudarDeParcela(linha, livres.find(l => String(l.parcela?.id) === sel.value)));
+    linhaCampos.append(sel, mudar);
+    caixa.appendChild(linhaCampos);
+    return caixa;
+  }
+
+  /** O boleto importado vai para outra parcela; pago, o pagamento vai junto. */
+  async function mudarDeParcela(linha, alvo) {
+    const b = linha?.boleto;
+    if (!b || !alvo || emAndamento) return;
+    const de = linha.parcela?.numero_parcela;
+    const para = alvo.parcela?.numero_parcela;
+    const pago = String(b.status) === 'pago' || Boolean(linha.recebimento);
+    const ok = await window.DialogPadrao?.confirm?.({
+      title: 'Mudar o boleto de parcela?', tom: 'aviso', icone: 'fa-exchange-alt',
+      subtitle: `Pedido ${ctx.numero}`,
+      secoes: [{ titulo: 'O boleto', itens: [{ rotulo: b.nosso_numero ? `Nº ${b.nosso_numero}` : 'Boleto do BB', valor: `da ${de}ª para a ${para}ª parcela`, detalhe: pago ? 'pago — o pagamento vai junto' : 'ainda não pago' }] }],
+      nota: pago
+        ? `A ${para}ª parcela passa a ficar paga e a ${de}ª volta a ficar em aberto. Nada muda no Banco do Brasil.`
+        : `A ${de}ª parcela fica livre para outro boleto. Nada muda no Banco do Brasil.`,
+      confirmText: 'Mudar'
+    });
+    if (!ok) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({ pedido_id: Number(ctx.pedidoId), parcela_id: Number(alvo.parcela.id) }));
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', corpo?.error || mensagemDeErro(resp.status, corpo)); return; }
+        mudando.delete(String(linha.parcela?.id));
+        window.showToast?.(`Boleto mudou da ${de}ª para a ${para}ª parcela${pago ? ' — o pagamento foi junto' : ''}.`, 'success');
+        avisarQuemEstaAberto('boletos:alterados');
+        if (pago) avisarQuemEstaAberto('recebimentos:alterados');
+        await carregar();
+      }, 'Mudando o boleto de parcela...');
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir.');
+    } finally {
+      emAndamento = false;
+    }
+  }
+
+  /** Solta da parcela o boleto importado que ainda não foi pago (ele continua no BB). */
+  async function desvincularBoleto(linha) {
+    const b = linha?.boleto;
+    if (!b || emAndamento) return;
+    const ok = await window.DialogPadrao?.confirm?.({
+      title: 'Desvincular o boleto da parcela?', tom: 'aviso', icone: 'fa-unlink',
+      subtitle: `Pedido ${ctx.numero} · parcela ${linha?.parcela?.numero_parcela ?? ''}`,
+      secoes: [{ titulo: 'O boleto', itens: [{ rotulo: b.nosso_numero ? `Nº ${b.nosso_numero}` : 'Boleto do BB', valor: b.valor ? moedaBR(b.valor) : '', detalhe: b.data_vencimento ? `vence ${diaBR(b.data_vencimento)}` : '' }] }],
+      nota: 'A parcela fica livre para outro boleto. O boleto continua registrado no Banco do Brasil e pode ser ligado de novo pelo "Importar do BB".',
+      confirmText: 'Desvincular', confirmVariant: 'danger'
+    });
+    if (!ok) return;
+    emAndamento = true;
+    try {
+      await comVeu(async () => {
+        const resp = await fetchApi(`/api/cobranca/boletos/${encodeURIComponent(b.id)}/vincular`, comoJson({}));
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { exibirMensagem('erro', corpo?.error || mensagemDeErro(resp.status, corpo)); return; }
+        window.showToast?.('Boleto desvinculado da parcela.', 'success');
+        avisarQuemEstaAberto('boletos:alterados');
+        await carregar();
+      }, 'Desvinculando o boleto...');
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir.');
+    } finally {
+      emAndamento = false;
+    }
+  }
+
   /** O "Gravar boletos" aparece enquanto houver campo de linha digitável na tabela. */
   function atualizarGravar() {
     const campos = overlay.querySelectorAll('#dadosExternosParcelas input[data-parcela-id]');
@@ -606,9 +724,14 @@
     const chave = String(p.id);
     const estado = estadoDaParcela(linha);
     const emTroca = estado.tipo === 'externo' && trocando.has(chave) && podeInformar && !cancelado;
+    const importado = estado.tipo === 'bb' && String(linha.boleto?.origem || '') === 'importado';
+    const pago = String(linha.boleto?.status || '') === 'pago' || Boolean(linha.recebimento);
+    const emMudanca = importado && mudando.has(chave) && podeInformar && !cancelado;
     const tr = document.createElement('tr');
     let conteudo;
-    if (emTroca) {
+    if (emMudanca) {
+      conteudo = campoDeMudanca(linha, estado);
+    } else if (emTroca) {
       conteudo = campoDaLinha(p, 'Cole a linha digitável do boleto novo');
       const antes = document.createElement('span');
       antes.className = 'text-xs text-gray-400 break-all';
@@ -653,13 +776,20 @@
         overlay.querySelector(`#dadosExternosParcelas input[data-parcela-id="${chave}"]`)?.focus();
       }),
       remover: () => iconeDeAcao('fa-trash', 'Remover o boleto de fora', 'var(--color-red)', () => removerBoleto(linha)),
-      desistir: () => iconeDeAcao('fa-times', 'Desistir da troca', 'var(--color-red)', () => {
+      mudar: () => iconeDeAcao('fa-exchange-alt', pago ? 'Mudar de parcela (o pagamento vai junto)' : 'Mudar de parcela', 'var(--color-primary)', () => {
+        mudando.add(chave);
+        refazer();
+        overlay.querySelector(`#dadosExternosParcelas select[data-mudar="${chave}"]`)?.focus();
+      }),
+      desvincular: () => iconeDeAcao('fa-unlink', 'Desvincular da parcela', 'var(--color-red)', () => desvincularBoleto(linha)),
+      desistir: () => iconeDeAcao('fa-times', emMudanca ? 'Desistir da mudança' : 'Desistir da troca', 'var(--color-red)', () => {
         trocando.delete(chave);
+        mudando.delete(chave);
         previasDasParcelas.delete(chave);
         refazer();
       })
     };
-    for (const acao of acoesDaParcela(estado.tipo, { podeInformar, cancelado, trocando: emTroca })) acoes.appendChild(FAZ[acao]());
+    for (const acao of acoesDaParcela(estado.tipo, { podeInformar, cancelado, trocando: emTroca || emMudanca, importado, pago })) acoes.appendChild(FAZ[acao]());
     if (!acoes.childElementCount) {
       acoes.classList.add('text-gray-500');
       acoes.textContent = '—';
@@ -707,6 +837,8 @@
     // A parcela que deixou de ter boleto de fora (removido) sai da troca.
     const comDeFora = new Set(linhas.filter(l => l?.boleto_externo).map(l => String(l.parcela?.id)));
     for (const chave of [...trocando]) if (!comDeFora.has(chave)) trocando.delete(chave);
+    const comImportado = new Set(linhas.filter(l => String(l?.boleto?.origem || '') === 'importado' && l?.tem_boleto_vivo).map(l => String(l.parcela?.id)));
+    for (const chave of [...mudando]) if (!comImportado.has(chave)) mudando.delete(chave);
     for (const linha of linhas) tbody.appendChild(montarLinhaDoBoleto(linha, { podeInformar, cancelado }));
     atualizarGravar();
   }
