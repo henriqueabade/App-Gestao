@@ -80,14 +80,17 @@ async function registrarEvento(api, boletoId, { origem = 'app', tipo, nosso_nume
 async function lerPedidoCobranca(api, pedidoId) {
   const id = Number(pedidoId);
   if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
-  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos] = await Promise.all([
+  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos, recebimentos] = await Promise.all([
     api.get('/api/pedidos', { query: { id } }).then(lista),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/boletos', { query: { pedido_id: id } }).then(lista).catch(() => []),
     configuracao.carregar(api),
     // Boletos emitidos FORA e informados (fiscal/externas.js). Sem o SQL, nenhum.
-    externas.listarBoletos(api, id).catch(() => [])
+    externas.listarBoletos(api, id).catch(() => []),
+    // Os pagamentos confirmados: parcela paga (Pix, cartão, boleto…) não
+    // ganha boleto novo (decisão do dono, 24/09/2026). Sem a tabela, nenhum.
+    api.get('/api/recebimentos', { query: { pedido_id: id } }).then(lista).catch(() => [])
   ]);
   const pedido = pedidos.find(p => Number(p?.id) === id) || null;
   if (!pedido) throw erro('Pedido não encontrado.', 404);
@@ -101,8 +104,33 @@ async function lerPedidoCobranca(api, pedidoId) {
     pedido, cliente, configuracao: cfg, notaViva,
     parcelas: parcelas.filter(p => Number(p?.pedido_id) === id).sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0)),
     boletos: boletos.filter(b => Number(b?.pedido_id) === id).sort((a, b) => Number(b.id) - Number(a.id)),
-    boletosExternos
+    boletosExternos,
+    recebimentos: recebimentos.filter(r => r && Number(r.pedido_id) === id && r.status === 'confirmado')
   };
+}
+
+/**
+ * O pagamento confirmado da parcela (Pix, cartão, boleto pago, quitação por
+ * fora), ou null. Parcela paga não recebe boleto — gerado, importado ou de
+ * fora — até o pagamento ser estornado. Pura.
+ */
+function pagamentoDaParcela(recebimentos, parcela) {
+  return (recebimentos || []).find(r => r && r.status === 'confirmado'
+    && (Number(r.parcela_id) === Number(parcela?.id) || Number(r.numero_parcela) === Number(parcela?.numero_parcela))) || null;
+}
+
+/** O pagamento como a tela mostra. Pura. */
+function pagamentoParaTela(r) {
+  if (!r) return null;
+  const dia = String(r.data_recebimento ?? '').slice(0, 10) || null;
+  return { id: r.id, data: dia, valor: Number(r.valor_recebido), forma: r.forma || null, origem: r.origem, boleto_id: r.boleto_id ?? null };
+}
+
+/** A frase do bloqueio: "a parcela 1 já tem pagamento registrado (Pix em 20/08/2026)". Pura. */
+function textoDaParcelaPaga(parcela, r) {
+  const dia = String(r?.data_recebimento ?? '').slice(0, 10);
+  const quando = /^\d{4}-\d{2}-\d{2}$/.test(dia) ? ` em ${dia.split('-').reverse().join('/')}` : '';
+  return `A parcela ${parcela?.numero_parcela ?? '?'} já tem pagamento registrado (${r?.forma || 'pagamento'}${quando}): estorne-o em "Pagamentos" antes de pôr um boleto nela.`;
 }
 
 /** O boleto ocupa a parcela: vivo, ou baixado por quitação por fora / cancelamento. */
@@ -131,7 +159,7 @@ function boletoDaParcela(boletos, parcela) {
  * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
  * histórico; a parcela continua livre para gerar outro.
  */
-function parcelasComBoletos({ parcelas, boletos, boletosExternos = [] }) {
+function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [] }) {
   return (parcelas || []).map(p => {
     const b = boletoDaParcela(boletos, p)
       || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
@@ -139,7 +167,9 @@ function parcelasComBoletos({ parcelas, boletos, boletosExternos = [] }) {
     // O boleto emitido FORA ocupa a parcela para o "Gerar boletos" (não se
     // cobra duas vezes), mas não é do BB: `tem_boleto_vivo` continua só do BB.
     const deFora = externas.boletoParaTela(externas.boletoExternoDaParcela(boletosExternos, p));
-    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora };
+    // O pagamento de cada parcela: a coluna BOLETO do Visualizar mostra "pago"
+    // também na parcela paga sem boleto, e parcela paga não recebe boleto.
+    return { parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora, recebimento: pagamentoParaTela(pagamentoDaParcela(recebimentos, p)) };
   });
 }
 
@@ -247,7 +277,8 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
   if (!dados.parcelas.length) throw erro('O pedido não tem parcelas: cadastre o pagamento antes de gerar boletos.', 409);
 
   const pedidas = new Set((parcelaIds || []).map(Number).filter(Number.isFinite));
-  const alvo = dados.parcelas.filter(p => (pedidas.size ? pedidas.has(Number(p.id)) : true));
+  // Sem escolha ("todas"), a parcela já paga fica de fora sem barulho; escolhida, responde com o motivo.
+  const alvo = dados.parcelas.filter(p => (pedidas.size ? pedidas.has(Number(p.id)) : !pagamentoDaParcela(dados.recebimentos, p)));
   if (!alvo.length) throw erro('Nenhuma parcela encontrada para gerar boleto.', 404);
 
   const notaId = notaFiscalId ?? dados.notaViva?.id ?? null;
@@ -264,6 +295,11 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
     const existente = boletoDaParcela(dados.boletos, parcela);
     if (ocupaParcela(existente)) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, boleto: enxuto(existente) });
+      continue;
+    }
+    const paga = pagamentoDaParcela(dados.recebimentos, parcela);
+    if (paga) {
+      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, paga: true, erro: textoDaParcelaPaga(parcela, paga) });
       continue;
     }
     const substitui = substituiBoletoId ?? existente?.substitui_boleto_id ?? null;
@@ -361,5 +397,6 @@ async function ler(api, boletoId) {
 module.exports = {
   STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, MOTIVOS_QUE_ENCERRAM, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
   enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, ocupaParcela, boletoDaParcela, parcelasComBoletos, resumo,
+  pagamentoDaParcela, pagamentoParaTela, textoDaParcelaPaga,
   reservarBoleto, atualizarBoleto, registrar, listar, ler
 };

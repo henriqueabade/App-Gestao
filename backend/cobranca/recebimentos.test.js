@@ -180,3 +180,28 @@ test('estorno: pede motivo; não vale para o que veio do banco; quitação por f
   assert.equal(n, 1);
   assert.equal(api.dados.recebimentos[0].status, 'estornado');
 });
+
+test('editar o pagamento lançado à mão: data, valor, forma e observação; o do banco não; mudar de mês com a comissão fechada, não (dono, 24/09/2026)', async () => {
+  const api = apiFalsa(tabelas({
+    recebimentos: [
+      { id: 1, pedido_id: 55, numero_parcela: 1, origem: 'manual', status: 'confirmado', forma: 'Pix', data_recebimento: '2026-09-10', competencia: '2026-09', valor_parcela: '1000.00', valor_recebido: '1000.00' },
+      { id: 2, pedido_id: 55, numero_parcela: 2, origem: 'boleto', status: 'confirmado', forma: 'Boleto', data_recebimento: '2026-09-11', competencia: '2026-09', valor_parcela: '1000.00', valor_recebido: '1000.00' },
+      { id: 3, pedido_id: 55, numero_parcela: 3, origem: 'manual', status: 'estornado', data_recebimento: '2026-09-11', competencia: '2026-09', valor_parcela: '1000.00', valor_recebido: '1000.00' }
+    ],
+    financeiro_fechamentos: [], financeiro_fechamento_itens: []
+  }));
+  const editado = await rec.editarManual({ api, id: 1, entrada: { data_recebimento: '2026-09-12', valor_recebido: 1020.5, forma: 'Cartão de crédito', observacao: 'maquininha' }, hoje: HOJE });
+  assert.deepEqual([editado.data_recebimento, editado.valor_recebido, editado.valor_encargos, editado.forma, editado.observacao, editado.competencia], ['2026-09-12', 1020.5, 20.5, 'Cartão de crédito', 'maquininha', '2026-09']);
+  assert.equal(api.dados.recebimentos[0].forma, 'Cartão de crédito', 'gravou');
+
+  await assert.rejects(() => rec.editarManual({ api, id: 2, entrada: { data_recebimento: '2026-09-12', valor_recebido: 1000, forma: 'Pix' }, hoje: HOJE }), /o do boleto vem do banco/);
+  await assert.rejects(() => rec.editarManual({ api, id: 3, entrada: { data_recebimento: '2026-09-12', valor_recebido: 1000, forma: 'Pix' }, hoje: HOJE }), /estornado/);
+  await assert.rejects(() => rec.editarManual({ api, id: 1, entrada: { data_recebimento: '2026-09-30', valor_recebido: 1000, forma: 'Pix' }, hoje: HOJE }), /não pode ser futura/);
+
+  // Comissão de setembro fechada com esse pagamento: mudar de mês é recusado; no mesmo mês, pode.
+  api.dados.financeiro_fechamentos.push({ id: 8, tipo: 'comissao', competencia: '2026-09', status: 'fechado' });
+  api.dados.financeiro_fechamento_itens.push({ id: 80, fechamento_id: 8, recebimento_id: 1 });
+  await assert.rejects(() => rec.editarManual({ api, id: 1, entrada: { data_recebimento: '2026-08-31', valor_recebido: 1000, forma: 'Pix' }, hoje: HOJE }), /comissão de 09\/2026, que está fechada/);
+  const mesmoMes = await rec.editarManual({ api, id: 1, entrada: { data_recebimento: '2026-09-15', valor_recebido: 1000, forma: 'Pix' }, hoje: HOJE });
+  assert.equal(mesmoMes.data_recebimento, '2026-09-15');
+});

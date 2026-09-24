@@ -224,6 +224,55 @@ async function registrarManual({ api, entrada, usuarioId = null, hoje }) {
 }
 
 /**
+ * A competência de comissão FECHADA que já congelou algum destes
+ * recebimentos (ou null): mexer no mês dele depois desmancharia o fechamento.
+ * Sem as tabelas do Financeiro, nenhuma.
+ */
+async function comissaoFechadaCom(api, recs) {
+  if (!recs.length) return null;
+  const ids = new Set(recs.map(r => String(r.id)));
+  const [itens, fechamentos] = await Promise.all([
+    Promise.all(recs.map(r => api.get('/api/financeiro_fechamento_itens', { query: { recebimento_id: r.id } }).then(lista).catch(() => []))).then(l => l.flat()),
+    api.get('/api/financeiro_fechamentos', { query: { tipo: 'comissao' } }).then(lista).catch(() => [])
+  ]);
+  const fechados = new Map(fechamentos.filter(f => f && f.tipo === 'comissao' && String(f.status) === 'fechado').map(f => [String(f.id), f]));
+  const item = itens.find(i => i && ids.has(String(i.recebimento_id)) && fechados.has(String(i.fechamento_id)));
+  return item ? fechados.get(String(item.fechamento_id)) : null;
+}
+
+/**
+ * Edita o pagamento registrado À MÃO (decisão do dono, 24/09/2026): data,
+ * valor, forma e observação — antes só dava para estornar. O que veio do
+ * banco (boleto pago, quitação por fora) não se edita aqui. A comissão usa o
+ * valor da PARCELA, então mudar o valor recebido não mexe nela; mudar a data
+ * para outro mês muda a competência, e isso é recusado se o pagamento já
+ * entrou numa comissão fechada (estorne e registre de novo).
+ */
+async function editarManual({ api, id, entrada, usuarioId = null, hoje }) {
+  const numeroId = Number(id);
+  if (!Number.isInteger(numeroId) || numeroId <= 0) throw erro('Recebimento inválido.');
+  const r = (await lerTodos(api, { id: numeroId }))[0];
+  if (!r) throw erro('Recebimento não encontrado.', 404);
+  if (r.status !== 'confirmado') throw erro('Este pagamento foi estornado: registre de novo.', 409);
+  if (r.origem !== 'manual') throw erro('Só o pagamento registrado à mão se edita aqui: o do boleto vem do banco.', 409);
+  const v = validarManual({ ...entrada, pedido_id: r.pedido_id, numero_parcela: r.numero_parcela }, hoje);
+  const competencia = competenciaDe(v.data);
+  const antes = String(r.competencia || competenciaDe(r.data_recebimento)).trim();
+  if (competencia !== antes) {
+    const fechada = await comissaoFechadaCom(api, [r]);
+    if (fechada) {
+      throw erro(`Este pagamento já entrou na comissão de ${String(fechada.competencia).split('-').reverse().join('/')}, que está fechada: não dá para mudá-lo de mês. Estorne e registre de novo.`, 409);
+    }
+  }
+  const campos = {
+    data_recebimento: v.data, valor_recebido: v.valor, valor_encargos: centavos(v.valor - centavos(r.valor_parcela)),
+    forma: v.forma, observacao: v.observacao || null, competencia, atualizado_em: agora()
+  };
+  await api.put(`/api/recebimentos/${r.id}`, campos);
+  return { ...r, ...campos, editado_por: usuarioId };
+}
+
+/**
  * Estorna um recebimento lançado por engano. O que veio do banco não se
  * estorna aqui (só o BB desfaz o pagamento). Estornar uma quitação por fora
  * libera a parcela para um boleto novo: o boleto baixado passa a dizer
@@ -257,5 +306,5 @@ async function estornar({ api, id, motivo, usuarioId = null }) {
 module.exports = {
   ORIGENS, FORMAS, SQL_FALTANDO,
   dia, dataValida, competenciaDe, tabelaAusente, ehDuplicado, lerTodos, tabelaPronta, valoresDoBoleto,
-  doBoleto, estornarDoBoleto, validarManual, registrarManual, estornar
+  doBoleto, estornarDoBoleto, validarManual, registrarManual, estornar, comissaoFechadaCom, editarManual
 };

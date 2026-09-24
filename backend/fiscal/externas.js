@@ -668,7 +668,9 @@ async function informarBoletos({ api, pedidoId, linhas = [], usuarioId = null, a
     const base = { parcela_id: entrada?.parcela_id ?? null, numero_parcela: parcela?.numero_parcela ?? null };
     if (!parcela) { resultados.push({ ...base, ok: false, erro: 'Parcela não encontrada neste pedido.' }); continue; }
     if (!digitos(entrada?.linha)) continue;
-    if (await ocupadaPeloBB(parcela)) { resultados.push({ ...base, ok: false, erro: 'Esta parcela já tem boleto do Banco do Brasil.' }); continue; }
+    // Texto = o motivo (parcela já paga); verdadeiro = boleto do BB vivo.
+    const ocupada = await ocupadaPeloBB(parcela);
+    if (ocupada) { resultados.push({ ...base, ok: false, erro: typeof ocupada === 'string' ? ocupada : 'Esta parcela já tem boleto do Banco do Brasil.' }); continue; }
     let boleto;
     try {
       boleto = lerLinhaDigitavel(entrada.linha, hoje);

@@ -113,6 +113,28 @@ com a coluna **Situação**: "Prevista" ou "Atrasada · N dias"), o relatório
 de quando é a foto. Por período, os relatórios continuam na posição de hoje.
 A pendência "parcelas vencidas há mais de 30 dias" continua sendo de hoje.
 
+## Parcela paga não recebe boleto; editar o pagamento (24/09/2026, 3ª rodada)
+
+- **Parcela com pagamento registrado** (Pix, cartão, transferência, boleto
+  pago, quitação por fora) **não recebe boleto** até o pagamento ser estornado
+  em "Pagamentos":
+  - **Gerar boletos**: a linha aparece "Paga · Pix" e não se marca; sem
+    escolha ("todas"), a paga fica de fora; escolhida, responde o motivo
+    (`boletos.registrar` + `pagamentoDaParcela`);
+  - **Importar do BB**: não é sugerida, aparece "(paga)" e não se escolhe, e o
+    importar recusa ("importe sem relacionar ou estorne");
+  - **Boletos de fora / colar a linha**: no lugar do campo, a tag "Paga ·
+    Pix · data" e o aviso; o backend recusa com o mesmo texto;
+  - **Mudar de parcela**: a paga não aparece como destino.
+- **Editar o pagamento lançado à mão** (ícone ✏️ em "Pagamentos"): data,
+  valor, forma e observação, no mesmo formulário (`PUT
+  /api/cobranca/recebimentos/:id`, permissão de registrar). O que veio do
+  banco não se edita. A comissão usa o valor da PARCELA — mudar o valor
+  recebido não mexe nela; mudar a data para outro mês muda a competência, e
+  isso é recusado se o pagamento já entrou numa comissão fechada.
+- **Visualizar › Parcelas**: coluna **VENCIMENTO** (a data prevista de cada
+  parcela); a de parcela virou **"PRC."**, com 4 caracteres.
+
 ## Boleto na parcela errada
 
 O boleto do BB importado (colado aqui ou trazido pelo "Importar do BB") pode

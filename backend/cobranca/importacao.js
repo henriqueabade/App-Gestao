@@ -433,17 +433,20 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
   const conta = configuracao.dadosDaConta(cfg, ambiente);
   const { boletos: doBB, aviso, pedacos } = await listarNoBB({ bb, conexao, conta, situacao, de, ate });
 
-  const [parcelas, pedidos, clientes, gravados] = await Promise.all([
+  const [parcelas, pedidos, clientes, gravados, pagas] = await Promise.all([
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/clientes').then(lista).catch(() => []),
-    api.get('/api/boletos').then(lista).catch(() => [])
+    api.get('/api/boletos').then(lista).catch(() => []),
+    parcelasPagas(api)
   ]);
   const sql = gravados.length ? { pronto: sqlPronto(gravados[0]), desconhecido: false } : { pronto: true, desconhecido: true };
   const existentes = await jaImportados(api, ambiente, doBB.map(b => b.nosso_numero), gravados);
   // Parcela que já tem boleto vivo não entra na sugestão: ninguém cobra a
   // mesma parcela duas vezes, e o `vincular` recusaria assim mesmo.
   const ocupadas = new Set(gravados.filter(b => boletos.ocupaParcela(b)).map(b => String(b.parcela_id)));
+  // Parcela já paga (Pix, cartão…) também não: não se cobra o que já entrou.
+  for (const p of parcelas) if (pagas.has(chaveDaParcela(p))) ocupadas.add(String(p.id));
 
   const doPedido = pedidoId ? pedidos.find(p => Number(p.id) === Number(pedidoId)) || null : null;
   const linhas = doBB.map(linha => {
@@ -500,11 +503,12 @@ async function listarParaImportar({ api, bb, conexao, cfg, ambiente, situacao, d
  */
 async function parcelasParaEscolher({ api, busca = '', pedidoId = null, limite = 20 }) {
   const termo = String(busca || '').trim().toLowerCase();
-  const [pedidos, parcelas, clientes, comBoleto] = await Promise.all([
+  const [pedidos, parcelas, clientes, comBoleto, pagas] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/clientes').then(lista).catch(() => []),
-    api.get('/api/boletos').then(lista).catch(() => [])
+    api.get('/api/boletos').then(lista).catch(() => []),
+    parcelasPagas(api)
   ]);
   const nomeDoCliente = new Map(clientes.map(c => [String(c.id), c.nome_fantasia || c.razao_social || c.nome || '']));
   const ocupadas = new Set(comBoleto.filter(b => boletos.ocupaParcela(b)).map(b => String(b.parcela_id)));
@@ -528,7 +532,9 @@ async function parcelasParaEscolher({ api, busca = '', pedidoId = null, limite =
         .sort((a, b) => Number(a.numero_parcela) - Number(b.numero_parcela))
         .map(pa => ({
           id: pa.id, numero_parcela: pa.numero_parcela, valor: numero(pa.valor),
-          data_vencimento: dia(pa.data_vencimento), ocupada: ocupadas.has(String(pa.id))
+          data_vencimento: dia(pa.data_vencimento), ocupada: ocupadas.has(String(pa.id)),
+          // Paga (Pix, cartão…): a tela mostra, mas não deixa escolher.
+          paga: pagas.has(chaveDaParcela(pa))
         }))
     }))
   };
@@ -741,6 +747,15 @@ async function importarUm({ api, bb, conexao, cfg, ambiente, doBB, vinculo = {},
     return { ok: true, ja_existia: true, nosso_numero: doBB.nosso_numero, boleto: boletos.enxuto(existente) };
   }
 
+  // Parcela já paga (Pix, cartão…) não recebe boleto (decisão do dono,
+  // 24/09/2026): importe sem relacionar ou estorne o pagamento antes.
+  if (vinculo.pedido_id && vinculo.numero_parcela) {
+    const pagas = await parcelasPagas(api, { pedido_id: vinculo.pedido_id });
+    if (pagas.has(`${Number(vinculo.pedido_id)}:${Number(vinculo.numero_parcela)}`)) {
+      throw erro(`A parcela ${vinculo.numero_parcela} do pedido ${vinculo.pedido_numero || vinculo.pedido_id} já tem pagamento registrado: estorne-o em "Pagamentos" ou importe sem relacionar.`, 409);
+    }
+  }
+
   const linha = linhaDoBoleto({ doBB, ambiente, cfg, conta, vinculo, usuarioId });
   let criado;
   try {
@@ -868,6 +883,17 @@ async function importar({ api, bb, conexao, cfg, ambiente, escolhidos = [], doBB
 }
 
 /**
+ * As parcelas já PAGAS (Pix, cartão, boleto, quitação por fora), como
+ * "pedido:parcela": não recebem boleto importado (decisão do dono,
+ * 24/09/2026). Sem a tabela de recebimentos, nenhuma.
+ */
+async function parcelasPagas(api, query = {}) {
+  const recs = await api.get('/api/recebimentos', { query }).then(lista).catch(() => []);
+  return new Set(recs.filter(r => r && r.status === 'confirmado').map(r => `${Number(r.pedido_id)}:${Number(r.numero_parcela)}`));
+}
+const chaveDaParcela = p => `${Number(p?.pedido_id)}:${Number(p?.numero_parcela)}`;
+
+/**
  * Os recebimentos confirmados que vieram deste boleto (pago no banco ou
  * quitado por fora): eles mudam de parcela junto com o boleto.
  */
@@ -882,21 +908,8 @@ async function recebimentosDoBoleto(api, boleto) {
   return doPedido.filter(r => r && r.status === 'confirmado' && Number(r.boleto_id) === Number(boleto.id));
 }
 
-/**
- * A competência de comissão FECHADA que já congelou algum destes
- * recebimentos (ou null). Mexer nele depois desmancharia o que foi fechado.
- */
-async function comissaoFechadaCom(api, recs) {
-  if (!recs.length) return null;
-  const ids = new Set(recs.map(r => String(r.id)));
-  const [itens, fechamentos] = await Promise.all([
-    Promise.all(recs.map(r => api.get('/api/financeiro_fechamento_itens', { query: { recebimento_id: r.id } }).then(lista).catch(() => []))).then(l => l.flat()),
-    api.get('/api/financeiro_fechamentos', { query: { tipo: 'comissao' } }).then(lista).catch(() => [])
-  ]);
-  const fechados = new Map(fechamentos.filter(f => f && f.tipo === 'comissao' && String(f.status) === 'fechado').map(f => [String(f.id), f]));
-  const item = itens.find(i => i && ids.has(String(i.recebimento_id)) && fechados.has(String(i.fechamento_id)));
-  return item ? fechados.get(String(item.fechamento_id)) : null;
-}
+// A trava da comissão fechada mora em recebimentos.js (a edição do pagamento usa a mesma).
+const comissaoFechadaCom = (api, recs) => recebimentos.comissaoFechadaCom(api, recs);
 
 const competenciaImpressa = comp => String(comp || '').split('-').reverse().join('/');
 
@@ -987,6 +1000,6 @@ module.exports = {
   faixaPadrao, pedacosDaFaixa, diaParaBB, somarMeses, somarDias,
   nossoNumeroDoCampoLivre, sequencialDoNossoNumero, normalizarDoBB, situacaoLegivel,
   lerSeuNumero, sugerirParcela, distanciaEmDias, DIAS_DE_FOLGA_NO_VENCIMENTO, linhaDoBoleto, sequencialDepoisDaImportacao, avisosDoRecebimentoQueJaExistia,
-  sqlPronto, exigirSql, estadoDoSql, jaImportados, listarNoBB, listarParaImportar, importarUm, importar, vincular,
+  sqlPronto, exigirSql, estadoDoSql, jaImportados, parcelasPagas, listarNoBB, listarParaImportar, importarUm, importar, vincular,
   consultarNoBB, reconhecerLinhas, informarPelaLinha, parcelasParaEscolher, buscarEscolhidos
 };

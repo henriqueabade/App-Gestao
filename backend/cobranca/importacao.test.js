@@ -580,6 +580,27 @@ test('boleto colado na parcela errada: muda de parcela levando o pagamento; o pa
   assert.ok(api.dados.boletos_eventos.some(e => e.tipo === 'vinculado' && /da parcela 1 para a parcela 2 .*O pagamento foi junto/.test(e.mensagem)));
 });
 
+test('parcela já PAGA (Pix, cartão…) não recebe boleto importado: não é sugerida, não se escolhe e o importar recusa (dono, 24/09/2026)', async () => {
+  const cfg = cfgBase({ proximo_sequencial_producao: 100 });
+  const api = apiParaImportar({
+    configuracao_cobranca: [cfg],
+    recebimentos: [{ id: 1, pedido_id: 12, parcela_id: 71, numero_parcela: 1, status: 'confirmado', origem: 'manual', forma: 'Pix' }]
+  });
+  const linha = importacao.normalizarDoBB(doBB());
+  const r = await importacao.importar({
+    api, bb: bbFalso({ detalhe: DETALHE_REGISTRADO }), conexao: CONEXAO, cfg, ambiente: 'producao', hoje: HOJE, usuarioId: 5,
+    escolhidos: [{ nosso_numero: linha.nosso_numero, pedido_id: 12, parcela_id: 71, numero_parcela: 1, pedido_numero: 'PED120' }],
+    doBB: new Map([[linha.nosso_numero, linha]])
+  });
+  assert.equal(r.importados, 0);
+  assert.match(r.resultados[0].erro, /A parcela 1 do pedido PED120 já tem pagamento registrado: estorne-o em "Pagamentos" ou importe sem relacionar/);
+  assert.equal(api.dados.boletos.length, 0, 'nada gravado');
+
+  const escolher = await importacao.parcelasParaEscolher({ api, pedidoId: 12 });
+  assert.deepEqual(escolher.pedidos[0].parcelas.map(p => [p.numero_parcela, p.paga]), [[1, true]], 'a tela mostra, mas não deixa escolher');
+  assert.deepEqual([...await importacao.parcelasPagas(api)], ['12:1']);
+});
+
 test('sem o SQL da fase, a tela avisa e a importação nem começa', async () => {
   assert.equal(importacao.sqlPronto({ id: 1, origem: 'app' }), true);
   assert.equal(importacao.sqlPronto({ id: 1 }), false);

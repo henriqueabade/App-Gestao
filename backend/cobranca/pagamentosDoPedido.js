@@ -72,7 +72,9 @@ function parcelasParaPagamento({ linhas = [], parcelas = [], boletosExternos = [
         encargos: r ? centavos(r.valor_encargos || 0) : 0,
         observacao: r?.observacao || null,
         // O que veio do banco só o BB desfaz (recebimentos.estornar).
-        pode_estornar: origem !== 'boleto'
+        pode_estornar: origem !== 'boleto',
+        // Só o registrado à mão se edita (data, valor, forma, observação).
+        pode_editar: origem === 'manual'
       } : null,
       pode_registrar: !cancelado && situacao !== 'paga' && situacao !== 'paga_no_banco' && situacao !== 'cancelada' && l.valor > 0
     };

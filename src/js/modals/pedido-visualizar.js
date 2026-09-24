@@ -215,7 +215,7 @@
     // O BOLETO não espera o embarque: cliente que pagou adiantado já tem o
     // boleto na mão antes da nota (decisão do dono, 23/09/2026).
     const faltaNota = pedidoJaSaiu(pedido) && !temNotaPropria && !notaExterna;
-    const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
+    const faltaBoleto = pagaComBoleto(pedido) && linhas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
     return faltaNota || faltaBoleto || temDeFora;
   }
 
@@ -534,7 +534,8 @@
     const lista = overlay.querySelector('#visualizarPedidoBoletos');
     if (!estado || !Array.isArray(estado.parcelas)) return;
     // Parcela com boleto emitido fora já está cobrada: não conta como faltando.
-    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo);
+    // Parcela já paga (Pix, cartão…) também não falta (dono, 24/09/2026).
+    const falta = estado.parcelas.some(l => !l?.tem_boleto_vivo && !l?.boleto_externo && !l?.recebimento);
     const cancelado = pedidoCancelado(pedido);
     const abrir = () => {
       window.gerarBoletosContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
@@ -988,7 +989,9 @@
             prazoDias = `${diferencaEmDias(vencimento, baseFaturamento)} dias`;
           }
           const numeroParcela = p.numero_parcela ? `${p.numero_parcela}ª` : '';
-          return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${numeroParcela}</td><td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazoDias}</td></tr>`;
+          // O vencimento previsto de cada parcela (pedido do dono, 24/09/2026).
+          const venceEm = vencimento ? formatarDia(vencimento) : '—';
+          return `<tr class="border-b border-white/10"><td class="px-4 py-4 text-left text-sm text-white" style="width: 4ch">${numeroParcela}</td><td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazoDias}</td><td class="px-6 py-4 text-left text-sm text-white">${venceEm}</td></tr>`;
         }).join('');
         const previsaoEmbarque = formatarDataDaColuna('embarcar_previsao', data.embarcar_previsao);
         const inicioFaturamento = formatarDataDaColuna('inicio_faturamento', data.inicio_faturamento);
@@ -1005,9 +1008,10 @@
             <table class="w-full text-sm">
               <thead class="bg-gray-50 sticky top-0">
                 <tr class="border-b border-gray-200">
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PARCELA</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="width: 4ch" title="Parcela">PRC.</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PRAZO</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VENCIMENTO</th>
                 </tr>
               </thead>
               <tbody>${rows}</tbody>

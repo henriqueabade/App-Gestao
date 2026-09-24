@@ -116,6 +116,25 @@ test('boleto emitido FORA ocupa a parcela: aparece na tela e o "gerar" não leva
   assert.equal(linhas[1].tem_boleto_vivo, false, 'tem_boleto_vivo continua só do BB');
 });
 
+test('parcela já PAGA (Pix, cartão…) não ganha boleto: "todas" a pula, escolhida responde o motivo (dono, 24/09/2026)', async () => {
+  configuracao.limparCache();
+  const api = apiFalsa({
+    ...tabelasBase(),
+    recebimentos: [{ id: 9, pedido_id: 55, parcela_id: 1, numero_parcela: 1, status: 'confirmado', origem: 'manual', forma: 'Pix', data_recebimento: '2026-08-20', valor_recebido: '1000.00' }]
+  });
+  const bb = bbFalso();
+  const todas = await registrar(api, bb);
+  assert.deepEqual(todas.resultados.map(x => x.numero_parcela), [2, 3], 'sem escolha, a paga fica de fora sem barulho');
+  const escolhida = await registrar(api, bb, { parcelaIds: [1] });
+  assert.equal(escolhida.resultados[0].ok, false);
+  assert.match(escolhida.resultados[0].erro, /A parcela 1 já tem pagamento registrado \(Pix em 20\/08\/2026\): estorne-o em "Pagamentos"/);
+
+  const linhas = boletos.parcelasComBoletos(await boletos.lerPedidoCobranca(api, 55));
+  assert.deepEqual(linhas[0].recebimento, { id: 9, data: '2026-08-20', valor: 1000, forma: 'Pix', origem: 'manual', boleto_id: null }, 'a tela sabe que ela está paga');
+  assert.equal(linhas[1].recebimento, null);
+  assert.equal(boletos.pagamentoDaParcela([{ status: 'estornado', numero_parcela: 1 }], { id: 1, numero_parcela: 1 }), null, 'estornado não conta');
+});
+
 test('registra as três parcelas: nosso número sequencial reservado, BB chamado com o payload, linha/Pix gravados, eventos e sequencial avançado', async () => {
   configuracao.limparCache();
   const api = apiFalsa();

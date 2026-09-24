@@ -29,6 +29,18 @@
 
   /** Como a parcela aparece: se pode ser marcada, e a tag do boleto que ela tem. */
   function linhaDaParcela(l) {
+    // Já paga (Pix, cartão…) e sem boleto: não se marca — só depois de
+    // estornar o pagamento em "Pagamentos" (decisão do dono, 24/09/2026).
+    if (l?.recebimento && !l?.tem_boleto_vivo && !l?.boleto_externo) {
+      const r = l.recebimento;
+      return {
+        id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
+        vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        classe: 'badge-success', rotulo: `Paga${r.forma ? ` · ${r.forma}` : ''}`,
+        detalhe: [r.data ? `em ${diaCurto(r.data)}` : '', 'para gerar boleto, estorne o pagamento em "Pagamentos"'].filter(Boolean).join(' · ')
+      };
+    }
     // Boleto emitido fora e informado: a parcela já está cobrada, não se marca.
     if (l?.boleto_externo && !l?.tem_boleto_vivo) {
       const e = l.boleto_externo;

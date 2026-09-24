@@ -401,9 +401,12 @@
       for (const parcela of pedido.parcelas || []) {
         const botao = document.createElement('button');
         botao.type = 'button';
-        botao.className = `${parcela.ocupada ? 'btn-neutral' : 'btn-secondary'} ctl-botao ctl-botao--pequeno text-white`;
-        botao.textContent = `${parcela.numero_parcela}ª · ${moeda(parcela.valor)} · ${diaCurto(parcela.data_vencimento) || '—'}${parcela.ocupada ? ' (com boleto)' : ''}`;
-        botao.disabled = parcela.ocupada;
+        // Com boleto ou já paga (Pix, cartão…): aparece, mas não se escolhe (dono, 24/09/2026).
+        const travada = Boolean(parcela.ocupada || parcela.paga);
+        botao.className = `${travada ? 'btn-neutral' : 'btn-secondary'} ctl-botao ctl-botao--pequeno text-white`;
+        botao.textContent = `${parcela.numero_parcela}ª · ${moeda(parcela.valor)} · ${diaCurto(parcela.data_vencimento) || '—'}${parcela.paga ? ' (paga)' : (parcela.ocupada ? ' (com boleto)' : '')}`;
+        botao.disabled = travada;
+        if (parcela.paga) botao.title = 'Parcela já paga: para ligar um boleto, estorne o pagamento em "Pagamentos".';
         botao.addEventListener('click', () => {
           escolhas.set(escolhendo.nosso_numero, {
             pedido_id: pedido.id, pedido_numero: pedido.numero,

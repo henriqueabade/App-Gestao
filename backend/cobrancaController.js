@@ -31,6 +31,7 @@
  *   GET    /recebimentos?competencia=&visao=          recebidos | a_receber | em_atraso | abertas
  *   POST   /recebimentos                              recebimento à mão (com baixar_boleto, baixa o boleto em aberto como quitado por fora)
  *   POST   /recebimentos/:id/estornar                 { motivo }
+ *   PUT    /recebimentos/:id                          edita o pagamento registrado à mão (data, valor, forma, observação)
  *   GET    /pedidos/:id/pagamentos                    as parcelas do pedido com o pagamento de cada uma (modal "Pagamentos")
  *   GET    /pedidos/:id/pagamentos/encargos?numero_parcela=&data=   multa e juros sugeridos para pagar naquele dia
  *   POST   /conciliar                                 fila do webhook + consulta dos boletos a pagar (so_fila: só a fila)
@@ -326,13 +327,8 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     const pagador = dados.cliente ? bbBoleto.pagadorDoCliente(dados.cliente) : null;
     const pendenciasPagador = pagador ? bbBoleto.pendenciasDoPagador(pagador) : ['Pedido sem cliente.'];
     if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
-    // O pagamento de cada parcela (boleto pago, Pix, cartão…): a coluna BOLETO
-    // do Visualizar mostra "Pago" também na parcela paga sem boleto.
-    const recs = await recebimentos.lerTodos(api, { pedido_id: dados.pedido.id }).catch(() => []);
-    const linhas = boletos.parcelasComBoletos(dados).map(l => {
-      const r = recs.find(x => x.status === 'confirmado' && Number(x.numero_parcela) === Number(l.parcela?.numero_parcela));
-      return { ...l, recebimento: r ? { id: r.id, data: recebimentos.dia(r.data_recebimento), valor: Number(r.valor_recebido), forma: r.forma || null, origem: r.origem } : null };
-    });
+    // Cada parcela com o boleto e o pagamento (Pix, cartão, boleto pago…).
+    const linhas = boletos.parcelasComBoletos(dados);
     return {
       // `faturamento_regra` vai junto: boleto gerado antes do embarque num
       // pedido "ao embarcar" pode ter o vencimento mudado no envio, e a tela
@@ -346,7 +342,8 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       nota_fiscal: dados.notaViva ? { id: dados.notaViva.id, serie: dados.notaViva.serie, numero: dados.notaViva.numero } : null,
       parcelas: linhas,
       pendencias: [...pendencias, ...pendenciasPagador],
-      pode_gerar: !pendencias.length && !pendenciasPagador.length && linhas.some(l => !l.tem_boleto_vivo && !l.boleto_externo) && String(dados.pedido.situacao || '').toLowerCase() !== 'cancelado',
+      // Parcela paga (Pix, cartão…) não conta como faltando boleto.
+      pode_gerar: !pendencias.length && !pendenciasPagador.length && linhas.some(l => !l.tem_boleto_vivo && !l.boleto_externo && !l.recebimento) && String(dados.pedido.situacao || '').toLowerCase() !== 'cancelado',
       gerar_ao_emitir_nfe: cfg ? cfg.gerar_ao_emitir_nfe !== false : false,
       resumo: boletos.resumo(dados.boletos)
     };
@@ -390,10 +387,18 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
   // Só os dados (fiscal/externas.js), pela linha digitável de cada parcela.
   // Não passam pelo BB. Quem pode gerar boletos informa.
 
-  /** A parcela já tem boleto do BB que vale? Então não recebe um de fora. */
+  /**
+   * A parcela já tem boleto do BB que vale? Então não recebe um de fora. E a
+   * parcela já paga (Pix, cartão…) não recebe boleto nenhum (decisão do dono,
+   * 24/09/2026): devolve o texto do bloqueio.
+   */
   async function ocupadaPeloBB(api, pedidoId) {
     const dados = await boletos.lerPedidoCobranca(api, pedidoId);
-    return parcela => boletos.ocupaParcela(boletos.boletoDaParcela(dados.boletos, parcela));
+    return parcela => {
+      const paga = boletos.pagamentoDaParcela(dados.recebimentos, parcela);
+      if (paga) return boletos.textoDaParcelaPaga(parcela, paga);
+      return boletos.ocupaParcela(boletos.boletoDaParcela(dados.boletos, parcela));
+    };
   }
 
   /**
@@ -798,6 +803,15 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       }
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/recebimentos');
+    }
+  });
+
+  /** Edita o pagamento registrado à mão (decisão do dono, 24/09/2026). */
+  router.put('/recebimentos/:id', exigirPermissao('financeiro.recebimento.registrar'), async (req, res) => {
+    try {
+      res.json({ recebimento: await recebimentos.editarManual({ api: createApiClient(req), id: req.params.id, entrada: req.body || {}, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia() }) });
+    } catch (err) {
+      responder(res, err, 'PUT /api/cobranca/recebimentos/:id');
     }
   });
 

@@ -89,10 +89,15 @@
     return { principal: diaBR(p?.vencimento) || '—', detalhe: detalhe.join(' · ') };
   }
 
-  /** As ações da linha: registrar (em aberto ou atrasada) e estornar (o que foi pago à mão ou por fora). */
+  /**
+   * As ações da linha: registrar (em aberto ou atrasada), editar (o que foi
+   * pago à mão — data, valor, forma, observação) e estornar (o que foi pago à
+   * mão ou por fora; o do banco só o BB desfaz).
+   */
   function acoesDaParcela(p, { podeRegistrar = false, podeEstornar = false } = {}) {
     const acoes = [];
     if (p?.pode_registrar && podeRegistrar) acoes.push('registrar');
+    if (p?.situacao === 'paga' && p?.recebimento?.pode_editar && podeRegistrar) acoes.push('editar');
     if (p?.situacao === 'paga' && p?.recebimento?.pode_estornar && podeEstornar) acoes.push('estornar');
     return acoes;
   }
@@ -143,6 +148,8 @@
   /** A parcela do formulário aberto (registrar) e a do estorno. */
   let alvo = null;
   let alvoEstorno = null;
+  /** O pagamento em edição (o formulário serve para registrar e para editar). */
+  let editando = null;
   let encargosAtuais = null;
   /** Descarta a resposta de encargos que chegou depois de outra data escolhida. */
   let vezDosEncargos = 0;
@@ -297,6 +304,7 @@
       acoes.className = 'flex items-center justify-center gap-1';
       const FAZ = {
         registrar: () => iconeDeAcao('fa-hand-holding-usd', 'Registrar o pagamento desta parcela', 'var(--color-green)', () => abrirRegistro(p)),
+        editar: () => iconeDeAcao('fa-edit', 'Editar este pagamento (data, valor, forma)', 'var(--color-primary)', () => abrirRegistro(p, p.recebimento)),
         estornar: () => iconeDeAcao('fa-undo', 'Estornar este pagamento', 'var(--color-red)', () => abrirEstorno(p))
       };
       for (const acao of acoesDaParcela(p, { podeRegistrar, podeEstornar })) acoes.appendChild(FAZ[acao]());
@@ -319,6 +327,7 @@
   function fecharPaineis() {
     alvo = null;
     alvoEstorno = null;
+    editando = null;
     encargosAtuais = null;
     vezDosEncargos += 1;
     el('pagamentosParcelasForm').classList.add('hidden');
@@ -331,15 +340,20 @@
     foco?.focus?.();
   }
 
-  function abrirRegistro(p) {
+  /** O formulário: registrar um pagamento novo ou, com `recebimento`, editar o que foi lançado à mão. */
+  function abrirRegistro(p, recebimento = null) {
     if (emAndamento) return;
     fecharPaineis();
     exibirMensagem('', '');
     alvo = p;
-    el('pagamentosParcelasFormTituloTexto').textContent = `Registrar o pagamento da ${p.numero_parcela}ª parcela`;
+    editando = recebimento;
+    el('pagamentosParcelasFormTituloTexto').textContent = editando
+      ? `Editar o pagamento da ${p.numero_parcela}ª parcela`
+      : `Registrar o pagamento da ${p.numero_parcela}ª parcela`;
+    el('pagamentosParcelasRegistrar').textContent = editando ? 'Salvar alteração' : 'Registrar pagamento';
     el('pagamentosParcelasFormContexto').textContent = `vence ${diaBR(p.vencimento)} · ${moedaBR(p.a_receber)}`;
     const aviso = el('pagamentosParcelasAvisoBoleto');
-    const textoAviso = p.boleto_aberto
+    const textoAviso = editando ? '' : p.boleto_aberto
       ? `Esta parcela tem boleto do BB em aberto${p.boleto?.nosso_numero ? ` (nº ${p.boleto.nosso_numero})` : ''}. Ao registrar, o app pergunta se pode baixá-lo no BB como "quitado por fora" — assim o cliente não paga duas vezes.`
       : (p.boleto_externo ? 'O boleto de fora desta parcela fica só como registro: quem cobra é o banco que o emitiu.' : '');
     aviso.textContent = textoAviso;
@@ -360,9 +374,10 @@
       o.textContent = f;
       forma.appendChild(o);
     }
-    forma.value = '';
-    el('pagamentosParcelasValor').value = numeroBR(p.a_receber);
-    el('pagamentosParcelasObservacao').value = '';
+    forma.value = editando?.forma && [...forma.options].some(o => o.value === editando.forma) ? editando.forma : '';
+    el('pagamentosParcelasValor').value = numeroBR(editando ? editando.valor : p.a_receber);
+    el('pagamentosParcelasObservacao').value = editando?.observacao || '';
+    if (editando?.data) data.value = editando.data;
     mostrarPainel(el('pagamentosParcelasForm'), forma);
     atualizarEncargos();
   }
@@ -412,6 +427,11 @@
     if (!forma) { exibirMensagem('erro', 'Diga como o cliente pagou (Pix, cartão, transferência…).'); return; }
     if (!(valor > 0)) { exibirMensagem('erro', 'Informe o valor recebido.'); return; }
 
+    if (editando) {
+      await salvarEdicao(p, editando, { data, forma, valor, observacao });
+      return;
+    }
+
     let baixar = false;
     if (p.boleto_aberto) {
       if (!pode('financeiro.boleto.baixa')) {
@@ -457,6 +477,25 @@
     }
   }
   botao(el('pagamentosParcelasRegistrar'), registrar);
+
+  /** Grava a edição do pagamento lançado à mão (PUT /api/cobranca/recebimentos/:id). */
+  async function salvarEdicao(p, r, { data, forma, valor, observacao }) {
+    emAndamento = true;
+    try {
+      const resp = await fetchApi(`/api/cobranca/recebimentos/${encodeURIComponent(r.id)}`, comoJson({ data_recebimento: data, valor_recebido: valor, forma, observacao }, 'PUT'));
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+      window.showToast?.(`Pagamento da ${p.numero_parcela}ª parcela atualizado.`, 'success');
+      avisarQuemEstaAberto('recebimentos:alterados');
+      fecharPaineis();
+      await carregar();
+      exibirMensagem('ok', `Pagamento da ${p.numero_parcela}ª parcela atualizado — conta na comissão de ${rotuloDoMes(data)}.`);
+    } catch (_) {
+      exibirMensagem('erro', 'Não foi possível falar com o servidor. Reabra o modal para conferir o que foi gravado.');
+    } finally {
+      emAndamento = false;
+    }
+  }
 
   // --------------------------------------------------------- estornar
   function abrirEstorno(p) {

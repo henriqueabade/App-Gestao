@@ -710,6 +710,19 @@ test('pagamentos do pedido: lista as parcelas, sugere multa e juros pelo vencime
     const estadoBoletos = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
     assert.deepEqual(estadoBoletos.corpo.parcelas.map(l => l.recebimento?.forma || null), [null, 'Cartão de crédito', null]);
 
+    // Parcela paga não ganha boleto (dono, 24/09/2026).
+    t.estado.chaves.add('financeiro.boleto.emit');
+    const gerar = await t.chamar('POST', '/api/cobranca/pedidos/55/boletos', { parcelas: [2] });
+    assert.equal(gerar.status, 200, JSON.stringify(gerar.corpo));
+    assert.deepEqual([gerar.corpo.resultados[0].ok, gerar.corpo.resultados[0].paga], [false, true]);
+    assert.match(gerar.corpo.resultados[0].erro, /já tem pagamento registrado \(Cartão de crédito/);
+
+    // Editar o pagamento lançado à mão (antes só dava para estornar).
+    const editado = await t.chamar('PUT', `/api/cobranca/recebimentos/${pago.corpo.recebimento.id}`, { data_recebimento: hoje, valor_recebido: 1010, forma: 'Pix', observacao: 'corrigido' });
+    assert.equal(editado.status, 200, JSON.stringify(editado.corpo));
+    const aposEditar = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
+    assert.deepEqual([aposEditar.corpo.parcelas[1].recebimento.forma, aposEditar.corpo.parcelas[1].recebimento.valor, aposEditar.corpo.parcelas[1].recebimento.pode_editar], ['Pix', 1010, true]);
+
     // Estornar devolve a parcela para em aberto.
     t.estado.chaves.add('financeiro.recebimento.estornar');
     assert.equal((await t.chamar('POST', `/api/cobranca/recebimentos/${pago.corpo.recebimento.id}/estornar`, { motivo: 'parcela errada' })).status, 200);

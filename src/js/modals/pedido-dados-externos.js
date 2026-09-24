@@ -75,6 +75,11 @@
    * de fora (mostra e deixa remover) ou livre (recebe a linha digitável).
    */
   function estadoDaParcela(linha) {
+    // Já paga (Pix, cartão…) e sem boleto: não recebe boleto (dono, 24/09/2026).
+    if (linha?.recebimento && !linha?.boleto_externo && !linha?.tem_boleto_vivo) {
+      const r = linha.recebimento;
+      return { tipo: 'paga', texto: `Paga${r.forma ? ` · ${r.forma}` : ''}${r.data ? ` · ${diaBR(r.data)}` : ''}` };
+    }
     if (linha?.boleto_externo) {
       const b = linha.boleto_externo;
       const partes = [b.banco_nome || (b.banco ? `Banco ${b.banco}` : 'Banco'), b.vencimento ? `vence ${diaBR(b.vencimento)}` : 'sem vencimento', b.valor ? moedaBR(b.valor) : null].filter(Boolean);
@@ -752,6 +757,16 @@
       conteudo = document.createElement('span');
       conteudo.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap';
       conteudo.textContent = estado.texto;
+    } else if (estado.tipo === 'paga') {
+      conteudo = document.createElement('div');
+      conteudo.className = 'flex flex-col gap-1 min-w-0';
+      const tag = document.createElement('span');
+      tag.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap self-start';
+      tag.textContent = estado.texto;
+      const nota = document.createElement('span');
+      nota.className = 'text-xs text-gray-400';
+      nota.textContent = 'Parcela já paga: para pôr um boleto nela, estorne o pagamento em "Pagamentos".';
+      conteudo.append(tag, nota);
     } else if (!cancelado && podeInformar) {
       conteudo = campoDaLinha(p, 'Cole a linha digitável (47 números)');
     } else {
