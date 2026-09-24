@@ -130,7 +130,9 @@ test('a trava de 100% saiu das comissões e foi para a produção', () => {
 
   assert.ok(PAINEL.includes("chave: 'rateio_incompleto'") && PAINEL.includes("destino: 'rateio-producao'"));
   assert.ok(PAINEL.includes('processo sem rateio completo'), 'a pendência fala de processos');
-  assert.ok(PAINEL.includes('rateios.lerVisao({ api, linhas: prodComp.linhas || [] })'));
+  // O rateio trava o FECHAMENTO: olha a prévia inteira (desde 24/09/2026 o
+  // cartão do painel mostra só o que é da competência — `propria`).
+  assert.ok(PAINEL.includes('rateios.lerVisao({ api, linhas: prodPrevia.linhas || [] })'));
 
   assert.ok(CONTROLLER.includes("fechamentos.previa({ api, tipo: 'producao', competencia, hoje, desde })"), 'a rota do rateio lê a produção');
   assert.ok(CONTROLLER.includes("router.post('/rateio/peca'"), 'e o atalho de copiar na peça');

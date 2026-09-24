@@ -375,6 +375,13 @@ div:has(> .fin-competencia-campo--modal) { min-width: 0; }
     color: var(--fin-texto-2);
 }
 
+/* O atraso de REPASSE (decisão do dono, 24/09/2026): o cliente já pagou e a
+   comissão (ou a produção) não foi repassada no prazo. Bordô, como a atenção. */
+.fin-kpi__rodape--atraso { color: var(--fin-bordo-texto); font-weight: 600; }
+.fin-kpi__rodape[hidden],
+.fin-resumo__nota[hidden] { display: none; }
+.fin-benef__total--atraso { color: var(--fin-bordo-texto); }
+
 /* Cartão de atenção: bordô da identidade, mais peso, nada de cor nova. */
 .fin-kpi--atencao {
     border-color: var(--fin-bordo-borda);

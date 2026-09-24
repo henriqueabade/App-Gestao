@@ -9,8 +9,11 @@ const comissoes = require('./comissoes');
 const producao = require('./producao');
 const fechamentos = require('./fechamentos');
 const base = require('./base');
+const calendario = require('./calendario');
+const repasses = require('./repasses');
 
 const TITULOS = {
+  'resumo-comissoes': 'Comissões do mês',
   'previsao-comissoes': 'Previsão de comissões',
   'comissoes-atrasadas': 'Comissões atrasadas',
   'comissoes-apuradas': 'Comissões apuradas',
@@ -95,7 +98,52 @@ async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }
   const comSituacao = p => linhaDeParcela(p, {
     situacao: p.situacao_mes === 'atrasada' || p.situacao === 'atrasada' ? `Atrasada · ${c.plural(p.dias_atraso, 'dia', 'dias')}` : 'Prevista'
   });
-  if (chave === 'previsao-comissoes') {
+  if (chave === 'resumo-comissoes') {
+    // O "Ver detalhes" do Resumo de Comissões (decisão do dono, 24/09/2026):
+    // TUDO do mês numa tabela, com a Situação dizendo o que é cada linha —
+    // previstas, atrasadas porque o cliente não pagou, apuradas (e os
+    // ajustes) da competência e o que o cliente já pagou e nós não
+    // repassamos no prazo. Por período, a posição de hoje.
+    const referencia = mes ? mes.referencia : hoje;
+    const proprio = comissoes.montarFechamento({ apuradas, estado, competencia: comp, propria: true });
+    const pagarAte = proprio.fechamento?.pagar_ate || calendario.pagarComissaoAte(comp, b.regras.configuracao);
+    const situacaoDoProprio = proprio.fechado
+      ? (Number(proprio.fechamento?.falta_pagar) > 0 ? `Fechada · pagar até ${c.impressa(pagarAte)}` : 'Paga')
+      : `Apurada · pagar até ${c.impressa(pagarAte)}`;
+    const previstas = mes ? mes.previstas : v.previstas.filter(p => crit.cabe(p.vencimento));
+    const atrasadas = mes ? mes.atrasadas : v.atrasadas.filter(p => crit.cabe(p.vencimento));
+    const repasse = repasses.deComissao({ estado, apuradas, configuracao: b.regras.configuracao, referencia });
+    const linhasDoRepasse = repasse.flatMap(r => {
+      const rotulo = `Atrasada · a repassar · ${c.rotuloCompetencia(r.competencia)} (${r.situacao_texto})`;
+      // Não fechada: os itens que o fechamento dela levaria. Fechada: uma
+      // linha com o que ainda falta pagar e para quem.
+      if (r.itens && r.itens.length) return r.itens.map(i => ({ ...linhaDeItem(i), situacao: rotulo }));
+      const benef = listaDeBeneficiarios(r.beneficiarios);
+      return [{
+        pedido: null, cliente: `${r.rotulo} — ${r.situacao_texto}`, nf: null, parcela: null, data: r.pagar_ate,
+        situacao: `${rotulo} · ${c.plural(r.dias_atraso, 'dia', 'dias')}`, liquido: null,
+        cms: c.centavos(benef.filter(x => x.tipo === 'cms').reduce((s, x) => s + x.valor, 0)),
+        royalty: c.centavos(benef.filter(x => x.tipo === 'royalty').reduce((s, x) => s + x.valor, 0)),
+        comissao: r.valor, benef_lista: benef, beneficiarios: textoDosBeneficiarios(benef)
+      }];
+    });
+    const doProprio = proprio.itens.map(i => ({ ...linhaDeItem(i), situacao: i.tipo_item === 'parcela' ? situacaoDoProprio : (i.tipo_item === 'saldo' ? 'Saldo anterior' : 'Ajuste') }));
+    linhas = [
+      ...previstas.map(p => linhaDeParcela(p, { situacao: 'Prevista', data: p.vencimento })),
+      ...atrasadas.map(p => linhaDeParcela(p, { situacao: `Atrasada · cliente não pagou · ${c.plural(p.dias_atraso, 'dia', 'dias')}`, data: p.vencimento })),
+      ...doProprio,
+      ...linhasDoRepasse
+    ];
+    const total = l => c.centavos(l.reduce((s, x) => s + (Number(x.comissao) || 0), 0));
+    const partes = [
+      ['Previstas', total(previstas.map(p => ({ comissao: p.potencial.total })))],
+      ['Apuradas', proprio.comissao],
+      ['Atrasadas (cliente não pagou)', total(atrasadas.map(p => ({ comissao: p.potencial.total })))],
+      ['Atrasadas (a repassar)', repasses.resumir(repasse).valor],
+      ['Ajustes', proprio.ajustes]
+    ];
+    crit.texto += ` · ${partes.map(([rotulo, valor]) => `${rotulo} ${c.reais(valor)}`).join(' · ')}${mes ? ` — ${posicao}` : ''}`;
+  } else if (chave === 'previsao-comissoes') {
     // Previsto no mês = previstas + atrasadas (a atrasada ainda não foi paga).
     linhas = mes
       ? [...mes.previstas, ...mes.atrasadas].map(comSituacao)

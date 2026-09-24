@@ -2202,7 +2202,13 @@ test('Financeiro: os indicadores dizem o recebido, o a receber, o atraso, as NF-
     assert.match(aPagar, /Comissões R\$ 3,2 mil · Produção R\$ 3 mil/);
     assert.match(aPagar, /pagar até 05\/10/, 'o prazo mais próximo dos dois');
     assert.match(aPagar, /comissões pagas em parte/);
-    assert.match(aPagar, /R\$ 350,50 em comissões atrasadas/);
+    assert.match(aPagar, /R\$ 350,50 esperando o cliente/);
+    assert.doesNotMatch(aPagar, /a repassar/, 'sem repasse em atraso, nada a dizer');
+    const comRepasse = montarPainelFalso();
+    const dadosComRepasse = amostraComFinanceiro();
+    dadosComRepasse.secoes.pagar.repasse = { valor: 554.4, competencias: ['2026-08'] };
+    comRepasse.avaliar('renderizarDashboard')(comRepasse.modulo, dadosComRepasse);
+    assert.match(comRepasse.texto('kpi-a-pagar'), /R\$ 554,40 a repassar em atraso/);
 });
 
 test('Financeiro: vencimentos em faixas, as maiores em atraso e os cartões de atenção com a lista cortada', () => {

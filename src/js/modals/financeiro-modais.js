@@ -232,6 +232,29 @@
     }), { quantidade: 0, liquido: 0, comissao: 0 });
   }
 
+  /**
+   * Uma linha do bloco "A repassar" (decisão do dono, 24/09/2026): o cliente
+   * já pagou e a competência passou do prazo sem o pagamento registrado. Para
+   * quem: as pessoas que ainda têm a receber (comissões) ou os processos
+   * (produção). Pura.
+   */
+  function textoDoRepasse(r) {
+    const tipo = r?.tipo === 'producao' ? 'Produção' : 'Comissões';
+    const paraQuem = r?.tipo === 'producao'
+      ? (r.setores || []).map(s => `${s.setor} ${formatarMoeda(s.total)}`).join(' · ')
+      : (r?.beneficiarios || []).map(b => `${b.beneficiario} (${b.tipo === 'royalty' ? 'Royalty' : 'CMS'}) ${formatarMoeda(b.valor)}`).join(' · ');
+    const dias = Number(r?.dias_atraso) || 0;
+    return {
+      tipo,
+      competencia: rotuloCompetenciaCurto(r?.competencia),
+      situacao: r?.situacao_texto || '',
+      pagarAte: formatarData(r?.pagar_ate),
+      dias: `${dias} ${dias === 1 ? 'dia' : 'dias'}`,
+      valor: formatarMoeda(Number(r?.valor) || 0),
+      paraQuem: paraQuem || '—'
+    };
+  }
+
   /** Aging sempre com as 5 faixas, mesmo vazias. */
   function agingDe(linhas) {
     return FAIXAS_ATRASO.map(faixa => {
@@ -592,6 +615,27 @@
   });
 
   const RELATORIOS = {
+    // O "Ver detalhes" do Resumo de Comissões (decisão do dono, 24/09/2026):
+    // tudo do mês, com a Situação dizendo o que é cada linha — prevista,
+    // atrasada porque o cliente não pagou, apurada, ajuste, e atrasada a
+    // repassar (o cliente pagou, nós não repassamos no prazo). Os totais de
+    // cada situação vão no subtítulo (o total da tabela mistura todas).
+    'resumo-comissoes': {
+      titulo: 'Comissões do mês',
+      colunas: [
+        { chave: 'pedido', rotulo: 'Pedido', tipo: 'pedido' },
+        { chave: 'cliente', rotulo: 'Cliente' },
+        { chave: 'nf', rotulo: 'NF' },
+        { chave: 'parcela', rotulo: 'Parcela' },
+        { chave: 'data', rotulo: 'Data', tipo: 'data' },
+        { chave: 'situacao', rotulo: 'Situação' },
+        { chave: 'liquido', rotulo: 'Valor líquido', tipo: 'moeda', total: true },
+        { chave: 'cms', rotulo: 'CMS', tipo: 'moeda', total: true },
+        { chave: 'royalty', rotulo: 'Royalty', tipo: 'moeda', total: true },
+        { chave: 'comissao', rotulo: 'Comissão', tipo: 'moeda', total: true },
+        { chave: 'beneficiarios', rotulo: 'Quem recebe', tipo: 'beneficiarios' }
+      ]
+    },
     // Previsto no mês = previstas + atrasadas (a atrasada passa para os meses
     // seguintes até ser paga — decisão do dono, 24/09/2026).
     'previsao-comissoes': {
@@ -715,7 +759,7 @@
   };
 
   /** Relatórios de comissão: a linha leva à parcela. */
-  const RELATORIOS_DE_PARCELA = new Set(['previsao-comissoes', 'comissoes-atrasadas', 'comissoes-apuradas', 'ajustes-anteriores', 'comissoes-nao-realizadas']);
+  const RELATORIOS_DE_PARCELA = new Set(['resumo-comissoes', 'previsao-comissoes','comissoes-atrasadas', 'comissoes-apuradas', 'ajustes-anteriores', 'comissoes-nao-realizadas']);
 
   /** O relatório pronto para a tela: as linhas dadas e a linha de totais. */
   function montarRelatorio(chave, extra = {}) {
@@ -909,7 +953,7 @@
     ordenarValoresDeProducao,
     formatarMoeda, lerMoeda, formatarData, somarDias, diferencaDias, competenciaDe, rotuloCompetencia,
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
-    faixaDeAtraso, resumoAtrasadas, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
+    faixaDeAtraso, resumoAtrasadas, textoDoRepasse, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
     filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, notaDeForaNaLista, juntarNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
@@ -3486,7 +3530,36 @@
     el('finAtrasadasInicio').value = '';
     el('finAtrasadasFim').value = '';
     let todas = [];
+    let repasses = [];
     let carregado = false;
+
+    /** "A repassar": o que o cliente já pagou e não foi repassado no prazo, por competência. Some sem nada. */
+    function desenharRepasses() {
+      const bloco = el('finAtrasadasRepasse');
+      const corpo = el('finAtrasadasRepasseCorpo');
+      if (!bloco || !corpo) return;
+      bloco.classList.toggle('hidden', !repasses.length);
+      corpo.replaceChildren();
+      for (const r of repasses) {
+        const t = textoDoRepasse(r);
+        const tr = document.createElement('tr');
+        const celula = (texto, classe = 'px-4 py-3') => { const td = criar('td', classe, texto); tr.appendChild(td); return td; };
+        celula(t.tipo, 'px-4 py-3 text-white font-medium');
+        celula(t.competencia);
+        const situacao = criar('span', 'badge-danger px-3 py-1 rounded-full text-xs font-medium', t.situacao);
+        const tdSituacao = criar('td', 'px-4 py-3');
+        tdSituacao.appendChild(situacao);
+        tr.appendChild(tdSituacao);
+        celula(t.pagarAte);
+        const dias = Number(r.dias_atraso) || 0;
+        celula(t.dias, `px-4 py-3 text-right${dias > 60 ? ' fin-dias--critico' : (dias > 30 ? ' fin-dias--alto' : '')}`);
+        celula(t.valor, 'px-4 py-3 text-right font-semibold');
+        celula(t.paraQuem, 'px-4 py-3 text-xs');
+        corpo.appendChild(tr);
+      }
+      const total = repasses.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+      el('finAtrasadasRepasseTotal').textContent = repasses.length ? `Total: ${formatarMoeda(centavos(total))}` : '';
+    }
 
     const quemSel = el('finAtrasadasQuemRecebe');
     const carregamento = criarCarregamento({ tbody: el('finAtrasadasCorpo'), colunas: 11, aviso: el('finAtrasadasCarregando'), vazio: el('finAtrasadasVazio') });
@@ -3584,11 +3657,13 @@
         const competencia = contexto.competencia || competenciaAtual();
         const corpo = await fetchApi(`/api/financeiro/parcelas?visao=atrasadas&competencia=${encodeURIComponent(competencia)}`);
         todas = (Array.isArray(corpo?.linhas) ? corpo.linhas : []).map(l => ({ ...l, dias: l.dias_atraso, faixa: l.faixa || faixaDeAtraso(l.dias_atraso) }));
+        repasses = Array.isArray(corpo?.repasses) ? corpo.repasses : [];
         const fotoDoFim = corpo?.referencia && corpo?.hoje && corpo.referencia < corpo.hoje;
         el('finAtrasadasSubtitulo').textContent = `${rotuloCompetenciaCurto(competencia)} · ${fotoDoFim ? `como estava no fim do mês (${formatarData(corpo.referencia)})` : `posição em ${formatarData(corpo?.referencia || corpo?.hoje)}`}`;
         el('finAtrasadasSemRegras').classList.toggle('hidden', corpo?.tem_regras !== false);
       } catch (e) {
         todas = [];
+        repasses = [];
         mostrarMensagem('finAtrasadasMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões.'));
       } finally {
         carregado = true;
@@ -3596,6 +3671,7 @@
       }
       montarClientes();
       montarQuemRecebe();
+      desenharRepasses();
       desenhar();
     }
 

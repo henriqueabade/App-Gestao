@@ -355,12 +355,24 @@ function resumirPagar(painel = {}, { agora = new Date() } = {}) {
     }))
     .filter(f => f.valor > 0)
     .sort((a, b) => Number(b.atrasado) - Number(a.atrasado) || String(a.pagarAte || '9999').localeCompare(String(b.pagarAte || '9999')));
+  // O que o cliente já pagou e não foi repassado no prazo (financeiro/repasses.js):
+  // comissões e produção de competências anteriores. Também é "a pagar".
+  const repasseComissao = centavos(painel.atrasadas?.repasse?.valor);
+  const repasseProducao = centavos(painel.producao?.atrasada?.valor);
+  const competenciasEmAtraso = [...new Set([
+    ...lista(painel.atrasadas?.repasse?.competencias), ...lista(painel.producao?.atrasada?.competencias)
+  ])].sort();
   return {
     competencia: painel.competencia || null,
-    aPagar: { valor: centavos(comissoes.valor + producao.valor) },
+    aPagar: { valor: centavos(comissoes.valor + producao.valor + repasseComissao + repasseProducao) },
     comissoes,
     producao,
-    atrasadas: { quantidade: Number(painel.atrasadas?.parcelas) || 0, valor: centavos(painel.atrasadas?.valor) },
+    // As atrasadas porque o CLIENTE não pagou (o painel manda a soma dos dois atrasos em `valor`).
+    atrasadas: {
+      quantidade: Number(painel.atrasadas?.cliente?.parcelas ?? painel.atrasadas?.parcelas) || 0,
+      valor: centavos(painel.atrasadas?.cliente ? painel.atrasadas.cliente.valor : painel.atrasadas?.valor)
+    },
+    repasse: { valor: centavos(repasseComissao + repasseProducao), competencias: competenciasEmAtraso },
     aConfirmar: {
       quantidade: aConfirmar.length,
       atrasados: aConfirmar.filter(f => f.atrasado).length,

@@ -5,6 +5,9 @@
   escolhido no Financeiro (vencidas até ele e não pagas; o mês passado mostra
   a foto do fim dele — decisão do dono, 24/09/2026). Filtros funcionam sobre a
   lista; clicar numa linha abre Detalhes da parcela por cima.
+  E o OUTRO atraso (mesma data): o que o cliente já pagou e nós não repassamos
+  no prazo — comissões e produção, por competência (`repasses` da mesma rota),
+  no bloco "A repassar", que some quando não há nada.
   Script: src/js/modals/financeiro-modais.js (montarComissoesAtrasadas).
 -->
 <div id="finComissoesAtrasadasOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
@@ -14,7 +17,7 @@
       <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
       <div class="text-center min-w-0">
         <h2 id="finAtrasadasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>Comissões atrasadas</h2>
-        <p id="finAtrasadasSubtitulo" class="text-xs text-gray-300 truncate">Parcelas vencidas e ainda não liquidadas</p>
+        <p id="finAtrasadasSubtitulo" class="text-xs text-gray-300 truncate">O cliente não pagou, ou pagou e ainda não repassamos</p>
       </div>
       <span></span>
     </header>
@@ -24,6 +27,33 @@
         <p id="finAtrasadasCarregando" class="fin-vazio">Carregando dados...</p>
         <div id="finAtrasadasMensagem" class="hidden text-sm" role="alert"></div>
         <p id="finAtrasadasSemRegras" class="hidden text-xs text-gray-400">Sem regras de CMS/Royalty cadastradas: a comissão potencial fica zero até elas existirem.</p>
+
+        <!-- A repassar: o cliente já pagou e o prazo da competência passou sem o pagamento registrado. -->
+        <div id="finAtrasadasRepasse" class="hidden space-y-3">
+          <div class="fin-faixa-titulo">
+            <h3 class="text-white font-semibold">A repassar — o cliente já pagou</h3>
+            <span class="fin-faixa-titulo__nota" id="finAtrasadasRepasseTotal"></span>
+          </div>
+          <div class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                  <th class="px-4 py-3 text-left text-xs">Competência</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-left text-xs">Pagar até</th>
+                  <th class="px-4 py-3 text-right text-xs">Dias em atraso</th>
+                  <th class="px-4 py-3 text-right text-xs">Falta pagar</th>
+                  <th class="px-4 py-3 text-left text-xs">Para quem</th>
+                </tr>
+              </thead>
+              <tbody id="finAtrasadasRepasseCorpo" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+          <p class="text-xs text-gray-400">Feche a competência e confirme o pagamento em "Fechar competência" e no "Próximo pagamento" do resumo: a linha sai daqui quando o pagamento é registrado.</p>
+        </div>
+
+        <h3 class="text-white font-semibold">Aguardando o cliente — parcelas vencidas sem pagamento</h3>
         <div class="fin-indicadores">
           <div class="fin-indicador">
             <span class="fin-indicador__rotulo">Parcelas vencidas</span>

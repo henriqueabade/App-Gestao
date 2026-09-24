@@ -51,6 +51,7 @@ const detalhes = require('./financeiro/detalhes');
 const base = require('./financeiro/base');
 const auditoria = require('./financeiro/auditoria');
 const rateios = require('./financeiro/rateios');
+const repasses = require('./financeiro/repasses');
 // A tarefa "Confirmar o pagamento" de quem fecha a competência.
 const tarefas = require('./tarefasServico');
 
@@ -275,7 +276,7 @@ function criarRouter() {
   router.get('/parcelas', exigirPermissao(VER), rota('GET /api/financeiro/parcelas', async ({ api, req, hoje, desde }) => {
     const visao = String(req.query?.visao || 'atrasadas');
     if (!['atrasadas', 'previstas', 'ajustaveis'].includes(visao)) throw c.erro('Visão desconhecida.', 400);
-    const { b, apuradas } = await fechamentos.dadosComissao(api, { competencia: c.competenciaDe(hoje), hoje, desde });
+    const { b, estado, apuradas } = await fechamentos.dadosComissao(api, { competencia: c.competenciaDe(hoje), hoje, desde });
     const v = comissoes.visoes(apuradas);
     // Com a competência, previstas e atrasadas DO MÊS (decisões do dono,
     // 24/09/2026: a atrasada passa para os meses seguintes até ser paga; o mês
@@ -289,9 +290,22 @@ function criarRouter() {
       .sort((x, y) => String(y.pedido).localeCompare(String(x.pedido), 'pt-BR', { numeric: true }) || x.numero_parcela - y.numero_parcela);
     const nomes = await base.nomesDosClientes(api, escolhidas.map(p => p.cliente_id));
     const linhas = escolhidas.map(p => ({ ...linhaDaParcela(p), cliente: p.cliente || nomes.get(String(p.cliente_id)) || null }));
+    const referencia = mes ? mes.referencia : hoje;
+    // O outro atraso (decisão do dono, 24/09/2026): o cliente pagou e a
+    // comissão — ou a produção — não foi repassada no prazo. Por competência.
+    let repassesEmAtraso = null;
+    if (visao === 'atrasadas') {
+      const cfg = b.regras.configuracao;
+      const prod = await producao.lerBase(api).catch(() => null);
+      repassesEmAtraso = [
+        ...repasses.semItens(repasses.deComissao({ estado, apuradas, configuracao: cfg, referencia })),
+        ...(prod ? repasses.semItens(repasses.deProducao({ estado: prod.estado, pend: prod.pend, configuracao: cfg, feriados: b.regras.feriados, referencia })) : [])
+      ];
+    }
     return {
-      visao, hoje, linhas, competencia, referencia: mes ? mes.referencia : hoje,
+      visao, hoje, linhas, competencia, referencia,
       aging: visao === 'atrasadas' ? comissoes.aging(escolhidas) : null,
+      repasses: repassesEmAtraso,
       tem_regras: b.regras.regras.some(r => regras.ativo(r.ativo))
     };
   }));

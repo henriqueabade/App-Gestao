@@ -277,7 +277,8 @@ test('produção da competência: um cartão por setor, total em destaque e o qu
 test('todo relatório da central tem folha: colunas e totais; planilha CSV para o Excel', () => {
     const f = puro();
     const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
-    assert.strictEqual(chavesDaCentral.length, 11);
+    assert.strictEqual(chavesDaCentral.length, 12);
+    assert.ok(chavesDaCentral.includes('resumo-comissoes'), 'Comissões do mês (o "Ver detalhes" do resumo) também na central');
     assert.ok(!chavesDaCentral.includes('pagamento-pintura'), 'Pintura não é processo');
     for (const processo of ['marcenaria', 'acabamento', 'montagem', 'embalagem']) assert.ok(chavesDaCentral.includes(`pagamento-${processo}`));
     for (const chave of chavesDaCentral) {
@@ -299,7 +300,7 @@ test('todo relatório da central tem folha: colunas e totais; planilha CSV para 
     assert.strictEqual(partes[0].slice(1), 'Pedido;Cliente;NF;Parcela;Liquidação;Valor líquido;CMS;Royalty;Total comissão;Quem recebe');
     assert.strictEqual(partes[1], '2548;"Casa; ""Vicenzo""";;;20/08/2026;17000,00;1700,00;1700,00;3400,00;', 'sem quem recebe, a coluna sai vazia');
     assert.strictEqual(partes[2], 'Total (1);;;;;18000,10;1800,01;1800,01;3600,02;', 'os totais são os da folha');
-    assert.deepStrictEqual(plano(f.RELATORIOS_DE_PARCELA).sort(), ['ajustes-anteriores', 'comissoes-apuradas', 'comissoes-atrasadas', 'comissoes-nao-realizadas', 'previsao-comissoes']);
+    assert.deepStrictEqual(plano(f.RELATORIOS_DE_PARCELA).sort(), ['ajustes-anteriores', 'comissoes-apuradas', 'comissoes-atrasadas', 'comissoes-nao-realizadas', 'previsao-comissoes', 'resumo-comissoes']);
     const aguardando = plano(f.montarRelatorio('aguardando-nf', { linhas: f.linhasDoRelatorioAguardando(PAINEL) }));
     assert.strictEqual(aguardando.totais.valor, 1900, 'o dispensado (S/NF) não entra no relatório');
     assert.strictEqual(aguardando.linhas.length, 2);
@@ -429,6 +430,23 @@ test('NF-e (puras): situação da nota, filtros da lista, indicadores, condiçã
     assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { incluirDispensados: true })).map(l => l.numero), ['2540', '2543', '2544']);
     assert.deepStrictEqual(plano(f.linhasAguardando(PAINEL, { busca: 'serrana' })).map(l => l.numero), ['2544']);
     assert.deepStrictEqual(plano(f.linhasAguardando(null)), []);
+});
+
+test('Comissões atrasadas: o bloco "A repassar" (o cliente pagou, nós não repassamos no prazo) — comissões e produção', () => {
+    const f = puro();
+    const comissao = plano(f.textoDoRepasse({
+        tipo: 'comissao', competencia: '2026-08', situacao_texto: 'competência não fechada', pagar_ate: '2026-09-15', dias_atraso: 9, valor: 554.4,
+        beneficiarios: [{ tipo: 'cms', beneficiario: 'Marcia Lamounier', valor: 277.2 }, { tipo: 'royalty', beneficiario: 'Barral & Lamounier', valor: 277.2 }]
+    }));
+    assert.deepStrictEqual([comissao.tipo, comissao.competencia, comissao.situacao, comissao.pagarAte, comissao.dias], ['Comissões', 'Agosto/2026', 'competência não fechada', '15/09/2026', '9 dias']);
+    assert.strictEqual(semNbsp(comissao.paraQuem), 'Marcia Lamounier (CMS) R$ 277,20 · Barral & Lamounier (Royalty) R$ 277,20');
+    const producao = plano(f.textoDoRepasse({ tipo: 'producao', competencia: '2026-08', situacao_texto: 'fechada, falta pagar', dias_atraso: 1, valor: 300, setores: [{ setor: 'Marcenaria', pecas: 2, total: 300 }] }));
+    assert.deepStrictEqual([producao.tipo, producao.dias, semNbsp(producao.paraQuem)], ['Produção', '1 dia', 'Marcenaria R$ 300,00']);
+
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'comissoes-atrasadas.html'), 'utf8');
+    assert.ok(html.includes('id="finAtrasadasRepasse" class="hidden'), 'some sem atraso de repasse');
+    assert.ok(html.includes('id="finAtrasadasRepasseCorpo"'));
+    assert.match(SCRIPT, /repasses = Array\.isArray\(corpo\?\.repasses\) \? corpo\.repasses : \[\];/, 'vem da mesma rota das atrasadas');
 });
 
 test('Notas fiscais: as NF-e emitidas fora e informadas nos pedidos entram na lista, nos filtros e nos indicadores', () => {

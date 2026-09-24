@@ -665,6 +665,57 @@ test('resumo de comissões: a previsão é só do que vence no mês escolhido, i
   }
 });
 
+test('a repassar (dono, 24/09/2026): o cliente pagou, ninguém fechou nem pagou — atrasada até o pagamento, sem contar duas vezes', async () => {
+  const hoje = hojeBR();
+  const atual = hoje.slice(0, 7);
+  // Dois meses atrás: o "pagar até" (dia 15 do mês seguinte) já passou, seja qual for o dia de hoje.
+  const velho = mesesAntes(atual, 2);
+  const t = await montar({ ...tabelasBase(velho), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar', 'financeiro.competencia.fechar', 'financeiro.pagamento.confirmar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'royalty', percentual: 10, escopo: 'todos' });
+
+    // No mês de hoje: a comissão daquele mês NÃO é "apurada" daqui (era contada
+    // duas vezes); é atrasada a repassar, somada às atrasadas do cliente.
+    const agora = (await t.chamar('GET', `/api/financeiro/painel?competencia=${atual}`)).corpo;
+    assert.equal(agora.resumo_comissoes.apuradas, 0, 'a apuração do mês é só a dele');
+    assert.equal(agora.comissoes.total, 0);
+    assert.equal(agora.resumo_comissoes.atrasadas_repasse, 4000);
+    assert.equal(agora.atrasadas.repasse.valor, 4000);
+    assert.equal(agora.atrasadas.valor, agora.atrasadas.cliente.valor + 4000, 'o cartão soma os dois atrasos');
+    assert.deepEqual(agora.repasses.comissoes.map(r => [r.competencia, r.situacao, r.valor]), [[velho, 'nao_fechada', 4000]]);
+    assert.deepEqual(agora.resumo_comissoes.beneficiarios_repasse.map(b => [b.beneficiario, b.valor]).sort(), [['Barral & Lamounier', 2000], ['Marcia Lamounier', 2000]]);
+
+    // No mês dele, a foto do fim do mês: apurada, ainda no prazo.
+    const noMes = (await t.chamar('GET', `/api/financeiro/painel?competencia=${velho}`)).corpo;
+    assert.deepEqual([noMes.resumo_comissoes.apuradas, noMes.resumo_comissoes.atrasadas_repasse], [4000, 0]);
+
+    // "Ver detalhes" (Comissões do mês) e o modal das atrasadas mostram o repasse.
+    const rel = (await t.chamar('GET', `/api/financeiro/relatorios/resumo-comissoes?competencia=${atual}`)).corpo;
+    assert.equal(rel.titulo, 'Comissões do mês');
+    assert.ok(rel.linhas.some(l => l.numero_parcela === 1 && /^Atrasada · a repassar · .+ \(competência não fechada\)$/.test(l.situacao) && l.comissao === 4000));
+    assert.match(rel.filtro, /Atrasadas \(a repassar\) R\$\s4\.000,00/);
+    const relDoMes = (await t.chamar('GET', `/api/financeiro/relatorios/resumo-comissoes?competencia=${velho}`)).corpo;
+    assert.ok(relDoMes.linhas.some(l => l.numero_parcela === 1 && /^Apurada · pagar até /.test(l.situacao)), 'no mês dele, a apurada aparece');
+    const modal = (await t.chamar('GET', `/api/financeiro/parcelas?visao=atrasadas&competencia=${atual}`)).corpo;
+    assert.deepEqual(modal.repasses.map(r => [r.tipo, r.competencia, r.valor]), [['comissao', velho, 4000]]);
+
+    // Fechada e não paga: continua atrasada, agora "fechada, falta pagar".
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'comissao', competencia: velho })).status, 200);
+    const fechada = (await t.chamar('GET', `/api/financeiro/painel?competencia=${atual}`)).corpo;
+    assert.deepEqual(fechada.repasses.comissoes.map(r => [r.situacao, r.valor]), [['fechada', 4000]]);
+
+    // Pago: sai.
+    const pago = await t.chamar('POST', '/api/financeiro/pagamentos', { tipo: 'comissao', competencia: velho, data_pagamento: hoje, forma: 'Pix' });
+    assert.equal(pago.status, 200);
+    const depois = (await t.chamar('GET', `/api/financeiro/painel?competencia=${atual}`)).corpo;
+    assert.deepEqual([depois.resumo_comissoes.atrasadas_repasse, depois.repasses.comissoes.length], [0, 0]);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('atividade: o histórico inteiro do módulo, do mais novo ao mais antigo, com o nome de quem fez', async () => {
   const hoje = hojeBR();
   const ant = mesesAntes(hoje.slice(0, 7), 1);

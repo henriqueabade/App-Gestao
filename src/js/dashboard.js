@@ -2429,6 +2429,9 @@ function desenharKpiAPagar(corpo, s) {
     const valorComissoes = numeroOuNulo(comissoes.valor);
     const valorProducao = numeroOuNulo(producao.valor);
     const atrasadas = numeroOuNulo(s?.atrasadas?.valor);
+    // Competências anteriores que o cliente pagou e não foram repassadas no prazo.
+    const repasse = numeroOuNulo(s?.repasse?.valor);
+    const mesesEmAtraso = listaDe(s?.repasse?.competencias).map(rotuloMesLongo);
     // O prazo mais próximo entre os dois pagamentos que ainda faltam.
     const prazos = [valorComissoes !== 0 && comissoes.pagarAte, valorProducao !== 0 && producao.pagarAte].filter(Boolean).sort();
     let sub = `competência de ${rotuloMesLongo(s?.competencia)}`;
@@ -2443,6 +2446,11 @@ function desenharKpiAPagar(corpo, s) {
         exato: total !== null ? formatarMoeda(total) : '',
         sub,
         notas: [
+            repasse !== null && repasse > 0 && {
+                tom: 'vermelho', icone: 'fa-triangle-exclamation',
+                texto: `${formatarMoedaCompacta(repasse)} a repassar em atraso`,
+                dica: `O cliente já pagou e o pagamento não foi registrado no prazo${mesesEmAtraso.length ? `: ${juntarLista(mesesEmAtraso)}` : ''}`
+            },
             prazos.length > 0 && { tom: 'neutro', icone: 'fa-calendar-alt', texto: `pagar até ${formatarDataCurta(prazos[0])}` },
             comissoes.situacao === 'parcial' && {
                 tom: 'azul', icone: 'fa-circle-half-stroke', texto: 'comissões pagas em parte',
@@ -2450,7 +2458,7 @@ function desenharKpiAPagar(corpo, s) {
             },
             atrasadas !== null && atrasadas > 0 && {
                 tom: 'vermelho', icone: 'fa-triangle-exclamation',
-                texto: `${formatarMoedaCompacta(atrasadas)} em comissões atrasadas`,
+                texto: `${formatarMoedaCompacta(atrasadas)} esperando o cliente`,
                 dica: 'Comissão de parcelas vencidas e ainda não pagas pelo cliente: entra quando o pagamento chegar'
             }
         ]

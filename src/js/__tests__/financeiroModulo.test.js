@@ -294,7 +294,7 @@ test('a tela preenche TODOS os campos data-fin: fiscal, contas a receber, comiss
     assert.strictEqual(valores['comissoes.auxiliar'], '12 parcelas');
     assert.strictEqual(valores['comissoes.rodape'], 'Pagamento até 15/10/2026');
     assert.strictEqual(valores['atrasadas.valor'], 'R$ 7.320,00');
-    assert.strictEqual(valores['atrasadas.rodape'], 'Aguardando recebimento');
+    assert.strictEqual(valores['atrasadas.rodape'], 'R$ 7.320,00 aguardando o cliente', 'painel sem as partes: tudo é do cliente');
     assert.strictEqual(valores['producao.auxiliar'], '327 peças finalizadas');
     assert.strictEqual(valores['producao.rodape'], 'Fechada · pagar até 07/10/2026 (5º dia útil)');
     // O cartão diz o que FALTA pagar e de quanto era a competência.
@@ -661,4 +661,56 @@ test('cartões de comissão e produção mostram o que FALTA pagar sobre o total
     }));
     assert.strictEqual(semAjuste['resumoComissoes.ajustesQuantidade'], '');
     assert.strictEqual(semAjuste['resumoComissoes.ajustes'], 'R$ 0,00');
+});
+
+test('os dois atrasos (dono, 24/09/2026): o cliente não pagou × o cliente pagou e não repassamos — no cartão, na produção e no resumo', async () => {
+    const modulo = montarModuloDoHtml();
+    // As linhas que só aparecem com atraso de repasse (data-fin-opcional).
+    for (const m of FONTE_HTML.matchAll(/data-fin-opcional="([^"]+)"/g)) {
+        const alvo = criarElemento('span');
+        alvo.dataset.finOpcional = m[1];
+        alvo.hidden = true;
+        modulo.appendChild(alvo);
+    }
+    carregar({
+        modulo, painel: painelFalso(), comissoes: comissoesFalso({
+            atrasadas: { valor: 904.4, parcelas: 2, cliente: { valor: 350, parcelas: 2 }, repasse: { valor: 554.4, competencias: ['2026-08'], rotulo: 'agosto/2026' } },
+            producao: { situacao: 'aberta', valor: 835.06, total: 835.06, pago: 0, pecas: 10, pagar_ate: '2026-10-07', dia_util: 5, pago_em: null, atrasada: { valor: 120, competencias: ['2026-08'], rotulo: 'agosto/2026' } },
+            resumo_comissoes: {
+                previstas: 0, apuradas: 554.48, atrasadas: 350, atrasadas_repasse: 554.4, atrasadas_repasse_rotulo: 'agosto/2026',
+                beneficiarios_repasse: [{ tipo: 'cms', beneficiario: 'Marcia Lamounier', valor: 277.2 }],
+                ajustes: 0, ajustes_manuais: { quantidade: 0, valor: 0, comissao: 0 }, proximo_pagamento: '2026-10-15', situacao: 'aberta'
+            },
+            resumo_producao: { em_producao: 11, parciais: 1, pecas_mes: 10, valor: 835.06, atrasada: 120, atrasada_rotulo: 'agosto/2026', proximo_pagamento: '2026-10-07', dia_util: 5, situacao: 'aberta' }
+        })
+    });
+    await modulo.moduleReadyPromise;
+    const texto = seletor => (modulo.querySelector(seletor)?.textContent || '').replace(/ /g, ' ');
+    const oculto = seletor => modulo.querySelector(seletor)?.hidden;
+
+    assert.strictEqual(texto('[data-fin="atrasadas.valor"]'), 'R$ 904,40', 'o número é a soma dos dois atrasos');
+    assert.strictEqual(texto('[data-fin="atrasadas.auxiliar"]'), '2 parcelas');
+    assert.strictEqual(texto('[data-fin="atrasadas.rodape"]'), 'R$ 350,00 aguardando o cliente');
+    assert.strictEqual(texto('[data-fin-opcional="atrasadas.repasse"]'), 'R$ 554,40 a repassar · agosto/2026');
+    assert.strictEqual(oculto('[data-fin-opcional="atrasadas.repasse"]'), false);
+    assert.strictEqual(texto('[data-fin-opcional="producao.atraso"]'), 'R$ 120,00 atrasados · agosto/2026');
+
+    assert.strictEqual(texto('[data-fin="resumoComissoes.apuradas"]'), 'R$ 554,48', 'a apuração é só do mês');
+    assert.strictEqual(texto('[data-fin="resumoComissoes.atrasadas"]'), 'R$ 350,00');
+    assert.strictEqual(texto('[data-fin="resumoComissoes.atrasadasRepasse"]'), 'R$ 554,40');
+    assert.strictEqual(texto('[data-fin-opcional="resumoComissoes.atrasadasRepasseNota"]'), '(agosto/2026)');
+    assert.strictEqual(texto('[data-fin="resumoProducao.atrasada"]'), 'R$ 120,00');
+    assert.strictEqual(texto('[data-fin-opcional="resumoProducao.atrasadaNota"]'), '(agosto/2026)');
+
+    // Sem atraso de repasse, as linhas extras somem e o cartão é o de antes.
+    const f = funcoes();
+    const semRepasse = f('finCartaoDasAtrasadas')({ valor: 350, parcelas: 2, cliente: { valor: 350, parcelas: 2 }, repasse: { valor: 0, competencias: [], rotulo: '' } });
+    assert.strictEqual(semRepasse.repasse, '');
+    assert.strictEqual(f('finCartaoDasAtrasadas')({ valor: 10, parcelas: 1 }, false).rodape, 'Sem regras de CMS/Royalty cadastradas');
+
+    // O HTML: as duas linhas do resumo, a lista de quem ainda não recebeu e o "Ver detalhes" no relatório novo.
+    assert.match(FONTE_HTML, />Atrasadas — cliente não pagou</);
+    assert.match(FONTE_HTML, /Atrasadas — a repassar <span class="fin-resumo__nota" data-fin-opcional="resumoComissoes\.atrasadasRepasseNota" hidden><\/span>/);
+    assert.match(FONTE_HTML, /id="finResumoRepasse" class="fin-benef fin-benef--atraso hidden"/);
+    assert.match(FONTE_JS, /'comissoes-detalhes': \{ rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal\('visualizar-relatorio', m, \{ relatorio: 'resumo-comissoes' \}\) \}/);
 });

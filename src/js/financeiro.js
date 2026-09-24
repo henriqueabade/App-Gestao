@@ -73,7 +73,9 @@ const FIN_ACOES = {
     // O rateio da produção: quem fez cada processo de cada peça e quanto leva.
     'rateio-producao': { rotulo: 'Rateio da produção', abrir: (m, extra) => finAbrirModal('rateio-producao', m, finDoFiltro(extra)) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
-    'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
+    // Tudo do mês numa tabela (decisão do dono, 24/09/2026): previstas, apuradas,
+    // as duas atrasadas e os ajustes — "Comissões do mês".
+    'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'resumo-comissoes' }) },
     // "Ver todas" abre o histórico inteiro num modal (quem fez, quando, o quê), em vez de esticar o card.
     'atividade-todas': { rotulo: 'Atividade recente', abrir: m => finAbrirModal('atividade', m) },
     // Contas a receber: os cartões e as pendências de cobrança abrem a lista na visão certa.
@@ -452,6 +454,27 @@ const FIN_SITUACAO = { aberta: 'em aberto', fechada: 'fechada', paga: 'paga', pa
  * Comissões e produção da tela, a partir do painel da fase G (ou da sua
  * ausência: sem permissão, sem o SQL, sem rede). Pura.
  */
+/**
+ * O cartão "Comissões atrasadas" (decisão do dono, 24/09/2026): o número é a
+ * soma dos dois atrasos; o rodapé diz quanto espera o CLIENTE pagar e a linha
+ * de baixo, quanto o cliente já pagou e NÓS não repassamos no prazo (e de que
+ * meses). Painel antigo, sem as partes: tudo é do cliente. Pura.
+ */
+function finCartaoDasAtrasadas(a = {}, temRegras = true) {
+    const cliente = a.cliente || { valor: a.valor, parcelas: a.parcelas };
+    const valorCliente = Number(cliente.valor) || 0;
+    const parcelas = Number(cliente.parcelas) || 0;
+    const repasse = Number(a.repasse?.valor) || 0;
+    return {
+        valor: Number(a.valor) || 0,
+        auxiliar: finPlural(parcelas, 'parcela', 'parcelas'),
+        rodape: temRegras === false
+            ? 'Sem regras de CMS/Royalty cadastradas'
+            : `${finFormatarMoeda(valorCliente)} aguardando o cliente`,
+        repasse: repasse > 0 ? `${finFormatarMoeda(repasse)} a repassar · ${a.repasse.rotulo || 'meses anteriores'}` : ''
+    };
+}
+
 function finMapearComissoes(painel, erro) {
     if (!painel) {
         const sqlPendente = Boolean(erro?.corpo?.sql_pendente);
@@ -459,11 +482,11 @@ function finMapearComissoes(painel, erro) {
         const motivo = erro?.status === 403 ? 'Sem permissão para ver comissões e produção.'
             : sqlPendente ? (/\.sql\b/.test(String(erro?.message || '')) ? erro.message : 'Falta ativar: rode sql/financeiro_comissoes_producao.sql e reinicie a API.')
                 : (erro ? 'Não foi possível carregar comissões e produção.' : 'Sem dados de comissões e produção.');
-        const vazio = { valor: null, auxiliar: '', rodape: motivo };
+        const vazio = { valor: null, auxiliar: '', rodape: motivo, repasse: '', atraso: '' };
         return {
             kpis: { comissoes: vazio, atrasadas: vazio, producao: vazio },
-            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, previstoMes: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], pago: 0, faltaPagar: null },
-            resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, proximoPagamento: '—' },
+            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, atrasadasRepasse: null, atrasadasRepasseNota: '', previstoMes: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], repassar: [], pago: 0, faltaPagar: null },
+            resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, atrasada: null, atrasadaNota: '', proximoPagamento: '—' },
             pendencias: sqlPendente
                 ? [{ nivel: 'critico', titulo: 'Comissões e produção ainda não ativadas', descricao: motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
                 : (erro && erro.status !== 403
@@ -493,17 +516,22 @@ function finMapearComissoes(painel, erro) {
                 valor: Number(c.valor) || 0, total: finTotalDoCartao(c),
                 auxiliar: finPlural(Number(c.parcelas) || 0, 'parcela', 'parcelas'), rodape: rodapeDe(c)
             },
-            atrasadas: {
-                valor: Number(a.valor) || 0, auxiliar: finPlural(Number(a.parcelas) || 0, 'parcela', 'parcelas'),
-                rodape: painel.tem_regras === false ? 'Sem regras de CMS/Royalty cadastradas' : 'Aguardando recebimento'
-            },
+            // Os dois atrasos (decisão do dono, 24/09/2026): o número é a soma;
+            // embaixo, o que espera o cliente pagar e o que o cliente já pagou e
+            // nós não repassamos no prazo.
+            atrasadas: finCartaoDasAtrasadas(a, painel.tem_regras),
             producao: {
                 valor: Number(p.valor) || 0, total: finTotalDoCartao(p),
-                auxiliar: `${finPlural(Number(p.pecas) || 0, 'peça finalizada', 'peças finalizadas')}`, rodape: rodapeDe(p, ` (${diaUtil})`)
+                auxiliar: `${finPlural(Number(p.pecas) || 0, 'peça finalizada', 'peças finalizadas')}`, rodape: rodapeDe(p, ` (${diaUtil})`),
+                atraso: Number(p.atrasada?.valor) > 0 ? `${finFormatarMoeda(Number(p.atrasada.valor))} atrasados · ${p.atrasada.rotulo}` : ''
             }
         },
         resumoComissoes: {
             previstas: Number(rc.previstas) || 0, apuradas: Number(rc.apuradas) || 0, atrasadas: Number(rc.atrasadas) || 0,
+            // O cliente pagou e a comissão não foi repassada no prazo (de quais meses).
+            atrasadasRepasse: Number(rc.atrasadas_repasse) || 0,
+            atrasadasRepasseNota: rc.atrasadas_repasse_rotulo ? `(${rc.atrasadas_repasse_rotulo})` : '',
+            repassar: Array.isArray(rc.beneficiarios_repasse) ? rc.beneficiarios_repasse : [],
             // Previstas + atrasadas do mês (a atrasada ainda não foi paga).
             previstoMes: rc.previsto_mes === undefined || rc.previsto_mes === null
                 ? finCentavos((Number(rc.previstas) || 0) + (Number(rc.atrasadas) || 0))
@@ -523,6 +551,7 @@ function finMapearComissoes(painel, erro) {
         },
         resumoProducao: {
             emProducao: Number(rp.em_producao) || 0, parciais: Number(rp.parciais) || 0, pecasMes: Number(rp.pecas_mes) || 0, valorCompetencia: Number(rp.valor) || 0,
+            atrasada: Number(rp.atrasada) || 0, atrasadaNota: rp.atrasada_rotulo ? `(${rp.atrasada_rotulo})` : '',
             proximoPagamento: `${finFormatarData(rp.proximo_pagamento)} (${diaUtil})${rp.situacao && rp.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rp.situacao]}` : ''}`
         },
         pendencias: (painel.pendencias || []).map(x => ({
@@ -695,6 +724,14 @@ function finPreencher(moduleEl, caminho, texto) {
     if (alvo) alvo.textContent = texto;
 }
 
+/** A linha que só existe quando tem o que dizer (os atrasos de repasse): sem texto, some. */
+function finPreencherOpcional(moduleEl, caminho, texto) {
+    const alvo = moduleEl.querySelector(`[data-fin-opcional="${caminho}"]`);
+    if (!alvo) return;
+    alvo.textContent = texto || '';
+    alvo.hidden = !texto;
+}
+
 function finRenderizarKpis(moduleEl, kpis) {
     const { nf, comissoes, atrasadas, producao } = kpis;
     finPreencher(moduleEl, 'nf.valor', finFormatarInteiro(nf.quantidade));
@@ -710,6 +747,9 @@ function finRenderizarKpis(moduleEl, kpis) {
         finPreencher(moduleEl, `${chave}.auxiliar`, cartao?.auxiliar || '');
         finPreencher(moduleEl, `${chave}.rodape`, cartao?.rodape || '');
     }
+    // O que o cliente já pagou e não foi repassado no prazo (24/09/2026).
+    finPreencherOpcional(moduleEl, 'atrasadas.repasse', atrasadas?.repasse || '');
+    finPreencherOpcional(moduleEl, 'producao.atraso', producao?.atraso || '');
 }
 
 /** A faixa "Contas a receber": nota e os quatro cartões. */
@@ -766,6 +806,8 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoComissoes.previstas', finFormatarMoeda(c.previstas));
     finPreencher(moduleEl, 'resumoComissoes.apuradas', finFormatarMoeda(c.apuradas));
     finPreencher(moduleEl, 'resumoComissoes.atrasadas', finFormatarMoeda(c.atrasadas));
+    finPreencher(moduleEl, 'resumoComissoes.atrasadasRepasse', finFormatarMoeda(c.atrasadasRepasse));
+    finPreencherOpcional(moduleEl, 'resumoComissoes.atrasadasRepasseNota', c.atrasadasRepasse ? c.atrasadasRepasseNota : '');
     finPreencher(moduleEl, 'resumoComissoes.previstoMes', finFormatarMoeda(c.previstoMes));
     // Ajustes: o que os ajustes à mão tiraram da comissão do mês mais os
     // estornos de competências já fechadas. Sem isto o card ficava em zero e a
@@ -776,12 +818,15 @@ function finRenderizarResumos(moduleEl, dados) {
         : '');
     finPreencher(moduleEl, 'resumoComissoes.proximoPagamento', c.proximoPagamento);
     finRenderizarBeneficiarios(moduleEl, c);
+    finRenderizarRepasse(moduleEl, c);
 
     const p = dados.resumoProducao;
     finPreencher(moduleEl, 'resumoProducao.emProducao', finFormatarInteiro(p.emProducao));
     finPreencher(moduleEl, 'resumoProducao.parciais', finFormatarInteiro(p.parciais));
     finPreencher(moduleEl, 'resumoProducao.pecasMes', finFormatarInteiro(p.pecasMes));
     finPreencher(moduleEl, 'resumoProducao.valorCompetencia', finFormatarMoeda(p.valorCompetencia));
+    finPreencher(moduleEl, 'resumoProducao.atrasada', finFormatarMoeda(p.atrasada));
+    finPreencherOpcional(moduleEl, 'resumoProducao.atrasadaNota', p.atrasada ? p.atrasadaNota : '');
     finPreencher(moduleEl, 'resumoProducao.proximoPagamento', p.proximoPagamento);
 }
 
@@ -831,6 +876,36 @@ function finRenderizarBeneficiarios(moduleEl, resumo) {
     }
 
     legenda.replaceChildren(window.Beneficiarios.legenda([]));
+}
+
+/**
+ * A quem ainda não repassamos (decisão do dono, 24/09/2026): o cliente já
+ * pagou, o prazo da competência passou e não há pagamento registrado. Soma as
+ * competências em atraso, por pessoa, no bordô da atenção. Some sem atraso.
+ */
+function finRenderizarRepasse(moduleEl, resumo) {
+    const caixa = moduleEl.querySelector('#finResumoRepasse');
+    const lista = moduleEl.querySelector('#finResumoRepasseLista');
+    const total = moduleEl.querySelector('#finResumoRepasseTotal');
+    if (!caixa || !lista) return;
+    const pessoas = window.Beneficiarios ? window.Beneficiarios.porPessoa(resumo.repassar || []) : [];
+    caixa.classList.toggle('hidden', !pessoas.length);
+    if (!pessoas.length) return;
+    if (total) {
+        total.textContent = `${finFormatarMoeda(resumo.atrasadasRepasse)}${resumo.atrasadasRepasseNota ? ` ${resumo.atrasadasRepasseNota}` : ''}`;
+        total.title = 'O cliente já pagou e o pagamento a estas pessoas não foi registrado no prazo';
+    }
+    lista.replaceChildren();
+    for (const pessoa of pessoas) {
+        const item = finCriar('li', 'fin-benef__item');
+        const nome = finCriar('div', 'fin-benef__nome');
+        nome.appendChild(window.Beneficiarios.ponto(pessoa.beneficiario));
+        nome.appendChild(finCriar('span', null, pessoa.beneficiario || '—'));
+        if (pessoa.cms > 0) nome.appendChild(finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--cms', 'CMS'));
+        if (pessoa.royalty > 0) nome.appendChild(finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--royalty', 'Royalty'));
+        item.append(nome, finCriar('span', 'fin-benef__valor fin-benef__total--atraso', finFormatarMoeda(pessoa.total)));
+        lista.appendChild(item);
+    }
 }
 
 function finRenderizarAtividade(moduleEl, eventos, hoje) {

@@ -72,4 +72,18 @@ test('pagar: o que falta é comissão + produção; a confirmar sem o que já fo
   ]);
   assert.deepEqual([p.aConfirmar.quantidade, p.aConfirmar.atrasados, p.aConfirmar.valor], [2, 1, 1100]);
   assert.deepEqual(p.producao.pago, { valor: 2000 });
+  assert.deepEqual(p.repasse, { valor: 0, competencias: [] });
+});
+
+test('pagar: o que o cliente pagou e não foi repassado no prazo entra no "a pagar", à parte das atrasadas do cliente', () => {
+  const p = F.resumirPagar({
+    competencia: '2026-09',
+    comissoes: { situacao: 'aberta', valor: 554.48, total: 554.48, pago: 0, pagar_ate: '2026-10-15' },
+    producao: { situacao: 'aberta', valor: 835.06, total: 835.06, pago: 0, pagar_ate: '2026-10-07', atrasada: { valor: 120, competencias: ['2026-08'] } },
+    // O painel manda em `valor` a soma dos dois atrasos; a parte do cliente vem em `cliente`.
+    atrasadas: { valor: 904.4, parcelas: 2, cliente: { valor: 350, parcelas: 2 }, repasse: { valor: 554.4, competencias: ['2026-08'] } }
+  }, { agora: new Date('2026-09-24T15:00:00.000Z') });
+  assert.deepEqual(p.atrasadas, { quantidade: 2, valor: 350 });
+  assert.deepEqual(p.repasse, { valor: 674.4, competencias: ['2026-08'] });
+  assert.deepEqual(p.aPagar, { valor: 2063.94 }, 'o do mês (554,48 + 835,06) e o atrasado (554,40 + 120)');
 });

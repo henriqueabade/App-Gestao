@@ -13,6 +13,8 @@ const regras = require('./regras');
 const rateios = require('./rateios');
 // Reembolso a pagar e devolução por terminar (backend/devolucoes): entram nas pendências do módulo.
 const reembolsos = require('../devolucoes/reembolsos');
+// O que o cliente pagou e ainda não foi repassado, fora do prazo (24/09/2026).
+const repasses = require('./repasses');
 
 /** 'YYYY-MM-DDTHH:MM-03:00' de um instante (a atividade fiscal já vem assim). */
 function instanteBR(instante) {
@@ -167,17 +169,30 @@ async function carregar({ api, competencia, hoje, desde }) {
     auditoria.recentes(api, { limite: 8 }).catch(() => []),
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
-  const { b, estado: estadoC, apuradas, resumo } = dc;
+  const { b, estado: estadoC, apuradas } = dc;
   // Previstas e atrasadas DO MÊS escolhido (comissoes.visaoDoMes): a atrasada
   // passa para os meses seguintes até ser paga; o mês passado mostra a foto
   // do fim dele. Antes as atrasadas eram as de hoje em qualquer mês.
   const mes = comissoes.visaoDoMes(apuradas, { competencia: comp, hoje, feriados: b.receber?.feriados || [] });
   const somaComissao = l => comissoes.soma(l, p => p.potencial.total);
-  const prodComp = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp });
+  // Só o que cai NESTA competência (decisão do dono, 24/09/2026): o que ficou
+  // de meses anteriores sem fechar ou sem pagar é "a repassar" (repasses.js).
+  // A prévia do fechamento continua levando tudo (fechamentos.previa).
+  const resumo = comissoes.montarFechamento({ apuradas, estado: estadoC, competencia: comp, propria: true });
+  const prodComp = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp, propria: true });
   // O rateio é da PRODUÇÃO e nunca derruba o painel: sem o SQL da fase,
-  // `lerVisao` devolve `sql_pendente` e nada aparece.
-  const visaoRateio = prodComp.fechado ? null : await rateios.lerVisao({ api, linhas: prodComp.linhas || [] }).catch(() => null);
+  // `lerVisao` devolve `sql_pendente` e nada aparece. Ele trava o FECHAMENTO,
+  // então olha o que o fechamento levaria (a prévia inteira).
+  const prodPrevia = prodComp.fechado ? prodComp : producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp });
+  const visaoRateio = prodComp.fechado ? null : await rateios.lerVisao({ api, linhas: prodPrevia.linhas || [] }).catch(() => null);
   const cfg = b.regras.configuracao;
+  // O que o cliente já pagou e nós não repassamos, com o prazo vencido — de
+  // qualquer competência anterior, até ser pago (foto do fim do mês no passado).
+  const repComissao = repasses.deComissao({ estado: estadoC, apuradas, configuracao: cfg, referencia: mes.referencia });
+  const repProducao = repasses.deProducao({ estado: prod.estado, pend: prod.pend, configuracao: cfg, feriados: b.regras.feriados, referencia: mes.referencia });
+  const repasseComissao = repasses.resumir(repComissao);
+  const repasseProducao = repasses.resumir(repProducao);
+  const atrasadasCliente = somaComissao(mes.atrasadas);
   const pagarComissao = resumo.fechamento?.pagar_ate || calendario.pagarComissaoAte(comp, cfg);
   const pagarProducao = prodComp.fechamento?.pagar_ate || calendario.pagarProducaoAte(comp, cfg, b.regras.feriados);
   const lista = [...fechamentos.listarDe(b, 'comissao'), ...fechamentos.listarDe(b, 'producao')];
@@ -193,19 +208,36 @@ async function carregar({ api, competencia, hoje, desde }) {
       parcelas: resumo.parcelas, pagar_ate: pagarComissao,
       pago_em: resumo.fechamento?.pagamento ? c.dia(resumo.fechamento.pagamento.data_pagamento) : null
     },
-    atrasadas: { valor: somaComissao(mes.atrasadas), parcelas: mes.atrasadas.length, referencia: mes.referencia },
+    // Os dois atrasos (decisão do dono, 24/09/2026): o do CLIENTE (a parcela
+    // venceu sem pagamento — a comissão espera) e o NOSSO (o cliente pagou e a
+    // comissão não foi repassada no prazo). `valor` é a soma; o cartão mostra
+    // as duas partes.
+    atrasadas: {
+      valor: c.centavos(atrasadasCliente + repasseComissao.valor), parcelas: mes.atrasadas.length, referencia: mes.referencia,
+      cliente: { valor: atrasadasCliente, parcelas: mes.atrasadas.length },
+      repasse: repasseComissao
+    },
     producao: {
       situacao: situacaoDe(prodComp), valor: faltaDe(prodComp), total: c.centavos(prodComp.a_pagar), pago: pagoDe(prodComp),
       pecas: prodComp.pecas, pagar_ate: pagarProducao,
       dia_util: cfg.producao_dia_util,
-      pago_em: prodComp.fechamento?.pagamento ? c.dia(prodComp.fechamento.pagamento.data_pagamento) : null
+      pago_em: prodComp.fechamento?.pagamento ? c.dia(prodComp.fechamento.pagamento.data_pagamento) : null,
+      // Produção de competências anteriores que passou do prazo sem pagamento.
+      atrasada: repasseProducao
     },
+    // Os repasses em atraso, competência a competência (sem os itens).
+    repasses: { comissoes: repasses.semItens(repComissao), producao: repasses.semItens(repProducao) },
     resumo_comissoes: {
       // O mesmo recorte do relatório "Previsão de comissões" que o "Ver
       // detalhes" abre: previstas + atrasadas = o previsto no mês.
       previstas: somaComissao(mes.previstas),
       apuradas: resumo.comissao,
-      atrasadas: somaComissao(mes.atrasadas),
+      // Atrasadas porque o CLIENTE não pagou…
+      atrasadas: atrasadasCliente,
+      // …e porque NÓS não repassamos (competências anteriores fora do prazo).
+      atrasadas_repasse: repasseComissao.valor,
+      atrasadas_repasse_rotulo: repasseComissao.rotulo,
+      beneficiarios_repasse: repasses.beneficiariosSomados(repComissao),
       previsto_mes: comissoes.soma([...mes.previstas, ...mes.atrasadas], p => p.potencial.total),
       ajustes: resumo.ajustes,
       // Ajustes à mão do mês: quantos, quanto saiu da base e quanta comissão
@@ -226,6 +258,8 @@ async function carregar({ api, competencia, hoje, desde }) {
       parciais: pedidosParciais({ eventos: prod.eventos, itensPor: prod.itensPor }),
       pecas_mes: prodComp.pecas,
       valor: prodComp.a_pagar,
+      atrasada: repasseProducao.valor,
+      atrasada_rotulo: repasseProducao.rotulo,
       proximo_pagamento: pagarProducao,
       dia_util: cfg.producao_dia_util,
       situacao: situacaoDe(prodComp)

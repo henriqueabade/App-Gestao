@@ -227,12 +227,17 @@ function resumir(linhas) {
   };
 }
 
-/** A competência de produção: fechada (congelada) ou em aberto (prévia). Pura. */
-function montarCompetencia({ pend, estado, competencia }) {
+/**
+ * A competência de produção: fechada (congelada) ou em aberto (prévia). Pura.
+ * `propria`: só o que cai nesta competência (o painel — o que ficou de meses
+ * não fechados é "a repassar", repasses.js); sem ela, a prévia do fechamento.
+ */
+function montarCompetencia({ pend, estado, competencia, propria = false }) {
   const fechado = estado.fechados.get(competencia) || null;
+  const cabe = p => p.competencia && (propria ? p.competencia === competencia : p.competencia <= competencia);
   const linhas = fechado
     ? congeladas(estado, fechado.id)
-    : [...pend.filter(p => p.competencia && p.competencia <= competencia), ...(estado.proxima === competencia ? saldosAnteriores(estado) : [])];
+    : [...pend.filter(cabe), ...(estado.proxima === competencia ? saldosAnteriores(estado) : [])];
   const r = resumir(linhas);
   return {
     competencia, fechado: Boolean(fechado),

@@ -335,12 +335,20 @@ function itemCongelado(i) {
   };
 }
 
-function montarFechamento({ apuradas, estado, competencia }) {
+/**
+ * `propria` (painel, decisão do dono de 24/09/2026): só os itens que caem NESTA
+ * competência. Sem ela — a prévia do fechamento — entra também o que ficou de
+ * meses ainda não fechados, porque é isso que o fechamento leva. No painel o
+ * que ficou de antes é "a repassar" (repasses.js), e contar lá e aqui seria
+ * contar duas vezes.
+ */
+function montarFechamento({ apuradas, estado, competencia, propria = false }) {
   const fechado = estado.fechados.get(competencia) || null;
+  const cabe = p => p.competencia && (propria ? p.competencia === competencia : p.competencia <= competencia);
   const itens = fechado
     ? estado.congelados.filter(i => String(i.fechamento_id) === String(fechado.id)).map(itemCongelado)
     : [
-      ...pendentesDe(apuradas).filter(p => p.competencia && p.competencia <= competencia),
+      ...pendentesDe(apuradas).filter(cabe),
       ...(estado.proxima === competencia ? saldosAnteriores(estado) : [])
     ];
   return resumirItens(itens, { fechado, competencia });

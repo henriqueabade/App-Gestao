@@ -105,7 +105,11 @@
           <span class="fin-kpi__valor" data-fin="atrasadas.valor">—</span>
           <span class="fin-kpi__auxiliar" data-fin="atrasadas.auxiliar"></span>
         </div>
+        <!-- Os dois atrasos (decisão do dono, 24/09/2026): o valor é a soma; aqui
+             o que espera o CLIENTE pagar e, quando houver, o que o cliente já
+             pagou e NÓS não repassamos no prazo (competência não fechada ou não paga). -->
         <p class="fin-kpi__rodape" data-fin="atrasadas.rodape"></p>
+        <p class="fin-kpi__rodape fin-kpi__rodape--atraso" data-fin-opcional="atrasadas.repasse" hidden></p>
       </article>
 
       <article class="fin-kpi glass-surface rounded-xl" data-fin-acao="producao-competencia" role="button" tabindex="0" aria-label="Produção a pagar — abrir fechamento da produção">
@@ -120,6 +124,8 @@
           <span class="fin-kpi__auxiliar" data-fin="producao.auxiliar"></span>
         </div>
         <p class="fin-kpi__rodape" data-fin="producao.rodape"></p>
+        <!-- Produção de competências anteriores que passou do prazo sem pagamento. -->
+        <p class="fin-kpi__rodape fin-kpi__rodape--atraso" data-fin-opcional="producao.atraso" hidden></p>
       </article>
     </div>
 
@@ -250,7 +256,10 @@
         <dl class="fin-resumo">
           <div class="fin-resumo__linha"><dt>Previstas</dt><dd data-fin="resumoComissoes.previstas">—</dd></div>
           <div class="fin-resumo__linha"><dt>Apuradas</dt><dd data-fin="resumoComissoes.apuradas">—</dd></div>
-          <div class="fin-resumo__linha"><dt title="Vencidas até este mês e ainda não pagas: passam para os meses seguintes até o pagamento ser registrado">Atrasadas</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="Parcelas vencidas até este mês que o cliente ainda não pagou: a comissão espera o pagamento e passa para os meses seguintes até ele ser registrado">Atrasadas — cliente não pagou</dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadas">—</dd></div>
+          <!-- O outro atraso (decisão do dono, 24/09/2026): o cliente pagou e a comissão
+               não foi repassada no prazo — competência não fechada, ou fechada e não paga. -->
+          <div class="fin-resumo__linha"><dt title="O cliente já pagou, mas a competência não foi fechada ou o pagamento não foi registrado até o prazo: passa de mês em mês até o pagamento">Atrasadas — a repassar <span class="fin-resumo__nota" data-fin-opcional="resumoComissoes.atrasadasRepasseNota" hidden></span></dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.atrasadasRepasse">—</dd></div>
           <!-- Previstas + atrasadas: a comissão que o mês ainda espera receber
                (decisão do dono, 24/09/2026). -->
           <div class="fin-resumo__linha"><dt title="Previstas + atrasadas: a comissão que o mês ainda espera">Previsto no mês</dt><dd data-fin="resumoComissoes.previstoMes">—</dd></div>
@@ -266,6 +275,14 @@
           </div>
           <ul id="finResumoBeneficiariosLista" class="fin-benef__lista"></ul>
           <div id="finResumoBeneficiariosLegenda" class="fin-benef__legenda"></div>
+        </div>
+        <!-- A quem ainda não repassamos (o cliente já pagou e o prazo passou), somando as competências em atraso. -->
+        <div id="finResumoRepasse" class="fin-benef fin-benef--atraso hidden">
+          <div class="fin-benef__topo">
+            <span class="fin-benef__titulo">A repassar em atraso</span>
+            <span id="finResumoRepasseTotal" class="fin-benef__total fin-benef__total--atraso">—</span>
+          </div>
+          <ul id="finResumoRepasseLista" class="fin-benef__lista"></ul>
         </div>
         <footer class="fin-proximo" data-fin-acao="confirmar-pagamento-comissao" role="button" tabindex="0" title="Confirmar pagamento das comissões">
           <i class="fas fa-calendar-alt" aria-hidden="true"></i>
@@ -286,6 +303,7 @@
           <div class="fin-resumo__linha"><dt>Parcialmente concluídos</dt><dd data-fin="resumoProducao.parciais">—</dd></div>
           <div class="fin-resumo__linha"><dt>Peças finalizadas no mês</dt><dd data-fin="resumoProducao.pecasMes">—</dd></div>
           <div class="fin-resumo__linha"><dt>Valor da competência</dt><dd data-fin="resumoProducao.valorCompetencia">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="Produção de competências anteriores que passou do prazo sem ser fechada ou sem o pagamento registrado: passa de mês em mês até o pagamento">Atrasada — a repassar <span class="fin-resumo__nota" data-fin-opcional="resumoProducao.atrasadaNota" hidden></span></dt><dd class="fin-resumo__atencao" data-fin="resumoProducao.atrasada">—</dd></div>
         </dl>
         <footer class="fin-proximo" data-fin-acao="confirmar-pagamento-producao" role="button" tabindex="0" title="Confirmar pagamento da produção">
           <i class="fas fa-calendar-alt" aria-hidden="true"></i>

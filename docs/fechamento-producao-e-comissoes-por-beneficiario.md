@@ -138,6 +138,42 @@ No **Confirmar pagamento** (comissões):
 
 ---
 
+## 3. Os dois atrasos: o cliente não pagou × nós não repassamos (24/09/2026)
+
+Decisões do dono ("tudo recomendado"). Antes só existia o atraso do CLIENTE
+(a parcela venceu sem pagamento). Agora também o NOSSO: **o cliente pagou, a
+comissão (ou a produção) já é devida, o "pagar até" da competência passou e
+não há pagamento registrado** — porque a competência não foi fechada, ou foi
+fechada e não paga (ou paga só em parte, por beneficiário).
+
+- Vira atraso **no dia seguinte ao "pagar até"** (comissões: o dia
+  configurado do mês seguinte; produção: o 5º dia útil). Até lá é "a pagar".
+- **Passa de mês em mês** até o pagamento ser confirmado. Olhando um mês que
+  já passou, é a foto do fim dele (fechada ou paga depois conta como não
+  fechada/não paga naquela data).
+- **Nada conta duas vezes**: "Comissões a pagar", "Apuradas", "Produção a
+  pagar" e "Valor da competência" do painel mostram só o que é **da
+  competência escolhida** (`propria`). O que ficou de meses anteriores sem
+  fechar ou sem pagar e já passou do prazo é "a repassar". A prévia do
+  fechamento continua levando tudo o que o fechamento leva.
+
+Onde aparece:
+
+| Lugar | O quê |
+| --- | --- |
+| Cartão "Comissões atrasadas" | o número é a soma dos dois atrasos; embaixo "R$ X aguardando o cliente" e, em bordô, "R$ Y a repassar · agosto/2026" |
+| Cartão "Produção a pagar" | a linha em bordô "R$ Z atrasados · agosto/2026" |
+| Resumo de Comissões | "Atrasadas — cliente não pagou" e "Atrasadas — a repassar (mês)", e a lista "A repassar em atraso" por pessoa |
+| Resumo de Produção | "Atrasada — a repassar (mês)" |
+| "Ver detalhes" | o relatório novo **Comissões do mês** (`resumo-comissoes`, também na central de Relatórios): previstas, atrasadas do cliente, apuradas, ajustes e a repassar, com a Situação de cada linha e os totais de cada uma no subtítulo |
+| Modal das atrasadas | o bloco "A repassar — o cliente já pagou" (comissões e produção, por competência, com para quem) acima da lista do que espera o cliente |
+| Dashboard | "Comissões e produção a pagar" inclui o atrasado, com a etiqueta "R$ X a repassar em atraso" |
+
+Código: `backend/financeiro/repasses.js` (puro: `deComissao`, `deProducao`);
+`painel.js` (cartões e resumos), `relatorios.js` (`resumo-comissoes`) e a rota
+`/parcelas?visao=atrasadas` (`repasses`). Testes: `repasses.test.js` e o
+ponta a ponta em `financeiroController.test.js`. Nenhum SQL novo.
+
 ## Correções depois dos testes
 
 O seletor de competência (mês, ano e lupa), o "falta / total" dos cartões, os
