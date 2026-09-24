@@ -50,6 +50,7 @@ const relatorios = require('./financeiro/relatorios');
 const detalhes = require('./financeiro/detalhes');
 const base = require('./financeiro/base');
 const auditoria = require('./financeiro/auditoria');
+const rateios = require('./financeiro/rateios');
 
 const VER = 'financeiro.comissao.view';
 const EDITAR_REGRAS = 'financeiro.regras.editar';
@@ -130,6 +131,37 @@ function criarRouter() {
   // Desativar guarda o histórico; EXCLUIR some com a linha — por isso só o Sup Admin.
   router.delete('/regras/:id', exigirSupAdmin, rota('DELETE /api/financeiro/regras/:id', async ({ api, req, usuarioId }) =>
     ({ removida: await regras.removerRegra({ api, id: req.params.id, usuarioId }) })));
+  // ------------------------------- colaboradores e rateio das comissões
+  // A comissão de cada PEÇA contabilizada é repartida entre colaboradores,
+  // em %. Fechar a competência exige 100% em toda peça — mas só quando há
+  // colaborador cadastrado (ver backend/financeiro/rateios.js).
+  router.get('/colaboradores', exigirPermissao(VER), rota('GET /api/financeiro/colaboradores', async ({ api }) => {
+    const lista = await rateios.listarColaboradores(api, { incluirDesligados: true });
+    return lista === null
+      ? { sql_pendente: true, arquivo: rateios.SQL_ARQUIVO, colaboradores: [] }
+      : { sql_pendente: false, colaboradores: lista };
+  }));
+  router.post('/colaboradores', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/colaboradores', ({ api, req, usuarioId }) =>
+    rateios.salvarColaborador({ api, dados: req.body, usuarioId })));
+  router.put('/colaboradores/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/colaboradores/:id', ({ api, req, usuarioId }) =>
+    rateios.salvarColaborador({ api, dados: { ...req.body, id: req.params.id }, usuarioId })));
+  router.delete('/colaboradores/:id', exigirPermissao(EDITAR_REGRAS), rota('DELETE /api/financeiro/colaboradores/:id', ({ api, req, usuarioId }) =>
+    rateios.removerColaborador({ api, id: req.params.id, usuarioId })));
+
+  /** As peças contabilizadas da competência, com o que cada uma já distribuiu. */
+  router.get('/rateio', exigirPermissao(VER), rota('GET /api/financeiro/rateio', async ({ api, req, hoje, desde }) => {
+    const competencia = String(req.query?.competencia || '') || c.competenciaDe(hoje);
+    const previa = await fechamentos.previa({ api, tipo: 'comissao', competencia, hoje, desde });
+    const visao = await rateios.lerVisao({ api, itens: previa.itens || [] });
+    return { competencia, fechado: Boolean(previa.fechado), ...visao };
+  }));
+  router.post('/rateio', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/rateio', ({ api, req, usuarioId }) =>
+    rateios.salvarLinha({ api, dados: req.body, usuarioId })));
+  router.put('/rateio/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/rateio/:id', ({ api, req, usuarioId }) =>
+    rateios.salvarLinha({ api, dados: { ...req.body, id: req.params.id }, usuarioId })));
+  router.delete('/rateio/:id', exigirPermissao(EDITAR_REGRAS), rota('DELETE /api/financeiro/rateio/:id', ({ api, req, usuarioId }) =>
+    rateios.removerLinha({ api, id: req.params.id, usuarioId })));
+
   router.post('/setores', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/setores', ({ api, req, usuarioId }) =>
     regras.salvarSetor({ api, entrada: req.body, usuarioId })));
   router.put('/setores/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/setores/:id', ({ api, req, usuarioId }) =>

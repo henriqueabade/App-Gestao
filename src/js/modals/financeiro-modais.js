@@ -4229,7 +4229,253 @@
     produtoSel.replaceChildren(opcao('padrao', PADRAO_DO_PROCESSO));
     pintarQuemRecebe();
     pintarTipoValor();
+    montarColaboradores({ podeEditar, erroDe });
     return carregar();
+  }
+
+  /**
+   * Aba "Colaboradores (rateio)": quem participa das comissões e quanto por
+   * cento cada um leva de CADA PEÇA contabilizada.
+   *
+   * A soma de uma peça vai até 100% e não passa — o backend recusa e a tela
+   * já mostra o restante antes de tentar. Fechar a competência exige 100% em
+   * toda peça, mas só quando há colaborador cadastrado (sem ninguém, o
+   * recurso não está em uso). Ver backend/financeiro/rateios.js.
+   */
+  function montarColaboradores({ podeEditar, erroDe }) {
+    let estado = { colaboradores: [], pecas: [], resumo: [], pendentes: 0, sql_pendente: false, fechado: false };
+    let editando = null;
+    const avisar = (texto, tipo = 'erro') => mostrarMensagem('finRateioMensagem', texto, tipo);
+    const pct = v => `${Number.isInteger(Number(v)) ? Number(v) : String(Number(v)).replace('.', ',')}%`;
+
+    function pintarColaboradores() {
+      const lista = el('finColabLista');
+      const vivos = estado.colaboradores.filter(x => x.ativo !== false);
+      el('finColabTotal').textContent = vivos.length === 1 ? '1 pessoa' : `${vivos.length} pessoas`;
+      lista.replaceChildren(...vivos.map(colab => {
+        const li = criar('li', 'py-2 flex items-center justify-between gap-3');
+        const dados = criar('div', 'min-w-0');
+        dados.append(criar('p', 'text-sm text-white truncate', colab.nome));
+        if (colab.funcao) dados.append(criar('p', 'text-xs text-gray-400 truncate', colab.funcao));
+        const acoes = criar('div', 'ctl-acoes');
+        if (podeEditar) {
+          const editar = criar('button', 'btn-neutral ctl-botao ctl-botao--pequeno text-white', 'Editar');
+          editar.type = 'button';
+          editar.addEventListener('click', () => {
+            editando = colab;
+            el('finColabNome').value = colab.nome;
+            el('finColabFuncao').value = colab.funcao || '';
+            el('finColabSalvar').textContent = 'Salvar';
+            el('finColabCancelar').classList.remove('hidden');
+          });
+          const desligar = criar('button', 'btn-danger ctl-botao ctl-botao--pequeno text-white', 'Desligar');
+          desligar.type = 'button';
+          acionar(desligar, () => removerColaborador(colab));
+          acoes.append(editar, desligar);
+        }
+        li.append(dados, acoes);
+        return li;
+      }));
+      el('finColabVazio').classList.toggle('hidden', vivos.length > 0);
+    }
+
+    /** Uma peça: o cabeçalho com a barra do % e as linhas de quem recebe. */
+    function linhaDaPeca(peca) {
+      const li = criar('li', 'rounded-xl border border-white/10 bg-white/5 p-4 space-y-3');
+
+      const topo = criar('div', 'flex flex-wrap items-start justify-between gap-3');
+      const quem = criar('div', 'min-w-0');
+      quem.append(criar('p', 'text-sm text-white truncate', peca.produto));
+      quem.append(criar('p', 'text-xs text-gray-400 truncate',
+        [peca.pedido_numero || `pedido ${peca.pedido_id}`, peca.cliente, `comissão ${formatarMoeda(peca.comissao)}`].filter(Boolean).join(' · ')));
+      const marca = criar('span', `${peca.completo ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`,
+        peca.completo ? '100% distribuído' : `faltam ${pct(peca.restante)}`);
+      topo.append(quem, marca);
+
+      // A barra é a leitura rápida do que falta: verde quando fecha 100%.
+      const trilho = criar('div', 'h-2 w-full rounded-full bg-white/10 overflow-hidden');
+      const barra = criar('div', `h-2 rounded-full ${peca.completo ? 'bg-green' : 'bg-primary'}`);
+      barra.style.width = `${Math.min(100, Number(peca.distribuido) || 0)}%`;
+      trilho.appendChild(barra);
+
+      const linhas = criar('ul', 'space-y-1 text-sm');
+      for (const l of peca.linhas) {
+        const item = criar('li', 'flex items-center justify-between gap-3');
+        const nome = criar('span', 'text-white truncate', `${l.colaborador} · ${pct(l.percentual)}`);
+        const direita = criar('div', 'flex items-center gap-3 flex-shrink-0');
+        direita.append(criar('span', 'text-xs text-gray-400', formatarMoeda(l.valor)));
+        if (podeEditar && !estado.fechado) {
+          const tirar = criar('button', 'btn-neutral ctl-botao ctl-botao--icone text-white', null);
+          tirar.type = 'button';
+          tirar.title = `Tirar ${l.colaborador} desta peça`;
+          tirar.setAttribute('aria-label', tirar.title);
+          const icone = criar('i', 'fas fa-times', null);
+          icone.setAttribute('aria-hidden', 'true');
+          tirar.appendChild(icone);
+          acionar(tirar, () => removerLinha(l));
+          direita.appendChild(tirar);
+        }
+        item.append(nome, direita);
+        linhas.appendChild(item);
+      }
+      li.append(topo, trilho, linhas);
+
+      if (podeEditar && !estado.fechado && !peca.completo) {
+        const form = criar('div', 'flex flex-wrap items-end gap-3');
+        const escolha = document.createElement('select');
+        escolha.className = 'flex-1 min-w-0 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        escolha.setAttribute('aria-label', `Colaborador da peça ${peca.produto}`);
+        const jaEstao = new Set(peca.linhas.map(l => String(l.colaborador_id)));
+        const livres = estado.colaboradores.filter(x => x.ativo !== false && !jaEstao.has(String(x.id)));
+        escolha.replaceChildren(...[opcao('', livres.length ? 'Escolha o colaborador' : 'Todos já estão nesta peça'),
+          ...livres.map(x => opcao(String(x.id), x.nome))]);
+        escolha.disabled = !livres.length;
+
+        const valor = document.createElement('input');
+        valor.type = 'text';
+        valor.inputMode = 'decimal';
+        valor.maxLength = 6;
+        // O padrão é o que falta: o caso mais comum é fechar a peça de uma vez.
+        valor.placeholder = `até ${pct(peca.restante)}`;
+        valor.className = 'w-28 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        valor.setAttribute('aria-label', `Percentual na peça ${peca.produto}`);
+
+        const incluir = criar('button', 'btn-success ctl-botao', 'Incluir');
+        incluir.type = 'button';
+        incluir.disabled = !livres.length;
+        acionar(incluir, () => incluirLinha(peca, escolha.value, valor.value || peca.restante));
+
+        const tudo = criar('button', 'btn-neutral ctl-botao text-white', `Dar os ${pct(peca.restante)}`);
+        tudo.type = 'button';
+        tudo.disabled = !livres.length;
+        acionar(tudo, () => incluirLinha(peca, escolha.value, peca.restante));
+
+        form.append(escolha, valor, incluir, tudo);
+        li.appendChild(form);
+      }
+      return li;
+    }
+
+    function pintarPecas() {
+      el('finRateioPecas').replaceChildren(...estado.pecas.map(linhaDaPeca));
+      el('finRateioVazio').classList.toggle('hidden', estado.pecas.length > 0);
+
+      const total = estado.pecas.reduce((s, p) => s + (Number(p.comissao) || 0), 0);
+      const partes = [`${estado.pecas.length === 1 ? '1 peça' : `${estado.pecas.length} peças`} · ${formatarMoeda(total)} de comissão`];
+      if (estado.pendentes) partes.push(`${estado.pendentes === 1 ? '1 peça falta distribuir' : `${estado.pendentes} peças faltam distribuir`}`);
+      else if (estado.pecas.length) partes.push('tudo distribuído');
+      if (estado.fechado) partes.push('competência fechada: só leitura');
+      el('finRateioResumo').textContent = partes.join(' · ');
+
+      const porPessoa = el('finRateioPorPessoaLista');
+      porPessoa.replaceChildren(...estado.resumo.map(r => {
+        const li = criar('li', 'flex items-center justify-between gap-3');
+        li.append(criar('span', 'text-white truncate', r.colaborador),
+          criar('span', 'text-gray-300 flex-shrink-0', `${formatarMoeda(r.valor)} · ${r.pecas === 1 ? '1 peça' : `${r.pecas} peças`}`));
+        return li;
+      }));
+      el('finRateioPorPessoa').classList.toggle('hidden', !estado.resumo.length);
+    }
+
+    async function carregarRateio() {
+      const competencia = el('finRateioCompetencia').value;
+      if (!competencia) return;
+      el('finRateioCarregando').classList.remove('hidden');
+      avisar('');
+      try {
+        const corpo = await fetchApi(`/api/financeiro/rateio?competencia=${encodeURIComponent(competencia)}`);
+        estado = { ...corpo, colaboradores: corpo.colaboradores || [], pecas: corpo.pecas || [], resumo: corpo.resumo || [] };
+        el('finColabSemSql').classList.toggle('hidden', !corpo.sql_pendente);
+        pintarColaboradores();
+        pintarPecas();
+        if (!corpo.sql_pendente && !estado.colaboradores.length) {
+          avisar('Cadastre ao menos um colaborador para começar a distribuir. Sem ninguém cadastrado, o fechamento não exige rateio.', 'ok');
+        }
+      } catch (e) {
+        avisar(erroDe(e));
+      } finally {
+        el('finRateioCarregando').classList.add('hidden');
+      }
+    }
+
+    async function salvarColaborador() {
+      const nome = el('finColabNome').value.trim();
+      if (!nome) { avisar('Informe o nome do colaborador.'); return; }
+      try {
+        const corpo = { nome, funcao: el('finColabFuncao').value.trim() || null };
+        if (editando) await fetchApi(`/api/financeiro/colaboradores/${editando.id}`, { method: 'PUT', body: JSON.stringify(corpo) });
+        else await fetchApi('/api/financeiro/colaboradores', { method: 'POST', body: JSON.stringify(corpo) });
+        window.showToast?.(editando ? 'Colaborador atualizado.' : `${nome} entrou no rateio das comissões.`, 'success');
+        limparFormulario();
+        await carregarRateio();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    function limparFormulario() {
+      editando = null;
+      el('finColabNome').value = '';
+      el('finColabFuncao').value = '';
+      el('finColabSalvar').textContent = 'Cadastrar';
+      el('finColabCancelar').classList.add('hidden');
+    }
+
+    async function removerColaborador(colab) {
+      const ok = await window.DialogPadrao?.confirm?.({
+        title: 'Desligar o colaborador?', tom: 'aviso', icone: 'fa-user-minus',
+        subtitle: colab.nome,
+        nota: 'Ele sai das peças em que estava, e essas peças voltam a ficar incompletas. O histórico guarda o que houve.',
+        confirmText: 'Desligar', confirmVariant: 'danger'
+      });
+      if (!ok) return;
+      try {
+        await fetchApi(`/api/financeiro/colaboradores/${colab.id}`, { method: 'DELETE' });
+        window.showToast?.(`${colab.nome} saiu do rateio.`, 'success');
+        await carregarRateio();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function incluirLinha(peca, colaboradorId, percentual) {
+      if (!colaboradorId) { avisar('Escolha o colaborador desta peça.'); return; }
+      try {
+        await fetchApi('/api/financeiro/rateio', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: peca.pedido_id, pedido_item_id: peca.id, produto_id: peca.produto_id,
+            colaborador_id: Number(colaboradorId), percentual
+          })
+        });
+        await carregarRateio();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function removerLinha(linha) {
+      try {
+        await fetchApi(`/api/financeiro/rateio/${linha.id}`, { method: 'DELETE' });
+        await carregarRateio();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    const hoje = new Date();
+    el('finRateioCompetencia').value = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    acionar(el('finColabSalvar'), salvarColaborador);
+    el('finColabCancelar').addEventListener('click', limparFormulario);
+    acionar(el('finRateioBuscar'), carregarRateio);
+    el('finRateioCompetencia').addEventListener('change', carregarRateio);
+    // A apuração é pesada: só roda quando a aba abre.
+    let jaAbriu = false;
+    overlay.querySelector('[data-fin-aba="colaboradores"]')?.addEventListener('click', () => {
+      if (jaAbriu) return;
+      jaAbriu = true;
+      carregarRateio();
+    });
   }
 
   // ------------------------------------------------ configuração fiscal

@@ -10,6 +10,7 @@ const producao = require('./producao');
 const fechamentos = require('./fechamentos');
 const auditoria = require('./auditoria');
 const regras = require('./regras');
+const rateios = require('./rateios');
 // Reembolso a pagar e devolução por terminar (backend/devolucoes): entram nas pendências do módulo.
 const reembolsos = require('../devolucoes/reembolsos');
 
@@ -142,6 +143,22 @@ function pendencias({ hoje, regrasTudo, apuradas, estadoC, estadoP, pend, fecham
   return lista;
 }
 
+/**
+ * A pendência do rateio: só existe com colaborador cadastrado e peça por
+ * distribuir. Pura.
+ */
+function pendenciaDoRateio({ visao, competencia, hoje, fechado }) {
+  if (!visao || visao.sql_pendente || fechado) return [];
+  if (!visao.colaboradores.length || !visao.pendentes) return [];
+  return [{
+    nivel: 'alto',
+    chave: 'rateio_incompleto',
+    titulo: `${c.plural(visao.pendentes, 'peça sem rateio completo', 'peças sem rateio completo')}`,
+    descricao: `A comissão de ${c.rotuloCompetencia(competencia)} só fecha com 100% de cada peça distribuído entre os colaboradores. Abra "Regras › Colaboradores (rateio)" e complete o que falta.`,
+    data: hoje, acao: 'Distribuir', destino: 'regras'
+  }];
+}
+
 async function carregar({ api, competencia, hoje, desde }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   const [dc, prod, recentes, daDevolucao] = await Promise.all([
@@ -151,6 +168,9 @@ async function carregar({ api, competencia, hoje, desde }) {
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
   const { b, estado: estadoC, apuradas, resumo } = dc;
+  // O rateio nunca derruba o painel: sem o SQL da fase, `lerVisao` devolve
+  // `sql_pendente` e nada aparece.
+  const visaoRateio = resumo.fechado ? null : await rateios.lerVisao({ api, itens: resumo.itens || [] }).catch(() => null);
   const v = comissoes.visoes(apuradas);
   const prodComp = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp });
   const cfg = b.regras.configuracao;
@@ -203,8 +223,15 @@ async function carregar({ api, competencia, hoje, desde }) {
       dia_util: cfg.producao_dia_util,
       situacao: situacaoDe(prodComp)
     },
+    // Rateio entre colaboradores: a distribuição por peça precisa fechar 100%
+    // para a competência fechar. Aparece aqui como pendência enquanto falta.
+    rateio: visaoRateio ? {
+      colaboradores: visaoRateio.colaboradores.length, pecas: visaoRateio.pecas.length,
+      pendentes: visaoRateio.pendentes, resumo: visaoRateio.resumo, total: visaoRateio.total
+    } : null,
     pendencias: [
       ...pendencias({ hoje, regrasTudo: b.regras, apuradas, estadoC, estadoP: prod.estado, pend: prod.pend, fechamentosLista: lista }),
+      ...pendenciaDoRateio({ visao: visaoRateio, competencia: comp, hoje, fechado: Boolean(resumo.fechado) }),
       ...daDevolucao
     ],
     atividade: recentes.map(e => ({
