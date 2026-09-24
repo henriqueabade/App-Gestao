@@ -39,6 +39,42 @@ já saiu — aí o modal só emite a nota, sem mexer na situação. O backend co
 de novo: `PUT /api/pedidos/:id/status` aceita `data_envio` e recusa com 400 o
 que não for um dia de verdade.
 
+### Corrigir depois: "Datas do envio" (decisões do dono, 24/09/2026)
+
+Para o pedido marcado como enviado **sem NF-e do sistema** com a data errada —
+o caso da nota emitida fora e informada depois, em que o envio foi marcado sem
+trocar o dia. O **calendário da lista de Pedidos** muda de função pela
+situação:
+
+| Situação | Calendário |
+| --- | --- |
+| Produção | "Alterar pagamento", como sempre |
+| Enviado sem NF-e do sistema | abre **"Datas do envio"** |
+| Enviado com NF-e do sistema (autorizada ou saindo), devolvido por inteiro | apagado: a data de saída e os vencimentos seguem a nota |
+| Entregue, Cancelado, Rascunho | apagado |
+
+No modal: a data de envio (com a sugestão "Usar esta data" quando o pedido tem
+NF-e de fora informada, com a data de emissão dela), a previsão de embarque, o
+início do faturamento (as mesmas três escolhas do pedido) e o prazo em dias de
+cada parcela, com o vencimento de hoje e o novo lado a lado.
+
+- A data de envio só **move as parcelas** quando o faturamento conta do envio
+  ("No envio"). Nas outras escolhas ela muda sozinha.
+- Parcela **paga, com boleto (do BB ou de fora) ou com ordem de pagamento**
+  não muda: aparece com o cadeado e o motivo.
+- Só muda o vencimento da parcela cujo início ou prazo mudou; o que ninguém
+  mexeu fica como está, mesmo fora da conta. Pedido antigo sem escolha gravada
+  abre em "Na conversão", que é de onde ele conta.
+- A produção confirmada no envio e as competências fechadas **não mudam**.
+- A correção vai para o histórico do pedido ("Datas do envio corrigidas: …").
+- Permissão: a mesma "Alterar datas de embarque e faturamento"
+  (`ped.dates.edit`). Sem SQL novo.
+
+Código: `backend/datasDoEnvio.js` (regras, puras), `GET`/`PUT
+/api/pedidos/:id/envio` (pedidosController), `src/js/modals/pedido-datas-envio.js`
+e `calendarioDaLinha` em `src/js/pedidos.js`. Testes:
+`backend/datasDoEnvio.test.js` e `src/js/__tests__/pedidoDatasEnvio.test.js`.
+
 ## Decisões do dono (17/09/2026)
 
 1. A situação do pedido **não muda** (continua Enviado/Entregue por baixo). A

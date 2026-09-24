@@ -5,6 +5,8 @@ const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
 const parcelaMinima = require('./cobranca/parcelaMinima');
 const pedidoParcelas = require('./pedidoParcelas');
+// Corrigir as datas de um pedido enviado sem NF-e do sistema.
+const datasDoEnvio = require('./datasDoEnvio');
 // Tarefa automática "pedido entregue → pós-venda" (sql/tarefas_calendario.sql).
 const tarefas = require('./tarefasServico');
 const confirmacaoDaProducao = require('./financeiro/producaoConfirmacao');
@@ -731,6 +733,134 @@ router.put('/:id/datas', exigirPermissao('ped.dates.edit'), async (req, res) => 
   } catch (err) {
     console.error('Erro ao alterar as datas do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao alterar as datas do pedido' });
+  }
+});
+
+/**
+ * O que o modal "Datas do envio" precisa, lido de uma vez: o pedido, as
+ * parcelas com as travas (boleto, pagamento, boleto de fora, ordem), as NF-e
+ * do sistema (que bloqueiam) e a NF-e de fora, cuja data de emissão a tela
+ * oferece como data de envio. Tabela que falta (SQL não rodado) vira lista
+ * vazia. `pedido` é null quando ele não existe.
+ */
+async function lerBaseDoEnvio(api, id) {
+  const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+  if (!pedido || pedido.error === 'Not found') return { pedido: null };
+  const lerLista = (tabela, query) => api.get(`/api/${tabela}`, { query })
+    .then(r => (Array.isArray(r) ? r : []))
+    .then(l => l.filter(x => String(x?.pedido_id) === String(id)))
+    .catch(() => []);
+  const [parcelas, boletos, recebimentos, externos, ordens, notas, notasDeFora] = await Promise.all([
+    lerLista('pedido_parcelas', { pedido_id: id }),
+    lerLista('boletos', { pedido_id: id }),
+    lerLista('recebimentos', { pedido_id: id }),
+    lerLista('boletos_externos', { pedido_id: id }),
+    lerLista('ordens_pagamento', { pedido_id: id, status: 'aberta' }),
+    lerLista('notas_fiscais', { pedido_id: id }),
+    lerLista('notas_fiscais_externas', { pedido_id: id })
+  ]);
+  const travas = pedidoParcelas.travasDasParcelas({ parcelas, boletos, recebimentos, externos, ordens });
+  const deFora = notasDeFora
+    .filter(n => !(n.ativo === false || n.ativo === 'false' || n.ativo === 0 || n.ativo === 'f'))
+    .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+  return {
+    pedido,
+    notas,
+    parcelas: datasDoEnvio.parcelasDoPedido({ pedido, parcelas, travas }),
+    notaDeFora: deFora
+      ? { numero: deFora.numero ?? null, serie: deFora.serie ?? null, data_emissao: diaValido(String(deFora.data_emissao ?? '')) }
+      : null
+  };
+}
+
+/**
+ * GET /pedidos/:id/envio — o pedido enviado, para corrigir as datas do envio
+ * (backend/datasDoEnvio.js). `bloqueio` traz a frase quando não pode.
+ */
+router.get('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+    const base = await lerBaseDoEnvio(api, id);
+    if (!base.pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+    const p = base.pedido;
+    res.json({
+      pedido: {
+        id: p.id,
+        numero: p.numero ?? null,
+        situacao: p.situacao ?? null,
+        embarcar_real: diaValido(String(p.embarcar_real ?? '')),
+        embarcar_previsao: diaValido(String(p.embarcar_previsao ?? '')),
+        inicio_faturamento: diaValido(String(p.inicio_faturamento ?? '')),
+        faturamento_regra: p.faturamento_regra ?? null,
+        prazo: p.prazo ?? null,
+        data_conversao: diaEmSaoPaulo(p.data_emissao)
+      },
+      parcelas: base.parcelas,
+      bloqueio: datasDoEnvio.motivoDoBloqueio(p, base.notas),
+      nota_de_fora: base.notaDeFora,
+      hoje: hojeEmSaoPaulo()
+    });
+  } catch (err) {
+    console.error('Erro ao ler as datas do envio:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao ler as datas do envio' });
+  }
+});
+
+/**
+ * PUT /pedidos/:id/envio — corrige a data de envio, a previsão, o início do
+ * faturamento e os prazos de um pedido enviado SEM NF-e do sistema.
+ *
+ * As parcelas mudam NO LUGAR, uma a uma e só as que mudam; a travada nunca.
+ * Sem transação: a parcela que falhar vira aviso e fica com a data antiga.
+ * A correção vai para o histórico do pedido.
+ */
+router.put('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+    const base = await lerBaseDoEnvio(api, id);
+    if (!base.pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    // A trava real: a tela apaga o calendário, mas uma tela velha ou outra
+    // aba ainda chegariam aqui.
+    const bloqueio = datasDoEnvio.motivoDoBloqueio(base.pedido, base.notas);
+    if (bloqueio) return res.status(409).json({ error: bloqueio, code: 'ENVIO_NAO_CORRIGE' });
+
+    const entrada = datasDoEnvio.lerEntrada(req.body, base.parcelas.length);
+    if (!entrada.ok) return res.status(400).json({ error: entrada.erro, code: 'DATAS_INVALIDAS' });
+
+    const plano = datasDoEnvio.planejar({
+      pedido: base.pedido, parcelas: base.parcelas, entrada, dataConversao: diaEmSaoPaulo(base.pedido.data_emissao)
+    });
+    if (!plano.ok) return res.status(400).json({ error: plano.erro, code: 'DATAS_INVALIDAS' });
+    if (plano.nada) return res.json({ ok: true, nada: true, parcelas: plano.parcelas, avisos: [] });
+
+    const avisos = [];
+    if (Object.keys(plano.campos).length) await api.put(`/api/pedidos/${id}`, plano.campos);
+
+    for (const parcela of plano.parcelas) {
+      if (!parcela.muda) continue;
+      try {
+        await api.put(`/api/pedido_parcelas/${parcela.id}`, { data_vencimento: parcela.vencimento });
+      } catch (err) {
+        avisos.push(`Parcela ${parcela.numero}: o vencimento não mudou (${err?.message || err}).`);
+        parcela.vencimento = parcela.vencimento_antes;
+        parcela.muda = false;
+      }
+    }
+
+    await registrarEventoDoPedido(api, {
+      pedidoId: id,
+      tipoEvento: EVENTO.EDICAO,
+      descricao: plano.descricao,
+      usuarioId: idDoUsuarioDaRequisicao(req)
+    }, avisos);
+
+    res.json({ ok: true, nada: false, campos: plano.campos, parcelas: plano.parcelas, mudancas: plano.mudancas, avisos });
+  } catch (err) {
+    console.error('Erro ao corrigir as datas do envio:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao corrigir as datas do envio' });
   }
 });
 

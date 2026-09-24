@@ -112,6 +112,30 @@ function tagCartaCorrecao(nota) {
  * tudo voltou, "Parcial" quando voltou uma parte. É este o texto que o filtro
  * de status compara. Pura.
  */
+/**
+ * O calendário da linha (decisões do dono, 24/09/2026). Pura.
+ *   Produção → "Alterar pagamento", como sempre;
+ *   Enviado sem NF-e do sistema → "Datas do envio": corrigir a data de envio,
+ *     a previsão, o início do faturamento e os prazos (ped.dates.edit);
+ *   o resto — entregue, enviado com NF-e, devolvido por inteiro, cancelado,
+ *     rascunho — fica apagado, com o motivo no balão.
+ * `nota` é a NF-e do sistema do pedido (a da tag DANFE), quando a lista tem;
+ * sem ela (sem financeiro.nfe.view) quem recusa é o próprio modal.
+ */
+function calendarioDaLinha(p, nota) {
+    const situacao = String(p?.situacao || '').trim();
+    if (situacao === 'Produção') return { modo: 'pagamento', perm: 'ped.payment.edit', titulo: 'Alterar pagamento' };
+    if (situacao === 'Enviado') {
+        if (p?.devolucao === 'total') return { modo: null, perm: 'ped.dates.edit', titulo: 'Pedido devolvido por inteiro: as datas não mudam mais' };
+        if (['autorizada', 'cancelamento_pendente', 'processando', 'enviando'].includes(String(nota?.status_fiscal || ''))) {
+            return { modo: null, perm: 'ped.dates.edit', titulo: 'Enviado com NF-e: a data de envio e os vencimentos seguem a nota' };
+        }
+        return { modo: 'envio', perm: 'ped.dates.edit', titulo: 'Corrigir a data de envio e os prazos' };
+    }
+    if (situacao === 'Entregue') return { modo: null, perm: 'ped.payment.edit', titulo: 'Pedido entregue: as datas não mudam mais' };
+    return { modo: null, perm: 'ped.payment.edit', titulo: 'Pagamento só pode ser alterado em produção' };
+}
+
 function situacaoNaLista(p) {
     if (p?.devolucao === 'total') return { rotulo: 'Devolvido', classe: 'badge-purple' };
     if (p?.devolucao === 'parcial') return { rotulo: 'Parcial', classe: 'badge-purple' };
@@ -412,6 +436,14 @@ function abrirPagamentoPedido(id) {
     openPedidoModal('modals/pedidos/pagamento.html', '../js/modals/pedido-pagamento.js', 'pagamentoPedido');
 }
 
+/** Corrigir as datas de um pedido enviado sem NF-e do sistema. */
+function abrirDatasDoEnvio(p) {
+    if (!p?.id) return;
+    window.selectedOrderId = p.id;
+    window.datasEnvioContext = { pedidoId: p.id, numero: p.numero, cliente: obterNomeCliente(p.cliente_id) };
+    openPedidoModal('modals/pedidos/datas-envio.html', '../js/modals/pedido-datas-envio.js', 'datasEnvio');
+}
+
 /** Conferência e emissão da NF-e ao marcar o pedido como "Enviado". */
 function abrirEmitirNfePedido(p) {
     if (!p?.id) return;
@@ -498,14 +530,9 @@ async function carregarPedidos() {
             const dataEmbarque = formatarDiaDate(p.embarcar_real);
             const dataFormatada4 = formatarDataLocal(p.data_entrega);
             const dataFormatada5 = formatarDataLocal(p.data_cancelamento);
-            // Repactuar pagamento só cabe enquanto o pedido está em produção:
-            // depois de enviado o combinado com o cliente virou fato, e um
-            // cancelado teve o estoque estornado sobre os números que tinha.
-            const podeEditarPagamento = p.situacao === 'Produção';
-            const pagamentoClass = podeEditarPagamento ? '' : 'icon-disabled';
-            const pagamentoTitle = podeEditarPagamento
-                ? 'Alterar pagamento'
-                : 'Pagamento só pode ser alterado em produção';
+            // O calendário: pagamento em produção, datas do envio no pedido
+            // enviado sem NF-e do sistema, apagado no resto (calendarioDaLinha).
+            const calendario = calendarioDaLinha(p, notasPorPedido[String(p.id)]);
             // permissão exigida para avançar o status deste pedido
             const statusPerm = p.situacao === 'Produção' ? 'ped.status.ship'
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
@@ -519,7 +546,7 @@ async function carregarPedidos() {
                 <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}" data-devolucao="${dataDevolucao}">${naLista.rotulo}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
-                        <i data-perm="ped.payment.edit" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-pagamento ${pagamentoClass}" style="color: var(--color-primary)" title="${pagamentoTitle}"></i>
+                        <i data-perm="${calendario.perm}" data-modo="${calendario.modo || ''}" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-calendario ${calendario.modo ? '' : 'icon-disabled'}" style="color: var(--color-primary)" title="${calendario.titulo}"></i>
                         <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i data-perm="${statusPerm}" class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i data-perm="ped.report" class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
@@ -664,12 +691,14 @@ async function carregarPedidos() {
 
 
 
-        tbody.querySelectorAll('.acao-pagamento').forEach(icon => {
+        tbody.querySelectorAll('.acao-calendario').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
                 if (icon.classList.contains('icon-disabled')) return;
                 const id = e.currentTarget.closest('tr')?.dataset.id;
-                if (id) abrirPagamentoPedido(id);
+                if (!id) return;
+                if (icon.dataset.modo === 'envio') abrirDatasDoEnvio(data.find(x => String(x.id) === String(id)));
+                else abrirPagamentoPedido(id);
             });
         });
 

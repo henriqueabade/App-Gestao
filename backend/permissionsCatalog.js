@@ -801,7 +801,7 @@ const PERMISSIONS_CATALOG = {
         "key": "ped.dates.edit",
         "column": "acao_dates_edit",
         "label": "Alterar datas de embarque e faturamento",
-        "desc": "Botão no pagamento do pedido — previsão de embarque e início do faturamento; reprograma os vencimentos (só em Produção)"
+        "desc": "Botão no pagamento do pedido em Produção — previsão de embarque e início do faturamento; e o calendário do pedido Enviado sem NF-e do sistema — corrigir a data de envio e os prazos. Reprograma os vencimentos"
       },
       {
         "key": "ped.stock.restore_on_cancel",

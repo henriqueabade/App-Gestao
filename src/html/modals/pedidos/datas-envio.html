@@ -1,0 +1,146 @@
+<!--
+  Datas do envio: corrigir a data de envio, a previsão de embarque, o início
+  do faturamento e os prazos de um pedido ENVIADO SEM NF-e do sistema
+  (decisões do dono, 24/09/2026 — backend/datasDoEnvio.js). Abre pelo
+  calendário da lista de Pedidos.
+
+  Os campos de data são texto com máscara dd/mm/aaaa e um calendário ao lado,
+  o mesmo desenho do "Datas do pedido" (datas.html): o seletor nativo fica
+  INVISÍVEL por opacidade, e não por display:none, senão o showPicker() não
+  tem onde se ancorar e não abre.
+
+  Não fecha clicando fora: sai por Voltar, Cancelar ou Esc.
+-->
+<div id="datasEnvioOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="datasEnvioTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarDatasEnvio" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="datasEnvioTitulo" class="ctl-modal-titulo text-white truncate">Datas do envio</h2>
+        <p id="datasEnvioSubtitulo" class="hidden text-xs text-gray-300 truncate"></p>
+      </div>
+      <span></span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="p-6 space-y-6">
+
+        <p class="text-xs text-gray-400">Para acertar um pedido enviado sem NF-e do sistema. A produção confirmada no envio e as competências fechadas não mudam.</p>
+
+        <div id="datasEnvioBloqueio" class="hidden glass-surface rounded-xl px-4 py-3 border border-white/10 text-sm" style="color: var(--color-red)" role="alert"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Data de envio: obrigatória. -->
+          <div>
+            <label for="datasEnvioData" class="ctl-rotulo text-gray-300">Data de envio <span style="color: var(--color-red)">*</span></label>
+            <div class="flex items-center gap-2">
+              <input id="datasEnvioData" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off" aria-describedby="datasEnvioDataErro"
+                     class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <span class="relative inline-flex flex-shrink-0">
+                <button id="datasEnvioDataCalendario" type="button" class="btn-neutral ctl-botao ctl-botao--icone border border-white/10 text-white" title="Escolher no calendário" aria-label="Escolher a data de envio no calendário"><i class="fas fa-calendar-alt" aria-hidden="true"></i></button>
+                <input id="datasEnvioDataNativo" type="date" tabindex="-1" aria-hidden="true" data-no-restore="true"
+                       style="position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0;" />
+              </span>
+            </div>
+            <p id="datasEnvioDataErro" class="hidden mt-2 text-xs" style="color: var(--color-red)" role="alert"></p>
+            <p id="datasEnvioDataAntes" class="mt-2 text-xs text-gray-400"></p>
+            <!-- A NF-e de fora informada no pedido: a data dela é a sugestão. -->
+            <div id="datasEnvioNotaFora" class="hidden mt-2 flex flex-wrap items-center gap-2">
+              <span id="datasEnvioNotaForaTexto" class="text-xs text-gray-300"></span>
+              <button id="datasEnvioUsarNotaFora" type="button" class="btn-secondary ctl-botao text-white">Usar esta data</button>
+            </div>
+          </div>
+
+          <!-- Previsão de embarque: fica como registro do que era previsto. -->
+          <div>
+            <label for="datasEnvioPrevisao" class="ctl-rotulo text-gray-300">Previsão de embarque <span style="color: var(--color-red)">*</span></label>
+            <div class="flex items-center gap-2">
+              <input id="datasEnvioPrevisao" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off" aria-describedby="datasEnvioPrevisaoErro"
+                     class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <span class="relative inline-flex flex-shrink-0">
+                <button id="datasEnvioPrevisaoCalendario" type="button" class="btn-neutral ctl-botao ctl-botao--icone border border-white/10 text-white" title="Escolher no calendário" aria-label="Escolher a previsão de embarque no calendário"><i class="fas fa-calendar-alt" aria-hidden="true"></i></button>
+                <input id="datasEnvioPrevisaoNativo" type="date" tabindex="-1" aria-hidden="true" data-no-restore="true"
+                       style="position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0;" />
+              </span>
+            </div>
+            <p id="datasEnvioPrevisaoErro" class="hidden mt-2 text-xs" style="color: var(--color-red)" role="alert"></p>
+          </div>
+        </div>
+
+        <!-- Início do faturamento: a mesma escolha do pedido. "No envio" conta
+             da data de envio acima; as outras não mudam com ela. -->
+        <div role="radiogroup" aria-labelledby="datasEnvioRegraTitulo" class="space-y-3">
+          <p id="datasEnvioRegraTitulo" class="ctl-rotulo text-gray-300">Início do faturamento</p>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input id="datasEnvioRegraEnvio" type="radio" name="datasEnvioRegra" value="ao_embarcar" class="mt-1 flex-shrink-0" style="accent-color: var(--color-primary)" />
+            <span class="min-w-0">
+              <span class="block text-white">No envio</span>
+              <span id="datasEnvioRegraEnvioInfo" class="block text-xs text-gray-400">Conta da data de envio: mudar o envio move as parcelas.</span>
+            </span>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input id="datasEnvioRegraConversao" type="radio" name="datasEnvioRegra" value="ao_converter" class="mt-1 flex-shrink-0" style="accent-color: var(--color-primary)" />
+            <span class="min-w-0">
+              <span id="datasEnvioRegraConversaoRotulo" class="block text-white">Na conversão</span>
+              <span class="block text-xs text-gray-400">O dia em que o orçamento virou pedido.</span>
+            </span>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input id="datasEnvioRegraData" type="radio" name="datasEnvioRegra" value="data" class="mt-1 flex-shrink-0" style="accent-color: var(--color-primary)" />
+            <span class="min-w-0">
+              <span class="block text-white">Data específica</span>
+              <span class="block text-xs text-gray-400">Escolha o dia no campo abaixo.</span>
+            </span>
+          </label>
+
+          <!-- Só vale na "Data específica"; nas outras fica travado. -->
+          <div id="datasEnvioInicioBloco" class="max-w-sm" style="padding-left: 1.75rem">
+            <label for="datasEnvioInicio" class="sr-only">Data de início do faturamento</label>
+            <div class="flex items-center gap-2">
+              <input id="datasEnvioInicio" type="text" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" autocomplete="off" aria-describedby="datasEnvioInicioErro" disabled
+                     class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <span class="relative inline-flex flex-shrink-0">
+                <button id="datasEnvioInicioCalendario" type="button" class="btn-neutral ctl-botao ctl-botao--icone border border-white/10 text-white" title="Escolher no calendário" aria-label="Escolher o início do faturamento no calendário" disabled><i class="fas fa-calendar-alt" aria-hidden="true"></i></button>
+                <input id="datasEnvioInicioNativo" type="date" tabindex="-1" aria-hidden="true" data-no-restore="true"
+                       style="position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0;" />
+              </span>
+            </div>
+            <p id="datasEnvioInicioErro" class="hidden mt-2 text-xs" style="color: var(--color-red)" role="alert"></p>
+          </div>
+        </div>
+
+        <!-- Parcelas: o prazo de cada uma e o vencimento antes e depois. A
+             travada (paga, com boleto ou ordem) não muda. -->
+        <div class="space-y-2">
+          <p class="ctl-rotulo text-gray-300">Parcelas</p>
+          <p id="datasEnvioPreviaTexto" class="text-sm text-white"></p>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr>
+                  <th class="text-left">Parcela</th>
+                  <th class="text-right">Valor</th>
+                  <th class="text-left">Prazo (dias)</th>
+                  <th class="text-left">Vencimento hoje</th>
+                  <th class="text-left">Novo vencimento</th>
+                </tr>
+              </thead>
+              <tbody id="datasEnvioParcelas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="datasEnvioMensagem" class="hidden text-sm" role="alert"></div>
+      </div>
+    </div>
+
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarDatasEnvio" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="salvarDatasEnvio" type="button" data-perm="ped.dates.edit" class="btn-primary ctl-botao min-w-[120px]">Salvar</button>
+    </footer>
+  </div>
+</div>
