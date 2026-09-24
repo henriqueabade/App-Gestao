@@ -611,6 +611,39 @@ test('ajuste manual aparece no painel: o cartão mostra o que falta pagar e o re
   }
 });
 
+test('resumo de comissões: a previsão é só do que vence no mês escolhido, igual ao relatório', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'royalty', percentual: 10, escopo: 'todos' });
+
+    // A parcela 2 (R$ 20.000) só vence em jan/2099. No mês da parcela 1 ela
+    // não pode aparecer como prevista — era o defeito: setembro mostrava a
+    // previsão de outubro enquanto o relatório do mês vinha vazio.
+    const doMes = await t.chamar('GET', `/api/financeiro/painel?competencia=${ant}`);
+    assert.equal(doMes.corpo.resumo_comissoes.previstas, 0, 'nada vence neste mês além do que já foi recebido');
+    assert.deepEqual(doMes.corpo.resumo_comissoes.beneficiarios_previstos, [], 'sem previsão, ninguém em "quem recebe (previsto)"');
+    const relMes = await t.chamar('GET', `/api/financeiro/relatorios/previsao-comissoes?competencia=${ant}`);
+    assert.equal(relMes.corpo.linhas.length, 0, 'o relatório do mesmo mês bate com o card');
+
+    // No mês em que ela vence, aparece: 20% de 20.000.
+    const futuro = await t.chamar('GET', '/api/financeiro/painel?competencia=2099-01');
+    assert.equal(futuro.corpo.resumo_comissoes.previstas, 4000);
+    assert.deepEqual(
+      futuro.corpo.resumo_comissoes.beneficiarios_previstos.map(b => [b.tipo, b.beneficiario, b.valor]).sort(),
+      [['cms', 'Marcia Lamounier', 2000], ['royalty', 'Barral & Lamounier', 2000]]
+    );
+    const relFuturo = await t.chamar('GET', '/api/financeiro/relatorios/previsao-comissoes?competencia=2099-01');
+    assert.equal(relFuturo.corpo.linhas.reduce((s, l) => s + l.comissao, 0), futuro.corpo.resumo_comissoes.previstas,
+      'card e relatório somam o mesmo');
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('atividade: o histórico inteiro do módulo, do mais novo ao mais antigo, com o nome de quem fez', async () => {
   const hoje = hojeBR();
   const ant = mesesAntes(hoje.slice(0, 7), 1);

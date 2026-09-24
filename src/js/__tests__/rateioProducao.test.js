@@ -104,7 +104,9 @@ test('Fechar competência — produção: Nada pronto, Tudo/Nada por peça, inat
 });
 
 test('o "Fechar competência" do modal Produção abre a tela da PRODUÇÃO, e leva ao rateio quando falta distribuir', () => {
-  assert.ok(FONTE.includes("acionar(fecharBtn, () => abrirOutro('fechar-competencia-producao', { competencia: mesSel.value }))"),
+  // `abrirOutro` usa as chaves do mapa de MODAIS (FIN_MODAIS), não as do
+  // mapa de ações: com a chave errada o app só diz "função em implementação".
+  assert.ok(FONTE.includes("acionar(fecharBtn, () => abrirOutro('fechar-producao', { competencia: mesSel.value }))"),
     'antes abria o modal de comissões');
   assert.ok(FONTE.includes("abrirOutro('rateio-producao', { competencia: compSel.value })"), 'tudo confirmado e falta rateio: vai distribuir');
   assert.ok(FONTE.includes('rateio.colaboradores > 0 && rateio.pendentes > 0'), 'só quando o rateio está em uso');
@@ -132,4 +134,28 @@ test('a trava de 100% saiu das comissões e foi para a produção', () => {
 
   assert.ok(CONTROLLER.includes("fechamentos.previa({ api, tipo: 'producao', competencia, hoje, desde })"), 'a rota do rateio lê a produção');
   assert.ok(CONTROLLER.includes("router.post('/rateio/peca'"), 'e o atalho de copiar na peça');
+});
+
+/**
+ * `abrirOutro` chama `window.FinanceiroAbrirModal`, que procura a chave no
+ * mapa de MODAIS. Chave que só existe no mapa de AÇÕES cai no aviso "função
+ * em implementação" — foi o que aconteceu com o "Fechar competência" da tela
+ * de produção em 24/09/2026.
+ */
+test('toda chave usada em abrirOutro existe no mapa de modais', () => {
+  const inicio = MODULO.indexOf('const FIN_MODAIS = {');
+  const fim = MODULO.indexOf('};', inicio);
+  assert.ok(inicio > 0 && fim > inicio);
+  const doMapa = new Set([...MODULO.slice(inicio, fim).matchAll(/'([a-z0-9-]+)':/g)].map(m => m[1]));
+
+  const usadas = new Set([...FONTE.matchAll(/abrirOutro\('([a-z0-9-]+)'/g)].map(m => m[1]));
+  const pasta = path.join(RAIZ, 'html', 'modals', 'financeiro');
+  for (const arquivo of fs.readdirSync(pasta).filter(f => f.endsWith('.html'))) {
+    const html = fs.readFileSync(path.join(pasta, arquivo), 'utf8');
+    for (const m of html.matchAll(/data-fin-abrir="([a-z0-9-]+)"/g)) usadas.add(m[1]);
+  }
+  assert.ok(usadas.size > 0);
+  const semModal = [...usadas].filter(u => !doMapa.has(u));
+  assert.deepStrictEqual(semModal, [], 'estas chaves abririam o aviso de "em implementação"');
+  assert.ok(doMapa.has('rateio-producao') && doMapa.has('fechar-producao'));
 });

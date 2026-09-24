@@ -3637,7 +3637,7 @@
     ['finProdCompPedido', 'finProdCompProduto'].forEach(id => el(id).addEventListener('input', desenhar));
     // O "Fechar competência" daqui é o da PRODUÇÃO: abre a tela de confirmar
     // peça a peça, não a de comissões (defeito que o dono pegou em 24/09/2026).
-    acionar(fecharBtn, () => abrirOutro('fechar-competencia-producao', { competencia: mesSel.value }));
+    acionar(fecharBtn, () => abrirOutro('fechar-producao', { competencia: mesSel.value }));
     acionar(el('finProdCompRelatorio'), () => abrirOutro('visualizar-relatorio', { relatorio: 'producao-competencia', competencia: mesSel.value }));
     aoAlterar(carregar);
     pintarTopo();

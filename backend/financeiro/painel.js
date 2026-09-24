@@ -159,6 +159,16 @@ function pendenciaDoRateio({ visao, competencia, hoje, fechado }) {
   }];
 }
 
+/**
+ * As parcelas previstas que VENCEM na competência do painel. A lista de
+ * `visoes` traz todas as a receber, de qualquer mês: sem este filtro o card de
+ * setembro somava a previsão de outubro (e o relatório "Previsão de comissões"
+ * do mesmo mês, que já filtrava, aparecia vazio). Pura.
+ */
+function previstasDaCompetencia(previstas, competencia) {
+  return (previstas || []).filter(p => String(p.vencimento || '').startsWith(competencia));
+}
+
 async function carregar({ api, competencia, hoje, desde }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   const [dc, prod, recentes, daDevolucao] = await Promise.all([
@@ -169,6 +179,7 @@ async function carregar({ api, competencia, hoje, desde }) {
   ]);
   const { b, estado: estadoC, apuradas, resumo } = dc;
   const v = comissoes.visoes(apuradas);
+  const previstasDoMes = previstasDaCompetencia(v.previstas, comp);
   const prodComp = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp });
   // O rateio é da PRODUÇÃO e nunca derruba o painel: sem o SQL da fase,
   // `lerVisao` devolve `sql_pendente` e nada aparece.
@@ -197,7 +208,9 @@ async function carregar({ api, competencia, hoje, desde }) {
       pago_em: prodComp.fechamento?.pagamento ? c.dia(prodComp.fechamento.pagamento.data_pagamento) : null
     },
     resumo_comissoes: {
-      previstas: comissoes.soma(v.previstas, p => p.potencial.total),
+      // Só o que vence no mês escolhido — o mesmo recorte do relatório
+      // "Previsão de comissões" que o "Ver detalhes" abre.
+      previstas: comissoes.soma(previstasDoMes, p => p.potencial.total),
       apuradas: resumo.comissao,
       atrasadas: comissoes.soma(v.atrasadas, p => p.potencial.total),
       ajustes: resumo.ajustes,
@@ -209,7 +222,7 @@ async function carregar({ api, competencia, hoje, desde }) {
       // Quem recebe o quê (CMS e Royalty, por pessoa): a tela mostra com
       // etiqueta colorida e legenda, e o pagamento pode ser feito por pessoa.
       beneficiarios: resumo.beneficiarios || [],
-      beneficiarios_previstos: [...comissoes.somarBeneficiarios(v.previstas.map(p => p.potencial.beneficiarios)).values()]
+      beneficiarios_previstos: [...comissoes.somarBeneficiarios(previstasDoMes.map(p => p.potencial.beneficiarios)).values()]
         .sort((a, b) => Number(b.valor) - Number(a.valor)),
       pago: resumo.fechamento?.pago ?? 0,
       falta_pagar: resumo.fechamento ? resumo.fechamento.falta_pagar : null
@@ -241,4 +254,4 @@ async function carregar({ api, competencia, hoje, desde }) {
   };
 }
 
-module.exports = { instanteBR, pedidosParciais, pendencias, carregar };
+module.exports = { instanteBR, pedidosParciais, pendencias, previstasDaCompetencia, carregar };
