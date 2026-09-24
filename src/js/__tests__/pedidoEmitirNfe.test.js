@@ -65,7 +65,7 @@ test('mais de um volume: uma linha por volume, guardando o que já foi digitado;
 
 test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/NF roxa; a nota que conta por pedido', () => {
   const contexto = vm.createContext({});
-  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota'), recortarFuncao(PEDIDOS, 'indexarNotas'), recortarFuncao(PEDIDOS, 'tagCartaCorrecao'), recortarFuncao(PEDIDOS, 'tagNota'), recortarFuncao(PEDIDOS, 'tagNotaDeFora'), recortarFuncao(PEDIDOS, 'indexarNotasDeFora')].join('\n'), contexto);
+  vm.runInContext([recortarFuncao(PEDIDOS, 'formatarDiaDate'), recortarFuncao(PEDIDOS, 'tagSemNota'), recortarFuncao(PEDIDOS, 'indexarNotas'), recortarFuncao(PEDIDOS, 'tagCartaCorrecao'), recortarFuncao(PEDIDOS, 'tagNota'), recortarFuncao(PEDIDOS, 'tagCartaCorrecaoDeFora'), recortarFuncao(PEDIDOS, 'tagNotaDeFora'), recortarFuncao(PEDIDOS, 'indexarNotasDeFora')].join('\n'), contexto);
   const { indexarNotas, tagNota, tagCartaCorrecao, indexarNotasDeFora } = contexto;
 
   // NF-e emitida FORA e informada: tag azul "NF fora" (sem DANFE); vence a S/NF e a cancelada daqui.
@@ -338,7 +338,7 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(f({ nfe_dispensada: true }, [])), [{ classe: 'badge-neutral', texto: 'Sem nota fiscal' }]);
   assert.strictEqual(plano(f({ nfe_dispensada: true }, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }]))[0].texto, 'NF-e 1/1 · autorizada', 'com nota autorizada a marca "sem nota" não aparece');
   assert.strictEqual(plano(f({}, [{ id: 1, serie: 1, numero: 2, status_fiscal: 'processando' }]))[0].classe, 'badge-warning');
-  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, notaDocs ? cartas.length : cartasDeFora, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));'));
+  assert.ok(VISUALIZAR.includes('/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}') && VISUALIZAR.includes('notaDocs ? cartas.length : cartasDeFora.length,'));
   assert.deepStrictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 2)).map(t => t.texto), ['NF-e 1/1 · autorizada', 'CC-e ×2'], 'as cartas de correção viram tag');
   assert.strictEqual(plano(f({}, [{ id: 9, serie: 1, numero: 1, status_fiscal: 'autorizada' }], 1)).at(-1).texto, 'CC-e 1');
   assert.strictEqual(plano(f({}, [], 3)).length, 0, 'sem nota, sem tag de carta');
@@ -347,7 +347,7 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 3, pagos: 1 })), [{ classe: 'badge-success', texto: 'Boletos 3/3 · 1 pago' }]);
   assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 0 })), []);
   assert.deepStrictEqual(plano(f({}, [], 0, null)), []);
-  assert.ok(VISUALIZAR.includes('/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos') && VISUALIZAR.includes('pintarTags(tagsDoEmbarque(data, notas, notaDocs ? cartas.length : cartasDeFora, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));'));
+  assert.ok(VISUALIZAR.includes('/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos') && VISUALIZAR.includes('notaDocs ? cartas.length : cartasDeFora.length,'));
   assert.ok(VISUALIZAR.includes('pintarColunaDeBoletos(pagamentoBox, detalhes, boletosEstado);') && VISUALIZAR.includes("th.textContent = 'BOLETO';"), 'a coluna BOLETO entra na tabela de parcelas, por createElement');
   assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/gerar-boletos.html', '../js/modals/pedido-gerar-boletos.js', 'gerarBoletos')"), 'Gerar boletos abre por cima do Visualizar');
   assert.ok(/id="visualizarPedidoGerarBoletos"[^>]*data-perm="financeiro\.boleto\.emit"[^>]*class="hidden/.test(HTML_VIS), 'o botão "Gerar boletos" nasce escondido, com a guarda escrita');

@@ -101,6 +101,13 @@ tela avisa e nada quebra.
 - **DANFE e XML** aparecem no modal "NF-e e boletos de fora" e, no Visualizar
   pedido, nos **mesmos botões** da nota daqui — ou o pedido tem nota própria,
   ou tem a de fora, nunca as duas.
+- **As etiquetas geram os documentos** (pedido do dono, 24/09/2026), como a
+  tag verde "DANFE" da lista sempre fez: a azul **"NF fora"** (lista) e a
+  **"NF-e …· de fora"** (Visualizar) geram o DANFE; a amarela **"CC-e"** gera
+  o PDF da **última** carta. Continuam sendo etiquetas — ganham só
+  `role="button"`, cursor e teclado. **Sem o XML da nota anexado elas não
+  clicam**, e o título diz o que falta. No Visualizar, a etiqueta da nota
+  daqui (autorizada ou cancelada) também passou a gerar o DANFE.
 - **Cartas de correção**: uma por sequência (1 a 20, como a SEFAZ). Entram
   pelo **XML do evento** (`procEventoNFe`, que preenche tudo e confere o
   `cStat` 135/136 e a chave) ou **à mão** (sequência, texto de 15 a 1000,

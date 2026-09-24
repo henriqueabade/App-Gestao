@@ -161,13 +161,40 @@ function tagNota(p, nota, notaDeFora = null) {
 }
 
 /**
- * Tag azul "NF fora": a NF-e foi emitida fora do sistema e só os dados foram
- * informados (pedido-dados-externos.js) — não há DANFE aqui. Pura; '' sem nota.
+ * Tag amarela "CC-e" da nota de FORA, na frente da "NF fora": com o XML da
+ * nota anexado o clique gera o PDF da última carta, como nas notas daqui.
+ * Sem o XML a tag continua aparecendo (o registro existe), só não clica.
+ * Pura; '' sem carta.
+ */
+function tagCartaCorrecaoDeFora(nota) {
+    const total = Number(nota?.cartas_correcao) || 0;
+    if (!nota || total <= 0) return '';
+    const seq = Number(nota.ultima_carta_seq) || total;
+    const quantas = total === 1 ? '1 carta de correção registrada' : `${total} cartas de correção registradas`;
+    if (!nota.tem_xml) {
+        const semXml = `${quantas} na NF-e de fora série ${Number(nota.serie) || 0} nº ${Number(nota.numero) || 0} — anexe o XML da nota para gerar o PDF`;
+        return ` <span class="badge-warning ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${semXml}" aria-label="${semXml}">CC-e</span>`;
+    }
+    const titulo = `${quantas} na NF-e de fora série ${Number(nota.serie) || 0} nº ${Number(nota.numero) || 0} — clique para gerar o PDF da última (nº ${seq})`;
+    return ` <span class="badge-warning tag-cce-fora ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-pedido-id="${Number(nota.pedido_id)}" data-carta-seq="${seq}" role="button" title="${titulo}" aria-label="${titulo}">CC-e</span>`;
+}
+
+/**
+ * Tag azul "NF fora": a NF-e foi emitida fora do sistema e informada aqui.
+ * Com o XML da nota anexado ela vira BOTÃO e gera o DANFE, como a tag verde
+ * das notas daqui (pedido do dono, 24/09/2026); sem o XML, continua só
+ * marcando que a nota existe. Pura; '' sem nota.
  */
 function tagNotaDeFora(nota) {
     if (!nota) return '';
-    const titulo = `NF-e série ${Number(nota.serie) || 0} nº ${Number(nota.numero) || 0} emitida fora do sistema (dados informados)`;
-    return ` <span class="badge-info ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
+    const serie = Number(nota.serie) || 0;
+    const numero = Number(nota.numero) || 0;
+    if (!nota.tem_xml) {
+        const titulo = `NF-e série ${serie} nº ${numero} emitida fora do sistema (dados informados) — anexe o XML da nota para gerar o DANFE`;
+        return `${tagCartaCorrecaoDeFora(nota)} <span class="badge-info ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
+    }
+    const titulo = `NF-e série ${serie} nº ${numero} emitida fora do sistema — clique para gerar o DANFE`;
+    return `${tagCartaCorrecaoDeFora(nota)} <span class="badge-info tag-danfe-fora ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-pedido-id="${Number(nota.pedido_id)}" role="button" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
 }
 
 /** As notas de fora vivas, por pedido. Pura. */
@@ -509,6 +536,16 @@ async function carregarPedidos() {
             tr.querySelector('.tag-cce')?.addEventListener('click', e => {
                 e.stopPropagation();
                 window.NfeDocumentos?.gerarCartaCorrecaoPdf(Number(e.currentTarget.dataset.notaId), Number(e.currentTarget.dataset.cartaSeq));
+            });
+            // As mesmas duas para a nota emitida FORA, que é achada pelo
+            // PEDIDO (é uma por pedido) e só com o XML dela anexado.
+            tr.querySelector('.tag-danfe-fora')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarDanfeExterna(Number(e.currentTarget.dataset.pedidoId));
+            });
+            tr.querySelector('.tag-cce-fora')?.addEventListener('click', e => {
+                e.stopPropagation();
+                window.NfeDocumentos?.gerarCartaExternaPdf(Number(e.currentTarget.dataset.pedidoId), Number(e.currentTarget.dataset.cartaSeq));
             });
             const checkIcon = tr.querySelector('.fa-check');
             const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };

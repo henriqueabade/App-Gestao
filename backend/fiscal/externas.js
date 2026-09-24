@@ -289,10 +289,34 @@ async function lerPedido(api, pedidoId) {
   return pedido;
 }
 
-/** As notas de fora vivas (todas, ou só as de um pedido), sem o que não interessa à tela. */
+/** Quantas cartas de correção cada nota de fora tem, e a última sequência. Pura. */
+function cartasPorNotaDeFora(eventos) {
+  const porNota = {};
+  for (const e of Array.isArray(eventos) ? eventos : []) {
+    if (!e || !ativo(e.ativo) || String(e.tipo || 'cce') !== 'cce') continue;
+    const seq = Number(e.sequencia) || 1;
+    const chave = String(e.nota_externa_id);
+    const atual = porNota[chave] || { cartas_correcao: 0, ultima_carta_seq: 0 };
+    porNota[chave] = { cartas_correcao: atual.cartas_correcao + 1, ultima_carta_seq: Math.max(atual.ultima_carta_seq, seq) };
+  }
+  return porNota;
+}
+
+/**
+ * As notas de fora vivas (todas, ou só as de um pedido), sem o XML e com a
+ * contagem de cartas de correção — os mesmos campos que a lista de pedidos já
+ * usa nas notas daqui (`emissao.listarNotas`), para a tag sair igual.
+ */
 async function listarNotas(api, { pedidoId = null } = {}) {
   const query = pedidoId ? { pedido_id: Number(pedidoId) } : {};
-  return (await lerSePuder(api, 'notas_fiscais_externas', query)).filter(n => ativo(n.ativo));
+  const [notas, eventos] = await Promise.all([
+    lerSePuder(api, 'notas_fiscais_externas', query),
+    lerSePuder(api, 'notas_fiscais_externas_eventos', {})
+  ]);
+  const cartas = cartasPorNotaDeFora(eventos);
+  return notas.filter(n => ativo(n.ativo))
+    .map(notaParaTela)
+    .map(n => ({ ...n, ...(cartas[String(n.id)] || { cartas_correcao: 0, ultima_carta_seq: null }) }));
 }
 
 /**
@@ -685,5 +709,5 @@ module.exports = {
   vencimentoDoFator, linhaImpressa, lerLinhaDigitavel, conferirBoleto, pedidoSaiu, pedidoCancelado,
   boletoExternoDaParcela, boletoParaTela, tabelaAusente,
   listarNotas, estadoDaNota, informarNota, removerNota, listarBoletos, informarBoletos, removerBoleto,
-  lerCartaCorrecaoXml, cartaParaTela, notaParaTela, anexarXmlDaNota, xmlDaNota, listarCartas, informarCarta, lerCarta, removerCarta
+  lerCartaCorrecaoXml, cartaParaTela, notaParaTela, cartasPorNotaDeFora, anexarXmlDaNota, xmlDaNota, listarCartas, informarCarta, lerCarta, removerCarta
 };

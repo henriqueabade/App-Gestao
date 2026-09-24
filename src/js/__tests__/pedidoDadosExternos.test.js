@@ -175,6 +175,66 @@ test('nota de fora: anexar o XML libera DANFE e XML, e a tela avisa quando ele f
   assert.ok(VISUALIZAR.includes('window.NfeDocumentos?.gerarDanfeExterna?.(id)') && VISUALIZAR.includes('window.NfeDocumentos?.salvarXmlExterna?.(id)'));
 });
 
+/**
+ * A etiqueta da nota de fora é um BOTÃO quando dá para gerar o documento
+ * (pedido do dono, 24/09/2026): "como nas outras". Sem o XML anexado ela
+ * continua só marcando que a nota existe — e o título diz o que falta.
+ */
+test('lista de pedidos: a tag "NF fora" gera o DANFE e a "CC-e" gera a carta, quando há XML', () => {
+  const PEDIDOS = ler('js', 'pedidos.js');
+  const tagNotaDeFora = recortar(PEDIDOS, 'tagNotaDeFora', textoDaFuncao(PEDIDOS, 'tagCartaCorrecaoDeFora'));
+
+  const semXml = tagNotaDeFora({ pedido_id: 58, serie: 2, numero: 700, tem_xml: false });
+  assert.match(semXml, />NF fora<\/span>/);
+  assert.ok(!semXml.includes('tag-danfe-fora'), 'sem XML não clica');
+  assert.match(semXml, /anexe o XML da nota para gerar o DANFE/);
+
+  const comXml = tagNotaDeFora({ pedido_id: 58, serie: 2, numero: 700, tem_xml: true });
+  assert.match(comXml, /badge-info tag-danfe-fora/);
+  assert.match(comXml, /data-pedido-id="58"/);
+  assert.match(comXml, /role="button"/);
+  assert.match(comXml, /clique para gerar o DANFE/);
+
+  const comCarta = tagNotaDeFora({ pedido_id: 58, serie: 2, numero: 700, tem_xml: true, cartas_correcao: 2, ultima_carta_seq: 2 });
+  assert.match(comCarta, /badge-warning tag-cce-fora/);
+  assert.match(comCarta, /data-carta-seq="2"/);
+  assert.ok(comCarta.indexOf('CC-e') < comCarta.indexOf('NF fora'), 'a CC-e vem antes, como nas notas daqui');
+  const cartaSemXml = tagNotaDeFora({ pedido_id: 58, serie: 2, numero: 700, tem_xml: false, cartas_correcao: 1 });
+  assert.match(cartaSemXml, />CC-e<\/span>/);
+  assert.ok(!cartaSemXml.includes('tag-cce-fora'), 'sem o XML da nota, a carta aparece mas não gera PDF');
+
+  assert.ok(PEDIDOS.includes('window.NfeDocumentos?.gerarDanfeExterna(Number(e.currentTarget.dataset.pedidoId))'));
+  assert.ok(PEDIDOS.includes('window.NfeDocumentos?.gerarCartaExternaPdf(Number(e.currentTarget.dataset.pedidoId), Number(e.currentTarget.dataset.cartaSeq))'));
+});
+
+test('visualizar pedido: as etiquetas de nota e de CC-e geram os documentos ao clicar', () => {
+  const tags = recortar(VISUALIZAR, 'tagsDoEmbarque');
+  const achar = (lista, pedaco) => lista.find(t => String(t.texto).includes(pedaco));
+
+  const daqui = plano(tags({ situacao: 'Enviado' }, [{ id: 1, serie: 2, numero: 9, status_fiscal: 'autorizada', valor_total: 1500 }], 2, null, [], null, 2));
+  assert.strictEqual(achar(daqui, 'NF-e 2/9').acao, 'danfe');
+  assert.strictEqual(achar(daqui, 'CC-e').acao, 'cce');
+  assert.strictEqual(achar(daqui, 'CC-e').seq, 2, 'o PDF é o da última carta');
+  const processando = plano(tags({}, [{ id: 1, serie: 2, numero: 9, status_fiscal: 'processando' }]));
+  assert.strictEqual(achar(processando, 'NF-e 2/9').acao, null, 'nota sem DANFE não vira botão');
+
+  const deFora = { serie: 2, numero: 700, valor_total: 1500, tem_xml: true };
+  const fora = plano(tags({ situacao: 'Enviado' }, [], 1, null, [], deFora, 1));
+  assert.strictEqual(achar(fora, 'de fora').acao, 'danfe-fora');
+  assert.strictEqual(achar(fora, 'CC-e').acao, 'cce-fora');
+
+  const foraSemXml = plano(tags({ situacao: 'Enviado' }, [], 1, null, [], { ...deFora, tem_xml: false }, 1));
+  assert.strictEqual(achar(foraSemXml, 'de fora').acao, null);
+  assert.strictEqual(achar(foraSemXml, 'CC-e').acao, null, 'sem o XML, a CC-e não gera PDF');
+  assert.match(achar(foraSemXml, 'de fora').titulo, /Anexe o XML/);
+
+  // `pintarTags` transforma a marca em clique, sem deixar de ser etiqueta.
+  assert.ok(VISUALIZAR.includes("'danfe-fora': () => window.NfeDocumentos?.gerarDanfeExterna?.(id)"));
+  assert.ok(VISUALIZAR.includes("'cce-fora': t => window.NfeDocumentos?.gerarCartaExternaPdf?.(id, t.seq)"));
+  assert.ok(VISUALIZAR.includes("s.setAttribute('role', 'button')") && VISUALIZAR.includes("s.classList.add('cursor-pointer')"));
+  assert.ok(VISUALIZAR.includes("if (e.key !== 'Enter' && e.key !== ' ') return;"), 'teclado também');
+});
+
 test('cartas de correção de fora: pelo XML do evento ou à mão, sempre, com PDF e remoção', () => {
   for (const id of ['dadosExternosCartas', 'dadosExternosCartasLista', 'dadosExternosCartasTag', 'cartaExternaXml',
     'escolherXmlCartaExterna', 'cartaExternaSequencia', 'cartaExternaProtocolo', 'cartaExternaData', 'cartaExternaTexto', 'gravarCartaExterna']) {

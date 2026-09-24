@@ -24,6 +24,12 @@
   // ------------------------------------------------------------------
   const COLUNAS_DATE = new Set(['data_aprovacao', 'embarcar_real', 'embarcar_previsao', 'inicio_faturamento', 'data_devolucao']);
 
+  /**
+   * A nota (daqui) que tem DANFE, guardada para as etiquetas clicáveis do
+   * rodapé — `pintarTags` roda depois da leitura e precisa do id dela.
+   */
+  let notaDocumentos = null;
+
   function diaDeColunaDate(valor) {
     if (valor === null || valor === undefined) return null;
     const achado = /^(\d{4}-\d{2}-\d{2})/.exec(String(valor).trim());
@@ -80,7 +86,7 @@
   // Tags do rodapé: NF-e (ou "sem nota fiscal"), frete, volumes e pesos —
   // o que foi informado no embarque. Pura e autocontida: o teste a recorta.
   // ------------------------------------------------------------------
-  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null, notasDevolucao = [], notaExterna = null) {
+  function tagsDoEmbarque(pedido, notas, cartas = 0, boletos = null, notasDevolucao = [], notaExterna = null, ultimaCarta = 0) {
     const ROTULO_FRETE = { 0: 'CIF (emitente)', 1: 'FOB (destinatário)', 2: 'terceiros', 3: 'próprio (emitente)', 4: 'próprio (destinatário)', 9: 'sem frete' };
     const STATUS_NF = {
       autorizada: ['badge-success', 'autorizada'], processando: ['badge-warning', 'em processamento'], enviando: ['badge-warning', 'enviada'],
@@ -96,21 +102,44 @@
     if (nota) {
       const [classe, rotulo] = STATUS_NF[nota.status_fiscal] || ['badge-neutral', String(nota.status_fiscal || '')];
       const valor = Number(nota.valor_total);
+      // Autorizada ou cancelada tem DANFE: a etiqueta gera, como na lista.
+      const temDanfe = ['autorizada', 'cancelada'].includes(String(nota.status_fiscal));
       tags.push({
         classe,
-        texto: `NF-e ${nota.serie}/${nota.numero} · ${rotulo}${Number.isFinite(valor) && valor > 0 ? ` · ${brl(valor)}` : ''}${nota.ambiente === 'homologacao' ? ' · homologação' : ''}`
+        texto: `NF-e ${nota.serie}/${nota.numero} · ${rotulo}${Number.isFinite(valor) && valor > 0 ? ` · ${brl(valor)}` : ''}${nota.ambiente === 'homologacao' ? ' · homologação' : ''}`,
+        acao: temDanfe ? 'danfe' : null,
+        titulo: temDanfe ? 'Clique para gerar o DANFE desta nota' : ''
       });
     } else if (notaExterna) {
-      // A NF-e emitida fora e informada (só os dados): vence o "Sem nota fiscal".
+      // A NF-e emitida fora e informada: vence o "Sem nota fiscal". Com o XML
+      // dela anexado, a etiqueta vira BOTÃO e gera o DANFE — como a da nota
+      // daqui (pedido do dono, 24/09/2026).
       const valorDeFora = Number(notaExterna.valor_total);
-      tags.push({ classe: 'badge-info', texto: `NF-e ${Number(notaExterna.serie) || 0}/${Number(notaExterna.numero) || 0} · de fora${Number.isFinite(valorDeFora) && valorDeFora > 0 ? ` · ${brl(valorDeFora)}` : ''}` });
+      tags.push({
+        classe: 'badge-info',
+        texto: `NF-e ${Number(notaExterna.serie) || 0}/${Number(notaExterna.numero) || 0} · de fora${Number.isFinite(valorDeFora) && valorDeFora > 0 ? ` · ${brl(valorDeFora)}` : ''}`,
+        acao: notaExterna.tem_xml ? 'danfe-fora' : null,
+        titulo: notaExterna.tem_xml ? 'Clique para gerar o DANFE desta nota' : 'Anexe o XML da nota em "NF-e e boletos de fora" para gerar o DANFE'
+      });
     } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
       tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
     }
     // As cartas de correção contam para a nota daqui e para a de fora: nos
-    // dois casos é o mesmo documento, registrado num lugar ou no outro.
+    // dois casos é o mesmo documento, registrado num lugar ou no outro. A
+    // etiqueta gera o PDF da ÚLTIMA carta (é ela que vale).
     const totalCartas = Number(cartas) || 0;
-    if ((nota || notaExterna) && totalCartas > 0) tags.push({ classe: 'badge-info', texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}` });
+    const seqCarta = Number(ultimaCarta) || totalCartas;
+    if ((nota || notaExterna) && totalCartas > 0) {
+      const deFora = !nota && Boolean(notaExterna);
+      const podePdf = deFora ? Boolean(notaExterna?.tem_xml) : true;
+      tags.push({
+        classe: 'badge-info',
+        texto: totalCartas === 1 ? 'CC-e 1' : `CC-e ×${totalCartas}`,
+        acao: podePdf ? (deFora ? 'cce-fora' : 'cce') : null,
+        seq: seqCarta,
+        titulo: podePdf ? `Clique para gerar o PDF da carta de correção nº ${seqCarta}` : 'Anexe o XML da nota para gerar o PDF da carta'
+      });
+    }
     // Devolução (roxo): o que voltou e a nota que o cliente emitiu.
     const devolvido = Number(p.valor_devolvido);
     if (p.devolucao && devolvido > 0) tags.push({ classe: 'badge-purple', texto: `${p.devolucao === 'total' ? 'Devolvido' : 'Devolução parcial'} · ${brl(devolvido)}` });
@@ -249,14 +278,42 @@
     return null;
   }
 
+  /**
+   * As etiquetas do rodapé. A que `tagsDoEmbarque` marcou com `acao` vira
+   * clicável — mesmo desenho de etiqueta (o dono não aceita que virem botão
+   * de verdade), mas com papel de botão, teclado e cursor, como a tag verde
+   * "DANFE" da lista de pedidos.
+   */
   function pintarTags(tags) {
     const caixa = overlay.querySelector('#visualizarPedidoTagsLista') || overlay.querySelector('#visualizarPedidoTags');
     if (!caixa) return;
+    const notaId = () => notaDocumentos?.id || null;
+    const ACOES = {
+      danfe: () => window.NfeDocumentos?.gerarDanfe?.(notaId()),
+      cce: t => window.NfeDocumentos?.gerarCartaCorrecaoPdf?.(notaId(), t.seq),
+      'danfe-fora': () => window.NfeDocumentos?.gerarDanfeExterna?.(id),
+      'cce-fora': t => window.NfeDocumentos?.gerarCartaExternaPdf?.(id, t.seq)
+    };
     caixa.replaceChildren();
     for (const t of tags) {
       const s = document.createElement('span');
       s.className = `${t.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       s.textContent = t.texto;
+      if (t.titulo) s.title = t.titulo;
+      const acao = t.acao ? ACOES[t.acao] : null;
+      if (acao) {
+        s.classList.add('cursor-pointer');
+        s.setAttribute('role', 'button');
+        s.setAttribute('tabindex', '0');
+        const disparar = () => acao(t);
+        if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(s, disparar);
+        else s.addEventListener('click', disparar);
+        s.addEventListener('keydown', e => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          disparar();
+        });
+      }
       caixa.appendChild(s);
     }
   }
@@ -797,6 +854,7 @@
       if (respNotas.ok) notas = await respNotas.json();
     } catch (_) { /* sem notas, sem tag */ }
     const notaDocs = notaParaDocumentos(notas);
+    notaDocumentos = notaDocs;
     const cartas = notaDocs && window.NfeDocumentos?.listarCartasCorrecao ? await window.NfeDocumentos.listarCartasCorrecao(notaDocs.id) : [];
     // Boletos das parcelas (cobrança BB): sem permissão (403) ou sem a cobrança configurada, fica tudo como era.
     let boletosEstado = null;
@@ -814,16 +872,23 @@
     }
     // A NF-e emitida fora e informada: sem permissão ou sem o SQL, fica como era.
     let notaExterna = null;
-    let cartasDeFora = 0;
+    let cartasDeFora = [];
     try {
       const respExt = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa`);
       if (respExt.ok) notaExterna = (await respExt.json())?.nota_externa || null;
       if (notaExterna) {
         const respCartas = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa/cartas`);
-        if (respCartas.ok) cartasDeFora = ((await respCartas.json())?.cartas || []).length;
+        if (respCartas.ok) cartasDeFora = (await respCartas.json())?.cartas || [];
       }
     } catch (_) { /* sem nota de fora */ }
-    pintarTags(tagsDoEmbarque(data, notas, notaDocs ? cartas.length : cartasDeFora, resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna));
+    // A etiqueta CC-e gera o PDF da ÚLTIMA carta: é ela que vale.
+    const ultimaSeq = lista => Math.max(0, ...(lista || []).map(c => Number(c.nSeqEvento ?? c.sequencia) || 0));
+    pintarTags(tagsDoEmbarque(
+      data, notas,
+      notaDocs ? cartas.length : cartasDeFora.length,
+      resumoDeBoletos(boletosEstado), notasDevolucao, notaExterna,
+      ultimaSeq(notaDocs ? cartas : cartasDeFora)
+    ));
     ligarBotoesDoPedido(data, clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '', notas);
     ligarDocumentosDaNota(notaDocs, data);
     // Sem nota daqui, quem manda nos botões DANFE/XML é a nota de fora.
