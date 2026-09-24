@@ -177,6 +177,29 @@ function saldosAnteriores(estado) {
   }));
 }
 
+/**
+ * Peças e processos são números DIFERENTES, e confundi-los é o defeito que o
+ * dono pegou em 24/09/2026: uma peça que passa por marcenaria, acabamento,
+ * montagem e embalagem paga 4 linhas — são 4 processos, mas **uma peça**.
+ *
+ *   `pecas`     peças distintas (pela linha do pedido);
+ *   `processos` pares peça+processo (o que de fato se paga);
+ *   `unidades`  a soma das quantidades (era o que `pecas` contava antes).
+ * Pura.
+ */
+function contarPecasEProcessos(linhas) {
+  const pecas = new Set();
+  const processos = new Set();
+  let unidades = 0;
+  for (const l of (linhas || []).filter(Boolean)) {
+    unidades += Number(l.quantidade) || 0;
+    if (l.pedido_item_id === null || l.pedido_item_id === undefined) continue;
+    pecas.add(String(l.pedido_item_id));
+    if (l.setor_id !== null && l.setor_id !== undefined) processos.add(`${l.pedido_item_id}:${l.setor_id}`);
+  }
+  return { pecas: pecas.size, processos: processos.size, unidades };
+}
+
 /** Totais de uma lista de linhas de produção: peças, por processo, a pagar e a compensar. Pura. */
 function resumir(linhas) {
   const porSetor = new Map();
@@ -188,8 +211,13 @@ function resumir(linhas) {
     porSetor.set(k, s);
   }
   const setores = [...porSetor.values()].sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR'));
+  const contagem = contarPecasEProcessos(linhas);
   return {
-    pecas: linhas.reduce((s, l) => s + (Number(l.quantidade) || 0), 0),
+    // `pecas` passou a ser a contagem de PEÇAS (era a soma das quantidades,
+    // que virou `unidades`): "8 peças finalizadas" eram 2 peças × 4 processos.
+    pecas: contagem.pecas,
+    processos: contagem.processos,
+    unidades: contagem.unidades,
     pedidos: new Set(linhas.filter(l => l.pedido_id).map(l => String(l.pedido_id))).size,
     setores,
     liquido: c.centavos(linhas.reduce((s, l) => s + Number(l.total || 0), 0)),
@@ -451,7 +479,7 @@ async function estornar({ api, id, motivo, usuarioId = null, hoje }) {
 }
 
 module.exports = {
-  SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas, saldosAnteriores, resumir, montarCompetencia,
+  SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas, saldosAnteriores, resumir, contarPecasEProcessos, montarCompetencia,
   lerBase, pedidosParaProduzir, doPedido, valorDasProximas, registrar, estornar,
   // A confirmação da produção (producaoConfirmacao.js) monta as filas do mesmo jeito.
   itensDe, extDe, precosDaTabela, montarFilas, chaveItemSetor

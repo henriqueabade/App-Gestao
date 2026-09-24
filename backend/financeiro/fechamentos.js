@@ -28,6 +28,7 @@ const confirmacao = require('./producaoConfirmacao');
 const auditoria = require('./auditoria');
 const base = require('./base');
 const rateios = require('./rateios');
+const { contarPecasEProcessos } = require('./producao');
 
 const TIPOS = { comissao: 'Comissões', producao: 'Produção' };
 const FORMAS_PAGAMENTO = ['Pix', 'Transferência', 'Depósito', 'Dinheiro', 'Cheque', 'Outro'];
@@ -60,9 +61,6 @@ function conferir({ tipo, competencia, estado, hoje, extra = {} }) {
     if (extra.fila) avisos.push(`${c.plural(extra.fila, 'aviso de pagamento do BB está', 'avisos de pagamento do BB estão')} na fila: concilie antes, para não ficar pagamento de fora.`);
     if (extra.semRegra) avisos.push(`${c.plural(extra.semRegra, 'parcela recebida não tem', 'parcelas recebidas não têm')} regra de CMS/Royalty: entram com comissão zero.`);
     if (extra.sqlRecebimentos) bloqueios.push('Os recebimentos ainda não estão ativados (sql/cobranca_recebimentos.sql).');
-    // O rateio entre colaboradores só trava quando está em uso (há gente
-    // cadastrada). A mensagem já vem pronta de rateios.bloqueioDoFechamento.
-    if (extra.rateio) bloqueios.push(extra.rateio);
   } else {
     if (extra.semValor?.length) {
       const nomes = [...new Set(extra.semValor.map(l => `${l.produto} (${l.setor})`))].slice(0, 5);
@@ -74,6 +72,9 @@ function conferir({ tipo, competencia, estado, hoje, extra = {} }) {
       const nomes = extra.semDecisao.slice(0, 8);
       bloqueios.push(`Falta confirmar a produção de ${c.plural(extra.semDecisao.length, 'pedido', 'pedidos')}: ${nomes.join(', ')}${extra.semDecisao.length > 8 ? '…' : ''}. Abra "Fechar competência — produção" e diga, em cada peça, o que ficou pronto.`);
     }
+    // O rateio entre colaboradores só trava quando está em uso (há gente
+    // cadastrada). A mensagem já vem pronta de rateios.bloqueioDoFechamento.
+    if (extra.rateio) bloqueios.push(extra.rateio);
   }
   return { bloqueios, avisos };
 }
@@ -98,23 +99,15 @@ async function previa({ api, tipo, competencia, hoje, desde }) {
     const nomes = await base.nomesDosClientes(api, resumo.itens.map(i => i.cliente_id));
     const semRegra = apuradas.filter(a => a.sem_regra && a.pendentes.some(i => i.tipo_item === 'parcela' && i.competencia <= competencia)).length;
     const itens = resumo.itens.map(i => ({ ...i, cliente: i.cliente || nomes.get(String(i.cliente_id)) || null }));
-    // Rateio entre colaboradores (fase de 24/09/2026): sem o SQL, ou sem
-    // ninguém cadastrado, não bloqueia nada — o Financeiro segue como era.
-    const rateio = resumo.fechado ? null : await rateios.lerVisao({ api, itens }).catch(() => null);
     const conf = conferir({
       tipo, competencia, estado, hoje,
       extra: {
         aLancar: apuradas.filter(p => p.lancamento_pendente).length, fila: b.receber.fila,
-        semRegra: resumo.fechado ? 0 : semRegra, sqlRecebimentos: b.receber.sqlPendente,
-        rateio: rateio?.bloqueio || null
+        semRegra: resumo.fechado ? 0 : semRegra, sqlRecebimentos: b.receber.sqlPendente
       }
     });
     return {
       tipo, competencia, ...resumo, itens,
-      rateio: rateio ? {
-        sql_pendente: rateio.sql_pendente, colaboradores: rateio.colaboradores.length,
-        pecas: rateio.pecas.length, pendentes: rateio.pendentes, resumo: rateio.resumo
-      } : null,
       pagar_ate: resumo.fechamento?.pagar_ate || calendario.pagarComissaoAte(competencia, b.regras.configuracao),
       proxima: estado.proxima, ...conf, pode_fechar: !resumo.fechado && conf.bloqueios.length === 0
     };
@@ -123,9 +116,22 @@ async function previa({ api, tipo, competencia, hoje, desde }) {
   const comp = producao.montarCompetencia({ pend: p.pend, estado: p.estado, competencia });
   // Sem o SQL da confirmação, segue como antes (nada a confirmar).
   const semDecisao = comp.fechado ? [] : await confirmacao.pedidosSemDecisao(api, { competencia, hoje }).catch(() => []);
-  const conf = conferir({ tipo, competencia, estado: p.estado, hoje, extra: { semValor: comp.fechado ? [] : comp.sem_valor, semDecisao } });
+  // Rateio entre colaboradores (24/09/2026): sem o SQL, ou sem ninguém
+  // cadastrado, não bloqueia nada — a produção fecha como sempre fechou.
+  const rateio = comp.fechado ? null : await rateios.lerVisao({ api, linhas: comp.linhas }).catch(() => null);
+  const conf = conferir({
+    tipo, competencia, estado: p.estado, hoje,
+    extra: { semValor: comp.fechado ? [] : comp.sem_valor, semDecisao, rateio: rateio?.bloqueio || null }
+  });
   return {
     tipo, competencia, ...comp,
+    // Peças e processos são números diferentes: uma peça com 4 processos
+    // pagos são 4 linhas, mas 1 peça. A tela mostra os dois.
+    contagem: rateio ? rateio.contagem : contarPecasEProcessos(comp.linhas),
+    rateio: rateio ? {
+      sql_pendente: rateio.sql_pendente, colaboradores: rateio.colaboradores.length,
+      pendentes: rateio.pendentes, resumo: rateio.resumo
+    } : null,
     pagar_ate: comp.fechamento?.pagar_ate || calendario.pagarProducaoAte(competencia, p.regras.configuracao, p.regras.feriados),
     proxima: p.estado.proxima, ...conf, pode_fechar: !comp.fechado && conf.bloqueios.length === 0
   };
@@ -189,7 +195,7 @@ async function fechar({ api, tipo, competencia, hoje, desde, usuarioId = null })
   try {
     cabecalho = await c.inserir(api, 'financeiro_fechamentos', {
       tipo, competencia, status: 'fechando',
-      quantidade: comissao ? p.parcelas : p.pecas,
+      quantidade: comissao ? p.parcelas : (p.unidades ?? p.pecas),
       base_total: comissao ? p.base : 0,
       cms_total: comissao ? p.cms : 0,
       royalty_total: comissao ? p.royalty : 0,

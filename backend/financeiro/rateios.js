@@ -1,35 +1,34 @@
 /**
- * Rateio das comissões entre COLABORADORES, peça a peça (24/09/2026).
+ * Rateio da PRODUÇÃO entre colaboradores, processo a processo (24/09/2026).
  *
- * A comissão de um pedido tem dono por natureza — CMS é do dono do cliente,
- * Royalty é do desenhista da peça. O rateio é outra camada, por cima: de
- * cada PEÇA CONTABILIZADA (uma linha de `pedidos_itens` de um pedido que
- * gerou comissão na competência), o usuário diz quanto por cento vai para
- * cada colaborador.
+ * A produção paga por PROCESSO de cada PEÇA (marcenaria, acabamento,
+ * montagem, embalagem…). O rateio diz **quem fez** cada um desses processos
+ * e **quanto por cento** leva: a unidade é o par `pedido_item_id + setor_id`,
+ * e o valor a repartir é o que aquele processo paga na competência.
  *
- * Decisões desta entrega:
- *   - a unidade é a PEÇA, não a parcela nem o pedido: é o que o dono pediu
- *     ("por peça que foi contabilizada"). O valor da peça é a fatia dela na
- *     comissão do pedido, na proporção do valor vendido (a mesma proporção
- *     que o Royalty já usa);
- *   - a soma de cada peça vai até 100% e **nunca passa**: quem cadastra vê o
- *     restante e o sistema recusa o que excede;
- *   - **fechar a competência exige 100% em toda peça contabilizada** — mas
- *     só quando existe colaborador cadastrado. Sem nenhum, o recurso não
- *     está em uso e o Financeiro fecha como sempre fechou (senão a primeira
- *     virada de mês depois de subir o código travaria sozinha);
+ * Decisões do dono (24/09/2026):
+ *   - **por processo**, não por peça (quem fez a marcenaria pode não ser quem
+ *     montou); a tela tem o atalho "mesma divisão em todos os processos desta
+ *     peça" para quem quiser dividir a peça inteira de uma vez;
+ *   - a soma de cada processo vai até 100% e **nunca passa**;
+ *   - **fechar a competência de PRODUÇÃO exige 100%** em todo processo
+ *     contabilizado — só quando existe colaborador cadastrado (sem ninguém, o
+ *     recurso não está em uso e o Financeiro fecha como sempre fechou);
+ *   - dá para ratear **a qualquer momento**, no que já foi decidido no mês:
+ *     processo que ainda não foi confirmado nem aparece como linha da
+ *     competência, então não há o que dividir;
  *   - remover é desligar (`ativo`), para o rastro não sumir.
  *
  * As contas são puras (testáveis sem rede); as de baixo falam com a API.
- * SQL: sql/comissao_colaboradores_rateio.sql. Sem ele nada quebra: a tela
+ * SQL: sql/producao_colaboradores_rateio.sql. Sem ele nada quebra: a tela
  * avisa e o fechamento não passa a exigir nada.
  */
 const c = require('./comum');
 const auditoria = require('./auditoria');
 
-const SQL_ARQUIVO = 'sql/comissao_colaboradores_rateio.sql';
+const SQL_ARQUIVO = 'sql/producao_colaboradores_rateio.sql';
 const SQL_FALTANDO = `Falta rodar ${SQL_ARQUIVO} no banco e reiniciar a API.`;
-const TABELAS = ['comissao_colaboradores', 'comissao_rateios'];
+const TABELAS = ['producao_colaboradores', 'producao_rateios'];
 /** Tudo distribuído. Percentuais são guardados com 4 casas. */
 const TOTAL = 100;
 const CASAS = 4;
@@ -37,6 +36,8 @@ const TOLERANCIA = 0.0001;
 
 const ativo = v => !(v === false || v === 'false' || v === 0 || v === 'f');
 const arredondar = v => Math.round((Number(v) + Number.EPSILON) * 10 ** CASAS) / 10 ** CASAS;
+/** A chave de um processo de uma peça: é a unidade do rateio. */
+const chaveDoProcesso = (pedidoItemId, setorId) => `${pedidoItemId}:${setorId}`;
 
 function sqlPendente() {
   return c.erro(SQL_FALTANDO, 409, { sql_pendente: true, arquivo: SQL_ARQUIVO });
@@ -44,10 +45,7 @@ function sqlPendente() {
 
 // ------------------------------------------------------------- contas puras
 
-/**
- * O percentual digitado ("12,5", "12.5", 12.5) em número. Devolve null
- * quando não é número. Pura.
- */
+/** O percentual digitado ("12,5", "12.5", 12.5) em número; null se não for. Pura. */
 function lerPercentual(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   const texto = String(valor).replace('%', '').replace(',', '.').trim();
@@ -55,7 +53,7 @@ function lerPercentual(valor) {
   return Number.isFinite(n) ? arredondar(n) : null;
 }
 
-/** Quanto já está distribuído numa peça. Pura. */
+/** Quanto já está distribuído num processo. Pura. */
 function somaDosPercentuais(linhas) {
   return arredondar((linhas || []).filter(l => l && ativo(l.ativo)).reduce((s, l) => s + (Number(l.percentual) || 0), 0));
 }
@@ -65,17 +63,23 @@ function restanteDoRateio(linhas) {
   return arredondar(Math.max(0, TOTAL - somaDosPercentuais(linhas)));
 }
 
-/** A peça está 100% distribuída? Pura. */
+/** O processo está 100% distribuído? Pura. */
 function rateioCompleto(linhas) {
   return Math.abs(somaDosPercentuais(linhas) - TOTAL) <= TOLERANCIA;
+}
+
+/** 12.5 → "12,5%"; 100 → "100%". Pura. */
+function formatarPercentual(v) {
+  const n = arredondar(Number(v) || 0);
+  const texto = Number.isInteger(n) ? String(n) : String(n).replace('.', ',');
+  return `${texto}%`;
 }
 
 /**
  * Pode entrar esta linha? Devolve a mensagem do problema, ou null.
  *
  * `ignorarId` é a própria linha quando se está EDITANDO — senão o percentual
- * dela contaria duas vezes contra o restante.
- * Pura.
+ * dela contaria duas vezes contra o restante. Pura.
  */
 function problemaDaLinha({ linhas = [], colaboradorId, percentual, ignorarId = null }) {
   const pct = lerPercentual(percentual);
@@ -86,21 +90,12 @@ function problemaDaLinha({ linhas = [], colaboradorId, percentual, ignorarId = n
 
   const vivas = (linhas || []).filter(l => l && ativo(l.ativo) && String(l.id) !== String(ignorarId));
   if (vivas.some(l => String(l.colaborador_id) === String(colaboradorId))) {
-    return 'Este colaborador já está nesta peça. Edite a linha dele em vez de somar outra.';
+    return 'Este colaborador já está neste processo. Edite a linha dele em vez de somar outra.';
   }
   const restante = arredondar(Math.max(0, TOTAL - somaDosPercentuais(vivas)));
-  if (restante <= TOLERANCIA) return 'Esta peça já está 100% distribuída: não cabe mais ninguém.';
-  if (pct - restante > TOLERANCIA) {
-    return `Só restam ${formatarPercentual(restante)} para distribuir nesta peça.`;
-  }
+  if (restante <= TOLERANCIA) return 'Este processo já está 100% distribuído: não cabe mais ninguém.';
+  if (pct - restante > TOLERANCIA) return `Só restam ${formatarPercentual(restante)} para distribuir neste processo.`;
   return null;
-}
-
-/** 12.5 → "12,5%"; 100 → "100%". Pura. */
-function formatarPercentual(v) {
-  const n = arredondar(Number(v) || 0);
-  const texto = Number.isInteger(n) ? String(n) : String(n).replace('.', ',');
-  return `${texto}%`;
 }
 
 /**
@@ -127,168 +122,137 @@ function distribuirValor(valor, linhas) {
 }
 
 /**
- * A fatia de cada peça na comissão do pedido: proporcional ao valor vendido
- * que continua com o cliente (o devolvido sai), como o Royalty já reparte.
- * Pura.
+ * Os PROCESSOS CONTABILIZADOS da competência, agrupados por peça.
  *
- * @param {Array} itens linhas de `pedidos_itens` do pedido
- * @returns {Map} pedido_item_id -> { valor, participacao }
+ * Entram só as linhas de produção de verdade (`tipo_item: 'producao'`) que
+ * têm peça e processo: saldo de competência anterior e estorno sem peça não
+ * se rateiam. Várias linhas do mesmo processo (registros em dias diferentes)
+ * viram um só. Pura.
+ *
+ * @param {Array} linhas `montarCompetencia(...).linhas`
+ * @returns {Array} uma entrada por PEÇA, com os processos dentro
  */
-function participacaoDasPecas(itens) {
-  const linhas = (itens || []).filter(Boolean).map(i => {
-    const q = Number(i.quantidade) || 0;
-    const devolvida = Math.min(q, Math.max(0, Number(i.quantidade_devolvida) || 0));
-    const fica = q - devolvida;
-    return { item: i, valor: q > 0 ? (Number(i.valor_total) || 0) * fica / q : 0 };
-  });
-  // Tudo devolvido: a divisão fica pelo valor vendido (a comissão já vai a zero).
-  const usar = linhas.some(l => l.valor > 0) ? linhas : (itens || []).filter(Boolean).map(i => ({ item: i, valor: Number(i.valor_total) || 0 }));
-  const total = usar.reduce((s, l) => s + l.valor, 0);
-  const mapa = new Map();
-  for (const l of usar) {
-    mapa.set(String(l.item.id), {
-      valor: c.centavos(l.valor),
-      participacao: total > 0 ? Math.round((l.valor / total) * 1000000) / 1000000 : 0
-    });
+function pecasDaCompetencia(linhas = []) {
+  const porProcesso = new Map();
+  for (const l of (linhas || []).filter(Boolean)) {
+    if (l.tipo_item !== 'producao') continue;
+    if (l.pedido_item_id === null || l.pedido_item_id === undefined) continue;
+    if (l.setor_id === null || l.setor_id === undefined) continue;
+    const k = chaveDoProcesso(l.pedido_item_id, l.setor_id);
+    const atual = porProcesso.get(k) || {
+      chave: k, pedido_item_id: l.pedido_item_id, setor_id: l.setor_id, setor: l.setor,
+      pedido_id: l.pedido_id ?? null, pedido: l.pedido || null, produto_id: l.produto_id ?? null,
+      produto: l.produto || `peça ${l.pedido_item_id}`, quantidade: 0, valor: 0, data: null
+    };
+    atual.quantidade += Number(l.quantidade) || 0;
+    atual.valor = c.centavos(atual.valor + (Number(l.total) || 0));
+    // A data mais recente é a que a tela mostra ("decidido em").
+    if (l.data && (!atual.data || String(l.data) > String(atual.data))) atual.data = c.dia(l.data);
+    porProcesso.set(k, atual);
   }
-  return mapa;
+
+  const porPeca = new Map();
+  for (const p of porProcesso.values()) {
+    const k = String(p.pedido_item_id);
+    const peca = porPeca.get(k) || {
+      pedido_item_id: p.pedido_item_id, pedido_id: p.pedido_id, pedido: p.pedido,
+      produto_id: p.produto_id, produto: p.produto, processos: [], valor: 0
+    };
+    peca.processos.push(p);
+    peca.valor = c.centavos(peca.valor + p.valor);
+    porPeca.set(k, peca);
+  }
+  return [...porPeca.values()]
+    .map(peca => ({
+      ...peca,
+      processos: peca.processos.sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR'))
+    }))
+    .sort((a, b) => String(a.pedido || '').localeCompare(String(b.pedido || ''), 'pt-BR', { numeric: true })
+      || String(a.produto).localeCompare(String(b.produto), 'pt-BR'));
 }
 
 /**
- * O estado de cada peça contabilizada: quanto de comissão ela puxa, o que já
- * está distribuído e o que falta. Pura.
- *
- * @param {Array}  p.pecas       { id, pedido_id, produto_id, produto, pedido_numero, cliente, comissao }
- * @param {Array}  p.rateios     linhas de `comissao_rateios` (todas as peças)
- * @param {Array}  p.colaboradores para pôr o nome em cada linha
+ * O estado de cada processo: quanto já foi distribuído, o que falta e quanto
+ * cada um leva. Devolve a mesma árvore peça → processos. Pura.
  */
 function estadoDasPecas({ pecas = [], rateios = [], colaboradores = [] }) {
   const nomeDo = new Map((colaboradores || []).filter(Boolean).map(x => [String(x.id), x.nome]));
-  const porPeca = new Map();
+  const porProcesso = new Map();
   for (const r of (rateios || []).filter(x => x && ativo(x.ativo))) {
-    const k = String(r.pedido_item_id);
-    if (!porPeca.has(k)) porPeca.set(k, []);
-    porPeca.get(k).push({
+    const k = chaveDoProcesso(r.pedido_item_id, r.setor_id);
+    if (!porProcesso.has(k)) porProcesso.set(k, []);
+    porProcesso.get(k).push({
       id: r.id, colaborador_id: r.colaborador_id,
       colaborador: nomeDo.get(String(r.colaborador_id)) || `colaborador ${r.colaborador_id}`,
-      percentual: arredondar(Number(r.percentual) || 0),
-      observacao: r.observacao || null,
-      ativo: true
+      percentual: arredondar(Number(r.percentual) || 0), ativo: true
     });
   }
-  return (pecas || []).filter(Boolean).map(peca => {
-    const linhas = (porPeca.get(String(peca.id)) || []).sort((a, b) => b.percentual - a.percentual || String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR'));
-    const distribuido = somaDosPercentuais(linhas);
+
+  return (pecas || []).map(peca => {
+    const processos = peca.processos.map(p => {
+      const linhas = (porProcesso.get(p.chave) || [])
+        .sort((a, b) => b.percentual - a.percentual || String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR'));
+      const distribuido = somaDosPercentuais(linhas);
+      return {
+        ...p,
+        linhas: linhas.map(l => ({ ...l, valor: c.centavos((Number(p.valor) || 0) * l.percentual / TOTAL) })),
+        distribuido,
+        restante: arredondar(Math.max(0, TOTAL - distribuido)),
+        completo: Math.abs(distribuido - TOTAL) <= TOLERANCIA
+      };
+    });
+    const completos = processos.filter(p => p.completo).length;
     return {
-      ...peca,
-      linhas: linhas.map(l => ({ ...l, valor: c.centavos((Number(peca.comissao) || 0) * l.percentual / TOTAL) })),
-      distribuido,
-      restante: arredondar(Math.max(0, TOTAL - distribuido)),
-      completo: Math.abs(distribuido - TOTAL) <= TOLERANCIA
+      ...peca, processos,
+      processos_completos: completos,
+      completo: completos === processos.length && processos.length > 0
     };
   });
 }
 
-/** As peças que ainda não fecham 100%. Pura. */
-function pecasPendentes(estado) {
-  return (estado || []).filter(p => !p.completo);
+/** Os processos que ainda não fecham 100%. Pura. */
+function processosPendentes(estado) {
+  return (estado || []).flatMap(peca => peca.processos.filter(p => !p.completo).map(p => ({ ...p, produto: peca.produto, pedido: peca.pedido })));
 }
 
-/**
- * O que cada colaborador tem a receber, somando todas as peças. Pura.
- * Sai ordenado do maior para o menor, como as telas de comissão.
- */
+/** Quantas PEÇAS e quantos PROCESSOS há no estado (são números diferentes). Pura. */
+function contagem(estado) {
+  const pecas = (estado || []).length;
+  const processos = (estado || []).reduce((s, p) => s + p.processos.length, 0);
+  return { pecas, processos, unidades: (estado || []).reduce((s, p) => s + p.processos.reduce((t, x) => t + (Number(x.quantidade) || 0), 0), 0) };
+}
+
+/** O que cada colaborador tem a receber, somando todos os processos. Pura. */
 function resumoPorColaborador(estado) {
   const mapa = new Map();
   for (const peca of estado || []) {
-    for (const l of peca.linhas || []) {
-      const k = String(l.colaborador_id);
-      const atual = mapa.get(k) || { colaborador_id: l.colaborador_id, colaborador: l.colaborador, valor: 0, pecas: 0 };
-      atual.valor = c.centavos(atual.valor + (Number(l.valor) || 0));
-      atual.pecas += 1;
-      mapa.set(k, atual);
+    for (const processo of peca.processos) {
+      for (const l of processo.linhas || []) {
+        const k = String(l.colaborador_id);
+        const atual = mapa.get(k) || { colaborador_id: l.colaborador_id, colaborador: l.colaborador, valor: 0, processos: 0 };
+        atual.valor = c.centavos(atual.valor + (Number(l.valor) || 0));
+        atual.processos += 1;
+        mapa.set(k, atual);
+      }
     }
   }
   return [...mapa.values()].sort((a, b) => b.valor - a.valor || String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR'));
 }
 
 /**
- * O bloqueio do fechamento, se houver. Pura.
+ * O bloqueio do fechamento da PRODUÇÃO, se houver. Pura.
  *
  * Só existe quando há colaborador cadastrado: sem nenhum, o rateio não está
  * em uso e o fechamento segue como sempre.
  */
 function bloqueioDoFechamento({ estado = [], temColaboradores = false }) {
   if (!temColaboradores) return null;
-  const faltando = pecasPendentes(estado);
+  const faltando = processosPendentes(estado);
   if (!faltando.length) return null;
   const exemplos = faltando.slice(0, 3)
-    .map(p => `${p.pedido_numero || `pedido ${p.pedido_id}`} · ${p.produto || `peça ${p.produto_id}`} (${formatarPercentual(p.distribuido)} de 100%)`)
+    .map(p => `${p.pedido || `pedido ${p.pedido_id}`} · ${p.produto} · ${p.setor} (${formatarPercentual(p.distribuido)} de 100%)`)
     .join('; ');
-  return `${c.plural(faltando.length, 'peça contabilizada ainda não foi distribuída', 'peças contabilizadas ainda não foram distribuídas')} entre os colaboradores: ${exemplos}${faltando.length > 3 ? '…' : ''}. Distribua 100% de cada peça em "Regras › Colaboradores" para fechar.`;
-}
-
-/**
- * As PEÇAS CONTABILIZADAS de uma competência: as peças dos pedidos que têm
- * comissão apurada, cada uma com a fatia que puxa. Pura.
- *
- * A comissão do pedido na competência (soma dos itens: parcelas, ajustes e
- * saldos) é repartida entre as peças dele na proporção do valor vendido —
- * a mesma proporção que o Royalty usa para achar o desenhista.
- *
- * @param {Array} p.itens        `resumo.itens` da prévia de comissões
- * @param {Array} p.pedidosItens linhas de `pedidos_itens`
- * @param {Array} p.produtos     { id, codigo, nome } para nomear a peça
- */
-function pecasContabilizadas({ itens = [], pedidosItens = [], produtos = [] }) {
-  const porPedido = new Map();
-  for (const i of (itens || []).filter(Boolean)) {
-    if (i.pedido_id === null || i.pedido_id === undefined) continue;
-    const k = String(i.pedido_id);
-    const atual = porPedido.get(k) || { pedido_id: i.pedido_id, pedido_numero: i.pedido || null, cliente: i.cliente || null, comissao: 0 };
-    atual.comissao = c.centavos(atual.comissao + (Number(i.total) || 0));
-    if (!atual.pedido_numero && i.pedido) atual.pedido_numero = i.pedido;
-    if (!atual.cliente && i.cliente) atual.cliente = i.cliente;
-    porPedido.set(k, atual);
-  }
-  const dadosProduto = new Map((produtos || []).filter(Boolean).map(p => [String(p.id), p]));
-  const itensPor = new Map();
-  for (const i of (pedidosItens || []).filter(Boolean)) {
-    const k = String(i.pedido_id);
-    if (!itensPor.has(k)) itensPor.set(k, []);
-    itensPor.get(k).push(i);
-  }
-
-  const pecas = [];
-  for (const pedido of porPedido.values()) {
-    const doPedido = itensPor.get(String(pedido.pedido_id)) || [];
-    if (!doPedido.length) continue;
-    const participacoes = participacaoDasPecas(doPedido);
-    const fatias = doPedido.map(item => {
-      const p = participacoes.get(String(item.id)) || { valor: 0, participacao: 0 };
-      const produto = dadosProduto.get(String(item.produto_id)) || null;
-      return {
-        id: item.id, pedido_id: pedido.pedido_id, pedido_numero: pedido.pedido_numero, cliente: pedido.cliente,
-        produto_id: item.produto_id ?? null,
-        produto: produto ? [produto.codigo, produto.nome].filter(Boolean).join(' · ') : (item.produto_id ? `peça ${item.produto_id}` : 'peça sem cadastro'),
-        quantidade: Number(item.quantidade) || 0,
-        valor_vendido: p.valor,
-        participacao: p.participacao,
-        comissao: c.centavos((Number(pedido.comissao) || 0) * p.participacao),
-        comissao_do_pedido: pedido.comissao
-      };
-    });
-    // A sobra de centavo do rateio entre as peças fica na maior.
-    const soma = c.centavos(fatias.reduce((s, f) => s + f.comissao, 0));
-    const sobra = c.centavos((Number(pedido.comissao) || 0) - soma);
-    if (Math.abs(sobra) >= 0.01 && fatias.length) {
-      const maior = fatias.reduce((a, b) => (Math.abs(b.comissao) > Math.abs(a.comissao) ? b : a), fatias[0]);
-      maior.comissao = c.centavos(maior.comissao + sobra);
-    }
-    pecas.push(...fatias);
-  }
-  return pecas.sort((a, b) => String(a.pedido_numero || a.pedido_id).localeCompare(String(b.pedido_numero || b.pedido_id), 'pt-BR')
-    || String(a.produto).localeCompare(String(b.produto), 'pt-BR'));
+  return `${c.plural(faltando.length, 'processo ainda não foi distribuído', 'processos ainda não foram distribuídos')} entre os colaboradores: ${exemplos}${faltando.length > 3 ? '…' : ''}. Abra "Rateio da produção" e complete 100% de cada processo para fechar.`;
 }
 
 // ------------------------------------------------------------------ leitura
@@ -315,21 +279,19 @@ async function lerSePuder(api, tabela, query = {}) {
   }
 }
 
-/** Os colaboradores vivos, em ordem alfabética. `null` quando falta o SQL. */
+/** Os colaboradores, em ordem alfabética. `null` quando falta o SQL. */
 async function listarColaboradores(api, { incluirDesligados = false } = {}) {
-  const linhas = await lerSePuder(api, 'comissao_colaboradores');
+  const linhas = await lerSePuder(api, 'producao_colaboradores');
   if (linhas === null) return null;
   return linhas
     .filter(x => incluirDesligados || ativo(x.ativo))
-    .map(x => ({
-      id: x.id, nome: x.nome, funcao: x.funcao || null, observacao: x.observacao || null, ativo: ativo(x.ativo)
-    }))
+    .map(x => ({ id: x.id, nome: x.nome, funcao: x.funcao || null, observacao: x.observacao || null, ativo: ativo(x.ativo) }))
     .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
 }
 
 /** Todos os rateios vivos. `null` quando falta o SQL. */
 async function listarRateios(api) {
-  const linhas = await lerSePuder(api, 'comissao_rateios');
+  const linhas = await lerSePuder(api, 'producao_rateios');
   if (linhas === null) return null;
   return linhas.filter(x => ativo(x.ativo));
 }
@@ -339,32 +301,25 @@ async function listarRateios(api) {
  * fechamento. Nunca quebra: sem o SQL desta fase devolve `sql_pendente` e
  * nenhum bloqueio.
  *
- * @param {Array} itens `resumo.itens` da prévia de comissões
+ * @param {Array} linhas `montarCompetencia(...).linhas` da produção
  */
-async function lerVisao({ api, itens = [] }) {
+async function lerVisao({ api, linhas = [] }) {
   const [colaboradores, rateios] = await Promise.all([listarColaboradores(api), listarRateios(api)]);
   if (colaboradores === null || rateios === null) {
-    return { sql_pendente: true, arquivo: SQL_ARQUIVO, colaboradores: [], pecas: [], resumo: [], pendentes: 0, bloqueio: null, total: 0 };
+    return {
+      sql_pendente: true, arquivo: SQL_ARQUIVO, colaboradores: [], pecas: [], resumo: [],
+      pendentes: 0, total: 0, contagem: { pecas: 0, processos: 0, unidades: 0 }, bloqueio: null
+    };
   }
-  const idsPedidos = [...new Set((itens || []).map(i => i?.pedido_id).filter(v => v !== null && v !== undefined).map(String))];
-  const [pedidosItens, produtos] = await Promise.all([
-    api.get('/api/pedidos_itens').then(c.lista).catch(() => []),
-    api.get('/api/produtos', { query: { select: 'id,codigo,nome' } }).then(c.lista).catch(() => [])
-  ]);
-  const pecas = pecasContabilizadas({
-    itens,
-    pedidosItens: pedidosItens.filter(i => idsPedidos.includes(String(i?.pedido_id))),
-    produtos
-  });
-  const estado = estadoDasPecas({ pecas, rateios, colaboradores });
-  const pendentes = pecasPendentes(estado);
+  const estado = estadoDasPecas({ pecas: pecasDaCompetencia(linhas), rateios, colaboradores });
   return {
     sql_pendente: false,
     colaboradores,
     pecas: estado,
     resumo: resumoPorColaborador(estado),
-    pendentes: pendentes.length,
-    total: c.centavos(estado.reduce((s, p) => s + (Number(p.comissao) || 0), 0)),
+    pendentes: processosPendentes(estado).length,
+    contagem: contagem(estado),
+    total: c.centavos(estado.reduce((s, p) => s + (Number(p.valor) || 0), 0)),
     bloqueio: bloqueioDoFechamento({ estado, temColaboradores: colaboradores.length > 0 })
   };
 }
@@ -381,28 +336,22 @@ async function salvarColaborador({ api, dados = {}, usuarioId = null }) {
     && String(x.nome).trim().toLowerCase() === nome.toLowerCase());
   if (repetido) throw c.erro(`Já existe um colaborador chamado "${repetido.nome}".`, 409);
 
-  const campos = {
-    nome, funcao: c.texto(dados.funcao, 80) || null, observacao: c.texto(dados.observacao, 300) || null
-  };
+  const campos = { nome, funcao: c.texto(dados.funcao, 80) || null, observacao: c.texto(dados.observacao, 300) || null };
   if (id) {
     const vivo = dados.ativo === undefined ? true : ativo(dados.ativo);
-    await c.atualizar(api, 'comissao_colaboradores', id, {
-      ...campos, ativo: vivo, atualizado_por: usuarioId, atualizado_em: c.agora()
-    });
+    await c.atualizar(api, 'producao_colaboradores', id, { ...campos, ativo: vivo, atualizado_por: usuarioId, atualizado_em: c.agora() });
     await auditoria.registrar(api, { tipo: 'colaborador_editado', descricao: `Colaborador "${nome}" atualizado.`, usuarioId }).catch(() => {});
     return { colaborador: { id, ...campos, ativo: vivo } };
   }
-  const criado = await c.inserir(api, 'comissao_colaboradores', {
-    ...campos, ativo: true, criado_por: usuarioId, criado_em: c.agora()
-  });
+  const criado = await c.inserir(api, 'producao_colaboradores', { ...campos, ativo: true, criado_por: usuarioId, criado_em: c.agora() });
   await auditoria.registrar(api, { tipo: 'colaborador_criado', descricao: `Colaborador "${nome}" cadastrado.`, usuarioId }).catch(() => {});
   return { colaborador: criado };
 }
 
 /**
- * Desliga um colaborador. As peças em que ele aparece perdem a parte dele —
- * e voltam a ficar incompletas —, então o rateio dele sai junto: deixar linha
- * viva apontando para quem não existe mais é pior que refazer a distribuição.
+ * Desliga um colaborador. Os processos em que ele aparece perdem a parte
+ * dele — e voltam a ficar incompletos —, então o rateio dele sai junto:
+ * deixar linha viva apontando para quem não existe mais é pior.
  */
 async function removerColaborador({ api, id, usuarioId = null }) {
   const colaboradores = await listarColaboradores(api, { incluirDesligados: true });
@@ -414,53 +363,100 @@ async function removerColaborador({ api, id, usuarioId = null }) {
   const dele = rateios.filter(r => String(r.colaborador_id) === String(id));
   const quando = c.agora();
   for (const r of dele) {
-    await c.atualizar(api, 'comissao_rateios', r.id, { ativo: false, removido_por: usuarioId, removido_em: quando });
+    await c.atualizar(api, 'producao_rateios', r.id, { ativo: false, removido_por: usuarioId, removido_em: quando });
   }
-  await c.atualizar(api, 'comissao_colaboradores', id, { ativo: false, atualizado_por: usuarioId, atualizado_em: quando });
+  await c.atualizar(api, 'producao_colaboradores', id, { ativo: false, atualizado_por: usuarioId, atualizado_em: quando });
   await auditoria.registrar(api, {
     tipo: 'colaborador_desligado',
-    descricao: `Colaborador "${alvo.nome}" desligado${dele.length ? ` (saiu de ${c.plural(dele.length, 'peça', 'peças')})` : ''}.`,
+    descricao: `Colaborador "${alvo.nome}" desligado${dele.length ? ` (saiu de ${c.plural(dele.length, 'processo', 'processos')})` : ''}.`,
     usuarioId
   }).catch(() => {});
-  return { ok: true, pecas_afetadas: dele.length };
+  return { ok: true, processos_afetados: dele.length };
 }
 
 // ------------------------------------------------------------------ rateio
 
+/** Grava (ou edita) uma linha do rateio de UM processo. */
 async function salvarLinha({ api, dados = {}, usuarioId = null }) {
   const rateios = await listarRateios(api);
   if (rateios === null) throw sqlPendente();
   const colaboradores = (await listarColaboradores(api)) || [];
 
   const pedidoItemId = Number(dados.pedido_item_id);
+  const setorId = Number(dados.setor_id);
   if (!Number.isInteger(pedidoItemId) || pedidoItemId <= 0) throw c.erro('Peça inválida.');
+  if (!Number.isInteger(setorId) || setorId <= 0) throw c.erro('Processo inválido.');
   const colaboradorId = Number(dados.colaborador_id);
   if (!colaboradores.some(x => Number(x.id) === colaboradorId)) throw c.erro('Escolha um colaborador ativo.');
 
-  const daPeca = rateios.filter(r => String(r.pedido_item_id) === String(pedidoItemId));
-  const problema = problemaDaLinha({
-    linhas: daPeca, colaboradorId, percentual: dados.percentual, ignorarId: dados.id ?? null
-  });
-  if (problema) throw c.erro(problema, 422, { restante: restanteDoRateio(daPeca.filter(l => String(l.id) !== String(dados.id ?? null))) });
+  const doProcesso = rateios.filter(r => chaveDoProcesso(r.pedido_item_id, r.setor_id) === chaveDoProcesso(pedidoItemId, setorId));
+  const problema = problemaDaLinha({ linhas: doProcesso, colaboradorId, percentual: dados.percentual, ignorarId: dados.id ?? null });
+  if (problema) {
+    throw c.erro(problema, 422, { restante: restanteDoRateio(doProcesso.filter(l => String(l.id) !== String(dados.id ?? null))) });
+  }
 
   const percentual = lerPercentual(dados.percentual);
   const campos = {
     pedido_id: Number(dados.pedido_id) || null,
     pedido_item_id: pedidoItemId,
+    setor_id: setorId,
     produto_id: dados.produto_id === null || dados.produto_id === undefined ? null : Number(dados.produto_id),
     colaborador_id: colaboradorId,
-    percentual,
-    observacao: c.texto(dados.observacao, 200) || null
+    percentual
   };
   const nome = colaboradores.find(x => Number(x.id) === colaboradorId)?.nome || `colaborador ${colaboradorId}`;
   if (dados.id) {
-    await c.atualizar(api, 'comissao_rateios', dados.id, campos);
-    await auditoria.registrar(api, { tipo: 'rateio_editado', descricao: `Rateio da peça ${pedidoItemId}: ${nome} passou a ${formatarPercentual(percentual)}.`, usuarioId }).catch(() => {});
+    await c.atualizar(api, 'producao_rateios', dados.id, campos);
+    await auditoria.registrar(api, { tipo: 'rateio_editado', descricao: `Rateio da peça ${pedidoItemId} (processo ${setorId}): ${nome} passou a ${formatarPercentual(percentual)}.`, usuarioId }).catch(() => {});
     return { linha: { id: dados.id, ...campos, ativo: true, colaborador: nome } };
   }
-  const criada = await c.inserir(api, 'comissao_rateios', { ...campos, ativo: true, criado_por: usuarioId, criado_em: c.agora() });
-  await auditoria.registrar(api, { tipo: 'rateio_criado', descricao: `Rateio da peça ${pedidoItemId}: ${formatarPercentual(percentual)} para ${nome}.`, usuarioId }).catch(() => {});
+  const criada = await c.inserir(api, 'producao_rateios', { ...campos, ativo: true, criado_por: usuarioId, criado_em: c.agora() });
+  await auditoria.registrar(api, { tipo: 'rateio_criado', descricao: `Rateio da peça ${pedidoItemId} (processo ${setorId}): ${formatarPercentual(percentual)} para ${nome}.`, usuarioId }).catch(() => {});
   return { linha: criada };
+}
+
+/**
+ * Copia a divisão de um processo para TODOS os processos da mesma peça — o
+ * atalho de quem divide a peça inteira do mesmo jeito (decisão do dono).
+ *
+ * Só entra onde ainda cabe: processo que já tem gente é deixado como está, e
+ * volta na resposta como `pulados`, para a tela poder dizer.
+ */
+async function aplicarNaPeca({ api, dados = {}, usuarioId = null }) {
+  const rateios = await listarRateios(api);
+  if (rateios === null) throw sqlPendente();
+  const pedidoItemId = Number(dados.pedido_item_id);
+  const setores = (Array.isArray(dados.setores) ? dados.setores : []).map(Number).filter(n => Number.isInteger(n) && n > 0);
+  const modelo = (Array.isArray(dados.linhas) ? dados.linhas : [])
+    .map(l => ({ colaborador_id: Number(l.colaborador_id), percentual: lerPercentual(l.percentual) }))
+    .filter(l => Number.isInteger(l.colaborador_id) && l.percentual > 0);
+  if (!modelo.length) throw c.erro('Nada para copiar: distribua um processo primeiro.');
+  if (!setores.length) throw c.erro('Nenhum outro processo nesta peça.');
+  if (Math.abs(modelo.reduce((s, l) => s + l.percentual, 0) - TOTAL) > TOLERANCIA) {
+    throw c.erro('Só dá para copiar uma divisão que fecha 100%.');
+  }
+
+  let aplicados = 0;
+  const pulados = [];
+  for (const setorId of setores) {
+    const doProcesso = rateios.filter(r => chaveDoProcesso(r.pedido_item_id, r.setor_id) === chaveDoProcesso(pedidoItemId, setorId));
+    if (somaDosPercentuais(doProcesso) > TOLERANCIA) { pulados.push(setorId); continue; }
+    for (const l of modelo) {
+      await c.inserir(api, 'producao_rateios', {
+        pedido_id: Number(dados.pedido_id) || null, pedido_item_id: pedidoItemId, setor_id: setorId,
+        produto_id: dados.produto_id === null || dados.produto_id === undefined ? null : Number(dados.produto_id),
+        colaborador_id: l.colaborador_id, percentual: l.percentual,
+        ativo: true, criado_por: usuarioId, criado_em: c.agora()
+      });
+    }
+    aplicados += 1;
+  }
+  await auditoria.registrar(api, {
+    tipo: 'rateio_copiado',
+    descricao: `Divisão copiada para ${c.plural(aplicados, 'processo', 'processos')} da peça ${pedidoItemId}${pulados.length ? ` (${pulados.length} já tinha divisão)` : ''}.`,
+    usuarioId
+  }).catch(() => {});
+  return { aplicados, pulados: pulados.length };
 }
 
 async function removerLinha({ api, id, usuarioId = null }) {
@@ -468,15 +464,16 @@ async function removerLinha({ api, id, usuarioId = null }) {
   if (rateios === null) throw sqlPendente();
   const alvo = rateios.find(r => String(r.id) === String(id));
   if (!alvo) throw c.erro('Linha do rateio não encontrada.', 404);
-  await c.atualizar(api, 'comissao_rateios', id, { ativo: false, removido_por: usuarioId, removido_em: c.agora() });
+  await c.atualizar(api, 'producao_rateios', id, { ativo: false, removido_por: usuarioId, removido_em: c.agora() });
   await auditoria.registrar(api, { tipo: 'rateio_removido', descricao: `Rateio da peça ${alvo.pedido_item_id} sem a parte de ${formatarPercentual(alvo.percentual)}.`, usuarioId }).catch(() => {});
   return { ok: true };
 }
 
 module.exports = {
-  SQL_ARQUIVO, SQL_FALTANDO, TABELAS, TOTAL, TOLERANCIA,
+  SQL_ARQUIVO, SQL_FALTANDO, TABELAS, TOTAL, TOLERANCIA, chaveDoProcesso,
   lerPercentual, formatarPercentual, somaDosPercentuais, restanteDoRateio, rateioCompleto,
-  problemaDaLinha, distribuirValor, participacaoDasPecas, pecasContabilizadas, estadoDasPecas, pecasPendentes,
-  resumoPorColaborador, bloqueioDoFechamento,
-  tabelaAusente, lerVisao, listarColaboradores, listarRateios, salvarColaborador, removerColaborador, salvarLinha, removerLinha
+  problemaDaLinha, distribuirValor, pecasDaCompetencia, estadoDasPecas, processosPendentes,
+  contagem, resumoPorColaborador, bloqueioDoFechamento,
+  tabelaAusente, lerVisao, listarColaboradores, listarRateios,
+  salvarColaborador, removerColaborador, salvarLinha, aplicarNaPeca, removerLinha
 };

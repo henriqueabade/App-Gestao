@@ -1,0 +1,111 @@
+<!--
+  Rateio da produção. Modal extra grande, dividido em duas colunas: à
+  esquerda quem pode receber (o cadastro de colaboradores), à direita as
+  PEÇAS da competência e, dentro de cada uma, os PROCESSOS — a unidade do
+  rateio. Em cada processo o usuário diz quem fez e quanto por cento leva; a
+  soma vai até 100% e não passa.
+
+  Dá para ratear a qualquer momento, no que já foi decidido no mês: processo
+  ainda não confirmado nem aparece aqui. Fechar a competência de produção
+  exige 100% em todo processo — só quando há colaborador cadastrado.
+
+  Dados:  GET  /api/financeiro/rateio?competencia=
+  Grava:  POST /api/financeiro/rateio            (financeiro.regras.editar)
+          POST /api/financeiro/rateio/peca       (copia a divisão na peça)
+          POST /api/financeiro/colaboradores
+  Fecha:  POST /api/financeiro/fechamentos { tipo: 'producao' }
+  Script: src/js/modals/financeiro-modais.js (montarRateioProducao).
+  Doc: docs/rateio-da-producao-por-colaborador.md.
+-->
+<div id="finRateioProducaoOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="finRateioProducaoTitulo" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="finRateioProducaoTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-users mr-2" aria-hidden="true"></i>Rateio da produção</h2>
+        <p class="text-xs text-gray-300 truncate">Quem fez cada processo de cada peça, e quanto por cento leva</p>
+      </div>
+      <span id="finRateioSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p class="text-sm text-gray-300">
+          A produção paga por <strong>processo</strong> de cada peça. Aqui você diz <strong>quem fez</strong> cada um e
+          <strong>quanto por cento</strong> recebe — uma pessoa com 100%, duas com 50% cada, o que for. A soma de cada processo precisa
+          fechar <strong>100%</strong> para a competência ser fechada. Só aparece o que já foi decidido no mês: o resto entra aqui assim que
+          você confirmar em "Fechar competência — produção".
+        </p>
+
+        <div id="finRateioSemSql" class="hidden fin-aviso" role="alert">
+          <i class="fas fa-database" aria-hidden="true"></i>
+          <span>O rateio ainda não está ativado: rode <strong>sql/producao_colaboradores_rateio.sql</strong> no banco e reinicie a API. Até lá a produção fecha como sempre.</span>
+        </div>
+
+        <div class="flex flex-wrap items-end gap-4">
+          <div>
+            <label for="finRateioCompetencia" class="ctl-rotulo text-gray-300">Competência</label>
+            <input id="finRateioCompetencia" type="month" data-no-restore="true"
+                   class="ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <button id="finRateioBuscar" type="button" class="btn-primary ctl-botao text-white">Ver processos</button>
+          <p id="finRateioInfo" class="text-xs text-gray-400 pb-3"></p>
+        </div>
+
+        <div id="finRateioIndicadores" class="fin-indicadores fin-indicadores--4"></div>
+        <div id="finRateioMensagem" class="hidden text-sm" role="alert"></div>
+        <p id="finRateioCarregando" class="hidden fin-vazio">Carregando os processos…</p>
+
+        <!-- O que ainda espera decisão: o rateio destes só aparece depois. -->
+        <div id="finRateioEsperando" class="hidden fin-aviso" role="status">
+          <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+          <span id="finRateioEsperandoTexto"></span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Quem pode receber -->
+          <div class="glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-white">Colaboradores</p>
+              <span id="finRateioColabTotal" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">0</span>
+            </div>
+            <p class="text-xs text-gray-400">Quem participa da produção. Desligar tira a pessoa dos processos em que ela estava — o rastro fica no histórico.</p>
+            <div class="space-y-2">
+              <label for="finRateioColabNome" class="ctl-rotulo text-gray-400">Nome</label>
+              <input id="finRateioColabNome" type="text" maxlength="120" placeholder="Ex.: Ana Silva" autocomplete="off"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="space-y-2">
+              <label for="finRateioColabFuncao" class="ctl-rotulo text-gray-400">Função (opcional)</label>
+              <input id="finRateioColabFuncao" type="text" maxlength="80" placeholder="Ex.: Marcenaria, Montagem" autocomplete="off"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="ctl-acoes justify-end">
+              <button id="finRateioColabCancelar" type="button" class="hidden btn-danger ctl-botao text-white">Cancelar</button>
+              <button id="finRateioColabSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao">Cadastrar</button>
+            </div>
+            <ul id="finRateioColabLista" class="divide-y divide-white/10"></ul>
+            <p id="finRateioColabVazio" class="hidden fin-vazio">Nenhum colaborador cadastrado: enquanto isso, o fechamento não exige rateio.</p>
+          </div>
+
+          <!-- As peças e os processos delas -->
+          <div class="lg:col-span-2 space-y-4">
+            <ul id="finRateioPecas" class="space-y-4"></ul>
+            <p id="finRateioVazio" class="hidden fin-vazio">Nenhum processo decidido nesta competência ainda.</p>
+
+            <div id="finRateioPorPessoa" class="hidden glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-2">
+              <p class="text-sm font-semibold text-white">A pagar por colaborador</p>
+              <ul id="finRateioPorPessoaLista" class="space-y-1 text-sm"></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-fin-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="finRateioFecharCompetencia" type="button" data-perm="financeiro.competencia.fechar" class="btn-success ctl-botao min-w-[200px]">Fechar competência</button>
+    </footer>
+  </div>
+</div>

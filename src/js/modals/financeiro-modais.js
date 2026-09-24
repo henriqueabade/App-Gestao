@@ -246,9 +246,19 @@
   }
 
   /** Os cartões do topo da Produção da competência: peças, pedidos, um por setor, total (e o que fica a compensar). */
+  /**
+   * PEÇAS e PROCESSOS são números diferentes, e confundi-los foi o defeito
+   * que o dono pegou em 24/09/2026: 2 peças que passam por 4 processos cada
+   * são 8 linhas de pagamento, mas continuam sendo 2 peças.
+   */
   function indicadoresDaProducao(d) {
+    const processos = Number(d?.processos ?? d?.contagem?.processos) || 0;
     const lista = [
-      { rotulo: 'Peças finalizadas', valor: String(Number(d?.pecas) || 0) },
+      {
+        rotulo: 'Peças finalizadas', valor: String(Number(d?.pecas ?? d?.contagem?.pecas) || 0),
+        nota: processos ? `${processos} ${processos === 1 ? 'processo pago' : 'processos pagos'}` : ''
+      },
+      { rotulo: 'Processos pagos', valor: String(processos) },
       { rotulo: 'Pedidos envolvidos', valor: String(Number(d?.pedidos) || 0) },
       ...((d?.setores) || []).map(s => ({ rotulo: s.setor, valor: formatarMoeda(s.total) })),
       { rotulo: d?.fechado ? 'Total a pagar (fechado)' : 'Total a pagar', valor: formatarMoeda(d?.a_pagar ?? 0), destaque: true }
@@ -1711,6 +1721,25 @@
     return s;
   }
 
+  /**
+   * 'dd/mm/aaaa às hh:mm' de um instante do banco (TIMESTAMPTZ), em
+   * Brasília. É o que as etiquetas de "confirmado" e "decidido" mostram no
+   * hover — o dono quer saber QUANDO cada decisão foi tomada.
+   */
+  function instanteCurto(instante) {
+    if (!instante) return '';
+    const texto = String(instante);
+    const soDia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto);
+    if (soDia) return `${soDia[3]}/${soDia[2]}/${soDia[1]}`;
+    const d = new Date(texto);
+    if (Number.isNaN(d.getTime())) return '';
+    const partes = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).formatToParts(d);
+    const v = t => partes.find(p => p.type === t)?.value;
+    return `${v('day')}/${v('month')}/${v('year')} às ${v('hour')}:${v('minute')}`;
+  }
+
   function botaoG(caixa, texto, fn, { classe = 'btn-neutral text-white', perm = null, titulo = '' } = {}) {
     const b = criar('button', `${classe} px-3 py-1 rounded-md text-xs font-medium`, texto);
     b.type = 'button';
@@ -2444,6 +2473,10 @@
       const faltam = faltamNaPeca(peca);
       alvo.className = `${faltam ? 'badge-warning' : 'badge-success'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       alvo.textContent = faltam ? `${faltam} processo(s) a decidir` : 'Tudo decidido';
+      // O hover diz QUANDO esta peça foi decidida (pedido do dono, 24/09/2026).
+      alvo.title = faltam
+        ? 'Falta dizer quantas unidades ficaram prontas nestes processos'
+        : (peca.decidida_em ? `Decidida em ${instanteCurto(peca.decidida_em)}` : 'Todos os processos desta peça já foram decididos');
     }
 
     function blocoDaPeca(pedido, peca) {
@@ -2458,8 +2491,33 @@
       const codigo = criar('span', 'fin-tag-produto fin-tag-produto--bordo', peca.codigo || nomeInteiro);
       codigo.title = nomeInteiro;
       codigo.setAttribute('aria-label', nomeInteiro);
-      const linhaCodigo = criar('p', 'flex items-center gap-2');
+      const linhaCodigo = criar('div', 'flex items-center gap-2 flex-wrap');
       linhaCodigo.appendChild(codigo);
+      // "Tudo" e "Nada" da PEÇA inteira, na frente do código (pedido do dono,
+      // 24/09/2026): decidem todos os processos dela de uma vez. Peça já
+      // decidida mantém os botões VISÍVEIS, só inativos.
+      const marcarPeca = valor => {
+        for (const processo of peca.processos) {
+          if (!processo.saldo) continue;
+          escolhas.set(chaveDoProcesso(peca, processo), valor === 'tudo' ? limite(processo) : 0);
+        }
+        pintar();
+      };
+      const botaoDaPeca = (rotulo, classe, titulo, valor) => {
+        const b = criar('button', `${classe} ctl-botao ctl-botao--pequeno`, rotulo);
+        b.type = 'button';
+        b.title = titulo;
+        b.dataset.perm = 'financeiro.producao.registrar';
+        b.disabled = peca.decidida;
+        if (peca.decidida) b.title = `Peça já decidida${peca.decidida_em ? ` em ${instanteCurto(peca.decidida_em)}` : ''}`;
+        // O clique é da peça, não do cabeçalho que abre/fecha o bloco.
+        b.addEventListener('click', e => { e.stopPropagation(); if (!b.disabled) marcarPeca(valor); });
+        return b;
+      };
+      linhaCodigo.append(
+        botaoDaPeca('Tudo', 'btn-success', 'Todas as unidades de todos os processos desta peça ficaram prontas', 'tudo'),
+        botaoDaPeca('Nada', 'btn-danger text-white', 'Nada desta peça ficou pronto: tudo fica pendente para o mês seguinte', 'nada')
+      );
       esquerda.appendChild(linhaCodigo);
       esquerda.appendChild(criar('p', 'text-xs text-gray-400 mt-1', `${peca.quantidade} un.${peca.do_estoque ? ` · ${peca.do_estoque} do estoque (paga só o que faltava)` : ''}`));
       const direita = criar('div', 'flex items-center gap-2');
@@ -2499,18 +2557,37 @@
       titulo.appendChild(criar('p', 'text-white font-semibold truncate', `Pedido ${pedido.numero}`));
       titulo.appendChild(criar('p', 'text-xs text-gray-400 truncate', [pedido.cliente, pedido.situacao].filter(Boolean).join(' • ')));
       topo.append(titulo, pedido.confirmado
-        ? tagG('Confirmado', 'badge-success')
-        : tagG(`${pedido.unidades_pendentes} un. a decidir`, 'badge-warning'));
+        ? tagG('Confirmado', 'badge-success', pedido.confirmado_em
+          ? `Tudo confirmado em ${instanteCurto(pedido.confirmado_em)}`
+          : 'Todas as peças deste pedido já foram decididas')
+        : tagG(`${pedido.unidades_pendentes} un. a decidir`, 'badge-warning', 'Diga, em cada processo de cada peça, quantas unidades ficaram prontas'));
       card.appendChild(topo);
 
       const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
       etiquetas.appendChild(tagG(`Pendente: ${formatarMoeda(pedido.valor_pendente)}`, 'badge-neutral'));
-      if (pedido.sem_valor) etiquetas.appendChild(tagG('Peça sem regra de produção', 'badge-danger', 'Acerte em "Regras" ou no cadastro da peça: sem valor a competência não fecha'));
-      const tudoPronto = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo pronto neste pedido');
-      tudoPronto.type = 'button';
-      tudoPronto.dataset.perm = 'financeiro.producao.registrar';
-      acionar(tudoPronto, () => confirmarPedidoInteiro(pedido));
-      etiquetas.appendChild(tudoPronto);
+      if (pedido.sem_valor) {
+        // O hover diz QUAIS peças estão sem regra (pedido do dono, 24/09/2026).
+        const quais = (pedido.pecas_sem_valor || []).join(', ');
+        etiquetas.appendChild(tagG('Peça sem regra de produção', 'badge-danger',
+          `${quais ? `${quais}. ` : ''}Acerte em "Regras" ou no cadastro da peça: sem valor a competência não fecha`));
+      }
+      // "Tudo pronto" e "Nada pronto" do PEDIDO inteiro. Já confirmado: os
+      // dois continuam VISÍVEIS, só inativos, com a data no hover.
+      const botaoDoPedido = (rotulo, classe, titulo, fn) => {
+        const b = criar('button', `${classe} ctl-botao ctl-botao--pequeno`, rotulo);
+        b.type = 'button';
+        b.dataset.perm = 'financeiro.producao.registrar';
+        b.title = pedido.confirmado
+          ? `Pedido já confirmado${pedido.confirmado_em ? ` em ${instanteCurto(pedido.confirmado_em)}` : ''}`
+          : titulo;
+        b.disabled = Boolean(pedido.confirmado);
+        if (!pedido.confirmado) acionar(b, fn);
+        return b;
+      };
+      etiquetas.append(
+        botaoDoPedido('Tudo pronto neste pedido', 'btn-success', 'Todas as unidades de todos os processos ficaram prontas', () => confirmarPedidoInteiro(pedido)),
+        botaoDoPedido('Nada pronto', 'btn-danger text-white', 'Nada deste pedido ficou pronto: tudo fica pendente para o mês seguinte', () => marcarPedidoInteiro(pedido, 'nada'))
+      );
       card.appendChild(etiquetas);
 
       for (const peca of pedido.pecas) card.appendChild(blocoDaPeca(pedido, peca));
@@ -2530,7 +2607,11 @@
       for (const pedido of dados?.pedidos || []) for (const peca of pedido.pecas) pintarCabecaDaPeca(pedido, peca);
       el('finFecharProducaoVazio').classList.toggle('hidden', Boolean(dados?.pedidos?.length) || !dados);
 
-      el('finFecharProducaoPecas').textContent = previa ? String(previa.pecas) : '—';
+      // Peças e processos são coisas diferentes: 2 peças × 4 processos = 8
+      // linhas de pagamento, mas 2 peças (defeito pego pelo dono em 24/09).
+      el('finFecharProducaoPecas').textContent = previa
+        ? `${previa.contagem?.pecas ?? previa.pecas ?? 0} · ${previa.contagem?.processos ?? previa.processos ?? 0} processo(s)`
+        : '—';
       el('finFecharProducaoTotal').textContent = previa ? formatarMoeda(previa.a_pagar) : '—';
       const processos = el('finFecharProducaoProcessos');
       processos.replaceChildren();
@@ -2629,9 +2710,46 @@
       await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`);
     }
 
+    /**
+     * "Nada pronto": nenhuma unidade do pedido ficou pronta — tudo volta no
+     * mês seguinte. É a outra ponta do "Tudo pronto" (pedido do dono,
+     * 24/09/2026), e pede confirmação porque joga a competência inteira do
+     * pedido para a frente.
+     */
+    async function marcarPedidoInteiro(pedido) {
+      const confirmado = await window.DialogPadrao?.confirm?.({
+        title: 'Nada pronto neste pedido?', tom: 'aviso', icone: 'fa-industry',
+        message: `Nenhuma unidade pendente do pedido ${pedido.numero} entra nesta competência `
+          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)} ficam para o mês seguinte).`,
+        confirmText: 'Nada ficou pronto', confirmVariant: 'danger'
+      });
+      if (!confirmado) return;
+      const decisoes = pedido.pecas.flatMap(peca => peca.processos
+        .filter(processo => limite(processo) > 0)
+        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 })));
+      if (!decisoes.length) return;
+      for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`);
+    }
+
     async function fecharCompetencia() {
       aviso('');
       if (!previa) return;
+      // Tudo confirmado, mas o rateio ainda não está fechado: em vez de
+      // barrar, leva direto para a tela de distribuir (pedido do dono,
+      // 24/09/2026) — é o último passo antes de fechar.
+      const rateio = previa.rateio;
+      if (rateio && !rateio.sql_pendente && rateio.colaboradores > 0 && rateio.pendentes > 0
+        && !(previa.bloqueios || []).some(b => /confirmar a produção|sem valor/i.test(b))) {
+        const ir = await window.DialogPadrao?.confirm?.({
+          title: 'Falta dizer quem fez o quê', tom: 'aviso', icone: 'fa-users',
+          message: `${rateio.pendentes === 1 ? '1 processo ainda não foi distribuído' : `${rateio.pendentes} processos ainda não foram distribuídos`} entre os colaboradores. `
+            + 'A competência só fecha com 100% de cada processo distribuído.',
+          confirmText: 'Distribuir agora'
+        });
+        if (ir) abrirOutro('rateio-producao', { competencia: compSel.value });
+        return;
+      }
       if (!previa.pode_fechar) {
         aviso((previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
         return;
@@ -3464,6 +3582,8 @@
       for (const i of indicadores) {
         const cartao = criar('div', `fin-indicador${i.destaque ? ' fin-indicador--destaque' : ''}${i.atencao ? ' fin-indicador--atencao' : ''}`);
         cartao.append(criar('span', 'fin-indicador__rotulo', i.rotulo), criar('strong', 'fin-indicador__valor', i.valor));
+        // A nota explica a diferença entre peça e processo, embaixo do número.
+        if (i.nota) cartao.appendChild(criar('span', 'text-xs text-gray-400', i.nota));
         caixa.appendChild(cartao);
       }
 
@@ -3515,7 +3635,9 @@
     mesSel.addEventListener('change', carregar);
     ['finProdCompSetor', 'finProdCompItemStatus'].forEach(id => el(id).addEventListener('change', desenhar));
     ['finProdCompPedido', 'finProdCompProduto'].forEach(id => el(id).addEventListener('input', desenhar));
-    acionar(fecharBtn, () => abrirOutro('fechar-competencia', { tipo: 'producao', competencia: mesSel.value }));
+    // O "Fechar competência" daqui é o da PRODUÇÃO: abre a tela de confirmar
+    // peça a peça, não a de comissões (defeito que o dono pegou em 24/09/2026).
+    acionar(fecharBtn, () => abrirOutro('fechar-competencia-producao', { competencia: mesSel.value }));
     acionar(el('finProdCompRelatorio'), () => abrirOutro('visualizar-relatorio', { relatorio: 'producao-competencia', competencia: mesSel.value }));
     aoAlterar(carregar);
     pintarTopo();
@@ -4229,7 +4351,6 @@
     produtoSel.replaceChildren(opcao('padrao', PADRAO_DO_PROCESSO));
     pintarQuemRecebe();
     pintarTipoValor();
-    montarColaboradores({ podeEditar, erroDe });
     return carregar();
   }
 
@@ -4242,16 +4363,46 @@
    * toda peça, mas só quando há colaborador cadastrado (sem ninguém, o
    * recurso não está em uso). Ver backend/financeiro/rateios.js.
    */
-  function montarColaboradores({ podeEditar, erroDe }) {
-    let estado = { colaboradores: [], pecas: [], resumo: [], pendentes: 0, sql_pendente: false, fechado: false };
+
+  // ---------------------------------------------------- rateio da produção
+  //
+  // A produção paga por PROCESSO de cada peça. Aqui se diz quem fez cada um e
+  // quanto por cento leva; a soma vai até 100% e não passa. Dá para ratear a
+  // qualquer momento, no que já foi decidido no mês — o resto entra aqui
+  // assim que for confirmado em "Fechar competência — produção".
+  // Backend: backend/financeiro/rateios.js.
+
+  function montarRateioProducao() {
+    let estado = { colaboradores: [], pecas: [], resumo: [], pendentes: 0, sql_pendente: false, fechado: false, contagem: { pecas: 0, processos: 0 } };
     let editando = null;
     const avisar = (texto, tipo = 'erro') => mostrarMensagem('finRateioMensagem', texto, tipo);
+    const erroDe = e => textoDoErro(e, 'Você não tem permissão para mexer no rateio.');
+    const podeEditar = pode('financeiro.regras.editar');
     const pct = v => `${Number.isInteger(Number(v)) ? Number(v) : String(Number(v)).replace('.', ',')}%`;
 
+    function pintarIndicadores() {
+      const caixa = el('finRateioIndicadores');
+      const c = estado.contagem || { pecas: 0, processos: 0 };
+      const total = estado.total || 0;
+      const lista = [
+        { rotulo: 'Peças decididas', valor: String(c.pecas || 0), nota: `${c.processos || 0} ${c.processos === 1 ? 'processo' : 'processos'}` },
+        { rotulo: 'Processos a distribuir', valor: String(estado.pendentes || 0), atencao: Boolean(estado.pendentes) },
+        { rotulo: 'Colaboradores', valor: String((estado.colaboradores || []).length) },
+        { rotulo: 'Produção da competência', valor: formatarMoeda(total), destaque: true }
+      ];
+      caixa.replaceChildren();
+      for (const i of lista) {
+        const cartao = criar('div', `fin-indicador${i.destaque ? ' fin-indicador--destaque' : ''}${i.atencao ? ' fin-indicador--atencao' : ''}`);
+        cartao.append(criar('span', 'fin-indicador__rotulo', i.rotulo), criar('strong', 'fin-indicador__valor', i.valor));
+        if (i.nota) cartao.appendChild(criar('span', 'text-xs text-gray-400', i.nota));
+        caixa.appendChild(cartao);
+      }
+    }
+
     function pintarColaboradores() {
-      const lista = el('finColabLista');
-      const vivos = estado.colaboradores.filter(x => x.ativo !== false);
-      el('finColabTotal').textContent = vivos.length === 1 ? '1 pessoa' : `${vivos.length} pessoas`;
+      const lista = el('finRateioColabLista');
+      const vivos = (estado.colaboradores || []).filter(x => x.ativo !== false);
+      el('finRateioColabTotal').textContent = vivos.length === 1 ? '1 pessoa' : `${vivos.length} pessoas`;
       lista.replaceChildren(...vivos.map(colab => {
         const li = criar('li', 'py-2 flex items-center justify-between gap-3');
         const dados = criar('div', 'min-w-0');
@@ -4263,10 +4414,10 @@
           editar.type = 'button';
           editar.addEventListener('click', () => {
             editando = colab;
-            el('finColabNome').value = colab.nome;
-            el('finColabFuncao').value = colab.funcao || '';
-            el('finColabSalvar').textContent = 'Salvar';
-            el('finColabCancelar').classList.remove('hidden');
+            el('finRateioColabNome').value = colab.nome;
+            el('finRateioColabFuncao').value = colab.funcao || '';
+            el('finRateioColabSalvar').textContent = 'Salvar';
+            el('finRateioColabCancelar').classList.remove('hidden');
           });
           const desligar = criar('button', 'btn-danger ctl-botao ctl-botao--pequeno text-white', 'Desligar');
           desligar.type = 'button';
@@ -4276,108 +4427,152 @@
         li.append(dados, acoes);
         return li;
       }));
-      el('finColabVazio').classList.toggle('hidden', vivos.length > 0);
+      el('finRateioColabVazio').classList.toggle('hidden', vivos.length > 0);
     }
 
-    /** Uma peça: o cabeçalho com a barra do % e as linhas de quem recebe. */
-    function linhaDaPeca(peca) {
-      const li = criar('li', 'rounded-xl border border-white/10 bg-white/5 p-4 space-y-3');
+    /** Um processo: quem já está nele, quanto falta e o formulário de incluir. */
+    function linhaDoProcesso(peca, processo) {
+      const caixa = criar('div', 'rounded-lg border border-white/10 bg-white/5 p-3 space-y-2');
 
-      const topo = criar('div', 'flex flex-wrap items-start justify-between gap-3');
-      const quem = criar('div', 'min-w-0');
-      quem.append(criar('p', 'text-sm text-white truncate', peca.produto));
-      quem.append(criar('p', 'text-xs text-gray-400 truncate',
-        [peca.pedido_numero || `pedido ${peca.pedido_id}`, peca.cliente, `comissão ${formatarMoeda(peca.comissao)}`].filter(Boolean).join(' · ')));
-      const marca = criar('span', `${peca.completo ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`,
-        peca.completo ? '100% distribuído' : `faltam ${pct(peca.restante)}`);
-      topo.append(quem, marca);
+      const topo = criar('div', 'flex flex-wrap items-center justify-between gap-3');
+      const nome = criar('div', 'min-w-0');
+      nome.append(criar('p', 'text-sm text-white truncate', processo.setor));
+      nome.append(criar('p', 'text-xs text-gray-400 truncate',
+        [`${processo.quantidade} un.`, formatarMoeda(processo.valor), processo.data ? `decidido em ${instanteCurto(processo.data)}` : ''].filter(Boolean).join(' · ')));
+      const marca = criar('span', `${processo.completo ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`,
+        processo.completo ? '100%' : `faltam ${pct(processo.restante)}`);
+      topo.append(nome, marca);
 
-      // A barra é a leitura rápida do que falta: verde quando fecha 100%.
       const trilho = criar('div', 'h-2 w-full rounded-full bg-white/10 overflow-hidden');
-      const barra = criar('div', `h-2 rounded-full ${peca.completo ? 'bg-green' : 'bg-primary'}`);
-      barra.style.width = `${Math.min(100, Number(peca.distribuido) || 0)}%`;
+      const barra = criar('div', `h-2 rounded-full ${processo.completo ? 'bg-green' : 'bg-primary'}`);
+      barra.style.width = `${Math.min(100, Number(processo.distribuido) || 0)}%`;
       trilho.appendChild(barra);
+      caixa.append(topo, trilho);
 
-      const linhas = criar('ul', 'space-y-1 text-sm');
-      for (const l of peca.linhas) {
-        const item = criar('li', 'flex items-center justify-between gap-3');
-        const nome = criar('span', 'text-white truncate', `${l.colaborador} · ${pct(l.percentual)}`);
-        const direita = criar('div', 'flex items-center gap-3 flex-shrink-0');
-        direita.append(criar('span', 'text-xs text-gray-400', formatarMoeda(l.valor)));
-        if (podeEditar && !estado.fechado) {
-          const tirar = criar('button', 'btn-neutral ctl-botao ctl-botao--icone text-white', null);
-          tirar.type = 'button';
-          tirar.title = `Tirar ${l.colaborador} desta peça`;
-          tirar.setAttribute('aria-label', tirar.title);
-          const icone = criar('i', 'fas fa-times', null);
-          icone.setAttribute('aria-hidden', 'true');
-          tirar.appendChild(icone);
-          acionar(tirar, () => removerLinha(l));
-          direita.appendChild(tirar);
+      if (processo.linhas.length) {
+        const linhas = criar('ul', 'space-y-1 text-sm');
+        for (const l of processo.linhas) {
+          const item = criar('li', 'flex items-center justify-between gap-3');
+          item.append(criar('span', 'text-white truncate', `${l.colaborador} · ${pct(l.percentual)}`));
+          const direita = criar('div', 'flex items-center gap-3 flex-shrink-0');
+          direita.append(criar('span', 'text-xs text-gray-400', formatarMoeda(l.valor)));
+          if (podeEditar && !estado.fechado) {
+            const tirar = criar('button', 'btn-neutral ctl-botao ctl-botao--icone text-white');
+            tirar.type = 'button';
+            tirar.title = `Tirar ${l.colaborador} deste processo`;
+            tirar.setAttribute('aria-label', tirar.title);
+            const icone = criar('i', 'fas fa-times');
+            icone.setAttribute('aria-hidden', 'true');
+            tirar.appendChild(icone);
+            acionar(tirar, () => removerLinha(l));
+            direita.appendChild(tirar);
+          }
+          item.append(direita);
+          linhas.appendChild(item);
         }
-        item.append(nome, direita);
-        linhas.appendChild(item);
+        caixa.appendChild(linhas);
       }
-      li.append(topo, trilho, linhas);
 
-      if (podeEditar && !estado.fechado && !peca.completo) {
-        const form = criar('div', 'flex flex-wrap items-end gap-3');
+      if (podeEditar && !estado.fechado && !processo.completo) {
+        const form = criar('div', 'flex flex-wrap items-end gap-2');
         const escolha = document.createElement('select');
-        escolha.className = 'flex-1 min-w-0 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
-        escolha.setAttribute('aria-label', `Colaborador da peça ${peca.produto}`);
-        const jaEstao = new Set(peca.linhas.map(l => String(l.colaborador_id)));
-        const livres = estado.colaboradores.filter(x => x.ativo !== false && !jaEstao.has(String(x.id)));
-        escolha.replaceChildren(...[opcao('', livres.length ? 'Escolha o colaborador' : 'Todos já estão nesta peça'),
-          ...livres.map(x => opcao(String(x.id), x.nome))]);
+        escolha.className = 'flex-1 min-w-0 appearance-none select-arrow ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        escolha.setAttribute('aria-label', `Colaborador de ${processo.setor}`);
+        const jaEstao = new Set(processo.linhas.map(l => String(l.colaborador_id)));
+        const livres = (estado.colaboradores || []).filter(x => x.ativo !== false && !jaEstao.has(String(x.id)));
+        escolha.replaceChildren(...[opcao('', livres.length ? 'Quem fez?' : 'Todos já estão neste processo'), ...livres.map(x => opcao(String(x.id), x.nome))]);
         escolha.disabled = !livres.length;
 
         const valor = document.createElement('input');
         valor.type = 'text';
         valor.inputMode = 'decimal';
         valor.maxLength = 6;
-        // O padrão é o que falta: o caso mais comum é fechar a peça de uma vez.
-        valor.placeholder = `até ${pct(peca.restante)}`;
-        valor.className = 'w-28 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
-        valor.setAttribute('aria-label', `Percentual na peça ${peca.produto}`);
+        valor.placeholder = `até ${pct(processo.restante)}`;
+        valor.className = 'w-24 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        valor.setAttribute('aria-label', `Percentual em ${processo.setor}`);
 
-        const incluir = criar('button', 'btn-success ctl-botao', 'Incluir');
+        const incluir = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Incluir');
         incluir.type = 'button';
         incluir.disabled = !livres.length;
-        acionar(incluir, () => incluirLinha(peca, escolha.value, valor.value || peca.restante));
+        acionar(incluir, () => incluirLinha(peca, processo, escolha.value, valor.value || processo.restante));
 
-        const tudo = criar('button', 'btn-neutral ctl-botao text-white', `Dar os ${pct(peca.restante)}`);
+        const tudo = criar('button', 'btn-neutral ctl-botao ctl-botao--pequeno text-white', `Dar os ${pct(processo.restante)}`);
         tudo.type = 'button';
         tudo.disabled = !livres.length;
-        acionar(tudo, () => incluirLinha(peca, escolha.value, peca.restante));
+        acionar(tudo, () => incluirLinha(peca, processo, escolha.value, processo.restante));
 
         form.append(escolha, valor, incluir, tudo);
-        li.appendChild(form);
+        caixa.appendChild(form);
       }
+      return caixa;
+    }
+
+    /** Uma peça: o cabeçalho, o atalho de copiar a divisão e os processos. */
+    function blocoDaPeca(peca) {
+      const li = criar('li', 'glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-3');
+      const topo = criar('div', 'flex flex-wrap items-start justify-between gap-3');
+      const quem = criar('div', 'min-w-0');
+      const linhaCodigo = criar('div', 'flex items-center gap-2 flex-wrap');
+      const codigo = criar('span', 'fin-tag-produto fin-tag-produto--bordo', peca.produto);
+      codigo.title = peca.produto;
+      linhaCodigo.appendChild(codigo);
+      quem.appendChild(linhaCodigo);
+      quem.appendChild(criar('p', 'text-xs text-gray-400 mt-1 truncate',
+        [peca.pedido || `pedido ${peca.pedido_id}`, `${peca.processos.length} ${peca.processos.length === 1 ? 'processo' : 'processos'}`, formatarMoeda(peca.valor)].filter(Boolean).join(' · ')));
+      const marca = criar('span', `${peca.completo ? 'badge-success' : 'badge-warning'} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`,
+        peca.completo ? 'peça distribuída' : `${peca.processos_completos} de ${peca.processos.length} processos`);
+      topo.append(quem, marca);
+      li.appendChild(topo);
+
+      // O atalho que o dono pediu: um processo já dividido serve de modelo
+      // para os outros da MESMA peça (quem divide a peça inteira igual).
+      const modelo = peca.processos.find(p => p.completo);
+      const faltam = peca.processos.filter(p => !p.completo);
+      if (podeEditar && !estado.fechado && modelo && faltam.length) {
+        const atalho = criar('button', 'btn-neutral ctl-botao ctl-botao--pequeno text-white',
+          `Mesma divisão nos outros ${faltam.length === 1 ? 'processo' : `${faltam.length} processos`}`);
+        atalho.type = 'button';
+        atalho.title = `Copia a divisão de ${modelo.setor} para os processos desta peça que ainda não têm ninguém`;
+        acionar(atalho, () => copiarNaPeca(peca, modelo));
+        linhaCodigo.appendChild(atalho);
+      }
+
+      const processos = criar('div', 'space-y-2');
+      for (const processo of peca.processos) processos.appendChild(linhaDoProcesso(peca, processo));
+      li.appendChild(processos);
       return li;
     }
 
-    function pintarPecas() {
-      el('finRateioPecas').replaceChildren(...estado.pecas.map(linhaDaPeca));
-      el('finRateioVazio').classList.toggle('hidden', estado.pecas.length > 0);
-
-      const total = estado.pecas.reduce((s, p) => s + (Number(p.comissao) || 0), 0);
-      const partes = [`${estado.pecas.length === 1 ? '1 peça' : `${estado.pecas.length} peças`} · ${formatarMoeda(total)} de comissão`];
-      if (estado.pendentes) partes.push(`${estado.pendentes === 1 ? '1 peça falta distribuir' : `${estado.pendentes} peças faltam distribuir`}`);
-      else if (estado.pecas.length) partes.push('tudo distribuído');
-      if (estado.fechado) partes.push('competência fechada: só leitura');
-      el('finRateioResumo').textContent = partes.join(' · ');
+    function pintar() {
+      pintarIndicadores();
+      pintarColaboradores();
+      el('finRateioPecas').replaceChildren(...(estado.pecas || []).map(blocoDaPeca));
+      el('finRateioVazio').classList.toggle('hidden', (estado.pecas || []).length > 0);
+      el('finRateioSemSql').classList.toggle('hidden', !estado.sql_pendente);
+      pintarSituacao(el('finRateioSituacao'), estado.fechado ? 'Fechada' : (estado.pendentes ? 'Falta distribuir' : 'Em aberto'));
 
       const porPessoa = el('finRateioPorPessoaLista');
-      porPessoa.replaceChildren(...estado.resumo.map(r => {
+      porPessoa.replaceChildren(...(estado.resumo || []).map(r => {
         const li = criar('li', 'flex items-center justify-between gap-3');
         li.append(criar('span', 'text-white truncate', r.colaborador),
-          criar('span', 'text-gray-300 flex-shrink-0', `${formatarMoeda(r.valor)} · ${r.pecas === 1 ? '1 peça' : `${r.pecas} peças`}`));
+          criar('span', 'text-gray-300 flex-shrink-0', `${formatarMoeda(r.valor)} · ${r.processos === 1 ? '1 processo' : `${r.processos} processos`}`));
         return li;
       }));
-      el('finRateioPorPessoa').classList.toggle('hidden', !estado.resumo.length);
+      el('finRateioPorPessoa').classList.toggle('hidden', !(estado.resumo || []).length);
+
+      // O que ainda espera decisão (os bloqueios que não são do rateio).
+      const esperando = (estado.bloqueios || []).filter(b => !/distribuí/i.test(b));
+      el('finRateioEsperandoTexto').textContent = esperando.join(' ');
+      el('finRateioEsperando').classList.toggle('hidden', !esperando.length);
+
+      const fecharBtn = el('finRateioFecharCompetencia');
+      fecharBtn.disabled = !estado.pode_fechar;
+      fecharBtn.title = estado.pode_fechar
+        ? 'Fecha a competência da produção'
+        : (estado.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.';
     }
 
-    async function carregarRateio() {
+    async function carregar() {
       const competencia = el('finRateioCompetencia').value;
       if (!competencia) return;
       el('finRateioCarregando').classList.remove('hidden');
@@ -4385,9 +4580,8 @@
       try {
         const corpo = await fetchApi(`/api/financeiro/rateio?competencia=${encodeURIComponent(competencia)}`);
         estado = { ...corpo, colaboradores: corpo.colaboradores || [], pecas: corpo.pecas || [], resumo: corpo.resumo || [] };
-        el('finColabSemSql').classList.toggle('hidden', !corpo.sql_pendente);
-        pintarColaboradores();
-        pintarPecas();
+        el('finRateioInfo').textContent = corpo.pagar_ate ? `Pagamento até ${formatarData(corpo.pagar_ate)}` : '';
+        pintar();
         if (!corpo.sql_pendente && !estado.colaboradores.length) {
           avisar('Cadastre ao menos um colaborador para começar a distribuir. Sem ninguém cadastrado, o fechamento não exige rateio.', 'ok');
         }
@@ -4398,57 +4592,74 @@
       }
     }
 
+    function limparFormulario() {
+      editando = null;
+      el('finRateioColabNome').value = '';
+      el('finRateioColabFuncao').value = '';
+      el('finRateioColabSalvar').textContent = 'Cadastrar';
+      el('finRateioColabCancelar').classList.add('hidden');
+    }
+
     async function salvarColaborador() {
-      const nome = el('finColabNome').value.trim();
+      const nome = el('finRateioColabNome').value.trim();
       if (!nome) { avisar('Informe o nome do colaborador.'); return; }
       try {
-        const corpo = { nome, funcao: el('finColabFuncao').value.trim() || null };
+        const corpo = { nome, funcao: el('finRateioColabFuncao').value.trim() || null };
         if (editando) await fetchApi(`/api/financeiro/colaboradores/${editando.id}`, { method: 'PUT', body: JSON.stringify(corpo) });
         else await fetchApi('/api/financeiro/colaboradores', { method: 'POST', body: JSON.stringify(corpo) });
-        window.showToast?.(editando ? 'Colaborador atualizado.' : `${nome} entrou no rateio das comissões.`, 'success');
+        window.showToast?.(editando ? 'Colaborador atualizado.' : `${nome} entrou no rateio da produção.`, 'success');
         limparFormulario();
-        await carregarRateio();
+        await carregar();
       } catch (e) {
         avisar(erroDe(e));
       }
     }
 
-    function limparFormulario() {
-      editando = null;
-      el('finColabNome').value = '';
-      el('finColabFuncao').value = '';
-      el('finColabSalvar').textContent = 'Cadastrar';
-      el('finColabCancelar').classList.add('hidden');
-    }
-
     async function removerColaborador(colab) {
       const ok = await window.DialogPadrao?.confirm?.({
-        title: 'Desligar o colaborador?', tom: 'aviso', icone: 'fa-user-minus',
-        subtitle: colab.nome,
-        nota: 'Ele sai das peças em que estava, e essas peças voltam a ficar incompletas. O histórico guarda o que houve.',
+        title: 'Desligar o colaborador?', tom: 'aviso', icone: 'fa-user-minus', subtitle: colab.nome,
+        nota: 'Ele sai dos processos em que estava, e esses processos voltam a ficar incompletos. O histórico guarda o que houve.',
         confirmText: 'Desligar', confirmVariant: 'danger'
       });
       if (!ok) return;
       try {
         await fetchApi(`/api/financeiro/colaboradores/${colab.id}`, { method: 'DELETE' });
         window.showToast?.(`${colab.nome} saiu do rateio.`, 'success');
-        await carregarRateio();
+        await carregar();
       } catch (e) {
         avisar(erroDe(e));
       }
     }
 
-    async function incluirLinha(peca, colaboradorId, percentual) {
-      if (!colaboradorId) { avisar('Escolha o colaborador desta peça.'); return; }
+    async function incluirLinha(peca, processo, colaboradorId, percentual) {
+      if (!colaboradorId) { avisar('Escolha quem fez este processo.'); return; }
       try {
         await fetchApi('/api/financeiro/rateio', {
           method: 'POST',
           body: JSON.stringify({
-            pedido_id: peca.pedido_id, pedido_item_id: peca.id, produto_id: peca.produto_id,
+            pedido_id: peca.pedido_id, pedido_item_id: peca.pedido_item_id,
+            setor_id: processo.setor_id, produto_id: peca.produto_id,
             colaborador_id: Number(colaboradorId), percentual
           })
         });
-        await carregarRateio();
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    async function copiarNaPeca(peca, modelo) {
+      try {
+        const r = await fetchApi('/api/financeiro/rateio/peca', {
+          method: 'POST',
+          body: JSON.stringify({
+            pedido_id: peca.pedido_id, pedido_item_id: peca.pedido_item_id, produto_id: peca.produto_id,
+            setores: peca.processos.filter(p => p.setor_id !== modelo.setor_id).map(p => p.setor_id),
+            linhas: modelo.linhas.map(l => ({ colaborador_id: l.colaborador_id, percentual: l.percentual }))
+          })
+        });
+        window.showToast?.(`Divisão copiada para ${r.aplicados === 1 ? '1 processo' : `${r.aplicados} processos`}${r.pulados ? ` (${r.pulados} já tinha divisão)` : ''}.`, 'success');
+        await carregar();
       } catch (e) {
         avisar(erroDe(e));
       }
@@ -4457,25 +4668,39 @@
     async function removerLinha(linha) {
       try {
         await fetchApi(`/api/financeiro/rateio/${linha.id}`, { method: 'DELETE' });
-        await carregarRateio();
+        await carregar();
       } catch (e) {
         avisar(erroDe(e));
       }
     }
 
-    const hoje = new Date();
-    el('finRateioCompetencia').value = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-    acionar(el('finColabSalvar'), salvarColaborador);
-    el('finColabCancelar').addEventListener('click', limparFormulario);
-    acionar(el('finRateioBuscar'), carregarRateio);
-    el('finRateioCompetencia').addEventListener('change', carregarRateio);
-    // A apuração é pesada: só roda quando a aba abre.
-    let jaAbriu = false;
-    overlay.querySelector('[data-fin-aba="colaboradores"]')?.addEventListener('click', () => {
-      if (jaAbriu) return;
-      jaAbriu = true;
-      carregarRateio();
-    });
+    async function fecharCompetencia() {
+      if (!estado.pode_fechar) { avisar((estado.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.'); return; }
+      const ok = await window.DialogPadrao?.confirm?.({
+        title: 'Fechar a competência da produção?', tom: 'aviso', icone: 'fa-lock',
+        message: `A produção de ${el('finRateioCompetencia').value} será congelada com o rateio como está: ${formatarMoeda(estado.total)} divididos entre ${(estado.resumo || []).length} ${(estado.resumo || []).length === 1 ? 'colaborador' : 'colaboradores'}.`,
+        confirmText: 'Fechar competência'
+      });
+      if (!ok) return;
+      try {
+        await fetchApi('/api/financeiro/fechamentos', {
+          method: 'POST', body: JSON.stringify({ tipo: 'producao', competencia: el('finRateioCompetencia').value })
+        });
+        window.showToast?.('Competência da produção fechada.', 'success');
+        await carregar();
+      } catch (e) {
+        avisar(erroDe(e));
+      }
+    }
+
+    const inicial = contexto.competencia || competenciaAtual();
+    el('finRateioCompetencia').value = String(inicial).slice(0, 7);
+    acionar(el('finRateioColabSalvar'), salvarColaborador);
+    el('finRateioColabCancelar').addEventListener('click', limparFormulario);
+    acionar(el('finRateioBuscar'), carregar);
+    el('finRateioCompetencia').addEventListener('change', carregar);
+    acionar(el('finRateioFecharCompetencia'), fecharCompetencia);
+    return carregar();
   }
 
   // ------------------------------------------------ configuração fiscal
@@ -5543,6 +5768,7 @@
     finComissoesAtrasadas: montarComissoesAtrasadas,
     finProducaoCompetencia: montarProducaoCompetencia,
     finRegras: montarRegras,
+    finRateioProducao: montarRateioProducao,
     finAtividade: montarAtividade
   };
 

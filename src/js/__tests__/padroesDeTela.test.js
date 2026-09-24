@@ -179,7 +179,13 @@ test('Fechar competência — produção: Tudo verde, Nada vermelho, Tudo pronto
   const js = ler('js/modals/financeiro-modais.js');
   assert.ok(js.includes("criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo')"), 'Tudo verde');
   assert.ok(js.includes("criar('button', 'btn-danger ctl-botao ctl-botao--pequeno text-white', 'Nada')"), 'Nada vermelho');
-  assert.ok(js.includes("criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo pronto neste pedido')"), 'Tudo pronto verde');
+  // Os botões do PEDIDO e da PEÇA saem do mesmo molde (`botaoDoPedido` e
+  // `botaoDaPeca`): verde para "tudo", vermelho para "nada".
+  assert.ok(js.includes("botaoDoPedido('Tudo pronto neste pedido', 'btn-success'"), 'Tudo pronto verde');
+  assert.ok(js.includes("botaoDoPedido('Nada pronto', 'btn-danger text-white'"), 'Nada pronto vermelho');
+  assert.ok(js.includes("botaoDaPeca('Tudo', 'btn-success'") && js.includes("botaoDaPeca('Nada', 'btn-danger text-white'"), 'Tudo/Nada da peça');
+  assert.ok(js.includes('b.disabled = peca.decidida') && js.includes('b.disabled = Boolean(pedido.confirmado)'),
+    'já confirmado: botões visíveis e inativos, nunca escondidos');
   assert.match(js, /const codigo = criar\('span', 'fin-tag-produto fin-tag-produto--bordo', peca\.codigo \|\| nomeInteiro\);\s*codigo\.title = nomeInteiro;/, 'só o código; o nome inteiro no hover');
   assert.match(ler('css/financeiro.css'), /\.fin-tag-produto--bordo \{[^}]*background: #6a152c;/);
 });

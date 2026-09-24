@@ -148,13 +148,26 @@ function criarRouter() {
   router.delete('/colaboradores/:id', exigirPermissao(EDITAR_REGRAS), rota('DELETE /api/financeiro/colaboradores/:id', ({ api, req, usuarioId }) =>
     rateios.removerColaborador({ api, id: req.params.id, usuarioId })));
 
-  /** As peças contabilizadas da competência, com o que cada uma já distribuiu. */
+  /**
+   * Os PROCESSOS contabilizados da competência (o que já foi decidido no
+   * mês), com o que cada um já distribuiu. Dá para ratear a qualquer momento:
+   * processo ainda não confirmado nem aparece aqui.
+   */
   router.get('/rateio', exigirPermissao(VER), rota('GET /api/financeiro/rateio', async ({ api, req, hoje, desde }) => {
     const competencia = String(req.query?.competencia || '') || c.competenciaDe(hoje);
-    const previa = await fechamentos.previa({ api, tipo: 'comissao', competencia, hoje, desde });
-    const visao = await rateios.lerVisao({ api, itens: previa.itens || [] });
-    return { competencia, fechado: Boolean(previa.fechado), ...visao };
+    const previa = await fechamentos.previa({ api, tipo: 'producao', competencia, hoje, desde });
+    const visao = await rateios.lerVisao({ api, linhas: previa.linhas || [] });
+    return {
+      competencia, fechado: Boolean(previa.fechado),
+      a_pagar: previa.a_pagar, pagar_ate: previa.pagar_ate,
+      // O que ainda espera decisão na competência: a tela avisa que o rateio
+      // do que falta só aparece depois de confirmado.
+      bloqueios: previa.bloqueios || [], pode_fechar: Boolean(previa.pode_fechar),
+      ...visao
+    };
   }));
+  router.post('/rateio/peca', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/rateio/peca', ({ api, req, usuarioId }) =>
+    rateios.aplicarNaPeca({ api, dados: req.body, usuarioId })));
   router.post('/rateio', exigirPermissao(EDITAR_REGRAS), rota('POST /api/financeiro/rateio', ({ api, req, usuarioId }) =>
     rateios.salvarLinha({ api, dados: req.body, usuarioId })));
   router.put('/rateio/:id', exigirPermissao(EDITAR_REGRAS), rota('PUT /api/financeiro/rateio/:id', ({ api, req, usuarioId }) =>

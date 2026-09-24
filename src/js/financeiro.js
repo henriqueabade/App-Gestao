@@ -70,6 +70,8 @@ const FIN_ACOES = {
         }
     },
     'fechar-competencia-producao': { rotulo: 'Fechar competência — produção', abrir: (m, extra) => finAbrirModal('fechar-producao', m, finDoFiltro(extra)) },
+    // O rateio da produção: quem fez cada processo de cada peça e quanto leva.
+    'rateio-producao': { rotulo: 'Rateio da produção', abrir: (m, extra) => finAbrirModal('rateio-producao', m, finDoFiltro(extra)) },
     'relatorios': { rotulo: 'Relatórios', abrir: m => finAbrirModal('relatorios', m) },
     'comissoes-detalhes': { rotulo: 'Detalhes das comissões', abrir: m => finAbrirModal('visualizar-relatorio', m, { relatorio: 'previsao-comissoes' }) },
     // "Ver todas" abre o histórico inteiro num modal (quem fez, quando, o quê), em vez de esticar o card.
@@ -92,6 +94,7 @@ const FIN_MODAIS = {
     'registrar-producao': { html: 'modals/financeiro/registrar-producao.html', overlay: 'finRegistrarProducao' },
     'fechar-competencia': { html: 'modals/financeiro/fechar-competencia.html', overlay: 'finFecharCompetencia' },
     'fechar-producao': { html: 'modals/financeiro/fechar-producao.html', overlay: 'finFecharProducao' },
+    'rateio-producao': { html: 'modals/financeiro/rateio-producao.html', overlay: 'finRateioProducao' },
     'relatorios': { html: 'modals/financeiro/relatorios.html', overlay: 'finRelatorios' },
     'detalhes-parcela': { html: 'modals/financeiro/detalhes-parcela.html', overlay: 'finDetalhesParcela' },
     'detalhes-pedido': { html: 'modals/financeiro/detalhes-pedido.html', overlay: 'finDetalhesPedido' },

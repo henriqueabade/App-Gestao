@@ -110,18 +110,23 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
           valor_pendente: valorPeca === null ? null : c.centavos(valorPeca * soma(alocado.pendentes)),
           decidido: d ? {
             prontas: inteiro(d.quantidade_pronta), pendentes: inteiro(d.quantidade_pendente),
-            origem: d.origem || 'fechamento', rotulo: ORIGENS[d.origem] || ORIGENS.fechamento
+            origem: d.origem || 'fechamento', rotulo: ORIGENS[d.origem] || ORIGENS.fechamento,
+            // Quando a decisão foi tomada: a tela mostra no hover da etiqueta.
+            em: d.criado_em || null
           } : null
         };
       }).filter(Boolean);
       if (!processos.length) return null;
+      const datas = processos.map(e => e.decidido?.em).filter(Boolean).sort();
       return {
         pedido_item_id: i.id, produto_id: i.produto_id ?? null, codigo: i.codigo || null, nome: i.nome || null,
         quantidade: Number(i.quantidade) || 0,
         do_estoque: grupos.filter(g => g.origem === 'estoque').reduce((s, g) => s + g.quantidade, 0),
         preco_tabela: preco,
         processos,
-        decidida: processos.every(e => !e.saldo || e.decidido)
+        decidida: processos.every(e => !e.saldo || e.decidido),
+        decidida_em: datas.length ? datas[datas.length - 1] : null,
+        sem_valor: processos.some(e => e.sem_valor && (e.saldo > 0 || (e.decidido?.prontas || 0) > 0))
       };
     }).filter(Boolean);
     if (!pecas.length) return null;
@@ -134,7 +139,13 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
       valor_pendente: c.centavos(todos.reduce((s, e) => s + (e.valor_pendente || 0), 0)),
       valor_decidido: c.centavos(todos.reduce((s, e) => s + (e.decidido && e.valor_unitario !== null ? e.valor_unitario * somaDasProntas(e) : 0), 0)),
       sem_valor: todos.some(e => e.sem_valor && (e.saldo > 0 || (e.decidido?.prontas || 0) > 0)),
-      confirmado: pecas.every(x => x.decidida)
+      // Quais peças estão sem regra (a tela lista no hover da etiqueta) e
+      // quando o pedido inteiro ficou decidido.
+      pecas_sem_valor: pecas.filter(x => x.sem_valor).map(x => x.codigo || x.nome || `peça ${x.pedido_item_id}`),
+      confirmado: pecas.every(x => x.decidida),
+      confirmado_em: pecas.every(x => x.decidida)
+        ? pecas.map(x => x.decidida_em).filter(Boolean).sort().slice(-1)[0] || null
+        : null
     };
   }).filter(Boolean);
 

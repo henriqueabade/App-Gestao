@@ -261,13 +261,14 @@ test('comissões atrasadas: totais e aging das linhas do backend (as 5 faixas, m
 test('produção da competência: um cartão por setor, total em destaque e o que fica a compensar', () => {
     const f = puro();
     const cartoes = plano(f.indicadoresDaProducao({
-        pecas: 327, pedidos: 5, fechado: false, a_pagar: 9870, a_compensar: 0,
+        pecas: 327, processos: 812, pedidos: 5, fechado: false, a_pagar: 9870, a_compensar: 0,
         setores: [{ setor: 'Marcenaria', total: 5640 }, { setor: 'Pintura', total: 4230 }]
     }));
     assert.deepStrictEqual(cartoes.map(c => [c.rotulo, semNbsp(c.valor)]), [
-        ['Peças finalizadas', '327'], ['Pedidos envolvidos', '5'], ['Marcenaria', 'R$ 5.640,00'], ['Pintura', 'R$ 4.230,00'], ['Total a pagar', 'R$ 9.870,00']
+        // Peça e processo são números diferentes: 327 peças passaram por 812 processos.
+        ['Peças finalizadas', '327'], ['Processos pagos', '812'], ['Pedidos envolvidos', '5'], ['Marcenaria', 'R$ 5.640,00'], ['Pintura', 'R$ 4.230,00'], ['Total a pagar', 'R$ 9.870,00']
     ]);
-    assert.strictEqual(cartoes[4].destaque, true);
+    assert.strictEqual(cartoes[5].destaque, true);
     const negativo = plano(f.indicadoresDaProducao({ pecas: -3, pedidos: 1, fechado: true, a_pagar: 0, a_compensar: -75, setores: [{ setor: 'Pintura', total: -75 }] }));
     assert.deepStrictEqual(negativo.slice(-2).map(c => [c.rotulo, semNbsp(c.valor)]), [['Total a pagar (fechado)', 'R$ 0,00'], ['A compensar', '- R$ 75,00']]);
     assert.strictEqual(negativo[negativo.length - 1].atencao, true);

@@ -22,7 +22,6 @@
       <div class="flex gap-8 overflow-x-auto scrollbar-hide">
         <button type="button" role="tab" aria-selected="true" data-fin-aba="comissoes" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Comissões (CMS e Royalty)</button>
         <button type="button" role="tab" aria-selected="false" data-fin-aba="producao" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Produção (processos)</button>
-        <button type="button" role="tab" aria-selected="false" data-fin-aba="colaboradores" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Colaboradores (rateio)</button>
         <button type="button" role="tab" aria-selected="false" data-fin-aba="calendario" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Calendário e prazos</button>
       </div>
     </nav>
@@ -204,79 +203,6 @@
                 </table>
               </div>
               <p id="finValoresVazio" class="hidden fin-vazio">Nenhum valor de processo cadastrado.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ======================================================== COLABORADORES -->
-        <!-- A comissão de cada PEÇA contabilizada é repartida entre os
-             colaboradores, em %. Para fechar a competência, toda peça precisa
-             estar 100% distribuída (só vale quando há gente cadastrada). -->
-        <div data-fin-painel="colaboradores" role="tabpanel" class="hidden space-y-6">
-          <p class="text-sm text-gray-300">
-            Depois que a comissão de um pedido é apurada, ela é repartida entre as <strong>peças</strong> dele, na proporção do que foi vendido.
-            Aqui você diz <strong>quem recebe</strong> a comissão de cada peça e <strong>quanto por cento</strong>. Pode ser uma pessoa com 100%,
-            duas com 50% cada, o que for — mas <strong>a soma de cada peça precisa fechar 100%</strong> para a competência ser fechada.
-          </p>
-
-          <div id="finColabSemSql" class="hidden fin-aviso" role="alert">
-            <i class="fas fa-database" aria-hidden="true"></i>
-            <span>O rateio ainda não está ativado: rode <strong>sql/comissao_colaboradores_rateio.sql</strong> no banco e reinicie a API. Até lá o Financeiro fecha como sempre.</span>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Quem pode receber -->
-            <div class="glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-white">Colaboradores</p>
-                <span id="finColabTotal" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">0</span>
-              </div>
-              <p class="text-xs text-gray-400">Quem participa das comissões. Desligar tira a pessoa das peças em que ela estava — o rastro fica no histórico.</p>
-              <div class="space-y-2">
-                <label for="finColabNome" class="ctl-rotulo text-gray-400">Nome</label>
-                <input id="finColabNome" type="text" maxlength="120" placeholder="Ex.: Ana Silva" autocomplete="off"
-                       class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              </div>
-              <div class="space-y-2">
-                <label for="finColabFuncao" class="ctl-rotulo text-gray-400">Função (opcional)</label>
-                <input id="finColabFuncao" type="text" maxlength="80" placeholder="Ex.: Montagem, Vendas" autocomplete="off"
-                       class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              </div>
-              <div class="ctl-acoes justify-end">
-                <button id="finColabCancelar" type="button" class="hidden btn-danger ctl-botao text-white">Cancelar</button>
-                <button id="finColabSalvar" type="button" data-perm="financeiro.regras.editar" class="btn-success ctl-botao">Cadastrar</button>
-              </div>
-              <ul id="finColabLista" class="divide-y divide-white/10"></ul>
-              <p id="finColabVazio" class="hidden fin-vazio">Nenhum colaborador cadastrado: enquanto isso, o fechamento não exige rateio.</p>
-            </div>
-
-            <!-- As peças contabilizadas -->
-            <div class="lg:col-span-2 glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4">
-              <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p class="text-sm font-semibold text-white">Peças contabilizadas</p>
-                  <p id="finRateioResumo" class="text-xs text-gray-400">—</p>
-                </div>
-                <div class="flex items-end gap-3">
-                  <div>
-                    <label for="finRateioCompetencia" class="ctl-rotulo text-gray-400">Competência</label>
-                    <input id="finRateioCompetencia" type="month" data-no-restore="true"
-                           class="ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-                  </div>
-                  <button id="finRateioBuscar" type="button" class="btn-primary ctl-botao text-white">Ver peças</button>
-                </div>
-              </div>
-
-              <div id="finRateioMensagem" class="hidden text-sm" role="alert"></div>
-              <p id="finRateioCarregando" class="hidden fin-vazio">Carregando as peças…</p>
-              <ul id="finRateioPecas" class="space-y-3"></ul>
-              <p id="finRateioVazio" class="hidden fin-vazio">Nenhuma peça contabilizada nesta competência.</p>
-
-              <!-- Quanto cada colaborador leva no fim -->
-              <div id="finRateioPorPessoa" class="hidden rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
-                <p class="text-sm font-semibold text-white">A pagar por colaborador</p>
-                <ul id="finRateioPorPessoaLista" class="space-y-1 text-sm"></ul>
-              </div>
             </div>
           </div>
         </div>
