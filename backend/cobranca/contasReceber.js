@@ -6,9 +6,13 @@
  *   - recebida   tem recebimento confirmado (ou boleto pago / quitado por fora
  *                ainda sem lançamento: a conciliação lança);
  *   - cancelada  o boleto foi baixado como cobrança cancelada;
- *   - a_receber  o resto; em atraso quando o vencimento (o do boleto que
- *                vale, se prorrogado) já passou.
- * Parcela de pedido em produção é só previsão e não entra. Parcela que
+ *   - a_receber  o resto; em atraso quando passou do último dia para pagar
+ *                sem encargos — o vencimento (o do boleto que vale, se
+ *                prorrogado) ou, se ele cai em fim de semana ou feriado, o
+ *                próximo dia útil. O atraso conta desde o vencimento do papel
+ *                (`vencimento.js`).
+ * Parcela de pedido em produção é só previsão e não entra — a menos que já
+ * tenha pagamento registrado (Pix, cartão… antes da nota). Parcela que
  * venceu antes de `recebimentos_desde` fica fora de "a receber" e "em
  * atraso" (era controlada por fora), mas ainda pode ser recebida à mão.
  *
@@ -18,6 +22,7 @@ const boletos = require('./boletos');
 const recebimentos = require('./recebimentos');
 const execucoes = require('./execucoes');
 const webhookEstado = require('./webhookEstado');
+const vencimentos = require('./vencimento');
 
 const SITUACOES_FATURADAS = new Set(['enviado', 'entregue']);
 /** Dias depois do vencimento em que o BB ainda recebe o boleto (configuração padrão). */
@@ -59,7 +64,7 @@ const agrupar = (linhas, campo) => {
 };
 
 /** Todas as parcelas dos pedidos faturados, cada uma com o seu estado. Pura. */
-function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = [], boletos: bols = [], notas = [], clientes = [], hoje, desde = null }) {
+function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = [], boletos: bols = [], notas = [], clientes = [], hoje, desde = null, feriados = [] }) {
   const parcelasPor = agrupar(parcelas, 'pedido_id');
   const boletosPor = agrupar(bols, 'pedido_id');
   const notasPor = agrupar(notas, 'pedido_id');
@@ -81,9 +86,11 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
     const nota = notasDoPedido.find(n => n.status_fiscal === 'autorizada') || null;
     // Quem tentou gerar boleto (até o recusado) já está cobrando o pedido.
     const temBoleto = bolsDoPedido.some(b => String(b.status) !== 'reservado');
-    const faturado = SITUACOES_FATURADAS.has(situacao) || Boolean(nota) || temBoleto;
-    if (!faturado) continue;
     const recsDoPedido = recebPor.get(chave) || [];
+    // Pagamento registrado (Pix, cartão… no pedido ainda em produção) também
+    // fatura: o dinheiro entrou e a comissão tem de contar (decisão do dono, 24/09/2026).
+    const faturado = SITUACOES_FATURADAS.has(situacao) || Boolean(nota) || temBoleto || recsDoPedido.length > 0;
+    if (!faturado) continue;
 
     for (const parcela of doPedido) {
       const numero = Number(parcela.numero_parcela);
@@ -104,7 +111,8 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
       // Parcela zerada por devolução do pedido (sem boleto para baixar): nada a receber.
       else if (!(valor > 0)) estado = 'cancelada';
 
-      const atraso = estado === 'a_receber' && vencimento && hojeDia && vencimento < hojeDia ? diasEntre(hojeDia, vencimento) : 0;
+      // Vencimento em fim de semana ou feriado: em dia até o próximo dia útil.
+      const atraso = estado === 'a_receber' && vencimento && hojeDia ? vencimentos.diasDeAtraso(vencimento, hojeDia, feriados) : 0;
       linhas.push({
         pedido_id: p.id,
         pedido: p.numero ?? String(p.id),
@@ -248,14 +256,24 @@ function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = []
 /** Por quantos dias um alerta de conciliação fica nas pendências. */
 const DIAS_ALERTA = 30;
 
+/**
+ * Os feriados cadastrados no Financeiro (`[{ data, descricao }]`), para o
+ * vencimento em dia não útil. Sem a tabela (SQL da fase G), só os nacionais.
+ */
+async function lerFeriados(api) {
+  const linhas = await api.get('/api/financeiro_feriados').then(lista).catch(() => []);
+  return linhas.filter(f => f && f.data).map(f => ({ data: dia(f.data), descricao: f.descricao || 'Feriado' })).filter(f => f.data);
+}
+
 /** Lê tudo o que as contas precisam. Clientes só dos pedidos que aparecem. */
 async function lerBase(api, hoje) {
-  const [pedidos, parcelas, bols, notas, eventos] = await Promise.all([
+  const [pedidos, parcelas, bols, notas, eventos, feriados] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/boletos').then(lista).catch(() => []),
     api.get('/api/notas_fiscais').then(lista).catch(() => []),
-    api.get('/api/boletos_eventos', { query: { origem: 'webhook' } }).then(lista).catch(() => [])
+    api.get('/api/boletos_eventos', { query: { origem: 'webhook' } }).then(lista).catch(() => []),
+    lerFeriados(api)
   ]);
   let recs = [];
   let sqlPendente = false;
@@ -271,7 +289,7 @@ async function lerBase(api, hoje) {
   // Sem a tabela da fase F, simplesmente não há "última conciliação".
   const execs = await execucoes.recentes(api, 1).catch(() => ({ linhas: [] }));
   return {
-    pedidos, parcelas, boletos: bols, notas: notasLeves, recebimentos: recs, sqlPendente,
+    pedidos, parcelas, boletos: bols, notas: notasLeves, recebimentos: recs, sqlPendente, feriados,
     ultimaConciliacao: execs.linhas[0] || null,
     fila: doWebhook.filter(e => !e.processado_em).length,
     // Aviso conciliado com alerta (pagamento de boleto já baixado aqui), dos últimos dias.
@@ -325,5 +343,5 @@ async function carregarVisao({ api, competencia, visao, hoje, desde }) {
 
 module.exports = {
   SITUACOES_FATURADAS, DIAS_ATRASO_CRITICO, VISOES,
-  diasEntre, competenciaValida, parcelasDosPedidos, recebidosDaCompetencia, visoes, resumir, lerBase, carregarPainel, carregarVisao
+  diasEntre, competenciaValida, parcelasDosPedidos, recebidosDaCompetencia, visoes, resumir, lerFeriados, lerBase, carregarPainel, carregarVisao
 };

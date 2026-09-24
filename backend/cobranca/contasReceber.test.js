@@ -144,3 +144,28 @@ test('carregar: lê a base (sem XML das notas), conta a fila e os alertas recent
   assert.equal(p2.sql_pendente, true);
   assert.equal(p2.pendencias[0].chave, 'recebimentos_sql');
 });
+
+test('vencimento em fim de semana ou feriado: em dia até o próximo dia útil; depois, o atraso conta desde o vencimento (dono, 24/09/2026)', async () => {
+  const b = base();
+  // A parcela 4 do PED100 (sem boleto) passa a vencer no domingo 20/09.
+  b.parcelas.find(p => p.id === 14).data_vencimento = '2026-09-20';
+  const linha = (hoje, feriados) => contas.parcelasDosPedidos({ ...b, hoje, feriados }).find(l => l.pedido === 'PED100' && l.numero_parcela === 4);
+  assert.equal(linha('2026-09-21').dias_atraso, 0, 'segunda: ainda em dia');
+  assert.equal(linha('2026-09-22').dias_atraso, 2, 'terça: 2 dias desde o domingo');
+  assert.equal(linha('2026-09-23').dias_atraso, 3, 'quarta: 3 dias desde 20/09');
+  assert.equal(linha('2026-09-22', [{ data: '2026-09-21', descricao: 'Feriado municipal' }]).dias_atraso, 0, 'com a segunda feriado (cadastrado), vale até terça');
+
+  // Os feriados vêm da tabela do Financeiro; sem ela, só os nacionais.
+  assert.deepEqual(await contas.lerFeriados({ get: async () => [{ data: '2026-09-21T00:00:00.000Z', descricao: 'Municipal' }, { data: null }] }), [{ data: '2026-09-21', descricao: 'Municipal' }]);
+  assert.deepEqual(await contas.lerFeriados({ get: async () => { throw new Error('404'); } }), []);
+});
+
+test('pagamento registrado (Pix, cartão…) fatura o pedido ainda em produção: a parcela entra nas contas e na comissão', () => {
+  const b = base();
+  b.recebimentos.push({ id: 9, pedido_id: 2, numero_parcela: 1, status: 'confirmado', data_recebimento: '2026-09-15', valor_parcela: '500.00', valor_abatimento: '0', valor_recebido: '500.00', valor_encargos: '0', competencia: '2026-09', forma: 'Cartão de crédito', origem: 'manual' });
+  const l = contas.parcelasDosPedidos({ ...b, hoje: HOJE }).find(x => x.pedido === 'PED101');
+  assert.deepEqual([l.estado, l.recebimento.forma, l.recebimento.competencia], ['recebida', 'Cartão de crédito', '2026-09']);
+  // O estornado não conta: o pedido volta a ser só previsão.
+  b.recebimentos[b.recebimentos.length - 1].status = 'estornado';
+  assert.ok(!contas.parcelasDosPedidos({ ...b, hoje: HOJE }).some(x => x.pedido === 'PED101'));
+});

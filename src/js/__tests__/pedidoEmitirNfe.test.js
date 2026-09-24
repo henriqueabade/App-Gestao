@@ -358,8 +358,8 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   vm.runInContext([recortarFuncao(VISUALIZAR, 'resumoDeBoletos'), recortarFuncao(VISUALIZAR, 'rotuloDoBoleto'), recortarFuncao(VISUALIZAR, 'boletoImprimivel')].join('\n'), contexto2);
   assert.deepStrictEqual(['registrado', 'vencido', 'protestado', 'pago', 'baixado', 'erro', 'reservado'].map(s => contexto2.boletoImprimivel({ status: s })), [true, true, true, false, false, false, false]);
   assert.strictEqual(contexto2.boletoImprimivel(null), false);
-  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos({ parcelas: [{ tem_boleto_vivo: true, boleto: { status: 'pago' } }, { tem_boleto_vivo: false, boleto: { status: 'erro' } }, { tem_boleto_vivo: false, boleto: null, boleto_externo: { id: 5 } }] })), { parcelas: 3, registrados: 1, pagos: 1, com_erro: 1, externos: 1 }, 'o boleto de fora conta à parte');
-  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos(null)), { parcelas: 0, registrados: 0, pagos: 0, com_erro: 0, externos: 0 });
+  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos({ parcelas: [{ tem_boleto_vivo: true, boleto: { status: 'pago' } }, { tem_boleto_vivo: false, boleto: { status: 'erro' } }, { tem_boleto_vivo: false, boleto: null, boleto_externo: { id: 5 } }] })), { parcelas: 3, registrados: 1, pagos: 1, com_erro: 1, externos: 1, pagos_a_mao: 0 }, 'o boleto de fora conta à parte');
+  assert.deepStrictEqual(plano(contexto2.resumoDeBoletos(null)), { parcelas: 0, registrados: 0, pagos: 0, com_erro: 0, externos: 0, pagos_a_mao: 0 });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'registrado', nosso_numero: '00034534810000000393', nosso_numero_dv: '4', ambiente: 'sandbox', linha_digitavel: '001…' })),
     { classe: 'badge-success', texto: 'registrado · 00034534810000000393-4 · homologação', detalhe: '001…' });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'erro', erro: 'Valor inválido' })), { classe: 'badge-danger', texto: 'erro', detalhe: 'Valor inválido' });

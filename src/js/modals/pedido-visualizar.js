@@ -156,6 +156,8 @@
     // Boletos emitidos fora e informados: contados à parte (não são do BB).
     const deFora = Number(boletos?.externos) || 0;
     if (parcelas > 0 && deFora > 0) tags.push({ classe: 'badge-info', texto: `Boletos de fora ${deFora}/${parcelas}` });
+    const aMao = Number(boletos?.pagos_a_mao) || 0;
+    if (parcelas > 0 && aMao > 0) tags.push({ classe: 'badge-success', texto: `Pagas à mão ${aMao}/${parcelas}` });
     const modalidade = p.modalidade_frete;
     if (modalidade !== null && modalidade !== undefined && modalidade !== '' && ROTULO_FRETE[Number(modalidade)]) {
       tags.push({ classe: 'badge-neutral', texto: `Frete: ${ROTULO_FRETE[Number(modalidade)]}` });
@@ -177,8 +179,17 @@
       registrados: linhas.filter(l => l?.tem_boleto_vivo).length,
       pagos: linhas.filter(l => l?.boleto?.status === 'pago').length,
       com_erro: linhas.filter(l => l?.boleto?.status === 'erro').length,
-      externos: linhas.filter(l => l?.boleto_externo).length
+      externos: linhas.filter(l => l?.boleto_externo).length,
+      // Pagas por Pix, cartão, transferência… (registradas no modal Pagamentos).
+      pagos_a_mao: linhas.filter(l => l?.recebimento?.origem === 'manual').length
     };
+  }
+
+  /** Como a parcela paga à mão (Pix, cartão…) aparece na coluna das parcelas. Pura. */
+  function rotuloDoPagamento(r) {
+    const [ano, mes, dia] = String(r?.data || '').split('-');
+    const partes = [r?.forma || '', dia ? `${dia}/${mes}/${ano}` : ''].filter(Boolean);
+    return { classe: 'badge-success', texto: `pago${partes.length ? ` · ${partes.join(' · ')}` : ''}` };
   }
 
   /** Como o boleto emitido fora aparece na coluna das parcelas. Pura. */
@@ -404,6 +415,17 @@
       const td = document.createElement('td');
       td.className = 'px-6 py-4 text-left text-sm';
       const linha = porParcela.get(String(p.id)) || estado.parcelas.find(l => Number(l?.parcela?.numero_parcela) === Number(p.numero_parcela));
+      // Paga à mão (Pix, cartão…): vale mais que o boleto que ficou para trás.
+      if (linha?.recebimento?.origem === 'manual') {
+        const pago = rotuloDoPagamento(linha.recebimento);
+        const tagPago = document.createElement('span');
+        tagPago.className = `${pago.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
+        tagPago.textContent = pago.texto;
+        tagPago.title = 'Pagamento registrado à mão — veja em "Pagamentos"';
+        td.appendChild(tagPago);
+        tr.appendChild(td);
+        return;
+      }
       // Boleto emitido fora: a tag azul copia a linha digitável.
       if (linha?.boleto_externo && !linha?.tem_boleto_vivo) {
         const ext = rotuloDoBoletoExterno(linha.boleto_externo);
@@ -526,6 +548,27 @@
     else botao.addEventListener('click', abrir);
   }
 
+  /**
+   * "Pagamentos" no rodapé: o que o cliente pagou em cada parcela (Pix,
+   * cartão, transferência…, com ou sem boleto). Aparece em todo pedido com
+   * parcelas; no cancelado, só se há pagamento registrado (para estornar).
+   */
+  function ligarPagamentos(pedido, detalhes, estado) {
+    const botao = overlay.querySelector('#visualizarPedidoPagamentos');
+    if (!botao || !Array.isArray(detalhes) || !detalhes.length) return;
+    const pode = typeof window.Permissoes?.pode === 'function' ? window.Permissoes.pode('financeiro.recebimento.view') : true;
+    if (!pode) return;
+    const temPagamento = (Array.isArray(estado?.parcelas) ? estado.parcelas : []).some(l => l?.recebimento);
+    if (pedidoCancelado(pedido) && !temPagamento) return;
+    const abrir = () => {
+      window.pagamentosParcelasContext = { pedidoId: id, numero: pedido?.numero || '', cliente: pedido?.cliente_nome || '' };
+      abrirPorCima('modals/pedidos/pagamentos-parcelas.html', '../js/modals/pedido-pagamentos-parcelas.js', 'pagamentosParcelas');
+    };
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
+    else botao.addEventListener('click', abrir);
+  }
+
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
@@ -536,8 +579,8 @@
   // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
   // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
   // Antes cada um fechava o Visualizar primeiro.
-  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos', 'importarBoletos'];
-  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa'];
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos', 'importarBoletos', 'pagamentosParcelas'];
+  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa', 'recebimentos:alterados'];
   let filhoMudouOPedido = false;
 
   function abrirPorCima(htmlPath, scriptPath, filhoId) {
@@ -948,6 +991,7 @@
     ligarGerarBoletos(boletosEstado, data);
     ligarBoletosPdf(boletosEstado);
     ligarImportarBoletos(data);
+    ligarPagamentos(data, data.parcelas_detalhes, boletosEstado);
     ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';

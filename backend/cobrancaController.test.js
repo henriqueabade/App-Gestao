@@ -664,6 +664,63 @@ test('fase E: painel, visões, recebimento à mão (e com boleto em aberto), est
   }
 });
 
+test('pagamentos do pedido: lista as parcelas, sugere multa e juros pelo vencimento em dia não útil, registra à mão no pedido em produção e estorna', async () => {
+  const tabelas = tabelasDoPedido();
+  // Pedido ainda em produção, sem nota e sem boleto: o cliente pagou por Pix.
+  tabelas.pedidos[0].situacao = 'Produção';
+  tabelas.notas_fiscais = [];
+  tabelas.recebimentos = [];
+  // A 1ª parcela vence num domingo (20/09/2026).
+  tabelas.pedido_parcelas[0].data_vencimento = '2026-09-20';
+  const t = await montar({ tabelas, env: { BB_CLIENT_SECRET_SANDBOX: 'ok' } });
+  try {
+    assert.equal((await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos')).status, 403);
+    t.estado.chaves.add('financeiro.recebimento.view');
+    const antes = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
+    assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
+    assert.equal(antes.corpo.parcelas.length, 3, 'todas as parcelas, mesmo com o pedido em produção');
+    assert.equal(antes.corpo.parcelas[0].limite_sem_encargos, '2026-09-21', 'domingo vale até segunda');
+    assert.ok(antes.corpo.parcelas.every(p => p.pode_registrar));
+    assert.ok(antes.corpo.formas.includes('Pix') && antes.corpo.formas.includes('Cartão de crédito'));
+    assert.equal(antes.corpo.resumo.pagas, 0);
+    assert.ok(!('_cfg' in antes.corpo), 'as regras internas não vão para a tela');
+
+    // Multa e juros sugeridos (regras do convênio: 2% + 9% ao mês): em dia na segunda; 3 dias na quarta.
+    const segunda = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos/encargos?numero_parcela=1&data=2026-09-21');
+    assert.deepEqual([segunda.corpo.dias, segunda.corpo.total], [0, 0]);
+    const quarta = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos/encargos?numero_parcela=1&data=2026-09-23');
+    assert.deepEqual([quarta.corpo.dias, quarta.corpo.multa, quarta.corpo.juros, quarta.corpo.total, quarta.corpo.com_encargos], [3, 20, 9, 29, 1029]);
+    assert.equal((await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos/encargos?numero_parcela=1&data=ontem')).status, 400);
+    assert.equal((await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos/encargos?numero_parcela=9&data=2026-09-23')).status, 404);
+
+    // Registrar à mão a 2ª parcela: o pedido em produção passa a contar como faturado.
+    t.estado.chaves.add('financeiro.recebimento.registrar');
+    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const pago = await t.chamar('POST', '/api/cobranca/recebimentos', { pedido_id: 55, numero_parcela: 2, data_recebimento: hoje, valor_recebido: 1000, forma: 'Cartão de crédito', observacao: 'Maquininha' });
+    assert.equal(pago.status, 200, JSON.stringify(pago.corpo));
+    const depois = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
+    const p2 = depois.corpo.parcelas[1];
+    assert.deepEqual([p2.situacao, p2.recebimento.forma, p2.recebimento.observacao, p2.recebimento.pode_estornar, p2.pode_registrar], ['paga', 'Cartão de crédito', 'Maquininha', true, false]);
+    assert.equal(depois.corpo.resumo.pagas, 1);
+    const abertas = await t.chamar('GET', '/api/cobranca/recebimentos?visao=abertas');
+    assert.ok(abertas.corpo.linhas.some(l => l.pedido_id === 55), 'com pagamento, o pedido em produção entra nas contas a receber (e na comissão)');
+
+    // A coluna BOLETO do Visualizar recebe o pagamento de cada parcela.
+    t.estado.chaves.add('financeiro.boleto.view');
+    const estadoBoletos = await t.chamar('GET', '/api/cobranca/pedidos/55/boletos');
+    assert.deepEqual(estadoBoletos.corpo.parcelas.map(l => l.recebimento?.forma || null), [null, 'Cartão de crédito', null]);
+
+    // Estornar devolve a parcela para em aberto.
+    t.estado.chaves.add('financeiro.recebimento.estornar');
+    assert.equal((await t.chamar('POST', `/api/cobranca/recebimentos/${pago.corpo.recebimento.id}/estornar`, { motivo: 'parcela errada' })).status, 200);
+    const estornado = await t.chamar('GET', '/api/cobranca/pedidos/55/pagamentos');
+    assert.equal(estornado.corpo.parcelas[1].recebimento, null);
+    assert.equal(estornado.corpo.parcelas[1].pode_registrar, true);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('fase F: estado do webhook (sem token), a conciliação pelo botão fica registrada e a agenda usa a mesma conciliação', async () => {
   const tabelas = tabelasDoPedido();
   tabelas.recebimentos = [];

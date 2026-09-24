@@ -21,6 +21,7 @@ const boletos = require('./boletos');
 const operacoes = require('./boletoOperacoes');
 const recebimentos = require('./recebimentos');
 const calculo = require('./boletoCalculo');
+const vencimentos = require('./vencimento');
 
 const LIMITE_FILA = 200;
 const LIMITE_CONSULTAS = 40;
@@ -134,7 +135,7 @@ async function cancelarPagamento({ api, boleto, aviso, hoje, usuarioId }) {
   if (boleto.status === 'pago') {
     const venc = dia(boleto.data_vencimento);
     await boletos.atualizarBoleto(api, boleto, {
-      status: venc && venc < hoje ? 'vencido' : 'registrado', data_pagamento: null, valor_pago: null, canal_pagamento: null, situacao_bb: 'BAIXA OPERACIONAL CANCELADA'
+      status: venc && vencimentos.estaAtrasado(venc, hoje) ? 'vencido' : 'registrado', data_pagamento: null, valor_pago: null, canal_pagamento: null, situacao_bb: 'BAIXA OPERACIONAL CANCELADA'
     });
   }
   await boletos.registrarEvento(api, boleto.id, {

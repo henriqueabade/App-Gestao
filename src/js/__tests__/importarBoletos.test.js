@@ -179,7 +179,7 @@ test('as duas portas: Configuração de cobrança e Visualizar pedido abrem o me
   assert.ok(/id="visualizarPedidoImportarBoletos"[^>]*data-perm="financeiro\.boleto\.view"[^>]*class="hidden/.test(VIS_HTML), 'botão no Visualizar nasce escondido');
   assert.ok(VISUALIZAR.includes("abrirPorCima('modals/pedidos/importar-boletos.html', '../js/modals/pedido-importar-boletos.js', 'importarBoletos')"));
   assert.ok(VISUALIZAR.includes('if (!botao || pedidoCancelado(pedido) || !pagaComBoleto(pedido)) return;'), 'só em pedido pago com boleto e não cancelado');
-  assert.ok(VISUALIZAR.includes("'importarBoletos'];"), 'entra na lista de modais filhos, que fecham junto');
+  assert.match(VISUALIZAR, /const FILHOS = \[[^\]]*'importarBoletos'/, 'entra na lista de modais filhos, que fecham junto');
   assert.ok(VISUALIZAR.includes('ligarImportarBoletos(data);'));
 });
 
@@ -227,6 +227,6 @@ test('fluxo depois de importar: solta a tranca, relê a lista e volta para o ped
   assert.ok(corpo.includes("new CustomEvent('boletos:alterados'"), 'o pedido de baixo se relê');
 
   // O Visualizar precisa ouvir os dois lados para voltar atualizado.
-  assert.ok(VISUALIZAR.includes("'importarBoletos'];"), 'importarBoletos é filho do Visualizar');
+  assert.match(VISUALIZAR, /const FILHOS = \[[^\]]*'importarBoletos'/, 'importarBoletos é filho do Visualizar');
   assert.ok(VISUALIZAR.includes("'boletos:alterados'"), 'o evento entra na lista do que muda o pedido');
 });

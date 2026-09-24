@@ -19,7 +19,7 @@ ou devolvido por inteiro não recebe nenhum dos dois.
 
 | Pergunta | Escolha |
 |---|---|
-| Como informar a NF-e | Pelo **XML** (lido e descartado) **ou** pela **chave de acesso + valor** |
+| Como informar a NF-e | Pelo **XML** (guardado desde 24/09/2026, para o DANFE e as cartas) **ou** pela **chave de acesso + valor** |
 | Como informar o boleto | Pela **linha digitável** de cada parcela |
 | Onde fica o botão | No **Visualizar pedido** e na lista **"Aguardando NF-e"** do Financeiro |
 | Quem pode | Quem pode **emitir NF-e** informa a nota; quem pode **gerar boletos** informa o boleto (nenhuma permissão nova) |
@@ -70,6 +70,26 @@ da parcela; parcela com boleto do BB vivo não recebe boleto de fora.
 - **Gerar boletos**: a parcela com boleto de fora aparece como "Boleto de fora"
   e não se marca; o backend também a pula (e a geração automática ao emitir a
   NF-e).
+
+### A tabela dos boletos no modal (24/09/2026)
+
+O modal ficou mais largo (`max-w-6xl`) e a tabela tem a coluna **Ações**. As
+colunas têm largura fixa (`table-fixed`); a do boleto fica com o resto e
+cresce com o modal, e a linha digitável quebra dentro dela: **sem rolagem de
+lado**.
+
+| Parcela com… | Ações |
+|---|---|
+| boleto de fora | **copiar** a linha · **trocar** por outro · **remover** |
+| boleto de fora, no meio da troca | **desistir** da troca |
+| boleto do BB | — |
+| nada (livre) | — (a linha digitável vai no próprio campo) |
+
+**Trocar** transforma a linha no campo da linha digitável ("Substitui: …"). O
+"Gravar boletos" manda a linha nova, e o backend desliga a anterior — informar
+de novo a mesma parcela sempre foi uma troca. Trocar e desistir refazem só
+aquela linha: o que foi colado nas outras não se perde. Quem só pode ver copia
+a linha.
 
 Nota de fora **não se emite e não se cancela** aqui: ela já aconteceu lá fora,
 e o app só registra. DANFE, XML e carta de correção, sim — ver abaixo.

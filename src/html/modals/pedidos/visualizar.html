@@ -115,6 +115,9 @@
         <button id="visualizarPedidoBoletos" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Boletos do pedido: situação no BB, prorrogar, abatimento e baixa">Boletos</button>
         <button id="visualizarPedidoBoletosPdf" type="button" data-perm="financeiro.boleto.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Gerar o PDF de todos os boletos a pagar do pedido">Boletos (PDF)</button>
         <button id="visualizarPedidoImportarBoletos" type="button" data-perm="financeiro.boleto.view" class="hidden btn-bb ctl-botao ctl-botao--pequeno text-white" title="Trazer para o app um boleto deste pedido que já existe no Banco do Brasil (emitido antes, pelo Gerenciador Financeiro)">Importar do BB</button>
+        <!-- O que o cliente pagou em cada parcela — Pix, cartão, transferência…,
+             com ou sem boleto (pedido-pagamentos-parcelas.js). -->
+        <button id="visualizarPedidoPagamentos" type="button" data-perm="financeiro.recebimento.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Registrar o que o cliente pagou em cada parcela (Pix, cartão, transferência…) e ver o que está em aberto">Pagamentos</button>
         <!-- Pedido que saiu sem nota (ou sem boleto) feita aqui: informa os dados
              da nota/boleto emitidos fora (pedido-dados-externos.js). Quem decide
              se aparece é precisaDeDadosDeFora; a permissão é a de emitir NF-e

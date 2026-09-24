@@ -27,7 +27,7 @@ function puras() {
   const fim = FONTE.indexOf('// ------------------------------------------------- fim das funções puras');
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   return vm.runInContext(`${FONTE.slice(inicio, fim)}
-({ chaveEmGrupos, documentoFormatado, linhasDaNota, etiquetaDaNota, estadoDaParcela, frasedaPrevia, mensagemDeErro })`, vm.createContext({}));
+({ chaveEmGrupos, documentoFormatado, linhasDaNota, etiquetaDaNota, estadoDaParcela, acoesDaParcela, frasedaPrevia, mensagemDeErro })`, vm.createContext({}));
 }
 
 /** O texto de uma função pelo nome (o corpo começa no `{` depois de `) `: os parâmetros podem ter `{ }`). */
@@ -258,4 +258,27 @@ test('cartas de correção de fora: pelo XML do evento ou à mão, sempre, com P
   // A tag CC-e no Visualizar vale para a nota daqui e para a de fora.
   assert.ok(VISUALIZAR.includes('if ((nota || notaExterna) && totalCartas > 0)'));
   assert.ok(VISUALIZAR.includes('/nfe-externa/cartas`'), 'o Visualizar conta as cartas de fora');
+});
+
+test('boletos de fora: coluna Ações (copiar, trocar, remover), modal largo e tabela sem rolagem de lado', () => {
+  const f = puras();
+  const pode = { podeInformar: true, cancelado: false };
+  assert.deepStrictEqual(plano(f.acoesDaParcela('externo', pode)), ['copiar', 'trocar', 'remover']);
+  assert.deepStrictEqual(plano(f.acoesDaParcela('externo', { ...pode, trocando: true })), ['desistir'], 'no meio da troca, só desistir');
+  assert.deepStrictEqual(plano(f.acoesDaParcela('externo', { podeInformar: false })), ['copiar'], 'quem só vê copia a linha');
+  assert.deepStrictEqual(plano(f.acoesDaParcela('externo', { podeInformar: true, cancelado: true })), ['copiar']);
+  assert.deepStrictEqual(plano(f.acoesDaParcela('bb', pode)), []);
+  assert.deepStrictEqual(plano(f.acoesDaParcela('livre', pode)), [], 'a parcela livre recebe a linha no próprio campo');
+
+  // Trocar: a linha vira o campo e o "Gravar boletos" manda a linha nova (o backend desliga a anterior).
+  assert.ok(FONTE.includes("trocando.add(chave)") && FONTE.includes("trocando.delete(chave)"));
+  assert.ok(FONTE.includes("tr.replaceWith(montarLinhaDoBoleto(linha, { podeInformar, cancelado }))"), 'refaz só a própria linha: o colado nas outras não se perde');
+  assert.ok(FONTE.includes("for (const r of resultados) if (r.ok) trocando.delete(String(r.parcela_id));"));
+  assert.ok(FONTE.includes("iconeDeAcao('fa-trash', 'Remover o boleto de fora'"));
+
+  assert.ok(HTML.includes('max-w-6xl'), 'modal mais largo');
+  assert.match(HTML, /id="dadosExternosParcelas" class="w-full table-fixed/);
+  assert.ok(HTML.includes('>Ações</th>'));
+  assert.ok(!/id="dadosExternosParcelasCaixa" class="[^"]*overflow-x-auto/.test(HTML), 'sem rolagem de lado');
+  assert.ok(!HTML.includes('lido e descartado') && !HTML.includes('o XML é lido e descartado'), 'o texto não diz mais que o XML é descartado');
 });

@@ -152,6 +152,10 @@ test('leitura do BB: datas dd.mm.aaaa, canal de pagamento, estado e o detalhe no
   assert.equal(s(17), 'registrado', 'cheque aguardando: o app espera');
   assert.equal(s(80, 'registrado', '2026-09-01'), 'vencido', 'transitório só atualiza o vencido');
   assert.equal(s(7, 'pago'), 'pago', 'pago é final');
+  // Vencimento no domingo 20/09: na segunda o banco ainda recebe sem encargos (dono, 24/09/2026).
+  const noDia = (hoje) => op.statusPeloBB(1, { statusAtual: 'registrado', vencimento: '2026-09-20', hoje });
+  assert.equal(noDia('2026-09-21'), 'registrado', 'segunda: ainda em dia');
+  assert.equal(noDia('2026-09-22'), 'vencido', 'terça: vencido');
 });
 
 test('payloads: todos os indicadores vão, um só com "S"; datas no formato do BB', () => {

@@ -31,6 +31,8 @@
  *   GET    /recebimentos?competencia=&visao=          recebidos | a_receber | em_atraso | abertas
  *   POST   /recebimentos                              recebimento à mão (com baixar_boleto, baixa o boleto em aberto como quitado por fora)
  *   POST   /recebimentos/:id/estornar                 { motivo }
+ *   GET    /pedidos/:id/pagamentos                    as parcelas do pedido com o pagamento de cada uma (modal "Pagamentos")
+ *   GET    /pedidos/:id/pagamentos/encargos?numero_parcela=&data=   multa e juros sugeridos para pagar naquele dia
  *   POST   /conciliar                                 fila do webhook + consulta dos boletos a pagar (so_fila: só a fila)
  *
  * Fase F — webhook e conciliação automática:
@@ -65,6 +67,7 @@ const execucoes = require('./cobranca/execucoes');
 const webhookEstado = require('./cobranca/webhookEstado');
 const parcelaMinima = require('./cobranca/parcelaMinima');
 const importacao = require('./cobranca/importacao');
+const pagamentos = require('./cobranca/pagamentosDoPedido');
 const externas = require('./fiscal/externas');
 
 /** Quem lê a parcela mínima: quem monta orçamento, mexe em pedido ou está no financeiro. */
@@ -323,7 +326,13 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     const pagador = dados.cliente ? bbBoleto.pagadorDoCliente(dados.cliente) : null;
     const pendenciasPagador = pagador ? bbBoleto.pendenciasDoPagador(pagador) : ['Pedido sem cliente.'];
     if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
-    const linhas = boletos.parcelasComBoletos(dados);
+    // O pagamento de cada parcela (boleto pago, Pix, cartão…): a coluna BOLETO
+    // do Visualizar mostra "Pago" também na parcela paga sem boleto.
+    const recs = await recebimentos.lerTodos(api, { pedido_id: dados.pedido.id }).catch(() => []);
+    const linhas = boletos.parcelasComBoletos(dados).map(l => {
+      const r = recs.find(x => x.status === 'confirmado' && Number(x.numero_parcela) === Number(l.parcela?.numero_parcela));
+      return { ...l, recebimento: r ? { id: r.id, data: recebimentos.dia(r.data_recebimento), valor: Number(r.valor_recebido), forma: r.forma || null, origem: r.origem } : null };
+    });
     return {
       // `faturamento_regra` vai junto: boleto gerado antes do embarque num
       // pedido "ao embarcar" pode ter o vencimento mudado no envio, e a tela
@@ -707,6 +716,32 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       return cache.get(ambiente);
     };
   }
+
+  /**
+   * O modal "Pagamentos" do Visualizar: cada parcela com o que foi pago, por
+   * onde, e o que está em aberto ou atrasado (vencimento em dia não útil só
+   * atrasa depois do próximo dia útil). Gravar e estornar usam as rotas de
+   * /recebimentos abaixo.
+   */
+  router.get('/pedidos/:id/pagamentos', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
+    try {
+      const estado = await pagamentos.estadoDosPagamentos({ api: createApiClient(req), pedidoId: req.params.id, hoje: hojeEmBrasilia() });
+      res.json(pagamentos.paraTela(estado));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/pedidos/:id/pagamentos');
+    }
+  });
+
+  router.get('/pedidos/:id/pagamentos/encargos', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
+    try {
+      res.json(await pagamentos.encargosDaParcela({
+        api: createApiClient(req), pedidoId: req.params.id,
+        numeroParcela: req.query?.numero_parcela, data: req.query?.data, hoje: hojeEmBrasilia()
+      }));
+    } catch (err) {
+      responder(res, err, 'GET /api/cobranca/pedidos/:id/pagamentos/encargos');
+    }
+  });
 
   router.get('/recebimentos/painel', exigirPermissao('financeiro.recebimento.view'), async (req, res) => {
     try {

@@ -17,6 +17,7 @@ const calculo = require('./boletoCalculo');
 const bbBoleto = require('./bbBoleto');
 const boletos = require('./boletos');
 const recebimentos = require('./recebimentos');
+const vencimentos = require('./vencimento');
 
 /** codigoEstadoTituloCobranca (documentação da API Cobranças v2). */
 const ESTADOS_BB = {
@@ -125,12 +126,16 @@ function lerDetalhe(detalhe) {
   };
 }
 
-/** O status do app a partir do estado no BB. Pago é final; transitório não mexe. */
+/**
+ * O status do app a partir do estado no BB. Pago é final; transitório não mexe.
+ * Vencimento em fim de semana ou feriado nacional só vira "vencido" depois do
+ * próximo dia útil — até lá o banco recebe sem encargos (`vencimento.js`).
+ */
 function statusPeloBB(codigo, { statusAtual, vencimento, hoje }) {
   if (statusAtual === 'pago' || ESTADOS_PAGOS.has(codigo)) return 'pago';
   if (codigo === 7) return 'baixado';
   if (ESTADOS_PROTESTADOS.has(codigo)) return 'protestado';
-  const vencido = Boolean(vencimento && hoje && vencimento < hoje);
+  const vencido = Boolean(vencimento && hoje && vencimentos.estaAtrasado(vencimento, hoje));
   if (codigo === 1 || ESTADOS_EM_CARTORIO.has(codigo)) return vencido ? 'vencido' : 'registrado';
   if (statusAtual === 'registrado' && vencido) return 'vencido';
   return statusAtual;

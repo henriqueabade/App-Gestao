@@ -3,12 +3,15 @@
  *
  * Para o pedido que saiu com nota e/ou boleto feitos em outro lugar, informa
  * só os DADOS (backend/fiscal/externas.js):
- *   - NF-e: pelo XML (lido no backend e descartado) ou pela chave de acesso +
- *     valor. Primeiro confere (POST …/nfe-externa/previa), mostra o que a
- *     nota diz e os avisos; só grava no "Gravar a nota".
+ *   - NF-e: pelo XML (guardado desde 24/09/2026, para o DANFE e as cartas de
+ *     correção) ou pela chave de acesso + valor. Primeiro confere
+ *     (POST …/nfe-externa/previa), mostra o que a nota diz e os avisos; só
+ *     grava no "Gravar a nota".
  *   - Boletos: a linha digitável de cada parcela, conferida ao colar
  *     (POST /api/cobranca/pedidos/:id/boletos-externos/previa) e gravada no
  *     "Gravar boletos". Parcela com boleto do BB não recebe boleto de fora.
+ *     A coluna Ações copia a linha, TROCA o boleto por outro (a linha vira o
+ *     campo; gravar desliga o anterior) e remove.
  * Remover só desliga (fica o rastro). Nada vai para a SEFAZ nem para o BB.
  *
  * Contexto: `window.dadosExternosContext = { pedidoId, numero, cliente, formaPagamento }`.
@@ -81,6 +84,18 @@
     return { tipo: 'livre', texto: '' };
   }
 
+  /**
+   * As ações de cada parcela na coluna Ações. Boleto de fora: copiar a linha
+   * e, para quem pode informar (pedido não cancelado), trocar por outro e
+   * remover; no meio de uma troca, só desistir dela. Parcela livre (recebe a
+   * linha no campo) e boleto do BB: nenhuma. Pura.
+   */
+  function acoesDaParcela(tipo, { podeInformar = false, cancelado = false, trocando = false } = {}) {
+    if (tipo !== 'externo') return [];
+    if (trocando) return ['desistir'];
+    return podeInformar && !cancelado ? ['copiar', 'trocar', 'remover'] : ['copiar'];
+  }
+
   /** O que a prévia de uma linha digitável diz, numa frase. */
   function frasedaPrevia(r) {
     if (!r) return { tom: 'neutro', texto: '' };
@@ -129,6 +144,8 @@
   let emAndamento = false;
   let fechado = false;
   const previasDasParcelas = new Map();
+  /** Parcelas com boleto de fora em troca: a linha mostra o campo para o boleto novo. */
+  const trocando = new Set();
 
   function desligarOuvintes() {
     document.removeEventListener('keydown', aoEsc);
@@ -530,6 +547,133 @@
     return td;
   }
 
+  /** Um ícone de ação da linha, no padrão das tabelas (`<i class="fas … cursor-pointer">`). */
+  function iconeDeAcao(icone, titulo, cor, fn) {
+    const i = document.createElement('i');
+    i.className = `fas ${icone} w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10`;
+    i.style.color = cor;
+    i.title = titulo;
+    i.setAttribute('role', 'button');
+    i.setAttribute('aria-label', titulo);
+    i.tabIndex = 0;
+    i.addEventListener('click', fn);
+    i.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+    return i;
+  }
+
+  /** O campo da linha digitável (parcela livre ou boleto em troca), conferido ao colar. */
+  function campoDaLinha(p, dica) {
+    const caixa = document.createElement('div');
+    caixa.className = 'flex flex-col gap-1 min-w-0';
+    const campo = document.createElement('input');
+    campo.type = 'text';
+    campo.inputMode = 'numeric';
+    campo.autocomplete = 'off';
+    campo.maxLength = 60;
+    campo.dataset.parcelaId = String(p.id);
+    campo.className = 'w-full ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+    campo.placeholder = dica;
+    campo.setAttribute('aria-label', `Linha digitável da parcela ${p.numero_parcela}`);
+    const saida = document.createElement('span');
+    saida.className = 'text-xs break-words';
+    const pintarSaida = r => {
+      const f = frasedaPrevia(r);
+      saida.textContent = f.texto;
+      saida.style.color = f.tom === 'erro' ? 'var(--color-red)' : (f.tom === 'aviso' ? 'var(--color-primary-light)' : 'var(--color-green)');
+    };
+    campo.addEventListener('input', () => {
+      previasDasParcelas.delete(String(p.id));
+      saida.textContent = '';
+      if (soDigitos(campo.value).length >= 44) conferirLinha(p.id, campo.value).then(pintarSaida);
+    });
+    caixa.append(campo, saida);
+    return caixa;
+  }
+
+  /** O "Gravar boletos" aparece enquanto houver campo de linha digitável na tabela. */
+  function atualizarGravar() {
+    const campos = overlay.querySelectorAll('#dadosExternosParcelas input[data-parcela-id]');
+    el('gravarBoletosExternos').classList.toggle('hidden', !campos.length);
+  }
+
+  /**
+   * Uma linha da tabela: parcela, vencimento, valor, o boleto (a tag do de
+   * fora, a do BB ou o campo para colar) e as ações. Trocar e desistir
+   * refazem só a própria linha — o que foi colado nas outras não se perde.
+   */
+  function montarLinhaDoBoleto(linha, { podeInformar, cancelado }) {
+    const p = linha.parcela || {};
+    const chave = String(p.id);
+    const estado = estadoDaParcela(linha);
+    const emTroca = estado.tipo === 'externo' && trocando.has(chave) && podeInformar && !cancelado;
+    const tr = document.createElement('tr');
+    let conteudo;
+    if (emTroca) {
+      conteudo = campoDaLinha(p, 'Cole a linha digitável do boleto novo');
+      const antes = document.createElement('span');
+      antes.className = 'text-xs text-gray-400 break-all';
+      antes.textContent = `Substitui: ${estado.texto}`;
+      conteudo.appendChild(antes);
+    } else if (estado.tipo === 'externo') {
+      conteudo = document.createElement('div');
+      conteudo.className = 'flex flex-col gap-1 min-w-0';
+      const tag = document.createElement('span');
+      tag.className = 'badge-info px-3 py-1 rounded-full text-xs font-medium self-start max-w-full truncate';
+      tag.textContent = estado.texto;
+      tag.title = estado.texto;
+      const linhaTexto = document.createElement('span');
+      linhaTexto.className = 'text-xs text-gray-400 break-all';
+      linhaTexto.textContent = estado.linha;
+      conteudo.append(tag, linhaTexto);
+    } else if (estado.tipo === 'bb') {
+      conteudo = document.createElement('span');
+      conteudo.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap';
+      conteudo.textContent = estado.texto;
+    } else if (!cancelado && podeInformar) {
+      conteudo = campoDaLinha(p, 'Cole a linha digitável (47 números)');
+    } else {
+      conteudo = document.createElement('span');
+      conteudo.className = 'text-gray-400';
+      conteudo.textContent = 'Sem boleto';
+    }
+
+    const acoes = document.createElement('div');
+    acoes.className = 'flex items-center justify-center gap-1';
+    const refazer = () => {
+      tr.replaceWith(montarLinhaDoBoleto(linha, { podeInformar, cancelado }));
+      atualizarGravar();
+    };
+    const FAZ = {
+      copiar: () => iconeDeAcao('fa-copy', 'Copiar a linha digitável', 'var(--color-primary-light)', async () => {
+        try { await navigator.clipboard.writeText(soDigitos(estado.linha)); window.showToast?.('Linha digitável copiada.', 'success'); } catch (_) { window.showToast?.('Não foi possível copiar.', 'error'); }
+      }),
+      trocar: () => iconeDeAcao('fa-edit', 'Trocar por outro boleto', 'var(--color-primary)', () => {
+        trocando.add(chave);
+        refazer();
+        overlay.querySelector(`#dadosExternosParcelas input[data-parcela-id="${chave}"]`)?.focus();
+      }),
+      remover: () => iconeDeAcao('fa-trash', 'Remover o boleto de fora', 'var(--color-red)', () => removerBoleto(linha)),
+      desistir: () => iconeDeAcao('fa-times', 'Desistir da troca', 'var(--color-red)', () => {
+        trocando.delete(chave);
+        previasDasParcelas.delete(chave);
+        refazer();
+      })
+    };
+    for (const acao of acoesDaParcela(estado.tipo, { podeInformar, cancelado, trocando: emTroca })) acoes.appendChild(FAZ[acao]());
+    if (!acoes.childElementCount) {
+      acoes.classList.add('text-gray-500');
+      acoes.textContent = '—';
+    }
+    tr.append(
+      celula(p.numero_parcela ? `${p.numero_parcela}ª` : '—'),
+      celula(diaBR(p.data_vencimento) || '—'),
+      celula(moedaBR(p.valor)),
+      celula(conteudo, 'px-4 py-3 text-left min-w-0'),
+      celula(acoes, 'px-4 py-3 text-center')
+    );
+    return tr;
+  }
+
   function pintarBoletos() {
     const secao = el('dadosExternosBoletos');
     const tbody = el('dadosExternosParcelas').querySelector('tbody');
@@ -560,85 +704,11 @@
     motivo.textContent = textoMotivo;
     motivo.classList.toggle('hidden', !textoMotivo);
 
-    let livres = 0;
-    for (const linha of linhas) {
-      const p = linha.parcela || {};
-      const estado = estadoDaParcela(linha);
-      const tr = document.createElement('tr');
-      const conteudo = document.createElement('div');
-      conteudo.className = 'flex flex-col gap-1 min-w-0';
-      if (estado.tipo === 'externo') {
-        const topo = document.createElement('div');
-        topo.className = 'flex flex-wrap items-center gap-2';
-        const tag = document.createElement('span');
-        tag.className = 'badge-info px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap';
-        tag.textContent = estado.texto;
-        topo.appendChild(tag);
-        const copiar = document.createElement('button');
-        copiar.type = 'button';
-        copiar.className = 'btn-neutral px-3 py-1 rounded-md text-xs font-medium text-white';
-        copiar.textContent = 'Copiar linha';
-        copiar.addEventListener('click', async () => {
-          try { await navigator.clipboard.writeText(soDigitos(estado.linha)); window.showToast?.('Linha digitável copiada.', 'success'); } catch (_) { window.showToast?.('Não foi possível copiar.', 'error'); }
-        });
-        topo.appendChild(copiar);
-        if (podeInformar) {
-          const remover = document.createElement('button');
-          remover.type = 'button';
-          remover.className = 'btn-danger px-3 py-1 rounded-md text-xs font-medium text-white';
-          remover.dataset.perm = 'financeiro.boleto.emit';
-          remover.textContent = 'Remover';
-          remover.addEventListener('click', () => removerBoleto(linha));
-          topo.appendChild(remover);
-        }
-        const linhaTexto = document.createElement('span');
-        linhaTexto.className = 'text-xs text-gray-400 break-all';
-        linhaTexto.textContent = estado.linha;
-        conteudo.append(topo, linhaTexto);
-      } else if (estado.tipo === 'bb') {
-        const tag = document.createElement('span');
-        tag.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap self-start';
-        tag.textContent = estado.texto;
-        conteudo.appendChild(tag);
-      } else if (!cancelado && podeInformar) {
-        livres += 1;
-        const campo = document.createElement('input');
-        campo.type = 'text';
-        campo.inputMode = 'numeric';
-        campo.autocomplete = 'off';
-        campo.maxLength = 60;
-        campo.dataset.parcelaId = String(p.id);
-        campo.className = 'w-full ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
-        campo.placeholder = 'Cole a linha digitável (47 números)';
-        campo.setAttribute('aria-label', `Linha digitável da parcela ${p.numero_parcela}`);
-        const saida = document.createElement('span');
-        saida.className = 'text-xs';
-        const pintarSaida = r => {
-          const f = frasedaPrevia(r);
-          saida.textContent = f.texto;
-          saida.style.color = f.tom === 'erro' ? 'var(--color-red)' : (f.tom === 'aviso' ? 'var(--color-primary-light)' : 'var(--color-green)');
-        };
-        campo.addEventListener('input', () => {
-          previasDasParcelas.delete(String(p.id));
-          saida.textContent = '';
-          if (soDigitos(campo.value).length >= 44) conferirLinha(p.id, campo.value).then(pintarSaida);
-        });
-        conteudo.append(campo, saida);
-      } else {
-        const vazio = document.createElement('span');
-        vazio.className = 'text-gray-400';
-        vazio.textContent = 'Sem boleto';
-        conteudo.appendChild(vazio);
-      }
-      tr.append(
-        celula(p.numero_parcela ? `${p.numero_parcela}ª` : '—'),
-        celula(diaBR(p.data_vencimento) || '—'),
-        celula(moedaBR(p.valor)),
-        celula(conteudo, 'px-4 py-3 text-left')
-      );
-      tbody.appendChild(tr);
-    }
-    el('gravarBoletosExternos').classList.toggle('hidden', !livres);
+    // A parcela que deixou de ter boleto de fora (removido) sai da troca.
+    const comDeFora = new Set(linhas.filter(l => l?.boleto_externo).map(l => String(l.parcela?.id)));
+    for (const chave of [...trocando]) if (!comDeFora.has(chave)) trocando.delete(chave);
+    for (const linha of linhas) tbody.appendChild(montarLinhaDoBoleto(linha, { podeInformar, cancelado }));
+    atualizarGravar();
   }
 
   async function conferirLinha(parcelaId, linha) {
@@ -668,6 +738,8 @@
       const resultados = Array.isArray(corpo?.resultados) ? corpo.resultados : [];
       const gravados = resultados.filter(r => r.ok).length;
       const erros = resultados.filter(r => !r.ok);
+      // A troca que deu certo sai do modo de troca; a que falhou continua com o campo.
+      for (const r of resultados) if (r.ok) trocando.delete(String(r.parcela_id));
       if (gravados) {
         window.showToast?.(`${gravados === 1 ? '1 boleto de fora gravado' : `${gravados} boletos de fora gravados`} no pedido ${ctx.numero}.`, 'success');
         avisarQuemEstaAberto('boletos:alterados');

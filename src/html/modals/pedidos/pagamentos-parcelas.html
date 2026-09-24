@@ -1,0 +1,156 @@
+<!--
+  Pagamentos das parcelas (Pedidos → Visualizar → "Pagamentos"). O cliente
+  pode pagar uma parcela por Pix, cartão, transferência… sem boleto nenhum,
+  ou mesmo tendo boleto: aqui se registra QUANDO e COMO pagou, e se estorna o
+  que foi registrado por engano (decisões do dono, 24/09/2026).
+
+  O pagamento entra na comissão e no royalty como qualquer recebimento (base =
+  valor da parcela; multa e juros não entram), no mês em que o cliente pagou.
+  Vencimento em fim de semana ou feriado: em dia até o próximo dia útil;
+  depois, o atraso conta desde o vencimento do papel, e o formulário sugere a
+  multa e os juros pelas regras dos boletos.
+
+  Parcela com boleto do BB em aberto: antes de gravar, a caixa pergunta se o
+  boleto pode ser baixado no BB como "quitado por fora" (senão o cliente
+  poderia pagá-lo de novo). Boleto pago no banco não entra por aqui: chega
+  pelo aviso do BB ou pela conciliação.
+
+  Leitura: GET /api/cobranca/pedidos/:id/pagamentos (+ /encargos). Gravar e
+  estornar: POST /api/cobranca/recebimentos e /recebimentos/:id/estornar.
+  Não fecha clicando fora (docs/padroes-de-interface.md).
+  Contexto: window.pagamentosParcelasContext = { pedidoId, numero, cliente }.
+  Script: src/js/modals/pedido-pagamentos-parcelas.js.
+-->
+<div id="pagamentosParcelasOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="pagamentosParcelasTitulo" class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarPagamentosParcelas" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="pagamentosParcelasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-hand-holding-usd mr-2" aria-hidden="true"></i>Pagamentos das parcelas</h2>
+        <p id="pagamentosParcelasSubtitulo" class="text-xs text-gray-300 truncate"></p>
+      </div>
+      <span id="pagamentosParcelasTag" class="hidden justify-self-end badge-neutral px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap"></span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="px-6 py-5 space-y-6">
+        <p class="text-sm text-gray-300">
+          Registre o que o cliente pagou em cada parcela — por <strong class="text-white">Pix, cartão, transferência…</strong>, com ou sem boleto.
+          O pagamento entra na comissão e no royalty do mês em que o cliente pagou. Vencimento em fim de semana ou feriado vale até o próximo dia útil;
+          depois disso, o atraso conta desde o vencimento.
+        </p>
+
+        <p id="pagamentosParcelasCarregando" class="text-sm text-gray-300"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Carregando…</p>
+
+        <!-- Os números do pedido -->
+        <div id="pagamentosParcelasResumo" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Recebido</p>
+            <p id="pagamentosParcelasRecebido" class="text-white font-semibold">—</p>
+            <p id="pagamentosParcelasRecebidoDetalhe" class="text-xs text-gray-400"></p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Em aberto</p>
+            <p id="pagamentosParcelasAberto" class="text-white font-semibold">—</p>
+            <p id="pagamentosParcelasAbertoDetalhe" class="text-xs text-gray-400"></p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Atrasadas</p>
+            <p id="pagamentosParcelasAtrasadas" class="text-white font-semibold">—</p>
+            <p id="pagamentosParcelasAtrasadasDetalhe" class="text-xs text-gray-400"></p>
+          </div>
+        </div>
+
+        <!-- ============================================== parcelas -->
+        <section id="pagamentosParcelasSecao" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+            <h3 class="ctl-secao text-white"><i class="fas fa-list-ol mr-2" aria-hidden="true"></i>Parcelas</h3>
+            <span class="text-xs text-gray-400">Registre ou estorne pela coluna Ações</span>
+          </div>
+          <p id="pagamentosParcelasMotivo" class="hidden px-5 py-4 text-sm text-gray-300"></p>
+          <!-- Colunas de largura fixa; a da situação fica com o resto (cresce com
+               o modal): sem rolagem de lado. -->
+          <table id="pagamentosParcelasTabela" class="w-full table-fixed text-sm">
+            <thead>
+              <tr class="border-b border-white/10">
+                <th class="w-24 px-4 py-3 text-left uppercase">Parcela</th>
+                <th class="w-40 px-4 py-3 text-left uppercase">Vencimento</th>
+                <th class="w-32 px-4 py-3 text-left uppercase">Valor</th>
+                <th class="px-4 py-3 text-left uppercase">Situação</th>
+                <th class="w-32 px-4 py-3 text-center uppercase">Ações</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/10"></tbody>
+          </table>
+        </section>
+
+        <!-- ================================= registrar um pagamento -->
+        <section id="pagamentosParcelasForm" class="hidden glass-surface rounded-xl border border-white/10 p-5 space-y-4" aria-live="polite">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h3 id="pagamentosParcelasFormTitulo" class="ctl-secao text-white"><i class="fas fa-hand-holding-usd mr-2" aria-hidden="true"></i><span id="pagamentosParcelasFormTituloTexto">Registrar pagamento</span></h3>
+            <span id="pagamentosParcelasFormContexto" class="text-xs text-gray-400"></span>
+          </div>
+
+          <p id="pagamentosParcelasAvisoBoleto" class="hidden text-sm" style="color: var(--color-primary-light)"></p>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label for="pagamentosParcelasData" class="ctl-rotulo text-gray-300">Pago em <span style="color: var(--color-red)">*</span></label>
+              <input id="pagamentosParcelasData" type="date" data-no-restore="true"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="pagamentosParcelasForma" class="ctl-rotulo text-gray-300">Como foi pago <span style="color: var(--color-red)">*</span></label>
+              <select id="pagamentosParcelasForma" data-no-restore="true"
+                      class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div>
+              <label for="pagamentosParcelasValor" class="ctl-rotulo text-gray-300">Valor recebido <span style="color: var(--color-red)">*</span></label>
+              <input id="pagamentosParcelasValor" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" data-numeric="false" data-no-restore="true"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="pagamentosParcelasObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+              <input id="pagamentosParcelasObservacao" type="text" maxlength="500" placeholder="Opcional" autocomplete="off" data-no-restore="true"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+          </div>
+
+          <!-- Atraso e encargos para a data escolhida (a conta é do backend). -->
+          <div id="pagamentosParcelasEncargos" class="hidden rounded-xl border border-white/10 bg-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <p id="pagamentosParcelasEncargosTexto" class="text-sm text-gray-300 min-w-0"></p>
+            <button id="pagamentosParcelasSomarEncargos" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">Somar encargos</button>
+          </div>
+
+          <div class="ctl-acoes justify-end">
+            <button id="pagamentosParcelasCancelarForm" type="button" class="btn-danger ctl-botao text-white">Cancelar</button>
+            <button id="pagamentosParcelasRegistrar" type="button" data-perm="financeiro.recebimento.registrar" class="btn-success ctl-botao">Registrar pagamento</button>
+          </div>
+        </section>
+
+        <!-- ================================= estornar um pagamento -->
+        <section id="pagamentosParcelasEstorno" class="hidden glass-surface rounded-xl border border-white/10 p-5 space-y-4" aria-live="polite">
+          <h3 id="pagamentosParcelasEstornoTitulo" class="ctl-secao text-white"><i class="fas fa-undo mr-2" aria-hidden="true"></i><span id="pagamentosParcelasEstornoTituloTexto">Estornar o pagamento</span></h3>
+          <p id="pagamentosParcelasEstornoTexto" class="text-sm text-gray-300"></p>
+          <div>
+            <label for="pagamentosParcelasMotivoEstorno" class="ctl-rotulo text-gray-300">Motivo do estorno <span style="color: var(--color-red)">*</span></label>
+            <textarea id="pagamentosParcelasMotivoEstorno" rows="3" maxlength="500" data-no-restore="true"
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
+                      placeholder="Ex.: registrado na parcela errada"></textarea>
+          </div>
+          <div class="ctl-acoes justify-end">
+            <button id="pagamentosParcelasVoltarEstorno" type="button" class="btn-neutral ctl-botao text-white">Voltar</button>
+            <button id="pagamentosParcelasConfirmarEstorno" type="button" data-perm="financeiro.recebimento.estornar" class="btn-danger ctl-botao text-white">Estornar</button>
+          </div>
+        </section>
+
+        <div id="pagamentosParcelasMensagem" class="hidden text-sm" role="alert"></div>
+      </div>
+    </div>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="fecharPagamentosParcelas" type="button" class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>

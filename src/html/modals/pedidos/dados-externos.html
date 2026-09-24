@@ -1,16 +1,19 @@
 <!--
   NF-e e boletos de fora (Pedidos → Visualizar → "NF-e e boletos de fora", e
   Financeiro → Aguardando NF-e → "NF-e de fora"). Para o pedido que saiu com
-  nota e/ou boleto feitos em outro lugar, informa só os DADOS: a nota pelo
-  XML (lido e descartado) ou pela chave de acesso + valor, e o boleto de cada
-  parcela pela linha digitável. Nenhum arquivo fica guardado (decisão do
-  dono, 21/09/2026). Nada passa pela SEFAZ nem pelo BB.
+  nota e/ou boleto feitos em outro lugar, informa os dados: a nota pelo XML
+  ou pela chave de acesso + valor, e o boleto de cada parcela pela linha
+  digitável. Desde 24/09/2026 o XML da nota fica guardado (DANFE e cartas de
+  correção); do boleto ficam só os dados da linha. Nada passa pela SEFAZ nem
+  pelo BB. A tabela dos boletos tem a coluna Ações (copiar, trocar, remover)
+  e colunas de largura fixa: a do boleto fica com o resto e o modal não rola
+  de lado.
   Não fecha clicando fora (docs/padroes-de-interface.md).
   Contexto: window.dadosExternosContext = { pedidoId, numero, cliente, formaPagamento }.
   Script: src/js/modals/pedido-dados-externos.js.
 -->
 <div id="dadosExternosOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao" aria-hidden="true">
-  <div role="dialog" aria-modal="true" aria-labelledby="dadosExternosTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" aria-labelledby="dadosExternosTitulo" class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
       <button id="voltarDadosExternos" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
@@ -24,8 +27,8 @@
     <div class="flex-1 overflow-y-auto modal-scroll">
       <div class="px-6 py-5 space-y-6">
         <p class="text-sm text-gray-300">
-          Para o pedido que saiu com nota ou boleto feitos em outro lugar. Só os <strong class="text-white">dados</strong> ficam
-          no pedido: o XML é lido e descartado, e o boleto não é guardado. Nada disso vai para a SEFAZ nem para o banco.
+          Para o pedido que saiu com nota ou boleto feitos em outro lugar. O <strong class="text-white">XML da nota</strong> fica
+          guardado (DANFE e cartas de correção); do boleto ficam só os dados da linha digitável. Nada disso vai para a SEFAZ nem para o banco.
         </p>
 
         <p id="dadosExternosCarregando" class="text-sm text-gray-300"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Carregando…</p>
@@ -154,17 +157,20 @@
         <section id="dadosExternosBoletos" class="hidden glass-surface rounded-xl border border-white/10 overflow-hidden">
           <div class="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
             <h3 class="ctl-secao text-white"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Boletos emitidos fora</h3>
-            <span class="text-xs text-gray-400">Cole a linha digitável de cada parcela</span>
+            <span class="text-xs text-gray-400">Cole a linha digitável de cada parcela · troque ou remova pela coluna Ações</span>
           </div>
           <p id="dadosExternosBoletosMotivo" class="hidden px-5 py-4 text-sm text-gray-300"></p>
-          <div id="dadosExternosParcelasCaixa" class="overflow-x-auto">
-            <table id="dadosExternosParcelas" class="w-full text-sm">
+          <!-- Colunas de largura fixa; a do boleto fica com o resto (cresce com o
+               modal) e a linha digitável quebra dentro dela: sem rolagem de lado. -->
+          <div id="dadosExternosParcelasCaixa">
+            <table id="dadosExternosParcelas" class="w-full table-fixed text-sm">
               <thead>
                 <tr class="border-b border-white/10">
-                  <th class="px-4 py-3 text-left uppercase">Parcela</th>
-                  <th class="px-4 py-3 text-left uppercase">Vencimento</th>
-                  <th class="px-4 py-3 text-left uppercase">Valor</th>
+                  <th class="w-24 px-4 py-3 text-left uppercase">Parcela</th>
+                  <th class="w-32 px-4 py-3 text-left uppercase">Vencimento</th>
+                  <th class="w-32 px-4 py-3 text-left uppercase">Valor</th>
                   <th class="px-4 py-3 text-left uppercase">Boleto</th>
+                  <th class="w-32 px-4 py-3 text-center uppercase">Ações</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-white/10"></tbody>
