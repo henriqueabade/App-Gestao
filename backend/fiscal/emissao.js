@@ -186,10 +186,35 @@ const CAMPOS_TRANSPORTE_PEDIDO = {
   transportadora_nome: v => (v === null || v === undefined ? undefined : String(v).trim().slice(0, 60) || undefined)
 };
 
+/** Número maior que zero, ou null. */
+const positivo = v => {
+  const n = Number(String(v ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * Os volumes do envio, um por caixa, para as etiquetas (pedido do dono,
+ * 24/09/2026): espécie, pesos e as três dimensões em mm. Vai para
+ * `pedidos.volumes_detalhe` como texto JSON (sql/pedido_volumes_etiquetas.sql).
+ * Pura.
+ */
+function volumesDetalhados(lista) {
+  return (Array.isArray(lista) ? lista : []).filter(v => v && typeof v === 'object').map((v, i) => ({
+    numero: i + 1,
+    especie: String(v.especie ?? '').trim().slice(0, 60) || 'Caixa',
+    peso_bruto: positivo(v.peso_bruto),
+    peso_liquido: positivo(v.peso_liquido),
+    comprimento_mm: positivo(v.comprimento_mm),
+    largura_mm: positivo(v.largura_mm),
+    altura_mm: positivo(v.altura_mm)
+  }));
+}
+
 /**
  * Só as chaves que vieram; `transportadora_nome` grava em `pedidos.transportadora`.
  * Volumes detalhados (uma linha por volume) viram o resumo: quantidade total,
- * espécies distintas e pesos somados.
+ * espécies distintas e pesos somados. `volumes_detalhe` (uma caixa por linha,
+ * com as dimensões) vai inteiro para as etiquetas.
  */
 function camposTransporteDoPedido(transporte) {
   const saida = {};
@@ -207,6 +232,10 @@ function camposTransporteDoPedido(transporte) {
     const valor = limpar(entrada[chave]);
     if (valor === undefined || Number.isNaN(valor)) continue;
     saida[chave === 'transportadora_nome' ? 'transportadora' : chave] = valor;
+  }
+  if (Array.isArray(entrada.volumes_detalhe)) {
+    const caixas = volumesDetalhados(entrada.volumes_detalhe);
+    saida.volumes_detalhe = caixas.length ? JSON.stringify(caixas) : null;
   }
   return saida;
 }
@@ -476,5 +505,5 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
 module.exports = {
   STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO,
   semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel,
-  camposTransporteDoPedido, emitir, sincronizar
+  volumesDetalhados, camposTransporteDoPedido, gravarTransporteNoPedido, emitir, sincronizar
 };

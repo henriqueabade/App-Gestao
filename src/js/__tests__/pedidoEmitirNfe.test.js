@@ -28,15 +28,19 @@ function puras() {
   return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos, mascararData, lerDataDigitada, avisoDaDataDeEnvio })`, contexto);
 }
 
-test('mais de um volume: uma linha por volume, guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
+test('uma linha por volume (com um só também), guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
   const f = puras();
-  assert.deepStrictEqual(plano(f.linhasDeVolumes('1', { especie: 'Caixa' })), [], 'um volume só fica nos campos gerais');
+  const semDimensao = { comprimento_mm: '', largura_mm: '', altura_mm: '' };
+  // Desde 24/09/2026 um volume só também ganha a linha: é onde entram as dimensões da etiqueta.
+  assert.deepStrictEqual(plano(f.linhasDeVolumes('1', { especie: 'Engradado' })), [{ numero: 1, especie: 'Engradado', peso_bruto: '', peso_liquido: '', ...semDimensao }]);
+  assert.strictEqual(f.linhasDeVolumes('1', {})[0].especie, 'Caixa', '"Caixa" é o padrão da empresa, sempre preenchido');
   assert.deepStrictEqual(plano(f.linhasDeVolumes('x', {})), []);
+  assert.deepStrictEqual(plano(f.linhasDeVolumes('0', {})), []);
   const tres = plano(f.linhasDeVolumes('3', { especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' }));
   assert.deepStrictEqual(tres, [
-    { numero: 1, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' },
-    { numero: 2, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' },
-    { numero: 3, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9' }
+    { numero: 1, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9', ...semDimensao },
+    { numero: 2, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9', ...semDimensao },
+    { numero: 3, especie: 'Caixa', peso_bruto: '10', peso_liquido: '9', ...semDimensao }
   ]);
   const editadas = plano(f.linhasDeVolumes('2', { especie: 'Caixa' }, [{ numero: 1, especie: 'Engradado', peso_bruto: '20', peso_liquido: '18' }]));
   assert.strictEqual(editadas[0].especie, 'Engradado', 'a linha editada sobrevive à mudança da quantidade');
@@ -49,7 +53,18 @@ test('mais de um volume: uma linha por volume, guardando o que já foi digitado;
     { numeracao: '1', especie: 'Caixa', peso_bruto: 10.5, peso_liquido: 9 }, { numeracao: '2', especie: 'Engradado', peso_bruto: null, peso_liquido: 18 }
   ]);
   assert.strictEqual(corpo.transporte.volumes_quantidade, 2);
-  assert.strictEqual(f.corpoDaEmissao({ volumes: [{ especie: 'Caixa' }] }).transporte.volumes, undefined, 'uma linha só não é detalhe');
+  assert.deepStrictEqual(corpo.transporte.volumes_detalhe.map(v => [v.especie, v.peso_bruto]), [['Caixa', 10.5], ['Engradado', null]], 'as caixas vão para o pedido (etiquetas)');
+  const uma = plano(f.corpoDaEmissao({ volumes_especie: 'Caixa', peso_bruto: '99', volumes: [{ especie: 'Engradado', peso_bruto: '24,9', peso_liquido: '20', comprimento_mm: '440', largura_mm: '665', altura_mm: '270' }] }).transporte);
+  assert.strictEqual(uma.volumes, undefined, 'uma linha só: a nota continua com um <vol> de resumo');
+  assert.deepStrictEqual([uma.volumes_quantidade, uma.volumes_especie, uma.peso_bruto, uma.peso_liquido], [1, 'Engradado', 24.9, 20], 'o resumo vem da linha');
+  assert.deepStrictEqual(uma.volumes_detalhe, [{ especie: 'Engradado', peso_bruto: 24.9, peso_liquido: 20, comprimento_mm: 440, largura_mm: 665, altura_mm: 270 }]);
+  const dims = f.validarCampos({ modalidade_frete: '1', volumes_quantidade: '1', volumes: [{ especie: 'Caixa', comprimento_mm: '0', largura_mm: 'x', altura_mm: '270' }] }).join(' ');
+  assert.match(dims, /Volume 1: comprimento inválido \(em mm\)/);
+  assert.match(dims, /Volume 1: largura inválido \(em mm\)/);
+  assert.ok(!/altura/.test(dims));
+  assert.ok(HTML.includes('Dimensões (mm) C × L × A'), 'a coluna das dimensões');
+  assert.match(HTML, /id="emitirNfeEspecie"[^>]*value="Caixa"/, '"Caixa" já vem escrito');
+  assert.ok(FONTE.includes("campos.volumes_especie.value = frete.volumes_especie || 'Caixa';"));
 
   assert.deepStrictEqual(plano(f.validarCampos({ modalidade_frete: '1', volumes_quantidade: '2', volumes: [{ especie: 'Caixa', peso_bruto: '1' }, { especie: 'Caixa' }] })), []);
   const erros = f.validarCampos({ modalidade_frete: '1', volumes_quantidade: '2', volumes: [{ especie: '', peso_bruto: 'x' }, { especie: 'Caixa', peso_liquido: '-1' }] });
@@ -387,7 +402,8 @@ test('Enviar sem NF-e: guarda de clique no botão e véu de carregamento depois 
   assert.ok(inicio > 0 && fim > inicio);
   const corpo = FONTE.slice(inicio, fim);
   assert.ok(corpo.includes('window.DialogPadrao?.confirm'), 'a confirmação continua na caixa da casa');
-  assert.ok(corpo.includes('comVeu(() => marcarEnviado(null)'), 'o trabalho depois da caixa roda sob o véu');
+  assert.ok(/comVeu\(async \(\) => \{\s*await gravarTransporteSemNota\(\);\s*return marcarEnviado\(null\);/.test(corpo), 'o trabalho depois da caixa roda sob o véu: grava as caixas (etiquetas) e marca como enviado');
+  assert.ok(FONTE.includes("fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/transporte`, {"), 'sem nota, o transporte vai direto para o pedido');
   assert.ok(corpo.indexOf('DialogPadrao') < corpo.indexOf('comVeu'), 'o véu entra DEPOIS da confirmação, não por cima dela');
 
   assert.ok(FONTE.includes("window.BotaoAcao?.comCarregamento === 'function'"), 'o véu é o da casa (BotaoAcao), não um spinner próprio');

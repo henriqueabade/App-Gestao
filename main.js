@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron');
 const path = require('path');
 const { isDev: useLocalDatabase } = require('./backend/dataConfig');
+const folhasDoPdf = require('./backend/fiscal/folhas');
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const http = require('http');
@@ -5051,6 +5052,24 @@ ipcMain.handle('get-saved-display', () => {
 });
 
 /**
+ * Imprime o HTML (já na janela oculta) e devolve o PDF. O HTML que pede o
+ * total de folhas (o DANFE: "FOLHA 1/x") é impresso duas vezes: a primeira
+ * conta as páginas, a segunda sai com o total no lugar da marca
+ * (backend/fiscal/folhas.js). Antes o DANFE dizia "1/1" mesmo com 3 folhas.
+ */
+async function imprimirHtmlEmPdf(janela, arquivoTemp, html, opcoes) {
+  const pedeTotal = folhasDoPdf.pedeTotalDeFolhas(html);
+  await fs.promises.writeFile(arquivoTemp, pedeTotal ? folhasDoPdf.comTotalDeFolhas(html, 9) : html, 'utf8');
+  await janela.loadFile(arquivoTemp);
+  const primeira = await janela.webContents.printToPDF(opcoes);
+  if (!pedeTotal) return primeira;
+  const total = folhasDoPdf.contarPaginasPdf(primeira) || 1;
+  await fs.promises.writeFile(arquivoTemp, folhasDoPdf.comTotalDeFolhas(html, total), 'utf8');
+  await janela.loadFile(arquivoTemp);
+  return janela.webContents.printToPDF(opcoes);
+}
+
+/**
  * Salva um HTML pronto como PDF em paisagem.
  *
  * O relatório de produção é montado no renderer (é lá que estão os dados já
@@ -5080,15 +5099,14 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
 
   let janela = null;
   try {
-    await fs.promises.writeFile(arquivoTemp, html, 'utf8');
-
     janela = new BrowserWindow({
       show: false,
       webPreferences: { offscreen: true, javascript: false }
     });
-    await janela.loadFile(arquivoTemp);
 
-    const pdf = await janela.webContents.printToPDF({
+    // As páginas nomeadas do CSS (@page paisagem/retrato) mandam em cada
+    // folha — é assim que as etiquetas misturam paisagem e retrato.
+    const pdf = await imprimirHtmlEmPdf(janela, arquivoTemp, html, {
       printBackground: true,
       pageSize: 'A4',
       // O DANFE da NF-e é em retrato; os relatórios continuam em paisagem.
@@ -5133,10 +5151,8 @@ ipcMain.handle('gerar-pdf-de-html', async (_event, { html, retrato = false } = {
   const arquivoTemp = path.join(app.getPath('temp'), `sd-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
   let janela = null;
   try {
-    await fs.promises.writeFile(arquivoTemp, html, 'utf8');
     janela = new BrowserWindow({ show: false, webPreferences: { offscreen: true, javascript: false } });
-    await janela.loadFile(arquivoTemp);
-    const pdf = await janela.webContents.printToPDF({
+    const pdf = await imprimirHtmlEmPdf(janela, arquivoTemp, html, {
       printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
     return { success: true, base64: Buffer.from(pdf).toString('base64'), tamanho: pdf.length };

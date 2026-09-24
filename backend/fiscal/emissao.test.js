@@ -339,6 +339,13 @@ test('camposTransporteDoPedido: só o que veio, limpo; vazio zera volumes/pesos 
   // Volumes detalhados viram o resumo gravado no pedido.
   assert.deepEqual(emissao.camposTransporteDoPedido({ modalidade_frete: 1, volumes: [{ especie: 'Caixa', peso_bruto: 10.5, peso_liquido: 9 }, { especie: 'Engradado', peso_bruto: 20, peso_liquido: 18 }, { especie: 'Caixa', quantidade: 2 }] }),
     { modalidade_frete: 1, volumes_quantidade: 4, volumes_especie: 'Caixa, Engradado', peso_bruto: 30.5, peso_liquido: 27 });
+  // As caixas com as dimensões (etiquetas, 24/09/2026): texto JSON no pedido; espécie vazia vira "Caixa".
+  const comCaixas = emissao.camposTransporteDoPedido({ volumes_detalhe: [{ especie: '', peso_bruto: 11, comprimento_mm: '440', largura_mm: 665, altura_mm: 270 }, { especie: 'Engradado', peso_bruto: 'x', altura_mm: 0 }] });
+  assert.deepEqual(JSON.parse(comCaixas.volumes_detalhe), [
+    { numero: 1, especie: 'Caixa', peso_bruto: 11, peso_liquido: null, comprimento_mm: 440, largura_mm: 665, altura_mm: 270 },
+    { numero: 2, especie: 'Engradado', peso_bruto: null, peso_liquido: null, comprimento_mm: null, largura_mm: null, altura_mm: null }
+  ]);
+  assert.deepEqual(emissao.camposTransporteDoPedido({ volumes_detalhe: [] }), { volumes_detalhe: null }, 'sem caixas, limpa');
 });
 
 test('volumes detalhados na emissão: um <vol> por linha no XML e o resumo no pedido', async () => {

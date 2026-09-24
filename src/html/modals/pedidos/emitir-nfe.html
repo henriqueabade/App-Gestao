@@ -127,7 +127,7 @@
               </div>
               <div>
                 <label for="emitirNfeEspecie" class="ctl-rotulo text-gray-300">Espécie</label>
-                <input id="emitirNfeEspecie" type="text" maxlength="60" placeholder="ex.: Caixa, Volume, Peça" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="emitirNfeEspecie" type="text" maxlength="60" placeholder="ex.: Caixa, Volume, Peça" value="Caixa" autocomplete="off" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
@@ -141,9 +141,10 @@
               </div>
             </div>
 
-            <!-- Mais de um volume: uma linha por volume (espécie e pesos de cada um). -->
+            <!-- Uma linha por volume (desde 24/09/2026 também com um só): espécie,
+                 pesos e as três dimensões em mm, que vão para as etiquetas. -->
             <div id="emitirNfeVolumesDetalhe" class="hidden mt-4 glass-surface rounded-xl border border-white/10 overflow-hidden">
-              <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Um volume por linha: espécie e pesos de cada um. Na nota, cada caixa sai numerada como <strong class="text-gray-200">nº da nota_caixa/total</strong> (a 2ª de 3 caixas da nota 125 é 125_2/3), com a marca; os pesos somados vão para o pedido.</p>
+              <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Um volume por linha: espécie, pesos e as <strong class="text-gray-200">dimensões da caixa em mm</strong> (comprimento × largura × altura), que saem na etiqueta. Na nota, cada caixa sai numerada como <strong class="text-gray-200">nº da nota_caixa/total</strong> (a 2ª de 3 caixas da nota 125 é 125_2/3), com a marca; os pesos somados vão para o pedido.</p>
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
@@ -152,6 +153,7 @@
                       <th class="px-4 py-2 text-left text-xs">Espécie</th>
                       <th class="px-4 py-2 text-left text-xs">Peso bruto (kg)</th>
                       <th class="px-4 py-2 text-left text-xs">Peso líq. (kg)</th>
+                      <th class="px-4 py-2 text-left text-xs">Dimensões (mm) C × L × A</th>
                     </tr>
                   </thead>
                   <tbody id="emitirNfeVolumesLinhas" class="divide-y divide-white/10"></tbody>

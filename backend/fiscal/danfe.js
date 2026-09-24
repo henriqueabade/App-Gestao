@@ -17,6 +17,8 @@
 const fs = require('fs');
 const path = require('path');
 const { campo, bloco } = require('./sefazCliente');
+// "FOLHA 1/x": o total entra depois da primeira impressão (folhas.js + main.js).
+const { MARCA_TOTAL_DE_FOLHAS } = require('./folhas');
 
 // Larguras de barras/espaços do Code 128 (valores 0-106); 105 = Start C, 106 = Stop.
 const CODE128 = [
@@ -310,7 +312,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
       <div class="desc">Documento Auxiliar da Nota Fiscal Eletrônica</div>
       <div class="tipo">${n.tpNF === '0' ? '0 - ENTRADA' : '1 - SAÍDA'}</div>
       <div class="num">Nº ${numeroNf(n.numero)}</div>
-      <div>SÉRIE ${esc(n.serie)} &nbsp; FOLHA 1/1</div>
+      <div>SÉRIE ${esc(n.serie)} &nbsp; FOLHA 1/${MARCA_TOTAL_DE_FOLHAS}</div>
     </div>
     <div class="chave">
       ${codigoDeBarrasSvg(n.chave, { largura: '100%' })}

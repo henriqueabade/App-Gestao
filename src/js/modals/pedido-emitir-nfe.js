@@ -120,33 +120,50 @@
   }
 
   /**
-   * Mais de um volume: uma linha por volume. Mantém o que já foi digitado nas
-   * linhas existentes e completa as novas com a espécie/pesos dos campos gerais.
+   * Uma linha por volume (desde 24/09/2026 também com UM volume: é onde entram
+   * as três dimensões da caixa, em mm, para a etiqueta). Mantém o que já foi
+   * digitado nas linhas existentes e completa as novas com a espécie/pesos dos
+   * campos gerais — a espécie vem sempre "Caixa", o padrão da empresa, e o
+   * usuário troca se quiser.
    */
   function linhasDeVolumes(quantidade, base = {}, existentes = []) {
     const n = lerNumero(quantidade);
-    if (!Number.isInteger(n) || n < 2) return [];
+    if (!Number.isInteger(n) || n < 1) return [];
     const atuais = Array.isArray(existentes) ? existentes : [];
     return Array.from({ length: n }, (_, i) => (atuais[i]
       ? { ...atuais[i], numero: i + 1 }
-      : { numero: i + 1, especie: String(base.especie ?? ''), peso_bruto: String(base.peso_bruto ?? ''), peso_liquido: String(base.peso_liquido ?? '') }));
+      : {
+        numero: i + 1, especie: String(base.especie ?? '').trim() || 'Caixa',
+        peso_bruto: String(base.peso_bruto ?? ''), peso_liquido: String(base.peso_liquido ?? ''),
+        comprimento_mm: '', largura_mm: '', altura_mm: ''
+      }));
   }
 
   /** O que se manda ao POST /emitir a partir dos campos da tela. */
   function corpoDaEmissao(campos = {}) {
-    const linhas = Array.isArray(campos.volumes) && campos.volumes.length >= 2 ? campos.volumes : null;
+    const linhas = Array.isArray(campos.volumes) && campos.volumes.length ? campos.volumes : null;
+    // Um volume só: a linha da tabela é o resumo (a nota continua com um <vol>).
+    const uma = linhas && linhas.length === 1 ? linhas[0] : null;
     const transporte = {
       modalidade_frete: Number(campos.modalidade_frete ?? 9),
       transportadora_nome: String(campos.transportadora ?? '').trim(),
       volumes_quantidade: linhas ? linhas.length : lerNumero(campos.volumes_quantidade),
-      volumes_especie: String(campos.volumes_especie ?? '').trim(),
-      peso_bruto: lerNumero(campos.peso_bruto),
-      peso_liquido: lerNumero(campos.peso_liquido)
+      volumes_especie: String((uma ? uma.especie : campos.volumes_especie) ?? '').trim(),
+      peso_bruto: lerNumero(uma ? uma.peso_bruto : campos.peso_bruto),
+      peso_liquido: lerNumero(uma ? uma.peso_liquido : campos.peso_liquido)
     };
-    if (linhas) {
+    if (linhas && linhas.length >= 2) {
       transporte.volumes = linhas.map((v, i) => ({
         numeracao: String(v.numero ?? i + 1), especie: String(v.especie ?? '').trim(),
         peso_bruto: lerNumero(v.peso_bruto), peso_liquido: lerNumero(v.peso_liquido)
+      }));
+    }
+    // As caixas, com as dimensões, ficam no pedido para as etiquetas
+    // (pedidos.volumes_detalhe — sql/pedido_volumes_etiquetas.sql).
+    if (linhas) {
+      transporte.volumes_detalhe = linhas.map(v => ({
+        especie: String(v.especie ?? '').trim(), peso_bruto: lerNumero(v.peso_bruto), peso_liquido: lerNumero(v.peso_liquido),
+        comprimento_mm: lerNumero(v.comprimento_mm), largura_mm: lerNumero(v.largura_mm), altura_mm: lerNumero(v.altura_mm)
       }));
     }
     return {
@@ -164,7 +181,7 @@
       if (Number.isNaN(n) || (n !== null && n < 0)) erros.push(`${rotulo}: informe um número válido.`);
     }
     const volumes = lerNumero(campos.volumes_quantidade);
-    const linhas = Array.isArray(campos.volumes) && campos.volumes.length >= 2 ? campos.volumes : null;
+    const linhas = Array.isArray(campos.volumes) && campos.volumes.length ? campos.volumes : null;
     if (volumes > 0 && !linhas && !String(campos.volumes_especie ?? '').trim()) erros.push('Informe a espécie dos volumes (ex.: Caixa).');
     if (volumes !== null && !Number.isNaN(volumes) && !Number.isInteger(volumes)) erros.push('Volumes: use um número inteiro.');
     if (String(campos.modalidade_frete) === '9' && volumes > 0) erros.push('Sem frete (9) não leva volumes: escolha a modalidade ou zere os volumes.');
@@ -173,6 +190,11 @@
       for (const [chave, rotulo] of [['peso_bruto', 'peso bruto'], ['peso_liquido', 'peso líquido']]) {
         const n = lerNumero(v[chave]);
         if (Number.isNaN(n) || (n !== null && n < 0)) erros.push(`Volume ${i + 1}: ${rotulo} inválido.`);
+      }
+      // As dimensões são opcionais (a etiqueta sai com o campo em branco), mas, se vierem, em mm e maiores que zero.
+      for (const [chave, rotulo] of [['comprimento_mm', 'comprimento'], ['largura_mm', 'largura'], ['altura_mm', 'altura']]) {
+        const n = lerNumero(v[chave]);
+        if (Number.isNaN(n) || (n !== null && n <= 0)) erros.push(`Volume ${i + 1}: ${rotulo} inválido (em mm).`);
       }
     }
     return erros;
@@ -526,7 +548,8 @@
     if (!campos.modalidade_frete.value) campos.modalidade_frete.value = '9';
     campos.transportadora.value = frete.transportadora && !/^n[aã]o definid/i.test(frete.transportadora) ? frete.transportadora : '';
     campos.volumes_quantidade.value = frete.volumes_quantidade ?? '';
-    campos.volumes_especie.value = frete.volumes_especie ?? '';
+    // "Caixa" é o padrão da empresa: vem sempre preenchido, e o usuário troca se quiser.
+    campos.volumes_especie.value = frete.volumes_especie || 'Caixa';
     campos.peso_bruto.value = frete.peso_bruto ?? '';
     campos.peso_liquido.value = frete.peso_liquido ?? '';
     campos.tPag.value = r.tPagSugerido || '99';
@@ -544,7 +567,10 @@
       numero: i + 1,
       especie: tr.querySelector('[data-volume="especie"]')?.value ?? '',
       peso_bruto: tr.querySelector('[data-volume="peso_bruto"]')?.value ?? '',
-      peso_liquido: tr.querySelector('[data-volume="peso_liquido"]')?.value ?? ''
+      peso_liquido: tr.querySelector('[data-volume="peso_liquido"]')?.value ?? '',
+      comprimento_mm: tr.querySelector('[data-volume="comprimento_mm"]')?.value ?? '',
+      largura_mm: tr.querySelector('[data-volume="largura_mm"]')?.value ?? '',
+      altura_mm: tr.querySelector('[data-volume="altura_mm"]')?.value ?? ''
     }));
   }
 
@@ -574,6 +600,32 @@
         td.appendChild(input);
         tr.appendChild(td);
       }
+      // As três dimensões da caixa, em mm (comprimento × largura × altura): vão para a etiqueta.
+      const tdDimensoes = document.createElement('td');
+      tdDimensoes.className = 'px-4 py-2';
+      const grupo = document.createElement('div');
+      grupo.className = 'flex items-center gap-1';
+      for (const [chave, dica, nome] of [['comprimento_mm', 'C', 'comprimento'], ['largura_mm', 'L', 'largura'], ['altura_mm', 'A', 'altura']]) {
+        if (grupo.childElementCount) {
+          const vezes = document.createElement('span');
+          vezes.className = 'text-xs text-gray-400';
+          vezes.textContent = '×';
+          grupo.appendChild(vezes);
+        }
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.dataset.volume = chave;
+        input.value = linha[chave] ?? '';
+        input.placeholder = dica;
+        input.title = `${nome[0].toUpperCase()}${nome.slice(1)} da caixa, em mm`;
+        input.setAttribute('aria-label', `Volume ${linha.numero}: ${nome} em mm`);
+        input.className = 'w-20 bg-input border border-inputBorder rounded-lg px-2 py-2 text-center text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        input.addEventListener('input', limparMensagem);
+        grupo.appendChild(input);
+      }
+      tdDimensoes.appendChild(grupo);
+      tr.appendChild(tdDimensoes);
       volumesCorpo.appendChild(tr);
     }
     volumesBloco.classList.toggle('hidden', volumesLinhas.length === 0);
@@ -585,14 +637,14 @@
       if (!campo) continue;
       campo.disabled = detalhado;
       campo.style.opacity = detalhado ? '0.5' : '';
-      campo.title = detalhado ? 'Com mais de um volume, preencha a tabela abaixo.' : '';
+      campo.title = detalhado ? 'Preencha cada volume na tabela abaixo.' : '';
     }
   }
 
   function valoresDosCampos() {
     const valores = Object.fromEntries(Object.entries(campos).map(([k, input]) => [k, input?.value ?? '']));
     const linhas = lerVolumesDaTela();
-    valores.volumes = volumesBloco && !volumesBloco.classList.contains('hidden') && linhas.length >= 2 ? linhas : null;
+    valores.volumes = volumesBloco && !volumesBloco.classList.contains('hidden') && linhas.length >= 1 ? linhas : null;
     return valores;
   }
 
@@ -604,6 +656,23 @@
       if (!resp.ok) console.warn('Pedido enviado, mas a marca "sem nota" não foi gravada:', resp.status);
     } catch (err) {
       console.warn('Pedido enviado, mas a marca "sem nota" não foi gravada:', err);
+    }
+  }
+
+  /**
+   * Sem NF-e, nada passa pelo /emitir: o transporte — transportadora e as
+   * caixas, com as dimensões — vai direto para o pedido, para as etiquetas.
+   * Não trava o envio (a regra "sem frete não leva volumes" é da nota).
+   */
+  async function gravarTransporteSemNota() {
+    try {
+      const resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/transporte`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transporte: corpoDaEmissao(valoresDosCampos()).transporte })
+      });
+      if (!resp.ok) console.warn('Pedido enviado, mas os volumes não foram gravados:', resp.status);
+    } catch (err) {
+      console.warn('Pedido enviado, mas os volumes não foram gravados:', err);
     }
   }
 
@@ -760,7 +829,10 @@
     // parecia travada. O véu da casa mostra o que está acontecendo e impede o
     // segundo clique.
     try {
-      await comVeu(() => marcarEnviado(null), ctx.numero ? `Enviando o pedido ${ctx.numero} sem NF-e...` : 'Enviando o pedido sem NF-e...');
+      await comVeu(async () => {
+        await gravarTransporteSemNota();
+        return marcarEnviado(null);
+      }, ctx.numero ? `Enviando o pedido ${ctx.numero} sem NF-e...` : 'Enviando o pedido sem NF-e...');
     } finally {
       emAndamento = false;
     }

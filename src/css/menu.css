@@ -1644,7 +1644,8 @@ header.glass-surface {
 .btn-neutral,
 .btn-preco-tabela,
 .btn-regra-producao,
-.btn-bb {
+.btn-bb,
+.btn-etiquetas {
     white-space: nowrap;
 }
 
@@ -1688,6 +1689,28 @@ header.glass-surface {
 }
 
 .btn-bb:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/**
+ * "Etiquetas" no rodapé do pedido enviado: bordô (pedido do dono,
+ * 24/09/2026). Global porque o Visualizar pedido também abre por cima do
+ * Financeiro, e só a folha de um módulo fica carregada por vez.
+ */
+.btn-etiquetas {
+    background: #6a152c;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-etiquetas:hover:not(:disabled) {
+    background: #7f1d38;
+    transform: scale(1.05);
+}
+
+.btn-etiquetas:disabled {
     opacity: 0.55;
     cursor: not-allowed;
     transform: none;

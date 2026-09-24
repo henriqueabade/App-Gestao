@@ -819,6 +819,30 @@ test('POST /pedidos/:id/dispensar-nfe exige ped.status.ship e marca o pedido com
   }
 });
 
+test('etiquetas (24/09/2026): o envio sem NF-e grava as caixas com as dimensões, e o PDF sai do pedido', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    const transporte = { transportadora_nome: 'VIPEX', volumes_quantidade: 2, volumes_detalhe: [{ especie: 'Caixa', peso_bruto: 11, comprimento_mm: 440, largura_mm: 665, altura_mm: 270 }, { especie: 'Caixa', peso_bruto: 5.2 }] };
+    assert.equal((await t.chamar('PUT', '/api/fiscal/pedidos/55/transporte', { transporte })).status, 403, 'a permissão de despachar');
+    t.estado.chaves.add('ped.status.ship');
+    const gravou = await t.chamar('PUT', '/api/fiscal/pedidos/55/transporte', { transporte });
+    assert.equal(gravou.status, 200, JSON.stringify(gravou.corpo));
+    assert.equal(tabelas.pedidos[0].transportadora, 'VIPEX');
+    assert.deepEqual(JSON.parse(tabelas.pedidos[0].volumes_detalhe).map(v => [v.peso_bruto, v.comprimento_mm]), [[11, 440], [5.2, null]]);
+
+    assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/55/etiquetas')).status, 403, 'quem vê o pedido');
+    t.estado.chaves.add('ped.view');
+    const r = await t.chamar('GET', '/api/fiscal/pedidos/55/etiquetas');
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.volumes, 2);
+    assert.ok(r.corpo.html.includes('440 x 665 x 270') && r.corpo.html.includes('11,000') && r.corpo.html.includes('VIPEX'));
+    assert.equal((await t.chamar('GET', '/api/fiscal/pedidos/999/etiquetas')).status, 404);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('server.js monta /api/fiscal antes do proxy genérico /api/:table', () => {
   const fonte = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
   const fiscal = fonte.indexOf("app.use('/api/fiscal'");

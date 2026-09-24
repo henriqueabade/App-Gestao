@@ -486,6 +486,33 @@
     else botao.addEventListener('click', abrir);
   }
 
+  /**
+   * "Etiquetas" (bordô) no rodapé do pedido que saiu: o PDF das etiquetas das
+   * caixas — a de transporte (paisagem, duas por folha; a que sobra fica
+   * sozinha no centro) e a "ATENÇÃO" (retrato, duas por folha), uma de cada
+   * por volume. O HTML vem do backend (GET /api/fiscal/pedidos/:id/etiquetas).
+   */
+  function ligarEtiquetas(pedido) {
+    const botao = overlay.querySelector('#visualizarPedidoEtiquetas');
+    if (!botao || !pedidoJaSaiu(pedido)) return;
+    const gerar = async () => {
+      try {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/etiquetas`);
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) { window.showToast?.(corpo?.error || 'Não foi possível montar as etiquetas.', 'error'); return; }
+        const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar etiquetas em PDF' });
+        if (!r) { window.showToast?.('Geração de PDF indisponível nesta janela.', 'error'); return; }
+        if (r.success) window.showToast?.(r.opened ? 'Etiquetas salvas e abertas.' : (r.message || 'Etiquetas salvas.'), 'success');
+        else if (!r.canceled) window.showToast?.(r.message || 'Não foi possível gerar as etiquetas.', 'error');
+      } catch (_) {
+        window.showToast?.('Não foi possível falar com o servidor.', 'error');
+      }
+    };
+    botao.classList.remove('hidden');
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, gerar);
+    else botao.addEventListener('click', gerar);
+  }
+
   /** "Boletos (PDF)" no rodapé: todos os boletos a pagar do pedido. */
   function ligarBoletosPdf(estado) {
     const botao = overlay.querySelector('#visualizarPedidoBoletosPdf');
@@ -994,6 +1021,7 @@
     ligarBoletosPdf(boletosEstado);
     ligarImportarBoletos(data);
     ligarPagamentos(data, data.parcelas_detalhes, boletosEstado);
+    ligarEtiquetas(data);
     ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';

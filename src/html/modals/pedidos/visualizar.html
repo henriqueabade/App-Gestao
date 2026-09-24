@@ -123,6 +123,9 @@
              se aparece é precisaDeDadosDeFora; a permissão é a de emitir NF-e
              ou a de gerar boletos. -->
         <button id="visualizarPedidoDadosExternos" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Informar a NF-e e os boletos emitidos fora do sistema">NF-e e boletos de fora</button>
+        <!-- Pedido que saiu: as etiquetas das caixas em PDF (a de transporte e a
+             "ATENÇÃO", uma de cada por volume — backend/fiscal/etiquetas.js). -->
+        <button id="visualizarPedidoEtiquetas" type="button" data-perm="ped.view" class="hidden btn-etiquetas ctl-botao ctl-botao--pequeno text-white" title="Gerar em PDF as etiquetas das caixas (transporte e ATENÇÃO, uma de cada por volume)">Etiquetas</button>
       </div>
       <div class="ctl-acoes">
         <!-- Os três nascem escondidos; o script mostra os que a situação pede

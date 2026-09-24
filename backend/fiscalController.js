@@ -28,6 +28,7 @@ const segredoBanco = require('./fiscal/segredoBanco');
 const cartaCorrecaoDoc = require('./fiscal/cartaCorrecaoDoc');
 const painel = require('./fiscal/painel');
 const externas = require('./fiscal/externas');
+const etiquetas = require('./fiscal/etiquetas');
 const { version: VERSAO_APP } = require('../package.json');
 
 /** Id do usuário autenticado, lido do JWT sem validar (só para auditoria). */
@@ -372,6 +373,39 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       res.json({ ok: true, pedido_id: id, ...marca });
     } catch (err) {
       responder(res, err, 'POST /api/fiscal/pedidos/:id/dispensar-nfe');
+    }
+  });
+
+  /**
+   * O transporte do envio SEM NF-e (transportadora, volumes e as dimensões de
+   * cada caixa): sem nota, nada passava pelo /emitir e as etiquetas ficavam
+   * sem os volumes. Mesma permissão de despachar.
+   */
+  router.put('/pedidos/:id/transporte', exigirPermissao('ped.status.ship'), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
+      const api = createApiClient(req);
+      const pedido = await api.get('/api/pedidos', { query: { id } }).then(r => (Array.isArray(r) ? r : [r]).find(p => Number(p?.id) === id) || null);
+      if (!pedido) throw erro('Pedido não encontrado.', 404);
+      const campos = emissao.camposTransporteDoPedido(req.body?.transporte || {});
+      if (Object.keys(campos).length) await api.put(`/api/pedidos/${id}`, campos);
+      res.json({ ok: true, pedido_id: id, campos });
+    } catch (err) {
+      responder(res, err, 'PUT /api/fiscal/pedidos/:id/transporte');
+    }
+  });
+
+  /**
+   * As etiquetas das caixas do pedido enviado, em HTML (o renderer manda para
+   * o PDF): a de transporte (paisagem, duas por folha) e a "ATENÇÃO" (retrato,
+   * duas por folha), uma de cada por volume. Ver fiscal/etiquetas.js.
+   */
+  router.get('/pedidos/:id/etiquetas', exigirPermissao('ped.view'), async (req, res) => {
+    try {
+      res.json(await etiquetas.etiquetasDoPedido(createApiClient(req), req.params.id));
+    } catch (err) {
+      responder(res, err, 'GET /api/fiscal/pedidos/:id/etiquetas');
     }
   });
 
