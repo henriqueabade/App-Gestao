@@ -139,7 +139,7 @@ test('manual: grava a parcela; recusa boleto em aberto (dizendo qual), boleto pa
   await assert.rejects(() => rec.registrarManual({ api, entrada: { ...entrada, numero_parcela: 2 }, hoje: HOJE }), err => {
     assert.equal(err.status, 409);
     assert.match(err.message, /tem boleto em aberto no BB \(00031285570000000002\)/);
-    assert.deepEqual(err.extra.boleto_em_aberto, { id: 42, nosso_numero: '00031285570000000002', ambiente: 'sandbox', valor: '1000.00', data_vencimento: '2026-10-18' });
+    assert.deepEqual(err.extra.boleto_em_aberto, { id: 42, nosso_numero: '00031285570000000002', ambiente: 'sandbox', valor: '1000.00', valor_desconto: null, data_vencimento: '2026-10-18' });
     return true;
   });
   await assert.rejects(() => rec.registrarManual({ api, entrada: { ...entrada, numero_parcela: 1 }, hoje: HOJE }), /já foi pago no banco: use "Conciliar com o BB"/);

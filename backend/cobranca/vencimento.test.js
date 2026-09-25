@@ -36,11 +36,11 @@ test('dias de atraso: zero até o limite; passou dele, conta desde o vencimento 
 test('multa e juros do pagamento em atraso: pelas regras dos boletos, desde o vencimento do papel', () => {
   // A parcela de R$ 3.326,51 que vence no domingo 20/09.
   const emDia = v.encargosDoAtraso({ valor: 3326.51, vencimento: '2026-09-20', data: '2026-09-21', cfg: REGRAS });
-  assert.deepEqual(emDia, { dias: 0, limite: '2026-09-21', multa: 0, juros: 0, total: 0, valor: 3326.51, com_encargos: 3326.51 });
+  assert.deepEqual(emDia, { dias: 0, limite: '2026-09-21', desconto_perdido: 0, multa: 0, juros: 0, total: 0, valor: 3326.51, com_encargos: 3326.51 });
 
   const atrasado = v.encargosDoAtraso({ valor: 3326.51, vencimento: '2026-09-20', data: '2026-09-23', cfg: REGRAS });
   // Multa 2% = 66,53; juros 9% ao mês ÷ 30 = 9,98 por dia × 3 dias = 29,94.
-  assert.deepEqual(atrasado, { dias: 3, limite: '2026-09-21', multa: 66.53, juros: 29.94, total: 96.47, valor: 3326.51, com_encargos: 3422.98 });
+  assert.deepEqual(atrasado, { dias: 3, limite: '2026-09-21', desconto_perdido: 0, multa: 66.53, juros: 29.94, total: 96.47, valor: 3326.51, com_encargos: 3422.98 });
 
   const semJuros = v.encargosDoAtraso({ valor: 1000, vencimento: '2026-09-24', data: '2026-09-28', cfg: { ...REGRAS, juros_tipo: 'sem' } });
   assert.deepEqual([semJuros.dias, semJuros.multa, semJuros.juros], [4, 20, 0]);

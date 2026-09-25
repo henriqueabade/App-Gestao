@@ -87,9 +87,18 @@ async function tabelaPronta(api) {
 const daParcela = (linhas, pedidoId, numeroParcela) => linhas.filter(r => Number(r.pedido_id) === Number(pedidoId) && Number(r.numero_parcela) === Number(numeroParcela));
 const confirmadoDe = linhas => linhas.find(r => r.status === 'confirmado') || null;
 
-/** Os valores de um recebimento de boleto: o que era devido (valor − abatimento) e o que entrou. */
+/**
+ * Os valores de um recebimento de boleto: o que era devido e o que entrou.
+ *
+ * Boleto com o valor cheio e desconto até o vencimento (decisões do dono,
+ * 25/09/2026): a parcela é o cheio MENOS o desconto — é sobre ela que a
+ * comissão conta —, e o que o cliente pagou a mais depois do vencimento (o
+ * desconto perdido, a multa e os juros) é encargo. Boleto antigo, sem
+ * desconto: a parcela é o próprio valor do boleto.
+ */
 function valoresDoBoleto(boleto, dados = {}) {
-  const valor = centavos(boleto?.valor);
+  const desconto = centavos(boleto?.valor_desconto || 0);
+  const valor = centavos(centavos(boleto?.valor) - desconto);
   const abatimento = centavos(boleto?.valor_abatimento || 0);
   const devido = centavos(valor - abatimento);
   const informado = Number(dados.valor);
@@ -198,7 +207,7 @@ async function registrarManual({ api, entrada, usuarioId = null, hoje }) {
   const boleto = boletos.boletoDaParcela(dados.boletos, parcela);
   if (boleto && boletos.STATUS_A_PAGAR.has(String(boleto.status))) {
     throw erro(`A parcela ${v.numeroParcela} tem boleto em aberto no BB (${boleto.nosso_numero}). Para registrar o recebimento, o boleto precisa ser baixado como quitado por fora.`, 409, {
-      boleto_em_aberto: { id: boleto.id, nosso_numero: boleto.nosso_numero, ambiente: boleto.ambiente, valor: boleto.valor, data_vencimento: dia(boleto.data_vencimento) }
+      boleto_em_aberto: { id: boleto.id, nosso_numero: boleto.nosso_numero, ambiente: boleto.ambiente, valor: boleto.valor, valor_desconto: boleto.valor_desconto ?? null, data_vencimento: dia(boleto.data_vencimento) }
     });
   }
   if (boleto && boleto.status === 'pago') throw erro(`O boleto da parcela ${v.numeroParcela} já foi pago no banco: use "Conciliar com o BB" para lançar o recebimento.`, 409);

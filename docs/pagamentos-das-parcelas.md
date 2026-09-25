@@ -191,8 +191,13 @@ total dos itens:
   **atualizadas no lugar** pelo número; só as que sobram são apagadas e as que
   faltam, criadas.
 - **NF-e**: o ajuste é repartido pelos itens (`ratearAjuste`) — o Desconto
-  aumenta o `vDesc`, o Adicional entra como `vOutro` em cada item e no total —,
-  para o valor da nota bater com as parcelas.
+  aumenta o `vDesc`, o Adicional entra como `vOutro` ("outras despesas
+  acessórias") em cada item e no total —, para o valor da nota bater com as
+  parcelas. Desde 25/09/2026 a conferência do **"Emitir NF-e"** mostra os
+  totais como a nota vai sair — Produtos, Desconto, Outras despesas
+  acessórias, Frete e Total da nota — e a frase do ajuste ("Adicional de R$ X,
+  que entra em outras despesas acessórias"); a conta é a mesma do XML
+  (`xmlNfe.totaisPrevistos`, no resumo da prontidão como `totaisDaNota`).
 
 ## Boleto na parcela errada
 

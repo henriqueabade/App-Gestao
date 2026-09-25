@@ -25,7 +25,7 @@ function puras() {
   assert.ok(inicio !== -1 && fim > inicio, 'o bloco de funções puras não foi encontrado');
   const trecho = FONTE.slice(inicio, fim);
   const contexto = vm.createContext({});
-  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos, mascararData, lerDataDigitada, avisoDaDataDeEnvio })`, contexto);
+  return vm.runInContext(`${trecho}\n({ notaQueVale, ultimaNota, diaDoTexto, textoDaNota, lerNumero, linhasDeVolumes, corpoDaEmissao, validarCampos, classificarPendencias, rotuloAmbiente, acaoPrincipal, mensagemDeErro, pedidoJaEnviado, textoDoBoleto, resumoDosBoletos, mascararData, lerDataDigitada, avisoDaDataDeEnvio, totaisDaConferencia })`, contexto);
 }
 
 test('uma linha por volume (com um só também), guardando o que já foi digitado; o corpo e a validação levam as linhas', () => {
@@ -416,4 +416,26 @@ test('NF-e e boletos de fora: remover nota e remover boleto também rodam sob o 
   assert.ok(EXTERNOS.includes("}, 'Removendo a NF-e de fora...')"));
   assert.ok(EXTERNOS.includes("}, 'Removendo o boleto de fora...')"));
   assert.ok(EXTERNOS.includes("window.BotaoAcao?.comCarregamento === 'function'"));
+});
+
+test('conferência da emissão: os totais da nota e o ajuste do pedido onde ele entra (dono, 25/09/2026)', () => {
+  const f = puras();
+  const semNbsp = t => String(t).replace(/ /g, ' ');
+  const adicional = plano(f.totaisDaConferencia({ valor_produtos: 1500, valor_desconto: 75, valor_outras: 100, valor_frete: 0, valor_total: 1525, ajuste: 100 }));
+  assert.deepStrictEqual(adicional.linhas.map(l => [l.rotulo, semNbsp(l.valor)]), [
+    ['Produtos', 'R$ 1.500,00'],
+    ['Desconto', '− R$ 75,00'],
+    ['Outras despesas acessórias', '+ R$ 100,00'],
+    ['Total da nota', 'R$ 1.525,00']
+  ]);
+  assert.equal(adicional.linhas.at(-1).total, true);
+  assert.equal(semNbsp(adicional.ajuste), 'Ajuste do pedido: Adicional de R$ 100,00, que entra em "outras despesas acessórias".');
+
+  const desconto = plano(f.totaisDaConferencia({ valor_produtos: 294, valor_desconto: 24, valor_outras: 0, valor_frete: 0, valor_total: 270, ajuste: -24 }));
+  assert.deepStrictEqual(desconto.linhas.map(l => l.rotulo), ['Produtos', 'Desconto', 'Total da nota']);
+  assert.match(semNbsp(desconto.ajuste), /Desconto de R\$ 24,00, que entra no desconto dos itens/);
+
+  assert.deepStrictEqual(plano(f.totaisDaConferencia(null)), { linhas: [], ajuste: '' });
+  assert.equal(plano(f.totaisDaConferencia({ valor_produtos: 10, valor_total: 10, ajuste: 0 })).ajuste, '', 'sem ajuste, sem frase');
+  assert.ok(HTML.includes('id="emitirNfeTotais"') && HTML.includes('id="emitirNfeAjuste"'), 'o rodapé dos totais está no modal');
 });

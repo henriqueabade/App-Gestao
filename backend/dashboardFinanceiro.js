@@ -136,16 +136,18 @@ function resumirReceber(tabelas = {}, { agora = new Date() } = {}) {
     if (!faixa) { semData += 1; continue; }
     const acc = porFaixa.get(faixa);
     acc.quantidade += 1;
-    acc.valor += Number(l.a_receber) || 0;
+    // Vencida com boleto: o que o boleto cobra hoje (cheio + multa + juros).
+    acc.valor += Number(l.a_receber_hoje ?? l.a_receber) || 0;
   }
   const emAtraso = visoes.em_atraso;
+  const devidoHoje = l => Number(l.a_receber_hoje ?? l.a_receber) || 0;
   const itemDaParcela = l => ({
     pedidoId: l.pedido_id ?? null, pedido: texto(l.pedido), cliente: texto(l.cliente), parcela: texto(l.parcela),
-    vencimento: l.vencimento || null, dias: Number(l.dias_atraso) || 0, valor: centavos(l.a_receber)
+    vencimento: l.vencimento || null, dias: Number(l.dias_atraso) || 0, valor: centavos(devidoHoje(l))
   });
   // As maiores em atraso: o valor manda; empate, a mais atrasada.
   const maiores = [...emAtraso]
-    .sort((x, y) => (Number(y.a_receber) || 0) - (Number(x.a_receber) || 0) || (y.dias_atraso - x.dias_atraso))
+    .sort((x, y) => devidoHoje(y) - devidoHoje(x) || (y.dias_atraso - x.dias_atraso))
     .slice(0, LIMITE_LISTA.atrasos)
     .map(itemDaParcela);
 

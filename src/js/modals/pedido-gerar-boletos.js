@@ -69,10 +69,21 @@
     const vencParcela = String(l?.parcela?.data_vencimento || '').slice(0, 10);
     const vencBoleto = String(b?.data_vencimento || '').slice(0, 10);
     const abatimento = Number(b?.valor_abatimento) || 0;
+    const reais = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const extras = [];
     // O boleto que vale pode vencer em outra data (prorrogação, reemissão) e ter abatimento.
     if (l?.tem_boleto_vivo && vencBoleto && vencBoleto !== vencParcela) extras.push(`vence ${diaCurto(vencBoleto)}`);
-    if (l?.tem_boleto_vivo && abatimento > 0) extras.push(`abatimento ${abatimento.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
+    if (l?.tem_boleto_vivo && abatimento > 0) extras.push(`abatimento ${reais(abatimento)}`);
+    // Valor cheio com desconto até o vencimento (decisões do dono, 25/09/2026).
+    const descontoDoBoleto = Number(b?.valor_desconto) || 0;
+    if (l?.tem_boleto_vivo && descontoDoBoleto > 0) {
+      extras.push(`boleto de ${reais(b.valor)} com desconto de ${reais(descontoDoBoleto)} até ${diaCurto(b.desconto_ate || vencBoleto)}`);
+    }
+    const descontoNovo = Number(l?.desconto_condicional) || 0;
+    const valorParcela = Number(l?.parcela?.valor) || 0;
+    const aviso = !l?.tem_boleto_vivo && descontoNovo > 0
+      ? `o boleto sai com ${reais(valorParcela + descontoNovo)} e desconto de ${reais(descontoNovo)} até o vencimento`
+      : '';
     return {
       id: l?.parcela?.id ?? null,
       numero: l?.parcela?.numero_parcela ?? null,
@@ -85,7 +96,10 @@
       temDetalhe: Boolean(b?.id) && String(b?.status) !== 'reservado',
       boletoId: b?.id ?? null,
       classe, rotulo,
-      detalhe: b ? (b.status === 'erro' ? (b.erro || '') : [b.nosso_numero ? `${b.nosso_numero}${b.nosso_numero_dv ? `-${b.nosso_numero_dv}` : ''}` : '', b.linha_digitavel || '', ...extras].filter(Boolean).join(' · ')) : ''
+      detalhe: [
+        b ? (b.status === 'erro' ? (b.erro || '') : [b.nosso_numero ? `${b.nosso_numero}${b.nosso_numero_dv ? `-${b.nosso_numero_dv}` : ''}` : '', b.linha_digitavel || '', ...extras].filter(Boolean).join(' · ')) : '',
+        aviso
+      ].filter(Boolean).join(' · ')
     };
   }
 

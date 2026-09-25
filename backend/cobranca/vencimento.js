@@ -78,22 +78,28 @@ const estaAtrasado = (vencimento, hoje, feriados = []) => diasDeAtraso(venciment
  * seguinte ao vencimento (ou de `multa_dias`); os juros, a taxa do mês ÷ 30
  * por dia de atraso — as mesmas contas do boleto (`boletoCalculo.encargos`).
  * É uma SUGESTÃO: quem registra confirma o que de fato entrou.
+ *
+ * `desconto` é o do pedido que o boleto devolve até o vencimento
+ * (descontoCondicional.js, decisões do dono de 25/09/2026): em atraso ele se
+ * perde, e a multa e os juros são sobre o valor CHEIO (valor + desconto).
  */
-function encargosDoAtraso({ valor, vencimento, data, cfg = {}, feriados = [] }) {
+function encargosDoAtraso({ valor, vencimento, data, cfg = {}, feriados = [], desconto = 0 }) {
   const venc = diaDe(vencimento);
   const quando = diaDe(data);
   const limite = venc ? limiteSemEncargos(venc, feriados) : null;
   const dias = venc && quando ? diasDeAtraso(venc, quando, feriados) : 0;
   const base = centavos(valor);
-  const vazio = { dias: 0, limite, multa: 0, juros: 0, total: 0, valor: base, com_encargos: base };
+  const vazio = { dias: 0, limite, desconto_perdido: 0, multa: 0, juros: 0, total: 0, valor: base, com_encargos: base };
   if (!(dias > 0) || !(base > 0)) return vazio;
 
-  const regra = calculo.encargos({ valor: base, vencimento: venc, cfg: cfg || {} });
+  const perdido = Math.max(centavos(desconto), 0);
+  const cheio = centavos(base + perdido);
+  const regra = calculo.encargos({ valor: cheio, vencimento: venc, cfg: cfg || {} });
   const multa = regra.multa && quando >= regra.multa.aPartirDe ? regra.multa.valor : 0;
   const pctMes = Number(cfg?.juros_percentual_mes || 0);
-  const juros = regra.juros ? centavos(calculo.jurosPorDia(base, pctMes) * dias) : 0;
-  const total = centavos(multa + juros);
-  return { dias, limite, multa, juros, total, valor: base, com_encargos: centavos(base + total) };
+  const juros = regra.juros ? centavos(calculo.jurosPorDia(cheio, pctMes) * dias) : 0;
+  const total = centavos(perdido + multa + juros);
+  return { dias, limite, desconto_perdido: perdido, multa, juros, total, valor: base, com_encargos: centavos(base + total) };
 }
 
 module.exports = { diaDe, diasEntre, limiteSemEncargos, diasDeAtraso, estaAtrasado, encargosDoAtraso };

@@ -86,7 +86,7 @@ test('visões e resumo da competência: recebidos (com estornados), a receber do
   const r = contas.resumir({ linhas, recebidos, competencia: '2026-09', desde: '2026-08-01', fila: 2, alertas, hoje: HOJE });
   assert.deepEqual(r.recebido, { quantidade: 2, total: 1052.3, encargos: 2.3, estornados: 1 });
   assert.deepEqual(r.a_receber, { quantidade: 2, total: 1200 });
-  assert.deepEqual(r.em_atraso, { quantidade: 1, total: 300, mais_antigo: '2026-09-05', dias_max: 11 });
+  assert.deepEqual(r.em_atraso, { quantidade: 1, total: 300, mais_antigo: '2026-09-05', dias_max: 11, em_dia: 300, encargos: 0 });
   assert.deepEqual(r.boletos_abertos, { quantidade: 1, total: 900 });
   assert.deepEqual(r.a_conciliar, { fila: 2, lancamentos: 1, alertas: 1 }, 'só o PED100/2: a quitação do PED104 já tem recebimento');
   assert.deepEqual(r.pendencias.map(p => [p.chave, p.nivel, p.destino]), [

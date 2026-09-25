@@ -58,7 +58,9 @@ function travasDasParcelas({ parcelas = [], boletos = [], recebimentos = [], ext
     const ordem = (ordens || []).find(o => o && o.status === 'aberta' && Number(o.numero_parcela) === n) || null;
     let origem = null;
     let permitido = null;
-    if (boleto) { origem = 'boleto'; permitido = centavos(boleto.valor); } else if (pago) { origem = 'pagamento'; permitido = centavos(pago.valor_recebido); } else if (deFora) { origem = 'boleto_fora'; permitido = deFora.valor === null || deFora.valor === undefined ? null : centavos(deFora.valor); } else if (ordem) { origem = 'ordem'; permitido = centavos(ordem.valor); }
+    // O boleto com desconto até o vencimento sai com o valor cheio: a parcela
+    // é o cheio menos o desconto (cobranca/descontoCondicional.js).
+    if (boleto) { origem = 'boleto'; permitido = centavos(Number(boleto.valor) - Number(boleto.valor_desconto || 0)); } else if (pago) { origem = 'pagamento'; permitido = centavos(pago.valor_recebido); } else if (deFora) { origem = 'boleto_fora'; permitido = deFora.valor === null || deFora.valor === undefined ? null : centavos(deFora.valor); } else if (ordem) { origem = 'ordem'; permitido = centavos(ordem.valor); }
     if (!origem) continue;
     const atual = centavos(p.valor);
     const texto = permitido !== null && Math.abs(permitido - atual) > 0.005

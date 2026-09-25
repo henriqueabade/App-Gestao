@@ -94,6 +94,11 @@
                 <tbody id="emitirNfeItens" class="divide-y divide-white/10"></tbody>
               </table>
             </div>
+            <!-- Os totais como a nota vai sair (backend: xmlNfe.totaisPrevistos):
+                 o ajuste do pedido aparece onde entra — Adicional em "outras
+                 despesas acessórias", Desconto no desconto. -->
+            <div id="emitirNfeTotais" class="hidden border-t border-white/10 px-4 py-3 space-y-1 text-sm"></div>
+            <p id="emitirNfeAjuste" class="hidden px-4 pb-3 text-xs" style="color: var(--color-primary-light)"></p>
           </div>
 
           <!-- Pendências: o que bloqueia (vermelho) e o que a emissão resolve sozinha (amarelo). -->

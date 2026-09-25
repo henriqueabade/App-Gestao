@@ -215,9 +215,11 @@ async function aplicarNaParcela({ api, linha, parcelasCruas, listaDeBoletos, con
     return avisos;
   }
 
-  // abatimento_boleto: o boleto passa a cobrar `valor_depois`.
+  // abatimento_boleto: o boleto passa a cobrar `valor_depois` (em dia). O
+  // boleto com desconto até o vencimento sai com o valor cheio: o desconto
+  // continua lá e o abatimento sai do valor em dia, senão seria dado duas vezes.
   if (!aPagar) throw c.erro(`o boleto está "${boleto.status}": não aceita abatimento`, 409);
-  const alvo = c.centavos(Number(boleto.valor) - Number(linha.valor_depois));
+  const alvo = c.centavos(Number(boleto.valor) - Number(boleto.valor_desconto || 0) - Number(linha.valor_depois));
   if (c.centavos(boleto.valor_abatimento || 0) >= alvo) return avisos; // já está lá
   const r = await operacoes.concederAbatimento({ api, ...ctx, boleto, valor: alvo, hoje, usuarioId });
   avisos.push(...(r.avisos || []));

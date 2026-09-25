@@ -54,6 +54,11 @@
     linhas.push(['Valor', abatimento > 0 ? `${moeda(b.valor)} − abatimento ${moeda(abatimento)} = ${moeda(Number(b.valor) - abatimento)}` : moeda(b.valor)]);
     const original = String(b.vencimento_original || '').slice(0, 10);
     const venc = String(b.data_vencimento || '').slice(0, 10);
+    // Valor cheio com desconto até o vencimento (decisões do dono, 25/09/2026).
+    const desconto = Number(b.valor_desconto) || 0;
+    if (desconto > 0) {
+      linhas.push(['Desconto até o vencimento', `${moeda(desconto)} até ${dia(String(b.desconto_ate || venc).slice(0, 10)) || '—'}: em dia, o cliente paga ${moeda(Number(b.valor) - abatimento - desconto)}; vencido, o valor cheio com multa e juros`]);
+    }
     linhas.push(['Vencimento', `${dia(venc) || '—'}${original && original !== venc ? ` (prorrogado; era ${dia(original)})` : ''}`]);
     linhas.push(['Emissão', dia(b.data_emissao) || '—']);
     if (b.linha_digitavel) linhas.push(['Linha digitável', b.linha_digitavel]);
@@ -305,7 +310,10 @@
     el('boletoDetalheDataRecebimento').max = hoje;
     el('boletoDetalheNovoVencimento').min = hoje;
     const recebido = el('boletoDetalheValorRecebido');
-    if (!recebido.value && b) recebido.value = String(Math.round((Number(b.valor) - abatido) * 100) / 100);
+    // Quitado por fora: em dia, a sugestão é o valor com o desconto do pedido;
+    // vencido, o cheio (a multa e os juros quem registra acrescenta).
+    const descontoVale = venc && venc >= hoje ? (Number(b?.valor_desconto) || 0) : 0;
+    if (!recebido.value && b) recebido.value = String(Math.round((Number(b.valor) - abatido - descontoVale) * 100) / 100);
     preencherFormas(estado?.formas_recebimento);
     atualizarMotivo();
     pintarEventos(estado?.eventos);

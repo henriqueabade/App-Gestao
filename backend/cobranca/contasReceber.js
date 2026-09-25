@@ -23,6 +23,7 @@ const recebimentos = require('./recebimentos');
 const execucoes = require('./execucoes');
 const webhookEstado = require('./webhookEstado');
 const vencimentos = require('./vencimento');
+const descontoCondicional = require('./descontoCondicional');
 
 const SITUACOES_FATURADAS = new Set(['enviado', 'entregue']);
 /** Dias depois do vencimento em que o BB ainda recebe o boleto (configuração padrão). */
@@ -119,6 +120,14 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
 
       // Vencimento em fim de semana ou feriado: em dia até o próximo dia útil.
       const atraso = estado === 'a_receber' && vencimento && hojeDia ? vencimentos.diasDeAtraso(vencimento, hojeDia, feriados) : 0;
+      // O que o boleto cobra HOJE (decisões do dono, 25/09/2026): em dia, o
+      // valor com desconto; vencido, o cheio (sem o desconto) mais a multa e
+      // os juros sobre ele. `a_receber` continua sendo o valor em dia — é a
+      // base da comissão, da devolução e da sugestão de encargos.
+      const devido = estado === 'a_receber' && aPagar && atraso > 0
+        ? descontoCondicional.devidoHoje({ boleto, vencimento, hoje: hojeDia, feriados })
+        : null;
+      const desconto = aPagar ? centavos(boleto.valor_desconto || 0) : 0;
       linhas.push({
         pedido_id: p.id,
         pedido: p.numero ?? String(p.id),
@@ -132,6 +141,11 @@ function parcelasDosPedidos({ pedidos = [], parcelas = [], recebimentos: recs = 
         valor,
         abatimento,
         a_receber: centavos(valor - abatimento),
+        // O desconto até o vencimento do boleto (0 sem ele) e o valor do boleto.
+        desconto_condicional: desconto,
+        valor_boleto: aPagar ? centavos(boleto.valor) : null,
+        a_receber_hoje: devido ? devido.total : centavos(valor - abatimento),
+        encargos_hoje: devido ? { dias: devido.dias, desconto_perdido: devido.desconto_perdido, multa: devido.multa, juros: devido.juros, total: devido.encargos } : null,
         estado,
         dias_atraso: atraso,
         controlada: !corte || !vencimento || vencimento >= corte,
@@ -224,7 +238,7 @@ function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = []
     pendencias.push({
       nivel: diasMax > DIAS_ATRASO_CRITICO ? 'critico' : 'normal', chave: 'em_atraso',
       titulo: `${plural(atrasadas.length, 'parcela vencida', 'parcelas vencidas')} sem recebimento`,
-      descricao: `Total: ${moeda.format(somar(atrasadas, 'a_receber'))} · mais antiga venceu em ${impressa(maisAntigo)}${diasMax > DIAS_ATRASO_CRITICO ? ` (há ${diasMax} dias: o boleto já não é aceito, reemita)` : ''}`,
+      descricao: `Total: ${moeda.format(somar(atrasadas, 'a_receber_hoje'))} · mais antiga venceu em ${impressa(maisAntigo)}${diasMax > DIAS_ATRASO_CRITICO ? ` (há ${diasMax} dias: o boleto já não é aceito, reemita)` : ''}`,
       data: maisAntigo, acao: 'Ver', destino: 'recebimentos-atraso'
     });
   }
@@ -245,9 +259,14 @@ function resumir({ linhas, recebidos, competencia, desde, fila = 0, alertas = []
     competencia,
     desde: dia(desde),
     recebido: { quantidade: confirmados.length, total: somar(confirmados, 'valor'), encargos: somar(confirmados, 'encargos'), estornados: recebidos.length - confirmados.length },
-    a_receber: { quantidade: v.a_receber.length, total: somar(v.a_receber, 'a_receber') },
-    em_atraso: { quantidade: atrasadas.length, total: somar(atrasadas, 'a_receber'), mais_antigo: maisAntigo, dias_max: diasMax },
-    boletos_abertos: { quantidade: comBoletoAberto.length, total: somar(comBoletoAberto, 'a_receber') },
+    // Vencido com boleto conta o que o boleto cobra hoje (cheio + multa +
+    // juros); em dia, o valor com desconto (decisões do dono, 25/09/2026).
+    a_receber: { quantidade: v.a_receber.length, total: somar(v.a_receber, 'a_receber_hoje') },
+    em_atraso: {
+      quantidade: atrasadas.length, total: somar(atrasadas, 'a_receber_hoje'), mais_antigo: maisAntigo, dias_max: diasMax,
+      em_dia: somar(atrasadas, 'a_receber'), encargos: centavos(somar(atrasadas, 'a_receber_hoje') - somar(atrasadas, 'a_receber'))
+    },
+    boletos_abertos: { quantidade: comBoletoAberto.length, total: somar(comBoletoAberto, 'a_receber_hoje') },
     a_conciliar: { fila, lancamentos: aLancar.length, alertas: alertas.length },
     sql_pendente: sqlPendente,
     // A conciliação mais recente (automática ou pelo botão), já no horário de Brasília.

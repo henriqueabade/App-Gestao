@@ -139,6 +139,29 @@
     return { modo: 'ordem', texto: `Ordem de pagamento para ${diaBR(data)}: a parcela fica cobrada por esta forma até lá (como um boleto, mas à mão). Quando o cliente pagar, dê a baixa em "Ações"; passou da data sem baixa, ela fica atrasada desde ${diaBR(data)}.` };
   }
 
+  /**
+   * A coluna do valor: o que a parcela cobra HOJE e, embaixo, de onde vem
+   * (dono, 25/09/2026). Vencida com boleto: o valor cheio, sem o desconto, com
+   * a multa e os juros; em dia com desconto: o boleto de valor cheio; e o
+   * abatimento, quando há.
+   */
+  function valorDaParcelaNaTela(p) {
+    const e = p?.encargos_hoje;
+    const detalhes = [];
+    if (Number(p?.abatimento) > 0) detalhes.push(`abatimento de ${moedaBR(p.abatimento)}`);
+    if (e && Number(e.total) > 0) {
+      detalhes.push(`em dia ${moedaBR(p.a_receber)}; vencido: ${[
+        Number(e.desconto_perdido) > 0 ? `sem o desconto de ${moedaBR(e.desconto_perdido)}` : '',
+        Number(e.multa) > 0 ? `multa ${moedaBR(e.multa)}` : '', Number(e.juros) > 0 ? `juros ${moedaBR(e.juros)}` : ''
+      ].filter(Boolean).join(', ')}`);
+      return { principal: moedaBR(p.a_receber_hoje), detalhe: detalhes.join(' · ') };
+    }
+    if (Number(p?.desconto_condicional) > 0 && Number(p?.valor_boleto) > 0 && p?.boleto_aberto) {
+      detalhes.push(`boleto de ${moedaBR(p.valor_boleto)} com desconto até o vencimento`);
+    }
+    return { principal: moedaBR(p?.a_receber), detalhe: detalhes.join(' · ') };
+  }
+
   /** A mensagem de erro que a tela mostra, pelo status e o corpo da resposta. */
   function mensagemDeErro(status, corpo) {
     if (corpo?.sql_pendente) return corpo?.error || 'Falta rodar sql/cobranca_recebimentos.sql no banco e reiniciar a API.';
@@ -341,7 +364,7 @@
       tr.append(
         celula(p.numero_parcela ? `${p.numero_parcela}ª` : '—'),
         celula(duasLinhas(venc.principal, venc.detalhe), 'px-4 py-3 text-left'),
-        celula(duasLinhas(moedaBR(p.a_receber), Number(p.abatimento) > 0 ? `abatimento de ${moedaBR(p.abatimento)}` : ''), 'px-4 py-3 text-left'),
+        celula((v => duasLinhas(v.principal, v.detalhe))(valorDaParcelaNaTela(p)), 'px-4 py-3 text-left'),
         celula(conteudo, 'px-4 py-3 text-left min-w-0'),
         celula(acoes, 'px-4 py-3 text-center')
       );

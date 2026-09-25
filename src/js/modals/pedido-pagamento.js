@@ -96,7 +96,8 @@
       if (!Number.isInteger(n) || n < 1) continue;
       let origem = null;
       let valor = null;
-      if (l.tem_boleto_vivo && l.boleto) { origem = 'boleto do BB'; valor = l.boleto.valor; } else if (l.recebimento) { origem = 'pagamento registrado'; valor = l.recebimento.valor; } else if (l.boleto_externo) { origem = 'boleto de fora'; valor = l.boleto_externo.valor; } else if (l.ordem) { origem = 'ordem de pagamento'; valor = l.ordem.valor; }
+      // Boleto com o valor cheio: a parcela é o cheio menos o desconto até o vencimento.
+      if (l.tem_boleto_vivo && l.boleto) { origem = 'boleto do BB'; valor = Number(l.boleto.valor) - (Number(l.boleto.valor_desconto) || 0); } else if (l.recebimento) { origem = 'pagamento registrado'; valor = l.recebimento.valor; } else if (l.boleto_externo) { origem = 'boleto de fora'; valor = l.boleto_externo.valor; } else if (l.ordem) { origem = 'ordem de pagamento'; valor = l.ordem.valor; }
       if (!origem) continue;
       const atual = Math.round((Number(l.parcela.valor) || 0) * 100);
       const permitido = valor === null || valor === undefined ? null : Math.round(Number(valor) * 100);

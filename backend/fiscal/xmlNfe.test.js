@@ -237,3 +237,30 @@ test('ajuste do pedido nas parcelas (dono, 24/09/2026): o Adicional vai em outra
   assert.deepEqual(x.ratearAjuste(0, [{ valor_total: 294 }]), [0]);
   assert.throws(() => x.montarNfe(base({ pedido: { ...PEDIDO, ajuste_valor: -300 }, parcelas: [{ numero_parcela: 1, valor: -6, data_vencimento: '2026-10-14' }] })), /passa do valor do item/);
 });
+
+test('totais previstos (conferência da emissão): a mesma conta da nota, com o ajuste onde ele entra', () => {
+  const semAjuste = x.totaisPrevistos({ pedido: PEDIDO, itens: ITENS });
+  const nota = x.montarNfe(base());
+  assert.equal(semAjuste.valor_total, nota.totais.valor_total);
+  assert.equal(semAjuste.valor_produtos, nota.totais.valor_produtos);
+  assert.equal(semAjuste.valor_desconto, nota.totais.valor_desconto);
+  assert.equal(semAjuste.valor_outras, 0);
+
+  const adicional = x.totaisPrevistos({ pedido: { ...PEDIDO, ajuste_valor: '30.00' }, itens: ITENS });
+  assert.deepEqual(
+    { outras: adicional.valor_outras, total: adicional.valor_total, ajuste: adicional.ajuste },
+    { outras: 30, total: 324, ajuste: 30 },
+    'o Adicional vai em outras despesas acessórias'
+  );
+
+  const desconto = x.totaisPrevistos({ pedido: { ...PEDIDO, ajuste_valor: -24 }, itens: ITENS });
+  assert.equal(desconto.valor_outras, 0);
+  assert.equal(desconto.valor_desconto, arredondarTeste(semAjuste.valor_desconto + 24));
+  assert.equal(desconto.valor_total, 270);
+  assert.equal(desconto.ajuste_desconto, 24);
+
+  assert.equal(x.totaisPrevistos({ pedido: PEDIDO, itens: [] }), null, 'sem itens, sem conta');
+  assert.equal(x.totaisPrevistos({ pedido: { ...PEDIDO, ajuste_valor: -300 }, itens: ITENS }), null, 'desconto maior que o item: a prontidão acusa');
+});
+
+const arredondarTeste = v => Math.round(v * 100) / 100;

@@ -267,6 +267,26 @@
     if (!partes.length) partes.push('Nenhum boleto para gerar');
     return { texto: `${partes.join(' · ')}.`, tipo: erros ? 'error' : (registrados ? 'success' : 'info') };
   }
+
+  /**
+   * As linhas dos totais da nota e a frase do ajuste do pedido (as parcelas
+   * somaram mais ou menos que os itens). Só aparecem as linhas com valor,
+   * menos Produtos e Total, que aparecem sempre. `totais` vem da prontidão.
+   */
+  function totaisDaConferencia(totais) {
+    if (!totais) return { linhas: [], ajuste: '' };
+    const reais = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const linhas = [{ rotulo: 'Produtos', valor: reais(totais.valor_produtos) }];
+    if (Number(totais.valor_desconto) > 0) linhas.push({ rotulo: 'Desconto', valor: `− ${reais(totais.valor_desconto)}` });
+    if (Number(totais.valor_outras) > 0) linhas.push({ rotulo: 'Outras despesas acessórias', valor: `+ ${reais(totais.valor_outras)}` });
+    if (Number(totais.valor_frete) > 0) linhas.push({ rotulo: 'Frete', valor: `+ ${reais(totais.valor_frete)}` });
+    linhas.push({ rotulo: 'Total da nota', valor: reais(totais.valor_total), total: true });
+    const ajuste = Number(totais.ajuste) || 0;
+    let frase = '';
+    if (ajuste > 0) frase = `Ajuste do pedido: Adicional de ${reais(ajuste)}, que entra em "outras despesas acessórias".`;
+    else if (ajuste < 0) frase = `Ajuste do pedido: Desconto de ${reais(-ajuste)}, que entra no desconto dos itens.`;
+    return { linhas, ajuste: frase };
+  }
   // ==================================================================
   // fim das funções puras
   // ==================================================================
@@ -471,6 +491,27 @@
     }
   }
 
+  function pintarTotais(totais) {
+    const caixa = el('emitirNfeTotais');
+    const fraseEl = el('emitirNfeAjuste');
+    if (!caixa || !fraseEl) return;
+    const { linhas, ajuste } = totaisDaConferencia(totais);
+    caixa.replaceChildren();
+    for (const l of linhas) {
+      const linha = document.createElement('div');
+      linha.className = `flex items-center justify-between gap-4${l.total ? ' font-semibold text-white' : ' text-gray-300'}`;
+      const rotulo = document.createElement('span');
+      rotulo.textContent = l.rotulo;
+      const valor = document.createElement('span');
+      valor.textContent = l.valor;
+      linha.append(rotulo, valor);
+      caixa.appendChild(linha);
+    }
+    caixa.classList.toggle('hidden', !linhas.length);
+    fraseEl.textContent = ajuste;
+    fraseEl.classList.toggle('hidden', !ajuste);
+  }
+
   function pintarNota() {
     const viva = notaQueVale(estado.notas);
     const ultima = ultimaNota(estado.notas);
@@ -535,6 +576,7 @@
     el('emitirNfeValor').textContent = formatarMoeda(r.valorFinal);
     el('emitirNfeParcelas').textContent = r.parcelas ? `${r.parcelas} · somam ${formatarMoeda(r.somaParcelas)}` : 'nenhuma';
     pintarItens(r.itens);
+    pintarTotais(r.totaisDaNota);
     pintarPendencias(estado.pendencias);
     pintarTitulo();
     pintarNota();

@@ -537,11 +537,35 @@
     });
   }
 
-  /** O total da lista: o recebido (só confirmados) ou o que falta receber. */
+  /**
+   * O total da lista: o recebido (só confirmados) ou o que falta receber —
+   * a parcela vencida com boleto conta o que o boleto cobra hoje (o valor
+   * cheio, sem o desconto, mais a multa e os juros; dono, 25/09/2026).
+   */
   function totalDaVisao(linhas, visao) {
     const lista = Array.isArray(linhas) ? linhas : [];
     if (visao === 'recebidos') return centavos(lista.filter(l => l.status === 'confirmado').reduce((s, l) => s + Number(l.valor || 0), 0));
-    return centavos(lista.reduce((s, l) => s + Number(l.a_receber || 0), 0));
+    return centavos(lista.reduce((s, l) => s + Number(l.a_receber_hoje ?? l.a_receber ?? 0), 0));
+  }
+
+  /**
+   * O valor a receber de uma parcela como a tabela mostra: o de hoje e, embaixo,
+   * de onde ele vem. Vencida com boleto: "em dia R$ X + desconto perdido, multa
+   * e juros"; em dia com desconto: o boleto de valor cheio e até quando vale o
+   * desconto. Pura.
+   */
+  function valorAReceberHoje(l) {
+    const emDia = Number(l?.a_receber ?? 0);
+    const e = l?.encargos_hoje;
+    if (e && Number(e.total) > 0) {
+      const partes = [Number(e.desconto_perdido) > 0 ? `desconto perdido ${formatarMoeda(e.desconto_perdido)}` : '',
+        Number(e.multa) > 0 ? `multa ${formatarMoeda(e.multa)}` : '', Number(e.juros) > 0 ? `juros ${formatarMoeda(e.juros)}` : ''].filter(Boolean);
+      return { valor: Number(l.a_receber_hoje ?? emDia), detalhe: `em dia ${formatarMoeda(emDia)} + ${partes.join(' + ')}` };
+    }
+    if (Number(l?.desconto_condicional) > 0 && Number(l?.valor_boleto) > 0) {
+      return { valor: emDia, detalhe: `boleto de ${formatarMoeda(l.valor_boleto)} com desconto até o vencimento` };
+    }
+    return { valor: emDia, detalhe: '' };
   }
 
   /** O texto de cada parcela no seletor de "Registrar recebimento". */
@@ -956,7 +980,7 @@
     faixaDeAtraso, resumoAtrasadas, textoDoRepasse, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
     filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, notaDeForaNaLista, juntarNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
-    rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
+    rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, valorAReceberHoje, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     textoDaConciliacao, BADGE_DO_AVISO,
     opcoesDeBeneficiario, filtrarPorBeneficiario, rotuloDoFiltroBenef,
     grupoDaAtividade, juntarAtividade, diaLocal, rotuloDoDia, iniciais, GRUPOS_ATIVIDADE,
@@ -1666,9 +1690,18 @@
       const atraso = celula(Number(l.dias_atraso) > 0 ? `${l.dias_atraso} dias` : '—', 'px-4 py-3 text-right');
       if (Number(l.dias_atraso) > 60) atraso.classList.add('fin-dias--critico');
       else if (Number(l.dias_atraso) > 15) atraso.classList.add('fin-dias--alto');
+      // O que o boleto cobra hoje e, embaixo, de onde vem (dono, 25/09/2026).
+      const hoje = valorAReceberHoje(l);
+      const valorCelula = criar('div', 'flex flex-col items-end gap-1');
+      valorCelula.appendChild(document.createTextNode(formatarMoeda(hoje.valor)));
+      if (hoje.detalhe) {
+        const detalhe = criar('span', 'text-xs text-gray-400');
+        detalhe.textContent = hoje.detalhe;
+        valorCelula.appendChild(detalhe);
+      }
       tr.append(
         celula(formatarData(l.vencimento), 'px-4 py-3 text-white'), celula(linkDoPedido(l)), celula(l.cliente), celula(l.nf),
-        celula(l.parcela), celula(formatarMoeda(l.a_receber), 'px-4 py-3 text-right'), atraso, celula(boletoCelula), celula(acoes)
+        celula(l.parcela), celula(valorCelula, 'px-4 py-3 text-right'), atraso, celula(boletoCelula), celula(acoes)
       );
       return tr;
     }

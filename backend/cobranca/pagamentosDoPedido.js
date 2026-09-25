@@ -65,6 +65,12 @@ function parcelasParaPagamento({ linhas = [], parcelas = [], boletosExternos = [
       limite_sem_encargos: vencimentos.limiteSemEncargos(l.vencimento, feriados),
       dias_atraso: l.dias_atraso,
       valor: l.valor, abatimento: l.abatimento, a_receber: l.a_receber,
+      // Boleto com o valor cheio e desconto até o vencimento (25/09/2026):
+      // vencido, cobra o cheio mais a multa e os juros.
+      desconto_condicional: l.desconto_condicional || 0,
+      valor_boleto: l.valor_boleto ?? null,
+      a_receber_hoje: l.a_receber_hoje ?? l.a_receber,
+      encargos_hoje: l.encargos_hoje || null,
       situacao,
       boleto: l.boleto ? { id: l.boleto.id, status: l.boleto.status, nosso_numero: l.boleto.nosso_numero, ambiente: l.boleto.ambiente, motivo_baixa: l.boleto.motivo_baixa } : null,
       boleto_aberto: boletoAberto,
@@ -102,7 +108,8 @@ function resumoDosPagamentos(parcelas) {
     parcelas: parcelas.length,
     pagas: pagas.length,
     recebido: centavos(pagas.reduce((s, p) => s + Number(p.recebimento?.valor ?? p.a_receber ?? 0), 0)),
-    em_aberto: centavos(parcelas.filter(p => p.situacao === 'aberta' || p.situacao === 'atrasada').reduce((s, p) => s + Number(p.a_receber || 0), 0)),
+    // O que o cliente deve hoje: a parcela vencida com boleto conta o cheio + multa + juros.
+    em_aberto: centavos(parcelas.filter(p => p.situacao === 'aberta' || p.situacao === 'atrasada').reduce((s, p) => s + Number(p.a_receber_hoje ?? p.a_receber ?? 0), 0)),
     atrasadas: parcelas.filter(p => p.situacao === 'atrasada').length
   };
 }
@@ -161,7 +168,12 @@ async function encargosDaParcela({ api, pedidoId, numeroParcela, data, hoje }) {
   const estado = await estadoDosPagamentos({ api, pedidoId, hoje });
   const p = estado.parcelas.find(x => Number(x.numero_parcela) === Number(numeroParcela));
   if (!p) throw erro(`O pedido não tem a parcela ${numeroParcela}.`, 404);
-  const e = vencimentos.encargosDoAtraso({ valor: p.a_receber, vencimento: p.vencimento, data: quando, cfg: estado._cfg, feriados: estado._feriados });
+  // Boleto com desconto até o vencimento: em atraso, o desconto se perde e a
+  // multa e os juros são sobre o cheio.
+  const e = vencimentos.encargosDoAtraso({
+    valor: p.a_receber, vencimento: p.vencimento, data: quando, cfg: estado._cfg, feriados: estado._feriados,
+    desconto: p.boleto_aberto ? p.desconto_condicional : 0
+  });
   return { numero_parcela: p.numero_parcela, data: quando, vencimento: p.vencimento, ...e };
 }
 

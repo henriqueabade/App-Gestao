@@ -160,3 +160,14 @@ test('pedido cancelado, sem valor ou com parcelas fora da tolerância não fatur
   const fora = avaliar(completo({ parcelas: [{ numero_parcela: 1, valor: 1400, data_vencimento: '2026-10-10' }] }));
   assert.equal(fora.pronto, false);
 });
+
+test('o resumo traz os totais da nota, com o ajuste do pedido em outras despesas (dono, 25/09/2026)', () => {
+  const r = avaliar(completo({
+    pedido: { ...PEDIDO, valor_final: '1600.00', ajuste_valor: '100.00' },
+    parcelas: [{ numero_parcela: 1, valor: 800, data_vencimento: '2026-10-10' }, { numero_parcela: 2, valor: 800, data_vencimento: '2026-11-10' }]
+  }));
+  assert.equal(r.pronto, true);
+  assert.equal(r.resumo.totaisDaNota.valor_outras, 100);
+  assert.equal(r.resumo.totaisDaNota.valor_total, 1600);
+  assert.equal(avaliar(completo()).resumo.totaisDaNota.valor_total, 1500);
+});

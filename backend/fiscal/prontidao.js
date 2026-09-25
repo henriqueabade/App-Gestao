@@ -11,7 +11,7 @@
  * IBGE pelo nome da cidade); o resto bloqueia até alguém corrigir o cadastro.
  */
 const { siglaDaUf } = require('./municipios');
-const { codigoPagamento } = require('./xmlNfe');
+const { codigoPagamento, totaisPrevistos } = require('./xmlNfe');
 
 const STATUS_QUE_BLOQUEIAM = new Set(['enviando', 'processando', 'autorizada', 'cancelamento_pendente']);
 const TOLERANCIA_PARCELAS = 0.02;
@@ -159,6 +159,9 @@ function avaliar({
     somaParcelas: Math.round(somaParcelas * 100) / 100,
     parcelas: parcelas.length,
     itens: itensAvaliados,
+    // Os totais como a nota vai sair — com o ajuste do pedido onde ele entra
+    // (Adicional em outras despesas, Desconto no desconto). null sem itens.
+    totaisDaNota: totaisPrevistos({ pedido, itens }),
     // O que a tela de embarque preenche: começa com o que o pedido já tem.
     formaPagamento: pedido.forma_pagamento || null,
     tPagSugerido: codigoPagamento(pedido.forma_pagamento),

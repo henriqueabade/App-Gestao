@@ -179,8 +179,13 @@ const valorImpresso = v => moedaBR.format(Number(v || 0));
  * Os encargos de um boleto pela configuração: juros (por dia ou % ao mês),
  * multa, protesto/negativação e a data-limite de recebimento — em números e
  * nas instruções impressas, com a redação do boleto que o cliente já conhece.
+ *
+ * `descontoFixo` ({ valor, ate }) é o desconto do PEDIDO até o vencimento
+ * (cobranca/descontoCondicional.js): quando vem, é ele que vale, no lugar do
+ * "Desconto por antecipação" da configuração (decisão do dono, 25/09/2026).
+ * Juros e multa são sempre sobre `valor`, o cheio.
  */
-function encargos({ valor, vencimento, cfg = {} }) {
+function encargos({ valor, vencimento, cfg = {}, descontoFixo = null }) {
   const bruto = centavos(valor);
   const diaSeguinte = somarDias(vencimento, 1);
   const tipoJuros = String(cfg.juros_tipo || 'valor_dia');
@@ -197,7 +202,10 @@ function encargos({ valor, vencimento, cfg = {} }) {
     ? { dias: Number(cfg.negativacao_dias), aPartirDe: somarDias(vencimento, Number(cfg.negativacao_dias)) } : null;
   const limite = Number(cfg.dias_limite_recebimento ?? 0);
   const pctDesc = Number(cfg.desconto_percentual || 0);
-  const desconto = pctDesc > 0 ? { percentual: pctDesc, valor: valorMulta(bruto, pctDesc), ate: somarDias(vencimento, -Number(cfg.desconto_dias || 0)) } : null;
+  const fixo = centavos(descontoFixo?.valor);
+  let desconto = null;
+  if (fixo > 0) desconto = { percentual: null, valor: fixo, ate: String(descontoFixo.ate || vencimento).slice(0, 10), do_pedido: true };
+  else if (pctDesc > 0) desconto = { percentual: pctDesc, valor: valorMulta(bruto, pctDesc), ate: somarDias(vencimento, -Number(cfg.desconto_dias || 0)) };
 
   const instrucoes = [];
   if (juros?.tipo === 'valor_dia') instrucoes.push(`JRS: Vl p/Dia Atraso R$${valorImpresso(juros.valorDia)} A PARTIR DE ${dataImpressa(juros.aPartirDe, { anoCurto: true })}`);

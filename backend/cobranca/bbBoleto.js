@@ -79,12 +79,19 @@ function pendenciasDoPagador(pagador) {
  * Monta o registro (payload do POST /boletos) de UMA parcela. Devolve também
  * o nosso número, os encargos e o número do documento — o que fica gravado.
  *
- * @param {object} p { cfg, ambiente, sequencial, pedido, parcela, cliente, hoje ('YYYY-MM-DD'), notaNumero }
+ * `desconto` é a parte da parcela no desconto do pedido
+ * (cobranca/descontoCondicional.js): o boleto sai com o VALOR CHEIO (parcela +
+ * desconto) e o desconto vale até o vencimento; juros e multa, sobre o cheio
+ * (decisões do dono, 25/09/2026). Sem desconto, o boleto é a parcela.
+ *
+ * @param {object} p { cfg, ambiente, sequencial, pedido, parcela, cliente, hoje ('YYYY-MM-DD'), notaNumero, desconto }
  */
-function montarRegistro({ cfg, ambiente, sequencial, pedido, parcela, cliente, hoje, notaNumero = null, pagadorTeste = process.env.BB_PAGADOR_TESTE || configuracao.PAGADOR_TESTE_CNPJ }) {
+function montarRegistro({ cfg, ambiente, sequencial, pedido, parcela, cliente, hoje, notaNumero = null, desconto = 0, pagadorTeste = process.env.BB_PAGADOR_TESTE || configuracao.PAGADOR_TESTE_CNPJ }) {
   if (!cfg) throw erro('Configuração de cobrança ausente.', 409);
-  const valor = Math.round(Number(parcela?.valor || 0) * 100) / 100;
-  if (!(valor > 0)) throw erro(`Parcela ${parcela?.numero_parcela ?? '?'} sem valor.`, 422);
+  const valorParcela = Math.round(Number(parcela?.valor || 0) * 100) / 100;
+  if (!(valorParcela > 0)) throw erro(`Parcela ${parcela?.numero_parcela ?? '?'} sem valor.`, 422);
+  const descontoDoPedido = Math.round(Math.max(Number(desconto) || 0, 0) * 100) / 100;
+  const valor = Math.round((valorParcela + descontoDoPedido) * 100) / 100;
   const vencimento = calculo.dataBB(parcela?.data_vencimento) ? String(parcela.data_vencimento).slice(0, 10) : null;
   if (!vencimento) throw erro(`Parcela ${parcela?.numero_parcela ?? '?'} sem data de vencimento.`, 422);
   if (vencimento < hoje) throw erro(`Parcela ${parcela?.numero_parcela ?? '?'} vence em ${calculo.dataImpressa(vencimento)}, que já passou: ajuste o vencimento no pedido antes de gerar o boleto.`, 422);
@@ -96,7 +103,7 @@ function montarRegistro({ cfg, ambiente, sequencial, pedido, parcela, cliente, h
   // Na homologação vale a conta de teste do BB; em produção, a real.
   const conta = configuracao.dadosDaConta(cfg, ambiente);
   const nn = calculo.nossoNumero(conta.convenio, sequencial);
-  const enc = calculo.encargos({ valor, vencimento, cfg });
+  const enc = calculo.encargos({ valor, vencimento, cfg, descontoFixo: descontoDoPedido > 0 ? { valor: descontoDoPedido, ate: vencimento } : null });
   const numeroDocumento = alfanumerico(`${pedido?.numero ?? pedido?.id ?? ''}P${parcela?.numero_parcela ?? 1}`, 15).replace(/ /g, '');
   const especie = String(cfg.especie || 'DM').toUpperCase();
   const limite = Number(cfg.dias_limite_recebimento ?? 0);
@@ -146,7 +153,10 @@ function montarRegistro({ cfg, ambiente, sequencial, pedido, parcela, cliente, h
   };
   if (payload.mensagemBloquetoOcorrencia === undefined) delete payload.mensagemBloquetoOcorrencia;
 
-  return { payload, nossoNumero: nn, encargos: enc, numeroDocumento, pagador, valor, vencimento, emissao: hoje, conta };
+  return {
+    payload, nossoNumero: nn, encargos: enc, numeroDocumento, pagador, valor, vencimento, emissao: hoje, conta,
+    valorParcela, desconto: descontoDoPedido > 0 ? { valor: descontoDoPedido, ate: vencimento } : null
+  };
 }
 
 /** O que o BB devolve no registro, no formato que a tabela guarda. */

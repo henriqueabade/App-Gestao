@@ -17,6 +17,8 @@ const configuracao = require('./configuracaoCobranca');
 const bbBoleto = require('./bbBoleto');
 const calculo = require('./boletoCalculo');
 const externas = require('../fiscal/externas');
+// Valor cheio com desconto até o vencimento (decisões do dono, 25/09/2026).
+const descontoCondicional = require('./descontoCondicional');
 
 const STATUS_VIVOS = new Set(['registrado', 'pago', 'vencido', 'protestado']);
 /** Os que ainda se pagam: entram no PDF "todos os boletos do pedido". */
@@ -80,7 +82,7 @@ async function registrarEvento(api, boletoId, { origem = 'app', tipo, nosso_nume
 async function lerPedidoCobranca(api, pedidoId) {
   const id = Number(pedidoId);
   if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
-  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos, recebimentos, ordens] = await Promise.all([
+  const [pedidos, parcelas, notas, boletos, cfg, boletosExternos, recebimentos, ordens, itens] = await Promise.all([
     api.get('/api/pedidos', { query: { id } }).then(lista),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),
@@ -92,10 +94,14 @@ async function lerPedidoCobranca(api, pedidoId) {
     // ganha boleto novo (decisão do dono, 24/09/2026). Sem a tabela, nenhum.
     api.get('/api/recebimentos', { query: { pedido_id: id } }).then(lista).catch(() => []),
     // As ordens de pagamento abertas (sql/ordens_pagamento.sql): ocupam a parcela como um boleto.
-    api.get('/api/ordens_pagamento', { query: { pedido_id: id, status: 'aberta' } }).then(lista).catch(() => [])
+    api.get('/api/ordens_pagamento', { query: { pedido_id: id, status: 'aberta' } }).then(lista).catch(() => []),
+    // Os itens dão o desconto do pedido, que o boleto devolve até o vencimento.
+    api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista).catch(() => [])
   ]);
   const pedido = pedidos.find(p => Number(p?.id) === id) || null;
   if (!pedido) throw erro('Pedido não encontrado.', 404);
+  const doPedido = parcelas.filter(p => Number(p?.pedido_id) === id).sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0));
+  const itensDoPedido = itens.filter(i => Number(i?.pedido_id) === id);
   const cliente = pedido.cliente_id
     ? await api.get('/api/clientes', { query: { id: pedido.cliente_id } }).then(r => lista(r)[0] || null).catch(() => null)
     : null;
@@ -104,7 +110,10 @@ async function lerPedidoCobranca(api, pedidoId) {
     .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
   return {
     pedido, cliente, configuracao: cfg, notaViva,
-    parcelas: parcelas.filter(p => Number(p?.pedido_id) === id).sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0)),
+    parcelas: doPedido,
+    itens: itensDoPedido,
+    // O desconto de cada parcela (número → valor): o boleto sai com o cheio.
+    descontos: descontoCondicional.descontosDasParcelas({ pedido, itens: itensDoPedido, parcelas: doPedido }),
     boletos: boletos.filter(b => Number(b?.pedido_id) === id).sort((a, b) => Number(b.id) - Number(a.id)),
     boletosExternos,
     recebimentos: recebimentos.filter(r => r && Number(r.pedido_id) === id && r.status === 'confirmado'),
@@ -185,7 +194,7 @@ function boletoDaParcela(boletos, parcela) {
  * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
  * histórico; a parcela continua livre para gerar outro.
  */
-function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [], ordens = [] }) {
+function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [], ordens = [], descontos = new Map() }) {
   return (parcelas || []).map(p => {
     const b = boletoDaParcela(boletos, p)
       || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
@@ -199,7 +208,9 @@ function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimen
       parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora,
       recebimento: pagamentoParaTela(pagamentoDaParcela(recebimentos, p)),
       // Ordem de pagamento aberta (Pix, cartão… para uma data): ocupa a parcela.
-      ordem: ordemParaTela(ordemDaParcela(ordens, p))
+      ordem: ordemParaTela(ordemDaParcela(ordens, p)),
+      // O desconto até o vencimento que o boleto NOVO desta parcela vai levar.
+      desconto_condicional: descontos.get(Number(p?.numero_parcela)) || 0
     };
   });
 }
@@ -346,7 +357,10 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
     let montado;
     try {
       const sequencial = existente ? Number(existente.sequencial) : configuracao.proximoSequencial(cfgCobranca, ambiente);
-      montado = bbBoleto.montarRegistro({ cfg: cfgCobranca, ambiente, sequencial, pedido: dados.pedido, parcela: parcelaDoBoleto, cliente: dados.cliente, hoje, notaNumero });
+      montado = bbBoleto.montarRegistro({
+        cfg: cfgCobranca, ambiente, sequencial, pedido: dados.pedido, parcela: parcelaDoBoleto, cliente: dados.cliente, hoje, notaNumero,
+        desconto: dados.descontos?.get(Number(parcela.numero_parcela)) || 0
+      });
     } catch (e) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, pendencias: e.extra?.pendencias || [] });
       continue;
@@ -359,6 +373,8 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
       juros_valor_dia: montado.encargos.juros?.valorDia ?? null, juros_percentual_mes: montado.encargos.juros?.percentualMes ?? montado.encargos.juros?.percentual ?? null,
       multa_percentual: montado.encargos.multa?.percentual ?? null, protesto_dias: montado.encargos.protesto?.dias ?? null,
       dias_limite_recebimento: montado.encargos.diasLimiteRecebimento, pagador: montado.pagador, instrucoes: montado.encargos.instrucoes,
+      // O desconto do pedido até o vencimento (sql/boletos_desconto_condicional.sql).
+      valor_desconto: montado.desconto ? montado.desconto.valor : null, desconto_ate: montado.desconto ? montado.desconto.ate : null,
       status: 'reservado', erro: null, requisicao: montado.payload, resposta: null, criado_por: usuarioId,
       ...(substitui ? { substitui_boleto_id: Number(substitui) } : {})
     };
@@ -374,6 +390,18 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
     } catch (e) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message });
       continue;
+    }
+    // Boleto com desconto só vai ao BB se o banco guardou o desconto: sem a
+    // coluna, a parcela ficaria valendo o cheio aqui dentro.
+    if (montado.desconto) {
+      const lido = await api.get(`/api/boletos/${boleto.id}`).catch(() => null);
+      if (!descontoCondicional.colunasProntas(lido)) {
+        boleto = await atualizarBoleto(api, boleto, { status: 'erro', erro: descontoCondicional.SQL_FALTANDO }).catch(() => boleto);
+        await registrarEvento(api, boleto.id, { tipo: 'erro', nosso_numero: boleto.nosso_numero, mensagem: descontoCondicional.SQL_FALTANDO, usuario_id: usuarioId });
+        dados.boletos.unshift(boleto);
+        resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: descontoCondicional.SQL_FALTANDO, sql_pendente: true, boleto: enxuto(boleto) });
+        continue;
+      }
     }
     // O payload vai com o nosso número que foi reservado de fato (pode ter pulado por corrida).
     let payload = { ...montado.payload, numeroTituloCliente: boleto.nosso_numero };

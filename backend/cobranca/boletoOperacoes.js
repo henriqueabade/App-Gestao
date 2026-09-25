@@ -145,13 +145,17 @@ function statusPeloBB(codigo, { statusAtual, vencimento, hoje }) {
  * Os encargos do boleto para um vencimento: as taxas gravadas no próprio
  * boleto (as da época do registro), completadas pela configuração.
  */
-function encargosDoBoleto(boleto, vencimento, cfg) {
+function encargosDoBoleto(boleto, vencimento, cfg, { descontoAte = null } = {}) {
   const base = cfg || {};
   const temValorDia = boleto.juros_valor_dia !== null && boleto.juros_valor_dia !== undefined;
   const pctMes = boleto.juros_percentual_mes ?? base.juros_percentual_mes;
+  // O desconto do pedido até o vencimento (descontoCondicional.js) fica nas
+  // instruções com a data que o BB tem.
+  const desconto = centavos(boleto.valor_desconto || 0);
   return calculo.encargos({
     valor: boleto.valor,
     vencimento,
+    descontoFixo: desconto > 0 ? { valor: desconto, ate: descontoAte || dia(boleto.desconto_ate) || vencimento } : null,
     cfg: {
       ...base,
       juros_tipo: temValorDia ? 'valor_dia' : (Number(boleto.juros_percentual_mes) > 0 ? 'percentual_mes' : 'sem'),
@@ -239,6 +243,11 @@ const payloadMulta = (convenio, { percentual, aPartirDe }) => payloadAlteracao(c
   multa: { tipoMulta: 2, valorMulta: 0, dataInicioMulta: calculo.dataBB(aPartirDe), taxaMulta: Number(percentual) }
 });
 
+/** O desconto até o vencimento acompanha a prorrogação: nova data-limite do primeiro desconto. */
+const payloadDataDesconto = (convenio, data) => payloadAlteracao(convenio, 'indicadorAlterarDataDesconto', {
+  alteracaoDataDesconto: { novaDataLimitePrimeiroDesconto: calculo.dataBB(data) }
+});
+
 const payloadBaixa = convenio => ({ numeroConvenio: Number(digitos(convenio)) });
 
 // ---------------------------------------------------------- validações
@@ -273,7 +282,14 @@ function validarAbatimento(boleto, valor) {
   if (!STATUS_ALTERAVEIS.has(String(boleto?.status))) throw erro(`Só se concede abatimento em boleto registrado ou vencido (este está "${boleto?.status}").`, 409);
   const v = centavos(valor);
   if (!(v > 0)) throw erro('Informe o valor do abatimento.');
-  if (v >= centavos(boleto.valor)) throw erro(`O abatimento precisa ser menor que o valor do boleto (${reais(boleto.valor)}).`);
+  // Com desconto até o vencimento, o abatimento sai do valor em dia (o cheio
+  // menos o desconto): passar dele deixaria o boleto negativo pago em dia.
+  const emDia = centavos(Number(boleto.valor) - Number(boleto.valor_desconto || 0));
+  if (v >= emDia) {
+    throw erro(Number(boleto.valor_desconto) > 0
+      ? `O abatimento precisa ser menor que o valor em dia do boleto (${reais(emDia)}: ${reais(boleto.valor)} menos o desconto de ${reais(boleto.valor_desconto)}).`
+      : `O abatimento precisa ser menor que o valor do boleto (${reais(boleto.valor)}).`);
+  }
   if (v === centavos(boleto.valor_abatimento || 0)) throw erro(`O abatimento deste boleto já é ${reais(v)}.`);
   return v;
 }
@@ -378,13 +394,30 @@ async function prorrogar({ api, bb, conexao, boleto, cfg = null, novaData, hoje,
   const anterior = dia(boleto.data_vencimento);
   const corpo = payloadProrrogacao(boleto.convenio, novaData);
   const resposta = await alterarNoBB({ api, bb, conexao, boleto, usuarioId, metodo: 'PATCH', caminho: caminhoNoBB(boleto), corpo, descricao: `Prorrogação para ${impressa(novaData)} recusada` });
-  const enc = encargosDoBoleto(boleto, novaData, cfg);
+  const avisos = [];
+
+  // Boleto com desconto até o vencimento (decisões do dono, 25/09/2026): o
+  // desconto vai para a nova data. Se o BB recusar, o boleto fica prorrogado
+  // com o desconto na data antiga — e a tela diz isso.
+  let descontoAte = dia(boleto.desconto_ate) || anterior;
+  if (centavos(boleto.valor_desconto || 0) > 0) {
+    const corpoDesconto = payloadDataDesconto(boleto.convenio, novaData);
+    try {
+      await alterarNoBB({ api, bb, conexao, boleto, usuarioId, metodo: 'PATCH', caminho: caminhoNoBB(boleto), corpo: corpoDesconto, descricao: `Desconto até ${impressa(novaData)} recusado` });
+      descontoAte = novaData;
+      await evento(api, boleto, usuarioId, 'desconto_atualizado', `Desconto de ${reais(boleto.valor_desconto)} até ${impressa(novaData)} (antes ${impressa(dia(boleto.desconto_ate) || anterior)}).`, { requisicao: corpoDesconto });
+    } catch (e) {
+      avisos.push(`Prorrogado, mas o BB não aceitou mover o desconto de ${reais(boleto.valor_desconto)} para ${impressa(novaData)}: ele continua até ${impressa(descontoAte)}. ${e.message}`);
+    }
+  }
+
+  const enc = encargosDoBoleto(boleto, novaData, cfg, { descontoAte });
   let atual = await boletos.atualizarBoleto(api, boleto, {
-    data_vencimento: novaData, vencimento_original: boleto.vencimento_original || anterior, instrucoes: enc.instrucoes, status: 'registrado'
+    data_vencimento: novaData, vencimento_original: boleto.vencimento_original || anterior, instrucoes: enc.instrucoes, status: 'registrado',
+    ...(centavos(boleto.valor_desconto || 0) > 0 ? { desconto_ate: descontoAte } : {})
   });
   await evento(api, boleto, usuarioId, 'prorrogado', `Vencimento ${impressa(anterior)} → ${impressa(novaData)}.`, { requisicao: corpo, resposta });
 
-  const avisos = [];
   try {
     const r = await sincronizar({ api, bb, conexao, boleto: atual, cfg, hoje, usuarioId, manter: ['data_vencimento'] });
     atual = r.boleto;
@@ -517,7 +550,7 @@ async function historico(api, boleto) {
 module.exports = {
   ESTADOS_BB, TIPOS_BAIXA_BB, MOTIVOS_BAIXA, MOTIVOS_ESCOLHIVEIS, FORMAS_RECEBIMENTO, INDICADORES, COLUNAS_DA_FASE,
   dataValida, isoDoBB, canalDePagamento, lerDetalhe, statusPeloBB, encargosDoBoleto, camposDaSincronizacao, resumoDaConsulta,
-  payloadAlteracao, payloadProrrogacao, payloadAbatimento, payloadMulta, payloadBaixa,
+  payloadAlteracao, payloadProrrogacao, payloadAbatimento, payloadMulta, payloadDataDesconto, payloadBaixa,
   acoesDoBoleto, sqlPronto, exigirSql, validarProrrogacao, validarAbatimento, validarBaixa,
   sincronizar, prorrogar, concederAbatimento, baixar, sincronizarPedido, historico
 };
