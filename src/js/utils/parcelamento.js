@@ -196,7 +196,17 @@
       // estava nas linhas continua (inclusive a travada).
       if(!n || n < minimo){ inst.elements.count.value = String(s.count || minimo); return; }
       s.count = n; s.mode = 'custom';
-      s.items = Array.from({length:n},(_,i)=>s.items[i] ? {...s.items[i]} : {amount:0,dueInDays:null});
+      // A parcela travada que ainda não está nas linhas (ex.: trocou de "à
+      // vista" para "a prazo") nasce com o valor e o prazo que ela tem. Quem
+      // chama diz o prazo em `dias`; `dias: null` é "não se sabe", e aí o prazo
+      // fica livre para digitar — travado e vazio, não havia como preencher.
+      s.items = Array.from({length:n},(_,i)=>{
+        if(s.items[i]) return {...s.items[i]};
+        const t = travaDe(inst, i);
+        if(!t) return {amount:0,dueInDays:null};
+        if(Number.isFinite(t.dias)) return {amount:t.atual,dueInDays:t.dias};
+        return t.dias === null ? {amount:t.atual,dueInDays:null,prazoLivre:true} : {amount:t.atual,dueInDays:null};
+      });
       inst.elements.modeRadios.forEach(r=>{r.checked = r.value==='custom'; r.disabled = r.value==='equal';});
       renderRows(id);
       recompute(id);
@@ -227,6 +237,7 @@
     s.items.forEach((it,idx)=>{
       const trava = travaDe(inst, idx);
       const soLeitura = s.mode==='equal' || Boolean(trava);
+      const prazoFixo = Boolean(trava) && !it.prazoLivre;
       const row=document.createElement('div');
       row.className='grid grid-cols-3 gap-4';
       row.innerHTML=`
@@ -235,7 +246,7 @@
           <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Valor</label>
         </div>
         <div class="relative">
-          <input type="number" min="0" id="${id}_due_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${trava?'bg-gray-800/40':''}" ${trava?'readonly':''} value="${it.dueInDays??''}">
+          <input type="number" min="0" id="${id}_due_${idx}" class="w-full ctl-campo bg-input border border-inputBorder text-white text-right ${prazoFixo?'bg-gray-800/40':''}" ${prazoFixo?'readonly':''} value="${it.dueInDays??''}">
           <label class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Prazo (dias)</label>
         </div>`;
       rowsDiv.appendChild(row);
@@ -282,7 +293,7 @@
   }
   function onDueChange(id,index,raw){
     const inst=instances.get(id); if(!inst) return;
-    if(travaDe(inst, index)) return;
+    if(travaDe(inst, index) && !inst.state.items[index]?.prazoLivre) return;
     const days=parseIntOnly(raw);
     inst.state.items[index].dueInDays=isNaN(days)?null:days;
     recompute(id);
