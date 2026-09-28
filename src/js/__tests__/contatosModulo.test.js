@@ -91,9 +91,13 @@ test('catálogo e tela de permissões: toda ação nova do módulo Contatos apar
   assert.equal(PERMISSOES.includes('name="col_ctt_cliente"'), false);
   assert.deepEqual(CATALOGO.ctt.actions.map(a => a.column).filter(c => /person|type|interaction|details|delete/.test(c)),
     ['acao_details_view', 'acao_delete', 'acao_person_add', 'acao_person_edit', 'acao_person_remove', 'acao_interaction_add', 'acao_type_manage']);
-  const SQL = fs.readFileSync(path.join(RAIZ, '..', 'sql', 'contatos_fornecedores.sql'), 'utf8');
-  for (const a of CATALOGO.ctt.actions) assert.ok(SQL.includes(a.column), `${a.column} não está no SQL`);
-  for (const c of CATALOGO.ctt.columns) assert.ok(SQL.includes(c.column), `${c.column} não está no SQL`);
+  // `sql/` fica fora do git e o dono apaga o arquivo depois de rodar: sem ele, a conferência do SQL é pulada.
+  const caminhoSql = path.join(RAIZ, '..', 'sql', 'contatos_fornecedores.sql');
+  if (fs.existsSync(caminhoSql)) {
+    const SQL = fs.readFileSync(caminhoSql, 'utf8');
+    for (const a of CATALOGO.ctt.actions) assert.ok(SQL.includes(a.column), `${a.column} não está no SQL`);
+    for (const c of CATALOGO.ctt.columns) assert.ok(SQL.includes(c.column), `${c.column} não está no SQL`);
+  }
 });
 
 test('modais: novo/editar têm o Tipo com + e −, CNPJ/CPF, endereço "end" e as pessoas; detalhes tem atividades e histórico', () => {

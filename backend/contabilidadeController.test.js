@@ -169,7 +169,7 @@ test('painel: checklist por fonte, pendências com severidade, contagem e o que 
     assert.deepEqual(p.contagem, { critico: 0, documental: 2, aviso: 0, ignoradas: 0, total: 2 });
     assert.deepEqual(p.fontes.map(f => [f.chave, f.estado]), [
       ['nfe_saida', 'pendente'], ['recebimentos', 'ok'], ['fechamentos', 'pendente'], ['devolucoes', 'ok'],
-      ['extrato', 'indisponivel'], ['documentos_recebidos', 'indisponivel'], ['contas_pagar', 'indisponivel'], ['conciliacao', 'indisponivel']
+      ['documentos_recebidos', 'indisponivel'], ['contas_pagar', 'indisponivel'], ['extrato', 'indisponivel'], ['conciliacao', 'indisponivel']
     ]);
     assert.equal(p.fontes[0].resumo[0].valor.replace(/ /g, ' '), '1 · R$ 1.500,00');
     assert.deepEqual(p.pode, { fechar: true, reabrir: false, pacote: false });

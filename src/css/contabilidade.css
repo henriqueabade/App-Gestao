@@ -120,7 +120,9 @@ body {
 /* As variáveis --menu-* vêm de menu.css e trocam com o tema claro/escuro; o
    valor de reserva é o da casa no escuro. As medidas são as do Financeiro
    (a referência visual, decisão do dono em 21/09/2026). */
-.contabilidade-module {
+/* Os modais ficam no <body>, fora do módulo: as variáveis valem para os dois. */
+.contabilidade-module,
+[data-ctb-modal] {
     --ctb-espaco: 1.5rem;          /* 24px entre blocos grandes */
     --ctb-borda: var(--menu-surface-border, rgba(255, 255, 255, 0.1));
     --ctb-texto-1: var(--menu-text-strong, #fff);
@@ -133,6 +135,10 @@ body {
     --ctb-bordo-texto: #e08aa6;    /* bordô legível sobre o fundo escuro */
     --ctb-ouro-fundo: rgba(182, 160, 62, 0.18);
     --ctb-verde: var(--color-green);
+}
+
+/* Só o módulo vira coluna: o véu dos modais tem o `hidden` e o centro dele. */
+.contabilidade-module {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -194,6 +200,9 @@ body {
 }
 
 .ctb-competencia-campo__ir { flex-shrink: 0; }
+
+/* Desligado (Competencia.desabilitar): quando a visão não depende do mês. */
+.fin-competencia-campo--desligado { opacity: 0.55; }
 
 /* Nos modais o seletor cabe na coluna do filtro: o mês encolhe, ano e lupa ficam fixos. */
 .ctb-competencia-campo--modal { width: 100%; min-width: 0; }
@@ -506,8 +515,9 @@ body {
 
 .ctb-fonte__topo {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.5rem 0.7rem;
 }
 
 .ctb-fonte__icone {
@@ -527,15 +537,17 @@ body {
 .ctb-fonte[data-estado="ok"] .ctb-fonte__icone { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
 .ctb-fonte[data-estado="indisponivel"] .ctb-fonte__icone { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
 
+/* O título quebra entre as palavras em vez de cortar ("Recebimentos e…"); e
+   quando nem assim cabe ao lado da etiqueta ("Ainda não integrado"), a
+   etiqueta desce para a linha de baixo (o topo do cartão quebra). */
 .ctb-fonte__titulo {
-    flex: 1;
+    flex: 1 1 7rem;
     min-width: 0;
     font-size: 0.95rem;
     font-weight: 600;
+    line-height: 1.25;
     color: var(--ctb-texto-1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
 }
 
 /* A situação da fonte é uma etiqueta (fora do padrão de botão, de propósito). */
@@ -889,6 +901,125 @@ body {
 .ctb-dados__linha dt { color: var(--menu-text-secondary, #9ca3af); }
 .ctb-dados__linha dd { margin: 0; color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 
+/* Os dados em duas colunas (ficha da conta e do documento). */
+.ctb-dados--duas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+}
+.ctb-dados--duas .ctb-dados__linha:nth-last-child(2):nth-child(odd) { border-bottom: 0; }
+.ctb-dados__linha dd.ctb-dados__texto { font-weight: 400; white-space: normal; text-align: right; }
+
+/* Tabela dentro do modal: a moldura e o cabeçalho vêm de tabelas-modais.css;
+   aqui só a rolagem e o espaço entre colunas. */
+.ctb-tabela { overflow: auto; max-height: 55vh; }
+.ctb-tabela--curta { max-height: 32vh; }
+.ctb-tabela tbody td { color: #e5e7eb; vertical-align: middle; }
+.ctb-tabela td.ctb-num,
+.ctb-tabela th.ctb-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ctb-tabela td.ctb-nowrap { white-space: nowrap; }
+.ctb-tabela tr[data-ctb-linha] { cursor: pointer; }
+/* Os botões da linha ficam numa linha só (quebrar deixava a linha com o dobro da altura). */
+.ctb-tabela .ctb-celula-acoes { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: nowrap; }
+
+/* Campo travado (conta com pagamento): apagado, para não parecer editável. */
+[data-ctb-modal] .ctl-campo:disabled,
+[data-ctb-modal] button.ctl-botao:disabled { opacity: 0.55; cursor: not-allowed; }
+.ctb-tabela .ctb-sub { display: block; font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); margin-top: 0.1rem; }
+.ctb-tabela input.ctl-campo { min-width: 0; }
+
+/* Os números do topo das listas (em aberto, vencido…). */
+.ctb-totais {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+.ctb-totais--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ctb-total {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.8rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+}
+.ctb-total__rotulo { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-total__valor { font-size: 1.2rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.ctb-total__nota { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-total[data-tom="bordo"] { border-color: rgba(106, 21, 44, 0.75); background: rgba(106, 21, 44, 0.28); }
+.ctb-total[data-tom="bordo"] .ctb-total__valor { color: #e08aa6; }
+.ctb-total[data-tom="verde"] .ctb-total__valor { color: var(--color-green); }
+
+/* Abas do modal (Registrar documento): sublinhadas, como as das fichas. */
+.ctb-abas { display: flex; gap: 2rem; overflow-x: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ctb-aba {
+    padding: 1rem 0.5rem;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--menu-text-secondary, #9ca3af);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 150ms ease;
+}
+.ctb-aba:hover { color: #fff; }
+.ctb-aba[aria-selected="true"] { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+/* Seção com título dentro do modal. */
+.ctb-secao-modal { display: flex; flex-direction: column; gap: 0.75rem; }
+.ctb-secao-modal__cabeca { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+
+/* A lista de arquivos da ficha (nome, origem, baixar). */
+.ctb-arquivos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ctb-arquivo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 0.875rem;
+}
+.ctb-arquivo > i { color: var(--color-primary-light); flex-shrink: 0; }
+.ctb-arquivo__texto { flex: 1; min-width: 0; }
+.ctb-arquivo__nome { display: block; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctb-arquivo__nota { display: block; font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-arquivo__acoes { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+/* O quadro para anexar (tipo, descrição, arquivo e o botão). */
+.ctb-anexar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+}
+.ctb-arquivo-campo::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.35rem 0.85rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+/* Soma das parcelas: vermelha quando não bate com o valor da conta. */
+.ctb-soma { font-size: 0.8rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-soma[data-ok="0"] { color: var(--color-red); font-weight: 600; }
+
+/* Linha do tempo dentro do modal (histórico da conta e do documento). */
+.ctb-historico { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; }
+.ctb-historico li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem; }
+.ctb-historico__quando { color: var(--menu-text-secondary, #9ca3af); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ctb-historico__texto strong { color: #fff; font-weight: 600; }
+.ctb-historico__texto span { display: block; color: var(--menu-text-secondary, #9ca3af); }
+
 /* Lista de bloqueios/pendências dentro do modal. */
 .ctb-lista-modal {
     list-style: none;
@@ -910,4 +1041,7 @@ body {
     .ctb-fontes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ctb-operacional,
     .ctb-resumos { grid-template-columns: minmax(0, 1fr); }
+    .ctb-totais { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ctb-anexar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .ctb-dados--duas { grid-template-columns: minmax(0, 1fr); }
 }

@@ -40,21 +40,45 @@ test('menu: Contabilidade entra logo abaixo do Financeiro, com rótulo e página
   assert.match(ler('..', 'backend', 'server.js'), /app\.use\('\/api\/contabilidade', require\('\.\/contabilidadeController'\)\)/);
 });
 
-test('permissões: o módulo está no catálogo, na tela de permissões e no SQL, com as mesmas chaves', () => {
+/**
+ * O SQL de cada etapa, quando ainda está na pasta: `sql/` fica fora do git e
+ * o dono apaga o arquivo depois de rodar. Sem ele, a conferência do SQL é
+ * pulada (o catálogo e a tela de permissões continuam conferidos).
+ */
+function sqlDaEtapa(nome) {
+  const caminho = path.join(RAIZ, '..', 'sql', nome);
+  return fs.existsSync(caminho) ? fs.readFileSync(caminho, 'utf8') : null;
+}
+
+const ACOES_BASE = ['contabilidade.view', 'contabilidade.fechar', 'contabilidade.reabrir', 'contabilidade.pendencia.resolver', 'contabilidade.pacote.gerar', 'contabilidade.config.view'];
+const ACOES_ETAPA3 = ['contabilidade.documento.registrar', 'contabilidade.documento.excluir', 'contabilidade.pagar.lancar', 'contabilidade.pagar.pagar', 'contabilidade.pagar.estornar'];
+
+test('permissões: o módulo está no catálogo, na tela de permissões e no SQL de cada etapa, com as mesmas chaves', () => {
   const mod = CATALOGO.contabilidade;
   assert.ok(mod, 'módulo contabilidade no catálogo');
   assert.equal(mod.page, 'contabilidade');
   assert.equal(mod.table, 'perm_contabilidade');
-  assert.deepEqual(mod.actions.map(a => a.key), ['contabilidade.view', 'contabilidade.fechar', 'contabilidade.reabrir', 'contabilidade.pendencia.resolver', 'contabilidade.pacote.gerar', 'contabilidade.config.view']);
+  assert.deepEqual(mod.actions.map(a => a.key).sort(), [...ACOES_BASE, ...ACOES_ETAPA3].sort());
   const PERMISSOES = ler('html', 'modals', 'usuarios', 'permissoes.html');
   assert.ok(PERMISSOES.includes('data-permission-tab-trigger="contabilidade"') && PERMISSOES.includes('data-module-toggle="contabilidade"'));
   for (const a of mod.actions) assert.ok(PERMISSOES.includes(`name="${a.key}"`), `${a.key} não está em permissoes.html`);
-  const SQL = fs.readFileSync(path.join(RAIZ, '..', 'sql', 'contabilidade_base.sql'), 'utf8');
-  assert.ok(SQL.includes('CREATE TABLE IF NOT EXISTS perm_contabilidade'));
-  for (const a of mod.actions) assert.ok(SQL.includes(a.column), `${a.column} não está no SQL`);
-  for (const t of ['competencia_contabil', 'contabil_pendencias_resolucoes', 'contabil_eventos']) assert.ok(SQL.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
-  // A tabela de permissão tem a chave no perfil, como as outras (PUT /api/perm_x/<modelo_id>).
-  assert.match(SQL, /perm_contabilidade \(\s*modelo_id\s+integer PRIMARY KEY/);
+  const coluna = chave => mod.actions.find(a => a.key === chave).column;
+  const base = sqlDaEtapa('contabilidade_base.sql');
+  if (base) {
+    assert.ok(base.includes('CREATE TABLE IF NOT EXISTS perm_contabilidade'));
+    for (const k of ACOES_BASE) assert.ok(base.includes(coluna(k)), `${coluna(k)} não está no SQL da base`);
+    for (const t of ['competencia_contabil', 'contabil_pendencias_resolucoes', 'contabil_eventos']) assert.ok(base.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
+    // A tabela de permissão tem a chave no perfil, como as outras (PUT /api/perm_x/<modelo_id>).
+    assert.match(base, /perm_contabilidade \(\s*modelo_id\s+integer PRIMARY KEY/);
+  }
+  const etapa3 = sqlDaEtapa('contabilidade_contas_pagar.sql');
+  if (etapa3) {
+    for (const k of ACOES_ETAPA3) assert.ok(etapa3.includes(`ADD COLUMN IF NOT EXISTS ${coluna(k)}`), `${coluna(k)} não está no SQL das contas a pagar`);
+    const { TABELAS_PAGAR } = require('../../../backend/contabilidade/base');
+    for (const t of TABELAS_PAGAR) assert.ok(etapa3.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
+    assert.ok(etapa3.includes('ADD COLUMN IF NOT EXISTS referencia_tipo'), 'a referência do histórico');
+    assert.match(etapa3, /\n\s+especie\s+varchar\(20\)/, 'a espécie do documento (recibo, guia…)');
+  }
 });
 
 test('tela: toda permissão usada existe no catálogo; Fechar (verde), Reabrir (bordô, escondido), Gerar pacote (azul claro) e Atualizar (dourado) no cabeçalho', () => {
@@ -116,16 +140,85 @@ test('modais: Fechar, Reabrir e Ignorar pendência têm a anatomia da casa e ped
   assert.ok(ler('html', 'modals', 'contabilidade', 'ignorar-pendencia.html').includes('id="ctbIgnorarJustificativa"'));
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   for (const overlay of ['ctbFechar', 'ctbReabrir', 'ctbIgnorarPendencia']) assert.ok(MODAIS.includes(`${overlay}:`), `${overlay} sem montador`);
-  assert.ok(MODAIS.includes("fetchApi('/api/contabilidade/fechar'") && MODAIS.includes("fetchApi('/api/contabilidade/reabrir'") && MODAIS.includes("fetchApi('/api/contabilidade/pendencias/ignorar'"));
+  assert.ok(MODAIS.includes("enviar('/api/contabilidade/fechar'") && MODAIS.includes("enviar('/api/contabilidade/reabrir'") && MODAIS.includes("enviar('/api/contabilidade/pendencias/ignorar'"));
   // A tela sabe abrir os três e relê o painel quando fecham.
   for (const chave of ['fechar', 'reabrir', 'ignorar-pendencia']) assert.ok(TELA.includes(`'${chave}': { html: 'modals/contabilidade/${chave}.html'`), chave);
   assert.ok(MODAIS.includes('window.ContabilidadeRecarregar?.()') && TELA.includes('window.ContabilidadeRecarregar = '));
 });
 
-test('tela: os botões montados em JavaScript (Financeiro, Ignorar, Restaurar) são o botão pequeno do padrão e a pendência do Financeiro abre o módulo', () => {
+test('tela: os botões montados em JavaScript (Abrir, Financeiro, Ignorar, Restaurar) são o botão pequeno do padrão; a pendência do Financeiro abre o módulo e a daqui abre o modal', () => {
   const botoes = [...TELA.matchAll(/ctbCriar\('button', '([^']*)'/g)].map(m => m[1]);
-  assert.equal(botoes.length, 3);
+  assert.equal(botoes.length, 4);
   for (const classe of botoes) assert.match(classe, /\bctl-botao ctl-botao--pequeno\b/);
   assert.ok(TELA.includes("await window.loadPage('financeiro')"));
-  assert.ok(TELA.includes("'ir-financeiro'") && TELA.includes("'restaurar'") && TELA.includes("'ignorar'"));
+  assert.ok(TELA.includes("'ir-financeiro'") && TELA.includes("'restaurar'") && TELA.includes("'ignorar'") && TELA.includes("'abrir-pendencia'"));
+});
+
+// ------------------------------------------------------------- etapas 2 e 3
+
+const MODAIS_ETAPA3 = {
+  'contas-pagar': { overlay: 'ctbContasPagar', principal: ['ctbContasPagarNova', 'btn-primary', 'contabilidade.pagar.lancar'] },
+  'conta-pagar': { overlay: 'ctbContaPagar', principal: ['ctbContaPagarEditar', 'btn-primary', 'contabilidade.pagar.lancar'] },
+  'conta-pagar-form': { overlay: 'ctbContaPagarForm', principal: ['ctbContaFormSalvar', 'btn-primary', 'contabilidade.pagar.lancar'] },
+  'pagar-parcela': { overlay: 'ctbPagarParcela', principal: ['ctbPagarConfirmar', 'btn-success', 'contabilidade.pagar.pagar'] },
+  'documentos-recebidos': { overlay: 'ctbDocumentosRecebidos', principal: ['ctbDocsRegistrar', 'btn-primary', 'contabilidade.documento.registrar'] },
+  'registrar-documento': { overlay: 'ctbRegistrarDocumento', principal: ['ctbDocRegistrar', 'btn-success', 'contabilidade.documento.registrar'] },
+  'documento-recebido': { overlay: 'ctbDocumentoRecebido', principal: ['ctbDocDetExcluir', 'btn-warning', 'contabilidade.documento.excluir'] },
+  'evidencias': { overlay: 'ctbEvidencias', principal: null }
+};
+
+test('modais das etapas 2 e 3: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
+  for (const [nome, e] of Object.entries(MODAIS_ETAPA3)) {
+    const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
+    assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
+    assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
+    assert.match(html, /<button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-\[120px\]">(Fechar|Cancelar)<\/button>/, `${nome}: Fechar/Cancelar vermelho`);
+    if (e.principal) {
+      const [id, cor, perm] = e.principal;
+      assert.match(html, new RegExp(`id="${id}" type="button" data-perm="${perm.replace(/\./g, '\\.')}" class="${cor} ctl-botao`), `${nome}: ${id}`);
+    }
+    for (const m of html.matchAll(/data-perm(?:-hide)?="([^"]+)"/g)) assert.ok(chaves.has(m[1]) || m[1] === 'ctt.create', `${nome}: ${m[1]} fora do catálogo`);
+    assert.ok(TELA.includes(`'${nome}': { html: 'modals/contabilidade/${nome}.html', overlay: '${e.overlay}' }`), `${nome}: a tela não sabe abrir`);
+    assert.ok(MODAIS.includes(`${e.overlay}: montar`), `${nome}: sem montador`);
+  }
+  // O "Novo contato" abre o cadastro de Contatos por cima e pede ctt.create.
+  assert.ok(MODAIS.includes("window.Modal.open('modals/contatos/novo.html', '../js/modals/contato-novo.js', 'novoContato', true)"));
+  assert.ok(ler('html', 'modals', 'contabilidade', 'conta-pagar-form.html').includes('id="ctbContaFormNovoContato" type="button" data-perm="ctt.create"'));
+  // Cada rota que grava é a da permissão certa (o backend confere de novo).
+  for (const rota of ["'/api/contabilidade/titulos', 'POST'", "/api/contabilidade/parcelas/${encodeURIComponent(parcelaId)}/pagar", "'/api/contabilidade/documentos', 'POST'", "'/api/contabilidade/arquivos', 'POST'", '/estornar', '/cancelar', '/excluir']) {
+    assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  }
+});
+
+test('ações da tela: contas a pagar, registrar documento, documentos recebidos e da competência são reais; as pendências da Contabilidade abrem o modal do filtro', () => {
+  for (const acao of ['contas-pagar', 'registrar-documento', 'documentos-recebidos', 'evidencias']) {
+    assert.ok(HTML.includes(`data-ctb-acao="${acao}"`), `botão ${acao}`);
+    assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  }
+  for (const acao of ['conta-pagar', 'documento-recebido', 'nova-conta', 'abrir-pendencia']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  // As pendências do backend usam só ações que a tela conhece.
+  const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
+  const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
+  assert.deepEqual([...acoes].sort(), ['conta-pagar', 'contas-pagar', 'documentos-recebidos', 'registrar-documento']);
+  for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
+  assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
+  // O roteiro marca as etapas 1, 2 e 3 como feitas.
+  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 3);
+});
+
+test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {
+  // O git (autocrlf) grava CRLF no Windows: o recorte procura o fim da função com "\n".
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js').replace(/\r\n/g, '\n');
+  const trecho = n => { const i = MODAIS.indexOf(`function ${n}(`); return MODAIS.slice(i, MODAIS.indexOf('\n  }\n', i) + 4); };
+  const f = vm.runInContext(`${trecho('lerMoeda')}\n${trecho('dividirParcelas')}\n({ lerMoeda, dividirParcelas })`, vm.createContext({}));
+  assert.equal(f.lerMoeda('1.234,56'), 1234.56);
+  assert.equal(f.lerMoeda('R$ 10'), 10);
+  assert.equal(f.lerMoeda(''), null);
+  assert.deepEqual(plano(f.dividirParcelas(3, '2026-01-31', 100)).map(p => [p.vencimento, p.valor]), [['2026-01-31', 33.33], ['2026-02-28', 33.33], ['2026-03-31', 33.34]]);
+  assert.equal(f.dividirParcelas(0, '2026-01-31', 100), null);
+  const titulos = require('../../../backend/contabilidade/titulos');
+  const doBackend = titulos.gerarParcelas({ quantidade: 7, primeiroVencimento: '2026-10-31', valorTotal: 1000 }).map(p => [p.vencimento, p.valor]);
+  assert.deepEqual(plano(f.dividirParcelas(7, '2026-10-31', 1000)).map(p => [p.vencimento, p.valor]), doBackend, 'a tela e o backend dividem igual');
 });

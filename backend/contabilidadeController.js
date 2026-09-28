@@ -9,8 +9,35 @@
  *   POST /pendencias/ignorar               { competencia, chave, justificativa }  (contabilidade.pendencia.resolver)
  *   POST /pendencias/restaurar             { competencia, chave }                 (contabilidade.pendencia.resolver)
  *
+ * Etapas 2 e 3 (documentos, evidências e contas a pagar):
+ *
+ *   GET  /fornecedores                     os contatos para escolher (fornecedor / prestador)
+ *   GET  /categorias                       as categorias já usadas + as da contabilidade, e as formas de pagamento
+ *   GET  /fechamentos-pagos                pagamentos de comissão/produção (para ligar a NFS-e)
+ *   GET  /evidencias?competencia=          tudo o que prova o mês (notas, documentos, comprovantes)
+ *   GET  /evidencias/xml/:tipo/:id         o XML de uma nota de saída | externa | devolução
+ *   GET  /arquivos?competencia=|alvo_tipo=&alvo_id=   os arquivos
+ *   GET  /arquivos/:id                     { nome, tipo, tamanho, base64 }
+ *   POST /arquivos                         { nome, tipo, base64, categoria, descricao, competencia, vinculos }  (contabilidade.documento.registrar)
+ *   POST /arquivos/:id/vinculos            { alvo_tipo, alvo_id }                  (contabilidade.documento.registrar)
+ *   POST /arquivos/:id/excluir             { motivo }                              (contabilidade.documento.excluir)
+ *   GET  /documentos?competencia=&tipo=    NF-e de entrada, NFS-e e outros
+ *   GET  /documentos/:id                   a ficha (itens, arquivos, conta, histórico)
+ *   POST /documentos/previa                { xml } | { chave, data_emissao, valor_total }  — lê sem gravar
+ *   POST /documentos                       registra (com gerar_titulo pede também contabilidade.pagar.lancar)
+ *   POST /documentos/:id/excluir           { motivo }                              (contabilidade.documento.excluir)
+ *   GET  /titulos?competencia=&visao=      as parcelas da visão e os totais
+ *   GET  /titulos/:id                      a conta (parcelas, pagamentos, arquivos, histórico)
+ *   POST /titulos, PUT /titulos/:id        lança / altera                          (contabilidade.pagar.lancar)
+ *   POST /titulos/:id/cancelar             { motivo }                              (contabilidade.pagar.estornar)
+ *   POST /parcelas/:id/pagar               { data_pagamento, valor_pago, forma, observacao, comprovante? }  (contabilidade.pagar.pagar)
+ *   POST /pagamentos/:id/estornar          { motivo }                              (contabilidade.pagar.estornar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
- * `sql_pendente: true` (a tela avisa) e as gravações respondem 409.
+ * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
+ * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
+ * do checklist dizem "falta o SQL" e as rotas delas respondem 409.
+ * Competência fechada recusa o que muda o mês (pagamento, documento, conta).
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
@@ -18,11 +45,20 @@ const { exigirPermissao } = require('./permissionsController');
 const configuracaoCobranca = require('./cobranca/configuracaoCobranca');
 const checklist = require('./contabilidade/checklist');
 const fechamento = require('./contabilidade/fechamento');
+const arquivos = require('./contabilidade/arquivos');
+const documentos = require('./contabilidade/documentosRecebidos');
+const titulos = require('./contabilidade/titulos');
+const evidencias = require('./contabilidade/evidencias');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
 const REABRIR = 'contabilidade.reabrir';
 const RESOLVER = 'contabilidade.pendencia.resolver';
+const REGISTRAR_DOCUMENTO = 'contabilidade.documento.registrar';
+const EXCLUIR_DOCUMENTO = 'contabilidade.documento.excluir';
+const LANCAR = 'contabilidade.pagar.lancar';
+const PAGAR = 'contabilidade.pagar.pagar';
+const ESTORNAR = 'contabilidade.pagar.estornar';
 
 const router = express.Router();
 
@@ -93,5 +129,89 @@ router.post('/pendencias/ignorar', exigirPermissao(RESOLVER), rota('POST /api/co
 
 router.post('/pendencias/restaurar', exigirPermissao(RESOLVER), rota('POST /api/contabilidade/pendencias/restaurar', ({ api, req, usuarioId }) =>
   fechamento.restaurarPendencia({ api, competencia: req.body?.competencia, chave: req.body?.chave, usuarioId })));
+
+// ------------------------------------------------------------ apoio das telas
+
+router.get('/fornecedores', exigirPermissao(VER), rota('GET /api/contabilidade/fornecedores', ({ api }) => documentos.fornecedores(api)));
+
+router.get('/categorias', exigirPermissao(VER), rota('GET /api/contabilidade/categorias', ({ api }) => titulos.categoriasDisponiveis(api)));
+
+router.get('/fechamentos-pagos', exigirPermissao(VER), rota('GET /api/contabilidade/fechamentos-pagos', ({ api, hoje }) =>
+  documentos.pagamentosDeFechamento(api, { hoje }).then(pagamentos => ({ pagamentos }))));
+
+// ------------------------------------------------------------ evidências e arquivos
+
+router.get('/evidencias', exigirPermissao(VER), rota('GET /api/contabilidade/evidencias', ({ api, req, hoje }) =>
+  evidencias.carregar(api, { competencia: String(req.query?.competencia || ''), hoje })));
+
+router.get('/evidencias/xml/:tipo/:id', exigirPermissao(VER), rota('GET /api/contabilidade/evidencias/xml', ({ api, req }) =>
+  evidencias.baixarXml(api, { tipo: req.params.tipo, id: req.params.id })));
+
+router.get('/arquivos', exigirPermissao(VER), rota('GET /api/contabilidade/arquivos', ({ api, req }) =>
+  arquivos.listar(api, { competencia: req.query?.competencia || null, alvoTipo: req.query?.alvo_tipo || null, alvoId: req.query?.alvo_id || null })
+    .then(lista => ({ arquivos: lista, categorias: arquivos.CATEGORIAS }))));
+
+router.get('/arquivos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/arquivos/:id', async ({ api, req }) => {
+  const { arquivo, base64 } = await arquivos.ler(api, req.params.id);
+  return { id: arquivo.id, nome: arquivo.nome_arquivo, tipo: arquivo.tipo_mime || 'application/octet-stream', tamanho: Number(arquivo.tamanho_bytes) || 0, base64 };
+}));
+
+router.post('/arquivos', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/arquivos', async ({ api, req, usuarioId }) => {
+  const corpo = req.body || {};
+  const { arquivo, reaproveitado } = await arquivos.salvar(api, {
+    nome: corpo.nome, tipo: corpo.tipo, base64: corpo.base64, categoria: corpo.categoria || 'outro', origem: 'fornecido',
+    competencia: corpo.competencia || null, descricao: corpo.descricao || null, vinculos: corpo.vinculos || [], usuarioId
+  });
+  return { id: arquivo.id, reaproveitado };
+}));
+
+router.post('/arquivos/:id/vinculos', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/arquivos/:id/vinculos', ({ api, req, usuarioId }) =>
+  arquivos.vincular(api, req.params.id, req.body || {}, usuarioId)));
+
+router.post('/arquivos/:id/excluir', exigirPermissao(EXCLUIR_DOCUMENTO), rota('POST /api/contabilidade/arquivos/:id/excluir', ({ api, req, usuarioId }) =>
+  arquivos.excluir(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+// ------------------------------------------------------------ documentos recebidos
+
+router.get('/documentos', exigirPermissao(VER), rota('GET /api/contabilidade/documentos', ({ api, req }) =>
+  documentos.listar(api, { competencia: req.query?.competencia || null, tipo: req.query?.tipo || null })));
+
+router.get('/documentos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/documentos/:id', ({ api, req }) =>
+  documentos.detalhe(api, req.params.id)));
+
+router.post('/documentos/previa', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/documentos/previa', ({ api, req, hoje }) =>
+  documentos.previa(api, { entrada: req.body || {}, hoje })));
+
+/** Registrar e já gerar a conta pede as duas permissões. */
+const permissoesDoRegistro = req => (req.body?.gerar_titulo === true ? [REGISTRAR_DOCUMENTO, LANCAR] : [REGISTRAR_DOCUMENTO]);
+
+router.post('/documentos', exigirPermissao(permissoesDoRegistro), rota('POST /api/contabilidade/documentos', ({ api, req, hoje, usuarioId }) =>
+  documentos.registrar(api, { entrada: req.body || {}, usuarioId, hoje, podeLancar: req.body?.gerar_titulo === true })));
+
+router.post('/documentos/:id/excluir', exigirPermissao(EXCLUIR_DOCUMENTO), rota('POST /api/contabilidade/documentos/:id/excluir', ({ api, req, usuarioId }) =>
+  documentos.excluir(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+// ------------------------------------------------------------ contas a pagar
+
+router.get('/titulos', exigirPermissao(VER), rota('GET /api/contabilidade/titulos', ({ api, req, hoje }) =>
+  titulos.listar(api, { visao: String(req.query?.visao || 'abertas'), competencia: String(req.query?.competencia || ''), hoje })));
+
+router.get('/titulos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/titulos/:id', ({ api, req, hoje }) =>
+  titulos.detalhe(api, req.params.id, { hoje })));
+
+router.post('/titulos', exigirPermissao(LANCAR), rota('POST /api/contabilidade/titulos', ({ api, req, hoje, usuarioId }) =>
+  titulos.criar(api, { entrada: req.body || {}, usuarioId, hoje })));
+
+router.put('/titulos/:id', exigirPermissao(LANCAR), rota('PUT /api/contabilidade/titulos/:id', ({ api, req, hoje, usuarioId }) =>
+  titulos.editar(api, req.params.id, { entrada: req.body || {}, usuarioId, hoje })));
+
+router.post('/titulos/:id/cancelar', exigirPermissao(ESTORNAR), rota('POST /api/contabilidade/titulos/:id/cancelar', ({ api, req, usuarioId }) =>
+  titulos.cancelar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/parcelas/:id/pagar', exigirPermissao(PAGAR), rota('POST /api/contabilidade/parcelas/:id/pagar', ({ api, req, hoje, usuarioId }) =>
+  titulos.pagar(api, req.params.id, { entrada: req.body || {}, usuarioId, hoje })));
+
+router.post('/pagamentos/:id/estornar', exigirPermissao(ESTORNAR), rota('POST /api/contabilidade/pagamentos/:id/estornar', ({ api, req, usuarioId }) =>
+  titulos.estornar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
 
 module.exports = router;

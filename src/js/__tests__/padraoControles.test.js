@@ -148,7 +148,12 @@ const PADRONIZADOS = [
     // modais (Fechar competência, Reabrir, Ignorar pendência). As etiquetas de
     // filtro (ctb-chip) e de situação das fontes ficam de fora, como as outras.
     modulo: 'contabilidade',
-    arquivos: ['html/contabilidade.html', ...['fechar', 'reabrir', 'ignorar-pendencia'].map(m => `html/modals/contabilidade/${m}.html`)]
+    arquivos: ['html/contabilidade.html', ...[
+      'fechar', 'reabrir', 'ignorar-pendencia',
+      // 28/09/2026 — etapas 2 e 3: contas a pagar, documentos e evidências.
+      'contas-pagar', 'conta-pagar', 'conta-pagar-form', 'pagar-parcela',
+      'documentos-recebidos', 'registrar-documento', 'documento-recebido', 'evidencias'
+    ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
   { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },

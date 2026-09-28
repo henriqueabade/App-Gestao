@@ -774,3 +774,93 @@ do último dia dele.
   `padraoControles.test.js`.
 - **Próxima:** etapa 2 (documentos e evidências) ou 3 (fornecedores e
   contas a pagar — os Contatos já estão prontos), a escolher pelo dono.
+
+---
+
+## S. Etapas 2 e 3 entregues (28/09/2026) — documentos, evidências e contas a pagar
+
+Branch `Implementando-Modulo-Contabilidade`. O dono pediu para seguir as
+fases; as duas foram juntas porque a conta a pagar precisa do arquivo (a nota,
+o comprovante) e o documento recebido precisa da conta.
+
+**SQL:** `sql/contabilidade_contas_pagar.sql` (rodar e reiniciar a API):
+`contabil_arquivos` (+ partes de 512 KB + vínculos), `documentos_recebidos`,
+`titulos_pagar`, `titulo_pagar_parcelas`, `titulo_pagar_pagamentos`,
+referência em `contabil_eventos` e cinco permissões novas em
+`perm_contabilidade`. Dados de teste só para o banco DEV:
+`sql/contabilidade_dados_simulados_dev.sql` (trava: só roda em banco com
+dev/local/test/homolog no nome, ou com `SET app.confirmo_dev = 'sim'`; apaga
+a simulação anterior antes; julho/2026 fechado, agosto cheio de pendências,
+setembro corrente).
+
+**Permissões novas:** `contabilidade.documento.registrar` (registrar NF-e,
+NFS-e, recibo/guia e anexar arquivos), `contabilidade.documento.excluir`,
+`contabilidade.pagar.lancar`, `contabilidade.pagar.pagar`,
+`contabilidade.pagar.estornar` (estorno e cancelamento). Registrar o
+documento já lançando a conta pede as duas.
+
+**Regras (as decisões em aberto estão no fim):**
+
+- **Arquivos** (`backend/contabilidade/arquivos.js`): sha256, origem
+  `oficial` (XML autorizado) / `interno` / `fornecido` (anexado à mão),
+  competência e vínculos (competência, documento, conta, pagamento, pagamento
+  de fechamento). O mesmo arquivo não é guardado duas vezes (ganha só o
+  vínculo). Excluir marca, com motivo.
+- **Documentos recebidos** (`documentosRecebidos.js`): NF-e pelo XML (lida
+  por `xmlDevolucao.lerNota` + duplicatas, endereço, IE e tributos; bloqueia
+  nota da própria empresa, destinatário errado e chave repetida), NF-e só pela
+  chave (confere o dígito e o mês), NFS-e digitada (Contagem, BH…) e recibo /
+  guia / fatura. Competência = mês da emissão. O emitente vira **contato**
+  quando não existe (Fornecedor; na NFS-e, Prestador de serviço). A NFS-e de
+  comissão/produção **liga ao pagamento do fechamento** e não vira conta.
+  Excluir cancela junto a conta sem pagamento.
+- **Contas a pagar** (`titulos.js`): conta + parcelas (divididas em centavos,
+  sobra na última, mensais) + um pagamento valendo por parcela; pago acima
+  vira juros/multa, abaixo vira desconto; estorno e cancelamento com motivo;
+  conta com pagamento só muda descrição, categoria, fornecedor, observação e
+  linha digitável. Categorias: as quatro do relatório atual da contabilidade
+  + as já usadas (a lista completa vem na etapa 6).
+- **Competência fechada** recusa, pela rota, lançamento, pagamento, estorno,
+  documento e exclusão nela (`base.garantirAberta`). Anexar arquivo continua
+  livre (evidência pode chegar depois).
+- **Checklist**: as fontes "NF-e de entrada e NFS-e" e "Contas a pagar"
+  passaram a contar. Documental (uma por item, para justificar uma a uma):
+  NF-e sem o XML, NFS-e/recibo sem o arquivo, pagamento de fechamento do mês
+  sem NFS-e (a soma das NFS-e ligadas cobre o valor pago), pagamento do mês
+  sem nota/recibo/guia. Aviso (junta tudo): documento sem conta a pagar,
+  pagamento sem comprovante, parcela vencida sem pagamento. As pendências da
+  Contabilidade abrem o modal que as resolve.
+- **Documentos da competência** (`evidencias.js`): NF-e de saída (e de fora),
+  notas de devolução, documentos recebidos com os arquivos, comprovantes e
+  anexos soltos; o que falta aparece como FALTA. Os XML de saída/devolução
+  saem por `contabilidade.view` (quem fecha não precisa da permissão de NF-e).
+
+**Banco DEV (`BANCO=DEV`):** `localDataClient` não ignora coluna que não
+existe (a API remota ignora) e `safeDatabaseError` tira o nome da tabela do
+erro 42P01. Por isso a detecção de "falta o SQL" usa a tabela da chamada
+(`base.traduzir(e, tabela)`). Conferido num Postgres 17 descartável: os três
+SQLs (duas vezes cada), o backend em modo DEV lendo e gravando, e a trava do
+SQL simulado num banco "producao_x".
+
+**Tela:** 8 modais novos (Contas a pagar, Conta a pagar, Nova conta/Editar,
+Registrar pagamento, Documentos recebidos, Registrar documento — XML, chave,
+NFS-e, recibo —, Ficha do documento, Documentos da competência), no padrão;
+"Novo contato" abre o cadastro de Contatos por cima (pede `ctt.create`).
+Conferidos com o Electron (janela offscreen, CSS e scripts reais, API falsa):
+nenhum erro de console em 15 casos.
+
+**Testes:** `backend/contabilidade/{base,titulos,documentosRecebidos,arquivos}.test.js`,
+`checklist.test.js` (+3), `backend/contabilidadeContasPagar.test.js` (7, de
+ponta a ponta), `contabilidadeModulo.test.js` (+3) e `padraoControles.test.js`.
+
+**Em aberto (para o dono):**
+1. A NFS-e de cada pagamento de comissão/produção é **documental** (bloqueia
+   o pacote). Quem não emite nota (ex.: colaborador sem MEI) se resolve com
+   "Ignorar" + justificativa. Confirmar.
+2. Pagamento sem nota/recibo é documental; sem comprovante é só aviso (o
+   extrato prova o pagamento). Confirmar.
+3. P11 (a partir de qual mês a Contabilidade vale) continua em aberto.
+4. A lista de categorias da contabilidade (plano de contas) — pedir na etapa 6.
+
+**Próxima:** etapa 4 (extrato por OFX: contas, importação, movimentos) —
+depende de um OFX de exemplo do BB.

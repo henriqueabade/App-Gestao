@@ -21,10 +21,12 @@
     (erro crítico bloqueia o fechamento; pendência documental bloqueia o
     pacote e o envio; aviso não bloqueia), o checklist por fonte — só com o
     que o sistema já controla: NF-e de saída, recebimentos, comissões e
-    produção, devoluções; extrato, documentos recebidos, contas a pagar e
-    conciliação aparecem como "ainda não integrado" — a lista de pendências
-    e a atividade do módulo. Cada botão/cartão traz `data-ctb-acao`: quem
-    ainda não tem função real abre o aviso "em implementação".
+    produção, devoluções, documentos recebidos e contas a pagar (etapas 2 e
+    3); extrato e conciliação aparecem como "ainda não integrado" — a lista
+    de pendências e a atividade do módulo. Contas a pagar, documentos
+    recebidos e os documentos da competência abrem os modais deles. Cada
+    botão/cartão traz `data-ctb-acao`: quem ainda não tem função real abre o
+    aviso "em implementação".
   -->
   <div class="modulo-container ctl-padrao contabilidade-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
@@ -168,6 +170,18 @@
           <div class="ctb-painel__titulo"><h2>Ações</h2></div>
         </header>
         <div class="ctb-acoes">
+          <button type="button" class="ctb-acao" data-ctb-acao="contas-pagar">
+            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Contas a pagar</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.documento.registrar" data-ctb-acao="registrar-documento">
+            <i class="fas fa-file-signature" aria-hidden="true"></i><span>Registrar NF-e, NFS-e ou recibo</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="documentos-recebidos">
+            <i class="fas fa-file-import" aria-hidden="true"></i><span>Documentos fiscais recebidos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="evidencias">
+            <i class="fas fa-folder-open" aria-hidden="true"></i><span>Documentos da competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.fechar" data-ctb-acao="fechar">
             <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
@@ -186,12 +200,6 @@
           <!-- Fala com o Banco do Brasil: azul escuro do BB só quando existir; até lá é aviso. -->
           <button type="button" class="ctb-acao" data-ctb-acao="sincronizar-extrato">
             <i class="fas fa-university" aria-hidden="true"></i><span>Sincronizar extrato do BB</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="documentos-recebidos">
-            <i class="fas fa-file-import" aria-hidden="true"></i><span>Documentos fiscais recebidos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="contas-pagar">
-            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Contas a pagar</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
             <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação e classificação</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
@@ -220,8 +228,8 @@
         </header>
         <ol class="ctb-roteiro">
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">1</span><div><strong>Base do módulo</strong><span>Menu, permissões, checklist com o que já existe, pendências e fechamento</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada e NFS-e à mão, títulos e pagamentos (os contatos já estão prontos)</span></div></li>
+          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
+          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada (XML ou chave), NFS-e, recibos e guias; contas, parcelas e pagamentos</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">4</span><div><strong>Extrato por OFX</strong><span>Contas, importação e a tela de movimentações</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>

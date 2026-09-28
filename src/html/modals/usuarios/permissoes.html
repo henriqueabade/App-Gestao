@@ -4667,6 +4667,56 @@
                   </div>
 
                   <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Documentos e arquivos</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="registrar documento nfe entrada nfse recibo guia anexar arquivo comprovante">
+                        <input type="checkbox" name="contabilidade.documento.registrar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Registrar documentos e anexar arquivos</span>
+                          <p class="text-sm text-gray-400">NF-e de entrada (XML ou chave), NFS-e, recibos e guias; anexar comprovantes e evidências</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir documento arquivo motivo">
+                        <input type="checkbox" name="contabilidade.documento.excluir" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Excluir documento ou arquivo</span>
+                          <p class="text-sm text-gray-400">Tira um documento recebido ou um arquivo, com motivo (o histórico fica)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Contas a pagar</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="lancar conta a pagar fornecedor parcelas">
+                        <input type="checkbox" name="contabilidade.pagar.lancar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Lançar contas a pagar</span>
+                          <p class="text-sm text-gray-400">Criar e alterar a conta do fornecedor e as parcelas</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar pagamento parcela comprovante">
+                        <input type="checkbox" name="contabilidade.pagar.pagar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Registrar pagamento</span>
+                          <p class="text-sm text-gray-400">Dizer quando e como a parcela foi paga, com o comprovante</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="estornar pagamento cancelar conta motivo">
+                        <input type="checkbox" name="contabilidade.pagar.estornar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Estornar pagamento e cancelar conta</span>
+                          <p class="text-sm text-gray-400">Desfazer um pagamento registrado ou cancelar a conta, com motivo</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
                     <h4 class="text-sm font-semibold text-gray-300 mb-3">Pacote e configuração (etapas seguintes)</h4>
                     <div class="grid grid-cols-1 gap-4">
                       <label class="usuarios-permissoes-item" data-search="gerar relatorio pacote zip contabilidade enviar">

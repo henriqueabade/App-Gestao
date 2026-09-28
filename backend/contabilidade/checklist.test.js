@@ -125,9 +125,11 @@ test('montar: críticas primeiro e ignoradas por último; a contagem, o progress
   assert.deepEqual(p.contagem, { critico: 2, documental: 2, aviso: 0, ignoradas: 0, total: 4 });
   assert.deepEqual(p.fontes.map(f => [f.chave, f.estado, f.pendencias]), [
     ['nfe_saida', 'critico', 3], ['recebimentos', 'pendente', 1], ['fechamentos', 'ok', 0], ['devolucoes', 'ok', 0],
-    ['extrato', 'indisponivel', 0], ['documentos_recebidos', 'indisponivel', 0], ['contas_pagar', 'indisponivel', 0], ['conciliacao', 'indisponivel', 0]
+    ['documentos_recebidos', 'indisponivel', 0], ['contas_pagar', 'indisponivel', 0], ['extrato', 'indisponivel', 0], ['conciliacao', 'indisponivel', 0]
   ]);
-  assert.match(p.fontes[4].nota, /API de extratos do BB/);
+  // Sem as tabelas das etapas 2 e 3 (aqui não vieram), as fontes novas dizem qual SQL falta.
+  assert.match(p.fontes[4].nota, /sql\/contabilidade_contas_pagar\.sql/);
+  assert.match(p.fontes[6].nota, /API de extratos do BB/);
   assert.deepEqual(p.progresso, { ok: 2, total: 4 });
   assert.equal(p.situacao.status, 'aberta');
   assert.deepEqual(p.bloqueios.fechar, ['2 erros críticos a resolver (erro crítico não se ignora).']);
@@ -190,4 +192,119 @@ test('competência inválida cai no mês de hoje; sql pendente vai na resposta',
   assert.equal(p.sql_pendente, true);
   assert.equal(ck.competenciaValida('2026-13', HOJE), '2026-09');
   assert.equal(ck.competenciaValida('2025-01', HOJE), '2025-01');
+});
+
+// ------------------------------------------------------------- etapas 2 e 3
+
+const titulosMod = require('./titulos');
+
+/** Agosto/2026: uma NF-e com XML e conta, uma só pela chave, uma NFS-e sem PDF, um recibo sem conta; contas e pagamentos. */
+function pagarDeAgosto(extra = {}) {
+  const base = {
+    titulos: [
+      { id: 1, contato_id: 7, documento_recebido_id: 20, descricao: 'Vidros', valor_total: 1200, competencia: '2026-08', status: 'aberto' },
+      { id: 2, contato_id: null, documento_recebido_id: null, descricao: 'Frete avulso', valor_total: 150, competencia: '2026-08', status: 'aberto' },
+      { id: 3, contato_id: null, documento_recebido_id: null, descricao: 'Aluguel', valor_total: 2000, competencia: '2026-08', status: 'aberto' }
+    ],
+    parcelas: [
+      { id: 11, titulo_id: 1, numero: 1, vencimento: '2026-08-20', valor: 600 },
+      { id: 12, titulo_id: 1, numero: 2, vencimento: '2026-09-20', valor: 600 },
+      { id: 21, titulo_id: 2, numero: 1, vencimento: '2026-08-15', valor: 150 },
+      { id: 31, titulo_id: 3, numero: 1, vencimento: '2026-08-05', valor: 2000 }
+    ],
+    pagamentos: [
+      { id: 100, parcela_id: 11, titulo_id: 1, data_pagamento: '2026-08-20', competencia: '2026-08', valor_pago: 600, forma: 'Pix' },
+      { id: 101, parcela_id: 21, titulo_id: 2, data_pagamento: '2026-08-15', competencia: '2026-08', valor_pago: 150, forma: 'Dinheiro' }
+    ],
+    contatos: new Map([['7', { id: 7, nome: 'Vidros Norte', cnpj: '57248237000103' }]])
+  };
+  return {
+    titulos: titulosMod.montarTodos(base, HOJE),
+    contatos: base.contatos,
+    documentos: [
+      { id: 20, tipo: 'nfe', origem: 'xml', serie: '1', numero: '1234', contato_id: 7, data_emissao: '2026-08-10', competencia: '2026-08', valor_total: 1200 },
+      { id: 21, tipo: 'nfe', origem: 'chave', serie: '1', numero: '99', emitente_nome: 'Madeiras Silva', data_emissao: '2026-08-12', competencia: '2026-08', valor_total: 300 },
+      { id: 22, tipo: 'nfse', origem: 'manual', numero: '45', emitente_nome: 'Ana Pintura', data_emissao: '2026-08-15', competencia: '2026-08', valor_total: 400, financeiro_pagamento_id: 70 },
+      { id: 23, tipo: 'outro', especie: 'recibo', origem: 'manual', emitente_nome: 'Chaveiro', data_emissao: '2026-08-18', competencia: '2026-08', valor_total: 80 },
+      { id: 24, tipo: 'nfe', origem: 'chave', numero: '5', emitente_nome: 'Excluída', data_emissao: '2026-08-18', competencia: '2026-08', valor_total: 5, excluido_em: '2026-08-19' }
+    ],
+    arquivosMapa: new Map([
+      ['documento_recebido:20', [{ id: 1, categoria: 'xml_nfe' }]],
+      ['documento_recebido:23', [{ id: 2, categoria: 'recibo' }]],
+      ['pagamento:100', [{ id: 3, categoria: 'comprovante' }]]
+    ]),
+    pagamentosFechamento: new Map([
+      ['70', { id: 70, rotulo: 'Comissões de julho/2026 — Ana (CMS)', valor: 1000, data: '2026-08-10' }],
+      ['71', { id: 71, rotulo: 'Produção de julho/2026', valor: 500, data: '2026-08-12' }],
+      ['72', { id: 72, rotulo: 'Comissões de agosto/2026 — Ana (CMS)', valor: 900, data: '2026-09-10' }]
+    ]),
+    ...extra
+  };
+}
+
+test('NF-e de entrada e NFS-e: falta de XML e de arquivo por documento; NFS-e que falta de cada pagamento de fechamento; documento sem conta junta num aviso', () => {
+  const r = ck.fonteDocumentosRecebidos({ pagar: pagarDeAgosto(), competencia: COMP, hoje: HOJE });
+  assert.deepEqual(r.pendencias.map(p => [p.nivel, p.chave, p.filtro.acao]), [
+    ['documental', 'docrec_sem_xml_21', 'documento-recebido'],
+    ['documental', 'docrec_sem_arquivo_22', 'documento-recebido'],
+    ['documental', 'nfse_fech_70', 'registrar-documento'],
+    ['documental', 'nfse_fech_71', 'registrar-documento'],
+    ['aviso', 'docrec_sem_conta', 'documentos-recebidos']
+  ]);
+  assert.equal(r.pendencias[0].titulo, 'NF-e 1/99 de Madeiras Silva sem o XML');
+  assert.match(r.pendencias[2].descricao.replace(/ /g, ' '), /R\$ 1\.000,00 pagos em 10\/08\/2026 · NFS-e registradas: R\$ 400,00/);
+  assert.deepEqual(r.pendencias[3].filtro, { acao: 'registrar-documento', tipo: 'nfse', financeiro_pagamento_id: 71 });
+  assert.equal(r.pendencias[4].titulo, '2 documentos sem conta a pagar', 'a NF-e só pela chave e o recibo (a NFS-e é do fechamento)');
+  assert.ok(r.pendencias.every(p => p.destino === 'contabilidade' && p.fonte === 'documentos_recebidos'));
+  assert.deepEqual(r.numeros, {
+    nfe: { quantidade: 2, total: 1500 }, nfse: { quantidade: 1, total: 400 }, outro: { quantidade: 1, total: 80 },
+    sem_arquivo: 2, sem_conta: 2, fechamentos_sem_nfse: 2
+  });
+  const semSql = ck.fonteDocumentosRecebidos({ pagar: null, competencia: COMP });
+  assert.match(semSql.indisponivel, /contabilidade_contas_pagar\.sql/);
+});
+
+test('contas a pagar: pagamento do mês sem nota/recibo é documental (um por pagamento); sem comprovante e vencidas são avisos', () => {
+  const r = ck.fonteContasPagar({ pagar: pagarDeAgosto(), competencia: COMP, hoje: HOJE });
+  assert.deepEqual(r.pendencias.map(p => [p.nivel, p.chave]), [
+    ['documental', 'pagar_sem_doc_101'],
+    ['aviso', 'pagar_sem_comprovante'],
+    ['aviso', 'pagar_vencidas']
+  ]);
+  assert.equal(r.pendencias[0].titulo, 'Pagamento sem nota ou recibo — Frete avulso');
+  assert.deepEqual(r.pendencias[0].filtro, { acao: 'conta-pagar', titulo_id: 2 });
+  assert.equal(r.pendencias[1].titulo, '1 pagamento sem comprovante');
+  assert.equal(r.pendencias[2].titulo, '1 parcela vencida sem pagamento registrado', 'o aluguel de 05/08; a de 20/09 ainda não venceu em agosto');
+  assert.deepEqual(r.numeros, {
+    pago_no_mes: { quantidade: 2, total: 750 }, vence_no_mes: { quantidade: 1, total: 2000 }, vencidas: 1, sem_comprovante: 1, sem_documento: 1
+  });
+  // Recibo anexado à conta resolve o "sem nota".
+  const comRecibo = pagarDeAgosto();
+  comRecibo.arquivosMapa.set('titulo:2', [{ id: 9, categoria: 'recibo' }]);
+  assert.deepEqual(ck.fonteContasPagar({ pagar: comRecibo, competencia: COMP, hoje: HOJE }).pendencias.map(p => p.chave), ['pagar_sem_comprovante', 'pagar_vencidas']);
+});
+
+test('montar com as etapas 2 e 3: as fontes novas entram na conta, no progresso e nos bloqueios do pacote', () => {
+  const p = ck.montar({
+    competencia: COMP, hoje: HOJE, notas: [], aguardando: { pedidos: [] },
+    receber: { recebido: {}, a_receber: {}, em_atraso: {}, a_conciliar: {}, pendencias: [] },
+    fechamentos: [{ tipo: 'comissao', competencia: COMP, total: 10, falta_pagar: 0 }, { tipo: 'producao', competencia: COMP, total: 10, falta_pagar: 0 }],
+    pagar: pagarDeAgosto()
+  });
+  assert.deepEqual(p.fontes.map(f => [f.chave, f.estado, f.pendencias]), [
+    ['nfe_saida', 'ok', 0], ['recebimentos', 'ok', 0], ['fechamentos', 'ok', 0], ['devolucoes', 'ok', 0],
+    ['documentos_recebidos', 'pendente', 5], ['contas_pagar', 'pendente', 3], ['extrato', 'indisponivel', 0], ['conciliacao', 'indisponivel', 0]
+  ]);
+  assert.deepEqual(p.contagem, { critico: 0, documental: 5, aviso: 3, ignoradas: 0, total: 8 });
+  assert.deepEqual(p.progresso, { ok: 4, total: 6 });
+  assert.equal(p.pode.fechar, true, 'documental não impede o fechamento');
+  assert.deepEqual(p.bloqueios.pacote, ['A competência precisa estar fechada.', '5 pendências documentais a resolver ou ignorar com justificativa.']);
+  // Ignorar a NFS-e da produção (o colaborador não emite) tira do bloqueio.
+  const ignorada = ck.montar({
+    competencia: COMP, hoje: HOJE, notas: [], aguardando: { pedidos: [] }, receber: { pendencias: [] },
+    fechamentos: [{ tipo: 'comissao', competencia: COMP, total: 10, falta_pagar: 0 }, { tipo: 'producao', competencia: COMP, total: 10, falta_pagar: 0 }],
+    pagar: pagarDeAgosto(), resolucoes: [{ id: 1, chave: 'nfse_fech_71', justificativa: 'Colaborador sem MEI', usuario_id: 3, criado_em: '2026-09-02T12:00:00Z' }]
+  });
+  assert.equal(ignorada.pendencias.find(x => x.chave === 'nfse_fech_71').ignorada, true);
+  assert.equal(ignorada.contagem.documental, 4);
 });

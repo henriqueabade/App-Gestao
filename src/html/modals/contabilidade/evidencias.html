@@ -1,0 +1,112 @@
+<!--
+  Documentos da competência (etapa 2): tudo o que prova o mês para a
+  contabilidade — NF-e de saída (e as de fora), notas de devolução,
+  documentos recebidos com os arquivos, comprovantes e o resto anexado —,
+  com a origem (oficial, interno, fornecido) e o que FALTA. É a base do
+  pacote (etapa 9). GET /api/contabilidade/evidencias?competencia=; os XML
+  das notas saem por /evidencias/xml/:tipo/:id e os anexos por /arquivos/:id.
+  "Anexar à competência" guarda um arquivo solto do mês (extrato em PDF,
+  contrato, guia) — contabilidade.documento.registrar.
+  Script: src/js/modals/contabilidade-modais.js (montarEvidencias).
+-->
+<div id="ctbEvidenciasOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbEvidTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbEvidTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-folder-open mr-2" aria-hidden="true"></i>Documentos da competência</h2>
+      <span id="ctbEvidRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbEvidCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbEvidCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbEvidCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbEvidCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbEvidCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbEvidGrupo" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbEvidGrupo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Tudo</option>
+              <option value="falta">Só o que falta</option>
+              <option value="saida">NF-e de saída</option>
+              <option value="devolucao">Notas de devolução</option>
+              <option value="recebidos">Documentos recebidos</option>
+              <option value="pagamentos">Comprovantes</option>
+              <option value="outros">Outros arquivos</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbEvidBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbEvidBusca" type="search" placeholder="Número, emitente, pedido…"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbEvidTotais">
+          <div class="ctb-total" data-total="oficial"><span class="ctb-total__rotulo">Oficiais</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">SEFAZ e banco</span></div>
+          <div class="ctb-total" data-total="interno"><span class="ctb-total__rotulo">Internos</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Gerados pelo app</span></div>
+          <div class="ctb-total" data-total="fornecido"><span class="ctb-total__rotulo">Fornecidos</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Anexados à mão</span></div>
+          <div class="ctb-total" data-total="falta" data-tom="bordo"><span class="ctb-total__rotulo">Faltam</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">XML ou arquivo</span></div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
+                <th class="px-4 py-3 text-left text-xs">Grupo</th>
+                <th class="px-4 py-3 text-left text-xs">Documento</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Origem</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbEvidLista"></tbody>
+          </table>
+        </div>
+
+        <div class="ctb-secao-modal" data-perm-hide="contabilidade.documento.registrar">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Anexar à competência</h3>
+          </div>
+          <div class="ctb-anexar">
+            <div>
+              <label for="ctbEvidAnexoCategoria" class="ctl-rotulo text-gray-300">Tipo</label>
+              <select id="ctbEvidAnexoCategoria" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="extrato">Extrato bancário</option>
+                <option value="guia">Guia de imposto</option>
+                <option value="contrato">Contrato</option>
+                <option value="comprovante">Comprovante de pagamento</option>
+                <option value="recibo">Recibo</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbEvidAnexoDescricao" class="ctl-rotulo text-gray-300">Descrição</label>
+              <input id="ctbEvidAnexoDescricao" type="text" maxlength="300" placeholder="Ex.: Extrato do BB de agosto"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbEvidAnexoArquivo" class="ctl-rotulo text-gray-300">Arquivo</label>
+              <input id="ctbEvidAnexoArquivo" type="file" accept=".pdf,.xml,.ofx,.png,.jpg,.jpeg,.xlsx,.csv" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+            </div>
+            <button id="ctbEvidAnexar" type="button" data-perm="contabilidade.documento.registrar" class="btn-neutral ctl-botao text-white">Anexar</button>
+          </div>
+        </div>
+
+        <div id="ctbEvidMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>

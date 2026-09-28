@@ -1,0 +1,92 @@
+<!--
+  A conta a pagar (etapa 3). Modal médio, aberto por cima da lista ou de uma
+  pendência. Mostra os dados da conta, as parcelas com o pagamento de cada
+  uma (Pagar / Estornar), os arquivos (nota, recibo, comprovante — anexar e
+  baixar) e o histórico. Lê GET /api/contabilidade/titulos/:id.
+  Editar abre conta-pagar-form.html por cima; Cancelar conta pede o motivo
+  (contabilidade.pagar.estornar) e só vale sem pagamento.
+  Script: src/js/modals/contabilidade-modais.js (montarContaPagar).
+-->
+<div id="ctbContaPagarOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbContaPagarTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbContaPagarTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-invoice-dollar mr-2" aria-hidden="true"></i>Conta a pagar</h2>
+      <span id="ctbContaPagarSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <dl id="ctbContaPagarDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Parcelas e pagamentos</h3>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Nº</th>
+                  <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-left text-xs">Pagamento</th>
+                  <th class="px-4 py-3 text-right text-xs">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="ctbContaPagarParcelas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Arquivos (nota, recibo, comprovante)</h3>
+          </div>
+          <ul id="ctbContaPagarArquivos" class="ctb-arquivos"></ul>
+          <div class="ctb-anexar" data-perm-hide="contabilidade.documento.registrar">
+            <div>
+              <label for="ctbContaPagarAnexoCategoria" class="ctl-rotulo text-gray-300">Tipo</label>
+              <select id="ctbContaPagarAnexoCategoria" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="nota">Nota fiscal (PDF)</option>
+                <option value="recibo">Recibo</option>
+                <option value="guia">Guia de imposto</option>
+                <option value="boleto">Boleto</option>
+                <option value="contrato">Contrato</option>
+                <option value="comprovante">Comprovante de pagamento</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbContaPagarAnexoDescricao" class="ctl-rotulo text-gray-300">Descrição</label>
+              <input id="ctbContaPagarAnexoDescricao" type="text" maxlength="300" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbContaPagarAnexoArquivo" class="ctl-rotulo text-gray-300">Arquivo</label>
+              <input id="ctbContaPagarAnexoArquivo" type="file" accept=".pdf,.xml,.png,.jpg,.jpeg" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+            </div>
+            <button id="ctbContaPagarAnexar" type="button" data-perm="contabilidade.documento.registrar" class="btn-neutral ctl-botao text-white">Anexar</button>
+          </div>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Histórico</h3>
+          </div>
+          <ol id="ctbContaPagarHistorico" class="ctb-historico"></ol>
+        </div>
+
+        <div id="ctbContaPagarMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbContaPagarCancelar" type="button" data-perm="contabilidade.pagar.estornar" class="btn-warning ctl-botao text-white">Cancelar conta</button>
+      <button id="ctbContaPagarEditar" type="button" data-perm="contabilidade.pagar.lancar" class="btn-primary ctl-botao text-white min-w-[160px]">Editar</button>
+    </footer>
+  </div>
+</div>

@@ -12,13 +12,9 @@
 const c = require('../financeiro/comum');
 const b = require('./base');
 const checklist = require('./checklist');
+const eventos = require('./eventos');
 
-const TIPOS = {
-  competencia_fechada: 'Competência fechada',
-  competencia_reaberta: 'Competência reaberta',
-  pendencia_ignorada: 'Pendência ignorada',
-  pendencia_restaurada: 'Pendência restaurada'
-};
+const { TIPOS, registrar } = eventos;
 
 const JUSTIFICATIVA_MINIMA = 10;
 
@@ -31,19 +27,6 @@ function exigirJustificativa(texto, oQue) {
   const j = c.texto(texto, 1000);
   if (j.length < JUSTIFICATIVA_MINIMA) throw c.erro(`Escreva a justificativa ${oQue} (pelo menos ${JUSTIFICATIVA_MINIMA} caracteres).`);
   return j;
-}
-
-async function registrar(api, { tipo, competencia, descricao, dados = null, usuarioId = null }) {
-  try {
-    await b.inserir(api, 'contabil_eventos', {
-      tipo, competencia, descricao: c.texto(descricao, 500),
-      dados: dados ? JSON.stringify(dados) : null, usuario_id: usuarioId, criado_em: c.agora()
-    });
-    return true;
-  } catch (e) {
-    console.error('[contabilidade] não foi possível registrar o histórico:', e?.message || e);
-    return false;
-  }
 }
 
 /** A foto do painel que fica gravada no fechamento (números, não a tela inteira). */
@@ -145,18 +128,9 @@ async function restaurarPendencia({ api, competencia, chave, usuarioId = null })
   return { competencia: comp, chave: chaveLimpa, ignorada: false };
 }
 
-/** Os eventos mais recentes (da competência, quando informada), com quem fez, já em horário de Brasília. */
-async function atividade({ api, competencia = null, limite = 50 }) {
-  const query = c.competenciaValida(competencia) ? { competencia: String(competencia) } : {};
-  const linhas = (await b.ler(api, 'contabil_eventos', query))
-    .sort((x, y) => String(y.criado_em).localeCompare(String(x.criado_em)) || Number(y.id) - Number(x.id))
-    .slice(0, Math.max(1, Math.min(500, Number(limite) || 50)));
-  const nomes = await b.nomesDeUsuarios(api, linhas.map(e => e.usuario_id));
-  return linhas.map(e => ({
-    id: e.id, tipo: e.tipo, rotulo: TIPOS[e.tipo] || e.tipo, competencia: e.competencia || null,
-    descricao: e.descricao || '', dados: c.jsonDe(e.dados), usuario: nomes.get(String(e.usuario_id)) || null,
-    quando: b.instanteBR(e.criado_em)
-  }));
+/** Os eventos mais recentes da competência (ou de tudo), com quem fez. */
+function atividade({ api, competencia = null, limite = 50 }) {
+  return eventos.atividade({ api, competencia, limite });
 }
 
 /** As competências que já têm linha (fechadas, reabertas), da mais recente para a mais antiga. */

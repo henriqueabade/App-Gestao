@@ -2459,6 +2459,36 @@ const PERMISSIONS_CATALOG = {
         "desc": "Ignora uma pendência documental ou um aviso, com justificativa (erro crítico não se ignora)"
       },
       {
+        "key": "contabilidade.documento.registrar",
+        "column": "acao_documento_registrar",
+        "label": "Registrar documentos e anexar arquivos",
+        "desc": "NF-e de entrada (XML ou chave), NFS-e, recibos e guias; anexar comprovantes e evidências"
+      },
+      {
+        "key": "contabilidade.documento.excluir",
+        "column": "acao_documento_excluir",
+        "label": "Excluir documento ou arquivo",
+        "desc": "Tira um documento recebido ou um arquivo, com motivo (o histórico fica)"
+      },
+      {
+        "key": "contabilidade.pagar.lancar",
+        "column": "acao_pagar_lancar",
+        "label": "Lançar contas a pagar",
+        "desc": "Criar e alterar a conta do fornecedor e as parcelas"
+      },
+      {
+        "key": "contabilidade.pagar.pagar",
+        "column": "acao_pagar_pagar",
+        "label": "Registrar pagamento",
+        "desc": "Dizer quando e como a parcela foi paga, com o comprovante"
+      },
+      {
+        "key": "contabilidade.pagar.estornar",
+        "column": "acao_pagar_estornar",
+        "label": "Estornar pagamento e cancelar conta",
+        "desc": "Desfazer um pagamento registrado ou cancelar a conta, com motivo"
+      },
+      {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",

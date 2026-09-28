@@ -1,5 +1,5 @@
 /**
- * Módulo Contabilidade — Fechamento do mês (etapa 1).
+ * Módulo Contabilidade — Fechamento do mês (etapas 1 a 3).
  *
  * Tudo vem de GET /api/contabilidade/painel da competência escolhida: a
  * situação (aberta, fechada, reaberta), a contagem das pendências nas três
@@ -7,12 +7,16 @@
  * documental bloqueia o pacote e o envio; aviso não bloqueia), o checklist
  * por fonte — só com o que o sistema já controla — a lista de pendências
  * (com "Ignorar" para documental/aviso, com justificativa) e a atividade do
- * módulo. Fechar e Reabrir são reais (modais próprios); relatório, pacote,
- * envio, extrato, documentos recebidos, contas a pagar, conciliação e
- * configuração abrem o aviso "em implementação" até a etapa deles.
+ * módulo. Fechar, Reabrir, Contas a pagar, Documentos recebidos (registrar
+ * NF-e, NFS-e, recibo) e Documentos da competência são reais (modais
+ * próprios, src/js/modals/contabilidade-modais.js); relatório, pacote,
+ * envio, extrato, conciliação e configuração abrem o aviso "em
+ * implementação" até a etapa deles.
  *
  * As pendências que vêm do Financeiro (NF-e, cobrança, fechamentos,
- * reembolsos) levam para lá: o botão da linha abre o módulo Financeiro.
+ * reembolsos) levam para lá: o botão da linha abre o módulo Financeiro. As
+ * da própria Contabilidade (documento sem XML, pagamento sem nota…) abrem o
+ * modal que as resolve.
  *
  * O menu reexecuta este arquivo a cada visita (src/js/menu.js injeta o script
  * de novo, embrulhado numa IIFE), então nada aqui registra ouvinte em
@@ -138,13 +142,25 @@ const CTB_ACOES = {
     'filtrar-fonte': { rotulo: 'Filtrar por fonte', abrir: (m, extra) => ctbFiltrar(m, { fonte: extra?.fonte || null }) },
     'pendencias-todas': { rotulo: 'Todas as pendências', abrir: m => ctbMostrarTodas(m, 'pendencias') },
     'atividade-todas': { rotulo: 'Toda a atividade', abrir: m => ctbMostrarTodas(m, 'atividade') },
+    // Etapas 2 e 3: documentos, evidências e contas a pagar. `extra` é o
+    // filtro da pendência (titulo_id, documento_id, visao…) ou vazio.
+    'contas-pagar': { rotulo: 'Contas a pagar', abrir: (m, extra) => ctbAbrirModal('contas-pagar', m, { visao: extra?.visao || null }) },
+    'conta-pagar': { rotulo: 'Conta a pagar', abrir: (m, extra) => ctbAbrirModal('conta-pagar', m, { titulo_id: extra?.titulo_id ?? null }) },
+    'nova-conta': { rotulo: 'Nova conta a pagar', abrir: m => ctbAbrirModal('conta-pagar-form', m, {}) },
+    'registrar-documento': {
+        rotulo: 'Registrar documento recebido',
+        abrir: (m, extra) => ctbAbrirModal('registrar-documento', m, { tipo: extra?.tipo || null, financeiro_pagamento_id: extra?.financeiro_pagamento_id ?? null })
+    },
+    'documentos-recebidos': { rotulo: 'Documentos fiscais recebidos', abrir: m => ctbAbrirModal('documentos-recebidos', m, {}) },
+    'documento-recebido': { rotulo: 'Documento recebido', abrir: (m, extra) => ctbAbrirModal('documento-recebido', m, { documento_id: extra?.documento_id ?? null }) },
+    'evidencias': { rotulo: 'Documentos da competência', abrir: m => ctbAbrirModal('evidencias', m, {}) },
+    // A pendência da própria Contabilidade: o filtro diz qual modal abre e com quê.
+    'abrir-pendencia': { rotulo: 'Resolver pendência', abrir: (m, extra) => ctbAbrirDaPendencia(m, extra?.pendencia) },
     // Etapas seguintes (docs/contabilidade-fechamento-plano.md, seção N).
     'relatorio': { rotulo: 'Relatório mensal' },
     'pacote': { rotulo: 'Gerar pacote (ZIP)' },
     'enviar': { rotulo: 'Enviar à contabilidade' },
     'sincronizar-extrato': { rotulo: 'Sincronizar extrato do BB' },
-    'documentos-recebidos': { rotulo: 'Documentos fiscais recebidos' },
-    'contas-pagar': { rotulo: 'Contas a pagar' },
     'conciliacao': { rotulo: 'Conciliação e classificação' },
     'configuracao': { rotulo: 'Configurações da contabilidade' }
 };
@@ -154,8 +170,26 @@ const CTB_ACOES = {
 const CTB_MODAIS = {
     'fechar': { html: 'modals/contabilidade/fechar.html', overlay: 'ctbFechar' },
     'reabrir': { html: 'modals/contabilidade/reabrir.html', overlay: 'ctbReabrir' },
-    'ignorar-pendencia': { html: 'modals/contabilidade/ignorar-pendencia.html', overlay: 'ctbIgnorarPendencia' }
+    'ignorar-pendencia': { html: 'modals/contabilidade/ignorar-pendencia.html', overlay: 'ctbIgnorarPendencia' },
+    'contas-pagar': { html: 'modals/contabilidade/contas-pagar.html', overlay: 'ctbContasPagar' },
+    'conta-pagar': { html: 'modals/contabilidade/conta-pagar.html', overlay: 'ctbContaPagar' },
+    'conta-pagar-form': { html: 'modals/contabilidade/conta-pagar-form.html', overlay: 'ctbContaPagarForm' },
+    'pagar-parcela': { html: 'modals/contabilidade/pagar-parcela.html', overlay: 'ctbPagarParcela' },
+    'documentos-recebidos': { html: 'modals/contabilidade/documentos-recebidos.html', overlay: 'ctbDocumentosRecebidos' },
+    'registrar-documento': { html: 'modals/contabilidade/registrar-documento.html', overlay: 'ctbRegistrarDocumento' },
+    'documento-recebido': { html: 'modals/contabilidade/documento-recebido.html', overlay: 'ctbDocumentoRecebido' },
+    'evidencias': { html: 'modals/contabilidade/evidencias.html', overlay: 'ctbEvidencias' }
 };
+
+/** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */
+function ctbAbrirDaPendencia(moduleEl, pendencia) {
+    const filtro = pendencia?.filtro || {};
+    if (!filtro.acao || !CTB_ACOES[filtro.acao] || filtro.acao === 'abrir-pendencia') {
+        ctbAvisarEmImplementacao('abrir-pendencia');
+        return;
+    }
+    ctbExecutarAcao(filtro.acao, moduleEl, filtro);
+}
 const CTB_SCRIPT_MODAIS = '../js/modals/contabilidade-modais.js';
 
 function ctbAbrirModal(chave, moduleEl, extra = {}) {
@@ -450,6 +484,14 @@ function ctbRenderizarPendencias(moduleEl) {
         texto.appendChild(ctbCriar('span', 'ctb-pendencia__descricao', descricao));
 
         const acoes = ctbCriar('div', 'ctb-pendencia__acoes');
+        if (p.destino === 'contabilidade') {
+            const abrir = ctbCriar('button', 'btn-secondary text-white ctl-botao ctl-botao--pequeno', p.acao || 'Abrir');
+            abrir.type = 'button';
+            abrir.dataset.ctbAcao = 'abrir-pendencia';
+            abrir.title = 'Abre aqui mesmo, na Contabilidade';
+            abrir.ctbPendencia = p;
+            acoes.appendChild(abrir);
+        }
         if (p.destino === 'financeiro') {
             const ir = ctbCriar('button', 'btn-neutral text-white ctl-botao ctl-botao--pequeno', p.acao || 'Financeiro');
             ir.type = 'button';

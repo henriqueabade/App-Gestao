@@ -1,0 +1,61 @@
+<!--
+  Registrar o pagamento de uma parcela (etapa 3). Modal pequeno, por cima da
+  lista ou da conta. O valor pago é o que saiu do banco: acima da parcela
+  vira juros/multa, abaixo vira desconto (a diferença aparece antes de
+  gravar). O comprovante é opcional e fica ligado ao pagamento e à conta.
+  Grava por POST /api/contabilidade/parcelas/:id/pagar (contabilidade.pagar.pagar).
+  Script: src/js/modals/contabilidade-modais.js (montarPagarParcela).
+-->
+<div id="ctbPagarParcelaOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbPagarTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbPagarTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-money-check-alt mr-2" aria-hidden="true"></i>Registrar pagamento</h2>
+      <span id="ctbPagarSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <dl id="ctbPagarDados" class="ctb-dados glass-surface rounded-xl border border-white/10"></dl>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="ctbPagarData" class="ctl-rotulo text-gray-300">Data do pagamento <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbPagarData" type="date"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="ctbPagarValor" class="ctl-rotulo text-gray-300">Valor pago <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbPagarValor" type="text" inputmode="decimal" placeholder="0,00"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <p id="ctbPagarDiferenca" class="text-xs text-gray-400 mt-2"></p>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbPagarForma" class="ctl-rotulo text-gray-300">Forma de pagamento <span class="ctb-obrigatorio">*</span></label>
+            <select id="ctbPagarForma" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Selecione</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbPagarObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+            <textarea id="ctbPagarObservacao" rows="2" maxlength="500" placeholder="Opcional"
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbPagarComprovante" class="ctl-rotulo text-gray-300">Comprovante (PDF ou imagem)</label>
+            <input id="ctbPagarComprovante" type="file" accept=".pdf,.png,.jpg,.jpeg" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+            <p class="text-xs text-gray-400 mt-2">Opcional: o extrato do banco também prova o pagamento, mas o comprovante ajuda a contabilidade.</p>
+          </div>
+        </div>
+
+        <div id="ctbPagarMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbPagarConfirmar" type="button" data-perm="contabilidade.pagar.pagar" class="btn-success ctl-botao min-w-[160px]">Registrar pagamento</button>
+    </footer>
+  </div>
+</div>
