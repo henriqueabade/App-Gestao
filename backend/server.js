@@ -41,7 +41,7 @@ app.use(cors());
 // para eles também.
 const jsonPadrao = express.json({ limit: '3mb' });
 const jsonGrande = express.json({ limit: '30mb' });
-const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes|contatos)\/csv\/|contabilidade\/(arquivos|documentos|parcelas\/\d+\/pagar))/;
+const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes|contatos)\/csv\/|contabilidade\/(arquivos|documentos|parcelas\/\d+\/pagar|extrato\/(previa|importar)))/;
 app.use((req, res, next) => (CORPO_GRANDE.test(req.path) ? jsonGrande : jsonPadrao)(req, res, next));
 
 if (isDev) {

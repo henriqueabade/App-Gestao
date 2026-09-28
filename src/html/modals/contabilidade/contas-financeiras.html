@@ -1,0 +1,116 @@
+<!--
+  Contas do banco (etapa 4). Modal médio. As contas de onde vem o extrato
+  (GET /api/contabilidade/contas-financeiras) e o cadastro/edição
+  (POST e PUT, contabilidade.contas.gerir). A conta dos boletos (Configuração
+  de cobrança do Financeiro) aparece como sugestão enquanto não estiver
+  cadastrada. O checklist cobra o extrato do mês de cada conta CORRENTE
+  ativa; aplicação e caixa não entram na cobrança (etapa 12 para o CDB).
+  Script: src/js/modals/contabilidade-modais.js (montarContasFinanceiras).
+-->
+<div id="ctbContasFinanceirasOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbContasFinTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbContasFinTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-landmark mr-2" aria-hidden="true"></i>Contas do banco</h2>
+      <span id="ctbContasFinRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbContasFinSugestao" class="hidden ctb-arquivo" hidden>
+          <i class="fas fa-lightbulb" aria-hidden="true"></i>
+          <div class="ctb-arquivo__texto">
+            <span class="ctb-arquivo__nome">A conta dos boletos ainda não está aqui</span>
+            <span id="ctbContasFinSugestaoTexto" class="ctb-arquivo__nota">—</span>
+          </div>
+          <div class="ctb-arquivo__acoes">
+            <button id="ctbContasFinUsarSugestao" type="button" data-perm="contabilidade.contas.gerir" class="btn-secondary ctl-botao ctl-botao--pequeno text-white">Usar a conta dos boletos</button>
+          </div>
+        </div>
+
+        <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Nome</th>
+                <th class="px-4 py-3 text-left text-xs">Banco, agência e conta</th>
+                <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbContasFinLista"></tbody>
+          </table>
+        </div>
+
+        <div class="ctb-secao-modal" data-perm-hide="contabilidade.contas.gerir">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 id="ctbContasFinFormTitulo" class="ctl-secao text-[var(--color-primary)]">Nova conta</h3>
+            <button id="ctbContasFinNova" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">Cadastrar outra</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2">
+              <label for="ctbContasFinNome" class="ctl-rotulo text-gray-300">Nome <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbContasFinNome" type="text" maxlength="80" placeholder="Ex.: BB — conta corrente"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbContasFinTipo" class="ctl-rotulo text-gray-300">Tipo</label>
+              <select id="ctbContasFinTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="corrente">Conta corrente</option>
+                <option value="aplicacao">Aplicação</option>
+                <option value="caixa">Caixa</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbContasFinBanco" class="ctl-rotulo text-gray-300">Banco (código)</label>
+              <input id="ctbContasFinBanco" type="text" inputmode="numeric" maxlength="3" placeholder="001"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <p id="ctbContasFinBancoNome" class="text-xs text-gray-400 mt-2">001 = Banco do Brasil</p>
+            </div>
+            <div>
+              <label for="ctbContasFinAgencia" class="ctl-rotulo text-gray-300">Agência e dígito</label>
+              <div class="flex gap-2">
+                <input id="ctbContasFinAgencia" type="text" inputmode="numeric" maxlength="6" placeholder="1234" aria-label="Agência"
+                       class="w-full min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="ctbContasFinAgenciaDv" type="text" maxlength="1" placeholder="DV" aria-label="Dígito da agência"
+                       class="w-16 flex-shrink-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+            <div>
+              <label for="ctbContasFinConta" class="ctl-rotulo text-gray-300">Conta com o dígito</label>
+              <input id="ctbContasFinConta" type="text" inputmode="numeric" maxlength="20" placeholder="12345-6"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbContasFinSaldo" class="ctl-rotulo text-gray-300">Saldo inicial</label>
+              <input id="ctbContasFinSaldo" type="text" inputmode="decimal" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbContasFinSaldoData" class="ctl-rotulo text-gray-300">Data do saldo</label>
+              <input id="ctbContasFinSaldoData" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="flex items-end">
+              <label class="flex items-center gap-2 text-sm text-gray-300"><input id="ctbContasFinAtiva" type="checkbox" checked class="w-4 h-4" /> Conta ativa</label>
+            </div>
+            <div class="md:col-span-3">
+              <label for="ctbContasFinObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+              <textarea id="ctbContasFinObservacao" rows="2" maxlength="500" placeholder="Opcional"
+                        class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div id="ctbContasFinMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbContasFinSalvar" type="button" data-perm="contabilidade.contas.gerir" class="btn-primary ctl-botao text-white min-w-[160px]">Salvar conta</button>
+    </footer>
+  </div>
+</div>

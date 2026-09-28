@@ -152,7 +152,9 @@ const PADRONIZADOS = [
       'fechar', 'reabrir', 'ignorar-pendencia',
       // 28/09/2026 — etapas 2 e 3: contas a pagar, documentos e evidências.
       'contas-pagar', 'conta-pagar', 'conta-pagar-form', 'pagar-parcela',
-      'documentos-recebidos', 'registrar-documento', 'documento-recebido', 'evidencias'
+      'documentos-recebidos', 'registrar-documento', 'documento-recebido', 'evidencias',
+      // 28/09/2026 — etapa 4: extrato por OFX e as contas do banco.
+      'extrato', 'importar-extrato', 'contas-financeiras'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

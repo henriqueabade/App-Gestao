@@ -1,11 +1,11 @@
 /**
- * Checklist do fechamento contábil (etapas 1 a 3): o que a tela da
+ * Checklist do fechamento contábil (etapas 1 a 4): o que a tela da
  * Contabilidade mostra de uma competência, calculado SÓ com o que o sistema
  * já controla — NF-e de saída (próprias e de fora), recebimentos e cobrança,
  * fechamentos de comissões e produção, devoluções e reembolsos, e (etapa 3)
- * os documentos recebidos e as contas a pagar. Extrato e conciliação
- * aparecem como fontes "ainda não integradas", para a tela já ter o desenho
- * inteiro.
+ * os documentos recebidos e as contas a pagar, e (etapa 4) o extrato
+ * bancário. A conciliação aparece como fonte "ainda não integrada", para a
+ * tela já ter o desenho inteiro.
  *
  * As contas ficam em funções puras sobre listas já lidas (`montar`); só
  * `carregar` fala com a API. Cada pendência sai com a severidade do dono
@@ -27,6 +27,7 @@ const reembolsos = require('../devolucoes/reembolsos');
 const titulos = require('./titulos');
 const documentos = require('./documentosRecebidos');
 const arquivos = require('./arquivos');
+const extratoMod = require('./extrato/extrato');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -39,7 +40,7 @@ const FONTES = [
   { chave: 'devolucoes', titulo: 'Devoluções e reembolsos', icone: 'fa-undo-alt' },
   { chave: 'documentos_recebidos', titulo: 'NF-e de entrada e NFS-e', icone: 'fa-file-import' },
   { chave: 'contas_pagar', titulo: 'Contas a pagar', icone: 'fa-file-invoice-dollar' },
-  { chave: 'extrato', titulo: 'Extrato bancário (BB)', icone: 'fa-university', etapa: 'Etapas 4 e 11 — OFX e API de extratos do BB' },
+  { chave: 'extrato', titulo: 'Extrato bancário', icone: 'fa-university' },
   { chave: 'conciliacao', titulo: 'Conciliação e classificação', icone: 'fa-check-double', etapa: 'Etapas 5 e 6 — extrato × documentos, plano de contas' }
 ];
 
@@ -354,6 +355,56 @@ function fonteContasPagar({ pagar, competencia, hoje }) {
   };
 }
 
+// ------------------------------------------------------------- extrato bancário
+
+const SEM_SQL_EXTRATO = `Falta rodar ${b.SQL_ARQUIVO_EXTRATO} no banco e reiniciar a API.`;
+
+/**
+ * O extrato das contas correntes ativas cobre o mês? Mês terminado sem o
+ * extrato inteiro = documental, uma pendência por conta (o que falta, de que
+ * dia a que dia). Sem conta cadastrada = documental. No mês em curso, só o
+ * resumo. `extrato` null = falta o SQL da etapa 4. Pura.
+ */
+function fonteExtrato({ extrato, competencia, hoje, encerrada }) {
+  if (!extrato) return { indisponivel: SEM_SQL_EXTRATO, resumo: [], numeros: null, pendencias: [] };
+  const correntes = c.lista(extrato.contas).filter(x => x && x.ativa !== false && x.ativa !== 'false' && (x.tipo || 'corrente') === 'corrente');
+  const pend = [];
+  if (!correntes.length) {
+    pend.push(pendencia({
+      nivel: 'documental', chave: 'extrato_sem_conta', fonte: 'extrato', titulo: 'Cadastre a conta do banco',
+      descricao: 'Sem a conta corrente cadastrada não dá para importar o extrato do mês', data: b.ultimoDia(competencia),
+      acao: 'Cadastrar', destino: 'contabilidade', filtro: { acao: 'contas-financeiras' }
+    }));
+  }
+  const coberturas = correntes.map(conta => ({ conta, cob: extratoMod.cobertura(c.lista(extrato.importacoes).filter(i => String(i.conta_id) === String(conta.id)), competencia, { hoje }) }));
+  if (encerrada) {
+    for (const { conta, cob } of coberturas) {
+      if (cob.completa) continue;
+      const nada = !cob.de;
+      pend.push(pendencia({
+        nivel: 'documental', chave: `extrato_${conta.id}`, fonte: 'extrato',
+        titulo: `Extrato de ${c.rotuloCompetencia(competencia)} — ${conta.nome}${nada ? ' não importado' : ' incompleto'}`,
+        descricao: `Falta: ${cob.faltas.map(extratoMod.faixaImpressa).join(', ')} · importe o OFX do mês (Gerenciador Financeiro do BB)`,
+        data: b.ultimoDia(competencia), acao: 'Importar', destino: 'contabilidade', filtro: { acao: 'importar-extrato', conta_id: conta.id }
+      }));
+    }
+  }
+  const doMes = c.lista(extrato.movimentos).filter(m => m && m.competencia === competencia);
+  const totais = extratoMod.totaisDe(doMes);
+  const cobreTudo = coberturas.length && coberturas.every(x => x.cob.completa);
+  const faixa = coberturas.length === 1 && coberturas[0].cob.de ? `${c.impressa(coberturas[0].cob.de)} a ${c.impressa(coberturas[0].cob.ate)}` : null;
+  return {
+    resumo: [
+      { rotulo: 'Lançamentos no mês', valor: String(totais.quantidade) },
+      { rotulo: 'Entradas', valor: c.reais(totais.entradas.total) },
+      { rotulo: 'Saídas', valor: c.reais(totais.saidas.total) },
+      { rotulo: 'Extrato', valor: !coberturas.length ? 'Sem conta' : (cobreTudo ? (faixa || 'Completo') : (faixa ? `${faixa} (falta)` : 'Não importado')) }
+    ],
+    numeros: { contas: correntes.length, movimentos: totais.quantidade, entradas: totais.entradas.total, saidas: totais.saidas.total, completo: Boolean(cobreTudo) },
+    pendencias: pend
+  };
+}
+
 // ------------------------------------------------------------- montagem
 
 function estadoDaFonte(fonte, pendencias, { encerrada }) {
@@ -363,7 +414,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
   if (vivas.some(p => p.nivel === 'critico')) return 'critico';
   if (vivas.some(p => p.nivel === 'documental')) return 'pendente';
   if (vivas.some(p => p.nivel === 'aviso')) return 'aviso';
-  return encerrada || fonte.chave !== 'fechamentos' ? 'ok' : 'em_curso';
+  return encerrada || !['fechamentos', 'extrato'].includes(fonte.chave) ? 'ok' : 'em_curso';
 }
 
 /**
@@ -376,7 +427,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
 function montar({
   competencia, hoje, notas = [], externas = [], aguardando = null, receber = null, receberErro = null,
   fechamentos: lista = [], reembolsosPendencias = [], situacao = null, resolucoes = [], nomes = new Map(), sqlPendente = false,
-  pagar = null
+  pagar = null, extrato = null
 }) {
   const comp = competenciaValida(competencia, hoje);
   const diaDeHoje = c.dia(hoje);
@@ -388,7 +439,8 @@ function montar({
     fechamentos: fonteFechamentos({ fechamentos: lista, competencia: comp, hoje: diaDeHoje, encerrada }),
     devolucoes: fonteDevolucoes({ reembolsosPendencias, hoje: diaDeHoje }),
     documentos_recebidos: fonteDocumentosRecebidos({ pagar, competencia: comp, hoje: diaDeHoje }),
-    contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje })
+    contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje }),
+    extrato: fonteExtrato({ extrato, competencia: comp, hoje: diaDeHoje, encerrada })
   };
 
   // As ignoradas: continuam na lista, marcadas, sem contar para os bloqueios.
@@ -474,6 +526,19 @@ async function lerContasPagar(api, hoje) {
   }
 }
 
+/** Contas, importações e os movimentos do mês, para a fonte do extrato. null = falta o SQL da etapa 4. */
+async function lerExtrato(api, competencia) {
+  try {
+    const [contas, importacoes, movimentos] = await Promise.all([
+      b.ler(api, 'contas_financeiras'), b.ler(api, 'extrato_importacoes'), b.ler(api, 'movimentos_bancarios', { competencia })
+    ]);
+    return { contas, importacoes, movimentos };
+  } catch (e) {
+    if (e?.extra?.sql_pendente) return null;
+    throw e;
+  }
+}
+
 /** Lê tudo o que o painel precisa e monta. `situacao_bruta` volta junto para quem grava (fechamento.js). */
 async function carregar({ api, competencia, hoje, desde = null }) {
   const comp = competenciaValida(competencia, hoje);
@@ -488,7 +553,7 @@ async function carregar({ api, competencia, hoje, desde = null }) {
     baseFinanceiro.lerFechamentos(api).then(dados => [...fechamentos.listarDe(dados, 'comissao'), ...fechamentos.listarDe(dados, 'producao')]).catch(() => null),
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
-  const pagar = await lerContasPagar(api, hoje);
+  const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
   try {
     situacao = (await b.ler(api, 'competencia_contabil', { competencia: comp }))[0] || null;
     resolucoes = await b.ler(api, 'contabil_pendencias_resolucoes', { competencia: comp });
@@ -500,12 +565,12 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   const nomes = await b.nomesDeUsuarios(api, [situacao?.fechada_por, situacao?.reaberta_por, ...resolucoes.map(r => r.usuario_id)]);
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
-    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar
+    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato
   });
   return { ...painel, situacao_bruta: situacao };
 }
 
 module.exports = {
   FONTES, NIVEL_DA_COBRANCA, competenciaValida, fonteNfe, fonteRecebimentos, fonteFechamentos, fonteDevolucoes,
-  fonteDocumentosRecebidos, fonteContasPagar, lerContasPagar, montar, carregar
+  fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, lerContasPagar, lerExtrato, montar, carregar
 };

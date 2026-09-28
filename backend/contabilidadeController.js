@@ -33,6 +33,15 @@
  *   POST /parcelas/:id/pagar               { data_pagamento, valor_pago, forma, observacao, comprovante? }  (contabilidade.pagar.pagar)
  *   POST /pagamentos/:id/estornar          { motivo }                              (contabilidade.pagar.estornar)
  *
+ * Etapa 4 (extrato bancário):
+ *
+ *   GET  /contas-financeiras               as contas (e a sugestão da conta dos boletos)
+ *   POST /contas-financeiras, PUT /contas-financeiras/:id   cadastra / altera   (contabilidade.contas.gerir)
+ *   GET  /extrato?conta_id=&competencia=   os lançamentos do mês, totais, saldo do banco, cobertura e importações
+ *   POST /extrato/previa                   { conta_id, base64 } — lê o OFX sem gravar       (contabilidade.extrato.importar)
+ *   POST /extrato/importar                 { conta_id, nome, base64 }                       (contabilidade.extrato.importar)
+ *   POST /extrato/importacoes/:id/desfazer { motivo }                                       (contabilidade.extrato.importar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -49,6 +58,7 @@ const arquivos = require('./contabilidade/arquivos');
 const documentos = require('./contabilidade/documentosRecebidos');
 const titulos = require('./contabilidade/titulos');
 const evidencias = require('./contabilidade/evidencias');
+const extrato = require('./contabilidade/extrato/extrato');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -59,6 +69,8 @@ const EXCLUIR_DOCUMENTO = 'contabilidade.documento.excluir';
 const LANCAR = 'contabilidade.pagar.lancar';
 const PAGAR = 'contabilidade.pagar.pagar';
 const ESTORNAR = 'contabilidade.pagar.estornar';
+const IMPORTAR_EXTRATO = 'contabilidade.extrato.importar';
+const GERIR_CONTAS = 'contabilidade.contas.gerir';
 
 const router = express.Router();
 
@@ -213,5 +225,27 @@ router.post('/parcelas/:id/pagar', exigirPermissao(PAGAR), rota('POST /api/conta
 
 router.post('/pagamentos/:id/estornar', exigirPermissao(ESTORNAR), rota('POST /api/contabilidade/pagamentos/:id/estornar', ({ api, req, usuarioId }) =>
   titulos.estornar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+// ------------------------------------------------------------ extrato bancário
+
+router.get('/contas-financeiras', exigirPermissao(VER), rota('GET /api/contabilidade/contas-financeiras', ({ api }) => extrato.listarContas(api)));
+
+router.post('/contas-financeiras', exigirPermissao(GERIR_CONTAS), rota('POST /api/contabilidade/contas-financeiras', ({ api, req, usuarioId }) =>
+  extrato.salvarConta(api, { entrada: req.body || {}, usuarioId })));
+
+router.put('/contas-financeiras/:id', exigirPermissao(GERIR_CONTAS), rota('PUT /api/contabilidade/contas-financeiras/:id', ({ api, req, usuarioId }) =>
+  extrato.salvarConta(api, { id: req.params.id, entrada: req.body || {}, usuarioId })));
+
+router.get('/extrato', exigirPermissao(VER), rota('GET /api/contabilidade/extrato', ({ api, req, hoje }) =>
+  extrato.movimentos(api, { contaId: req.query?.conta_id || null, competencia: String(req.query?.competencia || ''), hoje })));
+
+router.post('/extrato/previa', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/previa', ({ api, req }) =>
+  extrato.previa(api, { contaId: req.body?.conta_id, base64: req.body?.base64 })));
+
+router.post('/extrato/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importar', ({ api, req, usuarioId }) =>
+  extrato.importar(api, { contaId: req.body?.conta_id, nome: req.body?.nome, base64: req.body?.base64, usuarioId })));
+
+router.post('/extrato/importacoes/:id/desfazer', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importacoes/:id/desfazer', ({ api, req, usuarioId }) =>
+  extrato.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
 
 module.exports = router;

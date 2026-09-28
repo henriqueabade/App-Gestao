@@ -864,3 +864,92 @@ ponta a ponta), `contabilidadeModulo.test.js` (+3) e `padraoControles.test.js`.
 
 **Próxima:** etapa 4 (extrato por OFX: contas, importação, movimentos) —
 depende de um OFX de exemplo do BB.
+
+## T. Etapa 4 entregue (28/09/2026) — extrato bancário por OFX
+
+Branch `Implementando-Modulo-Contabilidade`. Sem OFX real do BB ainda: o
+leitor segue o formato OFX 1.x (SGML) que o BB exporta e o 2.x (XML); o dono
+vai mandar um arquivo de verdade para conferir (pendência abaixo).
+
+**SQL:** `sql/contabilidade_extrato.sql` (rodar e reiniciar a API):
+`contas_financeiras` (nome, tipo corrente/aplicação/caixa, banco, agência,
+conta, saldo inicial, ativa; única por banco + agência + conta),
+`extrato_importacoes` (conta, origem ofx/api/manual, situação, período, saldo
+informado, o OFX guardado, lidos/novos/repetidos, quem desfez e por quê) e
+`movimentos_bancarios` (data, competência, valor com sinal, descrição,
+documento, FITID, identidade `hash` única por conta, estado da conciliação —
+a etapa 5 usa). Duas permissões novas em `perm_contabilidade`. Dados de teste
+só para o banco DEV: `sql/contabilidade_dados_simulados_dev.sql` ganhou a
+conta do BB SIMULADA (ag. 9999-9, c/c 99999-9), agosto importado até dia 28
+(falta 29 a 31 → pendência), setembro até dia 20 e uma importação desfeita;
+`sql/contabilidade_extrato_exemplo_dev.ofx` completa agosto.
+
+**Permissões novas:** `contabilidade.extrato.importar` (importar e desfazer
+importação) e `contabilidade.contas.gerir` (cadastrar e alterar as contas).
+Ver o extrato pede só `contabilidade.view`.
+
+**Regras:**
+
+- **Leitor** (`backend/contabilidade/extrato/ofx.js`): Windows-1252 ou UTF-8,
+  tags sem fechamento, data cortada como texto (sem fuso), valor com ponto ou
+  vírgula; linhas de valor zero (o "Saldo anterior" do BB) saem com aviso;
+  recusa o que não é OFX e extrato de cartão.
+- **Identidade** de cada lançamento: sha256 de conta + data + valor + FITID
+  (sem FITID: documento + descrição), com número de ordem para linhas iguais
+  no mesmo arquivo. Importar o mesmo período de novo só acrescenta o que
+  faltava; o que tem o mesmo documento, dia e valor vindo de outra origem
+  (a API do BB, etapa 11) também fica de fora.
+- **Importar** (`extrato.js`): a prévia lê sem gravar e diz se a conta do
+  arquivo confere com a escolhida (aviso, não bloqueio). Bloqueia conta
+  desativada e lançamento novo em competência fechada. O OFX original fica
+  guardado como arquivo OFICIAL dos meses dele (aparece em "Documentos da
+  competência").
+- **Movimento é dado do banco**: não se edita. Importação errada se desfaz,
+  com motivo, enquanto nenhum lançamento dela estiver conciliado; quando os
+  períodos se cruzam, desfaz primeiro a mais nova (senão o período ficaria
+  "coberto" sem os lançamentos). O OFX desfeito sai das evidências (a não ser
+  que outra importação use o mesmo arquivo). Mês fechado recusa desfazer.
+- **Cobertura**: de que dia a que dia o mês já tem extrato, por conta (só as
+  importações vivas). No mês em curso, cobra até ontem.
+- **Checklist** (fonte "Extrato bancário"): sem conta corrente ativa =
+  documental "Cadastre a conta do banco"; mês encerrado sem o extrato inteiro
+  de cada conta corrente ativa = documental, com os dias que faltam e o botão
+  que abre a importação já com a conta. Aplicação e caixa não entram na
+  cobrança. O mês em curso fica "Mês em curso".
+
+**Tela:** 3 modais novos, no padrão: **Extrato bancário** (conta,
+competência, entradas/saídas, busca; entradas, saídas, resultado e o saldo
+que o banco informou; a cobertura; os lançamentos; as importações que tocam
+o mês com "Salvar OFX" e "Desfazer"; "Buscar no BB" em azul do BB avisa que
+é a etapa 11), **Importar extrato (OFX)** (conta + arquivo → prévia com a
+conta do arquivo, período, saldo, novos e já importados, bloqueios e avisos,
+e as linhas com "Novo"/"Já importado") e **Contas do banco** (lista +
+cadastro; a conta dos boletos da Configuração de cobrança aparece como
+sugestão). O "Sincronizar extrato do BB" do painel de Ações virou "Extrato
+bancário". Conferidos com o Electron: nenhum erro de console.
+
+**Banco DEV:** conferido num Postgres 17 descartável — os SQLs duas vezes
+cada, o SQL simulado sem o SQL do extrato (pula a parte com aviso), a trava
+do nome do banco, e o backend em modo DEV: pendência de agosto com os dias
+que faltam, prévia do OFX de exemplo (2 novos, 2 já importados — a
+identidade calculada no SQL é a mesma do app), importar, reimportar (0 novos),
+desfazer fora de ordem recusado, desfazer, julho fechado recusado, conta
+repetida 409, e sem o SQL: 409 dizendo qual arquivo.
+
+**Testes:** `backend/contabilidade/extrato/ofx.test.js` (7),
+`backend/contabilidadeExtrato.test.js` (6, de ponta a ponta),
+`checklist.test.js` (+3), `contabilidadeModulo.test.js` e
+`padraoControles.test.js`.
+
+**Em aberto (para o dono):**
+1. Mandar um OFX de verdade do BB (qualquer mês) para conferir o leitor.
+2. Extrato incompleto de mês encerrado é **documental** (bloqueia o pacote,
+   não o fechamento). Confirmar.
+3. Desfazer importação com motivo, da mais nova para a mais antiga. Confirmar.
+4. Existe caixa físico (dinheiro) que precise de conta própria? Hoje o caixa
+   pode ser cadastrado, mas não é cobrado no checklist.
+5. API de Extratos do BB (etapa 11): ativação no portal do BB, credenciais e
+   escopo.
+
+**Próxima:** etapa 5 (conciliação: extrato × recebimentos, pagamentos,
+reembolsos e contas a pagar).

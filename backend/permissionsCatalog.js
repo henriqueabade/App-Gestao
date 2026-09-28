@@ -2489,6 +2489,18 @@ const PERMISSIONS_CATALOG = {
         "desc": "Desfazer um pagamento registrado ou cancelar a conta, com motivo"
       },
       {
+        "key": "contabilidade.extrato.importar",
+        "column": "acao_extrato_importar",
+        "label": "Importar extrato",
+        "desc": "Importar o OFX do banco e desfazer uma importação errada (com motivo)"
+      },
+      {
+        "key": "contabilidade.contas.gerir",
+        "column": "acao_contas_gerir",
+        "label": "Cadastrar contas financeiras",
+        "desc": "Conta corrente, aplicação e caixa: banco, agência, conta e saldo inicial"
+      },
+      {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",

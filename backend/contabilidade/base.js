@@ -22,7 +22,18 @@ const TABELAS_PAGAR = [
   'contabil_arquivos', 'contabil_arquivo_partes', 'contabil_arquivo_vinculos',
   'documentos_recebidos', 'titulos_pagar', 'titulo_pagar_parcelas', 'titulo_pagar_pagamentos'
 ];
-const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR];
+/** Etapa 4: contas financeiras e extrato bancário. */
+const SQL_ARQUIVO_EXTRATO = 'sql/contabilidade_extrato.sql';
+const SQL_FALTANDO_EXTRATO = `Falta rodar ${SQL_ARQUIVO_EXTRATO} no banco e reiniciar a API.`;
+const TABELAS_EXTRATO = ['contas_financeiras', 'extrato_importacoes', 'movimentos_bancarios'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO];
+
+/** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
+function sqlDaTabela(tabela) {
+  if (TABELAS_EXTRATO.includes(tabela)) return { arquivo: SQL_ARQUIVO_EXTRATO, mensagem: SQL_FALTANDO_EXTRATO };
+  if (TABELAS_PAGAR.includes(tabela)) return { arquivo: SQL_ARQUIVO_PAGAR, mensagem: SQL_FALTANDO_PAGAR };
+  return { arquivo: SQL_ARQUIVO, mensagem: SQL_FALTANDO };
+}
 
 /** Na ordem em que importam (a lista de pendências sai nesta ordem). */
 const NIVEIS = {
@@ -49,12 +60,13 @@ function tabelaAusente(err, tabela = null) {
   return citaTabela && (/does not exist|não encontrada|não existe|não disponível/i.test(bruto) || (err?.status === 404 && /tabela/i.test(bruto)));
 }
 
-/** A mensagem diz QUAL SQL falta: o da base ou o das contas a pagar (pela tabela da chamada). */
+/** A mensagem diz QUAL SQL falta (pela tabela da chamada ou, sem ela, pela citada no erro). */
 function traduzir(e, tabela = null) {
   if (!tabelaAusente(e, tabela)) return e;
   const bruto = `${e?.message || ''} ${e?.body?.error || ''} ${e?.body?.detalhe || ''}`;
-  const daEtapa3 = tabela ? TABELAS_PAGAR.includes(tabela) : TABELAS_PAGAR.some(t => bruto.includes(t));
-  return c.erro(daEtapa3 ? SQL_FALTANDO_PAGAR : SQL_FALTANDO, 409, { sql_pendente: true, sql_arquivo: daEtapa3 ? SQL_ARQUIVO_PAGAR : SQL_ARQUIVO });
+  const alvo = tabela && TABELAS.includes(tabela) ? tabela : TABELAS.find(t => bruto.includes(t)) || null;
+  const { arquivo, mensagem } = sqlDaTabela(alvo);
+  return c.erro(mensagem, 409, { sql_pendente: true, sql_arquivo: arquivo });
 }
 
 /** Lê uma tabela do módulo, conferindo o filtro aqui também (a API ignora coluna que não conhece). */
@@ -169,7 +181,8 @@ function documentoFormatado(doc) {
 }
 
 module.exports = {
-  SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, TABELAS, TABELAS_BASE, TABELAS_PAGAR, NIVEIS, nivelValido,
+  SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, SQL_ARQUIVO_EXTRATO, SQL_FALTANDO_EXTRATO,
+  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, sqlDaTabela, NIVEIS, nivelValido,
   tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
   garantirAberta, valorDe, digitos, documentoFormatado
 };

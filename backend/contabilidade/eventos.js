@@ -25,7 +25,10 @@ const TIPOS = {
   titulo_alterado: 'Conta a pagar alterada',
   titulo_cancelado: 'Conta a pagar cancelada',
   pagamento_registrado: 'Pagamento registrado',
-  pagamento_estornado: 'Pagamento estornado'
+  pagamento_estornado: 'Pagamento estornado',
+  conta_financeira_criada: 'Conta financeira cadastrada',
+  extrato_importado: 'Extrato importado',
+  extrato_desfeito: 'Importação de extrato desfeita'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1, 2 e 3).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 4).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -18,6 +18,9 @@
  *   ctbRegistrarDocumento   Registrar documento — XML, chave, NFS-e, recibo (POST /documentos)
  *   ctbDocumentoRecebido    A ficha do documento (GET /documentos/:id)
  *   ctbEvidencias           Documentos da competência (GET /evidencias)
+ *   ctbExtrato              Extrato bancário do mês — lançamentos, saldo, cobertura, importações (GET /extrato)
+ *   ctbImportarExtrato      Importar OFX — prévia sem gravar e importação (POST /extrato/previa, /extrato/importar)
+ *   ctbContasFinanceiras    Contas do banco — lista e cadastro (GET/POST/PUT /contas-financeiras)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -32,6 +35,9 @@
   const TOM_TITULO = { aberto: 'badge-info', parcial: 'badge-warning', vencido: 'badge-danger', pago: 'badge-success', cancelado: 'badge-neutral' };
   const TOM_ORIGEM = { oficial: 'badge-success', interno: 'badge-info', fornecido: 'badge-neutral' };
   const ORIGENS_TITULO = { manual: 'Lançada à mão', nfe: 'NF-e de entrada', nfse: 'NFS-e', outro: 'Recibo ou guia' };
+  // A conciliação (etapa 5) muda o estado; até lá todo lançamento está "a conciliar".
+  const ROTULO_CONCILIACAO = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Sem par' };
+  const TOM_CONCILIACAO = { pendente: 'badge-neutral', conciliado: 'badge-success', ignorado: 'badge-info' };
   const EVENTO_ALTERADO = 'contabilidade:alterado';
 
   const contexto = window.contabilidadeModalContexto || {};
@@ -1702,6 +1708,459 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ extrato bancário (etapa 4)
+
+  const faixaDeDatas = f => (f.de === f.ate ? formatarData(f.de) : `${formatarData(f.de)} a ${formatarData(f.ate)}`);
+
+  function montarExtrato() {
+    const contaSel = el('ctbExtratoConta');
+    const compCampo = el('ctbExtratoCompetencia');
+    const tipoSel = el('ctbExtratoTipo');
+    const busca = el('ctbExtratoBusca');
+    const corpo = el('ctbExtratoLista');
+    const corpoImp = el('ctbExtratoImportacoes');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+    let contaEscolhida = contexto.conta_id ?? null;
+
+    function pintarContas() {
+      const contas = dados?.contas || [];
+      if (!contas.length) {
+        contaSel.replaceChildren(opcao('', 'Nenhuma conta cadastrada'));
+        contaSel.disabled = true;
+        return;
+      }
+      contaSel.disabled = false;
+      contaSel.replaceChildren(...contas.map(c => opcao(String(c.id), `${c.nome}${c.ativa ? '' : ' (desativada)'}`)));
+      if (dados.conta) contaSel.value = String(dados.conta.id);
+    }
+
+    function pintarTotais() {
+      const t = dados?.totais || { entradas: { quantidade: 0, total: 0 }, saidas: { quantidade: 0, total: 0 }, resultado: 0 };
+      const pinta = (chave, valor, nota) => {
+        const card = overlay.querySelector(`#ctbExtratoTotais [data-total="${chave}"]`);
+        card.querySelector('.ctb-total__valor').textContent = valor;
+        if (nota !== undefined) card.querySelector('.ctb-total__nota').textContent = nota;
+      };
+      pinta('entradas', formatarMoeda(t.entradas.total), plural(t.entradas.quantidade, 'lançamento', 'lançamentos'));
+      pinta('saidas', formatarMoeda(t.saidas.total), plural(t.saidas.quantidade, 'lançamento', 'lançamentos'));
+      pinta('resultado', formatarMoeda(t.resultado));
+      const saldo = dados?.saldo_banco;
+      pinta('saldo', saldo ? formatarMoeda(saldo.valor) : '—', saldo ? `Em ${formatarData(saldo.data)}` : 'O extrato do mês não trouxe saldo');
+    }
+
+    function pintarCobertura() {
+      const alvo = el('ctbExtratoCobertura');
+      const cob = dados?.cobertura;
+      alvo.style.color = '';
+      if (!dados?.conta) { alvo.textContent = 'Cadastre a conta do banco (botão "Contas do banco") para importar o extrato.'; return; }
+      if (!cob) { alvo.textContent = ''; return; }
+      const falta = cob.faltas?.length ? `Falta: ${cob.faltas.map(faixaDeDatas).join(', ')}.` : '';
+      if (cob.de) alvo.textContent = `O extrato importado cobre de ${formatarData(cob.de)} a ${formatarData(cob.ate)}. ${falta || 'Nada faltando.'}`;
+      else alvo.textContent = falta ? `Nenhum extrato importado neste mês. ${falta}` : 'Ainda não há o que importar neste mês.';
+      if (falta) alvo.style.color = 'var(--color-primary-light)';
+    }
+
+    function pintarLista() {
+      const termo = normalizar(busca.value.trim());
+      const tipo = tipoSel.value;
+      const linhas = (dados?.linhas || [])
+        .filter(l => !tipo || l.tipo === tipo)
+        .filter(l => !termo || normalizar([l.descricao, l.documento, l.identificador, formatarMoeda(l.valor), numeroBr(Math.abs(l.valor))].join(' ')).includes(termo));
+      if (!linhas.length) {
+        linhaVazia(corpo, 5, !dados?.conta ? 'Nenhuma conta cadastrada.' : (termo || tipo ? 'Nenhum lançamento com este filtro.' : 'Nenhum lançamento neste mês.'));
+        return;
+      }
+      corpo.replaceChildren();
+      for (const l of linhas) {
+        const valor = celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num');
+        valor.style.color = l.valor < 0 ? '#e08aa6' : 'var(--color-green)';
+        const tr = criar('tr');
+        tr.append(
+          celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+          celula(l.descricao || '—', 'px-4 py-3', l.contrapartida_documento || null),
+          celula(l.documento || '—', 'px-4 py-3 ctb-nowrap'),
+          valor,
+          celula(tag(ROTULO_CONCILIACAO[l.estado_conciliacao] || l.estado_conciliacao, TOM_CONCILIACAO[l.estado_conciliacao] || 'badge-neutral'), 'px-4 py-3')
+        );
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function desfazer(i) {
+      const periodo = `${formatarData(i.periodo_inicio)} a ${formatarData(i.periodo_fim)}`;
+      const quantos = i.novos === 1 ? 'O lançamento novo que ela trouxe sai' : `Os ${i.novos} lançamentos novos que ela trouxe saem`;
+      const motivo = await pedirTexto({
+        titulo: 'Desfazer a importação?',
+        mensagem: i.novos
+          ? `${quantos} do extrato (${periodo}) e o OFX sai dos documentos. O histórico fica.`
+          : `Ela não trouxe lançamento novo: o período ${periodo} deixa de contar como importado. O histórico fica.`,
+        confirmar: 'Desfazer'
+      });
+      if (motivo === null) return;
+      try {
+        const r = await enviar(`/api/contabilidade/extrato/importacoes/${encodeURIComponent(i.id)}/desfazer`, 'POST', { motivo });
+        window.showToast?.(`Importação desfeita: ${plural(r.retirados, 'lançamento retirado', 'lançamentos retirados')}.`, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para desfazer importações.'), 'error');
+      }
+    }
+
+    function pintarImportacoes() {
+      const lista = dados?.importacoes || [];
+      if (!lista.length) { linhaVazia(corpoImp, 6, dados?.conta ? 'Nenhuma importação neste mês.' : '—'); return; }
+      corpoImp.replaceChildren();
+      for (const i of lista) {
+        const viva = i.status !== 'desfeita';
+        const acoes = criar('div', 'ctb-celula-acoes');
+        if (viva && i.arquivo_id) acoes.appendChild(botaoPequeno('Salvar OFX', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/arquivos/${encodeURIComponent(i.arquivo_id)}`)));
+        if (viva) acoes.appendChild(botaoPequeno('Desfazer', 'btn-warning', () => desfazer(i), { perm: 'contabilidade.extrato.importar' }));
+        const situacao = !viva ? tag('Desfeita', 'badge-neutral') : (i.status === 'completa' ? tag('Completa', 'badge-success') : tag('Incompleta', 'badge-warning', 'A importação parou no meio: desfaça e importe de novo.'));
+        const tr = criar('tr');
+        tr.append(
+          celula(`${formatarData(i.periodo_inicio)} a ${formatarData(i.periodo_fim)}`, 'px-4 py-3 ctb-nowrap', i.saldo_final !== null ? `Saldo ${formatarMoeda(i.saldo_final)} em ${formatarData(i.saldo_final_data)}` : null),
+          celula(i.nome_arquivo || i.origem_rotulo, 'px-4 py-3', i.origem_rotulo),
+          celula(plural(i.novos, 'novo', 'novos'), 'px-4 py-3 ctb-nowrap', i.repetidos ? plural(i.repetidos, 'já importado', 'já importados') : null),
+          celula(formatarInstante(i.criado_em), 'px-4 py-3 ctb-nowrap', i.criado_por),
+          celula(situacao, 'px-4 py-3', viva ? null : [formatarInstante(i.desfeita_em), i.motivo_desfazer].filter(Boolean).join(' · ')),
+          celula(acoes, 'px-4 py-3')
+        );
+        corpoImp.appendChild(tr);
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpoImp); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbExtratoMensagem', '');
+      try {
+        const q = new URLSearchParams({ competencia: compCampo.value || '' });
+        if (contaEscolhida) q.set('conta_id', String(contaEscolhida));
+        const r = await fetchApi(`/api/contabilidade/extrato?${q.toString()}`);
+        if (minha !== leitura) return;
+        dados = r;
+        contaEscolhida = r.conta?.id ?? null;
+        el('ctbExtratoRotulo').textContent = r.rotulo || rotuloCompetencia(r.competencia);
+        pintarContas();
+        pintarTotais();
+        pintarCobertura();
+        pintarLista();
+        pintarImportacoes();
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        linhaVazia(corpo, 5, 'O extrato não pôde ser lido.');
+        linhaVazia(corpoImp, 6, '—');
+        mostrarMensagem('ctbExtratoMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    contaSel.addEventListener('change', () => { contaEscolhida = contaSel.value || null; carregar(); });
+    compCampo.addEventListener('change', carregar);
+    tipoSel.addEventListener('change', pintarLista);
+    busca.addEventListener('input', pintarLista);
+    el('ctbExtratoImportar').addEventListener('click', () => abrirOutro('importar-extrato', { conta_id: contaEscolhida, competencia: compCampo.value }));
+    el('ctbExtratoContas').addEventListener('click', () => abrirOutro('contas-financeiras', { competencia: compCampo.value }));
+    el('ctbExtratoBuscarBB').addEventListener('click', () => {
+      const aviso = { title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: '"Buscar o extrato no BB" ainda está em implementação.', nota: 'Chega com a API de Extratos do Banco do Brasil (etapa 11). Até lá, importe o OFX.' };
+      if (window.DialogPadrao?.info) window.DialogPadrao.info(aviso); else window.alert(aviso.message);
+    });
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
+  function montarImportarExtrato() {
+    const contaSel = el('ctbImpExtConta');
+    const campo = el('ctbImpExtArquivo');
+    const confirmarBtn = el('ctbImpExtConfirmar');
+    const situacao = el('ctbImpExtSituacao');
+    let arquivo = null;
+    let previa = null;
+    let leitura = 0;
+
+    async function carregarContas(preferida = null) {
+      const r = await fetchApi('/api/contabilidade/contas-financeiras');
+      const contas = (r?.contas || []).filter(c => c.ativa);
+      if (!contas.length) {
+        contaSel.replaceChildren(opcao('', 'Cadastre a conta do banco primeiro'));
+        contaSel.disabled = true;
+        mostrarMensagem('ctbImpExtMensagem', 'Nenhuma conta ativa cadastrada: use "Contas do banco" para cadastrar a conta corrente.');
+        return;
+      }
+      contaSel.disabled = false;
+      contaSel.replaceChildren(...contas.map(c => opcao(String(c.id), c.conta ? `${c.nome} · c/c ${c.conta}` : c.nome)));
+      const alvo = [preferida, contexto.conta_id].find(v => v && contas.some(c => String(c.id) === String(v)));
+      contaSel.value = String(alvo ?? (contas.find(c => c.tipo === 'corrente') || contas[0]).id);
+      if (el('ctbImpExtMensagem').textContent.startsWith('Nenhuma conta ativa')) mostrarMensagem('ctbImpExtMensagem', '');
+    }
+
+    function pintarPrevia() {
+      const p = previa;
+      const arq = p.arquivo || {};
+      // O banco diferente já vira aviso; aqui só agência e conta, para caber na linha.
+      const contaDoArquivo = [arq.agencia ? `ag. ${arq.agencia}` : null, arq.conta ? `c/c ${arq.conta}` : null].filter(Boolean).join(' · ') || '—';
+      const confere = p.confere === true ? tag('Confere', 'badge-success') : (p.confere === false ? tag('Não confere', 'badge-danger') : tag('Sem o número no arquivo', 'badge-neutral'));
+      preencherDados(el('ctbImpExtDados'), [
+        ['Conta do arquivo', contaDoArquivo],
+        ['Com a conta escolhida', confere],
+        ['Período', `${formatarData(p.periodo?.inicio)} a ${formatarData(p.periodo?.fim)}`],
+        ['Saldo informado', p.saldo ? `${formatarMoeda(p.saldo.valor)} em ${formatarData(p.saldo.data)}` : '—'],
+        ['Lançamentos no arquivo', String(p.lidos)],
+        ['Novos (entram agora)', String(p.novos)],
+        ['Já importados (ficam de fora)', String(p.repetidos)],
+        ['Entradas e saídas novas', `${formatarMoeda(p.creditos)} · ${formatarMoeda(p.debitos)}`]
+      ]);
+      const bloqueios = el('ctbImpExtBloqueios');
+      bloqueios.replaceChildren(...(p.bloqueios || []).map(t => itemDaLista(t, 'fa-ban')));
+      bloqueios.classList.toggle('hidden', !p.bloqueios?.length);
+      const avisos = el('ctbImpExtAvisos');
+      avisos.replaceChildren(...(p.avisos || []).map(t => itemDaLista(t, 'fa-info-circle')));
+      avisos.classList.toggle('hidden', !p.avisos?.length);
+
+      const corpo = el('ctbImpExtLinhas');
+      const linhas = p.linhas || [];
+      el('ctbImpExtContagem').textContent = p.lidos > linhas.length ? `Mostrando ${linhas.length} de ${p.lidos}` : plural(p.lidos, 'lançamento', 'lançamentos');
+      if (!linhas.length) linhaVazia(corpo, 5, 'O arquivo não tem lançamentos (só o saldo).');
+      else {
+        corpo.replaceChildren();
+        for (const l of linhas) {
+          const valor = celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num');
+          valor.style.color = l.valor < 0 ? '#e08aa6' : 'var(--color-green)';
+          const tr = criar('tr');
+          tr.append(
+            celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+            celula(l.descricao || '—', 'px-4 py-3'),
+            celula(l.documento || '—', 'px-4 py-3 ctb-nowrap'),
+            valor,
+            celula(tag(l.novo ? 'Novo' : 'Já importado', l.novo ? 'badge-success' : 'badge-neutral'), 'px-4 py-3')
+          );
+          corpo.appendChild(tr);
+        }
+      }
+      el('ctbImpExtPrevia').classList.remove('hidden');
+      const bloqueado = Boolean(p.bloqueios?.length);
+      if (bloqueado) pintarEtiqueta(situacao, 'Não dá para importar', 'badge-danger');
+      else if (!p.novos) pintarEtiqueta(situacao, 'Nada novo', 'badge-neutral');
+      else pintarEtiqueta(situacao, plural(p.novos, 'lançamento novo', 'lançamentos novos'), 'badge-info');
+      if (!bloqueado && !p.novos) {
+        mostrarMensagem('ctbImpExtMensagem', `Nenhum lançamento novo: importar só registra que o período de ${formatarData(p.periodo?.inicio)} a ${formatarData(p.periodo?.fim)} já tem extrato.`, 'info');
+      }
+      confirmarBtn.disabled = bloqueado;
+    }
+
+    async function lerPrevia() {
+      const minha = ++leitura;
+      previa = null;
+      confirmarBtn.disabled = true;
+      mostrarMensagem('ctbImpExtMensagem', '');
+      el('ctbImpExtPrevia').classList.add('hidden');
+      if (!arquivo || !contaSel.value) {
+        pintarEtiqueta(situacao, 'Escolha o arquivo', 'badge-neutral');
+        return;
+      }
+      pintarEtiqueta(situacao, 'Lendo o arquivo…', 'badge-info');
+      try {
+        const r = await enviar('/api/contabilidade/extrato/previa', 'POST', { conta_id: contaSel.value, base64: arquivo.base64 });
+        if (minha !== leitura) return;
+        previa = r;
+        pintarPrevia();
+      } catch (e) {
+        if (minha !== leitura) return;
+        pintarEtiqueta(situacao, 'Arquivo recusado', 'badge-danger');
+        mostrarMensagem('ctbImpExtMensagem', textoDoErro(e, 'Você não tem permissão para importar extratos.'));
+      }
+    }
+
+    async function confirmar() {
+      if (!previa || !arquivo) return;
+      mostrarMensagem('ctbImpExtMensagem', '');
+      processando = true;
+      try {
+        const r = await enviar('/api/contabilidade/extrato/importar', 'POST', { conta_id: contaSel.value, nome: arquivo.nome, base64: arquivo.base64 });
+        window.showToast?.(r.novos ? `${plural(r.novos, 'lançamento novo importado', 'lançamentos novos importados')}.` : 'Período registrado: nenhum lançamento novo.', 'success');
+        processando = false;
+        avisarAlteracao();
+        // Os avisos da prévia já foram vistos; aqui só o que apareceu ao gravar.
+        const novos = (r.avisos || []).filter(a => !(previa.avisos || []).includes(a));
+        if (novos.length && window.DialogPadrao?.info) await window.DialogPadrao.info({ title: 'Importado, com avisos', tom: 'aviso', message: novos.join('\n') });
+        fechar();
+      } catch (e) {
+        mostrarMensagem('ctbImpExtMensagem', textoDoErro(e, 'Você não tem permissão para importar extratos.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    campo.addEventListener('change', async () => {
+      try {
+        arquivo = await arquivoDoCampo(campo);
+      } catch (e) {
+        arquivo = null;
+        mostrarMensagem('ctbImpExtMensagem', e.message);
+        return;
+      }
+      await lerPrevia();
+    });
+    contaSel.addEventListener('change', lerPrevia);
+    el('ctbImpExtContas').addEventListener('click', () => abrirOutro('contas-financeiras', {}));
+    acionar(confirmarBtn, confirmar);
+    // Conta cadastrada no modal de cima: a lista se relê (e a prévia, se a conta mudou).
+    ouvirAlteracoes(async () => {
+      const antes = contaSel.value;
+      await carregarContas(antes).catch(() => null);
+      if (contaSel.value !== antes) await lerPrevia();
+    });
+    return carregarContas(contexto.conta_id).catch(e => {
+      contaSel.replaceChildren(opcao('', '—'));
+      contaSel.disabled = true;
+      mostrarMensagem('ctbImpExtMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+    });
+  }
+
+  const BANCOS = { '001': 'Banco do Brasil', '104': 'Caixa Econômica', '237': 'Bradesco', '341': 'Itaú', '033': 'Santander', '756': 'Sicoob', '748': 'Sicredi', '077': 'Inter', '260': 'Nubank' };
+  const soDigitos = v => String(v ?? '').replace(/\D/g, '');
+
+  function montarContasFinanceiras() {
+    const nome = el('ctbContasFinNome');
+    const tipo = el('ctbContasFinTipo');
+    const banco = el('ctbContasFinBanco');
+    const agencia = el('ctbContasFinAgencia');
+    const agenciaDv = el('ctbContasFinAgenciaDv');
+    const conta = el('ctbContasFinConta');
+    const saldo = el('ctbContasFinSaldo');
+    const saldoData = el('ctbContasFinSaldoData');
+    const ativa = el('ctbContasFinAtiva');
+    const observacao = el('ctbContasFinObservacao');
+    const corpo = el('ctbContasFinLista');
+    const salvarBtn = el('ctbContasFinSalvar');
+    let dados = null;
+    let editando = null;
+
+    function pintarBanco() {
+      const caixa = tipo.value === 'caixa';
+      for (const c of [banco, agencia, agenciaDv, conta]) c.disabled = caixa;
+      const cod = soDigitos(banco.value).padStart(3, '0');
+      el('ctbContasFinBancoNome').textContent = caixa ? 'O caixa não tem banco.' : (soDigitos(banco.value) ? (BANCOS[cod] || 'Banco fora da lista: confira o código.') : '001 = Banco do Brasil');
+    }
+
+    function preencher(c = {}) {
+      nome.value = c.nome || '';
+      tipo.value = c.tipo || 'corrente';
+      banco.value = c.banco_codigo || (c.tipo === 'caixa' ? '' : '001');
+      agencia.value = c.agencia || '';
+      agenciaDv.value = c.agencia_dv || '';
+      conta.value = c.conta || '';
+      saldo.value = c.saldo_inicial === null || c.saldo_inicial === undefined ? '' : numeroBr(c.saldo_inicial);
+      saldoData.value = c.saldo_inicial_data || '';
+      ativa.checked = c.ativa !== false;
+      observacao.value = c.observacao || '';
+      pintarBanco();
+    }
+
+    function limpar() {
+      editando = null;
+      preencher({});
+      el('ctbContasFinFormTitulo').textContent = 'Nova conta';
+      el('ctbContasFinNova').classList.add('hidden');
+    }
+
+    function editar(c) {
+      editando = c.id;
+      preencher(c);
+      el('ctbContasFinFormTitulo').textContent = `Editar: ${c.nome}`;
+      el('ctbContasFinNova').classList.remove('hidden');
+      mostrarMensagem('ctbContasFinMensagem', '');
+      nome.focus();
+    }
+
+    function pintar() {
+      const contas = dados?.contas || [];
+      el('ctbContasFinRotulo').textContent = plural(contas.length, 'conta', 'contas');
+      const s = dados?.sugestao_cobranca;
+      const caixaSugestao = el('ctbContasFinSugestao');
+      caixaSugestao.classList.toggle('hidden', !s);
+      // O atributo também: o espaço entre blocos (space-y) só pula o que tem [hidden].
+      caixaSugestao.hidden = !s;
+      if (s) el('ctbContasFinSugestaoTexto').textContent = `Banco do Brasil · ag. ${s.agencia}${s.agencia_dv ? `-${s.agencia_dv}` : ''} · c/c ${s.conta} (da Configuração de cobrança do Financeiro)`;
+      if (!contas.length) { linhaVazia(corpo, 5, 'Nenhuma conta cadastrada ainda.'); return; }
+      corpo.replaceChildren();
+      for (const c of contas) {
+        const acoes = criar('div', 'ctb-celula-acoes');
+        acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(c), { perm: 'contabilidade.contas.gerir' }));
+        const tr = criar('tr');
+        tr.append(
+          celula(c.nome, 'px-4 py-3', c.observacao),
+          celula(c.tipo === 'caixa' ? '—' : c.rotulo, 'px-4 py-3', c.saldo_inicial !== null ? `Saldo inicial ${formatarMoeda(c.saldo_inicial)} em ${formatarData(c.saldo_inicial_data)}` : null),
+          celula(c.tipo_rotulo, 'px-4 py-3'),
+          celula(c.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3'),
+          celula(acoes, 'px-4 py-3')
+        );
+        corpo.appendChild(tr);
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar() {
+      try {
+        dados = await fetchApi('/api/contabilidade/contas-financeiras');
+        pintar();
+      } catch (e) {
+        dados = null;
+        linhaVazia(corpo, 5, 'A lista não pôde ser lida.');
+        salvarBtn.disabled = true;
+        mostrarMensagem('ctbContasFinMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    async function salvar() {
+      mostrarMensagem('ctbContasFinMensagem', '');
+      const caixa = tipo.value === 'caixa';
+      const corpoConta = {
+        nome: nome.value.trim(), tipo: tipo.value,
+        banco_codigo: caixa ? null : banco.value, agencia: caixa ? null : agencia.value, agencia_dv: caixa ? null : agenciaDv.value, conta: caixa ? null : conta.value,
+        saldo_inicial: lerMoeda(saldo.value), saldo_inicial_data: saldoData.value || null, ativa: ativa.checked, observacao: observacao.value
+      };
+      const erro = corpoConta.nome.length < 2 ? 'Dê um nome à conta (ex.: BB — conta corrente).'
+        : (!caixa && (!soDigitos(banco.value) || !soDigitos(agencia.value) || !soDigitos(conta.value))) ? 'Informe banco, agência e conta.'
+          : (corpoConta.saldo_inicial !== null && !corpoConta.saldo_inicial_data) ? 'Informe a data do saldo inicial.' : '';
+      if (erro) { mostrarMensagem('ctbContasFinMensagem', erro); return; }
+      processando = true;
+      try {
+        if (editando) await enviar(`/api/contabilidade/contas-financeiras/${encodeURIComponent(editando)}`, 'PUT', corpoConta);
+        else await enviar('/api/contabilidade/contas-financeiras', 'POST', corpoConta);
+        window.showToast?.(editando ? 'Conta alterada.' : 'Conta cadastrada.', 'success');
+        processando = false;
+        avisarAlteracao();
+        limpar();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbContasFinMensagem', textoDoErro(e, 'Você não tem permissão para cadastrar contas.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    tipo.addEventListener('change', pintarBanco);
+    banco.addEventListener('input', pintarBanco);
+    ligarCampoMoeda(saldo);
+    el('ctbContasFinNova').addEventListener('click', limpar);
+    el('ctbContasFinUsarSugestao').addEventListener('click', () => {
+      const s = dados?.sugestao_cobranca;
+      if (!s) return;
+      editando = null;
+      preencher(s);
+      el('ctbContasFinFormTitulo').textContent = 'Nova conta';
+      mostrarMensagem('ctbContasFinMensagem', 'Confira os dados e clique em "Salvar conta".', 'info');
+      nome.focus();
+    });
+    acionar(salvarBtn, salvar);
+    limpar();
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -1713,7 +2172,10 @@
     ctbDocumentosRecebidos: montarDocumentosRecebidos,
     ctbRegistrarDocumento: montarRegistrarDocumento,
     ctbDocumentoRecebido: montarDocumentoRecebido,
-    ctbEvidencias: montarEvidencias
+    ctbEvidencias: montarEvidencias,
+    ctbExtrato: montarExtrato,
+    ctbImportarExtrato: montarImportarExtrato,
+    ctbContasFinanceiras: montarContasFinanceiras
   };
 
   let montagem;

@@ -1009,6 +1009,12 @@ body {
     cursor: pointer;
 }
 
+/* Os quatro filtros do extrato: a competência (mês + ano + lupa) precisa de
+   mais largura que os outros, senão o nome do mês é cortado. */
+@media (min-width: 768px) {
+    .ctb-filtros-extrato { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1fr); }
+}
+
 /* Soma das parcelas: vermelha quando não bate com o valor da conta. */
 .ctb-soma { font-size: 0.8rem; color: var(--menu-text-secondary, #9ca3af); }
 .ctb-soma[data-ok="0"] { color: var(--color-red); font-weight: 600; }

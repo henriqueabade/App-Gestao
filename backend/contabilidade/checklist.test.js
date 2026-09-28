@@ -127,9 +127,9 @@ test('montar: críticas primeiro e ignoradas por último; a contagem, o progress
     ['nfe_saida', 'critico', 3], ['recebimentos', 'pendente', 1], ['fechamentos', 'ok', 0], ['devolucoes', 'ok', 0],
     ['documentos_recebidos', 'indisponivel', 0], ['contas_pagar', 'indisponivel', 0], ['extrato', 'indisponivel', 0], ['conciliacao', 'indisponivel', 0]
   ]);
-  // Sem as tabelas das etapas 2 e 3 (aqui não vieram), as fontes novas dizem qual SQL falta.
+  // Sem as tabelas das etapas 2 a 4 (aqui não vieram), as fontes novas dizem qual SQL falta.
   assert.match(p.fontes[4].nota, /sql\/contabilidade_contas_pagar\.sql/);
-  assert.match(p.fontes[6].nota, /API de extratos do BB/);
+  assert.match(p.fontes[6].nota, /sql\/contabilidade_extrato\.sql/);
   assert.deepEqual(p.progresso, { ok: 2, total: 4 });
   assert.equal(p.situacao.status, 'aberta');
   assert.deepEqual(p.bloqueios.fechar, ['2 erros críticos a resolver (erro crítico não se ignora).']);
@@ -307,4 +307,76 @@ test('montar com as etapas 2 e 3: as fontes novas entram na conta, no progresso 
   });
   assert.equal(ignorada.pendencias.find(x => x.chave === 'nfse_fech_71').ignorada, true);
   assert.equal(ignorada.contagem.documental, 4);
+});
+
+// ------------------------------------------------------------- extrato (etapa 4)
+
+const extratoDeAgosto = (extra = {}) => ({
+  contas: [
+    { id: 1, nome: 'BB — conta corrente', tipo: 'corrente', ativa: true },
+    { id: 2, nome: 'Caixa da loja', tipo: 'caixa', ativa: true },
+    { id: 3, nome: 'Conta antiga', tipo: 'corrente', ativa: false }
+  ],
+  importacoes: [{ id: 10, conta_id: 1, status: 'completa', periodo_inicio: '2026-08-01', periodo_fim: '2026-08-20' }],
+  movimentos: [
+    { id: 1, conta_id: 1, competencia: COMP, valor: '1500.00' },
+    { id: 2, conta_id: 1, competencia: COMP, valor: '-2500.00' },
+    { id: 3, conta_id: 1, competencia: '2026-09', valor: '99.00' }
+  ],
+  ...extra
+});
+
+test('extrato: sem conta corrente cadastrada é documental; mês fechado sem o extrato inteiro é documental, com o que falta', () => {
+  const semConta = ck.fonteExtrato({ extrato: { contas: [], importacoes: [], movimentos: [] }, competencia: COMP, hoje: HOJE, encerrada: true });
+  assert.deepEqual(semConta.pendencias.map(p => [p.nivel, p.chave, p.filtro]), [['documental', 'extrato_sem_conta', { acao: 'contas-financeiras' }]]);
+  assert.equal(semConta.resumo[3].valor, 'Sem conta');
+
+  const r = ck.fonteExtrato({ extrato: extratoDeAgosto(), competencia: COMP, hoje: HOJE, encerrada: true });
+  assert.deepEqual(r.pendencias.map(p => [p.nivel, p.chave, p.filtro]), [['documental', 'extrato_1', { acao: 'importar-extrato', conta_id: 1 }]], 'caixa e conta inativa não cobram extrato');
+  assert.equal(r.pendencias[0].titulo, 'Extrato de agosto/2026 — BB — conta corrente incompleto');
+  assert.match(r.pendencias[0].descricao, /^Falta: 21\/08\/2026 a 31\/08\/2026/);
+  assert.deepEqual(r.numeros, { contas: 1, movimentos: 2, entradas: 1500, saidas: -2500, completo: false });
+  assert.equal(r.resumo[3].valor, '01/08/2026 a 20/08/2026 (falta)');
+
+  const nada = ck.fonteExtrato({ extrato: extratoDeAgosto({ importacoes: [] }), competencia: COMP, hoje: HOJE, encerrada: true });
+  assert.equal(nada.pendencias[0].titulo, 'Extrato de agosto/2026 — BB — conta corrente não importado');
+
+  const completo = ck.fonteExtrato({
+    extrato: extratoDeAgosto({ importacoes: [{ id: 10, conta_id: 1, status: 'completa', periodo_inicio: '2026-07-25', periodo_fim: '2026-09-02' }] }),
+    competencia: COMP, hoje: HOJE, encerrada: true
+  });
+  assert.deepEqual(completo.pendencias, []);
+  assert.equal(completo.numeros.completo, true);
+
+  // Importação desfeita não cobre nada.
+  const desfeita = ck.fonteExtrato({
+    extrato: extratoDeAgosto({ importacoes: [{ id: 10, conta_id: 1, status: 'desfeita', periodo_inicio: '2026-08-01', periodo_fim: '2026-08-31' }] }),
+    competencia: COMP, hoje: HOJE, encerrada: true
+  });
+  assert.deepEqual(desfeita.pendencias.map(p => p.chave), ['extrato_1']);
+});
+
+test('extrato: o mês em curso não cobra o extrato (fica "em curso"); sem o SQL da etapa 4 a fonte diz qual arquivo rodar', () => {
+  const emCurso = ck.fonteExtrato({ extrato: extratoDeAgosto(), competencia: '2026-09', hoje: HOJE, encerrada: false });
+  assert.deepEqual(emCurso.pendencias, []);
+  const p = ck.montar({
+    competencia: '2026-09', hoje: HOJE, notas: [], aguardando: { pedidos: [] }, receber: { pendencias: [] },
+    fechamentos: [], extrato: extratoDeAgosto()
+  });
+  assert.equal(p.fontes.find(f => f.chave === 'extrato').estado, 'em_curso');
+  const semSql = ck.fonteExtrato({ extrato: null, competencia: COMP, hoje: HOJE, encerrada: true });
+  assert.match(semSql.indisponivel, /sql\/contabilidade_extrato\.sql/);
+});
+
+test('montar com o extrato: a pendência entra no bloqueio do pacote (documental), não no fechamento', () => {
+  const p = ck.montar({
+    competencia: COMP, hoje: HOJE, notas: [], aguardando: { pedidos: [] },
+    receber: { recebido: {}, a_receber: {}, em_atraso: {}, a_conciliar: {}, pendencias: [] },
+    fechamentos: [{ tipo: 'comissao', competencia: COMP, total: 10, falta_pagar: 0 }, { tipo: 'producao', competencia: COMP, total: 10, falta_pagar: 0 }],
+    extrato: extratoDeAgosto()
+  });
+  const fonte = p.fontes.find(f => f.chave === 'extrato');
+  assert.deepEqual([fonte.estado, fonte.pendencias, fonte.nota], ['pendente', 1, null]);
+  assert.equal(p.pode.fechar, true);
+  assert.deepEqual(p.bloqueios.pacote, ['A competência precisa estar fechada.', '1 pendência documental a resolver ou ignorar com justificativa.']);
 });

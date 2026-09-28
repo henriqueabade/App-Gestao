@@ -1,0 +1,107 @@
+<!--
+  Extrato bancário (etapa 4). Modal grande. Os lançamentos do banco na
+  competência e na conta escolhidas (GET /api/contabilidade/extrato), os
+  quatro números do mês (entradas, saídas, resultado e o saldo que o banco
+  informou), a cobertura (de que dia a que dia o mês já tem extrato) e as
+  importações que tocam o mês, com o OFX e o "Desfazer" (com motivo).
+  "Importar OFX" abre importar-extrato.html por cima; "Contas" abre
+  contas-financeiras.html. "Buscar no BB" é a API de Extratos (etapa 11).
+  Lançamento do banco não se edita: importação errada se desfaz.
+  Script: src/js/modals/contabilidade-modais.js (montarExtrato).
+-->
+<div id="ctbExtratoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbExtratoTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbExtratoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-university mr-2" aria-hidden="true"></i>Extrato bancário</h2>
+      <span id="ctbExtratoRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 gap-6 ctb-filtros-extrato">
+          <div>
+            <label for="ctbExtratoConta" class="ctl-rotulo text-gray-300">Conta</label>
+            <select id="ctbExtratoConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div>
+            <label for="ctbExtratoCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbExtratoCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbExtratoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbExtratoCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbExtratoCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbExtratoTipo" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbExtratoTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Entradas e saídas</option>
+              <option value="credito">Só entradas</option>
+              <option value="debito">Só saídas</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbExtratoBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbExtratoBusca" type="search" placeholder="Descrição, documento ou valor"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbExtratoTotais">
+          <div class="ctb-total" data-total="entradas" data-tom="verde"><span class="ctb-total__rotulo">Entradas</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="saidas" data-tom="bordo"><span class="ctb-total__rotulo">Saídas</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="resultado"><span class="ctb-total__rotulo">Resultado do mês</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Entradas menos saídas</span></div>
+          <div class="ctb-total" data-total="saldo"><span class="ctb-total__rotulo">Saldo informado pelo banco</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+        </div>
+        <p id="ctbExtratoCobertura" class="text-sm text-gray-300"></p>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
+                <th class="px-4 py-3 text-left text-xs">Descrição</th>
+                <th class="px-4 py-3 text-left text-xs">Documento</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Conciliação</th>
+              </tr>
+            </thead>
+            <tbody id="ctbExtratoLista"></tbody>
+          </table>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Importações que tocam o mês</h3>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Período</th>
+                  <th class="px-4 py-3 text-left text-xs">Arquivo</th>
+                  <th class="px-4 py-3 text-left text-xs">Lançamentos</th>
+                  <th class="px-4 py-3 text-left text-xs">Importado</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                  <th class="px-4 py-3 text-right text-xs">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="ctbExtratoImportacoes"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbExtratoMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbExtratoContas" type="button" class="btn-neutral ctl-botao text-white">Contas do banco</button>
+      <button id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade.extrato.importar" class="btn-bb ctl-botao text-white" title="API de Extratos do Banco do Brasil (etapa 11)">Buscar no BB</button>
+      <button id="ctbExtratoImportar" type="button" data-perm="contabilidade.extrato.importar" class="btn-primary ctl-botao text-white min-w-[160px]">Importar OFX</button>
+    </footer>
+  </div>
+</div>
