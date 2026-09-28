@@ -36,6 +36,11 @@ const ORIGENS = {
     tabela: 'cliente_historico', coluna: 'cliente_id', tabelaRegistro: 'clientes',
     permissao: 'cli.details.view', rotulo: 'o cliente', pagina: 'clientes'
   },
+  // Fornecedores, prestadores e parceiros (sql/contatos_fornecedores.sql).
+  contato: {
+    tabela: 'contato_historico', coluna: 'contato_id', tabelaRegistro: 'contatos',
+    permissao: 'ctt.details.view', rotulo: 'o contato', pagina: 'contatos'
+  },
   // A linha do tempo de cada tarefa (sql/tarefas_calendario.sql). Quem vê é
   // decidido tarefa a tarefa (backend/tarefasController.js, podeVerTarefa),
   // não só pela permissão do módulo.
@@ -268,7 +273,10 @@ async function nomesDosUsuarios(api) {
 async function lerRegistro(api, origem, registroId, { itens = null, nomes = null } = {}) {
   const o = origemValida(origem);
   const registro = await api.get(`/api/${o.tabelaRegistro}/${registroId}`).catch(() => null);
-  if (!registro || registro.error) throw erro(404, origem === 'cliente' ? 'Cliente não encontrado.' : 'Prospecção não encontrada.');
+  if (!registro || registro.error) {
+    const faltando = { cliente: 'Cliente não encontrado.', contato: 'Contato não encontrado.', tarefa: 'Tarefa não encontrada.' };
+    throw erro(404, faltando[origem] || 'Prospecção não encontrada.');
+  }
   let criador = registro.criado_por ?? null;
   if (!criador && origem === 'cliente') {
     const eventos = itens || lista(await api.get(`/api/${o.tabela}`, { query: { [o.coluna]: registroId } }).catch(() => []));
@@ -286,7 +294,7 @@ async function lerRegistro(api, origem, registroId, { itens = null, nomes = null
     const participantes = lista(await api.get('/api/tarefa_participantes', { query: { tarefa_id: registroId } }).catch(() => []));
     interessados = [registro.responsavel_id, ...participantes.filter(p => p.status === 'aceito').map(p => p.usuario_id)];
   }
-  return { registro, nome: texto(registro.nome_fantasia) || texto(registro.titulo) || `#${registroId}`, criadorId: criador, interessados };
+  return { registro, nome: texto(registro.nome_fantasia) || texto(registro.titulo) || texto(registro.nome) || `#${registroId}`, criadorId: criador, interessados };
 }
 
 /** Lê tudo o que a linha do tempo precisa de uma vez (1 ida em paralelo). */

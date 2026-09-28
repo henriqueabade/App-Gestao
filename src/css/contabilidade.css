@@ -1,0 +1,913 @@
+/* Estilos do módulo Contabilidade — Fechamento do mês */
+
+/*
+ * Só UMA folha de módulo fica carregada por vez (o menu troca o link#page-style
+ * a cada navegação), por isso cada módulo redeclara a base visual da casa:
+ * cores, vidro, botões, badges e inputs. Este bloco é o mesmo do Financeiro —
+ * inclusive para o diálogo padrão (DialogPadrao) e os modais, que usam
+ * glass-surface / btn-* e ficariam sem estilo aqui.
+ */
+:root {
+    --color-primary: #b6a03e;
+    --color-primary-light: #d4c169;
+    --color-primary-dark: #7f6a27;
+    --color-violet: #A394A7;
+    --color-bordeaux: #6a152c;
+    --color-bg-deep: #310017;
+    --color-surface: rgba(255,255,255,0.08);
+    --color-green: #a2ffa6;
+    --color-green-dark: #065f46;
+    --color-red: #ff5858;
+    --color-blue: #8aa7f3;
+    --color-input: rgba(0,0,0,0.3);
+    --color-inputBorder: rgba(255,255,255,0.15);
+    --neutral-100: #f9fafb;
+    --neutral-500: #6b7280;
+}
+
+body {
+    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.glass-surface {
+    background: var(--color-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.btn-primary { background: var(--color-primary); transition: all 150ms ease; }
+.btn-primary:hover { background: var(--color-primary-light); transform: scale(1.05); }
+
+.btn-secondary { background: var(--color-blue); transition: all 150ms ease; }
+.btn-secondary:hover { background: rgba(138, 167, 243, 0.9); }
+
+.btn-warning { background: var(--color-bordeaux); transition: all 150ms ease; }
+.btn-warning:hover { background: rgba(106, 21, 44, 0.8); transform: scale(1.05); }
+
+.btn-danger { background: var(--color-red); transition: all 150ms ease; }
+.btn-danger:hover { background: rgba(255,88,88,0.8); transform: scale(1.1); }
+
+.btn-neutral { background: rgba(255,255,255,0.1); transition: all 150ms ease; }
+.btn-neutral:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
+
+.btn-success { background: var(--color-green); color: #000; transition: all 150ms ease; }
+.btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
+
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+.focus\:ring-primary\/50:focus { box-shadow: 0 0 0 2px rgba(182,160,62,0.5); }
+.appearance-none { appearance: none; }
+
+.select-arrow {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+.badge-success { background: rgba(162, 255, 166, 0.2); color: var(--color-green); }
+.badge-info { background: rgba(138, 167, 243, 0.2); color: var(--color-blue); }
+.badge-warning { background: rgba(212, 193, 105, 0.2); color: var(--color-primary); }
+.badge-danger { background: rgba(255, 88, 88, 0.2); color: var(--color-red); }
+.badge-neutral { background: rgba(163, 148, 167, 0.2); color: var(--color-violet); }
+
+.input-glass {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 150ms ease;
+}
+.input-glass:focus {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+.animate-fade-in-up:nth-child(1) { animation-delay: 0.1s; }
+.animate-fade-in-up:nth-child(2) { animation-delay: 0.2s; }
+.animate-fade-in-up:nth-child(3) { animation-delay: 0.3s; }
+.animate-fade-in-up:nth-child(4) { animation-delay: 0.4s; }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+.animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
+.slide-in { animation: slideIn 0.3s ease-out forwards; }
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateY(12px); } to { transform: translateY(0); } }
+
+/* Toast notifications */
+.toast {
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: opacity 0.5s ease-in-out;
+    background-color: #374151;
+}
+.toast-success { background-color: #16a34a; }
+.toast-error { background-color: #dc2626; }
+.toast-info { background-color: #2563eb; }
+
+/* ================================================================ módulo */
+
+/* As variáveis --menu-* vêm de menu.css e trocam com o tema claro/escuro; o
+   valor de reserva é o da casa no escuro. As medidas são as do Financeiro
+   (a referência visual, decisão do dono em 21/09/2026). */
+.contabilidade-module {
+    --ctb-espaco: 1.5rem;          /* 24px entre blocos grandes */
+    --ctb-borda: var(--menu-surface-border, rgba(255, 255, 255, 0.1));
+    --ctb-texto-1: var(--menu-text-strong, #fff);
+    --ctb-texto-2: var(--menu-text-secondary, #9ca3af);   /* texto secundário */
+    --ctb-texto-3: var(--menu-text-tertiary, #6b7280);
+    --ctb-hover: var(--menu-surface-soft, rgba(255, 255, 255, 0.05));
+    --ctb-acao-fundo: var(--menu-surface-soft, rgba(0, 0, 0, 0.2));
+    --ctb-bordo-fundo: rgba(106, 21, 44, 0.28);
+    --ctb-bordo-borda: rgba(106, 21, 44, 0.75);
+    --ctb-bordo-texto: #e08aa6;    /* bordô legível sobre o fundo escuro */
+    --ctb-ouro-fundo: rgba(182, 160, 62, 0.18);
+    --ctb-verde: var(--color-green);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* As classes ctb-* que definem display vencem o `.hidden` do Tailwind por
+   virem depois na cascata: sem isto, o aviso e o Reabrir "escondidos" apareciam. */
+[class*="ctb-"].hidden { display: none !important; }
+
+/* ------------------------------------------------------------ cabeçalho */
+
+.ctb-cabecalho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+}
+
+.ctb-cabecalho__controles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.ctb-competencia {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.ctb-competencia__rotulo {
+    font-size: 0.75rem;
+    color: var(--ctb-texto-2);
+}
+
+/* Seletor de competência (src/js/utils/competencia.js): mês, ano digitável e a
+   lupa que entra no mês. Campos e botões são `ctl-campo` / `ctl-botao`, 40 px. */
+.ctb-competencia-campo {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+}
+
+.ctb-competencia-campo__mes { min-width: 8.5rem; }
+
+.ctb-competencia-campo__ano {
+    width: 6.75rem;
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.ctb-competencia-campo__ano::-webkit-outer-spin-button,
+.ctb-competencia-campo__ano::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.ctb-competencia-campo__ir { flex-shrink: 0; }
+
+/* Nos modais o seletor cabe na coluna do filtro: o mês encolhe, ano e lupa ficam fixos. */
+.ctb-competencia-campo--modal { width: 100%; min-width: 0; }
+.ctb-competencia-campo--modal .ctb-competencia-campo__mes { flex: 1 1 auto; min-width: 0; }
+.ctb-competencia-campo--modal .ctb-competencia-campo__ano { flex: 0 0 5.25rem; width: 5.25rem; padding-left: 0.5rem; padding-right: 0.5rem; }
+
+/* Aviso de tela (SQL pendente, sem permissão): bordô, como o fin-aviso. */
+.ctb-aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: var(--ctb-espaco);
+    padding: 0.9rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--ctb-bordo-fundo);
+    border: 1px solid var(--ctb-bordo-borda);
+    color: var(--ctb-bordo-texto);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.ctb-aviso > i { margin-top: 0.15rem; flex-shrink: 0; }
+
+/* ---------------------------------------------------------- indicadores */
+
+.ctb-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ctb-espaco);
+    margin-bottom: var(--ctb-espaco);
+}
+
+.ctb-kpi {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.35rem 1.5rem;
+    border: 1px solid var(--ctb-borda);
+    transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.ctb-kpi[role="button"] { cursor: pointer; }
+
+.ctb-kpi[role="button"]:hover,
+.ctb-kpi[role="button"]:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(182, 160, 62, 0.45);
+    outline: none;
+}
+
+.ctb-kpi[role="button"]:hover .ctb-kpi__seta,
+.ctb-kpi[role="button"]:focus-visible .ctb-kpi__seta {
+    background: var(--color-primary);
+    color: var(--ctb-texto-1);
+}
+
+/* O cartão do filtro escolhido fica marcado. */
+.ctb-kpi.is-filtro { border-color: var(--color-primary); }
+
+.ctb-kpi__topo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ctb-kpi__icone {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    background: var(--ctb-ouro-fundo);
+    color: var(--color-primary-light);
+}
+
+.ctb-kpi__icone[data-tom="bordo"] {
+    background: var(--ctb-bordo-fundo);
+    color: var(--ctb-bordo-texto);
+}
+
+.ctb-kpi__icone[data-tom="neutro"] {
+    background: rgba(163, 148, 167, 0.2);
+    color: var(--color-violet);
+}
+
+.ctb-kpi__rotulo {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ctb-texto-2);
+}
+
+.ctb-kpi__seta {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--ctb-texto-1);
+    transition: all 150ms ease;
+}
+
+.ctb-kpi__linha {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ctb-kpi__valor {
+    font-size: 1.85rem;
+    line-height: 1.1;
+    font-weight: 700;
+    color: var(--ctb-texto-1);
+    font-variant-numeric: tabular-nums;
+}
+
+/* "Aberta" / "Fechada" no lugar do número: um pouco menor, para caber. */
+.ctb-kpi__valor--texto { font-size: 1.45rem; }
+
+.ctb-kpi__auxiliar { font-size: 0.9rem; color: var(--ctb-texto-2); }
+
+.ctb-kpi__rodape {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ctb-texto-2);
+}
+
+/* Situação: a cor do valor segue o estado (aberta ouro, fechada verde, reaberta bordô). */
+.ctb-kpi--situacao[data-ctb-situacao="aberta"] .ctb-kpi__valor { color: var(--color-primary-light); }
+.ctb-kpi--situacao[data-ctb-situacao="fechada"] .ctb-kpi__valor { color: var(--ctb-verde); }
+.ctb-kpi--situacao[data-ctb-situacao="reaberta"] .ctb-kpi__valor { color: var(--ctb-bordo-texto); }
+
+/* Erro crítico: bordô da identidade, mais peso, nada de cor nova. */
+.ctb-kpi--critico {
+    border-color: var(--ctb-bordo-borda);
+    background: linear-gradient(160deg, var(--ctb-bordo-fundo), var(--color-surface) 70%);
+}
+.ctb-kpi--critico .ctb-kpi__valor { color: var(--ctb-bordo-texto); }
+.ctb-kpi--critico:hover,
+.ctb-kpi--critico:focus-visible { border-color: var(--ctb-bordo-texto); }
+
+/* Zero crítico/documental: o cartão perde a ênfase (nada a resolver). */
+.ctb-kpi--critico.is-zero { background: var(--color-surface); border-color: var(--ctb-borda); }
+.ctb-kpi--critico.is-zero .ctb-kpi__valor { color: var(--ctb-texto-1); }
+.ctb-kpi--documental .ctb-kpi__valor { color: var(--color-primary-light); }
+.ctb-kpi--documental.is-zero .ctb-kpi__valor { color: var(--ctb-texto-1); }
+
+/* Barra de progresso das fontes em dia. */
+.ctb-progresso {
+    height: 0.4rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.ctb-progresso__barra {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    transition: width 300ms ease;
+}
+
+.ctb-progresso[data-completo="1"] .ctb-progresso__barra { background: var(--ctb-verde); }
+
+/* ------------------------------------------------------ faixas e painéis */
+
+.ctb-faixa-titulo {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.9rem;
+    margin: 0 0 0.75rem;
+}
+
+.ctb-faixa-titulo h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--ctb-texto-1);
+    margin: 0;
+}
+
+.ctb-faixa-titulo__nota {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--ctb-texto-2);
+}
+
+.ctb-painel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--ctb-borda);
+    padding: 1.35rem 1.5rem;
+}
+
+.ctb-painel__cabeca {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ctb-painel__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+.ctb-painel__titulo h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--ctb-texto-1);
+    margin: 0;
+}
+
+.ctb-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.ctb-badge--contagem {
+    background: var(--ctb-ouro-fundo);
+    color: var(--color-primary-light);
+    min-width: 1.6rem;
+}
+
+.ctb-link {
+    background: none;
+    border: 0;
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+    color: var(--color-primary-light);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 150ms ease;
+}
+
+.ctb-link i { font-size: 0.75rem; margin-left: 0.25rem; }
+.ctb-link:hover { color: var(--ctb-texto-1); }
+
+/* Terceira faixa: 70 / 30. Quarta: 50 / 50. */
+.ctb-operacional {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    gap: var(--ctb-espaco);
+    margin-bottom: var(--ctb-espaco);
+}
+
+.ctb-resumos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ctb-espaco);
+    margin-bottom: var(--ctb-espaco);
+}
+
+/* ---------------------------------------------------------- checklist */
+
+.ctb-fontes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ctb-espaco);
+    margin-bottom: var(--ctb-espaco);
+}
+
+.ctb-fonte {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 1.2rem 1.35rem;
+    border: 1px solid var(--ctb-borda);
+    cursor: pointer;
+    transition: transform 150ms ease, border-color 150ms ease;
+}
+
+.ctb-fonte:hover,
+.ctb-fonte:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(182, 160, 62, 0.45);
+    outline: none;
+}
+
+.ctb-fonte.is-filtro { border-color: var(--color-primary); }
+
+/* Ainda não integrada: apagada e sem clique. */
+.ctb-fonte[data-estado="indisponivel"] { opacity: 0.6; cursor: default; }
+.ctb-fonte[data-estado="indisponivel"]:hover { transform: none; border-color: var(--ctb-borda); }
+
+.ctb-fonte__topo {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.ctb-fonte__icone {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+    background: var(--ctb-ouro-fundo);
+    color: var(--color-primary-light);
+}
+
+.ctb-fonte[data-estado="critico"] .ctb-fonte__icone { background: var(--ctb-bordo-fundo); color: var(--ctb-bordo-texto); }
+.ctb-fonte[data-estado="ok"] .ctb-fonte__icone { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
+.ctb-fonte[data-estado="indisponivel"] .ctb-fonte__icone { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
+
+.ctb-fonte__titulo {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ctb-texto-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A situação da fonte é uma etiqueta (fora do padrão de botão, de propósito). */
+.ctb-fonte__estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ctb-fonte__estado[data-estado="ok"] { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
+.ctb-fonte__estado[data-estado="pendente"] { background: var(--ctb-ouro-fundo); color: var(--color-primary-light); }
+.ctb-fonte__estado[data-estado="aviso"] { background: rgba(163, 148, 167, 0.2); color: var(--color-violet); }
+.ctb-fonte__estado[data-estado="critico"] { background: var(--ctb-bordo-fundo); color: var(--ctb-bordo-texto); }
+.ctb-fonte__estado[data-estado="em_curso"] { background: rgba(138, 167, 243, 0.2); color: var(--color-blue); }
+.ctb-fonte__estado[data-estado="indisponivel"] { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
+
+.ctb-fonte__resumo {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.ctb-fonte__linha {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+}
+
+.ctb-fonte__linha dt { color: var(--ctb-texto-2); }
+.ctb-fonte__linha dd { margin: 0; color: var(--ctb-texto-1); font-variant-numeric: tabular-nums; text-align: right; }
+
+.ctb-fonte__nota {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--ctb-texto-2);
+}
+
+.ctb-fonte__rodape {
+    margin-top: auto;
+    font-size: 0.78rem;
+    color: var(--ctb-texto-2);
+}
+
+.ctb-fonte[data-estado="critico"] .ctb-fonte__rodape { color: var(--ctb-bordo-texto); font-weight: 600; }
+
+/* ----------------------------------------------------------- pendências */
+
+.ctb-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Etiquetas de filtro (como "Hoje / Amanhã" das Tarefas): fora do padrão de botão. */
+.ctb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--ctb-borda);
+    background: transparent;
+    color: var(--ctb-texto-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.ctb-chip:hover { border-color: var(--color-primary); color: var(--ctb-texto-1); }
+.ctb-chip.is-ativo { background: var(--ctb-ouro-fundo); border-color: var(--color-primary); color: var(--color-primary-light); }
+.ctb-chip--fonte { cursor: default; background: rgba(138, 167, 243, 0.15); border-color: rgba(138, 167, 243, 0.5); color: var(--color-blue); }
+.ctb-chip__fechar { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; font-size: 0.7rem; line-height: 1; }
+
+.ctb-pendencias {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ctb-pendencia {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 0.75rem;
+    margin: 0 -0.75rem;
+    border-radius: 0.75rem;
+    border-bottom: 1px solid var(--ctb-borda);
+    transition: background 150ms ease;
+}
+
+.ctb-pendencia:last-child { border-bottom: 0; }
+.ctb-pendencia:hover { background: var(--ctb-hover); }
+.ctb-pendencia.is-ignorada { opacity: 0.6; }
+
+/* A bolinha diz a severidade: bordô (crítico), ouro (documental), violeta (aviso). */
+.ctb-pendencia__status {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 9999px;
+    background: var(--color-violet);
+    box-shadow: 0 0 0 4px rgba(163, 148, 167, 0.18);
+}
+
+.ctb-pendencia__status[data-nivel="critico"] {
+    background: var(--ctb-bordo-texto);
+    box-shadow: 0 0 0 4px var(--ctb-bordo-fundo);
+}
+
+.ctb-pendencia__status[data-nivel="documental"] {
+    background: var(--color-primary);
+    box-shadow: 0 0 0 4px var(--ctb-ouro-fundo);
+}
+
+.ctb-pendencia__texto { min-width: 0; }
+
+.ctb-pendencia__titulo {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--ctb-texto-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ctb-pendencia__descricao {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ctb-texto-2);
+    margin-top: 0.15rem;
+}
+
+.ctb-pendencia__nivel {
+    display: inline-block;
+    margin-right: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ctb-texto-2);
+}
+
+.ctb-pendencia__nivel[data-nivel="critico"] { color: var(--ctb-bordo-texto); }
+.ctb-pendencia__nivel[data-nivel="documental"] { color: var(--color-primary-light); }
+
+.ctb-pendencia__data {
+    font-size: 0.8rem;
+    color: var(--ctb-texto-2);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.ctb-pendencia__acoes {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* -------------------------------------------------------------- ações */
+
+.ctb-acoes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+/* Superfície escura com borda; o dourado só no hover. */
+.ctb-acao {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--ctb-borda);
+    background: var(--ctb-acao-fundo);
+    color: var(--ctb-texto-1);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.ctb-acao > i:first-child {
+    width: 1.25rem;
+    text-align: center;
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+
+.ctb-acao > span { flex: 1; min-width: 0; }
+
+.ctb-acao__seta {
+    font-size: 0.7rem;
+    color: var(--ctb-texto-3);
+    transition: transform 150ms ease, color 150ms ease;
+}
+
+.ctb-acao:hover,
+.ctb-acao:focus-visible {
+    border-color: var(--color-primary);
+    background: rgba(182, 160, 62, 0.1);
+    outline: none;
+}
+
+.ctb-acao:hover .ctb-acao__seta,
+.ctb-acao:focus-visible .ctb-acao__seta {
+    color: var(--color-primary-light);
+    transform: translateX(2px);
+}
+
+.ctb-acao:disabled { opacity: 0.5; cursor: not-allowed; }
+.ctb-acao:disabled:hover { border-color: var(--ctb-borda); background: var(--ctb-acao-fundo); }
+
+/* ----------------------------------------------------------- atividade */
+
+.ctb-atividade {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 0.25rem;
+    position: relative;
+}
+
+.ctb-atividade::before {
+    content: "";
+    position: absolute;
+    left: 0.55rem;
+    top: 0.6rem;
+    bottom: 0.6rem;
+    width: 1px;
+    background: var(--ctb-borda);
+}
+
+.ctb-evento {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.35rem 0 0.9rem 1.5rem;
+}
+
+.ctb-evento::before {
+    content: "";
+    position: absolute;
+    left: 0.3rem;
+    top: 0.65rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-bg-deep);
+}
+
+.ctb-evento__hora {
+    font-size: 0.8rem;
+    color: var(--ctb-texto-2);
+    font-variant-numeric: tabular-nums;
+    padding-top: 0.05rem;
+}
+
+.ctb-evento__texto { min-width: 0; }
+.ctb-evento__titulo { display: block; font-size: 0.9rem; color: var(--ctb-texto-1); }
+.ctb-evento__detalhe { display: block; font-size: 0.8rem; color: var(--ctb-texto-2); margin-top: 0.1rem; }
+
+/* ------------------------------------------------------------- roteiro */
+
+.ctb-roteiro {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.ctb-roteiro__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.ctb-roteiro__item strong { display: block; color: var(--ctb-texto-1); font-weight: 600; }
+.ctb-roteiro__item span:last-child { display: block; color: var(--ctb-texto-2); font-size: 0.8rem; }
+
+.ctb-roteiro__numero {
+    flex-shrink: 0;
+    min-width: 2rem;
+    height: 1.6rem;
+    padding: 0 0.5rem;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--ctb-texto-2);
+}
+
+.ctb-roteiro__item[data-feita="1"] .ctb-roteiro__numero { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
+
+/* --------------------------------------------------------------- vazio */
+
+.ctb-vazio {
+    padding: 1.5rem 0;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--ctb-texto-2);
+}
+
+/* ------------------------------------------------------------------ modais */
+/* Os modais ficam fora do .contabilidade-module (o Modal os põe no <body>),
+   e só abrem a partir deste módulo — por isso o estilo deles vive aqui. */
+
+.ctb-obrigatorio { color: var(--color-red); }
+
+.ctb-somente-leitura { opacity: 0.7; cursor: default; }
+
+/* Lista de dados só de leitura (resumo do fechamento): rótulo à esquerda, valor à direita. */
+.ctb-dados { display: flex; flex-direction: column; }
+
+.ctb-dados__linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.875rem;
+}
+
+.ctb-dados__linha:last-child { border-bottom: 0; }
+.ctb-dados__linha dt { color: var(--menu-text-secondary, #9ca3af); }
+.ctb-dados__linha dd { margin: 0; color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Lista de bloqueios/pendências dentro do modal. */
+.ctb-lista-modal {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+}
+
+.ctb-lista-modal li { display: flex; gap: 0.6rem; align-items: flex-start; }
+.ctb-lista-modal li > i { margin-top: 0.2rem; flex-shrink: 0; }
+
+/* ---------------------------------------------------------- telas menores */
+
+@media (max-width: 1280px) {
+    .ctb-kpis,
+    .ctb-fontes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ctb-operacional,
+    .ctb-resumos { grid-template-columns: minmax(0, 1fr); }
+}

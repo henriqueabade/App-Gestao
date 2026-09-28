@@ -1,0 +1,46 @@
+<!--
+  Reabrir competência contábil. Modal pequeno, ação sensível: pede a
+  justificativa (mínimo de 10 caracteres) e grava por POST
+  /api/contabilidade/reabrir (contabilidade.reabrir). A competência volta a
+  "reaberta" e o fechamento anterior fica no histórico.
+  Script: src/js/modals/contabilidade-modais.js (montarReabrir).
+-->
+<div id="ctbReabrirOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbReabrirTitulo" class="w-full max-w-2xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbReabrirTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-lock-open mr-2" aria-hidden="true"></i>Reabrir competência</h2>
+      <span id="ctbReabrirSituacao" class="badge-info px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p class="text-sm text-gray-300">
+          Reabre a competência <strong id="ctbReabrirRotulo">—</strong> para novos lançamentos e um novo fechamento.
+          O fechamento anterior fica no histórico, com quem reabriu e por quê.
+        </p>
+
+        <dl class="ctb-dados glass-surface rounded-xl border border-white/10" id="ctbReabrirDados"></dl>
+
+        <div>
+          <label for="ctbReabrirJustificativa" class="ctl-rotulo text-gray-300">Justificativa <span class="ctb-obrigatorio">*</span></label>
+          <textarea id="ctbReabrirJustificativa" rows="3" maxlength="1000" placeholder="Por que a competência precisa ser reaberta (pelo menos 10 caracteres)"
+                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+        </div>
+
+        <div class="ctb-aviso" role="note">
+          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+          <span>Se o pacote desta competência já foi enviado à contabilidade, avise-a: o que mudar depois precisa ir num pacote novo.</span>
+        </div>
+
+        <div id="ctbReabrirMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbReabrirConfirmar" type="button" data-perm="contabilidade.reabrir" class="btn-warning ctl-botao text-white min-w-[160px]">Reabrir competência</button>
+    </footer>
+  </div>
+</div>

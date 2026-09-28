@@ -326,6 +326,133 @@ const EXEMPLO_PROSPECCAO = {
 const modeloDeClientes = () => gerarCsv(COLUNAS_CLIENTE, [EXEMPLO_CLIENTE]);
 const modeloDeProspeccoes = () => gerarCsv(COLUNAS_PROSPECCAO, [EXEMPLO_PROSPECCAO]);
 
+// ------------------------------------------------------------ contatos
+// Fornecedores, prestadores e parceiros (backend/contatosController.js).
+
+const COLUNAS_CONTATO = [
+  { chave: 'nome', titulo: 'Nome (empresa ou pessoa)', obrigatoria: true, alternativas: ['Nome', 'Empresa', 'Nome fantasia'] },
+  { chave: 'razao_social', titulo: 'Razão social' },
+  { chave: 'tipo', titulo: 'Tipo (Fornecedor, Prestador de serviço…)', obrigatoria: true, alternativas: ['Tipo', 'Tipo de contato'] },
+  { chave: 'tipo_pessoa', titulo: 'Tipo de pessoa (PJ ou PF)' },
+  { chave: 'cnpj', titulo: 'CNPJ', alternativas: ['CNPJ (pessoa jurídica)'] },
+  { chave: 'cpf', titulo: 'CPF', alternativas: ['CPF (pessoa física)'] },
+  { chave: 'inscricao_estadual', titulo: 'Inscrição estadual' },
+  { chave: 'inscricao_municipal', titulo: 'Inscrição municipal' },
+  { chave: 'email', titulo: 'E-mail' },
+  { chave: 'telefone_celular', titulo: 'Celular' },
+  { chave: 'telefone_fixo', titulo: 'Telefone' },
+  { chave: 'site', titulo: 'Site' },
+  { chave: 'status', titulo: 'Status (Ativo ou Inativo)' },
+  ...colunasDeEndereco('end', 'Endereço', { ibge: true }),
+  { chave: 'pessoa_nome', titulo: 'Pessoa de contato - Nome' },
+  { chave: 'pessoa_cargo', titulo: 'Pessoa de contato - Cargo' },
+  { chave: 'pessoa_email', titulo: 'Pessoa de contato - E-mail' },
+  { chave: 'pessoa_telefone_fixo', titulo: 'Pessoa de contato - Telefone' },
+  { chave: 'pessoa_telefone_celular', titulo: 'Pessoa de contato - Celular' },
+  { chave: 'anotacoes', titulo: 'Anotações' }
+];
+
+const EXEMPLO_CONTATO = {
+  nome: MARCA_EXEMPLO, razao_social: 'Madeiras Exemplo LTDA', tipo: 'Fornecedor', tipo_pessoa: 'PJ', cnpj: '11.222.333/0001-81',
+  inscricao_estadual: '0628725380094', email: 'vendas@exemplo.com.br', telefone_celular: '(31) 99999-8888', telefone_fixo: '(31) 3333-4444',
+  site: 'www.exemplo.com.br', status: 'Ativo', end_cep: '30820-272', end_rua: 'Av. Exemplo', end_numero: '100', end_complemento: 'Galpão 2',
+  end_bairro: 'Centro', end_cidade: 'Belo Horizonte', end_estado: 'MG', end_pais: 'Brasil', end_codigo_municipio: '3106200',
+  pessoa_nome: 'Carlos Souza', pessoa_cargo: 'Vendedor', pessoa_email: 'carlos@exemplo.com.br', pessoa_telefone_celular: '(31) 98888-7777',
+  anotacoes: 'Colunas com * são obrigatórias. O tipo precisa existir na lista do cadastro (a caixa com + e −).'
+};
+
+const modeloDeContatos = () => gerarCsv(COLUNAS_CONTATO, [EXEMPLO_CONTATO]);
+
+/** Um contato do banco (com a primeira pessoa) → linha da planilha. */
+function contatoParaLinha(c = {}, pessoa = null, tipoNome = null) {
+  const pf = String(c.tipo_pessoa || 'PJ').toUpperCase() === 'PF';
+  return {
+    nome: c.nome, razao_social: c.razao_social, tipo: tipoNome || '', tipo_pessoa: pf ? 'PF' : 'PJ',
+    cnpj: pf ? '' : formatarCnpj(c.cnpj), cpf: pf ? formatarCpf(c.cpf) : '',
+    inscricao_estadual: c.inscricao_estadual, inscricao_municipal: c.inscricao_municipal, email: c.email,
+    telefone_celular: c.telefone_celular, telefone_fixo: c.telefone_fixo, site: c.site, status: c.status || 'Ativo',
+    end_cep: c.end_cep, end_rua: c.end_logradouro, end_numero: c.end_numero, end_complemento: c.end_complemento,
+    end_bairro: c.end_bairro, end_cidade: c.end_cidade, end_estado: c.end_uf, end_pais: c.end_pais, end_codigo_municipio: c.end_codigo_municipio,
+    pessoa_nome: pessoa?.nome, pessoa_cargo: pessoa?.cargo, pessoa_email: pessoa?.email,
+    pessoa_telefone_fixo: pessoa?.telefone_fixo, pessoa_telefone_celular: pessoa?.telefone_celular,
+    anotacoes: c.anotacoes
+  };
+}
+
+/**
+ * Uma linha de contato → { payload, pessoas, bloqueios, pendencias, avisos, documento, identificacao }.
+ *
+ * Impede o cadastro: sem nome, sem tipo conhecido, CNPJ/CPF inválido, já
+ * cadastrado ou repetido no arquivo. Sem documento entra com pendência
+ * (fornecedor sem CNPJ existe: pessoa física de serviço, MEI sem nota…).
+ *
+ * contexto: { documentosCadastrados: Set, documentosDoArquivo: Map(doc → linha), tipos: [{ id, nome }] }
+ */
+function conferirContato(r = {}, contexto = {}) {
+  const bloqueios = [];
+  const pendencias = [];
+  const avisos = [];
+  const nome = texto(r.nome);
+  if (!nome) bloqueios.push('Nome é obrigatório.');
+
+  const tipoInformado = comparavel(r.tipo_pessoa);
+  let pf;
+  if (!tipoInformado) pf = Boolean(digitos(r.cpf)) && !digitos(r.cnpj);
+  else if (/^(pf|pessoa fisica|fisica|cpf)$/.test(tipoInformado)) pf = true;
+  else if (/^(pj|pessoa juridica|juridica|cnpj)$/.test(tipoInformado)) pf = false;
+  else {
+    pf = false;
+    pendencias.push(`Tipo de pessoa "${r.tipo_pessoa}" não reconhecido: cadastrado como pessoa jurídica.`);
+  }
+
+  const documento = pf ? digitos(r.cpf) : digitos(r.cnpj);
+  const nomeDoc = pf ? 'CPF' : 'CNPJ';
+  if (!documento) pendencias.push(`Sem ${nomeDoc}: complete no cadastro (a NF-e de entrada é achada por ele).`);
+  else if (pf ? !cpfValido(documento) : !cnpjValido(documento)) bloqueios.push(`${nomeDoc} ${r[pf ? 'cpf' : 'cnpj']} é inválido (confira os dígitos).`);
+  else if (contexto.documentosCadastrados?.has(documento)) bloqueios.push(`Já existe contato com este ${nomeDoc}.`);
+  else if (contexto.documentosDoArquivo?.has(documento)) bloqueios.push(`${nomeDoc} repetido: já aparece na linha ${contexto.documentosDoArquivo.get(documento)}.`);
+
+  const tipos = Array.isArray(contexto.tipos) ? contexto.tipos : [];
+  const tipo = tipos.find(t => comparavel(t.nome) === comparavel(r.tipo)) || null;
+  if (!texto(r.tipo)) bloqueios.push('Tipo é obrigatório (Fornecedor, Prestador de serviço…).');
+  else if (!tipo) bloqueios.push(`Tipo "${r.tipo}" não está na lista: inclua-o no cadastro (a caixa com + e −) antes de importar.`);
+
+  let status = 'Ativo';
+  const statusInformado = comparavel(r.status);
+  if (statusInformado === 'inativo') status = 'Inativo';
+  else if (statusInformado && statusInformado !== 'ativo') pendencias.push(`Status "${r.status}" não reconhecido: cadastrado como Ativo.`);
+
+  const end = enderecoDe(r, 'end');
+  if (vazio(end)) pendencias.push('Sem endereço.');
+  else {
+    const faltas = faltasDoEndereco(end);
+    if (faltas.length) pendencias.push(`Endereço incompleto: falta ${faltas.join(', ')}.`);
+  }
+
+  const pessoas = [];
+  if (texto(r.pessoa_nome)) {
+    pessoas.push({
+      nome: texto(r.pessoa_nome), cargo: texto(r.pessoa_cargo), email: texto(r.pessoa_email),
+      telefone_fixo: texto(r.pessoa_telefone_fixo), telefone_celular: texto(r.pessoa_telefone_celular)
+    });
+  } else if (texto(r.pessoa_cargo) || texto(r.pessoa_email) || texto(r.pessoa_telefone_celular) || texto(r.pessoa_telefone_fixo)) {
+    avisos.push('Pessoa de contato sem nome: os dados dela foram ignorados.');
+  }
+
+  const payload = {
+    nome, razao_social: texto(r.razao_social) || null, tipo_id: tipo ? tipo.id : null, tipo_pessoa: pf ? 'PF' : 'PJ',
+    cnpj: pf ? null : (documento || null), cpf: pf ? (documento || null) : null,
+    inscricao_estadual: texto(r.inscricao_estadual) || null, inscricao_municipal: texto(r.inscricao_municipal) || null,
+    email: texto(r.email) || null, telefone_celular: texto(r.telefone_celular) || null, telefone_fixo: texto(r.telefone_fixo) || null,
+    site: texto(r.site) || null, status,
+    end_logradouro: end.rua || null, end_numero: end.numero || null, end_complemento: end.complemento || null, end_bairro: end.bairro || null,
+    end_cidade: end.cidade || null, end_uf: end.estado || null, end_pais: end.pais || null, end_cep: end.cep || null,
+    end_codigo_municipio: end.codigo_municipio || null,
+    anotacoes: texto(r.anotacoes) || null
+  };
+  return { payload, pessoas, bloqueios, pendencias, avisos, documento: documento || null, identificacao: nome || (pf ? formatarCpf(documento) : formatarCnpj(documento)) };
+}
+
 // ------------------------------------------------------------ exportação
 
 /** Um cliente do banco (com o primeiro contato) → linha da planilha. */
@@ -649,7 +776,8 @@ function resumirImportacao(resultados = []) {
 }
 
 module.exports = {
-  SEPARADOR, BOM, MARCA_EXEMPLO, COLUNAS_CLIENTE, COLUNAS_PROSPECCAO, ETAPAS_PROSPECCAO,
+  SEPARADOR, BOM, MARCA_EXEMPLO, COLUNAS_CLIENTE, COLUNAS_PROSPECCAO, COLUNAS_CONTATO, ETAPAS_PROSPECCAO,
+  modeloDeContatos, contatoParaLinha, conferirContato,
   lerCsv, gerarCsv, celula, detectarSeparador, mapearCabecalho, registroDaLinha, tituloDaColuna,
   lerSimNao, lerNumero, lerData, dataBr, numeroBr, cnpjValido, cpfValido, formatarCnpj, formatarCpf, digitos, comparavel,
   ehLinhaDeExemplo, modeloDeClientes, modeloDeProspeccoes, clienteParaLinha, prospeccaoParaLinha,

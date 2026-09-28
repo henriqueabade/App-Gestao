@@ -1528,37 +1528,79 @@ const PERMISSIONS_CATALOG = {
         "key": "ctt.create",
         "column": "acao_create",
         "label": "Cadastrar contato",
-        "desc": "Botão \"Novo Contato\" (aqui e o ícone da linha de Clientes)"
+        "desc": "Botão \"Novo Contato\" (fornecedor, prestador de serviço, parceiro…) e o ícone da linha de Clientes"
       },
       {
         "key": "ctt.export.csv",
         "column": "acao_export_csv",
         "label": "Exportar CSV",
-        "desc": "Botão \"Exportar CSV\""
+        "desc": "Ações Rápidas › \"Exportar CSV\""
       },
       {
         "key": "ctt.import.csv",
         "column": "acao_import_csv",
         "label": "Importar CSV",
-        "desc": "Botão \"Importar CSV\""
+        "desc": "Ações Rápidas › \"Importar CSV\" e \"Salvar modelo CSV\""
       },
       {
         "key": "ctt.report",
         "column": "acao_report",
         "label": "Gerar relatório",
-        "desc": "Botão \"Gerar Relatório\""
+        "desc": "Ações Rápidas › \"Gerar Relatório\""
       },
       {
         "key": "ctt.email.bulk",
         "column": "acao_email_bulk",
         "label": "Enviar e-mail em massa",
-        "desc": "Botão \"Enviar E-mail em Massa\""
+        "desc": "Ações Rápidas › \"Enviar E-mail em Massa\""
+      },
+      {
+        "key": "ctt.details.view",
+        "column": "acao_details_view",
+        "label": "Ver detalhes",
+        "desc": "Ícone do olho da linha — a ficha do contato, as atividades e a linha do tempo"
       },
       {
         "key": "ctt.edit",
         "column": "acao_edit",
         "label": "Editar contato",
-        "desc": "Ícone de lápis da linha"
+        "desc": "Ícone de lápis da linha e o botão Editar da ficha"
+      },
+      {
+        "key": "ctt.delete",
+        "column": "acao_delete",
+        "label": "Excluir contato",
+        "desc": "Ícone da lixeira da linha"
+      },
+      {
+        "key": "ctt.person.add",
+        "column": "acao_person_add",
+        "label": "Adicionar pessoa de contato",
+        "desc": "Botão \"+ Nova pessoa\" na aba Pessoas do cadastro"
+      },
+      {
+        "key": "ctt.person.edit",
+        "column": "acao_person_edit",
+        "label": "Editar pessoa de contato",
+        "desc": "Lápis na aba Pessoas"
+      },
+      {
+        "key": "ctt.person.remove",
+        "column": "acao_person_remove",
+        "label": "Remover pessoa de contato",
+        "desc": "Lixeira na aba Pessoas"
+      },
+      {
+        "key": "ctt.interaction.add",
+        "column": "acao_interaction_add",
+        "label": "Registrar atividade",
+        "desc": "Aba Atividades da ficha: ligação, e-mail, reunião, visita… (registrar, editar e excluir)"
+      },
+      {
+        "key": "ctt.type.manage",
+        "column": "acao_type_manage",
+        "label": "Editar a lista de tipos",
+        "desc": "Os botões + e − ao lado do campo Tipo (Fornecedor, Prestador de serviço…)"
       }
     ],
     "columns": [
@@ -1573,9 +1615,9 @@ const PERMISSIONS_CATALOG = {
         "label": "Tipo"
       },
       {
-        "key": "col_ctt_cliente",
-        "column": "col_ctt_cliente",
-        "label": "Empresa"
+        "key": "col_ctt_cnpj",
+        "column": "col_ctt_cnpj",
+        "label": "CNPJ / CPF"
       },
       {
         "key": "col_ctt_tel",
@@ -2381,6 +2423,52 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_reembolso_confirmar",
         "label": "Confirmar reembolso",
         "desc": "Registrar que o reembolso de uma devolução foi pago ao cliente"
+      }
+    ],
+    "columns": []
+  },
+  "contabilidade": {
+    "code": "contabilidade",
+    "label": "Contabilidade",
+    "page": "contabilidade",
+    "table": "perm_contabilidade",
+    "configured": true,
+    "actions": [
+      {
+        "key": "contabilidade.view",
+        "column": "acao_view",
+        "label": "Ver o fechamento",
+        "desc": "Checklist da competência, pendências e atividade do módulo"
+      },
+      {
+        "key": "contabilidade.fechar",
+        "column": "acao_fechar",
+        "label": "Fechar competência",
+        "desc": "Fecha o mês para a contabilidade (só sem erro crítico e com o mês terminado)"
+      },
+      {
+        "key": "contabilidade.reabrir",
+        "column": "acao_reabrir",
+        "label": "Reabrir competência",
+        "desc": "Reabre um mês fechado, com justificativa"
+      },
+      {
+        "key": "contabilidade.pendencia.resolver",
+        "column": "acao_pendencia_resolver",
+        "label": "Ignorar pendência",
+        "desc": "Ignora uma pendência documental ou um aviso, com justificativa (erro crítico não se ignora)"
+      },
+      {
+        "key": "contabilidade.pacote.gerar",
+        "column": "acao_pacote_gerar",
+        "label": "Gerar relatório e pacote",
+        "desc": "Relatório mensal e ZIP para a contabilidade (etapas seguintes)"
+      },
+      {
+        "key": "contabilidade.config.view",
+        "column": "acao_config_view",
+        "label": "Ver configuração",
+        "desc": "Conta, destinatário e o que bloqueia o fechamento (etapas seguintes)"
       }
     ],
     "columns": []

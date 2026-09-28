@@ -147,6 +147,10 @@
           <i class="fas fa-dollar-sign mr-2"></i>
           Financeiro
         </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="contabilidade">
+          <i class="fas fa-book mr-2"></i>
+          Contabilidade
+        </button>
       </div>
     </nav>
 
@@ -2501,7 +2505,7 @@
                 <i class="fas fa-address-book text-[var(--color-primary)]"></i>
                 Contatos
               </h3>
-              <p class="text-sm text-gray-400">Gestão de contatos independentes ou ligados a clientes.
+              <p class="text-sm text-gray-400">Fornecedores, prestadores de serviço e parceiros: a ficha, as pessoas de contato, as atividades e a linha do tempo.
 </p>
             </div>
             <label class="usuario-permissao-toggle" data-module-toggle="ctt">
@@ -2556,11 +2560,19 @@
                         </div>
                       </label>
 
-                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo contato">
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo contato fornecedor prestador">
                         <input type="checkbox" name="ctt.create" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
                           <span class="text-sm font-medium">Cadastrar contato</span>
-                          <p class="text-sm text-gray-400">Botão "Novo Contato" (aqui e o ícone da linha de Clientes)</p>
+                          <p class="text-sm text-gray-400">Botão "Novo Contato" (fornecedor, prestador de serviço, parceiro…) e o ícone da linha de Clientes</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="tipos lista mais menos fornecedor prestador">
+                        <input type="checkbox" name="ctt.type.manage" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Editar a lista de tipos</span>
+                          <p class="text-sm text-gray-400">Os botões + e − ao lado do campo Tipo (Fornecedor, Prestador de serviço…)</p>
                         </div>
                       </label>
 
@@ -2610,11 +2622,66 @@
                     <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
                     <div class="grid grid-cols-1 gap-4">
 
+                      <label class="usuarios-permissoes-item" data-search="ver detalhes olho ficha contato">
+                        <input type="checkbox" name="ctt.details.view" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Ver detalhes</span>
+                          <p class="text-sm text-gray-400">Ícone do olho da linha — a ficha do contato, as atividades e a linha do tempo</p>
+                        </div>
+                      </label>
+
                       <label class="usuarios-permissoes-item" data-search="editar alterar contato lápis">
                         <input type="checkbox" name="ctt.edit" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
                           <span class="text-sm font-medium">Editar contato</span>
-                          <p class="text-sm text-gray-400">Ícone de lápis da linha</p>
+                          <p class="text-sm text-gray-400">Ícone de lápis da linha e o botão Editar da ficha</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir remover contato lixeira">
+                        <input type="checkbox" name="ctt.delete" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Excluir contato</span>
+                          <p class="text-sm text-gray-400">Ícone da lixeira da linha</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ficha do contato</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="adicionar pessoa de contato nova pessoa">
+                        <input type="checkbox" name="ctt.person.add" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Adicionar pessoa de contato</span>
+                          <p class="text-sm text-gray-400">Botão "+ Nova pessoa" na aba Pessoas do cadastro</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar pessoa de contato">
+                        <input type="checkbox" name="ctt.person.edit" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Editar pessoa de contato</span>
+                          <p class="text-sm text-gray-400">Lápis na aba Pessoas</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="remover excluir pessoa de contato">
+                        <input type="checkbox" name="ctt.person.remove" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Remover pessoa de contato</span>
+                          <p class="text-sm text-gray-400">Lixeira na aba Pessoas</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar atividade ligação reunião visita">
+                        <input type="checkbox" name="ctt.interaction.add" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Registrar atividade</span>
+                          <p class="text-sm text-gray-400">Aba Atividades da ficha: ligação, e-mail, reunião, visita… (registrar, editar e excluir)</p>
                         </div>
                       </label>
 
@@ -2662,8 +2729,8 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_cliente" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Empresa</span>
+                        <input type="checkbox" name="col_ctt_cnpj" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">CNPJ / CPF</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -4504,6 +4571,117 @@
                         <div>
                           <span class="text-sm font-medium">Confirmar reembolso</span>
                           <p class="text-sm text-gray-400">Registrar que o reembolso de uma devolução foi pago ao cliente</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Contabilidade (etapa 1, 28/09/2026): fechamento do mês para a contabilidade. -->
+        <section data-permission-tab-panel="contabilidade" data-module="contabilidade" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="ctl-secao-tela text-white flex items-center gap-3">
+                <i class="fas fa-book text-[var(--color-primary)]"></i>
+                Contabilidade
+              </h3>
+              <p class="text-sm text-gray-400">Fechamento do mês: checklist por fonte, pendências e pacote para a contabilidade.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="contabilidade">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="contabilidade" class="space-y-6">
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="acoes-contabilidade" aria-expanded="true">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-play text-[var(--color-primary)]"></i>
+                  <span class="ctl-secao text-[var(--color-primary)]">Ações</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4 is-open"
+                data-accordion-content="acoes-contabilidade"
+                data-group-container="acoes-contabilidade"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterAcoesContabilidade" data-role="master" data-group="acoes-contabilidade" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterAcoesContabilidade" class="text-sm font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="acoes-contabilidade">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 gap-6">
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Fechamento do mês</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ver fechamento contabilidade checklist pendencias">
+                        <input type="checkbox" name="contabilidade.view" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Ver o fechamento</span>
+                          <p class="text-sm text-gray-400">Checklist da competência, pendências e atividade do módulo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="fechar competencia contabil mes">
+                        <input type="checkbox" name="contabilidade.fechar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Fechar competência</span>
+                          <p class="text-sm text-gray-400">Fecha o mês para a contabilidade (só sem erro crítico e com o mês terminado)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="reabrir competencia contabil justificativa">
+                        <input type="checkbox" name="contabilidade.reabrir" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Reabrir competência</span>
+                          <p class="text-sm text-gray-400">Reabre um mês fechado, com justificativa</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Pendências</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="ignorar pendencia justificativa documental aviso">
+                        <input type="checkbox" name="contabilidade.pendencia.resolver" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Ignorar pendência</span>
+                          <p class="text-sm text-gray-400">Ignora uma pendência documental ou um aviso, com justificativa (erro crítico não se ignora)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Pacote e configuração (etapas seguintes)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="gerar relatorio pacote zip contabilidade enviar">
+                        <input type="checkbox" name="contabilidade.pacote.gerar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Gerar relatório e pacote</span>
+                          <p class="text-sm text-gray-400">Relatório mensal e ZIP para a contabilidade (etapas seguintes)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="configuracao contabilidade conta destinatario bloqueios">
+                        <input type="checkbox" name="contabilidade.config.view" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Ver configuração</span>
+                          <p class="text-sm text-gray-400">Conta, destinatário e o que bloqueia o fechamento (etapas seguintes)</p>
                         </div>
                       </label>
                     </div>

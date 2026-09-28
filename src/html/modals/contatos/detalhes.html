@@ -1,0 +1,187 @@
+<div id="detalhesContatoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao">
+  <div class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarDetalhesContato" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="contatoDetalhesTitulo" class="ctl-modal-titulo text-white text-center">Detalhes</h2>
+      <span></span>
+    </header>
+
+    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+      <div class="flex gap-8 overflow-x-auto scrollbar-hide">
+        <button id="tab-dados" role="tab" aria-selected="true" aria-controls="panel-dados" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Dados</button>
+        <button id="tab-pessoas" role="tab" aria-selected="false" aria-controls="panel-pessoas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Pessoas de contato</button>
+        <button id="tab-endereco" role="tab" aria-selected="false" aria-controls="panel-endereco" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Endereço</button>
+        <button id="tab-notas" role="tab" aria-selected="false" aria-controls="panel-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
+        <button id="tab-atividades" role="tab" aria-selected="false" aria-controls="panel-atividades" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Atividades</button>
+        <button id="tab-historico" role="tab" aria-selected="false" aria-controls="panel-historico" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Histórico</button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section id="panel-dados" role="tabpanel" aria-labelledby="tab-dados" class="px-8 py-6">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div class="md:col-span-3 flex flex-col items-center">
+            <div id="contatoAvatar" class="w-32 h-32 glass-surface rounded-full flex items-center justify-center text-4xl font-bold text-primary border-2 border-primary/20"></div>
+            <span id="contatoTipoEtiqueta" class="badge-info px-3 py-1 rounded-full text-xs font-medium mt-4"></span>
+          </div>
+          <div class="md:col-span-9">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="ctl-rotulo text-gray-300">Nome (empresa ou pessoa)</label>
+                <input id="contatoNome" data-perm-col="col_ctt_nome" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Razão Social</label>
+                <input id="contatoRazaoSocial" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Tipo</label>
+                <input id="contatoTipoTexto" data-perm-col="col_ctt_tipo" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Tipo de pessoa</label>
+                <select id="contatoTipoPessoa" disabled class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="PJ">Pessoa jurídica (CNPJ)</option>
+                  <option value="PF">Pessoa física (CPF)</option>
+                </select>
+              </div>
+              <div id="contatoCnpjBloco">
+                <label class="ctl-rotulo text-gray-300">CNPJ</label>
+                <input id="contatoCnpj" data-perm-col="col_ctt_cnpj" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div id="contatoCpfBloco" class="hidden">
+                <label class="ctl-rotulo text-gray-300">CPF</label>
+                <input id="contatoCpf" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Inscrição Estadual</label>
+                <input id="contatoInscricaoEstadual" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Inscrição Municipal</label>
+                <input id="contatoInscricaoMunicipal" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">E-mail</label>
+                <input id="contatoEmail" type="email" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Site</label>
+                <input id="contatoSite" type="url" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Celular</label>
+                <input id="contatoCelular" data-perm-col="col_ctt_tel" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Telefone</label>
+                <input id="contatoTelefone" data-perm-col="col_ctt_fixo" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="ctl-rotulo text-gray-300">Status</label>
+                <input id="contatoStatus" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-pessoas" role="tabpanel" aria-labelledby="tab-pessoas" class="px-8 py-6 hidden">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="ctl-secao text-white">Pessoas de contato</h3>
+        </div>
+        <div class="glass-surface rounded-xl border border-white/10 table-scroll">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b">
+                  <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">NOME</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">CARGO</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">E-MAIL</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">CELULAR</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">TELEFONE</th>
+                </tr>
+              </thead>
+              <tbody id="pessoasTabela">
+                <tr>
+                  <td colspan="5" class="py-12 text-left text-gray-400">Nenhuma pessoa cadastrada</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-endereco" role="tabpanel" aria-labelledby="tab-endereco" class="px-8 py-6 hidden">
+        <h3 class="ctl-secao text-white mb-4 flex items-center gap-2">
+          <button id="copyEndEndereco" type="button" class="text-gray-400 hover:text-white" title="Copiar o endereço"><i class="fas fa-copy"></i></button>
+          Endereço
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="ctl-rotulo text-gray-300">Rua</label>
+            <input id="endRua" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Número</label>
+            <input id="endNumero" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Complemento</label>
+            <input id="endComplemento" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Bairro</label>
+            <input id="endBairro" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Cidade</label>
+            <input id="endCidade" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">País</label>
+            <input id="endPais" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Estado</label>
+            <input id="endEstado" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">CEP</label>
+            <input id="endCep" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="ctl-rotulo text-gray-300">Código IBGE</label>
+            <input id="endCodigoMunicipio" type="text" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-notas" role="tabpanel" aria-labelledby="tab-notas" class="px-8 py-6 hidden">
+        <div>
+          <label class="ctl-rotulo text-gray-300">Observações</label>
+          <textarea id="contatoNotas" rows="12" placeholder="—" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        </div>
+      </section>
+
+      <!-- Atividades: o que foi feito com o contato (ligação, visita...).
+           data-editavel-na-ficha: fora do aviso de "somente leitura". -->
+      <section id="panel-atividades" role="tabpanel" aria-labelledby="tab-atividades" class="px-8 py-6 hidden" data-editavel-na-ficha>
+        <div class="cat">
+          <div id="contatoAtividades" class="cat__cartao"></div>
+        </div>
+      </section>
+
+      <!-- Linha do tempo "de rede social" (src/js/utils/historico-social.js). -->
+      <section id="panel-historico" role="tabpanel" aria-labelledby="tab-historico" class="px-8 py-6 hidden">
+        <h3 class="ctl-secao text-white mb-1">Linha do tempo</h3>
+        <p class="text-xs text-gray-400 mb-4">Tudo o que aconteceu com este contato, com quem fez. Curta, comente, responda e publique observações; quem cadastrou o contato e quem fez a ação recebem aviso no sino.</p>
+        <div id="contatoHistorico" data-historico-social></div>
+      </section>
+    </div>
+
+    <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
+      <button id="editarDetalhesContato" data-perm="ctt.edit" class="btn-primary ctl-botao text-white min-w-[120px]">Editar</button>
+    </footer>
+  </div>
+</div>

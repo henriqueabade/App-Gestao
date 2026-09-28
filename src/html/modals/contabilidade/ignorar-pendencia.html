@@ -1,0 +1,42 @@
+<!--
+  Ignorar pendência com justificativa. Modal pequeno. Só pendência documental
+  ou aviso (erro crítico não se ignora — o backend recusa). Grava por POST
+  /api/contabilidade/pendencias/ignorar (contabilidade.pendencia.resolver); a
+  pendência continua na lista, marcada, e deixa de contar para os bloqueios.
+  "Restaurar" na lista desfaz. Script: src/js/modals/contabilidade-modais.js
+  (montarIgnorarPendencia).
+-->
+<div id="ctbIgnorarPendenciaOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbIgnorarTitulo" class="w-full max-w-2xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbIgnorarTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-eye-slash mr-2" aria-hidden="true"></i>Ignorar pendência</h2>
+      <span id="ctbIgnorarSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p class="text-sm text-gray-300">
+          A pendência deixa de contar para os bloqueios desta competência, mas continua na lista, marcada como ignorada,
+          com quem ignorou e por quê. Erro crítico não se ignora: resolva-o no Financeiro.
+        </p>
+
+        <dl class="ctb-dados glass-surface rounded-xl border border-white/10" id="ctbIgnorarDados"></dl>
+
+        <div>
+          <label for="ctbIgnorarJustificativa" class="ctl-rotulo text-gray-300">Justificativa <span class="ctb-obrigatorio">*</span></label>
+          <textarea id="ctbIgnorarJustificativa" rows="3" maxlength="1000" placeholder="Por que esta pendência não vale para a contabilidade (pelo menos 10 caracteres)"
+                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+        </div>
+
+        <div id="ctbIgnorarMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbIgnorarConfirmar" type="button" data-perm="contabilidade.pendencia.resolver" class="btn-primary ctl-botao text-white min-w-[160px]">Ignorar pendência</button>
+    </footer>
+  </div>
+</div>

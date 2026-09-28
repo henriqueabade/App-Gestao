@@ -597,7 +597,7 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       return;
     }
-    const pagina = aviso.origem === 'cliente' ? 'clientes' : aviso.origem === 'prospeccao' ? 'prospeccoes' : null;
+    const pagina = { cliente: 'clientes', prospeccao: 'prospeccoes', contato: 'contatos' }[aviso.origem] || null;
     if (!pagina || !aviso.registro_id) return;
     window.historicoSocialFoco = {
       origem: aviso.origem,
@@ -614,6 +614,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       const registro = { id: aviso.registro_id };
       if (pagina === 'clientes') window.ClientesModulo?.abrirDetalhes?.(registro);
+      else if (pagina === 'contatos') window.ContatosModulo?.abrirDetalhes?.(registro);
       else window.ProspeccoesModulo?.abrirDetalhes?.(registro);
     } catch (err) {
       console.error('[sino] não foi possível abrir o aviso:', err);

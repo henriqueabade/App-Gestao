@@ -81,6 +81,8 @@ if (isDev) {
 // acontece: o vigia olha as escritas que deram certo (backend/tarefasAcoes.js).
 app.use('/api', require('./tarefasAcoes').observar);
 app.use('/api/clientes', clientesRouter);
+// Contatos = fornecedores, prestadores e parceiros (sql/contatos_fornecedores.sql).
+app.use('/api/contatos', require('./contatosController'));
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
@@ -99,6 +101,8 @@ app.use('/api/fiscal', require('./fiscalController'));
 app.use('/api/cobranca', require('./cobrancaController'));
 // Financeiro completo (fase G): comissões, ajustes, produção, fechamentos e pagamentos.
 app.use('/api/financeiro', require('./financeiroController'));
+// Contabilidade (etapa 1): checklist do fechamento do mês, pendências em três severidades, fechar/reabrir.
+app.use('/api/contabilidade', require('./contabilidadeController'));
 // Devolução de pedidos (parcial e total): peças ao estoque, parcelas, boletos no BB e reembolso.
 app.use('/api/devolucoes', require('./devolucoesController'));
 // Desenhistas das peças (o royalty vai para o desenhista de cada peça do pedido).

@@ -1,0 +1,12 @@
+<div id="excluirContatoOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <div class="p-6 text-center">
+      <h3 class="ctl-modal-titulo mb-4 text-white">Tem certeza?</h3>
+      <p class="text-sm text-gray-300">Deseja excluir este contato? As pessoas, as atividades e a linha do tempo dele saem junto. Esta ação não pode ser desfeita.</p>
+      <div class="ctl-acoes justify-center mt-8">
+        <button id="cancelarExcluirContato" class="btn-danger ctl-botao text-white active:scale-95">Não</button>
+        <button id="confirmarExcluirContato" data-perm="ctt.delete" class="btn-success ctl-botao active:scale-95">Sim</button>
+      </div>
+    </div>
+  </div>
+</div>

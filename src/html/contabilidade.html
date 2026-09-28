@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<!-- Tela principal do módulo Contabilidade — Fechamento do mês -->
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contabilidade - Santíssimo Decor</title>
+    <link rel="stylesheet" href="../styles/tailwind-offline.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Estilos específicos do módulo -->
+    <link rel="stylesheet" href="../css/contabilidade.css">
+    <!-- Estilos globais para barras de rolagem -->
+    <link rel="stylesheet" href="../styles/scroll.css">
+</head>
+<body class="text-white">
+  <!--
+    Só o .modulo-container é importado pelo menu (src/js/menu.js). Tudo é
+    preenchido por src/js/contabilidade.js a partir de GET
+    /api/contabilidade/painel da competência escolhida: a situação (aberta,
+    fechada, reaberta), a contagem das pendências nas três severidades do dono
+    (erro crítico bloqueia o fechamento; pendência documental bloqueia o
+    pacote e o envio; aviso não bloqueia), o checklist por fonte — só com o
+    que o sistema já controla: NF-e de saída, recebimentos, comissões e
+    produção, devoluções; extrato, documentos recebidos, contas a pagar e
+    conciliação aparecem como "ainda não integrado" — a lista de pendências
+    e a atividade do módulo. Cada botão/cartão traz `data-ctb-acao`: quem
+    ainda não tem função real abre o aviso "em implementação".
+  -->
+  <div class="modulo-container ctl-padrao contabilidade-module">
+    <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
+    <div class="module-header ctb-cabecalho mb-8 animate-fade-in-up">
+      <div>
+        <h1 class="text-2xl font-semibold mb-2 module-header__title">Contabilidade</h1>
+        <p class="module-header__description">Feche o mês e prepare o que vai para a contabilidade</p>
+      </div>
+      <div class="ctb-cabecalho__controles">
+        <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+        <div class="ctb-competencia">
+          <span class="ctb-competencia__rotulo" id="ctbCompetenciaRotulo">Competência</span>
+          <div class="ctb-competencia-campo" data-competencia role="group" aria-labelledby="ctbCompetenciaRotulo">
+            <select id="ctbCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes ctl-campo input-glass text-white select-arrow appearance-none"></select>
+            <input id="ctbCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo input-glass text-white" />
+            <button id="ctbCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência">
+              <i class="fas fa-search" aria-hidden="true"></i>
+            </button>
+            <input type="hidden" id="ctbCompetencia" />
+          </div>
+        </div>
+        <button id="ctbHoje" type="button" class="btn-neutral ctl-botao text-white">Hoje</button>
+        <button type="button" data-perm="contabilidade.config.view" data-ctb-acao="configuracao" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Configuração da contabilidade" aria-label="Configuração da contabilidade">
+          <i class="fas fa-cog" aria-hidden="true"></i>
+        </button>
+        <!-- Consulta dentro do app (azul claro): o relatório e o pacote são as etapas 8 e 9. -->
+        <button id="ctbPacote" type="button" data-perm="contabilidade.pacote.gerar" data-ctb-acao="pacote" class="btn-secondary ctl-botao text-white" title="Relatório mensal e ZIP para a contabilidade">
+          <i class="fas fa-file-archive mr-2" aria-hidden="true"></i>Gerar pacote
+        </button>
+        <!-- Reabrir (bordô, ação sensível) só aparece com a competência fechada. -->
+        <button id="ctbReabrir" type="button" data-perm="contabilidade.reabrir" data-ctb-acao="reabrir" class="btn-warning ctl-botao text-white hidden" title="Reabre a competência, com justificativa">
+          <i class="fas fa-lock-open mr-2" aria-hidden="true"></i>Reabrir
+        </button>
+        <button id="ctbFechar" type="button" data-perm="contabilidade.fechar" data-ctb-acao="fechar" class="btn-success ctl-botao" title="Fecha a competência para a contabilidade">
+          <i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência
+        </button>
+        <button id="ctbAtualizar" type="button" class="btn-primary ctl-botao text-white" data-ctb-acao="atualizar">
+          <i class="fas fa-rotate mr-2" aria-hidden="true"></i>Atualizar
+        </button>
+      </div>
+    </div>
+
+    <!-- Sem o SQL do módulo (ou sem permissão): a tela diz o que fazer, em vez de ficar vazia. -->
+    <div id="ctbAviso" class="ctb-aviso hidden" role="alert">
+      <i class="fas fa-database" aria-hidden="true"></i>
+      <span data-ctb="aviso.texto"></span>
+    </div>
+
+    <!-- Primeira faixa: a situação da competência e as pendências por severidade -->
+    <div class="ctb-kpis animate-fade-in-up">
+      <article class="ctb-kpi ctb-kpi--situacao glass-surface rounded-xl" data-ctb-situacao="aberta">
+        <div class="ctb-kpi__topo">
+          <span class="ctb-kpi__icone" data-tom="ouro"><i class="fas fa-calendar-check" aria-hidden="true"></i></span>
+          <span class="ctb-kpi__rotulo">Situação da competência</span>
+        </div>
+        <div class="ctb-kpi__linha">
+          <span class="ctb-kpi__valor ctb-kpi__valor--texto" data-ctb="situacao.status">—</span>
+          <span class="ctb-kpi__auxiliar" data-ctb="situacao.rotulo"></span>
+        </div>
+        <p class="ctb-kpi__rodape" data-ctb="situacao.detalhe"></p>
+        <!-- Fontes em dia / avaliáveis: a barra mostra o quanto falta para o mês fechar limpo. -->
+        <div class="ctb-progresso" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-ctb-progresso>
+          <span class="ctb-progresso__barra" data-ctb-progresso-barra></span>
+        </div>
+        <p class="ctb-kpi__rodape" data-ctb="progresso.texto"></p>
+      </article>
+
+      <!-- Erro crítico: bordô da identidade. Clicar filtra a lista. -->
+      <article class="ctb-kpi ctb-kpi--critico glass-surface rounded-xl" data-ctb-acao="filtrar" data-ctb-filtro="critico" role="button" tabindex="0" aria-label="Erros críticos — ver só eles na lista">
+        <div class="ctb-kpi__topo">
+          <span class="ctb-kpi__icone" data-tom="bordo"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></span>
+          <span class="ctb-kpi__rotulo">Erros críticos</span>
+          <span class="ctb-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="ctb-kpi__linha">
+          <span class="ctb-kpi__valor" data-ctb="contagem.critico">—</span>
+        </div>
+        <p class="ctb-kpi__rodape">Bloqueiam o fechamento da competência</p>
+      </article>
+
+      <article class="ctb-kpi ctb-kpi--documental glass-surface rounded-xl" data-ctb-acao="filtrar" data-ctb-filtro="documental" role="button" tabindex="0" aria-label="Pendências documentais — ver só elas na lista">
+        <div class="ctb-kpi__topo">
+          <span class="ctb-kpi__icone" data-tom="ouro"><i class="fas fa-file-alt" aria-hidden="true"></i></span>
+          <span class="ctb-kpi__rotulo">Pendências documentais</span>
+          <span class="ctb-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="ctb-kpi__linha">
+          <span class="ctb-kpi__valor" data-ctb="contagem.documental">—</span>
+        </div>
+        <p class="ctb-kpi__rodape">Bloqueiam o pacote e o envio à contabilidade</p>
+      </article>
+
+      <article class="ctb-kpi glass-surface rounded-xl" data-ctb-acao="filtrar" data-ctb-filtro="aviso" role="button" tabindex="0" aria-label="Avisos — ver só eles na lista">
+        <div class="ctb-kpi__topo">
+          <span class="ctb-kpi__icone" data-tom="neutro"><i class="fas fa-info-circle" aria-hidden="true"></i></span>
+          <span class="ctb-kpi__rotulo">Avisos</span>
+          <span class="ctb-kpi__seta" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+        </div>
+        <div class="ctb-kpi__linha">
+          <span class="ctb-kpi__valor" data-ctb="contagem.aviso">—</span>
+        </div>
+        <p class="ctb-kpi__rodape" data-ctb="contagem.rodape">Não bloqueiam nada</p>
+      </article>
+    </div>
+
+    <!-- Segunda faixa: o checklist por fonte -->
+    <div class="ctb-faixa-titulo animate-fade-in-up">
+      <h2>Checklist por fonte</h2>
+      <span class="ctb-faixa-titulo__nota">Só o que o sistema já controla entra na conta; o resto aparece como "ainda não integrado" e chega nas próximas etapas.</span>
+    </div>
+    <div class="ctb-fontes animate-fade-in-up" data-ctb-lista="fontes"></div>
+
+    <!-- Terceira faixa: pendências (70%) e ações (30%) -->
+    <div class="ctb-operacional animate-fade-in-up">
+      <section class="ctb-painel glass-surface rounded-xl">
+        <header class="ctb-painel__cabeca">
+          <div class="ctb-painel__titulo">
+            <h2>Pendências</h2>
+            <span class="ctb-badge ctb-badge--contagem" data-ctb="pendencias.total">0</span>
+          </div>
+          <!-- A lista mostra as primeiras; "Ver todas" abre o resto no lugar. -->
+          <button type="button" class="ctb-link" data-ctb-acao="pendencias-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+        </header>
+        <!-- Filtro por severidade (etiquetas, fora do padrão de botão de propósito) e por fonte (quando um cartão é clicado). -->
+        <div class="ctb-filtros" role="group" aria-label="Filtrar pendências">
+          <button type="button" class="ctb-chip is-ativo" data-ctb-acao="filtrar" data-ctb-filtro="todas">Todas</button>
+          <button type="button" class="ctb-chip" data-ctb-acao="filtrar" data-ctb-filtro="critico">Críticas</button>
+          <button type="button" class="ctb-chip" data-ctb-acao="filtrar" data-ctb-filtro="documental">Documentais</button>
+          <button type="button" class="ctb-chip" data-ctb-acao="filtrar" data-ctb-filtro="aviso">Avisos</button>
+          <button type="button" class="ctb-chip" data-ctb-acao="filtrar" data-ctb-filtro="ignoradas">Ignoradas</button>
+          <span class="ctb-chip ctb-chip--fonte hidden" data-ctb-fonte-chip>
+            <span data-ctb="filtro.fonte"></span>
+            <button type="button" class="ctb-chip__fechar" data-ctb-acao="filtrar-fonte" data-ctb-fonte="" title="Tirar o filtro da fonte" aria-label="Tirar o filtro da fonte"><i class="fas fa-times" aria-hidden="true"></i></button>
+          </span>
+        </div>
+        <ul class="ctb-pendencias" data-ctb-lista="pendencias"></ul>
+      </section>
+
+      <section class="ctb-painel glass-surface rounded-xl">
+        <header class="ctb-painel__cabeca">
+          <div class="ctb-painel__titulo"><h2>Ações</h2></div>
+        </header>
+        <div class="ctb-acoes">
+          <button type="button" class="ctb-acao" data-perm="contabilidade.fechar" data-ctb-acao="fechar">
+            <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.reabrir" data-ctb-acao="reabrir">
+            <i class="fas fa-lock-open" aria-hidden="true"></i><span>Reabrir competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="relatorio">
+            <i class="fas fa-file-lines" aria-hidden="true"></i><span>Relatório mensal</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="pacote">
+            <i class="fas fa-file-archive" aria-hidden="true"></i><span>Gerar pacote (ZIP)</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="enviar">
+            <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Enviar à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Fala com o Banco do Brasil: azul escuro do BB só quando existir; até lá é aviso. -->
+          <button type="button" class="ctb-acao" data-ctb-acao="sincronizar-extrato">
+            <i class="fas fa-university" aria-hidden="true"></i><span>Sincronizar extrato do BB</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="documentos-recebidos">
+            <i class="fas fa-file-import" aria-hidden="true"></i><span>Documentos fiscais recebidos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="contas-pagar">
+            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Contas a pagar</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
+            <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação e classificação</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.config.view" data-ctb-acao="configuracao">
+            <i class="fas fa-cog" aria-hidden="true"></i><span>Configurações</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Quarta faixa: atividade do módulo e o que vem a seguir -->
+    <div class="ctb-resumos animate-fade-in-up">
+      <section class="ctb-painel glass-surface rounded-xl">
+        <header class="ctb-painel__cabeca">
+          <div class="ctb-painel__titulo"><h2>Atividade recente</h2></div>
+          <button type="button" class="ctb-link" data-ctb-acao="atividade-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+        </header>
+        <ol class="ctb-atividade" data-ctb-lista="atividade"></ol>
+      </section>
+
+      <!-- O plano do módulo (docs/contabilidade-fechamento-plano.md, seção N), para se ver o que ainda vem. -->
+      <section class="ctb-painel glass-surface rounded-xl">
+        <header class="ctb-painel__cabeca">
+          <div class="ctb-painel__titulo"><h2>Próximas etapas</h2></div>
+        </header>
+        <ol class="ctb-roteiro">
+          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">1</span><div><strong>Base do módulo</strong><span>Menu, permissões, checklist com o que já existe, pendências e fechamento</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada e NFS-e à mão, títulos e pagamentos (os contatos já estão prontos)</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">4</span><div><strong>Extrato por OFX</strong><span>Contas, importação e a tela de movimentações</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">7–9</span><div><strong>Fechamento completo, relatório e pacote</strong><span>Totais congelados, relatório mensal, ZIP salvo pelo usuário</span></div></li>
+          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">10+</span><div><strong>Automáticos</strong><span>NF-e de entrada pela SEFAZ, extrato pela API do BB, CDB, NFS-e</span></div></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

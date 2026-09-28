@@ -109,6 +109,8 @@ const MODULES_WITHOUT_SCROLL = new Set([
     // Prospecções cabe na tela com o funil e os filtros avançados retraídos.
     // O próprio módulo tira o `no-scroll` quando um deles é aberto.
     'prospeccoes',
+    // Contatos (fornecedores) tem o mesmo layout de Clientes (28/09/2026).
+    'contatos',
     'ia'
 ]);
 
@@ -133,6 +135,7 @@ const MODULE_LABELS = {
     tarefas: 'Tarefas',
     usuarios: 'Usuários',
     financeiro: 'Financeiro',
+    contabilidade: 'Contabilidade',
     relatorios: 'Relatórios',
     'laminacao-clientes': 'Clientes',
     'laminacao-servicos': 'Serviços',

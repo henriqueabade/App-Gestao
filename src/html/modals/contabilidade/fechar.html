@@ -1,0 +1,68 @@
+<!--
+  Fechar competência contábil. Modal médio, ação sensível. O checklist é
+  relido aqui (GET /api/contabilidade/painel) e "Confirmar fechamento" grava
+  por POST /api/contabilidade/fechar (contabilidade.fechar): o backend recalcula
+  tudo e recusa se houver erro crítico ou se o mês ainda estiver em curso.
+  Pendências documentais e avisos não impedem o fechamento — ficam gravados
+  na foto do fechamento e continuam bloqueando o pacote/envio.
+  Script: src/js/modals/contabilidade-modais.js (montarFechar).
+-->
+<div id="ctbFecharOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbFecharTitulo" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbFecharTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-lock mr-2" aria-hidden="true"></i>Fechar competência</h2>
+      <span id="ctbFecharSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p class="text-sm text-gray-300">
+          Fecha a competência para a contabilidade. Só fecha com o mês terminado e <strong>sem erro crítico</strong>;
+          pendências documentais e avisos ficam registrados no fechamento e continuam segurando o pacote e o envio.
+        </p>
+
+        <div>
+          <label for="ctbFecharCompetenciaMes" class="ctl-rotulo text-gray-300">Competência <span class="ctb-obrigatorio">*</span></label>
+          <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+            <select id="ctbFecharCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <input id="ctbFecharCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <button id="ctbFecharCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+            <input type="hidden" id="ctbFecharCompetencia" />
+          </div>
+          <p id="ctbFecharInfo" class="text-xs text-gray-400 mt-2"></p>
+        </div>
+
+        <p id="ctbFecharCarregando" class="hidden ctb-vazio">Conferindo a competência...</p>
+
+        <!-- O resumo do checklist: por fonte e a contagem por severidade -->
+        <div id="ctbFecharResumo" class="glass-surface rounded-xl border border-white/10">
+          <dl class="ctb-dados" id="ctbFecharDados"></dl>
+        </div>
+
+        <div id="ctbFecharBloqueios" class="hidden ctb-aviso" role="alert">
+          <i class="fas fa-ban" aria-hidden="true"></i>
+          <ul id="ctbFecharBloqueiosLista" class="ctb-lista-modal"></ul>
+        </div>
+
+        <div id="ctbFecharSobras" class="hidden space-y-2">
+          <p class="text-xs text-gray-400 uppercase tracking-wider">Fica registrado no fechamento</p>
+          <ul id="ctbFecharSobrasLista" class="ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <div class="ctb-aviso" role="note">
+          <i class="fas fa-lock" aria-hidden="true"></i>
+          <span>Depois do fechamento, o mês só muda com "Reabrir competência" (com justificativa), e tudo fica no histórico do módulo.</span>
+        </div>
+
+        <div id="ctbFecharMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbFecharConfirmar" type="button" data-perm="contabilidade.fechar" class="btn-success ctl-botao min-w-[160px]">Confirmar fechamento</button>
+    </footer>
+  </div>
+</div>

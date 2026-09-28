@@ -104,9 +104,13 @@ const PADRONIZADOS = [
       'proximo-passo', 'concluir-passo', 'etapa', 'responsavel', 'converter'
     ].map(m => `html/modals/prospeccoes/${m}.html`)]
   },
-  // 22/09/2026. Sem modais próprios (as ações ainda mostram "Função
-  // indisponível" pela DialogPadrao).
-  { modulo: 'contatos', arquivos: ['html/contatos.html'] },
+  // 28/09/2026. Contatos virou o cadastro de fornecedores/prestadores, no
+  // molde de Clientes: ficha, pessoa de contato e o + e − do Tipo.
+  {
+    modulo: 'contatos',
+    arquivos: ['html/contatos.html', ...['detalhes', 'novo', 'editar', 'excluir', 'pessoa', 'tipo-novo', 'tipo-excluir']
+      .map(m => `html/modals/contatos/${m}.html`)]
+  },
   // 22/09/2026 — referência: só alinhados os centésimos (40,8 → 40 px; barra
   // de 32,7–34,3 → 32 px). Os modais são os do TarefasUI (teste abaixo).
   { modulo: 'calendario', arquivos: ['html/calendario.html'] },
@@ -138,6 +142,13 @@ const PADRONIZADOS = [
       'fechar-producao', 'notas-fiscais', 'producao-competencia', 'recebimentos', 'registrar-ajuste',
       'registrar-producao', 'registrar-recebimento', 'regras', 'relatorios', 'visualizar-relatorio'
     ].map(m => `html/modals/financeiro/${m}.html`)]
+  },
+  {
+    // 28/09/2026 — nasceu no padrão: tela (abaixo do Financeiro) e os 3
+    // modais (Fechar competência, Reabrir, Ignorar pendência). As etiquetas de
+    // filtro (ctb-chip) e de situação das fontes ficam de fora, como as outras.
+    modulo: 'contabilidade',
+    arquivos: ['html/contabilidade.html', ...['fechar', 'reabrir', 'ignorar-pendencia'].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
   { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },
@@ -308,6 +319,11 @@ const JS_PADRONIZADOS = [
     ignorar: []
   },
   {
+    modulo: 'contatos',
+    arquivos: ['js/contatos.js', 'js/utils/contato-ficha.js', 'js/modals/contato-editar.js', 'js/modals/contato-novo.js', 'js/modals/contato-detalhes.js'],
+    ignorar: []
+  },
+  {
     modulo: 'calendario',
     arquivos: ['js/calendario.js'],
     ignorar: []
@@ -335,6 +351,13 @@ const JS_PADRONIZADOS = [
     // de cada pendência na lista da tela ficam do tamanho delas, como os
     // ícones das linhas.
     ignorar: [/\bpx-3 py-1 rounded-md text-xs\b/, /^\$\{classe\} px-3 py-1/, /\bfin-pendencia__acao\b/]
+  },
+  {
+    // 28/09/2026 — os botões das linhas de pendência (Financeiro, Ignorar,
+    // Restaurar) são o botão pequeno do padrão.
+    modulo: 'contabilidade',
+    arquivos: ['js/contabilidade.js', 'js/modals/contabilidade-modais.js'],
+    ignorar: []
   },
   {
     modulo: 'orcamentos (converter)',
