@@ -42,6 +42,18 @@
  *   POST /extrato/importar                 { conta_id, nome, base64 }                       (contabilidade.extrato.importar)
  *   POST /extrato/importacoes/:id/desfazer { motivo }                                       (contabilidade.extrato.importar)
  *
+ * Etapa 5 (conciliação do extrato):
+ *
+ *   GET  /conciliacao?conta_id=&competencia=&visao=   os lançamentos do mês com o que casam, as sugestões,
+ *                                                     os totais e o que o app registrou sem lançamento
+ *   GET  /conciliacao/movimentos/:id?dias=            o lançamento e as candidatas (escolha à mão)
+ *   POST /conciliacao/movimentos/:id/conciliar        { itens: [{ tipo, id }], justificativa?, criterio? }  (contabilidade.conciliar)
+ *   POST /conciliacao/movimentos/:id/desfazer         { motivo }                                          (contabilidade.conciliar)
+ *   POST /conciliacao/movimentos/:id/ignorar          { motivo }                                          (contabilidade.conciliar)
+ *   POST /conciliacao/movimentos/:id/reativar                                                             (contabilidade.conciliar)
+ *   POST /conciliacao/movimentos/:id/criar-conta      { descricao, categoria, contato_id, forma }  (conciliar + pagar.lancar + pagar.pagar)
+ *   POST /conciliacao/automatica                      { conta_id, competencia, aceitar_sugestoes }        (contabilidade.conciliar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -59,6 +71,7 @@ const documentos = require('./contabilidade/documentosRecebidos');
 const titulos = require('./contabilidade/titulos');
 const evidencias = require('./contabilidade/evidencias');
 const extrato = require('./contabilidade/extrato/extrato');
+const conciliacao = require('./contabilidade/conciliacao/conciliacao');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -71,6 +84,7 @@ const PAGAR = 'contabilidade.pagar.pagar';
 const ESTORNAR = 'contabilidade.pagar.estornar';
 const IMPORTAR_EXTRATO = 'contabilidade.extrato.importar';
 const GERIR_CONTAS = 'contabilidade.contas.gerir';
+const CONCILIAR = 'contabilidade.conciliar';
 
 const router = express.Router();
 
@@ -247,5 +261,32 @@ router.post('/extrato/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /
 
 router.post('/extrato/importacoes/:id/desfazer', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importacoes/:id/desfazer', ({ api, req, usuarioId }) =>
   extrato.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+// ------------------------------------------------------------ conciliação (etapa 5)
+
+router.get('/conciliacao', exigirPermissao(VER), rota('GET /api/contabilidade/conciliacao', ({ api, req, hoje }) =>
+  conciliacao.painel(api, { contaId: req.query?.conta_id || null, competencia: String(req.query?.competencia || ''), visao: String(req.query?.visao || 'todos'), hoje })));
+
+router.get('/conciliacao/movimentos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/conciliacao/movimentos/:id', ({ api, req }) =>
+  conciliacao.candidatos(api, req.params.id, { dias: req.query?.dias })));
+
+router.post('/conciliacao/movimentos/:id/conciliar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/conciliar', ({ api, req, usuarioId }) =>
+  conciliacao.conciliar(api, req.params.id, { itens: req.body?.itens, justificativa: req.body?.justificativa, criterio: req.body?.criterio, usuarioId })));
+
+router.post('/conciliacao/movimentos/:id/desfazer', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/desfazer', ({ api, req, usuarioId }) =>
+  conciliacao.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/conciliacao/movimentos/:id/ignorar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/ignorar', ({ api, req, usuarioId }) =>
+  conciliacao.ignorar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/conciliacao/movimentos/:id/reativar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/reativar', ({ api, req, usuarioId }) =>
+  conciliacao.reativar(api, req.params.id, { usuarioId })));
+
+// Lançar a conta paga a partir do débito: concilia e lança conta/pagamento (as três permissões).
+router.post('/conciliacao/movimentos/:id/criar-conta', exigirPermissao([CONCILIAR, LANCAR, PAGAR]), rota('POST /api/contabilidade/conciliacao/movimentos/:id/criar-conta', ({ api, req, usuarioId, hoje }) =>
+  conciliacao.criarConta(api, req.params.id, { entrada: req.body || {}, usuarioId, hoje })));
+
+router.post('/conciliacao/automatica', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/automatica', ({ api, req, usuarioId, hoje }) =>
+  conciliacao.automatica(api, { contaId: req.body?.conta_id, competencia: String(req.body?.competencia || ''), aceitarSugestoes: req.body?.aceitar_sugestoes === true, usuarioId, hoje })));
 
 module.exports = router;

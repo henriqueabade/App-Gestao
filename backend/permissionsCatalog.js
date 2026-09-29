@@ -2501,6 +2501,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Conta corrente, aplicação e caixa: banco, agência, conta e saldo inicial"
       },
       {
+        "key": "contabilidade.conciliar",
+        "column": "acao_conciliar",
+        "label": "Conciliar o extrato",
+        "desc": "Casar os lançamentos do banco com recebimentos e pagamentos, desfazer e ignorar com justificativa"
+      },
+      {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",

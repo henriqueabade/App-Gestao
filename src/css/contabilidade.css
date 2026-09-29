@@ -919,6 +919,8 @@ body {
 .ctb-tabela th.ctb-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ctb-tabela td.ctb-nowrap { white-space: nowrap; }
 .ctb-tabela tr[data-ctb-linha] { cursor: pointer; }
+/* A linha que a pendência apontou (conciliação com registro que mudou). */
+.ctb-tabela tr.ctb-linha-destaque td { background: rgba(212, 175, 55, 0.14); }
 /* Os botões da linha ficam numa linha só (quebrar deixava a linha com o dobro da altura). */
 .ctb-tabela .ctb-celula-acoes { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: nowrap; }
 

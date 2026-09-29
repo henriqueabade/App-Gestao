@@ -22,9 +22,9 @@
     pacote e o envio; aviso não bloqueia), o checklist por fonte — só com o
     que o sistema já controla: NF-e de saída, recebimentos, comissões e
     produção, devoluções, documentos recebidos e contas a pagar (etapas 2 e
-    3) e o extrato bancário (etapa 4); a conciliação aparece como "ainda não
-    integrada" — a lista de pendências e a atividade do módulo. Contas a
-    pagar, documentos recebidos, os documentos da competência e o extrato
+    3), o extrato bancário (etapa 4) e a conciliação (etapa 5) — a lista de
+    pendências e a atividade do módulo. Contas a pagar, documentos
+    recebidos, os documentos da competência, o extrato e a conciliação
     abrem os modais deles. Cada
     botão/cartão traz `data-ctb-acao`: quem ainda não tem função real abre o
     aviso "em implementação".
@@ -187,6 +187,10 @@
           <button type="button" class="ctb-acao" data-ctb-acao="extrato">
             <i class="fas fa-university" aria-hidden="true"></i><span>Extrato bancário</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
+          <!-- Etapa 5: extrato × o que o app registrou (recebimentos, pagamentos, reembolsos). -->
+          <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
+            <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação bancária</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.fechar" data-ctb-acao="fechar">
             <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
@@ -202,8 +206,8 @@
           <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="enviar">
             <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Enviar à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
-            <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação e classificação</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          <button type="button" class="ctb-acao" data-ctb-acao="classificacao">
+            <i class="fas fa-tags" aria-hidden="true"></i><span>Classificação (plano de contas)</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.config.view" data-ctb-acao="configuracao">
             <i class="fas fa-cog" aria-hidden="true"></i><span>Configurações</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
@@ -232,7 +236,7 @@
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada (XML ou chave), NFS-e, recibos e guias; contas, parcelas e pagamentos</span></div></li>
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">4</span><div><strong>Extrato por OFX</strong><span>Contas, importação e a tela de movimentações</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
+          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">7–9</span><div><strong>Fechamento completo, relatório e pacote</strong><span>Totais congelados, relatório mensal, ZIP salvo pelo usuário</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">10+</span><div><strong>Automáticos</strong><span>NF-e de entrada pela SEFAZ, extrato pela API do BB, CDB, NFS-e</span></div></li>

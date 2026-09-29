@@ -953,3 +953,81 @@ repetida 409, e sem o SQL: 409 dizendo qual arquivo.
 
 **Próxima:** etapa 5 (conciliação: extrato × recebimentos, pagamentos,
 reembolsos e contas a pagar).
+
+## U. Etapa 5 entregue (28/09/2026) — conciliação do extrato
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (junto da etapa 4).
+O dono ainda não rodou os SQLs das etapas 2 a 5 nem respondeu as pendências;
+pediu para seguir e deixar as perguntas para a próxima fase.
+
+**SQL:** `sql/contabilidade_conciliacao.sql` (rodar depois do do extrato e
+reiniciar a API): `conciliacao_vinculos` (lançamento ↔ recebimento,
+pagamento de conta, pagamento de comissão/produção ou reembolso; a parte de
+cada um; o critério; desfazer marca, não apaga), quatro colunas em
+`movimentos_bancarios` (a diferença aceita, a justificativa, quem e quando)
+e a permissão `contabilidade.conciliar`. O SQL simulado do DEV ganhou dois
+lançamentos conciliados, um ignorado e os outros com sugestão.
+
+**As "liquidações"** (`backend/contabilidade/conciliacao/liquidacoes.js`): o
+que o app registrou como dinheiro que entrou ou saiu, das tabelas dos seus
+módulos, sem mexer nelas: `recebimentos` (confirmados), `titulo_pagar_pagamentos`,
+`financeiro_pagamentos` e `reembolsos` (pagos). Dinheiro fica fora; cartão
+entra como candidato, com a data incerta.
+
+**O motor** (`motor.js`, puro): pontua cada par (mesmo sentido, janela de
+datas, mesmo valor, CNPJ/CPF da contrapartida, nº do documento, nome na
+descrição).
+- **Automático** só com par ÚNICO dos dois lados + chave (CNPJ/CPF da
+  contrapartida, que a API do BB vai trazer, ou o nº do documento).
+- **Sugestão** com o mesmo valor na janela; "única" quando o par é único dos
+  dois lados (pode ser aceita em lote).
+- **Soma** (composição): várias liquidações que dão o lançamento — o crédito
+  de cobrança que junta os boletos do dia. Nunca automática.
+- Janelas: boleto recebido até 5 dias depois (a data de crédito, quando há,
+  é o alvo); cartão até 35; os outros 3 antes e 4 depois.
+
+**Regras** (`conciliacao.js`):
+- A soma tem de dar o lançamento; diferença só com justificativa, e fica
+  gravada. O que já está ligado e o outro sentido são recusados.
+- Desfazer e ignorar pedem motivo; reativar volta a "a conciliar".
+- Débito sem conta no app vira conta paga e conciliada de uma vez (pede
+  conciliar + lançar + pagar).
+- Pagamento de conta conciliado não se estorna (desfaça antes); importação
+  com lançamento conciliado ou ignorado não se desfaz.
+- Competência fechada recusa tudo nela.
+
+**Checklist** (a fonte virou "Conciliação bancária"):
+- documental: lançamentos do mês sem conciliação (uma pendência, com o
+  total e quantos têm sugestão);
+- crítico: conciliação com recebimento/pagamento que foi estornado ou mudou
+  de valor (um por lançamento; resolve desfazendo);
+- aviso: o que o app registrou pelo banco, no trecho que o extrato cobre,
+  sem lançamento possível (nem de mesmo valor, nem numa soma sugerida).
+
+**Tela:** 2 modais novos — **Conciliação bancária** (conta, competência,
+visão, busca; a conciliar, com sugestão, conciliados, ignorados; cada
+lançamento com o que casa e Aceitar/Escolher/Ignorar/Desfazer/Reativar; o
+lote "Conciliar automaticamente" e "Aceitar sugestões únicas"; o que o app
+registrou sem lançamento) e **Conciliar lançamento** (as candidatas com
+caixa de marcar e a soma, a justificativa da diferença, "Lançar como conta
+paga" para débito, desfazer/reativar). A linha do extrato abre a
+conciliação dela; o painel de Ações ganhou "Conciliação bancária" e
+"Classificação (plano de contas)" (etapa 6, em implementação).
+
+**Conferido:** testes puros do motor (9), de ponta a ponta das rotas (9),
+checklist (+1); Postgres 17 descartável com o backend em modo DEV (os SQLs
+duas vezes, com e sem o da etapa 5, o SQL simulado, lote, conta criada,
+estorno travado, desfazer, julho fechado); Electron sem erro de console.
+
+**Em aberto (para o dono):**
+1. Lançamento do extrato sem conciliação é **documental** (bloqueia o
+   pacote). Confirmar.
+2. Automático só com chave exata (CNPJ/CPF ou nº do documento). Aceitar
+   sozinho quando valor e dia batem e o nome aparece na descrição?
+3. Conciliação com recebimento estornado é **crítico** (bloqueia o
+   fechamento). Confirmar.
+4. O banco desconta tarifa do crédito de cobrança, ou lança a tarifa à
+   parte? (Com desconto, cada crédito pede justificativa da diferença.)
+
+**Próxima:** etapa 6 (classificação: plano de contas e regras) — depende da
+lista de categorias da contabilidade.

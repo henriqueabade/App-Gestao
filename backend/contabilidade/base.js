@@ -26,10 +26,15 @@ const TABELAS_PAGAR = [
 const SQL_ARQUIVO_EXTRATO = 'sql/contabilidade_extrato.sql';
 const SQL_FALTANDO_EXTRATO = `Falta rodar ${SQL_ARQUIVO_EXTRATO} no banco e reiniciar a API.`;
 const TABELAS_EXTRATO = ['contas_financeiras', 'extrato_importacoes', 'movimentos_bancarios'];
-const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO];
+/** Etapa 5: conciliação do extrato. */
+const SQL_ARQUIVO_CONCILIACAO = 'sql/contabilidade_conciliacao.sql';
+const SQL_FALTANDO_CONCILIACAO = `Falta rodar ${SQL_ARQUIVO_CONCILIACAO} no banco e reiniciar a API.`;
+const TABELAS_CONCILIACAO = ['conciliacao_vinculos'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO];
 
 /** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
 function sqlDaTabela(tabela) {
+  if (TABELAS_CONCILIACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CONCILIACAO, mensagem: SQL_FALTANDO_CONCILIACAO };
   if (TABELAS_EXTRATO.includes(tabela)) return { arquivo: SQL_ARQUIVO_EXTRATO, mensagem: SQL_FALTANDO_EXTRATO };
   if (TABELAS_PAGAR.includes(tabela)) return { arquivo: SQL_ARQUIVO_PAGAR, mensagem: SQL_FALTANDO_PAGAR };
   return { arquivo: SQL_ARQUIVO, mensagem: SQL_FALTANDO };
@@ -182,7 +187,8 @@ function documentoFormatado(doc) {
 
 module.exports = {
   SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, SQL_ARQUIVO_EXTRATO, SQL_FALTANDO_EXTRATO,
-  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, sqlDaTabela, NIVEIS, nivelValido,
+  SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO,
+  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, sqlDaTabela, NIVEIS, nivelValido,
   tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
   garantirAberta, valorDe, digitos, documentoFormatado
 };

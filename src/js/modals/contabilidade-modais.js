@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1 a 4).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 5).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -21,6 +21,8 @@
  *   ctbExtrato              Extrato bancário do mês — lançamentos, saldo, cobertura, importações (GET /extrato)
  *   ctbImportarExtrato      Importar OFX — prévia sem gravar e importação (POST /extrato/previa, /extrato/importar)
  *   ctbContasFinanceiras    Contas do banco — lista e cadastro (GET/POST/PUT /contas-financeiras)
+ *   ctbConciliacao          Conciliação do mês — lançamentos, sugestões, lote (GET /conciliacao, POST /conciliacao/automatica)
+ *   ctbConciliarMovimento   Um lançamento — escolher o par, ignorar, desfazer, lançar conta paga (/conciliacao/movimentos/:id)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -35,9 +37,9 @@
   const TOM_TITULO = { aberto: 'badge-info', parcial: 'badge-warning', vencido: 'badge-danger', pago: 'badge-success', cancelado: 'badge-neutral' };
   const TOM_ORIGEM = { oficial: 'badge-success', interno: 'badge-info', fornecido: 'badge-neutral' };
   const ORIGENS_TITULO = { manual: 'Lançada à mão', nfe: 'NF-e de entrada', nfse: 'NFS-e', outro: 'Recibo ou guia' };
-  // A conciliação (etapa 5) muda o estado; até lá todo lançamento está "a conciliar".
-  const ROTULO_CONCILIACAO = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Sem par' };
-  const TOM_CONCILIACAO = { pendente: 'badge-neutral', conciliado: 'badge-success', ignorado: 'badge-info' };
+  // O estado da conciliação (etapa 5) de cada lançamento do extrato.
+  const ROTULO_CONCILIACAO = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
+  const TOM_CONCILIACAO = { pendente: 'badge-warning', conciliado: 'badge-success', ignorado: 'badge-neutral' };
   const EVENTO_ALTERADO = 'contabilidade:alterado';
 
   const contexto = window.contabilidadeModalContexto || {};
@@ -1777,6 +1779,8 @@
         const valor = celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num');
         valor.style.color = l.valor < 0 ? '#e08aa6' : 'var(--color-green)';
         const tr = criar('tr');
+        tr.dataset.ctbLinha = '1';
+        tr.title = 'Abrir a conciliação deste lançamento';
         tr.append(
           celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
           celula(l.descricao || '—', 'px-4 py-3', l.contrapartida_documento || null),
@@ -1784,6 +1788,7 @@
           valor,
           celula(tag(ROTULO_CONCILIACAO[l.estado_conciliacao] || l.estado_conciliacao, TOM_CONCILIACAO[l.estado_conciliacao] || 'badge-neutral'), 'px-4 py-3')
         );
+        tr.addEventListener('click', () => abrirOutro('conciliar-movimento', { movimento_id: l.id, competencia: compCampo.value }));
         corpo.appendChild(tr);
       }
     }
@@ -1864,6 +1869,7 @@
     busca.addEventListener('input', pintarLista);
     el('ctbExtratoImportar').addEventListener('click', () => abrirOutro('importar-extrato', { conta_id: contaEscolhida, competencia: compCampo.value }));
     el('ctbExtratoContas').addEventListener('click', () => abrirOutro('contas-financeiras', { competencia: compCampo.value }));
+    el('ctbExtratoConciliacao').addEventListener('click', () => abrirOutro('conciliacao', { conta_id: contaEscolhida, competencia: compCampo.value }));
     el('ctbExtratoBuscarBB').addEventListener('click', () => {
       const aviso = { title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: '"Buscar o extrato no BB" ainda está em implementação.', nota: 'Chega com a API de Extratos do Banco do Brasil (etapa 11). Até lá, importe o OFX.' };
       if (window.DialogPadrao?.info) window.DialogPadrao.info(aviso); else window.alert(aviso.message);
@@ -2161,6 +2167,535 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ conciliação (etapa 5)
+
+  const rotuloDaLiq = l => (l ? `${l.rotulo}${l.nome ? ` · ${l.nome}` : ''}` : '—');
+  const corDoValor = (td, valor) => { td.style.color = Number(valor) < 0 ? '#e08aa6' : 'var(--color-green)'; return td; };
+  const CRITERIO_DA_SUGESTAO = { automatico: 'automatico', sugestao: 'sugestao', composicao: 'composicao' };
+
+  function montarConciliacao() {
+    const contaSel = el('ctbConcConta');
+    const compCampo = el('ctbConcCompetencia');
+    const visaoSel = el('ctbConcVisao');
+    const busca = el('ctbConcBusca');
+    const corpo = el('ctbConcLista');
+    const corpoSem = el('ctbConcSemLancamento');
+    montarCompetencias(compCampo, contexto.competencia);
+    visaoSel.value = contexto.visao && [...visaoSel.options].some(o => o.value === contexto.visao) ? contexto.visao : 'pendentes';
+    let dados = null;
+    let leitura = 0;
+    let contaEscolhida = contexto.conta_id ?? null;
+    let destaque = contexto.movimento_id ? String(contexto.movimento_id) : null;
+
+    function pintarContas() {
+      const contas = dados?.contas || [];
+      if (!contas.length) { contaSel.replaceChildren(opcao('', 'Nenhuma conta cadastrada')); contaSel.disabled = true; return; }
+      contaSel.disabled = false;
+      contaSel.replaceChildren(...contas.map(x => opcao(String(x.id), `${x.nome}${x.ativa ? '' : ' (desativada)'}`)));
+      if (dados.conta) contaSel.value = String(dados.conta.id);
+    }
+
+    function pintarTotais() {
+      const t = dados?.totais || { total: 0, a_conciliar: { quantidade: 0, total: 0 }, com_sugestao: 0, conciliados: 0, ignorados: 0 };
+      const pinta = (chave, valor, nota) => {
+        const card = overlay.querySelector(`#ctbConcTotais [data-total="${chave}"]`);
+        card.querySelector('.ctb-total__valor').textContent = valor;
+        if (nota !== undefined) card.querySelector('.ctb-total__nota').textContent = nota;
+      };
+      pinta('a_conciliar', formatarMoeda(t.a_conciliar.total), plural(t.a_conciliar.quantidade, 'lançamento', 'lançamentos'));
+      pinta('com_sugestao', String(t.com_sugestao));
+      pinta('conciliados', String(t.conciliados), `de ${plural(t.total, 'lançamento', 'lançamentos')} no mês`);
+      pinta('ignorados', String(t.ignorados));
+    }
+
+    function pintarNota() {
+      const alvo = el('ctbConcNota');
+      alvo.style.color = '';
+      if (!dados?.conta) { alvo.textContent = 'Cadastre a conta do banco e importe o extrato do mês (Extrato bancário).'; return; }
+      if (dados.fechada) {
+        alvo.textContent = 'Competência fechada: a conciliação dela só muda depois de reabrir.';
+        alvo.style.color = 'var(--color-primary-light)';
+        return;
+      }
+      const faltas = dados.cobertura?.faltas || [];
+      alvo.textContent = faltas.length ? `O extrato do mês ainda não está completo (falta ${faltas.map(faixaDeDatas).join(', ')}): o que cair nesses dias ainda não aparece.` : '';
+    }
+
+    function casaCom(l) {
+      if (l.estado === 'conciliado') {
+        const partes = l.vinculos.map(v => (v.liquidacao ? rotuloDaLiq(v.liquidacao) : `${v.alvo_tipo} ${v.alvo_id}`));
+        const criterios = [...new Set(l.vinculos.map(v => v.criterio_rotulo))].join(', ');
+        const sub = `${criterios}${l.diferenca ? ` · diferença de ${formatarMoeda(l.diferenca)}${l.observacao ? `: ${l.observacao}` : ''}` : ''}`;
+        const td = celula(partes.join(' + ') || '—', 'px-4 py-3', sub);
+        const invalido = l.vinculos.find(v => v.invalido);
+        if (invalido) {
+          const aviso = criar('span', 'ctb-sub', `Atenção: ${invalido.invalido}. Desfaça e concilie de novo.`);
+          aviso.style.color = 'var(--color-red)';
+          td.appendChild(aviso);
+        }
+        return td;
+      }
+      if (l.estado === 'ignorado') return celula(l.observacao || '—', 'px-4 py-3', 'Sem par, com justificativa');
+      const s = l.sugestao;
+      if (!s) return celula('—', 'px-4 py-3', 'Nada no app com este valor por perto');
+      const texto = s.tipo === 'composicao' ? `Soma de ${s.itens.length}: ${s.itens.map(i => i.rotulo).join(' + ')}` : rotuloDaLiq(s.itens[0]);
+      const tipo = s.tipo === 'automatico' ? 'Automático' : (s.tipo === 'composicao' ? 'Sugestão (soma)'
+        : (s.unica ? 'Sugestão' : `Sugestão (há mais ${plural(s.alternativas, 'registro', 'registros')} de mesmo valor)`));
+      return celula(texto, 'px-4 py-3', `${tipo} · ${s.motivos.join(', ')}`);
+    }
+
+    function abrirMovimento(l) {
+      abrirOutro('conciliar-movimento', { movimento_id: l.id, competencia: compCampo.value });
+    }
+
+    async function aceitar(l) {
+      const s = l.sugestao;
+      if (s.tipo === 'composicao' || !s.unica) {
+        const confirmado = await (window.DialogPadrao?.confirm
+          ? window.DialogPadrao.confirm({
+            title: s.tipo === 'composicao' ? 'Aceitar a soma?' : 'Aceitar esta sugestão?',
+            message: `${formatarData(l.data)} · ${formatarMoeda(l.valor)} com:\n${s.itens.map(i => `${rotuloDaLiq(i)} (${formatarData(i.data)}) — ${formatarMoeda(i.restante)}`).join('\n')}`,
+            confirmText: 'Conciliar'
+          })
+          : Promise.resolve(window.confirm('Aceitar a sugestão?')));
+        if (!confirmado) return;
+      }
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/conciliar`, 'POST', {
+          itens: s.itens.map(i => ({ tipo: i.tipo, id: i.id })), criterio: CRITERIO_DA_SUGESTAO[s.tipo] || 'sugestao'
+        });
+        window.showToast?.('Lançamento conciliado.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para conciliar.'), 'error');
+      }
+    }
+
+    async function ignorar(l) {
+      const motivo = await pedirTexto({
+        titulo: 'Ignorar o lançamento?',
+        mensagem: `${formatarData(l.data)} · ${formatarMoeda(l.valor)}${l.descricao ? ` · ${l.descricao}` : ''}. Ele fica sem par, com a justificativa (tarifa, aplicação, aporte…).`,
+        placeholder: 'Por que fica sem par (obrigatório)', confirmar: 'Ignorar'
+      });
+      if (motivo === null) return;
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/ignorar`, 'POST', { motivo });
+        window.showToast?.('Lançamento ignorado.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para conciliar.'), 'error');
+      }
+    }
+
+    async function desfazer(l) {
+      const motivo = await pedirTexto({ titulo: 'Desfazer a conciliação?', mensagem: `${formatarData(l.data)} · ${formatarMoeda(l.valor)} volta a ficar a conciliar. O histórico fica.`, confirmar: 'Desfazer' });
+      if (motivo === null) return;
+      try {
+        const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/desfazer`, 'POST', { motivo });
+        window.showToast?.('Conciliação desfeita.', 'success');
+        if (r?.conta_criada_continua) window.showToast?.('A conta lançada do extrato continua: estorne-a em Contas a pagar, se foi engano.', 'info');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para conciliar.'), 'error');
+      }
+    }
+
+    async function reativar(l) {
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/reativar`, 'POST', {});
+        window.showToast?.('O lançamento voltou a ficar a conciliar.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para conciliar.'), 'error');
+      }
+    }
+
+    function pintarLista() {
+      const termo = normalizar(busca.value.trim());
+      const texto = l => [
+        l.descricao, l.documento, formatarMoeda(l.valor), numeroBr(Math.abs(l.valor)), l.observacao,
+        ...(l.vinculos || []).map(v => rotuloDaLiq(v.liquidacao)), ...(l.sugestao?.itens || []).map(rotuloDaLiq)
+      ].join(' ');
+      const linhas = (dados?.linhas || []).filter(l => !termo || normalizar(texto(l)).includes(termo));
+      if (!linhas.length) {
+        linhaVazia(corpo, 6, !dados?.conta ? 'Nenhuma conta cadastrada.' : (termo ? 'Nada com esta busca.' : 'Nada nesta visão.'));
+        return;
+      }
+      corpo.replaceChildren();
+      const podeMexer = !dados.fechada;
+      let alvoDestaque = null;
+      for (const l of linhas) {
+        const acoes = criar('div', 'ctb-celula-acoes');
+        if (!podeMexer) acoes.appendChild(botaoPequeno('Ver', 'btn-neutral', () => abrirMovimento(l)));
+        else if (l.estado === 'pendente') {
+          if (l.sugestao) acoes.appendChild(botaoPequeno('Aceitar', 'btn-success', () => aceitar(l), { perm: 'contabilidade.conciliar' }));
+          acoes.appendChild(botaoPequeno('Escolher', 'btn-neutral', () => abrirMovimento(l)));
+          acoes.appendChild(botaoPequeno('Ignorar', 'btn-warning', () => ignorar(l), { perm: 'contabilidade.conciliar' }));
+        } else if (l.estado === 'conciliado') {
+          acoes.appendChild(botaoPequeno('Desfazer', 'btn-warning', () => desfazer(l), { perm: 'contabilidade.conciliar' }));
+        } else {
+          acoes.appendChild(botaoPequeno('Reativar', 'btn-neutral', () => reativar(l), { perm: 'contabilidade.conciliar' }));
+        }
+        const tr = criar('tr');
+        tr.dataset.ctbLinha = '1';
+        if (destaque && String(l.id) === destaque) { tr.classList.add('ctb-linha-destaque'); alvoDestaque = tr; }
+        tr.append(
+          celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+          celula(l.descricao || '—', 'px-4 py-3', l.documento ? `Doc. ${l.documento}` : null),
+          corDoValor(celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num'), l.valor),
+          celula(tag(l.estado_rotulo, TOM_CONCILIACAO[l.estado] || 'badge-neutral'), 'px-4 py-3'),
+          casaCom(l),
+          celula(acoes, 'px-4 py-3')
+        );
+        tr.addEventListener('click', e => { if (!e.target.closest('button')) abrirMovimento(l); });
+        corpo.appendChild(tr);
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+      if (alvoDestaque) { alvoDestaque.scrollIntoView?.({ block: 'center' }); destaque = null; }
+    }
+
+    function pintarSemLancamento() {
+      const lista = dados?.sem_lancamento || [];
+      if (!lista.length) { linhaVazia(corpoSem, 5, dados?.conta ? 'Nada: o que foi registrado pelo banco tem lançamento (ou sugestão).' : '—'); return; }
+      corpoSem.replaceChildren(...lista.map(l => {
+        const tr = criar('tr');
+        tr.append(
+          celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+          celula(l.rotulo, 'px-4 py-3', l.tipo_rotulo),
+          celula(l.nome || '—', 'px-4 py-3'),
+          celula(l.forma || '—', 'px-4 py-3'),
+          corDoValor(celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num'), l.valor)
+        );
+        return tr;
+      }));
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbConcMensagem', '');
+      try {
+        const q = new URLSearchParams({ competencia: compCampo.value || '', visao: visaoSel.value });
+        if (contaEscolhida) q.set('conta_id', String(contaEscolhida));
+        const r = await fetchApi(`/api/contabilidade/conciliacao?${q.toString()}`);
+        if (minha !== leitura) return;
+        dados = r;
+        contaEscolhida = r.conta?.id ?? null;
+        el('ctbConcRotulo').textContent = r.rotulo || rotuloCompetencia(r.competencia);
+        const semAcao = !r.conta || r.fechada;
+        el('ctbConcAutomatica').disabled = semAcao;
+        el('ctbConcAceitarUnicas').disabled = semAcao;
+        pintarContas();
+        pintarTotais();
+        pintarNota();
+        pintarLista();
+        pintarSemLancamento();
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        linhaVazia(corpo, 6, 'A conciliação não pôde ser lida.');
+        linhaVazia(corpoSem, 5, '—');
+        mostrarMensagem('ctbConcMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    async function lote(aceitarSugestoes) {
+      if (!dados?.conta) return;
+      const confirmado = await (window.DialogPadrao?.confirm
+        ? window.DialogPadrao.confirm({
+          title: aceitarSugestoes ? 'Aceitar as sugestões únicas?' : 'Conciliar automaticamente?',
+          message: aceitarSugestoes
+            ? 'Grava o que tem chave exata e as sugestões de mesmo valor que só servem para um lançamento (e vice-versa). A soma de vários fica para você conferir.'
+            : 'Grava só o que tem chave exata: o CNPJ/CPF da contrapartida ou o número do documento batem. O resto continua como sugestão.',
+          confirmText: 'Conciliar'
+        })
+        : Promise.resolve(window.confirm('Conciliar em lote?')));
+      if (!confirmado) return;
+      processando = true;
+      try {
+        const r = await enviar('/api/contabilidade/conciliacao/automatica', 'POST', { conta_id: contaEscolhida, competencia: compCampo.value, aceitar_sugestoes: aceitarSugestoes });
+        processando = false;
+        window.showToast?.(r.total ? `${plural(r.total, 'lançamento conciliado', 'lançamentos conciliados')}.` : 'Nada para conciliar em lote: confira as sugestões uma a uma.', r.total ? 'success' : 'info');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMensagem', textoDoErro(e, 'Você não tem permissão para conciliar.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    contaSel.addEventListener('change', () => { contaEscolhida = contaSel.value || null; carregar(); });
+    compCampo.addEventListener('change', carregar);
+    visaoSel.addEventListener('change', carregar);
+    busca.addEventListener('input', pintarLista);
+    acionar(el('ctbConcAutomatica'), () => lote(false));
+    acionar(el('ctbConcAceitarUnicas'), () => lote(true));
+    el('ctbConcExtrato').addEventListener('click', () => abrirOutro('extrato', { conta_id: contaEscolhida, competencia: compCampo.value }));
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
+  function montarConciliarMovimento() {
+    const id = contexto.movimento_id;
+    const diasSel = el('ctbConcMovDias');
+    const busca = el('ctbConcMovBusca');
+    const corpo = el('ctbConcMovCandidatos');
+    const confirmarBtn = el('ctbConcMovConfirmar');
+    const marcadas = new Set();
+    let dados = null;
+    let leitura = 0;
+    let primeira = true;
+    let contaPronta = false;
+
+    const pendente = () => dados?.movimento?.estado === 'pendente' && !dados?.fechada;
+    const candidata = chave => (dados?.candidatos || []).find(x => x.chave === chave) || null;
+
+    function pintarCabeca() {
+      const m = dados.movimento;
+      pintarEtiqueta(el('ctbConcMovSituacao'), m.estado_rotulo, TOM_CONCILIACAO[m.estado] || 'badge-neutral');
+      const valor = corDoValor(criar('span', null, formatarMoeda(m.valor)), m.valor);
+      preencherDados(el('ctbConcMovDados'), [
+        ['Data', formatarData(m.data)], ['Valor', valor],
+        ['Descrição do banco', m.descricao || '—'], ['Documento', m.documento || '—'],
+        ['Conta', m.conta || '—'], ['Situação', m.estado === 'ignorado' ? `Ignorado: ${m.observacao || 'sem justificativa'}` : m.estado_rotulo]
+      ]);
+    }
+
+    function pintarLigados() {
+      const bloco = el('ctbConcMovLigados');
+      const lista = dados.vinculos || [];
+      bloco.classList.toggle('hidden', dados.movimento.estado !== 'conciliado');
+      el('ctbConcMovLigadosLista').replaceChildren(...lista.map(v => {
+        const li = criar('li', 'ctb-arquivo');
+        const texto = criar('div', 'ctb-arquivo__texto');
+        texto.append(
+          criar('span', 'ctb-arquivo__nome', rotuloDaLiq(v.liquidacao)),
+          criar('span', 'ctb-arquivo__nota', [v.liquidacao?.tipo_rotulo, v.liquidacao ? formatarData(v.liquidacao.data) : null, formatarMoeda(v.valor), v.criterio_rotulo].filter(Boolean).join(' · '))
+        );
+        li.append(icone('fa-link'), texto);
+        return li;
+      }));
+      if (dados.movimento.estado === 'conciliado' && dados.movimento.observacao) {
+        const li = criar('li', 'ctb-arquivo');
+        li.append(icone('fa-comment'), criar('div', 'ctb-arquivo__texto', `Justificativa: ${dados.movimento.observacao}`));
+        el('ctbConcMovLigadosLista').appendChild(li);
+      }
+    }
+
+    function pintarSoma() {
+      const alvo = Math.abs(Number(dados?.movimento?.valor) || 0);
+      const soma = Math.round([...marcadas].reduce((s, k) => s + (candidata(k)?.restante || 0), 0) * 100) / 100;
+      const dif = Math.round((alvo - soma) * 100) / 100;
+      const p = el('ctbConcMovSoma');
+      if (!marcadas.size) { p.textContent = `Marque o que forma ${formatarMoeda(alvo)}.`; delete p.dataset.ok; }
+      else {
+        p.textContent = `Marcado: ${formatarMoeda(soma)} de ${formatarMoeda(alvo)}${dif ? ` · diferença de ${formatarMoeda(dif)}` : ' · bate'}`;
+        p.dataset.ok = dif ? '0' : '1';
+      }
+      el('ctbConcMovJustificativaBloco').classList.toggle('hidden', !marcadas.size || !dif);
+      confirmarBtn.disabled = !marcadas.size || !pendente();
+      return dif;
+    }
+
+    function pintarCandidatos() {
+      const termo = normalizar(busca.value.trim());
+      const todas = dados?.candidatos || [];
+      el('ctbConcMovContagem').textContent = `${plural(todas.length, 'registro', 'registros')} do app em até ${dados?.dias ?? diasSel.value} dias`;
+      const lista = todas.filter(x => !termo || normalizar([x.rotulo, x.nome, x.tipo_rotulo, x.forma, formatarMoeda(x.restante), numeroBr(Math.abs(x.restante))].join(' ')).includes(termo));
+      if (!lista.length) {
+        linhaVazia(corpo, 5, termo ? 'Nada com esta busca.' : 'Nada no app deste lado (entrada ou saída) por perto: aumente os dias ou, se for débito, lance a conta abaixo.');
+        pintarSoma();
+        return;
+      }
+      corpo.replaceChildren();
+      for (const x of lista) {
+        const tr = criar('tr');
+        tr.dataset.ctbLinha = '1';
+        const caixa = criar('input', 'w-4 h-4');
+        caixa.type = 'checkbox';
+        caixa.checked = marcadas.has(x.chave);
+        caixa.disabled = !pendente();
+        caixa.setAttribute('aria-label', `Escolher ${x.rotulo}`);
+        const alternar = () => {
+          if (!pendente()) return;
+          if (marcadas.has(x.chave)) marcadas.delete(x.chave); else marcadas.add(x.chave);
+          caixa.checked = marcadas.has(x.chave);
+          pintarSoma();
+        };
+        caixa.addEventListener('click', e => { e.stopPropagation(); alternar(); caixa.checked = marcadas.has(x.chave); });
+        tr.addEventListener('click', alternar);
+        const porque = x.exato ? [tag('Mesmo valor', 'badge-success')] : [];
+        const outros = x.motivos.filter(m => m !== 'mesmo valor').join(', ');
+        const celPorque = celula(porque.length ? porque : outros || '—', 'px-4 py-3', porque.length ? outros : null);
+        tr.append(
+          celula(caixa, 'px-4 py-3'),
+          celula(formatarData(x.data), 'px-4 py-3 ctb-nowrap', x.data_credito && x.data_credito !== x.data ? `crédito ${formatarData(x.data_credito)}` : null),
+          celula(x.rotulo, 'px-4 py-3', [x.tipo_rotulo, x.nome, x.forma].filter(Boolean).join(' · ')),
+          corDoValor(celula(formatarMoeda(x.valor < 0 ? -x.restante : x.restante), 'px-4 py-3 ctb-num', Math.abs(x.valor) !== x.restante ? `de ${formatarMoeda(x.valor)}` : null), x.valor),
+          celPorque
+        );
+        corpo.appendChild(tr);
+      }
+      pintarSoma();
+    }
+
+    async function prepararConta() {
+      if (contaPronta) return;
+      contaPronta = true;
+      el('ctbConcMovContaDescricao').value = dados.movimento.descricao || '';
+      el('ctbConcMovContaForma').replaceChildren(...(dados.formas || []).map(f => opcao(f, f)));
+      el('ctbConcMovContaForma').value = (dados.formas || []).includes('Débito automático') ? 'Débito automático' : (dados.formas || [])[0] || '';
+      try {
+        const r = await fetchApi('/api/contabilidade/categorias');
+        el('ctbConcMovCategorias').replaceChildren(...(r?.categorias || []).map(cat => opcao(cat, cat)));
+      } catch (_) { /* a lista de categorias é só ajuda */ }
+      await carregarFornecedores(el('ctbConcMovContaFornecedor'), { vazio: 'Sem fornecedor (tarifa, imposto…)' }).catch(() => null);
+    }
+
+    function pintarRodape() {
+      const m = dados.movimento;
+      const aberto = !dados.fechada;
+      el('ctbConcMovEscolha').classList.toggle('hidden', m.estado !== 'pendente');
+      confirmarBtn.classList.toggle('hidden', m.estado !== 'pendente');
+      el('ctbConcMovIgnorar').classList.toggle('hidden', m.estado !== 'pendente');
+      el('ctbConcMovDesfazer').classList.toggle('hidden', m.estado !== 'conciliado');
+      el('ctbConcMovReativar').classList.toggle('hidden', m.estado !== 'ignorado');
+      for (const botao of ['ctbConcMovIgnorar', 'ctbConcMovDesfazer', 'ctbConcMovReativar']) el(botao).disabled = !aberto;
+      const conta = m.estado === 'pendente' && Number(m.valor) < 0 && aberto;
+      el('ctbConcMovConta').classList.toggle('hidden', !conta);
+      if (conta) prepararConta();
+      if (!aberto) mostrarMensagem('ctbConcMovMensagem', 'Competência fechada: a conciliação dela só muda depois de reabrir.', 'info');
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      try {
+        const r = await fetchApi(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}?dias=${encodeURIComponent(diasSel.value)}`);
+        if (minha !== leitura) return;
+        dados = r;
+        // Na primeira leitura, a sugestão já vem marcada (é só conferir e conciliar).
+        if (primeira && r.sugestao && r.movimento.estado === 'pendente') r.sugestao.itens.forEach(i => marcadas.add(i.chave));
+        primeira = false;
+        for (const k of [...marcadas]) if (!candidata(k)) marcadas.delete(k);
+        pintarCabeca();
+        pintarLigados();
+        pintarCandidatos();
+        pintarRodape();
+      } catch (e) {
+        if (minha !== leitura) return;
+        confirmarBtn.classList.add('hidden');
+        el('ctbConcMovIgnorar').classList.add('hidden');
+        linhaVazia(corpo, 5, 'O lançamento não pôde ser lido.');
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    const mesmoConjunto = (a, b2) => a.length === b2.length && a.every(x => b2.includes(x));
+
+    async function confirmar() {
+      mostrarMensagem('ctbConcMovMensagem', '');
+      const dif = pintarSoma();
+      const justificativa = el('ctbConcMovJustificativa').value.trim();
+      if (dif && justificativa.length < 5) { mostrarMensagem('ctbConcMovMensagem', 'A soma não bate: justifique a diferença (ao menos 5 letras).'); return; }
+      const chaves = [...marcadas];
+      const sug = dados.sugestao;
+      const criterio = sug && mesmoConjunto(chaves, sug.itens.map(i => i.chave)) ? (CRITERIO_DA_SUGESTAO[sug.tipo] || 'sugestao') : 'manual';
+      processando = true;
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/conciliar`, 'POST', {
+          itens: chaves.map(k => candidata(k)).filter(Boolean).map(x => ({ tipo: x.tipo, id: x.id })), justificativa: dif ? justificativa : '', criterio
+        });
+        processando = false;
+        window.showToast?.('Lançamento conciliado.', 'success');
+        avisarAlteracao();
+        fechar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para conciliar.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    async function ignorar() {
+      const m = dados.movimento;
+      const motivo = await pedirTexto({
+        titulo: 'Ignorar o lançamento?', mensagem: `${formatarData(m.data)} · ${formatarMoeda(m.valor)}. Ele fica sem par, com a justificativa (tarifa, aplicação, aporte…).`,
+        placeholder: 'Por que fica sem par (obrigatório)', confirmar: 'Ignorar'
+      });
+      if (motivo === null) return;
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/ignorar`, 'POST', { motivo });
+        window.showToast?.('Lançamento ignorado.', 'success');
+        avisarAlteracao();
+        fechar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para conciliar.'));
+      }
+    }
+
+    async function desfazer() {
+      const motivo = await pedirTexto({ titulo: 'Desfazer a conciliação?', mensagem: 'O lançamento volta a ficar a conciliar. O histórico fica.', confirmar: 'Desfazer' });
+      if (motivo === null) return;
+      try {
+        const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/desfazer`, 'POST', { motivo });
+        window.showToast?.('Conciliação desfeita.', 'success');
+        if (r?.conta_criada_continua) window.showToast?.('A conta lançada do extrato continua: estorne-a em Contas a pagar, se foi engano.', 'info');
+        avisarAlteracao();
+        primeira = true;
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para conciliar.'));
+      }
+    }
+
+    async function reativar() {
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/reativar`, 'POST', {});
+        window.showToast?.('O lançamento voltou a ficar a conciliar.', 'success');
+        avisarAlteracao();
+        primeira = true;
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para conciliar.'));
+      }
+    }
+
+    async function criarConta() {
+      mostrarMensagem('ctbConcMovMensagem', '');
+      const descricao = el('ctbConcMovContaDescricao').value.trim();
+      if (descricao.length < 3) { mostrarMensagem('ctbConcMovMensagem', 'Descreva a conta (ao menos 3 letras).'); return; }
+      processando = true;
+      try {
+        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/criar-conta`, 'POST', {
+          descricao, categoria: el('ctbConcMovContaCategoria').value.trim() || null,
+          contato_id: el('ctbConcMovContaFornecedor').value || null, forma: el('ctbConcMovContaForma').value
+        });
+        processando = false;
+        window.showToast?.('Conta lançada, paga e conciliada.', 'success');
+        avisarAlteracao();
+        fechar();
+      } catch (e) {
+        mostrarMensagem('ctbConcMovMensagem', textoDoErro(e, 'Você não tem permissão para lançar contas e conciliar.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    diasSel.addEventListener('change', carregar);
+    busca.addEventListener('input', pintarCandidatos);
+    acionar(confirmarBtn, confirmar);
+    acionar(el('ctbConcMovIgnorar'), ignorar);
+    acionar(el('ctbConcMovDesfazer'), desfazer);
+    acionar(el('ctbConcMovReativar'), reativar);
+    acionar(el('ctbConcMovCriarConta'), criarConta);
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -2175,7 +2710,9 @@
     ctbEvidencias: montarEvidencias,
     ctbExtrato: montarExtrato,
     ctbImportarExtrato: montarImportarExtrato,
-    ctbContasFinanceiras: montarContasFinanceiras
+    ctbContasFinanceiras: montarContasFinanceiras,
+    ctbConciliacao: montarConciliacao,
+    ctbConciliarMovimento: montarConciliarMovimento
   };
 
   let montagem;

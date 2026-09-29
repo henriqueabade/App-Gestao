@@ -5,7 +5,8 @@
   informou), a cobertura (de que dia a que dia o mês já tem extrato) e as
   importações que tocam o mês, com o OFX e o "Desfazer" (com motivo).
   "Importar OFX" abre importar-extrato.html por cima; "Contas" abre
-  contas-financeiras.html. "Buscar no BB" é a API de Extratos (etapa 11).
+  contas-financeiras.html; "Conciliação" abre conciliacao.html e a linha
+  abre conciliar-movimento.html. "Buscar no BB" é a API de Extratos (etapa 11).
   Lançamento do banco não se edita: importação errada se desfaz.
   Script: src/js/modals/contabilidade-modais.js (montarExtrato).
 -->
@@ -100,6 +101,7 @@
     <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
       <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
       <button id="ctbExtratoContas" type="button" class="btn-neutral ctl-botao text-white">Contas do banco</button>
+      <button id="ctbExtratoConciliacao" type="button" class="btn-secondary ctl-botao text-white">Conciliação</button>
       <button id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade.extrato.importar" class="btn-bb ctl-botao text-white" title="API de Extratos do Banco do Brasil (etapa 11)">Buscar no BB</button>
       <button id="ctbExtratoImportar" type="button" data-perm="contabilidade.extrato.importar" class="btn-primary ctl-botao text-white min-w-[160px]">Importar OFX</button>
     </footer>

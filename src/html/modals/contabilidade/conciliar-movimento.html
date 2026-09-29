@@ -1,0 +1,120 @@
+<!--
+  Conciliar um lançamento (etapa 5). Modal médio, por cima da Conciliação ou
+  do Extrato. O lançamento do banco e as candidatas do app (GET
+  /api/contabilidade/conciliacao/movimentos/:id?dias=): marque uma ou
+  várias; a soma tem de dar o valor do lançamento — senão, justifique a
+  diferença (tarifa descontada, juros). Débito sem conta no app (tarifa,
+  imposto em débito automático) pode virar conta paga e conciliada de uma
+  vez. Conciliado: mostra com o que e deixa desfazer; ignorado: reativar.
+  Grava por POST .../conciliar, /ignorar, /desfazer, /reativar e /criar-conta.
+  Script: src/js/modals/contabilidade-modais.js (montarConciliarMovimento).
+-->
+<div id="ctbConciliarMovimentoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbConcMovTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbConcMovTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-link mr-2" aria-hidden="true"></i>Conciliar lançamento</h2>
+      <span id="ctbConcMovSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <dl id="ctbConcMovDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+
+        <div id="ctbConcMovLigados" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Conciliado com</h3>
+          </div>
+          <ul id="ctbConcMovLigadosLista" class="ctb-arquivos"></ul>
+        </div>
+
+        <div id="ctbConcMovEscolha" class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">O que casa com ele</h3>
+            <span id="ctbConcMovContagem" class="text-xs text-gray-400"></span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2">
+              <label for="ctbConcMovBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+              <input id="ctbConcMovBusca" type="search" placeholder="Pedido, conta, cliente, fornecedor ou valor"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbConcMovDias" class="ctl-rotulo text-gray-300">Até quantos dias de diferença</label>
+              <select id="ctbConcMovDias" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="7">7 dias</option>
+                <option value="15" selected>15 dias</option>
+                <option value="30">30 dias</option>
+                <option value="60">60 dias</option>
+              </select>
+            </div>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs"><span class="sr-only">Escolher</span></th>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">O quê</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Por quê</th>
+                </tr>
+              </thead>
+              <tbody id="ctbConcMovCandidatos"></tbody>
+            </table>
+          </div>
+          <p id="ctbConcMovSoma" class="ctb-soma"></p>
+          <div id="ctbConcMovJustificativaBloco" class="hidden">
+            <label for="ctbConcMovJustificativa" class="ctl-rotulo text-gray-300">Por que a diferença? <span class="ctb-obrigatorio">*</span></label>
+            <textarea id="ctbConcMovJustificativa" rows="2" maxlength="500" placeholder="Ex.: tarifa de cobrança descontada no crédito"
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          </div>
+        </div>
+
+        <div id="ctbConcMovConta" class="hidden ctb-secao-modal" data-perm-hide="contabilidade.pagar.lancar">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Sem conta no app? Lance a conta já paga</h3>
+            <span class="text-xs text-gray-400">Tarifa, imposto em débito automático… (com o dia e o valor do banco)</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="ctbConcMovContaDescricao" class="ctl-rotulo text-gray-300">Descrição <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbConcMovContaDescricao" type="text" maxlength="200"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbConcMovContaCategoria" class="ctl-rotulo text-gray-300">Categoria</label>
+              <input id="ctbConcMovContaCategoria" type="text" maxlength="80" list="ctbConcMovCategorias" placeholder="Ex.: Impostos e Taxas"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <datalist id="ctbConcMovCategorias"></datalist>
+            </div>
+            <div>
+              <label for="ctbConcMovContaFornecedor" class="ctl-rotulo text-gray-300">Fornecedor</label>
+              <select id="ctbConcMovContaFornecedor" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="">Sem fornecedor (tarifa, imposto…)</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbConcMovContaForma" class="ctl-rotulo text-gray-300">Forma</label>
+              <select id="ctbConcMovContaForma" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+          </div>
+          <div class="ctl-acoes justify-end">
+            <button id="ctbConcMovCriarConta" type="button" data-perm="contabilidade.conciliar" class="btn-primary ctl-botao text-white">Lançar como conta paga</button>
+          </div>
+        </div>
+
+        <div id="ctbConcMovMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbConcMovReativar" type="button" data-perm="contabilidade.conciliar" class="hidden btn-neutral ctl-botao text-white">Reativar</button>
+      <button id="ctbConcMovDesfazer" type="button" data-perm="contabilidade.conciliar" class="hidden btn-warning ctl-botao text-white">Desfazer conciliação</button>
+      <button id="ctbConcMovIgnorar" type="button" data-perm="contabilidade.conciliar" class="btn-warning ctl-botao text-white">Ignorar</button>
+      <button id="ctbConcMovConfirmar" type="button" data-perm="contabilidade.conciliar" class="btn-success ctl-botao min-w-[160px]" disabled>Conciliar</button>
+    </footer>
+  </div>
+</div>

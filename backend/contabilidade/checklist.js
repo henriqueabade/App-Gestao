@@ -1,11 +1,10 @@
 /**
- * Checklist do fechamento contábil (etapas 1 a 4): o que a tela da
+ * Checklist do fechamento contábil (etapas 1 a 5): o que a tela da
  * Contabilidade mostra de uma competência, calculado SÓ com o que o sistema
  * já controla — NF-e de saída (próprias e de fora), recebimentos e cobrança,
  * fechamentos de comissões e produção, devoluções e reembolsos, e (etapa 3)
- * os documentos recebidos e as contas a pagar, e (etapa 4) o extrato
- * bancário. A conciliação aparece como fonte "ainda não integrada", para a
- * tela já ter o desenho inteiro.
+ * os documentos recebidos e as contas a pagar, (etapa 4) o extrato bancário
+ * e (etapa 5) a conciliação do extrato com o que o app registrou.
  *
  * As contas ficam em funções puras sobre listas já lidas (`montar`); só
  * `carregar` fala com a API. Cada pendência sai com a severidade do dono
@@ -28,6 +27,9 @@ const titulos = require('./titulos');
 const documentos = require('./documentosRecebidos');
 const arquivos = require('./arquivos');
 const extratoMod = require('./extrato/extrato');
+const conciliacaoMod = require('./conciliacao/conciliacao');
+const liquidacoes = require('./conciliacao/liquidacoes');
+const motor = require('./conciliacao/motor');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -41,7 +43,7 @@ const FONTES = [
   { chave: 'documentos_recebidos', titulo: 'NF-e de entrada e NFS-e', icone: 'fa-file-import' },
   { chave: 'contas_pagar', titulo: 'Contas a pagar', icone: 'fa-file-invoice-dollar' },
   { chave: 'extrato', titulo: 'Extrato bancário', icone: 'fa-university' },
-  { chave: 'conciliacao', titulo: 'Conciliação e classificação', icone: 'fa-check-double', etapa: 'Etapas 5 e 6 — extrato × documentos, plano de contas' }
+  { chave: 'conciliacao', titulo: 'Conciliação bancária', icone: 'fa-check-double' }
 ];
 
 const semXml = n => {
@@ -405,6 +407,72 @@ function fonteExtrato({ extrato, competencia, hoje, encerrada }) {
   };
 }
 
+// ------------------------------------------------------------- conciliação (etapa 5)
+
+const SEM_EXTRATO_CONCILIACAO = `Depende do extrato: falta rodar ${b.SQL_ARQUIVO_EXTRATO} no banco e reiniciar a API.`;
+
+/**
+ * A conciliação do mês (todas as contas):
+ *   documental  lançamentos do extrato sem conciliação (junta todos; cada um
+ *               se resolve na Conciliação — conciliando ou ignorando com
+ *               justificativa)
+ *   critico     conciliação com um pagamento/recebimento que foi estornado ou
+ *               mudou de valor (um por lançamento): o banco diz uma coisa e o
+ *               app outra — desfaça e concilie de novo
+ *   aviso       o que o app registrou pelo banco, num trecho que o extrato
+ *               cobre, sem lançamento correspondente
+ * `conciliacao` = null quando falta o SQL do extrato; `{ semSql }` quando
+ * falta o da conciliação. Pura.
+ */
+function fonteConciliacao({ conciliacao, competencia }) {
+  if (!conciliacao) return { indisponivel: SEM_EXTRATO_CONCILIACAO, resumo: [], numeros: null, pendencias: [] };
+  if (conciliacao.semSql) return { indisponivel: conciliacao.semSql, resumo: [], numeros: null, pendencias: [] };
+  const movimentos = c.lista(conciliacao.movimentos);
+  const estado = m => (['conciliado', 'ignorado'].includes(m?.estado_conciliacao) ? m.estado_conciliacao : 'pendente');
+  const pendentes = movimentos.filter(m => estado(m) === 'pendente');
+  const conciliados = movimentos.filter(m => estado(m) === 'conciliado');
+  const ignorados = movimentos.filter(m => estado(m) === 'ignorado');
+  const somaAbs = l => c.centavos(l.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0));
+  const sugeridos = Number(conciliacao.sugeridos) || 0;
+  const sem = c.lista(conciliacao.semLancamento);
+  const pend = [];
+  if (pendentes.length) {
+    pend.push(pendencia({
+      nivel: 'documental', chave: 'conciliacao_pendente', fonte: 'conciliacao',
+      titulo: `${c.plural(pendentes.length, 'lançamento do extrato', 'lançamentos do extrato')} sem conciliação`,
+      descricao: `Total ${c.reais(somaAbs(pendentes))}${sugeridos ? ` · ${c.plural(sugeridos, 'com sugestão', 'com sugestão')}` : ''} · concilie ou ignore cada um com justificativa`,
+      data: b.ultimoDia(competencia), acao: 'Conciliar', destino: 'contabilidade', filtro: { acao: 'conciliacao', visao: 'pendentes' }
+    }));
+  }
+  for (const x of c.lista(conciliacao.invalidos)) {
+    const m = x.movimento || {};
+    pend.push(pendencia({
+      nivel: 'critico', chave: `conciliacao_invalida_${x.vinculo.movimento_id}`, fonte: 'conciliacao',
+      titulo: 'Conciliação com registro que mudou',
+      descricao: `Lançamento de ${c.impressa(c.dia(m.data))} (${c.reais(m.valor)}) — ${x.liq?.rotulo || `${x.vinculo.alvo_tipo} ${x.vinculo.alvo_id}`}: ${x.motivo}. Desfaça a conciliação e concilie de novo`,
+      data: c.dia(m.data), acao: 'Conciliar', destino: 'contabilidade', filtro: { acao: 'conciliacao', visao: 'conciliados', movimento_id: x.vinculo.movimento_id }
+    }));
+  }
+  if (sem.length) {
+    pend.push(pendencia({
+      nivel: 'aviso', chave: 'conciliacao_sem_lancamento', fonte: 'conciliacao',
+      titulo: `${c.plural(sem.length, 'registro do app sem lançamento no extrato', 'registros do app sem lançamento no extrato')}`,
+      descricao: `Total ${c.reais(c.centavos(sem.reduce((s, l) => s + Math.abs(l.valor), 0)))} · confira o dia e o valor registrados (ou se foi mesmo pelo banco)`,
+      data: b.ultimoDia(competencia), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'conciliacao', visao: 'pendentes' }
+    }));
+  }
+  return {
+    resumo: [
+      { rotulo: 'Conciliados', valor: movimentos.length ? `${conciliados.length} de ${movimentos.length}` : '0' },
+      { rotulo: 'A conciliar', valor: pendentes.length ? `${pendentes.length} · ${c.reais(somaAbs(pendentes))}` : '0' },
+      { rotulo: 'Ignorados (sem par)', valor: String(ignorados.length) },
+      { rotulo: 'Sem lançamento no extrato', valor: String(sem.length) }
+    ],
+    numeros: { movimentos: movimentos.length, conciliados: conciliados.length, pendentes: pendentes.length, ignorados: ignorados.length, sugeridos, sem_lancamento: sem.length, invalidos: c.lista(conciliacao.invalidos).length },
+    pendencias: pend
+  };
+}
+
 // ------------------------------------------------------------- montagem
 
 function estadoDaFonte(fonte, pendencias, { encerrada }) {
@@ -414,7 +482,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
   if (vivas.some(p => p.nivel === 'critico')) return 'critico';
   if (vivas.some(p => p.nivel === 'documental')) return 'pendente';
   if (vivas.some(p => p.nivel === 'aviso')) return 'aviso';
-  return encerrada || !['fechamentos', 'extrato'].includes(fonte.chave) ? 'ok' : 'em_curso';
+  return encerrada || !['fechamentos', 'extrato', 'conciliacao'].includes(fonte.chave) ? 'ok' : 'em_curso';
 }
 
 /**
@@ -427,7 +495,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
 function montar({
   competencia, hoje, notas = [], externas = [], aguardando = null, receber = null, receberErro = null,
   fechamentos: lista = [], reembolsosPendencias = [], situacao = null, resolucoes = [], nomes = new Map(), sqlPendente = false,
-  pagar = null, extrato = null
+  pagar = null, extrato = null, conciliacao = null
 }) {
   const comp = competenciaValida(competencia, hoje);
   const diaDeHoje = c.dia(hoje);
@@ -440,7 +508,8 @@ function montar({
     devolucoes: fonteDevolucoes({ reembolsosPendencias, hoje: diaDeHoje }),
     documentos_recebidos: fonteDocumentosRecebidos({ pagar, competencia: comp, hoje: diaDeHoje }),
     contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje }),
-    extrato: fonteExtrato({ extrato, competencia: comp, hoje: diaDeHoje, encerrada })
+    extrato: fonteExtrato({ extrato, competencia: comp, hoje: diaDeHoje, encerrada }),
+    conciliacao: fonteConciliacao({ conciliacao, competencia: comp })
   };
 
   // As ignoradas: continuam na lista, marcadas, sem contar para os bloqueios.
@@ -539,6 +608,36 @@ async function lerExtrato(api, competencia) {
   }
 }
 
+/**
+ * O que a fonte da conciliação precisa, a partir do extrato já lido: null sem
+ * o SQL do extrato; `{ semSql }` sem o da conciliação.
+ */
+async function lerConciliacao(api, competencia, extrato, hoje) {
+  if (!extrato) return null;
+  const vinculos = await b.lerOpcional(api, 'conciliacao_vinculos');
+  if (!vinculos) return { semSql: b.SQL_FALTANDO_CONCILIACAO };
+  const movimentos = c.lista(extrato.movimentos).filter(m => m && m.competencia === competencia);
+  const ids = new Set(movimentos.map(m => String(m.id)));
+  const ligados = vinculos.filter(v => !v.desfeito_em && ids.has(String(v.movimento_id)));
+  const { de, ate } = conciliacaoMod.janelaDoMes(competencia);
+  const liqs = conciliacaoMod.comRestante(
+    await liquidacoes.carregar(api, { de, ate, incluir: ligados.map(v => liquidacoes.chaveDe(v.alvo_tipo, v.alvo_id)) }), vinculos
+  );
+  const porChave = new Map(liqs.map(l => [l.chave, l]));
+  const pendentes = movimentos.filter(m => !['conciliado', 'ignorado'].includes(m.estado_conciliacao));
+  const sugestoes = motor.sugerir(pendentes.map(conciliacaoMod.paraMotor), liqs);
+  const correntes = c.lista(extrato.contas).filter(x => x && x.ativa !== false && x.ativa !== 'false' && (x.tipo || 'corrente') === 'corrente');
+  const coberturas = correntes.map(conta => extratoMod.cobertura(c.lista(extrato.importacoes).filter(i => String(i.conta_id) === String(conta.id)), competencia, { hoje }));
+  const porMovimento = new Map(movimentos.map(m => [String(m.id), m]));
+  // Um por lançamento (a chave da pendência é do lançamento).
+  const invalidos = [...new Map(conciliacaoMod.vinculosInvalidos(ligados, porChave)
+    .map(x => [String(x.vinculo.movimento_id), { ...x, movimento: porMovimento.get(String(x.vinculo.movimento_id)) || null }])).values()];
+  return {
+    movimentos, sugeridos: sugestoes.size, invalidos,
+    semLancamento: conciliacaoMod.semLancamento(liqs, { competencia, coberturas, movimentos: pendentes.map(conciliacaoMod.paraMotor), sugestoes })
+  };
+}
+
 /** Lê tudo o que o painel precisa e monta. `situacao_bruta` volta junto para quem grava (fechamento.js). */
 async function carregar({ api, competencia, hoje, desde = null }) {
   const comp = competenciaValida(competencia, hoje);
@@ -554,6 +653,7 @@ async function carregar({ api, competencia, hoje, desde = null }) {
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
   const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
+  const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje));
   try {
     situacao = (await b.ler(api, 'competencia_contabil', { competencia: comp }))[0] || null;
     resolucoes = await b.ler(api, 'contabil_pendencias_resolucoes', { competencia: comp });
@@ -565,12 +665,12 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   const nomes = await b.nomesDeUsuarios(api, [situacao?.fechada_por, situacao?.reaberta_por, ...resolucoes.map(r => r.usuario_id)]);
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
-    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato
+    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao
   });
   return { ...painel, situacao_bruta: situacao };
 }
 
 module.exports = {
   FONTES, NIVEL_DA_COBRANCA, competenciaValida, fonteNfe, fonteRecebimentos, fonteFechamentos, fonteDevolucoes,
-  fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, lerContasPagar, lerExtrato, montar, carregar
+  fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, fonteConciliacao, lerContasPagar, lerExtrato, lerConciliacao, montar, carregar
 };

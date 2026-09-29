@@ -568,6 +568,13 @@ async function estornar(api, pagamentoId, { motivo, usuarioId = null }) {
   if (!p) throw c.erro('Pagamento não encontrado.', 404);
   if (!ativo(p)) throw c.erro('Este pagamento já foi estornado.', 409);
   await b.garantirAberta(api, p.competencia, 'estornar pagamentos nela');
+  // Conciliado com o extrato (etapa 5): o banco diz que o dinheiro saiu; desfaça a conciliação antes.
+  const vinculos = (await b.lerOpcional(api, 'conciliacao_vinculos', { alvo_tipo: 'titulo_pagamento', alvo_id: Number(p.id) })) || [];
+  const conciliado = vinculos.find(v => !v.desfeito_em && v.alvo_tipo === 'titulo_pagamento' && String(v.alvo_id) === String(p.id));
+  if (conciliado) {
+    const mov = (await b.ler(api, 'movimentos_bancarios', { id: Number(conciliado.movimento_id) }).catch(() => []))[0] || null;
+    throw c.erro(`Este pagamento está conciliado com o lançamento do extrato${mov ? ` de ${c.impressa(c.dia(mov.data))}` : ''}: desfaça a conciliação antes de estornar.`, 409);
+  }
   const t = await lerTitulo(api, p.titulo_id);
   await b.atualizar(api, 'titulo_pagar_pagamentos', p.id, { estornado_em: c.agora(), estornado_por: usuarioId, motivo_estorno: m });
   await eventos.registrar(api, {

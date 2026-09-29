@@ -28,7 +28,12 @@ const TIPOS = {
   pagamento_estornado: 'Pagamento estornado',
   conta_financeira_criada: 'Conta financeira cadastrada',
   extrato_importado: 'Extrato importado',
-  extrato_desfeito: 'Importação de extrato desfeita'
+  extrato_desfeito: 'Importação de extrato desfeita',
+  conciliacao_feita: 'Lançamento conciliado',
+  conciliacao_desfeita: 'Conciliação desfeita',
+  conciliacao_automatica: 'Conciliação em lote',
+  lancamento_ignorado: 'Lançamento ignorado',
+  lancamento_reativado: 'Lançamento reativado'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

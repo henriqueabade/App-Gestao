@@ -380,3 +380,34 @@ test('montar com o extrato: a pendência entra no bloqueio do pacote (documental
   assert.equal(p.pode.fechar, true);
   assert.deepEqual(p.bloqueios.pacote, ['A competência precisa estar fechada.', '1 pendência documental a resolver ou ignorar com justificativa.']);
 });
+
+// ------------------------------------------------------------- conciliação (etapa 5)
+
+test('conciliação: pendentes = uma documental; registro estornado = crítico (um por lançamento); sem lançamento = aviso; sem SQL diz qual', () => {
+  assert.match(ck.fonteConciliacao({ conciliacao: null, competencia: COMP }).indisponivel, /Depende do extrato: .*contabilidade_extrato\.sql/);
+  assert.match(ck.fonteConciliacao({ conciliacao: { semSql: 'Falta rodar sql/contabilidade_conciliacao.sql' }, competencia: COMP }).indisponivel, /contabilidade_conciliacao\.sql/);
+  const r = ck.fonteConciliacao({
+    competencia: COMP,
+    conciliacao: {
+      movimentos: [
+        { id: 1, data: '2026-08-05', valor: -2500, estado_conciliacao: 'pendente' }, { id: 2, data: '2026-08-11', valor: 3700 },
+        { id: 3, data: '2026-08-20', valor: -600, estado_conciliacao: 'conciliado' }, { id: 4, data: '2026-08-31', valor: -12.9, estado_conciliacao: 'ignorado' }
+      ],
+      sugeridos: 2,
+      invalidos: [{ vinculo: { movimento_id: 3, alvo_tipo: 'recebimento', alvo_id: 9 }, motivo: 'recebimento estornado', liq: { rotulo: 'Pedido 2540 · parcela 1' }, movimento: { data: '2026-08-20', valor: -600 } }],
+      semLancamento: [{ chave: 'financeiro_pagamento:70', valor: -900 }]
+    }
+  });
+  assert.deepEqual(r.pendencias.map(p => [p.nivel, p.chave]), [['documental', 'conciliacao_pendente'], ['critico', 'conciliacao_invalida_3'], ['aviso', 'conciliacao_sem_lancamento']]);
+  assert.equal(r.pendencias[0].titulo, '2 lançamentos do extrato sem conciliação');
+  assert.match(r.pendencias[0].descricao.replace(/ /g, ' '), /^Total R\$ 6\.200,00 · 2 com sugestão/);
+  assert.deepEqual(r.pendencias[1].filtro, { acao: 'conciliacao', visao: 'conciliados', movimento_id: 3 });
+  assert.match(r.pendencias[1].descricao, /Pedido 2540 · parcela 1: recebimento estornado/);
+  assert.deepEqual(r.numeros, { movimentos: 4, conciliados: 1, pendentes: 2, ignorados: 1, sugeridos: 2, sem_lancamento: 1, invalidos: 1 });
+  assert.deepEqual(r.resumo.map(x => x.rotulo), ['Conciliados', 'A conciliar', 'Ignorados (sem par)', 'Sem lançamento no extrato']);
+  assert.equal(r.resumo[0].valor, '1 de 4');
+  // Tudo conciliado ou ignorado: nada a cobrar; no mês em curso fica "em curso".
+  const emDia = ck.montar({ competencia: '2026-09', hoje: HOJE, notas: [], aguardando: { pedidos: [] }, receber: { pendencias: [] }, fechamentos: [],
+    conciliacao: { movimentos: [{ id: 1, valor: 10, estado_conciliacao: 'conciliado' }], sugeridos: 0, invalidos: [], semLancamento: [] } });
+  assert.equal(emDia.fontes.find(f => f.chave === 'conciliacao').estado, 'em_curso');
+});

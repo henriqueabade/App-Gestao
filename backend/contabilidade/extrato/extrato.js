@@ -283,7 +283,7 @@ async function desfazer(api, importacaoId, { motivo, usuarioId = null }) {
   }
   const movimentos = await b.ler(api, 'movimentos_bancarios', { importacao_id: Number(imp.id) });
   const conciliados = movimentos.filter(x => x.estado_conciliacao && x.estado_conciliacao !== 'pendente');
-  if (conciliados.length) throw c.erro(`${c.plural(conciliados.length, 'lançamento desta importação já está conciliado', 'lançamentos desta importação já estão conciliados')}: desfaça a conciliação antes.`, 409);
+  if (conciliados.length) throw c.erro(`${c.plural(conciliados.length, 'lançamento desta importação já está conciliado ou ignorado', 'lançamentos desta importação já estão conciliados ou ignorados')}: desfaça isso na Conciliação antes.`, 409);
   for (const comp of [...new Set(movimentos.map(x => x.competencia))]) await b.garantirAberta(api, comp, 'desfazer a importação do extrato');
   for (const x of movimentos) await b.excluir(api, 'movimentos_bancarios', x.id);
   await b.atualizar(api, 'extrato_importacoes', imp.id, { status: 'desfeita', desfeita_em: c.agora(), desfeita_por: usuarioId, motivo_desfazer: m });
