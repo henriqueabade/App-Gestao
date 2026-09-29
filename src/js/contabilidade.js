@@ -1,5 +1,5 @@
 /**
- * Módulo Contabilidade — Fechamento do mês (etapas 1 a 6).
+ * Módulo Contabilidade — Fechamento do mês (etapas 1 a 7).
  *
  * Tudo vem de GET /api/contabilidade/painel da competência escolhida: a
  * situação (aberta, fechada, reaberta), a contagem das pendências nas três
@@ -90,7 +90,9 @@ function ctbTextoSituacao(painel) {
     let detalhe = '';
     if (status === 'fechada') {
         detalhe = `Fechada em ${ctbFormatarInstante(s.fechada_em)}${s.fechada_por ? ` por ${s.fechada_por}` : ''}`;
+        if (s.versao) detalhe += ` · versão ${s.versao}`;
         if (s.divergencias) detalhe += ` · ${s.divergencias === 1 ? '1 erro crítico novo' : `${s.divergencias} erros críticos novos`} desde o fechamento`;
+        if (s.diferencas) detalhe += ` · ${s.diferencas === 1 ? '1 diferença' : `${s.diferencas} diferenças`} desde a foto do fechamento`;
     } else if (status === 'reaberta') {
         detalhe = `Reaberta em ${ctbFormatarInstante(s.reaberta_em)}${s.reaberta_por ? ` por ${s.reaberta_por}` : ''}${s.justificativa_reabertura ? ` — ${s.justificativa_reabertura}` : ''}`;
     } else if (painel?.encerrada === false) {
@@ -169,6 +171,8 @@ const CTB_ACOES = {
     'classificacao': { rotulo: 'Classificação', abrir: (m, extra) => ctbAbrirModal('classificacao', m, { visao: extra?.visao || null }) },
     'plano-contas': { rotulo: 'Plano de contas', abrir: m => ctbAbrirModal('plano-contas', m, {}) },
     'regras-classificacao': { rotulo: 'Regras de classificação', abrir: m => ctbAbrirModal('regras-classificacao', m, {}) },
+    // Etapa 7: as versões do fechamento e as diferenças desde ele (o aviso da lista abre aqui).
+    'fechamentos': { rotulo: 'Histórico dos fechamentos', abrir: m => ctbAbrirModal('fechamentos', m, {}) },
     // A pendência da própria Contabilidade: o filtro diz qual modal abre e com quê.
     'abrir-pendencia': { rotulo: 'Resolver pendência', abrir: (m, extra) => ctbAbrirDaPendencia(m, extra?.pendencia) },
     // Etapas seguintes (docs/contabilidade-fechamento-plano.md, seção N).
@@ -199,7 +203,8 @@ const CTB_MODAIS = {
     'conciliar-movimento': { html: 'modals/contabilidade/conciliar-movimento.html', overlay: 'ctbConciliarMovimento' },
     'classificacao': { html: 'modals/contabilidade/classificacao.html', overlay: 'ctbClassificacao' },
     'plano-contas': { html: 'modals/contabilidade/plano-contas.html', overlay: 'ctbPlanoContas' },
-    'regras-classificacao': { html: 'modals/contabilidade/regras-classificacao.html', overlay: 'ctbRegras' }
+    'regras-classificacao': { html: 'modals/contabilidade/regras-classificacao.html', overlay: 'ctbRegras' },
+    'fechamentos': { html: 'modals/contabilidade/fechamentos.html', overlay: 'ctbFechamentos' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

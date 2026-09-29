@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1 a 6).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 7).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -26,6 +26,7 @@
  *   ctbClassificacao        Classificação do mês — a conta do plano de cada lançamento, lote, total por conta (GET /classificacao)
  *   ctbPlanoContas          Plano de contas — lista e cadastro (GET/POST/PUT /plano-contas)
  *   ctbRegras               Regras de classificação — lista, sugeridas, testar, cadastro (/regras)
+ *   ctbFechamentos          Histórico dos fechamentos — versões, comparação, diferenças desde o fechamento (GET /fechamentos)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -550,7 +551,38 @@
     montarCompetencias(compSel, contexto.competencia);
     const confirmarBtn = el('ctbFecharConfirmar');
     let painel = null;
+    let previa = null;
     let leitura = 0;
+
+    /** Etapa 7: a foto que o fechamento vai guardar (e o que mudou desde a última versão). */
+    function pintarFoto() {
+      const p = previa;
+      el('ctbFecharFoto').classList.toggle('hidden', !p || !painel?.pode?.fechar);
+      if (!p) return;
+      const r = p.resultado;
+      el('ctbFecharVersao').textContent = p.versao ? (p.versao === 1 ? 'Versão 1 (a primeira)' : `Versão ${p.versao} (a anterior fica guardada)`) : 'Sem o SQL da etapa 7: só a foto resumida';
+      const linhas = [['Lançamentos do extrato', `${p.lancamentos}${p.sem_classificacao ? ` · ${p.sem_classificacao} sem classificação` : ''}`]];
+      if (r) {
+        linhas.push(['Receitas', formatarMoeda(r.receitas)], ['Deduções', formatarMoeda(r.deducoes)], ['Custos', formatarMoeda(r.custos)], ['Despesas', formatarMoeda(r.despesas)]);
+        linhas.push(['Resultado do mês', formatarMoeda(r.resultado)], ['Fora do resultado', formatarMoeda(r.fora_do_resultado)]);
+        if (r.sem_classificacao) linhas.push(['Sem classificação', formatarMoeda(r.sem_classificacao)]);
+      } else linhas.push(['Resultado do mês', 'Sem a classificação (etapa 6)']);
+      for (const x of p.extrato || []) {
+        linhas.push([`Saldo do banco · ${x.conta}`, x.saldo_banco ? `${formatarMoeda(x.saldo_banco.valor)} em ${formatarData(x.saldo_banco.data)}` : 'o extrato não trouxe']);
+      }
+      preencherDados(el('ctbFecharFotoDados'), linhas);
+      const cmp = p.comparacao;
+      const alvo = el('ctbFecharComparacao');
+      alvo.classList.toggle('hidden', !cmp);
+      if (cmp) {
+        const partes = [];
+        if (cmp.resultado.antes !== cmp.resultado.depois) partes.push(`resultado ${formatarMoeda(cmp.resultado.antes)} → ${formatarMoeda(cmp.resultado.depois)}`);
+        if (cmp.reclassificados) partes.push(plural(cmp.reclassificados, 'lançamento mudou de conta', 'lançamentos mudaram de conta'));
+        if (cmp.novos) partes.push(plural(cmp.novos, 'lançamento novo', 'lançamentos novos'));
+        if (cmp.sairam) partes.push(plural(cmp.sairam, 'lançamento saiu', 'lançamentos saíram'));
+        alvo.textContent = `Em relação à versão ${cmp.de}: ${partes.length ? partes.join('; ') : 'nada mudou'}.`;
+      }
+    }
 
     function pintar() {
       const p = painel;
@@ -574,6 +606,7 @@
       const sobras = (p?.pendencias || []).filter(x => !x.ignorada && x.nivel !== 'critico');
       el('ctbFecharSobras').classList.toggle('hidden', !p || !p.pode?.fechar || !sobras.length);
       el('ctbFecharSobrasLista').replaceChildren(...sobras.map(x => itemDaLista(`${NIVEIS[x.nivel] || x.nivel}: ${x.titulo}`, x.nivel === 'documental' ? 'fa-file-alt' : 'fa-info-circle', x.nivel === 'documental' ? 'var(--color-primary-light)' : 'var(--color-violet)')));
+      pintarFoto();
     }
 
     async function carregar() {
@@ -581,9 +614,14 @@
       mostrarMensagem('ctbFecharMensagem', '');
       el('ctbFecharCarregando').classList.remove('hidden');
       try {
-        const r = await fetchApi(`/api/contabilidade/painel?competencia=${encodeURIComponent(compSel.value || '')}`);
+        const comp = encodeURIComponent(compSel.value || '');
+        const [r, foto] = await Promise.all([
+          fetchApi(`/api/contabilidade/painel?competencia=${comp}`),
+          fetchApi(`/api/contabilidade/fechar/previa?competencia=${comp}`).catch(() => null)
+        ]);
         if (minha !== leitura) return;
         painel = r;
+        previa = foto;
         if (r?.sql_pendente) mostrarMensagem('ctbFecharMensagem', 'Falta rodar sql/contabilidade_base.sql no banco e reiniciar a API: o fechamento não será gravado.');
       } catch (e) {
         if (minha !== leitura) return;
@@ -607,10 +645,11 @@
       if (!confirmado) return;
       processando = true;
       try {
-        await enviar('/api/contabilidade/fechar', 'POST', { competencia: compSel.value });
-        window.showToast?.(`Competência ${painel.rotulo} fechada.`, 'success');
+        const r = await enviar('/api/contabilidade/fechar', 'POST', { competencia: compSel.value });
+        window.showToast?.(`Competência ${painel.rotulo} fechada${r?.versao ? ` (versão ${r.versao})` : ''}.`, 'success');
         processando = false;
         avisarAlteracao();
+        if (r?.aviso && window.DialogPadrao?.info) await window.DialogPadrao.info({ title: 'Fechada, com aviso', tom: 'aviso', message: r.aviso });
         fechar();
       } catch (e) {
         mostrarMensagem('ctbFecharMensagem', textoDoErro(e, 'Você não tem permissão para fechar a competência.'));
@@ -2764,7 +2803,11 @@
     function pintarNota() {
       const alvo = el('ctbClassNota');
       alvo.style.color = '';
-      if (dados?.fechada) { alvo.textContent = 'Competência fechada: a classificação dela só muda depois de reabrir.'; alvo.style.color = 'var(--color-primary-light)'; return; }
+      if (dados?.fechada) {
+        alvo.textContent = `Competência fechada: vale a classificação congelada${dados.versao ? ` na versão ${dados.versao}` : ''}. Ela só muda depois de reabrir.`;
+        alvo.style.color = 'var(--color-primary-light)';
+        return;
+      }
       alvo.textContent = dados && !dados.totais.total ? 'Nenhum lançamento do extrato neste mês: importe o extrato (Extrato bancário).' : '';
     }
 
@@ -2783,9 +2826,15 @@
 
     function celulaDaConta(l) {
       const cls = l.classificacao || {};
-      const sub = cls.criterio === 'sem' ? (cls.detalhe || 'Sem conta: escolha uma ou crie uma regra') : [cls.criterio_rotulo, cls.detalhe].filter(Boolean).join(' · ');
+      const sub = cls.criterio === 'sem' ? (cls.detalhe || (dados?.fechada ? 'Sem conta no fechamento' : 'Sem conta: escolha uma ou crie uma regra')) : [cls.criterio_rotulo, cls.detalhe].filter(Boolean).join(' · ');
       if (!podeClassificar()) {
         const td = celula(cls.conta || '—', 'px-4 py-3', sub);
+        // Mês fechado: a de hoje, quando é outra (vira diferença; reabra para refazer).
+        if (l.atual) {
+          const hoje = criar('span', 'ctb-sub', `Hoje seria: ${l.atual.conta || 'sem classificação'}`);
+          hoje.style.color = 'var(--color-primary-light)';
+          td.appendChild(hoje);
+        }
         return td;
       }
       const select = criar('select', 'w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white ctb-conta-linha');
@@ -3212,6 +3261,120 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ histórico dos fechamentos (etapa 7)
+
+  function montarFechamentos() {
+    const compCampo = el('ctbFechHistCompetencia');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+    let escolhida = null;
+
+    function pintarDetalhe() {
+      const v = (dados?.versoes || []).find(x => x.versao === escolhida) || null;
+      el('ctbFechHistDetalhe').classList.toggle('hidden', !v);
+      if (!v) return;
+      el('ctbFechHistDetalheTitulo').textContent = `Congelado na versão ${v.versao}`;
+      const r = v.resultado;
+      el('ctbFechHistDetalheResultado').textContent = r ? `Resultado do mês: ${formatarMoeda(r.resultado)}${r.sem_classificacao ? ` · sem classificação: ${formatarMoeda(r.sem_classificacao)}` : ''}` : 'Sem a classificação na época';
+      const corpo = el('ctbFechHistPorConta');
+      const grupos = r?.por_conta || [];
+      if (!grupos.length) linhaVazia(corpo, 4, 'Nada classificado nesta versão.');
+      else {
+        corpo.replaceChildren(...grupos.map(g => {
+          const tr = criar('tr');
+          const nome = celula(g.conta, 'px-4 py-3', plural(g.quantidade, 'lançamento', 'lançamentos'));
+          if (!g.conta_id) nome.style.color = 'var(--color-primary-light)';
+          tr.append(nome, celula(g.entradas ? formatarMoeda(g.entradas) : '—', 'px-4 py-3 ctb-num'), celula(g.saidas ? formatarMoeda(g.saidas) : '—', 'px-4 py-3 ctb-num'),
+            corDoValor(celula(formatarMoeda(g.resultado), 'px-4 py-3 ctb-num'), g.resultado));
+          return tr;
+        }));
+      }
+      preencherDados(el('ctbFechHistExtrato'), (v.extrato || []).map(x => [
+        `Extrato · ${x.conta}`,
+        `${plural(x.lancamentos, 'lançamento', 'lançamentos')} · ${formatarMoeda(x.resultado)}${x.saldo_banco ? ` · saldo ${formatarMoeda(x.saldo_banco.valor)} em ${formatarData(x.saldo_banco.data)}` : ''}${x.completo === false ? ' · extrato incompleto' : ''}`
+      ]));
+    }
+
+    function textoDaComparacao(x) {
+      if (x.mesmo_hash && x.resultado.antes === x.resultado.depois) return `Da versão ${x.de} para a ${x.para}: os mesmos lançamentos, nas mesmas contas.`;
+      const partes = [];
+      if (x.resultado.antes !== x.resultado.depois) partes.push(`resultado ${formatarMoeda(x.resultado.antes)} → ${formatarMoeda(x.resultado.depois)}`);
+      if (x.contas.length) partes.push(x.contas.slice(0, 4).map(c => `${c.conta} ${c.diferenca > 0 ? '+' : ''}${formatarMoeda(c.diferenca)}`).join(', '));
+      if (x.novos) partes.push(plural(x.novos, 'lançamento novo', 'lançamentos novos'));
+      if (x.sairam) partes.push(plural(x.sairam, 'lançamento saiu', 'lançamentos saíram'));
+      if (x.reclassificados) partes.push(plural(x.reclassificados, 'mudou de conta', 'mudaram de conta'));
+      return `Da versão ${x.de} para a ${x.para}: ${partes.join('; ') || 'nada que mude o resultado'}.`;
+    }
+
+    function pintar() {
+      const d = dados;
+      pintarSituacao(el('ctbFechHistSituacao'), d?.status || 'aberta');
+      const versoes = d?.versoes || [];
+      const nota = el('ctbFechHistNota');
+      if (!d) nota.textContent = '';
+      else if (d.status === 'fechada') nota.textContent = versoes.length ? `Fechada: vale a versão ${versoes[0].versao}.` : 'Fechada antes da etapa 7: sem a foto completa.';
+      else if (d.status === 'reaberta') nota.textContent = 'Reaberta: o mês voltou a mudar. Ao fechar de novo, nasce a próxima versão.';
+      else nota.textContent = versoes.length ? '' : 'Esta competência ainda não foi fechada.';
+
+      const itens = (d?.diferencas || []).map(x => itemDaLista(`${x.titulo}${x.descricao ? ` — ${x.descricao}` : ''}`, 'fa-exclamation-triangle', 'var(--color-primary-light)'));
+      if (d?.criticos_depois) itens.unshift(itemDaLista(`${plural(d.criticos_depois, 'erro crítico novo', 'erros críticos novos')} desde o fechamento (veja a lista de pendências)`, 'fa-ban', 'var(--color-red)'));
+      el('ctbFechHistDiferencasBloco').classList.toggle('hidden', !itens.length);
+      el('ctbFechHistDiferencas').replaceChildren(...itens);
+
+      const corpo = el('ctbFechHistVersoes');
+      if (!versoes.length) linhaVazia(corpo, 6, 'Nenhuma versão guardada.');
+      else {
+        corpo.replaceChildren();
+        versoes.forEach((v, i) => {
+          const vale = i === 0 && d.status === 'fechada';
+          const tr = criar('tr');
+          tr.dataset.ctbLinha = '1';
+          if (v.versao === escolhida) tr.classList.add('ctb-linha-destaque');
+          const sobrou = v.pendencias.filter(p => !p.ignorada);
+          const ignoradas = v.pendencias.length - sobrou.length;
+          tr.append(
+            celula(vale ? [criar('span', null, `Versão ${v.versao} `), tag('Vale', 'badge-success')] : `Versão ${v.versao}`, 'px-4 py-3 ctb-nowrap'),
+            celula(formatarInstante(v.fechada_em), 'px-4 py-3', v.fechada_por),
+            celula(v.reaberta_em ? formatarInstante(v.reaberta_em) : '—', 'px-4 py-3', [v.reaberta_por, v.justificativa_reabertura].filter(Boolean).join(' · ') || null),
+            corDoValor(celula(v.resultado ? formatarMoeda(v.resultado.resultado) : '—', 'px-4 py-3 ctb-num'), v.resultado?.resultado ?? 0),
+            celula(String(v.lancamentos), 'px-4 py-3', v.sem_classificacao ? `${v.sem_classificacao} sem classificação` : null),
+            celula(sobrou.length ? plural(sobrou.length, 'pendência', 'pendências') : 'nada', 'px-4 py-3', ignoradas ? plural(ignoradas, 'ignorada', 'ignoradas') : null)
+          );
+          tr.addEventListener('click', () => { escolhida = v.versao; pintar(); });
+          corpo.appendChild(tr);
+        });
+      }
+      el('ctbFechHistComparacoes').replaceChildren(...(d?.comparacoes || []).map(x => itemDaLista(textoDaComparacao(x), 'fa-code-branch')));
+      el('ctbFechHistReabrir').classList.toggle('hidden', d?.status !== 'fechada');
+      el('ctbFechHistFechar').classList.toggle('hidden', !d || d.status === 'fechada');
+      pintarDetalhe();
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbFechHistMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/fechamentos?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        if (minha !== leitura) return;
+        dados = r;
+        if (!r.versoes.some(v => v.versao === escolhida)) escolhida = r.versoes[0]?.versao ?? null;
+        pintar();
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        pintar();
+        mostrarMensagem('ctbFechHistMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    compCampo.addEventListener('change', () => { escolhida = null; carregar(); });
+    el('ctbFechHistReabrir').addEventListener('click', () => abrirOutro('reabrir', { competencia: compCampo.value }));
+    el('ctbFechHistFechar').addEventListener('click', () => abrirOutro('fechar', { competencia: compCampo.value }));
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -3231,7 +3394,8 @@
     ctbConciliarMovimento: montarConciliarMovimento,
     ctbClassificacao: montarClassificacao,
     ctbPlanoContas: montarPlanoContas,
-    ctbRegras: montarRegras
+    ctbRegras: montarRegras,
+    ctbFechamentos: montarFechamentos
   };
 
   let montagem;

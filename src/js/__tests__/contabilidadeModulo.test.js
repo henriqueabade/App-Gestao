@@ -106,6 +106,13 @@ test('permissões: o módulo está no catálogo, na tela de permissões e no SQL
     for (const n of ['Aquisição de Bens', 'Serviços de Terceiros', 'Impostos e Taxas', 'Aporte de Capital']) assert.ok(etapa6.includes(`('${n}',`), n);
     assert.match(etapa6, /classificacoes \(movimento_id\) WHERE substituida_em IS NULL/, 'uma classificação à mão valendo por lançamento');
   }
+  const etapa7 = sqlDaEtapa('contabilidade_fechamento.sql');
+  if (etapa7) {
+    const { TABELAS_FECHAMENTO } = require('../../../backend/contabilidade/base');
+    for (const t of TABELAS_FECHAMENTO) assert.ok(etapa7.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
+    assert.match(etapa7, /competencia_fechamentos \(competencia, versao\)/, 'uma versão por número');
+    assert.doesNotMatch(etapa7, /perm_contabilidade/, 'a etapa 7 não cria permissão');
+  }
 });
 
 test('tela: toda permissão usada existe no catálogo; Fechar (verde), Reabrir (bordô, escondido), Gerar pacote (azul claro) e Atualizar (dourado) no cabeçalho', () => {
@@ -142,6 +149,9 @@ test('funções puras: filtro por severidade/fonte/ignoradas, a contagem e o tex
   assert.equal(f.ctbTextoSituacao({ situacao: { status: 'aberta' }, encerrada: true, pode: { fechar: true } }).detalhe, 'Sem erro crítico: a competência pode ser fechada.');
   assert.equal(f.ctbTextoSituacao({ situacao: { status: 'aberta' }, encerrada: true, pode: { fechar: false }, bloqueios: { fechar: ['2 erros críticos a resolver.'] } }).detalhe, '2 erros críticos a resolver.');
   assert.equal(f.ctbTextoSituacao(null).status, 'aberta');
+  // Etapa 7: a versão e as diferenças desde a foto do fechamento.
+  assert.equal(f.ctbTextoSituacao({ situacao: { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', versao: 2, diferencas: 3 } }).detalhe,
+    'Fechada em 25/09/2026 às 15:30 · versão 2 · 3 diferenças desde a foto do fechamento');
 
   assert.equal(f.ctbFormatarData('2026-08-31'), '31/08/2026');
   assert.equal(f.ctbFormatarQuando('2026-09-28T10:05:00-03:00', '2026-09-28'), '10:05');
@@ -205,16 +215,20 @@ const MODAIS_ETAPA5 = {
   'conciliar-movimento': { overlay: 'ctbConciliarMovimento', principal: ['ctbConcMovConfirmar', 'btn-success', 'contabilidade.conciliar'] }
 };
 
+const MODAIS_ETAPA7 = {
+  'fechamentos': { overlay: 'ctbFechamentos', principal: null }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
   'regras-classificacao': { overlay: 'ctbRegras', principal: ['ctbRegraSalvar', 'btn-primary', 'contabilidade.plano.gerir'] }
 };
 
-test('modais das etapas 2 a 6: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
+test('modais das etapas 2 a 7: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6 })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7 })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -251,6 +265,13 @@ test('modais das etapas 2 a 6: anatomia da casa, Fechar/Cancelar vermelho, botã
     "'/api/contabilidade/regras/testar', 'POST'"]) {
     assert.ok(MODAIS.includes(rota), `rota ${rota}`);
   }
+  // Etapa 7: o fechar lê a prévia do que congela; o histórico lê as versões.
+  for (const rota of ['/api/contabilidade/fechar/previa?competencia=', '/api/contabilidade/fechamentos?competencia=']) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  const fecharHtml = ler('html', 'modals', 'contabilidade', 'fechar.html');
+  assert.ok(fecharHtml.includes('id="ctbFecharFoto"') && fecharHtml.includes('O que fica congelado'));
+  const hist = ler('html', 'modals', 'contabilidade', 'fechamentos.html');
+  assert.match(hist, /id="ctbFechHistReabrir" type="button" data-perm="contabilidade\.reabrir" class="hidden btn-warning ctl-botao/);
+  assert.match(hist, /id="ctbFechHistFechar" type="button" data-perm="contabilidade\.fechar" class="hidden btn-success ctl-botao/);
   // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e por enquanto só avisa.
   assert.match(ler('html', 'modals', 'contabilidade', 'extrato.html'), /id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade\.extrato\.importar" class="btn-bb ctl-botao text-white"/);
 });
@@ -264,7 +285,7 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // As pendências do backend usam só ações que a tela conhece.
   const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
   const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
-  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'importar-extrato', 'registrar-documento']);
+  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'fechamentos', 'importar-extrato', 'registrar-documento']);
   for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
   assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
   // Etapa 4: o extrato é real (o "Sincronizar extrato do BB" virou "Buscar no BB" dentro dele).
@@ -273,8 +294,11 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // Etapas 5 e 6: a conciliação e a classificação são reais (o plano e as regras abrem da classificação).
   assert.ok(HTML.includes('data-ctb-acao="conciliacao"') && HTML.includes('data-ctb-acao="classificacao"'));
   for (const acao of ['conciliacao', 'conciliar-movimento', 'classificacao', 'plano-contas', 'regras-classificacao']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
-  // O roteiro marca as etapas 1 a 6 como feitas.
-  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 6);
+  // Etapa 7: o histórico dos fechamentos é real.
+  assert.ok(HTML.includes('data-ctb-acao="fechamentos"'));
+  assert.match(TELA, /'fechamentos': \{[^}]*abrir:/);
+  // O roteiro marca as etapas 1 a 7 como feitas.
+  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 7);
 });
 
 test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {

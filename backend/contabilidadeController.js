@@ -5,6 +5,8 @@
  *   GET  /atividade?competencia=&limite=   o histórico do módulo, com quem fez
  *   GET  /competencias                     as competências já fechadas/reabertas
  *   POST /fechar                           { competencia }                        (contabilidade.fechar)
+ *   GET  /fechar/previa?competencia=       o que o fechamento vai congelar (etapa 7; não grava)
+ *   GET  /fechamentos?competencia=         as versões do fechamento, o que mudou entre elas e desde a última
  *   POST /reabrir                          { competencia, justificativa }         (contabilidade.reabrir)
  *   POST /pendencias/ignorar               { competencia, chave, justificativa }  (contabilidade.pendencia.resolver)
  *   POST /pendencias/restaurar             { competencia, chave }                 (contabilidade.pendencia.resolver)
@@ -160,6 +162,13 @@ router.get('/competencias', exigirPermissao(VER), rota('GET /api/contabilidade/c
 
 router.post('/fechar', exigirPermissao(FECHAR), rota('POST /api/contabilidade/fechar', ({ api, req, hoje, desde, usuarioId }) =>
   fechamento.fechar({ api, competencia: req.body?.competencia, hoje, desde, usuarioId })));
+
+// Etapa 7: o que o fechamento vai congelar (não grava) e o histórico das versões.
+router.get('/fechar/previa', exigirPermissao(VER), rota('GET /api/contabilidade/fechar/previa', ({ api, req, hoje, desde }) =>
+  fechamento.previa({ api, competencia: req.query?.competencia, hoje, desde })));
+
+router.get('/fechamentos', exigirPermissao(VER), rota('GET /api/contabilidade/fechamentos', ({ api, req, hoje, desde }) =>
+  fechamento.historico({ api, competencia: req.query?.competencia, hoje, desde })));
 
 router.post('/reabrir', exigirPermissao(REABRIR), rota('POST /api/contabilidade/reabrir', ({ api, req, usuarioId }) =>
   fechamento.reabrir({ api, competencia: req.body?.competencia, justificativa: req.body?.justificativa, usuarioId })));

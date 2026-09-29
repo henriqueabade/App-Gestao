@@ -32,6 +32,7 @@ const conciliacaoMod = require('./conciliacao/conciliacao');
 const liquidacoes = require('./conciliacao/liquidacoes');
 const motor = require('./conciliacao/motor');
 const classificacaoMod = require('./classificacao/classificacao');
+const versoes = require('./versoes');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -513,7 +514,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
 function montar({
   competencia, hoje, notas = [], externas = [], aguardando = null, receber = null, receberErro = null,
   fechamentos: lista = [], reembolsosPendencias = [], situacao = null, resolucoes = [], nomes = new Map(), sqlPendente = false,
-  pagar = null, extrato = null, conciliacao = null
+  pagar = null, extrato = null, conciliacao = null, versao = null
 }) {
   const comp = competenciaValida(competencia, hoje);
   const diaDeHoje = c.dia(hoje);
@@ -530,9 +531,21 @@ function montar({
     conciliacao: fonteConciliacao({ conciliacao, competencia: comp })
   };
 
+  // Etapa 7: fechada com versão — o que o sistema diz hoje × a foto do fechamento (aviso, com a lista).
+  const fechadaAgora = situacao?.status === 'fechada';
+  const diferencas = fechadaAgora && versao?.versao
+    ? versoes.divergencias(versao.versao, { lancamentos: versao.lancamentos, fontes: FONTES.map(f => ({ chave: f.chave, numeros: partes[f.chave]?.numeros || null })) })
+    : [];
+  const doFechamento = diferencas.length ? [pendencia({
+    nivel: 'aviso', chave: 'fechamento_diferencas', fonte: 'fechamento',
+    titulo: `${c.plural(diferencas.length, 'diferença', 'diferenças')} desde o fechamento (versão ${versao.versao.versao})`,
+    descricao: `${diferencas.slice(0, 2).map(d => d.titulo).join(' · ')}${diferencas.length > 2 ? ' · …' : ''} — a foto do fechamento não muda; reabra para refazer`,
+    data: c.dia(versao.versao.fechada_em), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'fechamentos' }
+  })] : [];
+
   // As ignoradas: continuam na lista, marcadas, sem contar para os bloqueios.
   const ignoradas = new Map(c.lista(resolucoes).map(r => [String(r.chave), r]));
-  const pendencias = Object.values(partes).flatMap(p => p.pendencias).map(p => {
+  const pendencias = [...Object.values(partes).flatMap(p => p.pendencias), ...doFechamento].map(p => {
     const r = ignoradas.get(p.chave);
     if (!r || p.nivel === 'critico') return p;
     return { ...p, ignorada: true, justificativa: r.justificativa || '', ignorada_em: b.instanteBR(r.criado_em), ignorada_por: nomes.get(String(r.usuario_id)) || null, resolucao_id: r.id };
@@ -582,7 +595,11 @@ function montar({
       reaberta_em: b.instanteBR(situacao?.reaberta_em), reaberta_por: nomes.get(String(situacao?.reaberta_por)) || null,
       justificativa_reabertura: situacao?.justificativa_reabertura || null,
       // Fechada com erro crítico novo (algo mudou depois): a tela avisa.
-      divergencias: status === 'fechada' ? contagem.critico : 0
+      divergencias: status === 'fechada' ? contagem.critico : 0,
+      // Etapa 7: a versão que vale e o que mudou desde ela.
+      versao: status === 'fechada' && versao?.versao ? Number(versao.versao.versao) : null,
+      diferencas: diferencas.length,
+      diferencas_lista: diferencas.slice(0, 100)
     },
     fontes,
     pendencias,
@@ -628,12 +645,14 @@ async function lerExtrato(api, competencia) {
 
 /**
  * O que a fonte da conciliação precisa, a partir do extrato já lido: null sem
- * o SQL do extrato; `{ semSql }` sem o da conciliação.
+ * o SQL do extrato; `{ semSql }` sem o da conciliação. Com a `versao` do
+ * fechamento (mês fechado, etapa 7), a classificação é a congelada e
+ * `lancamentosAtuais` traz a conta de hoje, para as diferenças.
  */
-async function lerConciliacao(api, competencia, extrato, hoje) {
+async function lerConciliacao(api, competencia, extrato, hoje, versao = null) {
   if (!extrato) return null;
   const vinculos = await b.lerOpcional(api, 'conciliacao_vinculos');
-  if (!vinculos) return { semSql: b.SQL_FALTANDO_CONCILIACAO };
+  if (!vinculos) return { semSql: b.SQL_FALTANDO_CONCILIACAO, lancamentosAtuais: null };
   const movimentos = c.lista(extrato.movimentos).filter(m => m && m.competencia === competencia);
   const ids = new Set(movimentos.map(m => String(m.id)));
   const ligados = vinculos.filter(v => !v.desfeito_em && ids.has(String(v.movimento_id)));
@@ -651,13 +670,17 @@ async function lerConciliacao(api, competencia, extrato, hoje) {
   const invalidos = [...new Map(conciliacaoMod.vinculosInvalidos(ligados, porChave)
     .map(x => [String(x.vinculo.movimento_id), { ...x, movimento: porMovimento.get(String(x.vinculo.movimento_id)) || null }])).values()];
   // Etapa 6: a conta do plano de cada lançamento do mês (sem o SQL dela, só avisa).
-  const classificados = await classificacaoMod.doMes(api, movimentos);
+  // Mês fechado (etapa 7): vale a congelada; a de hoje fica para as diferenças.
+  const classificados = await classificacaoMod.doMes(api, movimentos, { congelado: versao ? versoes.congeladoDe(versao) : null });
   const semConta = classificados ? classificados.filter(x => !x.classificacao.conta_id) : [];
   const classificacao = classificados
     ? { sem: semConta.length, sem_valor: c.centavos(semConta.reduce((s, x) => s + Math.abs(Number(x.movimento.valor) || 0), 0)), total: classificados.length }
     : { semSql: b.SQL_FALTANDO_CLASSIFICACAO };
+  const lancamentosAtuais = classificados
+    ? classificados.map(x => versoes.lancamentoDaFoto(x.movimento, x.atual || x.classificacao))
+    : movimentos.map(m => versoes.lancamentoDaFoto(m, null));
   return {
-    movimentos, sugeridos: sugestoes.size, invalidos, classificacao,
+    movimentos, sugeridos: sugestoes.size, invalidos, classificacao, lancamentosAtuais,
     semLancamento: conciliacaoMod.semLancamento(liqs, { competencia, coberturas, movimentos: pendentes.map(conciliacaoMod.paraMotor), sugestoes })
   };
 }
@@ -676,8 +699,6 @@ async function carregar({ api, competencia, hoje, desde = null }) {
     baseFinanceiro.lerFechamentos(api).then(dados => [...fechamentos.listarDe(dados, 'comissao'), ...fechamentos.listarDe(dados, 'producao')]).catch(() => null),
     reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
   ]);
-  const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
-  const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje));
   try {
     situacao = (await b.ler(api, 'competencia_contabil', { competencia: comp }))[0] || null;
     resolucoes = await b.ler(api, 'contabil_pendencias_resolucoes', { competencia: comp });
@@ -685,11 +706,16 @@ async function carregar({ api, competencia, hoje, desde = null }) {
     if (!e?.extra?.sql_pendente) throw e;
     sqlPendente = true;
   }
+  // Mês fechado (etapa 7): a versão que vale — a classificação dela e a foto para comparar.
+  const versao = situacao?.status === 'fechada' ? versoes.ultima((await versoes.lerVersoes(api, comp)) || []) : null;
+  const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
+  const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje), versao);
   const aguardando = fiscalPainel.pedidosAguardandoNfe({ pedidos, notas: notas.map(semXml), desde: `${comp}-01`, hoje, externas });
   const nomes = await b.nomesDeUsuarios(api, [situacao?.fechada_por, situacao?.reaberta_por, ...resolucoes.map(r => r.usuario_id)]);
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
-    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao
+    fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao,
+    versao: versao ? { versao, lancamentos: conciliacao?.lancamentosAtuais ?? null } : null
   });
   return { ...painel, situacao_bruta: situacao };
 }

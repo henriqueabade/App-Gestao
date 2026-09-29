@@ -1100,3 +1100,71 @@ automático, renomear, CFOP); Electron sem erro de console.
    dividir?
 
 **Próxima:** etapa 7 (fechamento completo: congelar os totais do mês).
+
+## W. Etapa 7 entregue (29/09/2026) — fechamento completo (versões)
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 6 foi
+commitada pelo dono como "Fase 6").
+
+**SQL:** `sql/contabilidade_fechamento.sql` (rodar depois do da
+classificação e reiniciar a API): `competencia_fechamentos`, uma linha por
+fechamento (versão 1, 2, 3… de cada competência, com número único), com a
+foto do mês, os lançamentos com a conta que valia, as pendências que
+sobraram ou foram ignoradas, um hash (sha256) dos lançamentos e, se foi
+reaberta, quando, por quem e por quê. Sem permissão nova: fechar e reabrir
+continuam com as da etapa 1. **Todos os SQLs da Contabilidade** passaram a
+começar com `SET client_encoding = 'UTF8'`: sem isso, o `psql` do Windows
+lê o arquivo como WIN1252 e grava "ServiÃ§os" no lugar de "Serviços" (no
+pgAdmin não muda nada).
+
+**O que o fechamento congela** (`backend/contabilidade/fechamento.js` e
+`versoes.js`):
+- o resultado do mês por conta do plano (receitas, deduções, custos,
+  despesas, o que fica fora do resultado e o sem classificação);
+- o extrato de cada conta (lançamentos, entradas, saídas, o saldo que o
+  banco informou e se o mês está completo);
+- os números da conciliação e das outras fontes do checklist;
+- cada lançamento do extrato com a conta do plano que valia.
+
+**Depois de fechado:** a classificação do mês passa a ser a congelada (a
+tela mostra "Hoje seria: …" quando uma regra nova mudaria a conta). Se algo
+mudar depois — regra nova, lançamento que entrou ou saiu, valor, os números
+de NF-e, recebimentos, documentos recebidos e contas a pagar —, o painel
+mostra **um aviso** "N diferenças desde o fechamento (versão X)" e a lista
+fica no histórico. Nada muda na foto.
+
+**Reabrir** marca a versão (quando, por quem, a justificativa); **fechar de
+novo** cria a próxima. A prévia do "Fechar competência" já mostra o número
+da versão, o resultado, o extrato e, se houve versão antes, o que mudou.
+
+**Sem o SQL da etapa 7:** fechar continua funcionando (como na etapa 1), com
+um aviso de que a foto completa não ficou guardada; o histórico responde
+dizendo qual arquivo falta.
+
+**Tela:** o modal "Fechar competência" ganhou a seção "O que fica
+congelado"; modal novo **Histórico dos fechamentos** (as diferenças desde a
+foto, as versões com a que vale, a comparação entre elas, o resultado por
+conta e o extrato da versão escolhida, e os botões Reabrir/Fechar conforme a
+permissão). O painel de Ações ganhou "Histórico dos fechamentos"; o texto da
+situação diz a versão e as diferenças.
+
+**Conferido:** testes puros das versões (6), de ponta a ponta das rotas (5),
+checklist e tela; Postgres 17 descartável com o backend em modo DEV (os SQLs
+duas vezes, com e sem o da etapa 7: prévia sem gravar, versão 1 com hash que
+confere, classificação congelada, classificar no mês fechado recusado, regra
+nova → 2 diferenças, fechar duas vezes recusado, versão repetida recusada
+pelo índice único, reabrir, versão 2 com a comparação, setembro em curso não
+fecha; sem o SQL: fecha com aviso e o histórico responde 409); Electron sem
+erro de console.
+
+**Em aberto (para o dono):**
+1. A diferença depois do fechamento é só **aviso** (não bloqueia nada).
+   Confirmar.
+2. Hoje dá para reabrir agosto com setembro fechado. Deve travar?
+3. Hoje dá para fechar setembro com agosto aberto. Deve exigir o mês
+   anterior fechado?
+4. Mês fechado antes da etapa 7 (julho, no DEV) não tem foto: para ter,
+   reabrir e fechar de novo. Está bom assim?
+
+**Próxima:** etapas 8 e 9 (relatório mensal, dossiê e pacote para a
+contabilidade).

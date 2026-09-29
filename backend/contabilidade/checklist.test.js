@@ -173,7 +173,7 @@ test('montar: fechada permite reabrir e pacote (sem documentais); crítico novo 
   const situacao = { id: 9, status: 'fechada', fechada_em: '2026-09-25T18:30:00.000Z', fechada_por: 3 };
   const base = cenario({ notas: notas().filter(n => ![3, 6].includes(n.id)), aguardando: { pedidos: [] }, receber: { recebido: {}, a_receber: {}, em_atraso: {}, a_conciliar: {}, pendencias: [] } });
   const fechada = ck.montar({ ...base, situacao, nomes: new Map([['3', 'Henrique']]) });
-  assert.deepEqual(fechada.situacao, { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', fechada_por: 'Henrique', reaberta_em: null, reaberta_por: null, justificativa_reabertura: null, divergencias: 0 });
+  assert.deepEqual(fechada.situacao, { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', fechada_por: 'Henrique', reaberta_em: null, reaberta_por: null, justificativa_reabertura: null, divergencias: 0, versao: null, diferencas: 0, diferencas_lista: [] });
   assert.deepEqual(fechada.pode, { fechar: false, reabrir: true, pacote: true });
   assert.deepEqual(fechada.bloqueios.fechar, ['A competência já está fechada.']);
 

@@ -1,11 +1,15 @@
 /**
  * Fechar e reabrir a competência contábil, ignorar/restaurar pendências e o
- * histórico do módulo (etapa 1).
+ * histórico do módulo (etapa 1; o fechamento completo é da etapa 7).
  *
  * Fechar exige: mês terminado, nenhum erro crítico vivo (o checklist é
  * recalculado na hora, nunca se confia no que a tela mandou) e a
- * competência ainda não fechada. Fica gravada a foto dos números e das
- * pendências que sobraram. Reabrir exige justificativa. Ignorar só vale para
+ * competência ainda não fechada. Fica gravada a FOTO do mês (etapa 7, em
+ * competencia_fechamentos, uma versão por fechamento): o resultado por conta
+ * do plano, o extrato de cada conta com o saldo do banco, a conciliação, os
+ * números das fontes e cada lançamento com a conta do plano que valia — a
+ * classificação do mês fechado passa a ser essa. Reabrir exige justificativa
+ * e marca a versão; fechar de novo cria a próxima. Ignorar só vale para
  * documental e aviso. Cada ação vira um evento em contabil_eventos —
  * registrar é o último passo e não desfaz a ação se falhar.
  */
@@ -13,6 +17,9 @@ const c = require('../financeiro/comum');
 const b = require('./base');
 const checklist = require('./checklist');
 const eventos = require('./eventos');
+const versoes = require('./versoes');
+const classificacao = require('./classificacao/classificacao');
+const extratoMod = require('./extrato/extrato');
 
 const { TIPOS, registrar } = eventos;
 
@@ -38,6 +45,46 @@ function fotoDoPainel(painel) {
   };
 }
 
+/**
+ * A foto completa do mês (etapa 7), a partir do painel já calculado: os
+ * lançamentos do extrato com a conta do plano que vale agora, o resultado
+ * por conta do plano, o extrato de cada conta (com o saldo que o banco
+ * informou) e a conciliação. Sem o SQL do extrato ou da classificação, a
+ * parte dele fica vazia.
+ */
+async function carregarFoto(api, { painel, competencia, hoje }) {
+  const movs = ((await b.lerOpcional(api, 'movimentos_bancarios', { competencia })) || [])
+    .filter(m => m && m.competencia === competencia)
+    .sort((x, y) => String(c.dia(x.data)).localeCompare(String(c.dia(y.data))) || Number(x.id) - Number(y.id));
+  const classificados = movs.length ? await classificacao.doMes(api, movs) : [];
+  const clsPorId = new Map((classificados || []).map(x => [String(x.movimento.id), x.classificacao]));
+  const lancamentos = movs.map(m => versoes.lancamentoDaFoto(m, clsPorId.get(String(m.id)) || null));
+  const resultado = classificados
+    ? versoes.resultadoDe(classificacao.porConta(lancamentos.map(l => ({ valor: l.valor, classificacao: { conta_id: l.conta_id, conta: l.conta, conta_tipo: l.conta_tipo } }))))
+    : null;
+  const [contas, importacoes] = await Promise.all([
+    extratoMod.listarContas(api).then(r => r.contas).catch(() => []),
+    b.lerOpcional(api, 'extrato_importacoes').then(x => x || [])
+  ]);
+  const extrato = contas
+    .filter(conta => conta.ativa || lancamentos.some(l => String(l.conta_financeira_id) === String(conta.id)))
+    .map(conta => {
+      const daConta = lancamentos.filter(l => String(l.conta_financeira_id) === String(conta.id));
+      const tot = extratoMod.totaisDe(daConta);
+      const imps = importacoes.filter(i => String(i.conta_id) === String(conta.id));
+      return {
+        conta_id: conta.id, conta: conta.nome, tipo: conta.tipo, lancamentos: tot.quantidade,
+        entradas: tot.entradas.total, saidas: tot.saidas.total, resultado: tot.resultado,
+        saldo_banco: extratoMod.saldoDoBanco(imps, competencia),
+        completo: conta.tipo === 'corrente' ? extratoMod.cobertura(imps, competencia, { hoje }).completa : null
+      };
+    });
+  const conciliacao = (painel.fontes || []).find(f => f.chave === 'conciliacao')?.numeros || null;
+  return { foto: { ...fotoDoPainel(painel), gerada_em: c.agora(), resultado, extrato, conciliacao }, lancamentos };
+}
+
+const proximaVersao = lidas => (c.lista(lidas).length ? Math.max(...lidas.map(v => Number(v.versao) || 0)) : 0) + 1;
+
 async function fechar({ api, competencia, hoje, desde = null, usuarioId = null }) {
   const comp = exigirCompetencia(competencia);
   const painel = await checklist.carregar({ api, competencia: comp, hoje, desde });
@@ -46,9 +93,32 @@ async function fechar({ api, competencia, hoje, desde = null, usuarioId = null }
 
   const agora = c.agora();
   const sobraram = painel.pendencias.filter(p => !p.ignorada).map(p => ({ nivel: p.nivel, chave: p.chave, titulo: p.titulo }));
+  const ignoradas = painel.pendencias.filter(p => p.ignorada).map(p => ({ nivel: p.nivel, chave: p.chave, titulo: p.titulo, ignorada: true, justificativa: p.justificativa || null }));
+  const { foto, lancamentos } = await carregarFoto(api, { painel, competencia: comp, hoje });
+
+  // A versão (etapa 7) primeiro: se a competência não gravar, ela sai.
+  const lidas = await versoes.lerVersoes(api, comp);
+  let versao = null;
+  let aviso = null;
+  if (lidas) {
+    const numero = proximaVersao(lidas);
+    try {
+      versao = await b.inserir(api, 'competencia_fechamentos', {
+        competencia: comp, versao: numero, fechada_em: agora, fechada_por: usuarioId,
+        foto: JSON.stringify(foto), lancamentos: JSON.stringify(lancamentos), pendencias: JSON.stringify([...sobraram, ...ignoradas]), hash: versoes.hashDe(lancamentos)
+      });
+      versao = { ...versao, versao: numero };
+    } catch (e) {
+      if (c.ehDuplicado(e) && !e.extra?.sql_pendente) throw c.erro('Esta competência acabou de ser fechada por outro usuário.', 409);
+      throw e;
+    }
+  } else {
+    aviso = `${b.SQL_FALTANDO_FECHAMENTO} Sem ele, a foto completa (o resultado e a conta de cada lançamento) não fica guardada.`;
+  }
+
   const campos = {
     status: 'fechada', fechada_em: agora, fechada_por: usuarioId, reaberta_em: null, reaberta_por: null, justificativa_reabertura: null,
-    totais: JSON.stringify(fotoDoPainel(painel)), pendencias_no_fechamento: JSON.stringify(sobraram), atualizado_em: agora
+    totais: JSON.stringify(foto), pendencias_no_fechamento: JSON.stringify(sobraram), atualizado_em: agora
   };
   const existente = painel.situacao_bruta;
   let linha;
@@ -57,17 +127,23 @@ async function fechar({ api, competencia, hoje, desde = null, usuarioId = null }
       ? { ...existente, ...campos, ...(await b.atualizar(api, 'competencia_contabil', existente.id, campos), {}) }
       : await b.inserir(api, 'competencia_contabil', { competencia: comp, ...campos, criado_em: agora });
   } catch (e) {
+    if (versao?.id) await api.delete(`/api/competencia_fechamentos/${versao.id}`).catch(() => null);
     // Duas máquinas fechando ao mesmo tempo: a segunda cai no UNIQUE da competência.
     if (c.ehDuplicado(e)) throw c.erro('Esta competência acabou de ser fechada por outro usuário.', 409);
     throw e;
   }
   const { contagem } = painel;
+  const resultado = foto.resultado ? foto.resultado.resultado : null;
   await registrar(api, {
     tipo: 'competencia_fechada', competencia: comp, usuarioId,
-    descricao: `Competência ${painel.rotulo} fechada com ${c.plural(contagem.documental, 'pendência documental', 'pendências documentais')}, ${c.plural(contagem.aviso, 'aviso', 'avisos')} e ${c.plural(contagem.ignoradas, 'ignorada', 'ignoradas')}`,
-    dados: { contagem, progresso: painel.progresso }
+    descricao: `Competência ${painel.rotulo} fechada${versao ? ` (versão ${versao.versao})` : ''} com ${c.plural(contagem.documental, 'pendência documental', 'pendências documentais')}, ${c.plural(contagem.aviso, 'aviso', 'avisos')} e ${c.plural(contagem.ignoradas, 'ignorada', 'ignoradas')}`
+      + `${resultado !== null ? ` · resultado do mês ${c.reais(resultado)}` : ''}`,
+    dados: { contagem, progresso: painel.progresso, versao: versao?.versao ?? null }
   });
-  return { id: linha.id, competencia: comp, status: 'fechada', fechada_em: b.instanteBR(agora), contagem, pendencias_no_fechamento: sobraram };
+  return {
+    id: linha.id, competencia: comp, status: 'fechada', fechada_em: b.instanteBR(agora), contagem, pendencias_no_fechamento: sobraram,
+    versao: versao?.versao ?? null, resultado, lancamentos: lancamentos.length, aviso
+  };
 }
 
 async function reabrir({ api, competencia, justificativa, usuarioId = null }) {
@@ -78,12 +154,59 @@ async function reabrir({ api, competencia, justificativa, usuarioId = null }) {
   const agora = c.agora();
   const campos = { status: 'reaberta', reaberta_em: agora, reaberta_por: usuarioId, justificativa_reabertura: j, atualizado_em: agora };
   await b.atualizar(api, 'competencia_contabil', linha.id, campos);
+  // A versão que estava valendo fica marcada (a foto dela não muda).
+  const ultimaVersao = versoes.ultima((await versoes.lerVersoes(api, comp)) || []);
+  if (ultimaVersao && !ultimaVersao.reaberta_em) {
+    await b.atualizar(api, 'competencia_fechamentos', ultimaVersao.id, { reaberta_em: agora, reaberta_por: usuarioId, justificativa_reabertura: j });
+  }
   await registrar(api, {
     tipo: 'competencia_reaberta', competencia: comp, usuarioId,
-    descricao: `Competência ${c.rotuloCompetencia(comp)} reaberta: ${j}`,
-    dados: { fechada_em: linha.fechada_em, fechada_por: linha.fechada_por }
+    descricao: `Competência ${c.rotuloCompetencia(comp)} reaberta${ultimaVersao ? ` (a versão ${ultimaVersao.versao} fica guardada)` : ''}: ${j}`,
+    dados: { fechada_em: linha.fechada_em, fechada_por: linha.fechada_por, versao: ultimaVersao?.versao ?? null }
   });
-  return { id: linha.id, competencia: comp, status: 'reaberta', reaberta_em: b.instanteBR(agora) };
+  return { id: linha.id, competencia: comp, status: 'reaberta', reaberta_em: b.instanteBR(agora), versao: ultimaVersao?.versao ?? null };
+}
+
+/**
+ * O que o fechamento vai congelar (nada é gravado): o resultado, o extrato
+ * de cada conta, os lançamentos sem conta e, quando já houve versão, o que
+ * mudou desde a última.
+ */
+async function previa({ api, competencia, hoje, desde = null }) {
+  const comp = exigirCompetencia(competencia);
+  const painel = await checklist.carregar({ api, competencia: comp, hoje, desde });
+  const { foto, lancamentos } = await carregarFoto(api, { painel, competencia: comp, hoje });
+  const lidas = await versoes.lerVersoes(api, comp);
+  const numero = lidas ? proximaVersao(lidas) : null;
+  const anterior = lidas ? versoes.ultima(lidas) : null;
+  return {
+    competencia: comp, rotulo: painel.rotulo, versao: numero, sql_versoes: Boolean(lidas),
+    resultado: foto.resultado, extrato: foto.extrato, conciliacao: foto.conciliacao,
+    lancamentos: lancamentos.length, sem_classificacao: lancamentos.filter(l => !l.conta_id).length,
+    comparacao: anterior ? versoes.compararVersoes(anterior, { versao: numero, foto, lancamentos, hash: versoes.hashDe(lancamentos) }) : null
+  };
+}
+
+/**
+ * O histórico dos fechamentos de uma competência: as versões (da mais nova
+ * para a mais antiga), o que mudou de uma para a outra e, se ela está
+ * fechada, as diferenças entre a foto e o que o sistema diz hoje.
+ */
+async function historico({ api, competencia, hoje, desde = null }) {
+  const comp = exigirCompetencia(competencia);
+  const lidas = await versoes.lerVersoes(api, comp);
+  if (!lidas) throw c.erro(b.SQL_FALTANDO_FECHAMENTO, 409, { sql_pendente: true });
+  const situacao = ((await b.lerOpcional(api, 'competencia_contabil', { competencia: comp })) || [])[0] || null;
+  const nomes = await b.nomesDeUsuarios(api, lidas.flatMap(v => [v.fechada_por, v.reaberta_por]));
+  const fechada = situacao?.status === 'fechada';
+  const painel = fechada && lidas.length ? await checklist.carregar({ api, competencia: comp, hoje, desde }) : null;
+  return {
+    competencia: comp, rotulo: c.rotuloCompetencia(comp), status: situacao?.status || 'aberta',
+    versoes: lidas.map(v => versoes.publica(v, nomes)).reverse(),
+    comparacoes: lidas.slice(1).map((v, i) => versoes.compararVersoes(lidas[i], v)).reverse(),
+    diferencas: painel?.situacao?.diferencas_lista || [],
+    criticos_depois: painel ? painel.contagem.critico : 0
+  };
 }
 
 async function ignorarPendencia({ api, competencia, chave, justificativa, hoje, desde = null, usuarioId = null }) {
@@ -148,4 +271,7 @@ async function listarCompetencias({ api }) {
     }));
 }
 
-module.exports = { TIPOS, JUSTIFICATIVA_MINIMA, registrar, fotoDoPainel, fechar, reabrir, ignorarPendencia, restaurarPendencia, atividade, listarCompetencias };
+module.exports = {
+  TIPOS, JUSTIFICATIVA_MINIMA, registrar, fotoDoPainel, carregarFoto, fechar, reabrir, previa, historico,
+  ignorarPendencia, restaurarPendencia, atividade, listarCompetencias
+};

@@ -1,0 +1,97 @@
+<!--
+  Histórico dos fechamentos (etapa 7). Modal grande. As versões do
+  fechamento de uma competência (GET /api/contabilidade/fechamentos): quem
+  fechou e quando, quem reabriu e por quê, o resultado e o que sobrou de
+  pendência em cada uma; o que mudou de uma versão para a outra; e, com a
+  competência fechada, as diferenças entre a foto e o que o sistema diz hoje
+  (a foto não muda: reabra para refazer). Clicar numa versão mostra o
+  resultado congelado por conta do plano e o extrato de cada conta.
+  Script: src/js/modals/contabilidade-modais.js (montarFechamentos).
+-->
+<div id="ctbFechamentosOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbFechHistTitulo" class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbFechHistTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-history mr-2" aria-hidden="true"></i>Histórico dos fechamentos</h2>
+      <span id="ctbFechHistSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbFechHistCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbFechHistCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbFechHistCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbFechHistCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbFechHistCompetencia" />
+            </div>
+          </div>
+          <p id="ctbFechHistNota" class="md:col-span-2 self-end text-sm text-gray-300"></p>
+        </div>
+
+        <div id="ctbFechHistDiferencasBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Diferenças desde o fechamento</h3>
+            <span class="text-xs text-gray-400">A foto não muda: reabra para refazer o mês com o que está hoje</span>
+          </div>
+          <ul id="ctbFechHistDiferencas" class="ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Versões</h3>
+            <span class="text-xs text-gray-400">Clique numa versão para ver o que ela congelou</span>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Versão</th>
+                  <th class="px-4 py-3 text-left text-xs">Fechada</th>
+                  <th class="px-4 py-3 text-left text-xs">Reaberta</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Resultado</th>
+                  <th class="px-4 py-3 text-left text-xs">Lançamentos</th>
+                  <th class="px-4 py-3 text-left text-xs">Sobrou</th>
+                </tr>
+              </thead>
+              <tbody id="ctbFechHistVersoes"></tbody>
+            </table>
+          </div>
+          <ul id="ctbFechHistComparacoes" class="ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <div id="ctbFechHistDetalhe" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 id="ctbFechHistDetalheTitulo" class="ctl-secao text-[var(--color-primary)]">Congelado na versão</h3>
+            <span id="ctbFechHistDetalheResultado" class="text-sm text-gray-300"></span>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Conta do plano</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Entradas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saídas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Resultado</th>
+                </tr>
+              </thead>
+              <tbody id="ctbFechHistPorConta"></tbody>
+            </table>
+          </div>
+          <dl id="ctbFechHistExtrato" class="ctb-dados glass-surface rounded-xl border border-white/10"></dl>
+        </div>
+
+        <div id="ctbFechHistMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbFechHistReabrir" type="button" data-perm="contabilidade.reabrir" class="hidden btn-warning ctl-botao text-white">Reabrir competência</button>
+      <button id="ctbFechHistFechar" type="button" data-perm="contabilidade.fechar" class="hidden btn-success ctl-botao">Fechar competência</button>
+    </footer>
+  </div>
+</div>

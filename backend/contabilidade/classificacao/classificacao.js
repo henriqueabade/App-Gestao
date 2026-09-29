@@ -23,8 +23,12 @@ const extrato = require('../extrato/extrato');
 const liquidacoes = require('../conciliacao/liquidacoes');
 const regrasMod = require('./regras');
 const planoMod = require('./plano');
+const versoes = require('../versoes');
 
-const CRITERIOS = { manual: 'À mão', titulo: 'Pela categoria da conta a pagar', origem: 'Pela origem do dinheiro', regra: 'Por regra', sem: 'Sem classificação' };
+const CRITERIOS = {
+  manual: 'À mão', titulo: 'Pela categoria da conta a pagar', origem: 'Pela origem do dinheiro', regra: 'Por regra', sem: 'Sem classificação',
+  fechamento: 'Congelada no fechamento'
+};
 const VISOES = { sem: 'Sem classificação', manuais: 'Classificados à mão', automaticos: 'Classificados sozinhos', todos: 'Todos' };
 
 const ativaC = x => x && !x.substituida_em;
@@ -154,6 +158,31 @@ function classificarTodos(movimentos, lido) {
   }));
 }
 
+/**
+ * Mês fechado (etapa 7): vale a conta congelada na versão do fechamento; a
+ * de hoje vai junto em `atual` quando é outra (regra nova, conciliação
+ * mudada). Lançamento que não estava na versão fica com a de hoje. Pura.
+ */
+function aplicarCongelado(itens, congelado) {
+  if (!congelado || !congelado.size) return itens;
+  return itens.map(({ movimento, classificacao }) => {
+    const f = congelado.get(String(movimento.id));
+    if (!f) return { movimento, classificacao, atual: null };
+    const congelada = {
+      conta_id: f.conta_id ?? null, conta: f.conta ?? null, conta_tipo: f.conta_tipo ?? null, criterio: f.conta_id ? 'fechamento' : 'sem',
+      criterio_rotulo: f.conta_id ? CRITERIOS.fechamento : CRITERIOS.sem, detalhe: f.criterio ? `no fechamento: ${CRITERIOS[f.criterio] || f.criterio}` : null, regra_id: null
+    };
+    const mudou = String(classificacao.conta_id ?? '') !== String(congelada.conta_id ?? '');
+    return { movimento, classificacao: congelada, atual: mudou ? classificacao : null };
+  });
+}
+
+/** A versão fechada da competência (a última), se ela está fechada e o SQL da etapa 7 existe. */
+async function versaoFechada(api, competencia) {
+  if (!(await competenciaFechada(api, competencia))) return null;
+  return versoes.ultima((await versoes.lerVersoes(api, competencia)) || []);
+}
+
 async function competenciaFechada(api, competencia) {
   const linha = ((await b.lerOpcional(api, 'competencia_contabil', { competencia })) || [])[0] || null;
   return linha?.status === 'fechada';
@@ -170,10 +199,12 @@ async function painel(api, { competencia, contaId = null, hoje, visao = 'todos' 
     .sort((x, y) => String(c.dia(x.data)).localeCompare(String(c.dia(y.data))) || Number(x.id) - Number(y.id));
   const lido = await lerContexto(api, movs);
   const nomeDaConta = new Map(contas.map(x => [String(x.id), x.nome]));
-  const linhas = classificarTodos(movs, lido).map(({ movimento: m, classificacao }) => ({
+  // Mês fechado: a conta congelada no fechamento (a de hoje vai em `atual`, se for outra).
+  const versao = fechada ? await versaoFechada(api, comp) : null;
+  const linhas = aplicarCongelado(classificarTodos(movs, lido), versao ? versoes.congeladoDe(versao) : null).map(({ movimento: m, classificacao, atual }) => ({
     ...extrato.movimentoPublico(m), conta_financeira: nomeDaConta.get(String(m.conta_id)) || null,
     estado_conciliacao: ['conciliado', 'ignorado'].includes(m.estado_conciliacao) ? m.estado_conciliacao : 'pendente',
-    classificacao,
+    classificacao, atual: atual ? { conta_id: atual.conta_id, conta: atual.conta, criterio_rotulo: atual.criterio_rotulo } : null,
     // O texto que uma regra nova usaria (o botão "Regra" já preenche).
     chave_regra: regrasMod.chaveDaDescricao(m.descricao)
   }));
@@ -182,19 +213,23 @@ async function painel(api, { competencia, contaId = null, hoje, visao = 'todos' 
     competencia: comp, rotulo: c.rotuloCompetencia(comp), conta_id: contaId ? Number(contaId) : null,
     contas_financeiras: contas.map(x => ({ id: x.id, nome: x.nome, ativa: x.ativa })),
     plano: planoMod.ordenar(lido.plano.filter(planoMod.ativa)).map(p => planoMod.contaPublica(p)),
-    visao: v, visoes: VISOES, fechada,
+    visao: v, visoes: VISOES, fechada, versao: versao ? Number(versao.versao) : null,
     linhas: linhas.filter(l => naVisao(l, v)),
     totais: totaisDe(linhas),
     por_conta: porConta(linhas)
   };
 }
 
-/** A classificação que vale para os lançamentos de um mês (para o checklist); null sem o SQL. */
-async function doMes(api, movimentos) {
+/**
+ * A classificação que vale para os lançamentos de um mês (checklist,
+ * fechamento); null sem o SQL. Com `congelado` (mês fechado), a conta da
+ * versão vale e a de hoje vai em `atual`.
+ */
+async function doMes(api, movimentos, { congelado = null } = {}) {
   const plano = await b.lerOpcional(api, 'plano_contas');
   if (!plano) return null;
   const lido = await lerContexto(api, movimentos);
-  return classificarTodos(movimentos, lido);
+  return aplicarCongelado(classificarTodos(movimentos, lido), congelado);
 }
 
 // ------------------------------------------------------------------ gravação
@@ -306,6 +341,6 @@ async function testarRegra(api, { entrada = {}, competencia, hoje }) {
 }
 
 module.exports = {
-  CRITERIOS, VISOES, contexto, contaDaLiquidacao, efetiva, porConta, totaisDe, naVisao,
-  lerContexto, classificarTodos, painel, doMes, classificar, voltarAoAutomatico, listarRegras, testarRegra
+  CRITERIOS, VISOES, contexto, contaDaLiquidacao, efetiva, porConta, totaisDe, naVisao, aplicarCongelado,
+  lerContexto, classificarTodos, versaoFechada, painel, doMes, classificar, voltarAoAutomatico, listarRegras, testarRegra
 };
