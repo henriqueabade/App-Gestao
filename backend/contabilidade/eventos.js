@@ -33,7 +33,11 @@ const TIPOS = {
   conciliacao_desfeita: 'Conciliação desfeita',
   conciliacao_automatica: 'Conciliação em lote',
   lancamento_ignorado: 'Lançamento ignorado',
-  lancamento_reativado: 'Lançamento reativado'
+  lancamento_reativado: 'Lançamento reativado',
+  lancamento_classificado: 'Lançamento classificado',
+  classificacao_removida: 'Classificação à mão desfeita',
+  plano_conta_salva: 'Plano de contas alterado',
+  regra_salva: 'Regra de classificação'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

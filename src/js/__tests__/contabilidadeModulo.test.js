@@ -54,13 +54,14 @@ const ACOES_BASE = ['contabilidade.view', 'contabilidade.fechar', 'contabilidade
 const ACOES_ETAPA3 = ['contabilidade.documento.registrar', 'contabilidade.documento.excluir', 'contabilidade.pagar.lancar', 'contabilidade.pagar.pagar', 'contabilidade.pagar.estornar'];
 const ACOES_ETAPA4 = ['contabilidade.extrato.importar', 'contabilidade.contas.gerir'];
 const ACOES_ETAPA5 = ['contabilidade.conciliar'];
+const ACOES_ETAPA6 = ['contabilidade.classificar', 'contabilidade.plano.gerir'];
 
 test('permissões: o módulo está no catálogo, na tela de permissões e no SQL de cada etapa, com as mesmas chaves', () => {
   const mod = CATALOGO.contabilidade;
   assert.ok(mod, 'módulo contabilidade no catálogo');
   assert.equal(mod.page, 'contabilidade');
   assert.equal(mod.table, 'perm_contabilidade');
-  assert.deepEqual(mod.actions.map(a => a.key).sort(), [...ACOES_BASE, ...ACOES_ETAPA3, ...ACOES_ETAPA4, ...ACOES_ETAPA5].sort());
+  assert.deepEqual(mod.actions.map(a => a.key).sort(), [...ACOES_BASE, ...ACOES_ETAPA3, ...ACOES_ETAPA4, ...ACOES_ETAPA5, ...ACOES_ETAPA6].sort());
   const PERMISSOES = ler('html', 'modals', 'usuarios', 'permissoes.html');
   assert.ok(PERMISSOES.includes('data-permission-tab-trigger="contabilidade"') && PERMISSOES.includes('data-module-toggle="contabilidade"'));
   for (const a of mod.actions) assert.ok(PERMISSOES.includes(`name="${a.key}"`), `${a.key} não está em permissoes.html`);
@@ -95,6 +96,15 @@ test('permissões: o módulo está no catálogo, na tela de permissões e no SQL
     for (const t of TABELAS_CONCILIACAO) assert.ok(etapa5.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
     for (const col of ['conciliacao_diferenca', 'conciliacao_observacao', 'conciliado_em', 'conciliado_por']) assert.ok(etapa5.includes(`ADD COLUMN IF NOT EXISTS ${col}`), col);
     assert.match(etapa5, /conciliacao_vinculos \(movimento_id, alvo_tipo, alvo_id\) WHERE desfeito_em IS NULL/, 'um vínculo valendo por par');
+  }
+  const etapa6 = sqlDaEtapa('contabilidade_classificacao.sql');
+  if (etapa6) {
+    for (const k of ACOES_ETAPA6) assert.ok(etapa6.includes(`ADD COLUMN IF NOT EXISTS ${coluna(k)}`), `${coluna(k)} não está no SQL da classificação`);
+    const { TABELAS_CLASSIFICACAO } = require('../../../backend/contabilidade/base');
+    for (const t of TABELAS_CLASSIFICACAO) assert.ok(etapa6.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
+    // As quatro categorias do relatório da contabilidade entram no plano inicial.
+    for (const n of ['Aquisição de Bens', 'Serviços de Terceiros', 'Impostos e Taxas', 'Aporte de Capital']) assert.ok(etapa6.includes(`('${n}',`), n);
+    assert.match(etapa6, /classificacoes \(movimento_id\) WHERE substituida_em IS NULL/, 'uma classificação à mão valendo por lançamento');
   }
 });
 
@@ -195,10 +205,16 @@ const MODAIS_ETAPA5 = {
   'conciliar-movimento': { overlay: 'ctbConciliarMovimento', principal: ['ctbConcMovConfirmar', 'btn-success', 'contabilidade.conciliar'] }
 };
 
-test('modais das etapas 2 a 5: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
+const MODAIS_ETAPA6 = {
+  'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
+  'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
+  'regras-classificacao': { overlay: 'ctbRegras', principal: ['ctbRegraSalvar', 'btn-primary', 'contabilidade.plano.gerir'] }
+};
+
+test('modais das etapas 2 a 6: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5 })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6 })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -229,6 +245,12 @@ test('modais das etapas 2 a 5: anatomia da casa, Fechar/Cancelar vermelho, botã
   for (const rota of ["/conciliar`, 'POST'", "/desfazer`, 'POST'", "/ignorar`, 'POST'", "/reativar`, 'POST'", "/criar-conta`, 'POST'", "'/api/contabilidade/conciliacao/automatica', 'POST'"]) {
     assert.ok(MODAIS.includes(rota), `rota ${rota}`);
   }
+  // Etapa 6: classificar à mão, voltar ao automático, plano e regras (testar não grava).
+  for (const rota of ["'/api/contabilidade/classificacao/classificar', 'POST'", "/automatico`, 'POST'", "'/api/contabilidade/plano-contas', 'POST'",
+    "/api/contabilidade/plano-contas/${encodeURIComponent(editando)}`, 'PUT'", "'/api/contabilidade/regras', 'POST'", "/api/contabilidade/regras/${encodeURIComponent(editando)}`, 'PUT'",
+    "'/api/contabilidade/regras/testar', 'POST'"]) {
+    assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  }
   // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e por enquanto só avisa.
   assert.match(ler('html', 'modals', 'contabilidade', 'extrato.html'), /id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade\.extrato\.importar" class="btn-bb ctl-botao text-white"/);
 });
@@ -242,18 +264,17 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // As pendências do backend usam só ações que a tela conhece.
   const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
   const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
-  assert.deepEqual([...acoes].sort(), ['conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'importar-extrato', 'registrar-documento']);
+  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'importar-extrato', 'registrar-documento']);
   for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
   assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
   // Etapa 4: o extrato é real (o "Sincronizar extrato do BB" virou "Buscar no BB" dentro dele).
   assert.ok(HTML.includes('data-ctb-acao="extrato"') && !HTML.includes('sincronizar-extrato'));
   for (const acao of ['extrato', 'importar-extrato', 'contas-financeiras']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
-  // Etapa 5: a conciliação é real; a classificação (etapa 6) ainda avisa.
+  // Etapas 5 e 6: a conciliação e a classificação são reais (o plano e as regras abrem da classificação).
   assert.ok(HTML.includes('data-ctb-acao="conciliacao"') && HTML.includes('data-ctb-acao="classificacao"'));
-  for (const acao of ['conciliacao', 'conciliar-movimento']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
-  assert.doesNotMatch(TELA, /'classificacao': \{[^}]*abrir:/);
-  // O roteiro marca as etapas 1 a 5 como feitas.
-  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 5);
+  for (const acao of ['conciliacao', 'conciliar-movimento', 'classificacao', 'plano-contas', 'regras-classificacao']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  // O roteiro marca as etapas 1 a 6 como feitas.
+  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 6);
 });
 
 test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {

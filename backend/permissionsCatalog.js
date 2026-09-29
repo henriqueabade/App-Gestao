@@ -2507,6 +2507,18 @@ const PERMISSIONS_CATALOG = {
         "desc": "Casar os lançamentos do banco com recebimentos e pagamentos, desfazer e ignorar com justificativa"
       },
       {
+        "key": "contabilidade.classificar",
+        "column": "acao_classificar",
+        "label": "Classificar lançamentos",
+        "desc": "Escolher a conta do plano de cada lançamento do extrato (à mão, um ou vários) e voltar ao automático"
+      },
+      {
+        "key": "contabilidade.plano.gerir",
+        "column": "acao_plano_gerir",
+        "label": "Plano de contas e regras",
+        "desc": "Cadastrar e alterar as contas do plano e as regras de classificação"
+      },
+      {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",

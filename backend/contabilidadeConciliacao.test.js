@@ -333,7 +333,7 @@ test('checklist: pendentes = documental; conciliação com recebimento estornado
     const antes = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.equal(antes.status, 200);
     const fonte = antes.corpo.fontes.find(f => f.chave === 'conciliacao');
-    assert.deepEqual([fonte.titulo, fonte.estado, fonte.pendencias], ['Conciliação bancária', 'pendente', 2]);
+    assert.deepEqual([fonte.titulo, fonte.estado, fonte.pendencias], ['Conciliação e classificação', 'pendente', 2]);
     const doc = antes.corpo.pendencias.find(p => p.chave === 'conciliacao_pendente');
     assert.deepEqual([doc.nivel, doc.filtro], ['documental', { acao: 'conciliacao', visao: 'pendentes' }]);
     assert.match(semNbsp(doc.descricao), /^Total R\$ 6\.812,90 · 3 com sugestão/);

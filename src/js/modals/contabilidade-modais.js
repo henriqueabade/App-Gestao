@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1 a 5).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 6).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -23,6 +23,9 @@
  *   ctbContasFinanceiras    Contas do banco — lista e cadastro (GET/POST/PUT /contas-financeiras)
  *   ctbConciliacao          Conciliação do mês — lançamentos, sugestões, lote (GET /conciliacao, POST /conciliacao/automatica)
  *   ctbConciliarMovimento   Um lançamento — escolher o par, ignorar, desfazer, lançar conta paga (/conciliacao/movimentos/:id)
+ *   ctbClassificacao        Classificação do mês — a conta do plano de cada lançamento, lote, total por conta (GET /classificacao)
+ *   ctbPlanoContas          Plano de contas — lista e cadastro (GET/POST/PUT /plano-contas)
+ *   ctbRegras               Regras de classificação — lista, sugeridas, testar, cadastro (/regras)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -1376,6 +1379,8 @@
         corpo.appendChild(tr);
       }
       if (!(p.itens || []).length) linhaVazia(corpo, 5, 'A nota não tem itens.');
+      // A regra do fornecedor/CFOP (etapa 6) sugere a categoria; o que foi digitado vale.
+      if (p.categoria_sugerida && !el('ctbDocContaCategoria').value.trim()) el('ctbDocContaCategoria').value = p.categoria_sugerida;
       registrarBtn.disabled = Boolean((p.bloqueios || []).length);
       pintarConta();
       pintarCompetencia();
@@ -2696,6 +2701,517 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ classificação (etapa 6)
+
+  const ROTULO_ESTADO_CONC = { pendente: 'a conciliar', conciliado: 'conciliado', ignorado: 'ignorado' };
+
+  /** As contas do plano num select, agrupadas pelo tipo (Receita, Custo, Despesa…). */
+  function opcoesDoPlano(select, plano, { vazio = null, selecionada = null } = {}) {
+    const grupos = new Map();
+    for (const p of plano || []) {
+      if (!grupos.has(p.tipo_rotulo)) grupos.set(p.tipo_rotulo, []);
+      grupos.get(p.tipo_rotulo).push(p);
+    }
+    const filhos = vazio !== null ? [opcao('', vazio)] : [];
+    for (const [rotulo, contas] of grupos) {
+      const g = document.createElement('optgroup');
+      g.label = rotulo;
+      g.append(...contas.map(p => opcao(String(p.id), p.codigo ? `${p.codigo} · ${p.nome}` : p.nome)));
+      filhos.push(g);
+    }
+    select.replaceChildren(...filhos);
+    if (selecionada !== null && selecionada !== undefined) select.value = String(selecionada);
+  }
+
+  function montarClassificacao() {
+    const contaSel = el('ctbClassConta');
+    const compCampo = el('ctbClassCompetencia');
+    const visaoSel = el('ctbClassVisao');
+    const busca = el('ctbClassBusca');
+    const corpo = el('ctbClassLista');
+    const loteConta = el('ctbClassLoteConta');
+    const aplicarBtn = el('ctbClassAplicar');
+    const todos = el('ctbClassTodos');
+    montarCompetencias(compCampo, contexto.competencia);
+    visaoSel.value = contexto.visao && [...visaoSel.options].some(o => o.value === contexto.visao) ? contexto.visao : 'todos';
+    let dados = null;
+    let leitura = 0;
+    const marcados = new Set();
+    const podeClassificar = () => !dados?.fechada && (!window.Permissoes?.pode || window.Permissoes.pode('contabilidade.classificar'));
+
+    function pintarFiltros() {
+      const atual = contaSel.value;
+      contaSel.replaceChildren(opcao('', 'Todas as contas'), ...(dados?.contas_financeiras || []).map(x => opcao(String(x.id), `${x.nome}${x.ativa ? '' : ' (desativada)'}`)));
+      contaSel.value = dados?.conta_id ? String(dados.conta_id) : atual;
+      const lote = loteConta.value;
+      opcoesDoPlano(loteConta, dados?.plano, { vazio: 'Escolha a conta' });
+      if (lote && [...loteConta.querySelectorAll('option')].some(o => o.value === lote)) loteConta.value = lote;
+    }
+
+    function pintarTotais() {
+      const t = dados?.totais || { total: 0, classificados: 0, sem: 0, sem_valor: 0, manuais: 0, automaticos: 0 };
+      const pinta = (chave, valor, nota) => {
+        const card = overlay.querySelector(`#ctbClassTotais [data-total="${chave}"]`);
+        card.querySelector('.ctb-total__valor').textContent = valor;
+        if (nota !== undefined) card.querySelector('.ctb-total__nota').textContent = nota;
+      };
+      pinta('total', String(t.total), 'no extrato do mês');
+      pinta('classificados', String(t.classificados), `${plural(t.automaticos, 'sozinho', 'sozinhos')}, ${t.manuais} à mão`);
+      pinta('sem', String(t.sem), t.sem ? formatarMoeda(t.sem_valor) : 'Nada faltando');
+      pinta('manuais', String(t.manuais));
+    }
+
+    function pintarNota() {
+      const alvo = el('ctbClassNota');
+      alvo.style.color = '';
+      if (dados?.fechada) { alvo.textContent = 'Competência fechada: a classificação dela só muda depois de reabrir.'; alvo.style.color = 'var(--color-primary-light)'; return; }
+      alvo.textContent = dados && !dados.totais.total ? 'Nenhum lançamento do extrato neste mês: importe o extrato (Extrato bancário).' : '';
+    }
+
+    function pintarLote() {
+      const visiveis = linhasVisiveis();
+      el('ctbClassMarcados').textContent = marcados.size ? plural(marcados.size, 'lançamento marcado', 'lançamentos marcados') : 'Nenhum marcado';
+      aplicarBtn.disabled = !marcados.size || !loteConta.value || !podeClassificar();
+      todos.checked = visiveis.length > 0 && visiveis.every(l => marcados.has(String(l.id)));
+      todos.disabled = !podeClassificar();
+    }
+
+    function linhasVisiveis() {
+      const termo = normalizar(busca.value.trim());
+      return (dados?.linhas || []).filter(l => !termo || normalizar([l.descricao, l.documento, formatarMoeda(l.valor), numeroBr(Math.abs(l.valor)), l.classificacao?.conta, l.conta_financeira].join(' ')).includes(termo));
+    }
+
+    function celulaDaConta(l) {
+      const cls = l.classificacao || {};
+      const sub = cls.criterio === 'sem' ? (cls.detalhe || 'Sem conta: escolha uma ou crie uma regra') : [cls.criterio_rotulo, cls.detalhe].filter(Boolean).join(' · ');
+      if (!podeClassificar()) {
+        const td = celula(cls.conta || '—', 'px-4 py-3', sub);
+        return td;
+      }
+      const select = criar('select', 'w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white ctb-conta-linha');
+      select.setAttribute('aria-label', `Conta do plano do lançamento de ${formatarData(l.data)}`);
+      opcoesDoPlano(select, dados.plano, { vazio: '— sem classificação —', selecionada: cls.conta_id ?? '' });
+      select.addEventListener('change', () => {
+        if (!select.value) { select.value = String(cls.conta_id ?? ''); return; }
+        classificar([l.id], select.value, '');
+      });
+      const td = celula(select, 'px-4 py-3', sub);
+      if (cls.criterio === 'sem') td.querySelector('.ctb-sub').style.color = 'var(--color-primary-light)';
+      return td;
+    }
+
+    function pintarLista() {
+      const linhas = linhasVisiveis();
+      if (!linhas.length) {
+        linhaVazia(corpo, 6, busca.value.trim() ? 'Nada com esta busca.' : (visaoSel.value === 'sem' ? 'Nada sem classificação neste mês.' : 'Nada nesta visão.'));
+        pintarLote();
+        return;
+      }
+      corpo.replaceChildren();
+      for (const l of linhas) {
+        const caixa = criar('input', 'w-4 h-4');
+        caixa.type = 'checkbox';
+        caixa.checked = marcados.has(String(l.id));
+        caixa.disabled = !podeClassificar();
+        caixa.setAttribute('aria-label', `Marcar o lançamento de ${formatarData(l.data)}`);
+        caixa.addEventListener('change', () => { if (caixa.checked) marcados.add(String(l.id)); else marcados.delete(String(l.id)); pintarLote(); });
+        const acoes = criar('div', 'ctb-celula-acoes');
+        if (!dados.fechada && l.classificacao?.criterio === 'manual') {
+          acoes.appendChild(botaoPequeno('Automático', 'btn-neutral', () => automatico(l), { perm: 'contabilidade.classificar', titulo: 'Tira a classificação à mão: vale a conciliação ou a regra' }));
+        }
+        acoes.appendChild(botaoPequeno('Regra', 'btn-secondary', () => abrirOutro('regras-classificacao', {
+          competencia: compCampo.value,
+          preencher: { condicao_tipo: 'descricao', valor: l.chave_regra || l.descricao || '', sentido: Number(l.valor) < 0 ? 'debito' : 'credito', conta_id: l.classificacao?.conta_id ?? null }
+        }), { perm: 'contabilidade.plano.gerir', titulo: 'Criar uma regra a partir deste lançamento' }));
+        const tr = criar('tr');
+        tr.append(
+          celula(caixa, 'px-4 py-3'),
+          celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+          celula(l.descricao || '—', 'px-4 py-3', [l.conta_financeira, ROTULO_ESTADO_CONC[l.estado_conciliacao]].filter(Boolean).join(' · ')),
+          corDoValor(celula(formatarMoeda(l.valor), 'px-4 py-3 ctb-num'), l.valor),
+          celulaDaConta(l),
+          celula(acoes, 'px-4 py-3')
+        );
+        corpo.appendChild(tr);
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+      pintarLote();
+    }
+
+    function pintarPorConta() {
+      const grupos = dados?.por_conta || [];
+      const alvo = el('ctbClassPorConta');
+      if (!grupos.length) { linhaVazia(alvo, 5, 'Nada no mês.'); el('ctbClassResultado').textContent = ''; return; }
+      alvo.replaceChildren(...grupos.map(g => {
+        const tr = criar('tr');
+        const nome = celula(g.conta, 'px-4 py-3', plural(g.quantidade, 'lançamento', 'lançamentos'));
+        if (!g.conta_id) nome.style.color = 'var(--color-primary-light)';
+        tr.append(
+          nome, celula(g.tipo_rotulo || '—', 'px-4 py-3'),
+          celula(g.entradas ? formatarMoeda(g.entradas) : '—', 'px-4 py-3 ctb-num'),
+          celula(g.saidas ? formatarMoeda(g.saidas) : '—', 'px-4 py-3 ctb-num'),
+          corDoValor(celula(formatarMoeda(g.resultado), 'px-4 py-3 ctb-num'), g.resultado)
+        );
+        return tr;
+      }));
+      const resultado = Math.round(grupos.filter(g => g.do_resultado).reduce((s, g) => s + g.resultado, 0) * 100) / 100;
+      el('ctbClassResultado').textContent = `Resultado do mês (receitas − deduções − custos − despesas): ${formatarMoeda(resultado)}`;
+    }
+
+    async function classificar(ids, contaId, observacao) {
+      mostrarMensagem('ctbClassMensagem', '');
+      processando = true;
+      try {
+        const r = await enviar('/api/contabilidade/classificacao/classificar', 'POST', { ids, conta_id: contaId, observacao });
+        processando = false;
+        window.showToast?.(`${plural(ids.length, 'lançamento classificado', 'lançamentos classificados')} em "${r.conta}".`, 'success');
+        ids.forEach(id => marcados.delete(String(id)));
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbClassMensagem', textoDoErro(e, 'Você não tem permissão para classificar.'));
+        await carregar();
+      } finally {
+        processando = false;
+      }
+    }
+
+    async function automatico(l) {
+      try {
+        await enviar(`/api/contabilidade/classificacao/movimentos/${encodeURIComponent(l.id)}/automatico`, 'POST', {});
+        window.showToast?.('O lançamento voltou à classificação automática.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para classificar.'), 'error');
+      }
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      try {
+        const q = new URLSearchParams({ competencia: compCampo.value || '', visao: visaoSel.value });
+        if (contaSel.value) q.set('conta_id', contaSel.value);
+        const r = await fetchApi(`/api/contabilidade/classificacao?${q.toString()}`);
+        if (minha !== leitura) return;
+        dados = r;
+        const ids = new Set((r.linhas || []).map(l => String(l.id)));
+        for (const id of [...marcados]) if (!ids.has(id)) marcados.delete(id);
+        el('ctbClassRotulo').textContent = r.rotulo || rotuloCompetencia(r.competencia);
+        pintarFiltros();
+        pintarTotais();
+        pintarNota();
+        pintarLista();
+        pintarPorConta();
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        linhaVazia(corpo, 6, 'A classificação não pôde ser lida.');
+        linhaVazia(el('ctbClassPorConta'), 5, '—');
+        mostrarMensagem('ctbClassMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    todos.addEventListener('change', () => {
+      for (const l of linhasVisiveis()) { if (todos.checked) marcados.add(String(l.id)); else marcados.delete(String(l.id)); }
+      pintarLista();
+    });
+    loteConta.addEventListener('change', pintarLote);
+    acionar(aplicarBtn, () => classificar([...marcados].map(Number), loteConta.value, el('ctbClassLoteObs').value.trim()));
+    contaSel.addEventListener('change', carregar);
+    compCampo.addEventListener('change', () => { marcados.clear(); carregar(); });
+    visaoSel.addEventListener('change', carregar);
+    busca.addEventListener('input', pintarLista);
+    el('ctbClassPlano').addEventListener('click', () => abrirOutro('plano-contas', {}));
+    el('ctbClassRegras').addEventListener('click', () => abrirOutro('regras-classificacao', { competencia: compCampo.value }));
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
+  function montarPlanoContas() {
+    const nome = el('ctbPlanoNome');
+    const codigo = el('ctbPlanoCodigo');
+    const tipo = el('ctbPlanoTipo');
+    const ativa = el('ctbPlanoAtiva');
+    const observacao = el('ctbPlanoObservacao');
+    const corpo = el('ctbPlanoLista');
+    const salvarBtn = el('ctbPlanoSalvar');
+    let dados = null;
+    let editando = null;
+
+    function limpar() {
+      editando = null;
+      nome.value = '';
+      codigo.value = '';
+      tipo.value = 'despesa';
+      ativa.checked = true;
+      observacao.value = '';
+      el('ctbPlanoFormTitulo').textContent = 'Nova conta';
+      el('ctbPlanoNova').classList.add('hidden');
+    }
+
+    function editar(p) {
+      editando = p.id;
+      nome.value = p.nome;
+      codigo.value = p.codigo || '';
+      tipo.value = p.tipo;
+      ativa.checked = p.ativa;
+      observacao.value = p.observacao || '';
+      el('ctbPlanoFormTitulo').textContent = `Editar: ${p.nome}`;
+      el('ctbPlanoNova').classList.remove('hidden');
+      mostrarMensagem('ctbPlanoMensagem', '');
+      nome.focus();
+    }
+
+    function pintar() {
+      const contas = dados?.contas || [];
+      el('ctbPlanoRotulo').textContent = plural(contas.filter(p => p.ativa).length, 'conta ativa', 'contas ativas');
+      if (!tipo.options.length) tipo.replaceChildren(...Object.entries(dados?.tipos || {}).map(([k, v]) => opcao(k, v)));
+      if (!contas.length) { linhaVazia(corpo, 5, 'Nenhuma conta ainda.'); return; }
+      corpo.replaceChildren();
+      for (const p of contas) {
+        const uso = p.uso || {};
+        const partes = [uso.titulos ? plural(uso.titulos, 'conta a pagar', 'contas a pagar') : null, uso.regras ? plural(uso.regras, 'regra', 'regras') : null,
+          uso.classificacoes ? plural(uso.classificacoes, 'lançamento à mão', 'lançamentos à mão') : null].filter(Boolean);
+        const acoes = criar('div', 'ctb-celula-acoes');
+        acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(p), { perm: 'contabilidade.plano.gerir' }));
+        const tr = criar('tr');
+        tr.append(
+          celula(p.codigo ? `${p.codigo} · ${p.nome}` : p.nome, 'px-4 py-3', p.observacao),
+          celula(p.tipo_rotulo, 'px-4 py-3', p.do_resultado ? null : 'fora do resultado'),
+          celula(partes.join(' · ') || '—', 'px-4 py-3'),
+          celula(p.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3', p.origem === 'padrao' ? 'veio com o app' : null),
+          celula(acoes, 'px-4 py-3')
+        );
+        corpo.appendChild(tr);
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar() {
+      try {
+        dados = await fetchApi('/api/contabilidade/plano-contas');
+        pintar();
+      } catch (e) {
+        dados = null;
+        linhaVazia(corpo, 5, 'O plano não pôde ser lido.');
+        salvarBtn.disabled = true;
+        mostrarMensagem('ctbPlanoMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    async function salvar() {
+      mostrarMensagem('ctbPlanoMensagem', '');
+      if (nome.value.trim().length < 2) { mostrarMensagem('ctbPlanoMensagem', 'Dê um nome à conta.'); return; }
+      const corpoConta = { nome: nome.value.trim(), codigo: codigo.value.trim(), tipo: tipo.value, ativa: ativa.checked, observacao: observacao.value };
+      processando = true;
+      try {
+        const r = editando
+          ? await enviar(`/api/contabilidade/plano-contas/${encodeURIComponent(editando)}`, 'PUT', corpoConta)
+          : await enviar('/api/contabilidade/plano-contas', 'POST', corpoConta);
+        processando = false;
+        window.showToast?.(editando ? `Conta alterada${r?.renomeadas ? ` (${plural(r.renomeadas, 'conta a pagar acompanhou', 'contas a pagar acompanharam')} o nome novo)` : ''}.` : 'Conta cadastrada.', 'success');
+        avisarAlteracao();
+        limpar();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbPlanoMensagem', textoDoErro(e, 'Você não tem permissão para mexer no plano de contas.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    el('ctbPlanoNova').addEventListener('click', limpar);
+    acionar(salvarBtn, salvar);
+    return carregar().then(() => { if (!editando) limpar(); });
+  }
+
+  const AJUDA_DA_REGRA = {
+    descricao: 'Palavras inteiras, sem acento. Ex.: TARIFA pega "Tarifa pacote de serviços". Vale para os lançamentos do extrato.',
+    contrapartida: 'O CNPJ/CPF de quem pagou ou recebeu. O extrato pela API do BB (etapa 11) traz; o OFX não.',
+    fornecedor: 'Vale para as contas a pagar novas desse fornecedor sem categoria e para os lançamentos conciliados com contas dele.',
+    cfop: 'Vale para as contas a pagar novas de NF-e de entrada com um destes CFOPs (separe com vírgula).',
+    origem: 'Vale para os lançamentos conciliados com recebimento de pedido, reembolso, comissão ou produção.'
+  };
+
+  function montarRegras() {
+    const condicao = el('ctbRegraCondicao');
+    const valor = el('ctbRegraValor');
+    const valorLista = el('ctbRegraValorLista');
+    const conta = el('ctbRegraConta');
+    const sentido = el('ctbRegraSentido');
+    const prioridade = el('ctbRegraPrioridade');
+    const observacao = el('ctbRegraObservacao');
+    const ativa = el('ctbRegraAtiva');
+    const corpo = el('ctbRegrasLista');
+    let dados = null;
+    let editando = null;
+    let preenchida = false;
+    let fornecedoresProntos = false;
+
+    const usaLista = () => ['fornecedor', 'origem'].includes(condicao.value);
+
+    async function pintarValor(selecionado = null) {
+      const lista = usaLista();
+      valor.classList.toggle('hidden', lista);
+      valorLista.classList.toggle('hidden', !lista);
+      el('ctbRegraAjuda').textContent = AJUDA_DA_REGRA[condicao.value] || '';
+      valor.placeholder = { descricao: 'Ex.: TARIFA', contrapartida: 'CNPJ ou CPF', cfop: 'Ex.: 5101, 5102' }[condicao.value] || '';
+      if (condicao.value === 'origem') {
+        valorLista.replaceChildren(...Object.entries(dados?.origens || {}).map(([k, v]) => opcao(k, v)));
+        if (selecionado) valorLista.value = selecionado;
+      } else if (condicao.value === 'fornecedor') {
+        if (!fornecedoresProntos) {
+          fornecedoresProntos = true;
+          await carregarFornecedores(valorLista, { vazio: 'Escolha o fornecedor' }).catch(() => null);
+        }
+        valorLista.value = selecionado ?? '';
+      }
+    }
+
+    function valorDoForm() { return usaLista() ? valorLista.value : valor.value.trim(); }
+
+    async function preencher(r = {}) {
+      condicao.value = r.condicao_tipo || 'descricao';
+      await pintarValor(r.valor ?? null);
+      if (!usaLista()) valor.value = r.valor || '';
+      sentido.value = r.sentido || 'ambos';
+      if (r.conta_id !== null && r.conta_id !== undefined) conta.value = String(r.conta_id); else conta.value = '';
+      prioridade.value = String(r.prioridade ?? 0);
+      observacao.value = r.observacao || '';
+      ativa.checked = r.ativa !== false;
+      el('ctbRegraTeste').textContent = '';
+    }
+
+    async function limpar() {
+      editando = null;
+      await preencher({});
+      el('ctbRegraFormTitulo').textContent = 'Nova regra';
+      el('ctbRegraNova').classList.add('hidden');
+    }
+
+    async function editar(r) {
+      editando = r.id;
+      await preencher(r);
+      el('ctbRegraFormTitulo').textContent = `Editar: ${r.condicao_rotulo} ${r.valor_rotulo}`;
+      el('ctbRegraNova').classList.remove('hidden');
+      mostrarMensagem('ctbRegrasMensagem', '');
+    }
+
+    function pintar() {
+      const regras = dados?.regras || [];
+      el('ctbRegrasRotulo').textContent = plural(regras.filter(r => r.ativa).length, 'regra ativa', 'regras ativas');
+      if (!regras.length) linhaVazia(corpo, 5, 'Nenhuma regra ainda.');
+      else {
+        corpo.replaceChildren();
+        for (const r of regras) {
+          const acoes = criar('div', 'ctb-celula-acoes');
+          acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(r), { perm: 'contabilidade.plano.gerir' }));
+          const tr = criar('tr');
+          tr.append(
+            celula(`${r.condicao_rotulo}: ${r.valor_rotulo}`, 'px-4 py-3', [r.prioridade ? `prioridade ${r.prioridade}` : null, r.observacao].filter(Boolean).join(' · ') || null),
+            celula(r.conta || '—', 'px-4 py-3', r.conta_ativa ? null : 'conta desativada'),
+            celula(r.sentido_rotulo, 'px-4 py-3'),
+            celula(r.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3', r.origem === 'padrao' ? 'veio com o app' : null),
+            celula(acoes, 'px-4 py-3')
+          );
+          corpo.appendChild(tr);
+        }
+      }
+      const sugeridas = dados?.sugeridas || [];
+      el('ctbRegrasSugeridasBloco').classList.toggle('hidden', !sugeridas.length);
+      el('ctbRegrasSugeridas').replaceChildren(...sugeridas.map(s => {
+        const li = criar('li', 'ctb-arquivo');
+        const texto = criar('div', 'ctb-arquivo__texto');
+        texto.append(
+          criar('span', 'ctb-arquivo__nome', `Descrição contém "${s.valor}" → ${s.conta || '—'}`),
+          criar('span', 'ctb-arquivo__nota', `${plural(s.quantidade, 'classificação à mão', 'classificações à mão')} · ${dados?.sentidos?.[s.sentido] || s.sentido} · ex.: ${s.exemplos.join(' | ')}`)
+        );
+        const acoes = criar('div', 'ctb-arquivo__acoes');
+        acoes.appendChild(botaoPequeno('Usar', 'btn-secondary', async () => {
+          editando = null;
+          await preencher({ ...s, ativa: true });
+          el('ctbRegraFormTitulo').textContent = 'Nova regra (sugerida)';
+          mostrarMensagem('ctbRegrasMensagem', 'Confira e clique em "Salvar regra".', 'info');
+        }, { perm: 'contabilidade.plano.gerir' }));
+        li.append(icone('fa-lightbulb'), texto, acoes);
+        return li;
+      }));
+      try { window.Permissoes?.aplicarAcoesEColunas?.(overlay); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar() {
+      try {
+        dados = await fetchApi('/api/contabilidade/regras');
+        if (!condicao.options.length) {
+          condicao.replaceChildren(...Object.entries(dados.condicoes || {}).map(([k, v]) => opcao(k, v)));
+          sentido.replaceChildren(...Object.entries(dados.sentidos || {}).map(([k, v]) => opcao(k, v)));
+        }
+        const atual = conta.value;
+        opcoesDoPlano(conta, dados.plano, { vazio: 'Escolha a conta' });
+        if (atual) conta.value = atual;
+        pintar();
+        if (!preenchida) {
+          preenchida = true;
+          if (contexto.preencher) {
+            await preencher({ ...contexto.preencher, ativa: true });
+            el('ctbRegraFormTitulo').textContent = 'Nova regra (a partir do lançamento)';
+          } else await limpar();
+        }
+      } catch (e) {
+        dados = null;
+        linhaVazia(corpo, 5, 'As regras não puderam ser lidas.');
+        el('ctbRegraSalvar').disabled = true;
+        mostrarMensagem('ctbRegrasMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    const doForm = () => ({
+      condicao_tipo: condicao.value, valor: valorDoForm(), sentido: sentido.value, conta_id: conta.value,
+      prioridade: prioridade.value, ativa: ativa.checked, observacao: observacao.value
+    });
+
+    async function testar() {
+      mostrarMensagem('ctbRegrasMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/regras/testar', 'POST', { ...doForm(), competencia: contexto.competencia || '' });
+        const exemplos = (r.exemplos || []).slice(0, 3).map(x => `${formatarData(x.data)} (${formatarMoeda(x.valor)})`).join(', ');
+        el('ctbRegraTeste').textContent = r.quantidade
+          ? `Em ${r.rotulo}, pega ${plural(r.quantidade, 'lançamento', 'lançamentos')}: ${r.mudariam} ${r.mudariam === 1 ? 'mudaria' : 'mudariam'} para "${r.conta}"${r.a_mao ? `, ${r.a_mao} à mão (não ${r.a_mao === 1 ? 'muda' : 'mudam'})` : ''}. Ex.: ${exemplos}.`
+          : `Em ${r.rotulo}, não pega nenhum lançamento do extrato.`;
+      } catch (e) {
+        el('ctbRegraTeste').textContent = '';
+        mostrarMensagem('ctbRegrasMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    async function salvar() {
+      mostrarMensagem('ctbRegrasMensagem', '');
+      if (!valorDoForm()) { mostrarMensagem('ctbRegrasMensagem', 'Informe o valor da regra.'); return; }
+      if (!conta.value) { mostrarMensagem('ctbRegrasMensagem', 'Escolha a conta do plano.'); return; }
+      processando = true;
+      try {
+        if (editando) await enviar(`/api/contabilidade/regras/${encodeURIComponent(editando)}`, 'PUT', doForm());
+        else await enviar('/api/contabilidade/regras', 'POST', doForm());
+        processando = false;
+        window.showToast?.(editando ? 'Regra alterada.' : 'Regra criada.', 'success');
+        avisarAlteracao();
+        await limpar();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbRegrasMensagem', textoDoErro(e, 'Você não tem permissão para mexer nas regras.'));
+      } finally {
+        processando = false;
+      }
+    }
+
+    condicao.addEventListener('change', () => { valor.value = ''; pintarValor(); });
+    el('ctbRegraNova').addEventListener('click', limpar);
+    acionar(el('ctbRegraTestar'), testar);
+    acionar(el('ctbRegraSalvar'), salvar);
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -2712,7 +3228,10 @@
     ctbImportarExtrato: montarImportarExtrato,
     ctbContasFinanceiras: montarContasFinanceiras,
     ctbConciliacao: montarConciliacao,
-    ctbConciliarMovimento: montarConciliarMovimento
+    ctbConciliarMovimento: montarConciliarMovimento,
+    ctbClassificacao: montarClassificacao,
+    ctbPlanoContas: montarPlanoContas,
+    ctbRegras: montarRegras
   };
 
   let montagem;

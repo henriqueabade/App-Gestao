@@ -1017,6 +1017,22 @@ body {
     .ctb-filtros-extrato { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1fr); }
 }
 
+/* A barra de "classificar os marcados" (etapa 6): quantos, a conta, a observação e o botão. */
+.ctb-lote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+}
+.ctb-lote > span { align-self: center; min-width: 9rem; }
+.ctb-lote__campo { flex: 1 1 14rem; min-width: 0; }
+/* A conta do plano trocada na própria linha. */
+.ctb-tabela select.ctb-conta-linha { min-width: 13rem; }
+
 /* Soma das parcelas: vermelha quando não bate com o valor da conta. */
 .ctb-soma { font-size: 0.8rem; color: var(--menu-text-secondary, #9ca3af); }
 .ctb-soma[data-ok="0"] { color: var(--color-red); font-weight: 600; }

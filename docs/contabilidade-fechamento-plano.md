@@ -1031,3 +1031,72 @@ estorno travado, desfazer, julho fechado); Electron sem erro de console.
 
 **Próxima:** etapa 6 (classificação: plano de contas e regras) — depende da
 lista de categorias da contabilidade.
+
+## V. Etapa 6 entregue (29/09/2026) — classificação (plano de contas e regras)
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 5 foi
+commitada pelo dono como "Fase 5"). A lista de categorias da contabilidade
+não veio: o plano começa com as quatro do relatório atual e as que o app
+precisa para classificar sozinho, tudo editável na tela.
+
+**SQL:** `sql/contabilidade_classificacao.sql` (rodar depois do da
+conciliação e reiniciar a API): `plano_contas` (nome único sem ligar para
+maiúsculas, tipo, código opcional, ativa; 10 contas iniciais),
+`classificacao_regras` (9 regras iniciais: origem do dinheiro, TARIFA,
+SIMPLES NACIONAL, APLICACAO, RESGATE e os CFOPs de compra) e
+`classificacoes` (a escolha à mão; reclassificar substitui e guarda a
+anterior). Duas permissões: `contabilidade.classificar` e
+`contabilidade.plano.gerir`. Sem centro de custo (resposta do dono).
+
+**A conta de cada lançamento** (`backend/contabilidade/classificacao/`),
+nesta ordem:
+1. à mão;
+2. pela conciliação: a categoria da conta a pagar (ou a regra do
+   fornecedor dela), a origem do dinheiro (recebimento, reembolso, comissão,
+   produção); todas as partes na mesma conta — partes em contas diferentes
+   pedem a mão;
+3. pela regra de descrição do banco ou CNPJ/CPF da contrapartida;
+4. sem classificação.
+Só a escolha à mão é gravada; o resto é calculado a cada leitura (o
+fechamento completo, etapa 7, congela o mês).
+
+**Regras:** palavra inteira, sem acento ("TARIFA" não pega "TARIFAÇO"); vence
+a maior prioridade, depois o texto mais longo. Tipos: descrição do banco,
+CNPJ/CPF da contrapartida, fornecedor, CFOP da NF-e, origem do dinheiro. A
+conta a pagar nova sem categoria ganha a da regra do fornecedor ou do CFOP
+(e a prévia da NF-e já mostra a sugerida). **Sugeridas:** 2 ou mais
+classificações à mão com a mesma descrição, sentido e conta, que nenhuma
+regra cobre, viram proposta; só valem se alguém criar. "Testar no mês" diz
+quantos lançamentos a regra pega sem gravar.
+
+**Plano:** o tipo diz se a conta entra no resultado (receita, dedução,
+custo, despesa) ou não (transferência, patrimônio). Não se apaga: desativa;
+conta com regra ativa não desativa. Renomear leva a categoria das contas a
+pagar junto. A lista de categorias do formulário de conta a pagar passou a
+vir do plano.
+
+**Checklist:** a fonte volta a se chamar "Conciliação e classificação";
+lançamento sem classificação é documental (uma pendência, com o total).
+
+**Tela:** 3 modais novos — **Classificação** (a conta de cada lançamento
+trocada na própria linha, marcar vários e classificar de uma vez, voltar ao
+automático, "Regra" a partir do lançamento, o total por conta do plano e o
+resultado do mês), **Plano de contas** e **Regras de classificação** (com as
+sugeridas e o teste). O painel de Ações ganhou "Classificação".
+
+**Conferido:** testes puros (6), de ponta a ponta das rotas (7), checklist e
+tela; Postgres 17 descartável com o backend em modo DEV (os SQLs duas vezes,
+com e sem o da etapa 6; plano, regras, sugerida, teste, lote, voltar ao
+automático, renomear, CFOP); Electron sem erro de console.
+
+**Em aberto (para o dono):**
+1. A lista de categorias da contabilidade (e se ela usa código de conta).
+2. Os nomes das contas que o app criou: Receita de vendas, Devoluções e
+   reembolsos, Comissões sobre vendas, Produção (colaboradores), Despesas
+   bancárias, Transferência entre contas.
+3. Lançamento sem classificação é **documental** (bloqueia o pacote).
+   Confirmar.
+4. Um lançamento só cai numa conta (não se divide entre duas). Precisa
+   dividir?
+
+**Próxima:** etapa 7 (fechamento completo: congelar os totais do mês).

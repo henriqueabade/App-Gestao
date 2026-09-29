@@ -1,10 +1,11 @@
 /**
- * Checklist do fechamento contábil (etapas 1 a 5): o que a tela da
+ * Checklist do fechamento contábil (etapas 1 a 6): o que a tela da
  * Contabilidade mostra de uma competência, calculado SÓ com o que o sistema
  * já controla — NF-e de saída (próprias e de fora), recebimentos e cobrança,
  * fechamentos de comissões e produção, devoluções e reembolsos, e (etapa 3)
- * os documentos recebidos e as contas a pagar, (etapa 4) o extrato bancário
- * e (etapa 5) a conciliação do extrato com o que o app registrou.
+ * os documentos recebidos e as contas a pagar, (etapa 4) o extrato bancário,
+ * (etapa 5) a conciliação do extrato com o que o app registrou e (etapa 6) a
+ * classificação de cada lançamento no plano de contas.
  *
  * As contas ficam em funções puras sobre listas já lidas (`montar`); só
  * `carregar` fala com a API. Cada pendência sai com a severidade do dono
@@ -30,6 +31,7 @@ const extratoMod = require('./extrato/extrato');
 const conciliacaoMod = require('./conciliacao/conciliacao');
 const liquidacoes = require('./conciliacao/liquidacoes');
 const motor = require('./conciliacao/motor');
+const classificacaoMod = require('./classificacao/classificacao');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -43,7 +45,7 @@ const FONTES = [
   { chave: 'documentos_recebidos', titulo: 'NF-e de entrada e NFS-e', icone: 'fa-file-import' },
   { chave: 'contas_pagar', titulo: 'Contas a pagar', icone: 'fa-file-invoice-dollar' },
   { chave: 'extrato', titulo: 'Extrato bancário', icone: 'fa-university' },
-  { chave: 'conciliacao', titulo: 'Conciliação bancária', icone: 'fa-check-double' }
+  { chave: 'conciliacao', titulo: 'Conciliação e classificação', icone: 'fa-check-double' }
 ];
 
 const semXml = n => {
@@ -421,8 +423,10 @@ const SEM_EXTRATO_CONCILIACAO = `Depende do extrato: falta rodar ${b.SQL_ARQUIVO
  *               app outra — desfaça e concilie de novo
  *   aviso       o que o app registrou pelo banco, num trecho que o extrato
  *               cobre, sem lançamento correspondente
+ *   documental  (etapa 6) lançamentos sem conta do plano — nem à mão, nem pela
+ *               conciliação, nem por regra (junta todos)
  * `conciliacao` = null quando falta o SQL do extrato; `{ semSql }` quando
- * falta o da conciliação. Pura.
+ * falta o da conciliação; `classificacao.semSql` quando falta o da etapa 6. Pura.
  */
 function fonteConciliacao({ conciliacao, competencia }) {
   if (!conciliacao) return { indisponivel: SEM_EXTRATO_CONCILIACAO, resumo: [], numeros: null, pendencias: [] };
@@ -461,14 +465,28 @@ function fonteConciliacao({ conciliacao, competencia }) {
       data: b.ultimoDia(competencia), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'conciliacao', visao: 'pendentes' }
     }));
   }
+  // Etapa 6: lançamento sem conta do plano (nem à mão, nem pela conciliação, nem por regra).
+  const cls = conciliacao.classificacao || null;
+  if (cls && !cls.semSql && cls.sem > 0) {
+    pend.push(pendencia({
+      nivel: 'documental', chave: 'classificacao_pendente', fonte: 'conciliacao',
+      titulo: `${c.plural(cls.sem, 'lançamento do extrato', 'lançamentos do extrato')} sem classificação`,
+      descricao: `Total ${c.reais(cls.sem_valor || 0)} · escolha a conta do plano (ou crie uma regra que valha para os próximos)`,
+      data: b.ultimoDia(competencia), acao: 'Classificar', destino: 'contabilidade', filtro: { acao: 'classificacao', visao: 'sem' }
+    }));
+  }
+  const valorClassificacao = !cls ? '—' : (cls.semSql ? 'falta o SQL' : (cls.sem ? `${cls.sem} · ${c.reais(cls.sem_valor || 0)}` : '0'));
   return {
     resumo: [
       { rotulo: 'Conciliados', valor: movimentos.length ? `${conciliados.length} de ${movimentos.length}` : '0' },
       { rotulo: 'A conciliar', valor: pendentes.length ? `${pendentes.length} · ${c.reais(somaAbs(pendentes))}` : '0' },
-      { rotulo: 'Ignorados (sem par)', valor: String(ignorados.length) },
+      { rotulo: 'Sem classificação', valor: valorClassificacao },
       { rotulo: 'Sem lançamento no extrato', valor: String(sem.length) }
     ],
-    numeros: { movimentos: movimentos.length, conciliados: conciliados.length, pendentes: pendentes.length, ignorados: ignorados.length, sugeridos, sem_lancamento: sem.length, invalidos: c.lista(conciliacao.invalidos).length },
+    numeros: {
+      movimentos: movimentos.length, conciliados: conciliados.length, pendentes: pendentes.length, ignorados: ignorados.length, sugeridos,
+      sem_lancamento: sem.length, invalidos: c.lista(conciliacao.invalidos).length, sem_classificacao: cls && !cls.semSql ? cls.sem : null
+    },
     pendencias: pend
   };
 }
@@ -632,8 +650,14 @@ async function lerConciliacao(api, competencia, extrato, hoje) {
   // Um por lançamento (a chave da pendência é do lançamento).
   const invalidos = [...new Map(conciliacaoMod.vinculosInvalidos(ligados, porChave)
     .map(x => [String(x.vinculo.movimento_id), { ...x, movimento: porMovimento.get(String(x.vinculo.movimento_id)) || null }])).values()];
+  // Etapa 6: a conta do plano de cada lançamento do mês (sem o SQL dela, só avisa).
+  const classificados = await classificacaoMod.doMes(api, movimentos);
+  const semConta = classificados ? classificados.filter(x => !x.classificacao.conta_id) : [];
+  const classificacao = classificados
+    ? { sem: semConta.length, sem_valor: c.centavos(semConta.reduce((s, x) => s + Math.abs(Number(x.movimento.valor) || 0), 0)), total: classificados.length }
+    : { semSql: b.SQL_FALTANDO_CLASSIFICACAO };
   return {
-    movimentos, sugeridos: sugestoes.size, invalidos,
+    movimentos, sugeridos: sugestoes.size, invalidos, classificacao,
     semLancamento: conciliacaoMod.semLancamento(liqs, { competencia, coberturas, movimentos: pendentes.map(conciliacaoMod.paraMotor), sugestoes })
   };
 }

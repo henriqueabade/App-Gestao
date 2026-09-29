@@ -20,6 +20,7 @@ const b = require('./base');
 const eventos = require('./eventos');
 const arquivos = require('./arquivos');
 const titulos = require('./titulos');
+const regras = require('./classificacao/regras');
 const xmlNota = require('../devolucoes/xmlDevolucao');
 const externas = require('../fiscal/externas');
 const { UFS } = require('../fiscal/municipios');
@@ -397,7 +398,9 @@ async function previa(api, { entrada = {}, hoje }) {
     const competencia = String(nota.data_emissao || '').slice(0, 7);
     const fechada = await b.garantirAberta(api, competencia, 'registrar documentos nela').then(() => null).catch(e => e.message);
     if (fechada) conferencia.bloqueios.push(fechada);
+    const categoriaSugerida = await regras.categoriaSugerida(api, { contato_id: contato?.id ?? null, cfops: nota.cfops }).catch(() => null);
     return {
+      categoria_sugerida: categoriaSugerida,
       tipo: 'nfe', origem: 'xml', chave_acesso: nota.chave_acesso, modelo: nota.modelo, serie: nota.serie, numero: nota.numero,
       data_emissao: nota.data_emissao, competencia, natureza_operacao: nota.natureza_operacao,
       emitente: { documento: b.documentoFormatado(nota.emitente_documento), nome: nota.emitente_nome, fantasia: nota.emitente_fantasia, cidade: nota.emitente_endereco.cidade, estado: nota.emitente_endereco.estado },

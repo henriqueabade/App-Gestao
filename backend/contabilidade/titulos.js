@@ -21,8 +21,9 @@ const c = require('../financeiro/comum');
 const b = require('./base');
 const eventos = require('./eventos');
 const arquivos = require('./arquivos');
+const regras = require('./classificacao/regras');
 
-const FORMAS = ['Pix', 'Boleto', 'TED/DOC', 'Transferência', 'Débito automático', 'Cartão', 'Dinheiro', 'Cheque'];
+const FORMAS =['Pix', 'Boleto', 'TED/DOC', 'Transferência', 'Débito automático', 'Cartão', 'Dinheiro', 'Cheque'];
 
 /** As categorias que o relatório da contabilidade usa hoje (a lista completa vem na etapa 6). */
 const CATEGORIAS_SUGERIDAS = ['Aquisição de Bens', 'Serviços de Terceiros', 'Impostos e Taxas', 'Aporte de Capital'];
@@ -300,10 +301,16 @@ function categoriasDe(titulos) {
   return [...vistas.values()].sort((x, y) => x.localeCompare(y, 'pt-BR'));
 }
 
-/** As categorias para a lista do campo e as formas de pagamento (a tela do formulário). */
+/**
+ * As categorias para a lista do campo e as formas de pagamento (a tela do
+ * formulário). Com o plano de contas (etapa 6), as contas ativas dele vêm
+ * primeiro; as já usadas continuam na lista.
+ */
 async function categoriasDisponiveis(api) {
-  const linhas = (await b.lerOpcional(api, 'titulos_pagar')) || [];
-  return { categorias: categoriasDe(linhas), formas: FORMAS };
+  const [linhas, plano] = await Promise.all([b.lerOpcional(api, 'titulos_pagar').then(x => x || []), b.lerOpcional(api, 'plano_contas')]);
+  const doPlano = (plano || []).filter(p => p.ativa !== false && p.ativa !== 'false').map(p => p.nome).sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  const usadas = categoriasDe(linhas).filter(n => !doPlano.some(p => p.toLowerCase() === n.toLowerCase()));
+  return { categorias: plano ? [...doPlano, ...usadas] : categoriasDe(linhas), formas: FORMAS, plano: Boolean(plano) };
 }
 
 async function listar(api, { visao, competencia, hoje }) {
@@ -397,7 +404,9 @@ async function criar(api, { entrada = {}, usuarioId = null, hoje, origem = 'manu
     : gerarParcelas({ quantidade: entrada.quantidade_parcelas || 1, primeiroVencimento: entrada.primeiro_vencimento, valorTotal: t.valor_total });
   await b.garantirAberta(api, t.competencia, 'lançar contas nela');
   const contato = await conferirContato(api, t.contato_id);
-  await conferirDocumento(api, t.documento_recebido_id);
+  const documento = await conferirDocumento(api, t.documento_recebido_id);
+  // Sem categoria: a regra do fornecedor ou do CFOP da NF-e (etapa 6), se houver.
+  if (!t.categoria) t.categoria = await regras.categoriaSugerida(api, { contato_id: t.contato_id, cfops: documento?.cfops || [] }).catch(() => null);
   const titulo = await b.inserir(api, 'titulos_pagar', {
     ...t, status: 'aberto', origem: ['manual', 'nfe', 'nfse', 'outro'].includes(origem) ? origem : 'manual',
     criado_por: usuarioId, criado_em: c.agora()

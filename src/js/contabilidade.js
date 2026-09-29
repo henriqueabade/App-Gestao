@@ -1,5 +1,5 @@
 /**
- * Módulo Contabilidade — Fechamento do mês (etapas 1 a 5).
+ * Módulo Contabilidade — Fechamento do mês (etapas 1 a 6).
  *
  * Tudo vem de GET /api/contabilidade/painel da competência escolhida: a
  * situação (aberta, fechada, reaberta), a contagem das pendências nas três
@@ -9,9 +9,10 @@
  * (com "Ignorar" para documental/aviso, com justificativa) e a atividade do
  * módulo. Fechar, Reabrir, Contas a pagar, Documentos recebidos (registrar
  * NF-e, NFS-e, recibo), Documentos da competência, o Extrato bancário (OFX,
- * contas do banco) e a Conciliação bancária são reais (modais próprios,
- * src/js/modals/contabilidade-modais.js); classificação, relatório, pacote,
- * envio e configuração abrem o aviso "em implementação" até a etapa deles.
+ * contas do banco), a Conciliação bancária e a Classificação (plano de
+ * contas, regras) são reais (modais próprios,
+ * src/js/modals/contabilidade-modais.js); relatório, pacote, envio e
+ * configuração abrem o aviso "em implementação" até a etapa deles.
  *
  * As pendências que vêm do Financeiro (NF-e, cobrança, fechamentos,
  * reembolsos) levam para lá: o botão da linha abre o módulo Financeiro. As
@@ -164,13 +165,16 @@ const CTB_ACOES = {
         abrir: (m, extra) => ctbAbrirModal('conciliacao', m, { conta_id: extra?.conta_id ?? null, visao: extra?.visao || null, movimento_id: extra?.movimento_id ?? null })
     },
     'conciliar-movimento': { rotulo: 'Conciliar lançamento', abrir: (m, extra) => ctbAbrirModal('conciliar-movimento', m, { movimento_id: extra?.movimento_id ?? null }) },
+    // Etapa 6: classificação (plano de contas e regras). A pendência abre só os sem classificação.
+    'classificacao': { rotulo: 'Classificação', abrir: (m, extra) => ctbAbrirModal('classificacao', m, { visao: extra?.visao || null }) },
+    'plano-contas': { rotulo: 'Plano de contas', abrir: m => ctbAbrirModal('plano-contas', m, {}) },
+    'regras-classificacao': { rotulo: 'Regras de classificação', abrir: m => ctbAbrirModal('regras-classificacao', m, {}) },
     // A pendência da própria Contabilidade: o filtro diz qual modal abre e com quê.
     'abrir-pendencia': { rotulo: 'Resolver pendência', abrir: (m, extra) => ctbAbrirDaPendencia(m, extra?.pendencia) },
     // Etapas seguintes (docs/contabilidade-fechamento-plano.md, seção N).
     'relatorio': { rotulo: 'Relatório mensal' },
     'pacote': { rotulo: 'Gerar pacote (ZIP)' },
     'enviar': { rotulo: 'Enviar à contabilidade' },
-    'classificacao': { rotulo: 'Classificação (plano de contas)' },
     'configuracao': { rotulo: 'Configurações da contabilidade' }
 };
 
@@ -192,7 +196,10 @@ const CTB_MODAIS = {
     'importar-extrato': { html: 'modals/contabilidade/importar-extrato.html', overlay: 'ctbImportarExtrato' },
     'contas-financeiras': { html: 'modals/contabilidade/contas-financeiras.html', overlay: 'ctbContasFinanceiras' },
     'conciliacao': { html: 'modals/contabilidade/conciliacao.html', overlay: 'ctbConciliacao' },
-    'conciliar-movimento': { html: 'modals/contabilidade/conciliar-movimento.html', overlay: 'ctbConciliarMovimento' }
+    'conciliar-movimento': { html: 'modals/contabilidade/conciliar-movimento.html', overlay: 'ctbConciliarMovimento' },
+    'classificacao': { html: 'modals/contabilidade/classificacao.html', overlay: 'ctbClassificacao' },
+    'plano-contas': { html: 'modals/contabilidade/plano-contas.html', overlay: 'ctbPlanoContas' },
+    'regras-classificacao': { html: 'modals/contabilidade/regras-classificacao.html', overlay: 'ctbRegras' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

@@ -156,7 +156,9 @@ const PADRONIZADOS = [
       // 28/09/2026 — etapa 4: extrato por OFX e as contas do banco.
       'extrato', 'importar-extrato', 'contas-financeiras',
       // 28/09/2026 — etapa 5: a conciliação do extrato.
-      'conciliacao', 'conciliar-movimento'
+      'conciliacao', 'conciliar-movimento',
+      // 29/09/2026 — etapa 6: classificação, plano de contas e regras.
+      'classificacao', 'plano-contas', 'regras-classificacao'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

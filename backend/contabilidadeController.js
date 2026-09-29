@@ -54,6 +54,15 @@
  *   POST /conciliacao/movimentos/:id/criar-conta      { descricao, categoria, contato_id, forma }  (conciliar + pagar.lancar + pagar.pagar)
  *   POST /conciliacao/automatica                      { conta_id, competencia, aceitar_sugestoes }        (contabilidade.conciliar)
  *
+ * Etapa 6 (classificação):
+ *
+ *   GET  /classificacao?competencia=&conta_id=&visao=   cada lançamento com a conta do plano e como; o total por conta
+ *   POST /classificacao/classificar                     { ids, conta_id, observacao }      (contabilidade.classificar)
+ *   POST /classificacao/movimentos/:id/automatico       tira a classificação à mão         (contabilidade.classificar)
+ *   GET  /plano-contas, POST /plano-contas, PUT /plano-contas/:id                          (gravar: contabilidade.plano.gerir)
+ *   GET  /regras, POST /regras, PUT /regras/:id        (+ sugeridas pelas classificações à mão) (gravar: contabilidade.plano.gerir)
+ *   POST /regras/testar                                 { ...regra, competencia } — não grava
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -72,6 +81,9 @@ const titulos = require('./contabilidade/titulos');
 const evidencias = require('./contabilidade/evidencias');
 const extrato = require('./contabilidade/extrato/extrato');
 const conciliacao = require('./contabilidade/conciliacao/conciliacao');
+const classificacao = require('./contabilidade/classificacao/classificacao');
+const plano = require('./contabilidade/classificacao/plano');
+const regras = require('./contabilidade/classificacao/regras');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -85,6 +97,8 @@ const ESTORNAR = 'contabilidade.pagar.estornar';
 const IMPORTAR_EXTRATO = 'contabilidade.extrato.importar';
 const GERIR_CONTAS = 'contabilidade.contas.gerir';
 const CONCILIAR = 'contabilidade.conciliar';
+const CLASSIFICAR = 'contabilidade.classificar';
+const PLANO_GERIR = 'contabilidade.plano.gerir';
 
 const router = express.Router();
 
@@ -288,5 +302,36 @@ router.post('/conciliacao/movimentos/:id/criar-conta', exigirPermissao([CONCILIA
 
 router.post('/conciliacao/automatica', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/automatica', ({ api, req, usuarioId, hoje }) =>
   conciliacao.automatica(api, { contaId: req.body?.conta_id, competencia: String(req.body?.competencia || ''), aceitarSugestoes: req.body?.aceitar_sugestoes === true, usuarioId, hoje })));
+
+// ------------------------------------------------------------ classificação (etapa 6)
+
+router.get('/classificacao', exigirPermissao(VER), rota('GET /api/contabilidade/classificacao', ({ api, req, hoje }) =>
+  classificacao.painel(api, { competencia: String(req.query?.competencia || ''), contaId: req.query?.conta_id || null, visao: String(req.query?.visao || 'todos'), hoje })));
+
+router.post('/classificacao/classificar', exigirPermissao(CLASSIFICAR), rota('POST /api/contabilidade/classificacao/classificar', ({ api, req, usuarioId }) =>
+  classificacao.classificar(api, { ids: req.body?.ids, conta_id: req.body?.conta_id, observacao: req.body?.observacao, usuarioId })));
+
+router.post('/classificacao/movimentos/:id/automatico', exigirPermissao(CLASSIFICAR), rota('POST /api/contabilidade/classificacao/movimentos/:id/automatico', ({ api, req, usuarioId }) =>
+  classificacao.voltarAoAutomatico(api, req.params.id, { usuarioId })));
+
+router.get('/plano-contas', exigirPermissao(VER), rota('GET /api/contabilidade/plano-contas', ({ api }) => plano.listar(api)));
+
+router.post('/plano-contas', exigirPermissao(PLANO_GERIR), rota('POST /api/contabilidade/plano-contas', ({ api, req, usuarioId }) =>
+  plano.salvar(api, { entrada: req.body || {}, usuarioId })));
+
+router.put('/plano-contas/:id', exigirPermissao(PLANO_GERIR), rota('PUT /api/contabilidade/plano-contas/:id', ({ api, req, usuarioId }) =>
+  plano.salvar(api, { id: req.params.id, entrada: req.body || {}, usuarioId })));
+
+router.get('/regras', exigirPermissao(VER), rota('GET /api/contabilidade/regras', ({ api }) => classificacao.listarRegras(api)));
+
+// Testar não grava: basta ver a Contabilidade.
+router.post('/regras/testar', exigirPermissao(VER), rota('POST /api/contabilidade/regras/testar', ({ api, req, hoje }) =>
+  classificacao.testarRegra(api, { entrada: req.body || {}, competencia: String(req.body?.competencia || ''), hoje })));
+
+router.post('/regras', exigirPermissao(PLANO_GERIR), rota('POST /api/contabilidade/regras', ({ api, req, usuarioId }) =>
+  regras.salvar(api, { entrada: req.body || {}, usuarioId })));
+
+router.put('/regras/:id', exigirPermissao(PLANO_GERIR), rota('PUT /api/contabilidade/regras/:id', ({ api, req, usuarioId }) =>
+  regras.salvar(api, { id: req.params.id, entrada: req.body || {}, usuarioId })));
 
 module.exports = router;

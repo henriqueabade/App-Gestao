@@ -403,8 +403,16 @@ test('conciliação: pendentes = uma documental; registro estornado = crítico (
   assert.match(r.pendencias[0].descricao.replace(/ /g, ' '), /^Total R\$ 6\.200,00 · 2 com sugestão/);
   assert.deepEqual(r.pendencias[1].filtro, { acao: 'conciliacao', visao: 'conciliados', movimento_id: 3 });
   assert.match(r.pendencias[1].descricao, /Pedido 2540 · parcela 1: recebimento estornado/);
-  assert.deepEqual(r.numeros, { movimentos: 4, conciliados: 1, pendentes: 2, ignorados: 1, sugeridos: 2, sem_lancamento: 1, invalidos: 1 });
-  assert.deepEqual(r.resumo.map(x => x.rotulo), ['Conciliados', 'A conciliar', 'Ignorados (sem par)', 'Sem lançamento no extrato']);
+  assert.deepEqual(r.numeros, { movimentos: 4, conciliados: 1, pendentes: 2, ignorados: 1, sugeridos: 2, sem_lancamento: 1, invalidos: 1, sem_classificacao: null });
+  assert.deepEqual(r.resumo.map(x => x.rotulo), ['Conciliados', 'A conciliar', 'Sem classificação', 'Sem lançamento no extrato']);
+  assert.equal(r.resumo[2].valor, '—', 'sem os dados da classificação, só um traço');
+  // Etapa 6: sem classificação = documental (junta todos); sem o SQL dela, só avisa no resumo.
+  const base = { movimentos: [{ id: 1, valor: -10, estado_conciliacao: 'conciliado' }], sugeridos: 0, invalidos: [], semLancamento: [] };
+  const semConta = ck.fonteConciliacao({ competencia: COMP, conciliacao: { ...base, classificacao: { sem: 3, sem_valor: 150.5, total: 5 } } });
+  assert.deepEqual(semConta.pendencias.map(p => [p.nivel, p.chave, p.titulo, p.filtro]), [['documental', 'classificacao_pendente', '3 lançamentos do extrato sem classificação', { acao: 'classificacao', visao: 'sem' }]]);
+  assert.equal(semConta.resumo[2].valor.replace(/ /g, ' '), '3 · R$ 150,50');
+  const semSqlCls = ck.fonteConciliacao({ competencia: COMP, conciliacao: { ...base, classificacao: { semSql: 'Falta rodar sql/contabilidade_classificacao.sql' } } });
+  assert.deepEqual([semSqlCls.pendencias, semSqlCls.resumo[2].valor], [[], 'falta o SQL']);
   assert.equal(r.resumo[0].valor, '1 de 4');
   // Tudo conciliado ou ignorado: nada a cobrar; no mês em curso fica "em curso".
   const emDia = ck.montar({ competencia: '2026-09', hoje: HOJE, notas: [], aguardando: { pedidos: [] }, receber: { pendencias: [] }, fechamentos: [],

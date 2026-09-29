@@ -32,7 +32,14 @@ const TIPOS_FECHAMENTO = { comissao: 'Comissões', producao: 'Produção' };
 const chaveDe = (tipo, id) => `${tipo}:${id}`;
 const docDe = x => b.digitos(x?.cnpj || x?.cpf || x?.cpf_cnpj || x?.documento) || null;
 
-function base(tipo, id, { data, dataCredito = null, valor, forma, rotulo, detalhe = null, nome = null, documento = null, referencia = null, estornado = false }) {
+/**
+ * `categoria` e `contato_id` (conta a pagar) e `subtipo` (comissao/producao)
+ * servem à classificação (etapa 6).
+ */
+function base(tipo, id, {
+  data, dataCredito = null, valor, forma, rotulo, detalhe = null, nome = null, documento = null, referencia = null, estornado = false,
+  categoria = null, contatoId = null, subtipo = null
+}) {
   const abs = c.centavos(Math.abs(Number(valor) || 0));
   return {
     chave: chaveDe(tipo, id), tipo, tipo_rotulo: TIPOS[tipo].rotulo, id: Number(id),
@@ -40,7 +47,8 @@ function base(tipo, id, { data, dataCredito = null, valor, forma, rotulo, detalh
     valor: c.centavos(abs * TIPOS[tipo].sinal), valor_abs: abs, forma: forma || null,
     rotulo, detalhe, nome, documento, referencia: referencia ? String(referencia) : null,
     estornado: Boolean(estornado),
-    no_banco: !FORA_DO_BANCO.has(forma), data_incerta: DATA_INCERTA.has(forma)
+    no_banco: !FORA_DO_BANCO.has(forma), data_incerta: DATA_INCERTA.has(forma),
+    categoria: categoria || null, contato_id: contatoId === null || contatoId === undefined ? null : Number(contatoId), subtipo: subtipo || null
   };
 }
 
@@ -69,7 +77,8 @@ function deTituloPagamento(p, { titulos = new Map(), contatos = new Map(), parce
     data: p.data_pagamento, valor: p.valor_pago, forma: p.forma,
     rotulo: t ? `${t.descricao}${de > 1 ? ` · parcela ${parcela.numero}/${de}` : ''}` : `Pagamento ${p.id}`,
     detalhe: t?.categoria || null, nome: contato?.nome || null, documento: docDe(contato),
-    referencia: t?.numero_documento || null, estornado: Boolean(p.estornado_em) || t?.status === 'cancelado'
+    referencia: t?.numero_documento || null, estornado: Boolean(p.estornado_em) || t?.status === 'cancelado',
+    categoria: t?.categoria || null, contatoId: t?.contato_id ?? null
   });
 }
 
@@ -80,7 +89,8 @@ function deFinanceiroPagamento(p, { fechamentos = new Map() } = {}) {
   return base('financeiro_pagamento', p.id, {
     data: p.data_pagamento, valor: p.valor, forma: p.forma,
     rotulo: `${tipo} de ${c.rotuloCompetencia(comp)}${p.beneficiario ? ` — ${p.beneficiario}` : ''}`,
-    detalhe: p.tipo_comissao ? String(p.tipo_comissao).toUpperCase() : null, nome: p.beneficiario || null
+    detalhe: p.tipo_comissao ? String(p.tipo_comissao).toUpperCase() : null, nome: p.beneficiario || null,
+    subtipo: p.tipo || f?.tipo || null
   });
 }
 
@@ -97,7 +107,8 @@ function deReembolso(r, { pedidos = new Map(), clientes = new Map() } = {}) {
 // ------------------------------------------------------------ leitura
 
 const lerSePuder = (api, tabela) => api.get(`/api/${tabela}`).then(c.lista).catch(() => []);
-const naJanela = (data, de, ate) => Boolean(data) && (!de || data >= de) && (!ate || data <= ate);
+// Sem janela nenhuma (só `incluir`), nada entra pela data.
+const naJanela = (data, de, ate) => Boolean(data) && Boolean(de || ate) && (!de || data >= de) && (!ate || data <= ate);
 
 async function porId(api, tabela, ids) {
   const unicos = [...new Set([...ids].map(String).filter(x => x && x !== 'null' && x !== 'undefined'))];

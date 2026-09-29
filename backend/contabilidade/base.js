@@ -30,10 +30,15 @@ const TABELAS_EXTRATO = ['contas_financeiras', 'extrato_importacoes', 'movimento
 const SQL_ARQUIVO_CONCILIACAO = 'sql/contabilidade_conciliacao.sql';
 const SQL_FALTANDO_CONCILIACAO = `Falta rodar ${SQL_ARQUIVO_CONCILIACAO} no banco e reiniciar a API.`;
 const TABELAS_CONCILIACAO = ['conciliacao_vinculos'];
-const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO];
+/** Etapa 6: classificação (plano de contas e regras). */
+const SQL_ARQUIVO_CLASSIFICACAO = 'sql/contabilidade_classificacao.sql';
+const SQL_FALTANDO_CLASSIFICACAO = `Falta rodar ${SQL_ARQUIVO_CLASSIFICACAO} no banco e reiniciar a API.`;
+const TABELAS_CLASSIFICACAO = ['plano_contas', 'classificacao_regras', 'classificacoes'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO];
 
 /** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
 function sqlDaTabela(tabela) {
+  if (TABELAS_CLASSIFICACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CLASSIFICACAO, mensagem: SQL_FALTANDO_CLASSIFICACAO };
   if (TABELAS_CONCILIACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CONCILIACAO, mensagem: SQL_FALTANDO_CONCILIACAO };
   if (TABELAS_EXTRATO.includes(tabela)) return { arquivo: SQL_ARQUIVO_EXTRATO, mensagem: SQL_FALTANDO_EXTRATO };
   if (TABELAS_PAGAR.includes(tabela)) return { arquivo: SQL_ARQUIVO_PAGAR, mensagem: SQL_FALTANDO_PAGAR };
@@ -187,8 +192,8 @@ function documentoFormatado(doc) {
 
 module.exports = {
   SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, SQL_ARQUIVO_EXTRATO, SQL_FALTANDO_EXTRATO,
-  SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO,
-  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, sqlDaTabela, NIVEIS, nivelValido,
+  SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO, SQL_ARQUIVO_CLASSIFICACAO, SQL_FALTANDO_CLASSIFICACAO,
+  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, TABELAS_CLASSIFICACAO, sqlDaTabela, NIVEIS, nivelValido,
   tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
   garantirAberta, valorDe, digitos, documentoFormatado
 };
