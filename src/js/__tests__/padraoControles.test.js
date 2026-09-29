@@ -162,7 +162,9 @@ const PADRONIZADOS = [
       // 29/09/2026 — etapa 7: histórico dos fechamentos.
       'fechamentos',
       // 29/09/2026 — etapa 8: relatório mensal e dossiê.
-      'relatorio', 'dossie'
+      'relatorio', 'dossie',
+      // 29/09/2026 — etapa 9: o pacote para a contabilidade.
+      'pacote'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

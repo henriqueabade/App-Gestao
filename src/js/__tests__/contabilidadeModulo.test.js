@@ -113,6 +113,13 @@ test('permissões: o módulo está no catálogo, na tela de permissões e no SQL
     assert.match(etapa7, /competencia_fechamentos \(competencia, versao\)/, 'uma versão por número');
     assert.doesNotMatch(etapa7, /perm_contabilidade/, 'a etapa 7 não cria permissão');
   }
+  const etapa9 = sqlDaEtapa('contabilidade_pacote.sql');
+  if (etapa9) {
+    const { TABELAS_PACOTE } = require('../../../backend/contabilidade/base');
+    for (const t of TABELAS_PACOTE) assert.ok(etapa9.includes(`CREATE TABLE IF NOT EXISTS ${t}`), t);
+    assert.ok(etapa9.startsWith("SET client_encoding = 'UTF8';"), 'acentos certos também pelo psql do Windows');
+    assert.doesNotMatch(etapa9, /perm_contabilidade/, 'a etapa 9 não cria permissão');
+  }
 });
 
 test('tela: toda permissão usada existe no catálogo; Fechar (verde), Reabrir (bordô, escondido), Gerar pacote (azul claro) e Atualizar (dourado) no cabeçalho', () => {
@@ -152,6 +159,11 @@ test('funções puras: filtro por severidade/fonte/ignoradas, a contagem e o tex
   // Etapa 7: a versão e as diferenças desde a foto do fechamento.
   assert.equal(f.ctbTextoSituacao({ situacao: { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', versao: 2, diferencas: 3 } }).detalhe,
     'Fechada em 25/09/2026 às 15:30 · versão 2 · 3 diferenças desde a foto do fechamento');
+  // Etapa 9: o pacote da contabilidade.
+  assert.equal(f.ctbTextoSituacao({ situacao: { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', versao: 1, pacote: { gerado_em: '2026-09-26T10:00:00-03:00', enviado_em: '2026-09-26T11:00:00-03:00' } } }).detalhe,
+    'Fechada em 25/09/2026 às 15:30 · versão 1 · pacote enviado em 26/09/2026');
+  assert.equal(f.ctbTextoSituacao({ situacao: { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', versao: 1, pacote: { gerado_em: '2026-09-26T10:00:00-03:00', enviado_em: null } } }).detalhe,
+    'Fechada em 25/09/2026 às 15:30 · versão 1 · pacote gerado, falta marcar o envio');
 
   assert.equal(f.ctbFormatarData('2026-08-31'), '31/08/2026');
   assert.equal(f.ctbFormatarQuando('2026-09-28T10:05:00-03:00', '2026-09-28'), '10:05');
@@ -215,6 +227,10 @@ const MODAIS_ETAPA5 = {
   'conciliar-movimento': { overlay: 'ctbConciliarMovimento', principal: ['ctbConcMovConfirmar', 'btn-success', 'contabilidade.conciliar'] }
 };
 
+const MODAIS_ETAPA9 = {
+  'pacote': { overlay: 'ctbPacote', principal: ['ctbPacoteGerar', 'btn-primary', 'contabilidade.pacote.gerar'] }
+};
+
 const MODAIS_ETAPA8 = {
   'relatorio': { overlay: 'ctbRelatorio', principal: ['ctbRelPdf', 'btn-primary', 'contabilidade.pacote.gerar'] },
   'dossie': { overlay: 'ctbDossie', principal: null }
@@ -230,10 +246,10 @@ const MODAIS_ETAPA6 = {
   'regras-classificacao': { overlay: 'ctbRegras', principal: ['ctbRegraSalvar', 'btn-primary', 'contabilidade.plano.gerir'] }
 };
 
-test('modais das etapas 2 a 8: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
+test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8 })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9 })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -291,6 +307,12 @@ test('modais das etapas 2 a 8: anatomia da casa, Fechar/Cancelar vermelho, botã
     assert.match(ler('html', 'modals', 'contabilidade', `${arquivo}.html`), new RegExp(`id="${id}" type="button" class="btn-secondary ctl-botao text-white"`), `${arquivo}: Dossiê`);
     assert.ok(MODAIS.includes(`el('${id}').addEventListener('click', () => abrirOutro('dossie', { tipo: '${tipo}', id }));`), `${arquivo}: abre o dossiê`);
   }
+  // Etapa 9: o pacote lê a prévia, gera (com o PDF que o Electron imprime) e marca o envio.
+  for (const rota of ['/api/contabilidade/pacote?competencia=', "'/api/contabilidade/pacote', 'POST'", "/enviado`, 'POST'"]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  assert.ok(MODAIS.includes('window.electronAPI.gerarPdfDeHtml({ html: doc.html })'), 'o PDF do relatório vai dentro do pacote');
+  const pac = ler('html', 'modals', 'contabilidade', 'pacote.html');
+  assert.match(pac, /id="ctbPacoteEnviado" type="button" data-perm="contabilidade\.pacote\.gerar" class="btn-success ctl-botao"/);
+  assert.ok(pac.includes('data-perm-hide="contabilidade.pacote.gerar"'), 'o registro do envio some sem a permissão');
   // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e por enquanto só avisa.
   assert.match(ler('html', 'modals', 'contabilidade', 'extrato.html'), /id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade\.extrato\.importar" class="btn-bb ctl-botao text-white"/);
 });
@@ -304,7 +326,7 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // As pendências do backend usam só ações que a tela conhece.
   const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
   const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
-  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'fechamentos', 'importar-extrato', 'registrar-documento']);
+  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'fechamentos', 'importar-extrato', 'pacote', 'registrar-documento']);
   for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
   assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
   // Etapa 4: o extrato é real (o "Sincronizar extrato do BB" virou "Buscar no BB" dentro dele).
@@ -319,8 +341,11 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // Etapa 8: o relatório mensal é real e quem só vê a Contabilidade também o abre (salvar pede a permissão, lá dentro).
   assert.ok(HTML.includes('<button type="button" class="ctb-acao" data-ctb-acao="relatorio">'));
   for (const acao of ['relatorio', 'dossie']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
-  // O roteiro marca as etapas 1 a 8 como feitas.
-  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 8);
+  // Etapa 9: gerar o pacote e registrar o envio são reais (os dois abrem o modal do pacote).
+  for (const acao of ['pacote', 'enviar']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  assert.ok(TELA.includes("ctbAbrirModal('pacote', m, { enviar: true })"));
+  // O roteiro marca as etapas 1 a 9 como feitas.
+  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 9);
 });
 
 test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {

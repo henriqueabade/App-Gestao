@@ -37,7 +37,9 @@ const TIPOS = {
   lancamento_classificado: 'Lançamento classificado',
   classificacao_removida: 'Classificação à mão desfeita',
   plano_conta_salva: 'Plano de contas alterado',
-  regra_salva: 'Regra de classificação'
+  regra_salva: 'Regra de classificação',
+  pacote_gerado: 'Pacote gerado',
+  pacote_enviado: 'Pacote enviado à contabilidade'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

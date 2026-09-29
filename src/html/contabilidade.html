@@ -25,8 +25,8 @@
     3), o extrato bancário (etapa 4), a conciliação (etapa 5) e a
     classificação (etapa 6) — a lista de pendências e a atividade do módulo.
     Contas a pagar, documentos recebidos, os documentos da competência, o
-    extrato, a conciliação, a classificação, o histórico dos fechamentos e o
-    relatório mensal (etapa 8) abrem os modais deles. Cada
+    extrato, a conciliação, a classificação, o histórico dos fechamentos, o
+    relatório mensal (etapa 8) e o pacote (etapa 9) abrem os modais deles. Cada
     botão/cartão traz `data-ctb-acao`: quem ainda não tem função real abre o
     aviso "em implementação".
   -->
@@ -54,7 +54,7 @@
         <button type="button" data-perm="contabilidade.config.view" data-ctb-acao="configuracao" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Configuração da contabilidade" aria-label="Configuração da contabilidade">
           <i class="fas fa-cog" aria-hidden="true"></i>
         </button>
-        <!-- Consulta dentro do app (azul claro): o relatório e o pacote são as etapas 8 e 9. -->
+        <!-- Consulta dentro do app (azul claro): abre o modal do pacote (etapa 9), onde se gera o ZIP. -->
         <button id="ctbPacote" type="button" data-perm="contabilidade.pacote.gerar" data-ctb-acao="pacote" class="btn-secondary ctl-botao text-white" title="Relatório mensal e ZIP para a contabilidade">
           <i class="fas fa-file-archive mr-2" aria-hidden="true"></i>Gerar pacote
         </button>
@@ -214,7 +214,7 @@
             <i class="fas fa-file-archive" aria-hidden="true"></i><span>Gerar pacote (ZIP)</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="enviar">
-            <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Enviar à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+            <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Registrar o envio à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.config.view" data-ctb-acao="configuracao">
             <i class="fas fa-cog" aria-hidden="true"></i><span>Configurações</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
@@ -247,7 +247,7 @@
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">7</span><div><strong>Fechamento completo</strong><span>A foto do mês congelada em versões; diferenças depois do fechamento</span></div></li>
           <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">8</span><div><strong>Relatório mensal e dossiê</strong><span>Livro-caixa, resultado e conciliação em tela, PDF e planilha; tudo o que está ligado a cada lançamento</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">9</span><div><strong>Pacote</strong><span>O ZIP com os originais e o relatório, salvo pelo usuário</span></div></li>
+          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">9</span><div><strong>Pacote</strong><span>O ZIP com os originais e o relatório, salvo pelo usuário; o registro do envio</span></div></li>
           <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">10+</span><div><strong>Automáticos</strong><span>NF-e de entrada pela SEFAZ, extrato pela API do BB, CDB, NFS-e</span></div></li>
         </ol>
       </section>

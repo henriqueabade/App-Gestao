@@ -173,7 +173,7 @@ test('montar: fechada permite reabrir e pacote (sem documentais); crítico novo 
   const situacao = { id: 9, status: 'fechada', fechada_em: '2026-09-25T18:30:00.000Z', fechada_por: 3 };
   const base = cenario({ notas: notas().filter(n => ![3, 6].includes(n.id)), aguardando: { pedidos: [] }, receber: { recebido: {}, a_receber: {}, em_atraso: {}, a_conciliar: {}, pendencias: [] } });
   const fechada = ck.montar({ ...base, situacao, nomes: new Map([['3', 'Henrique']]) });
-  assert.deepEqual(fechada.situacao, { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', fechada_por: 'Henrique', reaberta_em: null, reaberta_por: null, justificativa_reabertura: null, divergencias: 0, versao: null, diferencas: 0, diferencas_lista: [] });
+  assert.deepEqual(fechada.situacao, { status: 'fechada', fechada_em: '2026-09-25T15:30:00-03:00', fechada_por: 'Henrique', reaberta_em: null, reaberta_por: null, justificativa_reabertura: null, divergencias: 0, versao: null, diferencas: 0, diferencas_lista: [], pacote: null });
   assert.deepEqual(fechada.pode, { fechar: false, reabrir: true, pacote: true });
   assert.deepEqual(fechada.bloqueios.fechar, ['A competência já está fechada.']);
 
@@ -184,6 +184,35 @@ test('montar: fechada permite reabrir e pacote (sem documentais); crítico novo 
   assert.equal(reaberta.situacao.status, 'reaberta');
   assert.equal(reaberta.situacao.justificativa_reabertura, 'Entrou uma nota atrasada');
   assert.deepEqual(reaberta.pode, { fechar: true, reabrir: false, pacote: false });
+});
+
+test('etapa 9: fechada sem pacote enviado é aviso; o enviado de outra versão também; sem o SQL do pacote, nada', () => {
+  const situacao = { id: 9, status: 'fechada', fechada_em: '2026-09-25T18:30:00.000Z', fechada_por: 3 };
+  const base = cenario({ notas: notas().filter(n => ![3, 6].includes(n.id)), aguardando: { pedidos: [] }, receber: { recebido: {}, a_receber: {}, em_atraso: {}, a_conciliar: {}, pendencias: [] } });
+  const versao = { versao: { versao: 2, fechada_em: '2026-09-25T18:30:00.000Z', lancamentos: [], foto: { fontes: [] } }, lancamentos: null };
+  const chaves = p => p.pendencias.filter(x => x.fonte === 'fechamento').map(x => [x.nivel, x.chave]);
+
+  assert.deepEqual(chaves(ck.montar({ ...base, situacao, versao, pacotes: null })), [], 'sem o SQL da etapa 9 não cobra');
+  const semPacote = ck.montar({ ...base, situacao, versao, pacotes: [] });
+  assert.deepEqual(chaves(semPacote), [['aviso', 'pacote_nao_enviado']]);
+  assert.match(semPacote.pendencias.find(x => x.chave === 'pacote_nao_enviado').descricao, /Gere o pacote/);
+  assert.deepEqual(semPacote.pendencias.find(x => x.chave === 'pacote_nao_enviado').filtro, { acao: 'pacote' });
+  assert.equal(semPacote.pode.pacote, true, 'o aviso não bloqueia o próprio pacote');
+
+  const gerado = ck.montar({ ...base, situacao, versao, pacotes: [{ id: 1, versao: 2, gerado_em: '2026-09-26T13:00:00.000Z' }] });
+  assert.match(gerado.pendencias.find(x => x.chave === 'pacote_nao_enviado').descricao, /^Gerado em 26\/09\/2026/);
+  assert.deepEqual(gerado.situacao.pacote, { id: 1, versao: 2, gerado_em: '2026-09-26T10:00:00-03:00', enviado_em: null, enviado_para: null });
+
+  const enviado = ck.montar({ ...base, situacao, versao, pacotes: [{ id: 1, versao: 2, gerado_em: '2026-09-26T13:00:00.000Z', enviado_em: '2026-09-26T14:00:00.000Z', enviado_para: 'contabil@exemplo.com' }] });
+  assert.deepEqual(chaves(enviado), []);
+  assert.equal(enviado.situacao.pacote.enviado_para, 'contabil@exemplo.com');
+
+  const antigo = ck.montar({ ...base, situacao, versao, pacotes: [{ id: 1, versao: 1, gerado_em: '2026-09-20T13:00:00.000Z', enviado_em: '2026-09-20T14:00:00.000Z', enviado_para: 'x' }] });
+  assert.deepEqual(chaves(antigo), [['aviso', 'pacote_desatualizado']]);
+  assert.equal(antigo.pendencias.find(x => x.chave === 'pacote_desatualizado').titulo, 'O pacote enviado é da versão 1; a competência está na versão 2');
+
+  const aberta = ck.montar({ ...base, situacao: null, pacotes: [] });
+  assert.deepEqual(chaves(aberta), [], 'aberta: o pacote ainda não é cobrado');
 });
 
 test('competência inválida cai no mês de hoje; sql pendente vai na resposta', () => {

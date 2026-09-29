@@ -72,6 +72,12 @@
  *   GET  /relatorio/planilha?competencia=   { nome, tipo, base64 } — a planilha .xlsx (contabilidade.pacote.gerar)
  *   GET  /dossie?tipo=movimento|titulo|documento&id=   tudo o que está ligado ao item, com o histórico
  *
+ * Etapa 9 (o pacote para a contabilidade — o ZIP que o usuário salva e envia):
+ *
+ *   GET  /pacote?competencia=         se pode gerar (fechada, sem documental viva), o que vai em cada pasta, o que falta, os pacotes gerados
+ *   POST /pacote                      { competencia, pdf_base64 } — gera, registra e devolve { nome, base64, hash }  (contabilidade.pacote.gerar)
+ *   POST /pacote/:id/enviado          { para, meio, observacao } — marca como enviado                              (contabilidade.pacote.gerar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -97,6 +103,7 @@ const relatorio = require('./contabilidade/relatorio/relatorio');
 const relatorioDocumento = require('./contabilidade/relatorio/documento');
 const relatorioPlanilha = require('./contabilidade/relatorio/planilha');
 const dossie = require('./contabilidade/relatorio/dossie');
+const pacote = require('./contabilidade/pacote/pacote');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -374,5 +381,16 @@ router.get('/relatorio/planilha', exigirPermissao(PACOTE), rota('GET /api/contab
 
 router.get('/dossie', exigirPermissao(VER), rota('GET /api/contabilidade/dossie', ({ api, req, hoje }) =>
   dossie.carregar(api, { tipo: String(req.query?.tipo || ''), id: req.query?.id, hoje })));
+
+// ------------------------------------------------------------ pacote para a contabilidade (etapa 9)
+
+router.get('/pacote', exigirPermissao(VER), rota('GET /api/contabilidade/pacote', ({ api, req, hoje, desde }) =>
+  pacote.previa(api, { competencia: req.query?.competencia, hoje, desde })));
+
+router.post('/pacote', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote', ({ api, req, hoje, desde, usuarioId }) =>
+  pacote.gerar(api, { competencia: req.body?.competencia, hoje, desde, usuarioId, pdfBase64: req.body?.pdf_base64 || null })));
+
+router.post('/pacote/:id/enviado', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote/:id/enviado', ({ api, req, usuarioId }) =>
+  pacote.marcarEnviado(api, req.params.id, { entrada: req.body || {}, usuarioId })));
 
 module.exports = router;

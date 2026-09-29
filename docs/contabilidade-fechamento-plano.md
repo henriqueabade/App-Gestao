@@ -1244,3 +1244,65 @@ passou a gravar nos eventos o id do lançamento e da importação, como o app.
    Está bom?
 
 **Próxima:** etapa 9 (o pacote ZIP com os originais e o relatório).
+
+## Y. Etapa 9 entregue (29/09/2026) — o pacote para a contabilidade
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 8 foi
+commitada pelo dono como "Fase 8"). Resposta do dono (Q,
+item 8): **zipar tudo e o usuário salvar e enviar ele mesmo** — o app não
+manda e-mail; ele gera o ZIP, registra e guarda o envio que o usuário marca.
+
+**SQL:** `sql/contabilidade_pacote.sql` (rodar depois do da etapa 7 e
+reiniciar a API): `contabil_pacotes`, um registro por pacote gerado — a
+competência, a versão do fechamento, o nome, o **SHA-256 do ZIP**, o tamanho,
+a lista dos arquivos (pasta, nome, SHA-256, origem) e o que faltou; e, ao
+marcar, para quem, como e quando foi enviado. O ZIP em si não fica no banco.
+Sem permissão nova ("Gerar relatório e pacote", da etapa 1).
+
+**Sem biblioteca nova:** o ZIP é montado pelo próprio app
+(`backend/contabilidade/pacote/zip.js`, com a compressão do Node): nomes em
+UTF-8, conferido pelo Windows (Expand-Archive e o leitor .NET) e pelo Python.
+
+**O pacote** (`pacote/pacote.js`), `Contabilidade-AAAA-MM-vN.zip`:
+- `LEIA-ME.txt` (empresa, competência, versão, quem gerou, o resultado, o que
+  tem em cada pasta, **o que falta** e as pendências ignoradas com a
+  justificativa) e `indice.csv` (cada arquivo com a pasta, a origem e o
+  SHA-256 — dá para conferir que é o original);
+- `01-Relatorio` (o PDF — a tela imprime pelo Electron e manda junto — e a
+  planilha), `02-Extrato` (o OFX original de cada importação e o extrato em
+  PDF), `03-NF-e-de-saida`, `04-Devolucoes`, `05-Recebidos` (NF-e de entrada,
+  NFS-e, recibos, guias), `06-Comprovantes`, `07-Outros` — os arquivos são os
+  **originais** guardados no app (os Documentos da competência).
+
+**Quando sai:** só com a competência **fechada** e **sem pendência documental
+viva** (ignorada com justificativa vale) — a regra das três severidades do
+dono. Com o mês fechado, o painel mostra um **aviso** até o pacote ser
+marcado como enviado; se a competência for reaberta e fechada de novo, outro
+aviso: "o pacote enviado é da versão X".
+
+**Tela:** modal novo **Pacote para a contabilidade** (o que vai em cada pasta,
+o que falta, os bloqueios, os pacotes gerados com o SHA-256 e o registro do
+envio — para quem, como, observação). O "Gerar pacote" do cabeçalho e o painel
+de Ações ("Gerar pacote (ZIP)" e "Registrar o envio à contabilidade") abrem
+esse modal; a situação no topo diz "pacote enviado em …".
+
+**Conferido:** testes puros (ZIP e pacote: 4), de ponta a ponta das rotas (4),
+checklist (o aviso do pacote), tela; Postgres 17 descartável com o backend em
+modo DEV (com e sem o SQL da etapa 9): bloqueado com o mês aberto, fechar e
+ignorar as documentais, gerar, os originais conferidos pelo SHA-256 guardado
+no app, o registro, marcar como enviado, refechar → "pacote desatualizado";
+o ZIP aberto pelo Windows com os 10 SHA-256 do índice conferidos; Electron
+sem erro de console (o gerar imprime o PDF, gera e salva).
+
+**Em aberto (para o dono):**
+1. O app não manda o e-mail (decisão sua): marca-se como enviado à mão.
+   Quer que ele mande direto (pelo SMTP da NF-e) no futuro?
+2. O e-mail da contabilidade: hoje o último usado vira a sugestão. Quer um
+   cadastro fixo (na Configuração da contabilidade)?
+3. O ZIP não fica guardado no app (só o SHA-256 e a lista). Deve guardar uma
+   cópia (ocupa espaço no banco)?
+4. "Pacote ainda não enviado" é aviso (não bloqueia nada). Confirmar.
+
+**Próxima:** as etapas 10+ (automáticos: NF-e de entrada pela SEFAZ, extrato
+pela API do BB, CDB, NFS-e) dependem de contratação/confirmação; a fase final
+é rodar os SQLs, testar juntos e homologar.

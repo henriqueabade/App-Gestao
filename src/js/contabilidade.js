@@ -1,5 +1,5 @@
 /**
- * Módulo Contabilidade — Fechamento do mês (etapas 1 a 8).
+ * Módulo Contabilidade — Fechamento do mês (etapas 1 a 9).
  *
  * Tudo vem de GET /api/contabilidade/painel da competência escolhida: a
  * situação (aberta, fechada, reaberta), a contagem das pendências nas três
@@ -10,10 +10,10 @@
  * módulo. Fechar, Reabrir, Contas a pagar, Documentos recebidos (registrar
  * NF-e, NFS-e, recibo), Documentos da competência, o Extrato bancário (OFX,
  * contas do banco), a Conciliação bancária e a Classificação (plano de
- * contas, regras), o Histórico dos fechamentos, o Relatório mensal e o
- * Dossiê são reais (modais próprios, src/js/modals/contabilidade-modais.js);
- * pacote, envio e configuração abrem o aviso "em implementação" até a etapa
- * deles.
+ * contas, regras), o Histórico dos fechamentos, o Relatório mensal, o
+ * Dossiê e o Pacote (gerar o ZIP e registrar o envio) são reais (modais
+ * próprios, src/js/modals/contabilidade-modais.js); a configuração abre o
+ * aviso "em implementação" até a etapa dela.
  *
  * As pendências que vêm do Financeiro (NF-e, cobrança, fechamentos,
  * reembolsos) levam para lá: o botão da linha abre o módulo Financeiro. As
@@ -94,6 +94,9 @@ function ctbTextoSituacao(painel) {
         if (s.versao) detalhe += ` · versão ${s.versao}`;
         if (s.divergencias) detalhe += ` · ${s.divergencias === 1 ? '1 erro crítico novo' : `${s.divergencias} erros críticos novos`} desde o fechamento`;
         if (s.diferencas) detalhe += ` · ${s.diferencas === 1 ? '1 diferença' : `${s.diferencas} diferenças`} desde a foto do fechamento`;
+        // Etapa 9: o pacote da contabilidade.
+        if (s.pacote?.enviado_em) detalhe += ` · pacote enviado em ${ctbFormatarData(s.pacote.enviado_em)}`;
+        else if (s.pacote) detalhe += ' · pacote gerado, falta marcar o envio';
     } else if (status === 'reaberta') {
         detalhe = `Reaberta em ${ctbFormatarInstante(s.reaberta_em)}${s.reaberta_por ? ` por ${s.reaberta_por}` : ''}${s.justificativa_reabertura ? ` — ${s.justificativa_reabertura}` : ''}`;
     } else if (painel?.encerrada === false) {
@@ -179,9 +182,10 @@ const CTB_ACOES = {
     'dossie': { rotulo: 'Dossiê', abrir: (m, extra) => ctbAbrirModal('dossie', m, { tipo: extra?.tipo || 'movimento', id: extra?.id ?? null }) },
     // A pendência da própria Contabilidade: o filtro diz qual modal abre e com quê.
     'abrir-pendencia': { rotulo: 'Resolver pendência', abrir: (m, extra) => ctbAbrirDaPendencia(m, extra?.pendencia) },
+    // Etapa 9: o pacote (ZIP) que o usuário salva e envia; "enviar" abre o mesmo modal no registro do envio.
+    'pacote': { rotulo: 'Gerar pacote (ZIP)', abrir: m => ctbAbrirModal('pacote', m, {}) },
+    'enviar': { rotulo: 'Registrar o envio à contabilidade', abrir: m => ctbAbrirModal('pacote', m, { enviar: true }) },
     // Etapas seguintes (docs/contabilidade-fechamento-plano.md, seção N).
-    'pacote': { rotulo: 'Gerar pacote (ZIP)' },
-    'enviar': { rotulo: 'Enviar à contabilidade' },
     'configuracao': { rotulo: 'Configurações da contabilidade' }
 };
 
@@ -209,7 +213,8 @@ const CTB_MODAIS = {
     'regras-classificacao': { html: 'modals/contabilidade/regras-classificacao.html', overlay: 'ctbRegras' },
     'fechamentos': { html: 'modals/contabilidade/fechamentos.html', overlay: 'ctbFechamentos' },
     'relatorio': { html: 'modals/contabilidade/relatorio.html', overlay: 'ctbRelatorio' },
-    'dossie': { html: 'modals/contabilidade/dossie.html', overlay: 'ctbDossie' }
+    'dossie': { html: 'modals/contabilidade/dossie.html', overlay: 'ctbDossie' },
+    'pacote': { html: 'modals/contabilidade/pacote.html', overlay: 'ctbPacote' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

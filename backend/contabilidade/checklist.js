@@ -514,7 +514,7 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
 function montar({
   competencia, hoje, notas = [], externas = [], aguardando = null, receber = null, receberErro = null,
   fechamentos: lista = [], reembolsosPendencias = [], situacao = null, resolucoes = [], nomes = new Map(), sqlPendente = false,
-  pagar = null, extrato = null, conciliacao = null, versao = null
+  pagar = null, extrato = null, conciliacao = null, versao = null, pacotes = null
 }) {
   const comp = competenciaValida(competencia, hoje);
   const diaDeHoje = c.dia(hoje);
@@ -543,9 +543,35 @@ function montar({
     data: c.dia(versao.versao.fechada_em), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'fechamentos' }
   })] : [];
 
+  // Etapa 9: fechada, o pacote precisa ir para a contabilidade — e o enviado tem de ser o da versão que vale.
+  const doPacote = [];
+  const pacotesDoMes = c.lista(pacotes).slice().sort((x, y) => String(y.gerado_em).localeCompare(String(x.gerado_em)) || Number(y.id) - Number(x.id));
+  const ultimoPacote = pacotesDoMes[0] || null;
+  const enviado = pacotesDoMes.find(p => p.enviado_em) || null;
+  const versaoAtual = versao?.versao ? Number(versao.versao.versao) : null;
+  if (fechadaAgora && pacotes !== null) {
+    if (!enviado) {
+      doPacote.push(pendencia({
+        nivel: 'aviso', chave: 'pacote_nao_enviado', fonte: 'fechamento',
+        titulo: 'Pacote ainda não enviado à contabilidade',
+        descricao: ultimoPacote
+          ? `Gerado em ${b.instanteBR(ultimoPacote.gerado_em)?.slice(0, 10).split('-').reverse().join('/')}: depois de mandar, marque como enviado`
+          : 'Gere o pacote (ZIP), mande para a contabilidade e marque como enviado',
+        data: c.dia(situacao?.fechada_em), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'pacote' }
+      }));
+    } else if (versaoAtual && Number(enviado.versao) !== versaoAtual) {
+      doPacote.push(pendencia({
+        nivel: 'aviso', chave: 'pacote_desatualizado', fonte: 'fechamento',
+        titulo: `O pacote enviado é da versão ${enviado.versao || 'sem versão'}; a competência está na versão ${versaoAtual}`,
+        descricao: 'A competência foi reaberta e fechada de novo: gere e mande o pacote da versão que vale',
+        data: c.dia(situacao?.fechada_em), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'pacote' }
+      }));
+    }
+  }
+
   // As ignoradas: continuam na lista, marcadas, sem contar para os bloqueios.
   const ignoradas = new Map(c.lista(resolucoes).map(r => [String(r.chave), r]));
-  const pendencias = [...Object.values(partes).flatMap(p => p.pendencias), ...doFechamento].map(p => {
+  const pendencias = [...Object.values(partes).flatMap(p => p.pendencias), ...doFechamento, ...doPacote].map(p => {
     const r = ignoradas.get(p.chave);
     if (!r || p.nivel === 'critico') return p;
     return { ...p, ignorada: true, justificativa: r.justificativa || '', ignorada_em: b.instanteBR(r.criado_em), ignorada_por: nomes.get(String(r.usuario_id)) || null, resolucao_id: r.id };
@@ -599,7 +625,12 @@ function montar({
       // Etapa 7: a versão que vale e o que mudou desde ela.
       versao: status === 'fechada' && versao?.versao ? Number(versao.versao.versao) : null,
       diferencas: diferencas.length,
-      diferencas_lista: diferencas.slice(0, 100)
+      diferencas_lista: diferencas.slice(0, 100),
+      // Etapa 9: o último pacote gerado (e se foi enviado).
+      pacote: ultimoPacote ? {
+        id: ultimoPacote.id, versao: ultimoPacote.versao === null || ultimoPacote.versao === undefined ? null : Number(ultimoPacote.versao),
+        gerado_em: b.instanteBR(ultimoPacote.gerado_em), enviado_em: b.instanteBR(enviado?.enviado_em), enviado_para: enviado?.enviado_para || null
+      } : null
     },
     fontes,
     pendencias,
@@ -708,6 +739,8 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   }
   // Mês fechado (etapa 7): a versão que vale — a classificação dela e a foto para comparar.
   const versao = situacao?.status === 'fechada' ? versoes.ultima((await versoes.lerVersoes(api, comp)) || []) : null;
+  // Etapa 9: os pacotes da competência (null sem o SQL da etapa 9).
+  const pacotes = sqlPendente ? null : await b.lerOpcional(api, 'contabil_pacotes', { competencia: comp });
   const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
   const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje), versao);
   const aguardando = fiscalPainel.pedidosAguardandoNfe({ pedidos, notas: notas.map(semXml), desde: `${comp}-01`, hoje, externas });
@@ -715,7 +748,7 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
     fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao,
-    versao: versao ? { versao, lancamentos: conciliacao?.lancamentosAtuais ?? null } : null
+    versao: versao ? { versao, lancamentos: conciliacao?.lancamentosAtuais ?? null } : null, pacotes
   });
   return { ...painel, situacao_bruta: situacao };
 }

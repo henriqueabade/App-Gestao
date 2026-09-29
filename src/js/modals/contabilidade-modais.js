@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1 a 8).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 9).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -29,6 +29,7 @@
  *   ctbFechamentos          Histórico dos fechamentos — versões, comparação, diferenças desde o fechamento (GET /fechamentos)
  *   ctbRelatorio            Relatório mensal — resumo, livro-caixa, resultado, conciliação, pendências, documentos; PDF e planilha (GET /relatorio)
  *   ctbDossie               Dossiê — tudo o que está ligado a um lançamento, conta ou documento, navegando entre eles (GET /dossie)
+ *   ctbPacote               Pacote para a contabilidade — o ZIP (relatório + originais), os gerados e o envio (GET/POST /pacote)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -3753,6 +3754,168 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ pacote para a contabilidade (etapa 9)
+
+  /** Salva um arquivo que veio em base64 (o app pergunta onde; no navegador, download). null = desistiu. */
+  async function salvarBase64(base64, nome, titulo, tipo = 'application/octet-stream') {
+    if (window.electronAPI?.salvarArquivoBinario) {
+      const s = await window.electronAPI.salvarArquivoBinario({ base64, nomeSugerido: nome, titulo });
+      if (s?.canceled) return null;
+      if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar o arquivo.');
+      return s.filePath || nome;
+    }
+    const binario = atob(base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: tipo }));
+    const link = criar('a');
+    link.href = url;
+    link.download = nome;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return nome;
+  }
+
+  function montarPacote() {
+    const compCampo = el('ctbPacoteCompetencia');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+    let primeira = true;
+    // O pacote que o "Marcar como enviado" marca: o mais novo que ainda não foi.
+    const alvoDoEnvio = () => (dados?.pacotes || []).find(p => !p.enviado_em) || null;
+
+    function pintar() {
+      const d = dados;
+      const badge = el('ctbPacoteSituacao');
+      if (!d) pintarEtiqueta(badge, '—', 'badge-neutral');
+      else if (d.status === 'fechada') pintarEtiqueta(badge, `Fechada${d.versao ? ` · v${d.versao}` : ''}`, 'badge-success');
+      else pintarEtiqueta(badge, SITUACOES[d.status] || 'Aberta', 'badge-warning');
+      let nota = '';
+      if (d) {
+        nota = d.pode
+          ? `Pronto para gerar ${d.nome}.zip: o relatório${d.versao ? ` da versão ${d.versao}` : ''} e os originais do mês. O que faltar vai listado no LEIA-ME.`
+          : 'O pacote só sai com a competência fechada e sem pendência documental.';
+        if (!d.sql_pacotes) nota += ' Falta rodar sql/contabilidade_pacote.sql: o pacote sai, mas não fica registrado.';
+      }
+      el('ctbPacoteNota').textContent = nota;
+      el('ctbPacoteBloqueiosBloco').classList.toggle('hidden', !d || d.pode);
+      el('ctbPacoteBloqueios').replaceChildren(...(d?.bloqueios || []).map(t => itemDaLista(t, 'fa-ban', 'var(--color-red)')));
+      el('ctbPacoteNome').textContent = d ? `${d.nome}.zip` : '';
+
+      const pastas = el('ctbPacotePastas');
+      if (!d) linhaVazia(pastas, 3, '—');
+      else {
+        pastas.replaceChildren(...d.pastas.map(p => {
+          const tr = criar('tr');
+          const exemplos = p.itens.slice(0, 3).map(i => i.titulo).join(' · ') + (p.itens.length > 3 ? ` e mais ${p.itens.length - 3}` : '');
+          tr.append(celula(p.pasta, 'px-4 py-3 ctb-nowrap'), celula(p.rotulo, 'px-4 py-3', exemplos || null), celula(String(p.quantidade), 'px-4 py-3'));
+          if (!p.quantidade) tr.style.opacity = '0.55';
+          return tr;
+        }));
+      }
+      const faltando = d?.faltando || [];
+      el('ctbPacoteFaltando').classList.toggle('hidden', !faltando.length);
+      el('ctbPacoteFaltando').replaceChildren(...faltando.map(f => itemDaLista(`Falta: ${f.titulo}${f.detalhe ? ` — ${f.detalhe}` : ''} (${f.motivo})`, 'fa-exclamation-triangle', 'var(--color-primary-light)')));
+
+      const lista = el('ctbPacoteLista');
+      const pacotes = d?.pacotes || [];
+      if (!pacotes.length) linhaVazia(lista, 6, d && !d.sql_pacotes ? 'Sem o SQL da etapa 9, os pacotes não ficam registrados.' : 'Nenhum pacote gerado ainda.');
+      else {
+        lista.replaceChildren(...pacotes.map(p => {
+          const tr = criar('tr');
+          const hash = celula(`${p.hash.slice(0, 12)}…`, 'px-4 py-3 ctb-nowrap');
+          hash.title = p.hash;
+          tr.append(
+            celula(formatarInstante(p.gerado_em), 'px-4 py-3', p.gerado_por), celula(p.versao ? `v${p.versao}` : '—', 'px-4 py-3'),
+            celula(String(p.arquivos), 'px-4 py-3', p.faltando ? `${p.faltando} faltando` : null), celula(p.tamanho_rotulo, 'px-4 py-3 ctb-nowrap'), hash,
+            celula(p.enviado_em ? tag('Enviado', 'badge-success') : tag('Não enviado', 'badge-warning'), 'px-4 py-3',
+              p.enviado_em ? `${formatarInstante(p.enviado_em)} · ${p.enviado_para} (${p.envio_meio})` : null)
+          );
+          return tr;
+        }));
+      }
+
+      const alvo = alvoDoEnvio();
+      el('ctbPacoteEnvioBloco').classList.toggle('hidden', !d?.sql_pacotes || !alvo);
+      if (alvo) {
+        el('ctbPacoteEnvioAlvo').textContent = `Do pacote gerado em ${formatarInstante(alvo.gerado_em)} (${alvo.nome})`;
+        const meio = el('ctbPacoteEnvioMeio');
+        if (!meio.options.length) meio.replaceChildren(...(d.meios || []).map(m => opcao(m, m)));
+        if (!el('ctbPacoteEnvioPara').value && d.ultimo_destinatario) el('ctbPacoteEnvioPara').value = d.ultimo_destinatario;
+        if (primeira && d.ultimo_meio) meio.value = d.ultimo_meio;
+      }
+      el('ctbPacoteGerar').disabled = !d?.pode;
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbPacoteMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/pacote?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        if (minha !== leitura) return;
+        dados = r;
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbPacoteMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+      pintar();
+      // Veio do "Registrar o envio" do painel: mostra o quadro do envio.
+      if (primeira && contexto.enviar) el('ctbPacoteEnvioBloco').scrollIntoView?.({ block: 'center' });
+      primeira = false;
+    }
+
+    acionar(el('ctbPacoteGerar'), async () => {
+      if (!dados?.pode) return;
+      const comp = compCampo.value || '';
+      mostrarMensagem('ctbPacoteMensagem', '');
+      try {
+        // O relatório em PDF: o Electron imprime o HTML do relatório (sem perguntar onde salvar).
+        let pdf = null;
+        if (window.electronAPI?.gerarPdfDeHtml) {
+          const doc = await fetchApi(`/api/contabilidade/relatorio/documento?competencia=${encodeURIComponent(comp)}`);
+          const impresso = await window.electronAPI.gerarPdfDeHtml({ html: doc.html });
+          if (!impresso?.success) throw new Error(impresso?.message || 'Não foi possível gerar o PDF do relatório.');
+          pdf = impresso.base64;
+        }
+        const p = await enviar('/api/contabilidade/pacote', 'POST', { competencia: comp, pdf_base64: pdf });
+        const salvo = await salvarBase64(p.base64, p.nome, 'Salvar o pacote da contabilidade', p.tipo);
+        if (salvo) window.showToast?.(`Pacote salvo: ${plural(p.arquivos, 'arquivo', 'arquivos')}, ${p.tamanho_rotulo}.`, 'success');
+        else window.showToast?.('O pacote foi gerado, mas não foi salvo: gere de novo para salvar.', 'info');
+        avisarAlteracao();
+        await carregar();
+        // Depois de reler (a leitura limpa a mensagem): o aviso do que faltou (sem PDF, sem o SQL).
+        if (p.aviso) mostrarMensagem('ctbPacoteMensagem', p.aviso, 'aviso');
+      } catch (e) {
+        mostrarMensagem('ctbPacoteMensagem', textoDoErro(e, 'Gerar o pacote pede a permissão "Gerar relatório e pacote".'));
+      }
+    });
+
+    acionar(el('ctbPacoteEnviado'), async () => {
+      const alvo = alvoDoEnvio();
+      if (!alvo) return;
+      mostrarMensagem('ctbPacoteMensagem', '');
+      try {
+        await enviar(`/api/contabilidade/pacote/${encodeURIComponent(alvo.id)}/enviado`, 'POST', {
+          para: el('ctbPacoteEnvioPara').value.trim(), meio: el('ctbPacoteEnvioMeio').value, observacao: el('ctbPacoteEnvioObs').value.trim()
+        });
+        el('ctbPacoteEnvioObs').value = '';
+        window.showToast?.('Envio registrado.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbPacoteMensagem', textoDoErro(e, 'Registrar o envio pede a permissão "Gerar relatório e pacote".'));
+      }
+    });
+
+    compCampo.addEventListener('change', carregar);
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -3775,7 +3938,8 @@
     ctbRegras: montarRegras,
     ctbFechamentos: montarFechamentos,
     ctbRelatorio: montarRelatorio,
-    ctbDossie: montarDossie
+    ctbDossie: montarDossie,
+    ctbPacote: montarPacote
   };
 
   let montagem;
