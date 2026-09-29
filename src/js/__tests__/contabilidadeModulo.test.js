@@ -215,6 +215,11 @@ const MODAIS_ETAPA5 = {
   'conciliar-movimento': { overlay: 'ctbConciliarMovimento', principal: ['ctbConcMovConfirmar', 'btn-success', 'contabilidade.conciliar'] }
 };
 
+const MODAIS_ETAPA8 = {
+  'relatorio': { overlay: 'ctbRelatorio', principal: ['ctbRelPdf', 'btn-primary', 'contabilidade.pacote.gerar'] },
+  'dossie': { overlay: 'ctbDossie', principal: null }
+};
+
 const MODAIS_ETAPA7 = {
   'fechamentos': { overlay: 'ctbFechamentos', principal: null }
 };
@@ -225,10 +230,10 @@ const MODAIS_ETAPA6 = {
   'regras-classificacao': { overlay: 'ctbRegras', principal: ['ctbRegraSalvar', 'btn-primary', 'contabilidade.plano.gerir'] }
 };
 
-test('modais das etapas 2 a 7: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
+test('modais das etapas 2 a 8: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7 })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8 })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -272,6 +277,20 @@ test('modais das etapas 2 a 7: anatomia da casa, Fechar/Cancelar vermelho, botã
   const hist = ler('html', 'modals', 'contabilidade', 'fechamentos.html');
   assert.match(hist, /id="ctbFechHistReabrir" type="button" data-perm="contabilidade\.reabrir" class="hidden btn-warning ctl-botao/);
   assert.match(hist, /id="ctbFechHistFechar" type="button" data-perm="contabilidade\.fechar" class="hidden btn-success ctl-botao/);
+  // Etapa 8: o relatório lê a tela, o PDF (HTML impresso pelo Electron) e a planilha; o dossiê é só leitura.
+  for (const rota of ['/api/contabilidade/relatorio?competencia=', '/api/contabilidade/relatorio/documento?competencia=', '/api/contabilidade/relatorio/planilha?competencia=', '/api/contabilidade/dossie?tipo=']) {
+    assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  }
+  assert.ok(MODAIS.includes('window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome') && MODAIS.includes('window.electronAPI.salvarArquivoBinario({ base64: r.base64, nomeSugerido: r.nome'));
+  const rel = ler('html', 'modals', 'contabilidade', 'relatorio.html');
+  assert.match(rel, /id="ctbRelPlanilha" type="button" data-perm="contabilidade\.pacote\.gerar" class="btn-primary ctl-botao/);
+  for (const aba of ['resumo', 'livro', 'resultado', 'conciliacao', 'pendencias', 'documentos']) assert.ok(rel.includes(`data-ctb-aba="${aba}"`) && rel.includes(`data-ctb-painel="${aba}"`), `aba ${aba}`);
+  assert.ok(!/data-perm="[^"]+"[^>]*id="ctbDossie/.test(ler('html', 'modals', 'contabilidade', 'dossie.html')), 'o dossiê não pede permissão além de ver');
+  // O dossiê abre das fichas (conta, documento, lançamento), sempre em azul claro (consulta dentro do app).
+  for (const [arquivo, id, tipo] of [['conta-pagar', 'ctbContaPagarDossie', 'titulo'], ['documento-recebido', 'ctbDocDetDossie', 'documento'], ['conciliar-movimento', 'ctbConcMovDossie', 'movimento']]) {
+    assert.match(ler('html', 'modals', 'contabilidade', `${arquivo}.html`), new RegExp(`id="${id}" type="button" class="btn-secondary ctl-botao text-white"`), `${arquivo}: Dossiê`);
+    assert.ok(MODAIS.includes(`el('${id}').addEventListener('click', () => abrirOutro('dossie', { tipo: '${tipo}', id }));`), `${arquivo}: abre o dossiê`);
+  }
   // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e por enquanto só avisa.
   assert.match(ler('html', 'modals', 'contabilidade', 'extrato.html'), /id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade\.extrato\.importar" class="btn-bb ctl-botao text-white"/);
 });
@@ -297,8 +316,11 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // Etapa 7: o histórico dos fechamentos é real.
   assert.ok(HTML.includes('data-ctb-acao="fechamentos"'));
   assert.match(TELA, /'fechamentos': \{[^}]*abrir:/);
-  // O roteiro marca as etapas 1 a 7 como feitas.
-  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 7);
+  // Etapa 8: o relatório mensal é real e quem só vê a Contabilidade também o abre (salvar pede a permissão, lá dentro).
+  assert.ok(HTML.includes('<button type="button" class="ctb-acao" data-ctb-acao="relatorio">'));
+  for (const acao of ['relatorio', 'dossie']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  // O roteiro marca as etapas 1 a 8 como feitas.
+  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 8);
 });
 
 test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {

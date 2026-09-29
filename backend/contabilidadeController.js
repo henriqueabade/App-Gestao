@@ -65,6 +65,13 @@
  *   GET  /regras, POST /regras, PUT /regras/:id        (+ sugeridas pelas classificações à mão) (gravar: contabilidade.plano.gerir)
  *   POST /regras/testar                                 { ...regra, competencia } — não grava
  *
+ * Etapa 8 (relatório mensal e dossiê — leituras, nada é gravado):
+ *
+ *   GET  /relatorio?competencia=            o relatório do mês (mês fechado: a foto da versão; aberto: prévia)
+ *   GET  /relatorio/documento?competencia=  { nome, html } — a tela imprime em PDF    (contabilidade.pacote.gerar)
+ *   GET  /relatorio/planilha?competencia=   { nome, tipo, base64 } — a planilha .xlsx (contabilidade.pacote.gerar)
+ *   GET  /dossie?tipo=movimento|titulo|documento&id=   tudo o que está ligado ao item, com o histórico
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -86,6 +93,10 @@ const conciliacao = require('./contabilidade/conciliacao/conciliacao');
 const classificacao = require('./contabilidade/classificacao/classificacao');
 const plano = require('./contabilidade/classificacao/plano');
 const regras = require('./contabilidade/classificacao/regras');
+const relatorio = require('./contabilidade/relatorio/relatorio');
+const relatorioDocumento = require('./contabilidade/relatorio/documento');
+const relatorioPlanilha = require('./contabilidade/relatorio/planilha');
+const dossie = require('./contabilidade/relatorio/dossie');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -101,6 +112,7 @@ const GERIR_CONTAS = 'contabilidade.contas.gerir';
 const CONCILIAR = 'contabilidade.conciliar';
 const CLASSIFICAR = 'contabilidade.classificar';
 const PLANO_GERIR = 'contabilidade.plano.gerir';
+const PACOTE = 'contabilidade.pacote.gerar';
 
 const router = express.Router();
 
@@ -342,5 +354,25 @@ router.post('/regras', exigirPermissao(PLANO_GERIR), rota('POST /api/contabilida
 
 router.put('/regras/:id', exigirPermissao(PLANO_GERIR), rota('PUT /api/contabilidade/regras/:id', ({ api, req, usuarioId }) =>
   regras.salvar(api, { id: req.params.id, entrada: req.body || {}, usuarioId })));
+
+// ------------------------------------------------------------ relatório mensal e dossiê (etapa 8)
+
+// Ver na tela basta ver a Contabilidade; salvar o PDF ou a planilha (o que vai para a contabilidade) pede "Relatório e pacote".
+router.get('/relatorio', exigirPermissao(VER), rota('GET /api/contabilidade/relatorio', ({ api, req, hoje, desde }) =>
+  relatorio.montar(api, { competencia: req.query?.competencia, hoje, desde })));
+
+router.get('/relatorio/documento', exigirPermissao(PACOTE), rota('GET /api/contabilidade/relatorio/documento', async ({ api, req, hoje, desde }) => {
+  const rel = await relatorio.montar(api, { competencia: req.query?.competencia, hoje, desde });
+  return { nome: rel.arquivo, html: relatorioDocumento.html(rel), versao: rel.situacao.versao, previa: rel.situacao.previa };
+}));
+
+router.get('/relatorio/planilha', exigirPermissao(PACOTE), rota('GET /api/contabilidade/relatorio/planilha', async ({ api, req, hoje, desde }) => {
+  const rel = await relatorio.montar(api, { competencia: req.query?.competencia, hoje, desde });
+  const bytes = await relatorioPlanilha.gerar(rel);
+  return { nome: `${rel.arquivo}.xlsx`, tipo: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base64: bytes.toString('base64'), versao: rel.situacao.versao, previa: rel.situacao.previa };
+}));
+
+router.get('/dossie', exigirPermissao(VER), rota('GET /api/contabilidade/dossie', ({ api, req, hoje }) =>
+  dossie.carregar(api, { tipo: String(req.query?.tipo || ''), id: req.query?.id, hoje })));
 
 module.exports = router;

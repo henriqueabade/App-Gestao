@@ -1168,3 +1168,79 @@ erro de console.
 
 **Próxima:** etapas 8 e 9 (relatório mensal, dossiê e pacote para a
 contabilidade).
+
+## X. Etapa 8 entregue (29/09/2026) — relatório mensal e dossiê
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 7 foi
+commitada pelo dono como "Fase 7"). **Sem SQL novo**:
+as duas coisas são leituras do que as etapas anteriores gravaram.
+
+**Relatório mensal** (`backend/contabilidade/relatorio/`: `relatorio.js` monta,
+`documento.js` faz o HTML do PDF, `planilha.js` a planilha). Partes:
+- **Resumo:** receitas, deduções, custos, despesas, o resultado do mês, o que
+  ficou fora do resultado e sem classificação; cada conta do banco com saldo
+  inicial, entradas, saídas, saldo final e o saldo que o banco informou; os
+  números da conciliação, das pendências e dos documentos.
+- **Livro-caixa** de cada conta, no formato do "Extrato de Conta" que a
+  contabilidade recebe hoje (seção 0): data, número, descrição do banco,
+  débito, crédito, saldo, a conta do plano (o "Tipo"), a observação (de quem
+  é o dinheiro: fornecedor/cliente e a conta ou a parcela que ele paga; o
+  motivo do ignorado; "a conciliar") e o vencimento do título; com o total de
+  cada dia e do período. O saldo inicial sai do saldo que o banco informou no
+  OFX (sem ele, a coluna é o acumulado do mês).
+- **Resultado** por conta do plano; **Conciliação** (a conciliar, ignorados
+  com a justificativa, conciliados com diferença e o que o app registrou sem
+  lançamento no extrato); **Pendências**; **Documentos** da competência (com
+  o que falta).
+- Na planilha, também **Partidas** (duas linhas por lançamento, banco × conta
+  do plano, como o relatório de hoje) e **Lançamentos** (uma linha por
+  lançamento, para filtrar). Datas são datas do Excel; valores, números.
+
+**Mês fechado = a foto:** com versão (etapa 7), os lançamentos, as contas do
+plano, o resultado, o saldo do banco e as pendências são os da versão; o que
+mudou depois aparece como diferença no alto. **Mês aberto ou reaberto =
+PRÉVIA**, com a marca em toda folha do PDF. Fechado antes da etapa 7: os
+números de hoje, avisando.
+
+**Permissões:** ver na tela basta ver a Contabilidade; salvar o PDF e a
+planilha pede "Gerar relatório e pacote" (`contabilidade.pacote.gerar`, a
+mesma do ZIP da etapa 9). Nada é gravado ao gerar (o pacote, que é o que vai
+para a contabilidade, terá o registro com hash).
+
+**Dossiê** (`relatorio/dossie.js`, `GET /dossie?tipo=&id=`): tudo o que está
+ligado a um **lançamento do banco** (de que OFX veio, o que ele paga ou
+recebe — inclusive a NF-e do pedido —, o que foi desfeito, a conta do plano
+que vale, a congelada e as escolhas à mão), a uma **conta a pagar** (parcelas,
+pagamentos, o lançamento do banco de cada um, o documento) ou a um
+**documento recebido** (as contas que gerou ou o pagamento de comissão/produção
+que prova, e o banco). Cada item ligado abre o dossiê dele ali mesmo ("←
+Anterior" volta); arquivos e histórico de tudo. Só leitura.
+
+**Tela:** 2 modais novos — **Relatório mensal** (abas Resumo, Livro-caixa,
+Resultado, Conciliação, Pendências, Documentos; clicar num lançamento abre o
+dossiê; "Salvar PDF" e "Salvar planilha (Excel)") e **Dossiê**. O botão
+"Dossiê" (azul claro) entrou na conta a pagar, no documento recebido e no
+"Conciliar lançamento". O "Relatório mensal" do painel de Ações é real.
+
+**Conferido:** testes puros (8), de ponta a ponta das rotas (6), checklist e
+tela; Postgres 17 descartável com o backend em modo DEV em três bancos (todos
+os SQLs; sem o da etapa 7; sem o do extrato): livro-caixa com saldo e total
+do dia, observação, resultado, conciliação, partidas somando zero, PDF,
+planilha com as 8 abas, dossiê lançamento → conta → documento e volta, mês
+fechado com a foto e sem a marca de prévia; Electron sem erro de console,
+e o PDF impresso de verdade (7 folhas no exemplo). O SQL simulado do DEV
+passou a gravar nos eventos o id do lançamento e da importação, como o app.
+
+**Em aberto (para o dono):**
+1. O formato para a contabilidade: livro-caixa (uma linha por lançamento) e
+   "Partidas" (duas linhas, como o Finance de hoje) vão os dois na planilha.
+   Qual ela usa? Precisa de mais alguma coluna?
+2. Ver o relatório na tela: quem vê a Contabilidade; salvar PDF/planilha:
+   "Gerar relatório e pacote". Está bom?
+3. Dá para salvar a PRÉVIA (mês aberto), com a marca em toda folha. Deve
+   salvar só o de mês fechado?
+4. O saldo inicial vem do saldo que o banco informa no OFX. Sem ele, a
+   coluna é o acumulado do mês (não usa o saldo inicial cadastrado na conta).
+   Está bom?
+
+**Próxima:** etapa 9 (o pacote ZIP com os originais e o relatório).

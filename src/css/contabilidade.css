@@ -921,6 +921,8 @@ body {
 .ctb-tabela tr[data-ctb-linha] { cursor: pointer; }
 /* A linha que a pendência apontou (conciliação com registro que mudou). */
 .ctb-tabela tr.ctb-linha-destaque td { background: rgba(212, 175, 55, 0.14); }
+/* Total do dia e do período no livro-caixa do relatório mensal (etapa 8). */
+.ctb-tabela tr.ctb-linha-total td { background: rgba(255, 255, 255, 0.05); color: #fff; font-weight: 600; }
 /* Os botões da linha ficam numa linha só (quebrar deixava a linha com o dobro da altura). */
 .ctb-tabela .ctb-celula-acoes { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: nowrap; }
 

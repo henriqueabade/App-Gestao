@@ -160,7 +160,9 @@ const PADRONIZADOS = [
       // 29/09/2026 — etapa 6: classificação, plano de contas e regras.
       'classificacao', 'plano-contas', 'regras-classificacao',
       // 29/09/2026 — etapa 7: histórico dos fechamentos.
-      'fechamentos'
+      'fechamentos',
+      // 29/09/2026 — etapa 8: relatório mensal e dossiê.
+      'relatorio', 'dossie'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

@@ -1,5 +1,5 @@
 /**
- * Modais da Contabilidade — Fechamento do mês (etapas 1 a 7).
+ * Modais da Contabilidade — Fechamento do mês (etapas 1 a 8).
  *
  * Um script para os modais do módulo: a anatomia é a mesma — Voltar,
  * Cancelar/Fechar e Esc fecham; a ação principal fica no rodapé — e o que
@@ -27,6 +27,8 @@
  *   ctbPlanoContas          Plano de contas — lista e cadastro (GET/POST/PUT /plano-contas)
  *   ctbRegras               Regras de classificação — lista, sugeridas, testar, cadastro (/regras)
  *   ctbFechamentos          Histórico dos fechamentos — versões, comparação, diferenças desde o fechamento (GET /fechamentos)
+ *   ctbRelatorio            Relatório mensal — resumo, livro-caixa, resultado, conciliação, pendências, documentos; PDF e planilha (GET /relatorio)
+ *   ctbDossie               Dossiê — tudo o que está ligado a um lançamento, conta ou documento, navegando entre eles (GET /dossie)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -997,6 +999,7 @@
     });
 
     el('ctbContaPagarEditar').addEventListener('click', () => abrirOutro('conta-pagar-form', { titulo_id: id }));
+    el('ctbContaPagarDossie').addEventListener('click', () => abrirOutro('dossie', { tipo: 'titulo', id }));
     ouvirAlteracoes(carregar);
     return carregar();
   }
@@ -1667,6 +1670,7 @@
 
     el('ctbDocDetAbrirConta').addEventListener('click', () => { if (dados?.documento?.titulo) abrirOutro('conta-pagar', { titulo_id: dados.documento.titulo.id }); });
     el('ctbDocDetLancarConta').addEventListener('click', () => abrirOutro('conta-pagar-form', { documento_id: id }));
+    el('ctbDocDetDossie').addEventListener('click', () => abrirOutro('dossie', { tipo: 'documento', id }));
     ouvirAlteracoes(carregar);
     return carregar();
   }
@@ -2736,6 +2740,7 @@
     acionar(el('ctbConcMovDesfazer'), desfazer);
     acionar(el('ctbConcMovReativar'), reativar);
     acionar(el('ctbConcMovCriarConta'), criarConta);
+    el('ctbConcMovDossie').addEventListener('click', () => abrirOutro('dossie', { tipo: 'movimento', id }));
     ouvirAlteracoes(carregar);
     return carregar();
   }
@@ -3375,6 +3380,379 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ relatório mensal e dossiê (etapa 8)
+
+  /** As abas do modal: `[data-ctb-aba]` mostra o `[data-ctb-painel]` de mesmo nome. */
+  function ligarAbas() {
+    const abas = [...overlay.querySelectorAll('[data-ctb-aba]')];
+    const trocar = nome => {
+      abas.forEach(b => b.setAttribute('aria-selected', String(b.dataset.ctbAba === nome)));
+      overlay.querySelectorAll('[data-ctb-painel]').forEach(p => p.classList.toggle('hidden', p.dataset.ctbPainel !== nome));
+    };
+    abas.forEach(b => b.addEventListener('click', () => trocar(b.dataset.ctbAba)));
+    return trocar;
+  }
+
+  /** Célula de dinheiro que fica em branco quando não há valor (débito/crédito do livro). */
+  function celulaValor(v, classe = 'px-4 py-3 ctb-num') {
+    const td = criar('td', classe);
+    if (v !== null && v !== undefined && v !== '' && Number(v) !== 0) td.textContent = formatarMoeda(v);
+    return td;
+  }
+
+  const TOM_NIVEL = { critico: 'badge-danger', documental: 'badge-warning', aviso: 'badge-info' };
+
+  function montarRelatorio() {
+    const compCampo = el('ctbRelCompetencia');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+    ligarAbas();
+
+    function total(chave, valor, nota) {
+      const card = el('ctbRelTotais').querySelector(`[data-total="${chave}"]`);
+      card.querySelector('.ctb-total__valor').textContent = valor;
+      if (nota !== undefined) card.querySelector('.ctb-total__nota').textContent = nota;
+    }
+
+    function pintarResumo() {
+      const d = dados;
+      const r = d?.resultado || null;
+      total('receitas', r ? formatarMoeda(r.receitas) : '—', r?.deducoes ? `deduções ${formatarMoeda(r.deducoes)}` : 'Nas contas de receita');
+      total('gastos', r ? formatarMoeda(Math.round((r.custos + r.despesas) * 100) / 100) : '—', r ? `custos ${formatarMoeda(r.custos)} · despesas ${formatarMoeda(r.despesas)}` : '—');
+      total('resultado', r ? formatarMoeda(r.resultado) : '—');
+      total('sem', r ? formatarMoeda(r.sem_classificacao) : '—',
+        d?.resumo?.sem_classificacao ? plural(d.resumo.sem_classificacao, 'lançamento', 'lançamentos') : (r ? 'Tudo classificado' : 'Sem a classificação'));
+      const corpo = el('ctbRelContas');
+      const contas = d?.resumo?.contas || [];
+      if (!contas.length) linhaVazia(corpo, 6, d ? 'Nenhuma conta do banco (ou falta o SQL do extrato).' : 'Não foi possível ler o relatório.');
+      else {
+        corpo.replaceChildren(...contas.map(x => {
+          const tr = criar('tr');
+          tr.append(
+            celula(x.conta, 'px-4 py-3', x.completo === false ? 'o extrato não cobre o mês inteiro' : null),
+            celula(x.saldo_inicial === null ? '—' : formatarMoeda(x.saldo_inicial), 'px-4 py-3 ctb-num'),
+            celula(formatarMoeda(x.entradas), 'px-4 py-3 ctb-num'), celula(formatarMoeda(x.saidas), 'px-4 py-3 ctb-num'),
+            celula(x.saldo_final === null ? '—' : formatarMoeda(x.saldo_final), 'px-4 py-3 ctb-num'),
+            celula(x.saldo_banco ? formatarMoeda(x.saldo_banco.valor) : '—', 'px-4 py-3 ctb-num', x.saldo_banco ? `em ${formatarData(x.saldo_banco.data)}` : null)
+          );
+          return tr;
+        }));
+      }
+      if (!d) { preencherDados(el('ctbRelResumo'), []); return; }
+      const cc = d.resumo.conciliacao;
+      const p = d.resumo.pendencias;
+      const docs = d.resumo.documentos;
+      preencherDados(el('ctbRelResumo'), [
+        ['Lançamentos no extrato', String(d.resumo.lancamentos)],
+        ['Sem classificação', d.resumo.sem_classificacao === null ? 'sem a classificação' : String(d.resumo.sem_classificacao)],
+        ['Conciliados', cc ? String(cc.conciliados) : '—'],
+        ['Ignorados (com justificativa)', cc ? String(cc.ignorados) : '—'],
+        ['A conciliar', cc ? `${cc.a_conciliar.quantidade} · ${formatarMoeda(cc.a_conciliar.total)}` : '—'],
+        ['Registrados sem lançamento no extrato', cc ? String(cc.sem_lancamento) : '—'],
+        [d.pendencias.origem === 'fechamento' ? 'Pendências no fechamento' : 'Pendências', `${p.critico} críticas · ${p.documental} documentais · ${p.aviso} avisos · ${p.ignoradas} ignoradas`],
+        ['Documentos da competência', docs ? `${docs.total}${docs.falta ? ` (${docs.falta} faltando)` : ''}` : '—']
+      ]);
+    }
+
+    function pintarLivro() {
+      const livros = dados?.livro || [];
+      const sel = el('ctbRelConta');
+      const antes = sel.value;
+      sel.replaceChildren(...livros.map(l => opcao(String(l.conta_id), l.conta)));
+      if (livros.some(l => String(l.conta_id) === antes)) sel.value = antes;
+      sel.disabled = livros.length < 2;
+      const livro = livros.find(l => String(l.conta_id) === sel.value) || livros[0] || null;
+      const corpo = el('ctbRelLivro');
+      el('ctbRelSaldoInicial').textContent = !livro ? '' : (livro.saldo_conhecido
+        ? `Saldo inicial ${formatarMoeda(livro.saldo_inicial)} (pelo saldo do banco em ${formatarData(livro.saldo_banco.data)})`
+        : 'Sem o saldo do banco: a coluna Saldo é o acumulado do mês.');
+      if (!livro) { linhaVazia(corpo, 8, dados ? 'Nenhuma conta do banco (ou falta o SQL do extrato).' : '—'); return; }
+      const busca = normalizar(el('ctbRelBusca').value.trim());
+      const linhas = busca
+        ? livro.linhas.filter(l => normalizar([l.descricao, l.numero, l.conta_plano, l.observacao, numeroBr(Math.abs(l.valor))].join(' ')).includes(busca))
+        : livro.linhas;
+      if (!linhas.length) { linhaVazia(corpo, 8, busca ? 'Nenhum lançamento com esta busca.' : 'Nenhum lançamento no mês.'); return; }
+      const porDia = new Map(livro.dias.map(x => [x.data, x]));
+      const trs = [];
+      const linhaTotal = (rotulo, sub, saidas, entradas, saldo) => {
+        const tr = criar('tr', 'ctb-linha-total');
+        tr.append(celula(rotulo, 'px-4 py-2 ctb-nowrap'), celula(sub, 'px-4 py-2'), celulaValor(saidas ? -saidas : null, 'px-4 py-2 ctb-num'),
+          celulaValor(entradas, 'px-4 py-2 ctb-num'), celula(formatarMoeda(saldo), 'px-4 py-2 ctb-num'), criar('td'), criar('td'), criar('td'));
+        return tr;
+      };
+      linhas.forEach((l, i) => {
+        const tr = criar('tr');
+        tr.dataset.ctbLinha = '1';
+        tr.title = 'Ver o dossiê do lançamento';
+        const conta = celula(l.conta_plano || 'Sem classificação', 'px-4 py-3');
+        if (!l.conta_plano) conta.style.color = 'var(--color-primary-light)';
+        const saldo = celula(formatarMoeda(l.saldo), 'px-4 py-3 ctb-num');
+        if (l.saldo < 0) saldo.style.color = '#e08aa6';
+        tr.append(
+          celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'), celula(l.descricao, 'px-4 py-3', l.numero ? `nº ${l.numero}` : null),
+          celulaValor(l.debito), celulaValor(l.credito), saldo, conta,
+          // "A conciliar" e "Ignorado" já estão na observação; embaixo só o "Conciliado".
+          celula(l.observacao, 'px-4 py-3', l.estado === 'conciliado' ? l.estado_rotulo : null),
+          l.vencimento ? celula(formatarData(l.vencimento), 'px-4 py-3 ctb-nowrap') : criar('td', 'px-4 py-3')
+        );
+        tr.addEventListener('click', () => abrirOutro('dossie', { tipo: 'movimento', id: l.id }));
+        trs.push(tr);
+        const proxima = linhas[i + 1];
+        if (!busca && (!proxima || proxima.data !== l.data)) {
+          const dia = porDia.get(l.data);
+          trs.push(linhaTotal(`Total do dia ${formatarData(l.data).slice(0, 5)}`, plural(dia.quantidade, 'lançamento', 'lançamentos'), dia.saidas, dia.entradas, dia.saldo));
+        }
+      });
+      if (!busca) {
+        const t = livro.totais;
+        trs.push(linhaTotal('Total do período', plural(t.quantidade, 'lançamento', 'lançamentos'), t.saidas, t.entradas, livro.saldo_final ?? t.resultado));
+      }
+      corpo.replaceChildren(...trs);
+    }
+
+    function pintarResultado() {
+      const corpo = el('ctbRelResultado');
+      const r = dados?.resultado || null;
+      if (!r) { linhaVazia(corpo, 6, dados ? 'Sem a classificação (falta o SQL da etapa 6): o resultado não pôde ser calculado.' : '—'); return; }
+      if (!r.por_conta.length) { linhaVazia(corpo, 6, 'Nenhum lançamento no mês.'); return; }
+      const trs = r.por_conta.map(g => {
+        const tr = criar('tr');
+        const nome = celula(g.conta, 'px-4 py-3');
+        if (!g.conta_id) nome.style.color = 'var(--color-primary-light)';
+        tr.append(nome, celula(g.tipo_rotulo || '—', 'px-4 py-3'), celula(String(g.quantidade), 'px-4 py-3'),
+          celulaValor(g.entradas), celulaValor(g.saidas), corDoValor(celula(formatarMoeda(g.resultado), 'px-4 py-3 ctb-num'), g.resultado));
+        return tr;
+      });
+      const pe = criar('tr', 'ctb-linha-total');
+      pe.append(celula('Resultado do mês', 'px-4 py-2'), celula('receitas − deduções − custos − despesas', 'px-4 py-2'), criar('td'), criar('td'), criar('td'),
+        corDoValor(celula(formatarMoeda(r.resultado), 'px-4 py-2 ctb-num'), r.resultado));
+      corpo.replaceChildren(...trs, pe);
+    }
+
+    function pintarConciliacao() {
+      const alvo = el('ctbRelConciliacao');
+      const lista = dados?.conciliacao;
+      if (!lista) {
+        alvo.replaceChildren(criar('p', 'text-sm text-gray-300', dados ? 'Sem a conciliação (falta o SQL da etapa 5 ou do extrato).' : ''));
+        return;
+      }
+      if (!lista.length) { alvo.replaceChildren(criar('p', 'text-sm text-gray-300', 'Nenhuma conta do banco.')); return; }
+      alvo.replaceChildren(...lista.map(x => {
+        const bloco = criar('div', 'ctb-secao-modal');
+        const cabeca = criar('div', 'ctb-secao-modal__cabeca');
+        const t = x.totais;
+        cabeca.append(criar('h3', 'ctl-secao text-[var(--color-primary)]', x.conta),
+          criar('span', 'text-sm text-gray-300', `${t.conciliados} conciliados · ${t.ignorados} ignorados · ${t.a_conciliar.quantidade} a conciliar (${formatarMoeda(t.a_conciliar.total)})${x.cobertura?.completa === false ? ' · o extrato não cobre o mês inteiro' : ''}`));
+        bloco.appendChild(cabeca);
+        const itens = [
+          ...x.a_conciliar.map(i => ({ ...i, rotulo: 'A conciliar', tom: 'badge-warning', texto: i.sugestao ? 'tem sugestão' : '' })),
+          ...x.ignorados.map(i => ({ ...i, rotulo: 'Ignorado', tom: 'badge-neutral', texto: i.observacao || '' })),
+          ...x.com_diferenca.map(i => ({ ...i, rotulo: 'Com diferença', tom: 'badge-info', texto: `diferença ${formatarMoeda(i.diferenca)}${i.observacao ? ` — ${i.observacao}` : ''}` })),
+          ...x.sem_lancamento.map(i => ({ ...i, id: null, descricao: i.rotulo, rotulo: 'Sem lançamento no extrato', tom: 'badge-danger', texto: [i.tipo, i.nome, i.forma].filter(Boolean).join(' · ') }))
+        ];
+        if (!itens.length) {
+          bloco.appendChild(criar('p', 'text-sm text-gray-300', 'Tudo conciliado.'));
+          return bloco;
+        }
+        const quadro = criar('div', 'ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10');
+        const tabela = criar('table', 'w-full text-sm');
+        const cab = criar('tr');
+        for (const [texto, classe] of [['Situação', ''], ['Data', ''], ['Valor', ' ctb-num'], ['Descrição', ''], ['Observação', '']]) cab.appendChild(criar('th', `px-4 py-3 text-left text-xs${classe}`, texto));
+        const thead = criar('thead');
+        thead.appendChild(cab);
+        const tbody = criar('tbody');
+        for (const i of itens) {
+          const tr = criar('tr');
+          if (i.id) {
+            tr.dataset.ctbLinha = '1';
+            tr.title = 'Ver o dossiê do lançamento';
+            tr.addEventListener('click', () => abrirOutro('dossie', { tipo: 'movimento', id: i.id }));
+          }
+          tr.append(celula(tag(i.rotulo, i.tom), 'px-4 py-3'), celula(formatarData(i.data), 'px-4 py-3 ctb-nowrap'),
+            corDoValor(celula(formatarMoeda(i.valor), 'px-4 py-3 ctb-num'), i.valor), celula(i.descricao, 'px-4 py-3'), celula(i.texto, 'px-4 py-3'));
+          tbody.appendChild(tr);
+        }
+        tabela.append(thead, tbody);
+        quadro.appendChild(tabela);
+        bloco.appendChild(quadro);
+        return bloco;
+      }));
+    }
+
+    function pintarPendencias() {
+      const corpo = el('ctbRelPendencias');
+      const p = dados?.pendencias;
+      el('ctbRelPendNota').textContent = !p ? '' : (p.origem === 'fechamento'
+        ? 'O que sobrou (ou foi ignorado com justificativa) quando a competência fechou.'
+        : 'As pendências de hoje (a competência não está fechada).');
+      if (!p?.lista?.length) { linhaVazia(corpo, 3, p ? 'Nenhuma pendência.' : '—'); return; }
+      corpo.replaceChildren(...p.lista.map(x => {
+        const tr = criar('tr');
+        tr.append(celula(tag(x.nivel_rotulo, TOM_NIVEL[x.nivel] || 'badge-neutral'), 'px-4 py-3'), celula(x.titulo, 'px-4 py-3', x.descricao),
+          celula(x.ignorada ? `Ignorada${x.justificativa ? `: ${x.justificativa}` : ''}` : 'Em aberto', 'px-4 py-3'));
+        return tr;
+      }));
+    }
+
+    function pintarDocumentos() {
+      const corpo = el('ctbRelDocumentos');
+      const docs = dados?.documentos;
+      if (!docs?.itens?.length) { linhaVazia(corpo, 5, docs ? 'Nenhum documento na competência.' : (dados ? 'Sem os documentos (falta o SQL das etapas 2 e 3).' : '—')); return; }
+      corpo.replaceChildren(...docs.itens.map(i => {
+        const tr = criar('tr');
+        tr.append(celula(i.grupo_rotulo, 'px-4 py-3'), celula(formatarData(i.data), 'px-4 py-3 ctb-nowrap'), celula(i.titulo, 'px-4 py-3', i.detalhe),
+          celulaValor(i.valor), celula(i.falta ? tag(i.falta_rotulo || 'Falta o arquivo', 'badge-danger') : [i.categoria, i.origem_rotulo].filter(Boolean).join(' · '), 'px-4 py-3'));
+        return tr;
+      }));
+    }
+
+    function pintar() {
+      const d = dados;
+      const badge = el('ctbRelSituacao');
+      if (!d) pintarEtiqueta(badge, '—', 'badge-neutral');
+      else if (d.situacao.previa) pintarEtiqueta(badge, 'Prévia', 'badge-warning');
+      else pintarEtiqueta(badge, `Fechada${d.situacao.versao ? ` · v${d.situacao.versao}` : ''}`, 'badge-success');
+      el('ctbRelNota').textContent = d?.situacao?.nota || '';
+      const avisos = [...(d?.avisos || []), ...(d?.situacao?.diferencas_lista || []).slice(0, 5).map(x => `${x.titulo}${x.descricao ? ` — ${x.descricao}` : ''}`)];
+      el('ctbRelAvisos').classList.toggle('hidden', !avisos.length);
+      el('ctbRelAvisos').replaceChildren(...avisos.map(t => itemDaLista(t, 'fa-exclamation-triangle', 'var(--color-primary-light)')));
+      pintarResumo();
+      pintarLivro();
+      pintarResultado();
+      pintarConciliacao();
+      pintarPendencias();
+      pintarDocumentos();
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbRelMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/relatorio?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        if (minha !== leitura) return;
+        dados = r;
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbRelMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+      pintar();
+    }
+
+    acionar(el('ctbRelPdf'), async () => {
+      try {
+        if (!window.electronAPI?.salvarHtmlComoPdf) throw new Error('O PDF só é gerado dentro do aplicativo.');
+        const r = await fetchApi(`/api/contabilidade/relatorio/documento?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        const s = await window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o relatório mensal em PDF' });
+        if (s?.canceled) return;
+        if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar o PDF.');
+        window.showToast?.(r.previa ? 'Prévia do relatório salva em PDF.' : `Relatório (versão ${r.versao}) salvo em PDF.`, 'success');
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Salvar o relatório pede a permissão "Gerar relatório e pacote".'), 'error');
+      }
+    });
+    acionar(el('ctbRelPlanilha'), async () => {
+      try {
+        if (!window.electronAPI?.salvarArquivoBinario) throw new Error('A planilha só é salva dentro do aplicativo.');
+        const r = await fetchApi(`/api/contabilidade/relatorio/planilha?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        const s = await window.electronAPI.salvarArquivoBinario({ base64: r.base64, nomeSugerido: r.nome, titulo: 'Salvar a planilha do relatório mensal' });
+        if (s?.canceled) return;
+        if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar a planilha.');
+        window.showToast?.(r.previa ? 'Prévia do relatório salva em planilha.' : `Relatório (versão ${r.versao}) salvo em planilha.`, 'success');
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Salvar o relatório pede a permissão "Gerar relatório e pacote".'), 'error');
+      }
+    });
+    compCampo.addEventListener('change', carregar);
+    el('ctbRelConta').addEventListener('change', pintarLivro);
+    el('ctbRelBusca').addEventListener('input', pintarLivro);
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
+  const TOM_DOSSIE = { movimento: 'badge-info', titulo: 'badge-warning', documento: 'badge-neutral' };
+  const ICONE_LIGACAO = { movimento: 'fa-university', titulo: 'fa-file-invoice-dollar', documento: 'fa-file-alt' };
+
+  function montarDossie() {
+    const pilha = [];
+    let atual = { tipo: contexto.tipo || 'movimento', id: contexto.id ?? null };
+    let leitura = 0;
+
+    function secao(s) {
+      const bloco = criar('div', 'ctb-secao-modal');
+      const cabeca = criar('div', 'ctb-secao-modal__cabeca');
+      const h = criar('h3', 'ctl-secao text-[var(--color-primary)]');
+      h.append(icone(`${s.icone || 'fa-circle'} mr-2`), document.createTextNode(s.titulo));
+      cabeca.appendChild(h);
+      bloco.appendChild(cabeca);
+      if (s.linhas?.length) {
+        const dl = criar('dl', 'ctb-dados glass-surface rounded-xl border border-white/10');
+        preencherDados(dl, s.linhas);
+        bloco.appendChild(dl);
+      }
+      if (s.ligacoes?.length) {
+        const ul = criar('ul', 'ctb-arquivos');
+        for (const l of s.ligacoes) {
+          const li = criar('li', 'ctb-arquivo');
+          const texto = criar('div', 'ctb-arquivo__texto');
+          texto.append(criar('span', 'ctb-arquivo__nome', l.rotulo), criar('span', 'ctb-arquivo__nota', l.detalhe || ''));
+          li.append(icone(ICONE_LIGACAO[l.tipo] || 'fa-link'), texto);
+          if (l.tipo && l.id !== null && l.id !== undefined) {
+            const acoes = criar('div', 'ctb-arquivo__acoes');
+            acoes.appendChild(botaoPequeno('Ver dossiê', 'btn-secondary', () => ir({ tipo: l.tipo, id: l.id })));
+            li.appendChild(acoes);
+          }
+          ul.appendChild(li);
+        }
+        bloco.appendChild(ul);
+      }
+      if (s.vazio) bloco.appendChild(criar('p', 'text-sm text-gray-400', s.vazio));
+      return bloco;
+    }
+
+    function pintar(d) {
+      pintarEtiqueta(el('ctbDossieTipo'), d?.tipo_rotulo || '—', TOM_DOSSIE[d?.tipo] || 'badge-neutral');
+      el('ctbDossieNome').textContent = d?.titulo || '';
+      el('ctbDossieSub').textContent = [d?.subtitulo, d?.competencia ? `competência ${rotuloCompetencia(d.competencia)}` : null].filter(Boolean).join(' · ');
+      el('ctbDossieSecoes').replaceChildren(...(d?.secoes || []).map(secao));
+      arquivosEm(el('ctbDossieArquivos'), d?.arquivos || [], { aoMudar: carregar });
+      historicoEm(el('ctbDossieHistorico'), d?.historico || []);
+      el('ctbDossieAnterior').classList.toggle('hidden', !pilha.length);
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbDossieMensagem', '');
+      try {
+        const d = await fetchApi(`/api/contabilidade/dossie?tipo=${encodeURIComponent(atual.tipo)}&id=${encodeURIComponent(atual.id ?? '')}`);
+        if (minha !== leitura) return;
+        pintar(d);
+      } catch (e) {
+        if (minha !== leitura) return;
+        pintar(null);
+        mostrarMensagem('ctbDossieMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    /** Abre o dossiê de um item ligado aqui mesmo; "← Anterior" volta. */
+    function ir(alvo) {
+      pilha.push(atual);
+      atual = alvo;
+      const rolagem = overlay.querySelector('.modal-scroll');
+      if (rolagem) rolagem.scrollTop = 0;
+      return carregar();
+    }
+
+    el('ctbDossieAnterior').addEventListener('click', () => {
+      if (!pilha.length) return;
+      atual = pilha.pop();
+      carregar();
+    });
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -3395,7 +3773,9 @@
     ctbClassificacao: montarClassificacao,
     ctbPlanoContas: montarPlanoContas,
     ctbRegras: montarRegras,
-    ctbFechamentos: montarFechamentos
+    ctbFechamentos: montarFechamentos,
+    ctbRelatorio: montarRelatorio,
+    ctbDossie: montarDossie
   };
 
   let montagem;

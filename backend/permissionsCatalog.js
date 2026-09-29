@@ -2522,7 +2522,7 @@ const PERMISSIONS_CATALOG = {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",
-        "desc": "Relatório mensal e ZIP para a contabilidade (etapas seguintes)"
+        "desc": "Salvar o relatório mensal em PDF e planilha e gerar o ZIP para a contabilidade (o ZIP chega na etapa 9)"
       },
       {
         "key": "contabilidade.config.view",

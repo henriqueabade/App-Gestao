@@ -1,0 +1,54 @@
+<!--
+  Dossiê (etapa 8). Modal médio. Tudo o que está ligado a um lançamento do
+  banco, a uma conta a pagar ou a um documento recebido
+  (GET /api/contabilidade/dossie?tipo=&id=): cada parte em uma seção (no
+  banco, conciliação, classificação, a conta, as parcelas, o documento), os
+  itens ligados (que abrem o dossiê deles aqui mesmo — "← Anterior" volta),
+  os arquivos e o histórico. É só leitura: para mudar alguma coisa, use o
+  modal de cada parte. Abre por cima do Relatório mensal, da conta a pagar,
+  do documento recebido e do "Conciliar lançamento".
+  Script: src/js/modals/contabilidade-modais.js (montarDossie).
+-->
+<div id="ctbDossieOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbDossieTitulo" class="w-full max-w-4xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbDossieTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-sitemap mr-2" aria-hidden="true"></i>Dossiê</h2>
+      <span id="ctbDossieTipo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div>
+          <p id="ctbDossieNome" class="text-lg text-white font-semibold"></p>
+          <p id="ctbDossieSub" class="text-sm text-gray-300"></p>
+        </div>
+
+        <div id="ctbDossieSecoes" class="space-y-6"></div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Arquivos</h3>
+            <span class="text-xs text-gray-400">De tudo o que está ligado</span>
+          </div>
+          <ul id="ctbDossieArquivos" class="ctb-arquivos"></ul>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Histórico</h3>
+          </div>
+          <ol id="ctbDossieHistorico" class="ctb-historico"></ol>
+        </div>
+
+        <div id="ctbDossieMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbDossieAnterior" type="button" class="hidden btn-neutral ctl-botao text-white">← Anterior</button>
+    </footer>
+  </div>
+</div>
