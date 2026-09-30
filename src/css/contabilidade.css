@@ -481,6 +481,34 @@ body {
     margin-bottom: var(--ctb-espaco);
 }
 
+/* Altura fixa com rolagem dentro do cartão (pedido do dono, 29/09/2026). A
+   barra é a da casa (scroll.css, seção 3d): aqui só se diz QUE rola. Quando
+   a lista chega no fim, a roda passa a rolar a tela. */
+.ctb-rolagem {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Pendências: o cartão tem a altura do das Ações (a linha da grade estica
+   os dois); com a tela estreita, os dois empilham e ela fica em 24rem. */
+.ctb-painel--pendencias .ctb-pendencias {
+    min-height: 24rem;
+    /* As linhas avançam 0,75rem sobre o recuo do cartão (o realce do hover
+       vai de borda a borda); a lista abre esse espaço para não cortá-las. */
+    margin: 0 -0.75rem;
+    padding: 0 0.75rem;
+}
+
+/* Atividade e mensagens: a mesma altura, fixa. */
+.ctb-painel--fixo { height: 34rem; }
+
+/* A lista rola até ela: um respiro acima, para o título não colar no topo. */
+#ctbPendenciasPainel { scroll-margin-top: 1rem; }
+
+/* A pendência citada numa mensagem pisca ao chegar. */
+.ctb-pendencia.is-destaque { box-shadow: 0 0 0 2px var(--color-primary); background: var(--ctb-hover); }
+
 /* ---------------------------------------------------------- checklist */
 
 .ctb-fontes {
@@ -785,19 +813,10 @@ body {
     list-style: none;
     margin: 0;
     padding: 0 0 0 0.25rem;
-    position: relative;
 }
 
-.ctb-atividade::before {
-    content: "";
-    position: absolute;
-    left: 0.55rem;
-    top: 0.6rem;
-    bottom: 0.6rem;
-    width: 1px;
-    background: var(--ctb-borda);
-}
-
+/* O traço que liga as bolinhas vai em cada item (e não na lista): a lista
+   rola, e um traço da lista inteira ficaria do tamanho da parte visível. */
 .ctb-evento {
     position: relative;
     display: grid;
@@ -806,9 +825,24 @@ body {
     padding: 0.35rem 0 0.9rem 1.5rem;
 }
 
+.ctb-evento::after {
+    content: "";
+    position: absolute;
+    left: calc(0.575rem - 0.5px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--ctb-borda);
+}
+
+.ctb-evento:first-child::after { top: 0.9rem; }
+.ctb-evento:last-child::after { bottom: auto; height: 0.9rem; }
+.ctb-evento:only-child::after { display: none; }
+
 .ctb-evento::before {
     content: "";
     position: absolute;
+    z-index: 1;
     left: 0.3rem;
     top: 0.65rem;
     width: 0.55rem;
@@ -829,43 +863,117 @@ body {
 .ctb-evento__titulo { display: block; font-size: 0.9rem; color: var(--ctb-texto-1); }
 .ctb-evento__detalhe { display: block; font-size: 0.8rem; color: var(--ctb-texto-2); margin-top: 0.1rem; }
 
-/* ------------------------------------------------------------- roteiro */
+/* ------------------------------------------------------------ mensagens */
 
-.ctb-roteiro {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
+/* O social da Contabilidade no cartão (src/styles/historico-social.css dá o
+   visual; aqui só o encaixe): um respiro à direita para a barra de rolagem
+   não encostar nos cartões. */
+.ctb-mensagens { padding-right: 0.35rem; }
+.ctb-mensagens .hs { gap: 0.85rem; }
+
+/* ------------------------------------ linha do tempo do modal de atividade
+   A mesma do Financeiro (financeiro.css, .fin-linha-tempo): só uma folha de
+   módulo fica carregada por vez, então o desenho mora aqui também. Um dia
+   por cabeçalho; em cada movimento, a foto (ou as iniciais) de quem fez, o
+   nome, a hora, a etiqueta do tipo e o que aconteceu. */
+.ctb-linha-tempo { list-style: none; margin: 0; padding: 0; position: relative; }
+
+.ctb-linha-tempo__dia {
+    margin: 1.5rem 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-primary-light, #d4c169);
 }
 
-.ctb-roteiro__item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    font-size: 0.85rem;
+.ctb-linha-tempo__dia:first-child { margin-top: 0; }
+
+.ctb-linha-tempo__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0 0 1.25rem;
 }
 
-.ctb-roteiro__item strong { display: block; color: var(--ctb-texto-1); font-weight: 600; }
-.ctb-roteiro__item span:last-child { display: block; color: var(--ctb-texto-2); font-size: 0.8rem; }
+/* O traço que liga um avatar ao próximo. */
+.ctb-linha-tempo__item::before {
+    content: '';
+    position: absolute;
+    left: calc(1.375rem - 1px);
+    top: 2.9rem;
+    bottom: 0.15rem;
+    width: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
 
-.ctb-roteiro__numero {
-    flex-shrink: 0;
-    min-width: 2rem;
-    height: 1.6rem;
-    padding: 0 0.5rem;
-    border-radius: 9999px;
+.ctb-linha-tempo__item:last-child::before,
+.ctb-linha-tempo__item:has(+ .ctb-linha-tempo__dia)::before { display: none; }
+
+.ctb-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.72rem;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0.85rem;
     font-weight: 700;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--ctb-texto-2);
+    color: #1a0009;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-.ctb-roteiro__item[data-feita="1"] .ctb-roteiro__numero { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
+.ctb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.ctb-avatar--sistema {
+    color: var(--color-primary-light, #d4c169);
+    background: rgba(182, 160, 62, 0.14);
+    border-color: rgba(182, 160, 62, 0.4);
+    font-size: 1rem;
+}
+
+.ctb-linha-tempo__corpo {
+    min-width: 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.ctb-linha-tempo__topo {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.ctb-linha-tempo__quem { font-size: 0.9rem; color: var(--menu-text-strong, #fff); }
+.ctb-linha-tempo__hora { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-linha-tempo__competencia { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+
+.ctb-linha-tempo__tag {
+    margin-left: auto;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ctb-linha-tempo__texto { margin: 0; font-size: 0.85rem; line-height: 1.45; color: #e5e7eb; overflow-wrap: anywhere; }
+
+/* Os filtros do modal de atividade: a busca ocupa duas partes. */
+.ctb-filtros-atividade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 768px) {
+    .ctb-filtros-atividade { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+}
 
 /* --------------------------------------------------------------- vazio */
 

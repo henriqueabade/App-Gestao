@@ -133,7 +133,10 @@ const COLUNAS = {
   historico_curtidas: ['id', 'origem', 'registro_id', 'item_id', 'comentario_id', 'usuario_id', 'criado_em'],
   historico_anexos: ['id', 'origem', 'registro_id', 'item_id', 'comentario_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'partes', 'completo', 'usuario_id', 'criado_em', 'excluido_em', 'excluido_por'],
   historico_anexo_partes: ['id', 'anexo_id', 'ordem', 'dados'],
-  notificacoes: ['id', 'usuario_id', 'tipo', 'titulo', 'mensagem', 'origem', 'registro_id', 'item_id', 'comentario_id', 'autor_id', 'lida_em', 'criado_em']
+  notificacoes: ['id', 'usuario_id', 'tipo', 'titulo', 'mensagem', 'origem', 'registro_id', 'item_id', 'comentario_id', 'autor_id', 'lida_em', 'criado_em'],
+  // As mensagens da Contabilidade (29/09/2026): o mural fixo e a permissão de ver o módulo.
+  perm_contabilidade: ['id', 'modelo_id', 'modulo_ativo', 'acao_view'],
+  contabil_mural_historico: ['id', 'mural_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em', 'excluido_em', 'excluido_por', 'motivo_exclusao']
 };
 const SOCIAIS = ['historico_comentarios', 'historico_comentario_versoes', 'historico_curtidas', 'historico_anexos', 'historico_anexo_partes', 'notificacoes'];
 
@@ -483,6 +486,77 @@ test('sino: cada um lê e marca só os próprios avisos', async () => {
     assert.strictEqual((await chamar(ctx.porta, '/api/notificacoes', { usuario: 2 })).json.nao_lidas, 1);
     assert.strictEqual((await chamar(ctx.porta, '/api/notificacoes/lidas', { usuario: 2, corpo: { todas: true } })).json.marcadas, 1);
     assert.strictEqual((await chamar(ctx.porta, '/api/notificacoes', { usuario: 2 })).json.nao_lidas, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test("textoSimples: o objeto citado com ' vira o rótulo entre aspas (aviso do sino)", () => {
+  assert.strictEqual(social.textoSimples("Veja '[NF-e 1/123 · Madeira](o:documento:7) com @[Ana](u:2)"), 'Veja “NF-e 1/123 · Madeira” com @Ana');
+  assert.strictEqual(social.textoSimples("'[Crítico: X (08/2026)](o:pendencia:2026-08:pagar_vencidas)"), '“Crítico: X (08/2026)”');
+  assert.deepStrictEqual(social.mencionadosNoTexto("'[Doc](o:documento:7) @[Ana](u:2)"), [2]);
+});
+
+/** A Ana e o João veem a Contabilidade (modelo 9); o Beto não. */
+function baseContabilidade({ semMural = false } = {}) {
+  const dados = baseDados();
+  dados.perm_contabilidade = [{ id: 1, modelo_id: 9, modulo_ativo: true, acao_view: true }];
+  if (!semMural) dados.contabil_mural_historico = [];
+  return dados;
+}
+
+test('mensagens da Contabilidade: mural fixo, publicar com @ e \', comentar avisa o autor, permissão do módulo', async () => {
+  const ctx = await montar(baseContabilidade());
+  try {
+    const texto = "@[João](u:3) veja '[NF-e 1/123 · Madeira](o:documento:7) antes de fechar";
+    const pub = await chamar(ctx.porta, '/api/historico-social/contabilidade/1/observacoes', { usuario: 2, corpo: { texto } });
+    assert.strictEqual(pub.status, 201);
+    const linha = ctx.tabelas.contabil_mural_historico[0];
+    assert.strictEqual(linha.mural_id, 1);
+    assert.strictEqual(linha.entidade, 'Mensagem');
+    assert.strictEqual(linha.observacao, texto, 'as marcas ficam gravadas como vieram');
+    // O João foi mencionado: aviso "mencao" com a origem e o mural (o sino abre as mensagens).
+    const aviso = avisosDe(ctx, 3)[0];
+    assert.strictEqual(aviso.tipo, 'mencao');
+    assert.strictEqual(aviso.origem, 'contabilidade');
+    assert.strictEqual(aviso.registro_id, 1);
+    assert.match(aviso.mensagem, /Ana mencionou você em Mensagens da Contabilidade: “@João veja “NF-e 1\/123 · Madeira” antes de fechar”/);
+    assert.strictEqual(avisosDe(ctx, 2).length, 0, 'quem publicou não se avisa');
+    assert.strictEqual(avisosDe(ctx, 1).length, 0, 'mural sem dono: ninguém mais é avisado de uma mensagem nova');
+
+    // O João comenta: a Ana (autora da mensagem) recebe.
+    const com = await chamar(ctx.porta, `/api/historico-social/contabilidade/1/itens/${linha.id}/comentarios`, { usuario: 3, corpo: { texto: 'Vou ver' } });
+    assert.strictEqual(com.status, 201);
+    assert.strictEqual(ctx.tabelas.historico_comentarios[0].origem, 'contabilidade');
+    assert.strictEqual(avisosDe(ctx, 2)[0].tipo, 'comentario');
+
+    // A linha do tempo: o que foi publicado, com o comentário.
+    const lida = await chamar(ctx.porta, '/api/historico-social/contabilidade/1', { usuario: 3 });
+    assert.strictEqual(lida.status, 200);
+    assert.strictEqual(lida.json.sql_pendente, false);
+    assert.strictEqual(lida.json.itens.length, 1);
+    assert.strictEqual(lida.json.comentarios.length, 1);
+
+    // Quem não vê a Contabilidade não lê nem escreve; outro mural não existe.
+    assert.strictEqual((await chamar(ctx.porta, '/api/historico-social/contabilidade/1', { usuario: 4 })).status, 403);
+    assert.strictEqual((await chamar(ctx.porta, '/api/historico-social/contabilidade/1/observacoes', { usuario: 4, corpo: { texto: 'oi' } })).status, 403);
+    const outro = await chamar(ctx.porta, '/api/historico-social/contabilidade/2', { usuario: 2 });
+    assert.strictEqual(outro.status, 404);
+    assert.strictEqual(outro.json.error, 'Mural não encontrado.');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('mensagens da Contabilidade antes do SQL: a tela avisa e publicar pede o sql/contabilidade_mensagens.sql', async () => {
+  const ctx = await montar(baseContabilidade({ semMural: true }));
+  try {
+    const lida = await chamar(ctx.porta, '/api/historico-social/contabilidade/1', { usuario: 2 });
+    assert.strictEqual(lida.status, 200);
+    assert.strictEqual(lida.json.sql_pendente, true);
+    const pub = await chamar(ctx.porta, '/api/historico-social/contabilidade/1/observacoes', { usuario: 2, corpo: { texto: 'oi' } });
+    assert.strictEqual(pub.status, 409);
+    assert.match(pub.json.error, /sql\/contabilidade_mensagens\.sql/);
   } finally {
     await ctx.encerrar();
   }

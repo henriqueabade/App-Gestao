@@ -1,0 +1,36 @@
+<!--
+  Mensagens e comentários — o social da Contabilidade em tamanho grande
+  (o cartão da tela mostra o mesmo, numa altura fixa). Publicar, curtir,
+  comentar, responder sem limite e anexar, como nas fichas de Clientes e
+  Contatos; "@" menciona um usuário (ele recebe o aviso no sino) e "'" cita
+  um objeto do módulo — competência, pendência, documento recebido, conta a
+  pagar, lançamento do extrato, arquivo, fechamento, pacote, conta do plano,
+  conta do banco, fornecedor —, que abre ao clicar (por cima deste modal).
+  O aviso do sino abre aqui, já no comentário.
+  Dados: /api/historico-social/contabilidade/1 e GET /api/contabilidade/citaveis.
+  Script: src/js/modals/contabilidade-modais.js (montarMensagens), que usa
+  src/js/utils/historico-social.js.
+-->
+<div id="ctbMensagensOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbMensagensTitulo" class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbMensagensTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-comments mr-2" aria-hidden="true"></i>Mensagens e comentários</h2>
+        <p class="text-xs text-gray-300 truncate">@ menciona alguém · ' cita um item da Contabilidade</p>
+      </div>
+      <span class="badge-success px-3 py-1 rounded-full text-xs font-medium justify-self-end">Contabilidade</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6">
+        <div id="ctbMensagensLinha" data-historico-social></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+    </footer>
+  </div>
+</div>

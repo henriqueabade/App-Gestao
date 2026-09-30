@@ -14,7 +14,8 @@
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao } = require('./permissionsController');
+const { exigirPermissao, obterPermissoesEfetivas } = require('./permissionsController');
+const permissoesRepo = require('./permissionsRepository');
 const { usuarioDaRequisicao } = require('./usuarioAtual');
 const historico = require('./contatoHistorico');
 const csv = require('./importacaoCsv');
@@ -471,6 +472,52 @@ router.delete('/:id/interacoes/:atividadeId', exigirPermissao('ctt.interaction.a
   }
 });
 
+// ---------------------------------------------------------------------------
+// O "'" da linha do tempo do contato (29/09/2026): cita o que é LIGADO a ele —
+// as pessoas, as atividades e, para quem vê a Contabilidade, os documentos
+// recebidos, as contas a pagar e os arquivos deles (a tela abre cada um).
+// ---------------------------------------------------------------------------
+const semAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Pessoas e atividades do contato → os objetos que batem com a busca (puro; até 6 de cada). */
+function citaveisDoContato({ busca = '', pessoas = [], interacoes = [], contatoId }) {
+  const termo = semAcento(busca).replace(/\s+/g, ' ').trim();
+  const bate = t => !termo || termo.split(' ').every(p => semAcento(t).includes(p));
+  const doContato = x => x && String(x.contato_id) === String(contatoId);
+  const itens = [];
+  const pessoasDoContato = lista(pessoas).filter(doContato).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+  for (const p of pessoasDoContato.filter(p => bate(`${p.nome} ${p.cargo || ''} ${p.email || ''}`)).slice(0, 6)) {
+    itens.push({ tipo: 'pessoa', id: String(p.id), rotulo: `Pessoa: ${texto(p.nome)}${p.cargo ? ` (${texto(p.cargo)})` : ''}`.slice(0, 110), detalhe: texto(p.email || p.telefone_celular || p.telefone_fixo || '') });
+  }
+  const atividades = lista(interacoes).filter(doContato).sort((a, b) => String(b.data).localeCompare(String(a.data)) || Number(b.id) - Number(a.id));
+  for (const a of atividades.filter(a => bate(`${a.tipo} ${a.resumo} ${a.detalhe || ''}`)).slice(0, 6)) {
+    const quando = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(a.data || ''));
+    itens.push({ tipo: 'interacao', id: String(a.id), rotulo: `Atividade: ${texto(a.tipo)} · ${texto(a.resumo)}`.slice(0, 110), detalhe: quando ? `${quando[3]}/${quando[2]}/${quando[1]}` : '' });
+  }
+  return itens;
+}
+
+router.get('/:id/citaveis', exigirPermissao('ctt.details.view'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const busca = String(req.query?.busca || '').slice(0, 80);
+    const [pessoas, interacoes, permissoes] = await Promise.all([
+      api.get('/api/contato_pessoas', { query: { contato_id: id } }).catch(() => []),
+      api.get('/api/contato_interacoes', { query: { contato_id: id } }).catch(() => []),
+      obterPermissoesEfetivas(req).catch(() => null)
+    ]);
+    // Documentos e contas só para quem vê a Contabilidade (é lá que eles abrem).
+    const veContabilidade = Boolean(permissoes && permissoesRepo.can(permissoes, 'contabilidade.view'));
+    const daContabilidade = veContabilidade
+      ? (await require('./contabilidade/citaveis').carregar({ api, busca, contatoId: id }).catch(() => ({ itens: [] }))).itens
+      : [];
+    res.json({ itens: [...citaveisDoContato({ busca, pessoas, interacoes, contatoId: id }), ...daContabilidade] });
+  } catch (err) {
+    responder(res, err, 'GET /api/contatos/:id/citaveis');
+  }
+});
+
 // ------------------------------------------------------------------ ficha
 
 router.get('/:id', exigirPermissao('ctt.details.view'), async (req, res) => {
@@ -586,4 +633,5 @@ module.exports.mapBasico = mapBasico;
 module.exports.mapCompleto = mapCompleto;
 module.exports.criarContato = criarContato;
 module.exports.importarContatos = importarContatos;
+module.exports.citaveisDoContato = citaveisDoContato;
 module.exports.SQL_FALTANDO = SQL_FALTANDO;

@@ -4,6 +4,7 @@
  *   GET  /painel?competencia=              checklist por fonte, pendências (3 severidades), situação e bloqueios
  *   GET  /atividade?competencia=&limite=   o histórico do módulo, com quem fez
  *   GET  /competencias                     as competências já fechadas/reabertas
+ *   GET  /citaveis?busca=&competencia=     o que o "'" das mensagens cita (competência, documento, conta, lançamento, arquivo…)
  *   POST /fechar                           { competencia }                        (contabilidade.fechar)
  *   GET  /fechar/previa?competencia=       o que o fechamento vai congelar (etapa 7; não grava)
  *   GET  /fechamentos?competencia=         as versões do fechamento, o que mudou entre elas e desde a última
@@ -104,6 +105,7 @@ const relatorioDocumento = require('./contabilidade/relatorio/documento');
 const relatorioPlanilha = require('./contabilidade/relatorio/planilha');
 const dossie = require('./contabilidade/relatorio/dossie');
 const pacote = require('./contabilidade/pacote/pacote');
+const citaveis = require('./contabilidade/citaveis');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -178,6 +180,10 @@ router.get('/atividade', exigirPermissao(VER), rota('GET /api/contabilidade/ativ
 
 router.get('/competencias', exigirPermissao(VER), rota('GET /api/contabilidade/competencias', ({ api }) =>
   fechamento.listarCompetencias({ api }).then(competencias => ({ competencias }))));
+
+// O que o "'" das mensagens cita (competência, documento, conta, lançamento, arquivo…); as pendências vêm da tela.
+router.get('/citaveis', exigirPermissao(VER), rota('GET /api/contabilidade/citaveis', ({ api, req, hoje }) =>
+  citaveis.carregar({ api, busca: String(req.query?.busca || '').slice(0, 80), competencia: req.query?.competencia || null, hoje })));
 
 router.post('/fechar', exigirPermissao(FECHAR), rota('POST /api/contabilidade/fechar', ({ api, req, hoje, desde, usuarioId }) =>
   fechamento.fechar({ api, competencia: req.body?.competencia, hoje, desde, usuarioId })));

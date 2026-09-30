@@ -23,19 +23,21 @@
     que o sistema já controla: NF-e de saída, recebimentos, comissões e
     produção, devoluções, documentos recebidos e contas a pagar (etapas 2 e
     3), o extrato bancário (etapa 4), a conciliação (etapa 5) e a
-    classificação (etapa 6) — a lista de pendências e a atividade do módulo.
+    classificação (etapa 6) — a lista de pendências, a atividade do módulo e
+    as mensagens (o social da Contabilidade, com "@" e "'").
     Contas a pagar, documentos recebidos, os documentos da competência, o
     extrato, a conciliação, a classificação, o histórico dos fechamentos, o
     relatório mensal (etapa 8) e o pacote (etapa 9) abrem os modais deles. Cada
     botão/cartão traz `data-ctb-acao`: quem ainda não tem função real abre o
-    aviso "em implementação".
+    aviso "em implementação". Os cartões de erros críticos, documentais e
+    avisos filtram a lista E rolam a tela até ela.
   -->
   <div class="modulo-container ctl-padrao contabilidade-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
     <div class="module-header ctb-cabecalho mb-8 animate-fade-in-up">
       <div>
         <h1 class="text-2xl font-semibold mb-2 module-header__title">Contabilidade</h1>
-        <p class="module-header__description">Feche o mês e prepare o que vai para a contabilidade</p>
+        <p class="module-header__description">Feche a contabilidade completa</p>
       </div>
       <div class="ctb-cabecalho__controles">
         <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
@@ -141,16 +143,15 @@
     </div>
     <div class="ctb-fontes animate-fade-in-up" data-ctb-lista="fontes"></div>
 
-    <!-- Terceira faixa: pendências (70%) e ações (30%) -->
+    <!-- Terceira faixa: pendências (70%) e ações (30%). O cartão das
+         pendências tem a altura do das ações: a lista rola dentro dele. -->
     <div class="ctb-operacional animate-fade-in-up">
-      <section class="ctb-painel glass-surface rounded-xl">
+      <section id="ctbPendenciasPainel" class="ctb-painel ctb-painel--pendencias glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
           <div class="ctb-painel__titulo">
             <h2>Pendências</h2>
             <span class="ctb-badge ctb-badge--contagem" data-ctb="pendencias.total">0</span>
           </div>
-          <!-- A lista mostra as primeiras; "Ver todas" abre o resto no lugar. -->
-          <button type="button" class="ctb-link" data-ctb-acao="pendencias-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
         <!-- Filtro por severidade (etiquetas, fora do padrão de botão de propósito) e por fonte (quando um cartão é clicado). -->
         <div class="ctb-filtros" role="group" aria-label="Filtrar pendências">
@@ -164,7 +165,8 @@
             <button type="button" class="ctb-chip__fechar" data-ctb-acao="filtrar-fonte" data-ctb-fonte="" title="Tirar o filtro da fonte" aria-label="Tirar o filtro da fonte"><i class="fas fa-times" aria-hidden="true"></i></button>
           </span>
         </div>
-        <ul class="ctb-pendencias" data-ctb-lista="pendencias"></ul>
+        <!-- "Todas" mostra todas: a lista não corta, rola (barra da casa). -->
+        <ul class="ctb-pendencias ctb-rolagem" data-ctb-lista="pendencias" tabindex="0" aria-label="Lista de pendências"></ul>
       </section>
 
       <section class="ctb-painel glass-surface rounded-xl">
@@ -223,33 +225,29 @@
       </section>
     </div>
 
-    <!-- Quarta faixa: atividade do módulo e o que vem a seguir -->
+    <!-- Quarta faixa: a atividade do módulo e as mensagens (o social da
+         Contabilidade), os dois com a mesma altura fixa; "Ver todas" e
+         "Ver tudo" abrem cada um no modal grande. -->
     <div class="ctb-resumos animate-fade-in-up">
-      <section class="ctb-painel glass-surface rounded-xl">
+      <section class="ctb-painel ctb-painel--fixo glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
           <div class="ctb-painel__titulo"><h2>Atividade recente</h2></div>
           <button type="button" class="ctb-link" data-ctb-acao="atividade-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
-        <ol class="ctb-atividade" data-ctb-lista="atividade"></ol>
+        <ol class="ctb-atividade ctb-rolagem" data-ctb-lista="atividade" tabindex="0" aria-label="Atividade recente"></ol>
       </section>
 
-      <!-- O plano do módulo (docs/contabilidade-fechamento-plano.md, seção N), para se ver o que ainda vem. -->
-      <section class="ctb-painel glass-surface rounded-xl">
+      <!-- Mensagens e comentários: publicar, curtir, comentar, responder e
+           anexar, como nas fichas; "@" menciona um usuário (ele recebe o
+           aviso) e "'" cita um objeto do módulo (competência, pendência,
+           documento, conta, lançamento, arquivo, pacote…), que abre ao clicar.
+           Componente: src/js/utils/historico-social.js (origem 'contabilidade'). -->
+      <section class="ctb-painel ctb-painel--fixo glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
-          <div class="ctb-painel__titulo"><h2>Próximas etapas</h2></div>
+          <div class="ctb-painel__titulo"><h2>Mensagens e comentários</h2></div>
+          <button type="button" class="ctb-link" data-ctb-acao="mensagens">Ver tudo <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
-        <ol class="ctb-roteiro">
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">1</span><div><strong>Base do módulo</strong><span>Menu, permissões, checklist com o que já existe, pendências e fechamento</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada (XML ou chave), NFS-e, recibos e guias; contas, parcelas e pagamentos</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">4</span><div><strong>Extrato por OFX</strong><span>Contas, importação e a tela de movimentações</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">7</span><div><strong>Fechamento completo</strong><span>A foto do mês congelada em versões; diferenças depois do fechamento</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">8</span><div><strong>Relatório mensal e dossiê</strong><span>Livro-caixa, resultado e conciliação em tela, PDF e planilha; tudo o que está ligado a cada lançamento</span></div></li>
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">9</span><div><strong>Pacote</strong><span>O ZIP com os originais e o relatório, salvo pelo usuário; o registro do envio</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">10+</span><div><strong>Automáticos</strong><span>NF-e de entrada pela SEFAZ, extrato pela API do BB, CDB, NFS-e</span></div></li>
-        </ol>
+        <div class="ctb-mensagens ctb-rolagem" data-ctb-mensagens data-historico-social></div>
       </section>
     </div>
   </div>

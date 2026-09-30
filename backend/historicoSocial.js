@@ -1,5 +1,6 @@
 /**
- * Histórico "de rede social" de Prospecções e Clientes.
+ * Histórico "de rede social" de Prospecções, Clientes, Contatos e Tarefas —
+ * e as mensagens da Contabilidade (um mural fixo, sem ficha).
  *
  * O histórico de cada ficha (prospeccao_historico / cliente_historico) é a
  * linha do tempo; por cima dele:
@@ -47,6 +48,14 @@ const ORIGENS = {
   tarefa: {
     tabela: 'tarefa_historico', coluna: 'tarefa_id', tabelaRegistro: 'tarefas',
     permissao: 'tarefas.view', rotulo: 'a tarefa', pagina: 'tarefas'
+  },
+  // As mensagens da Contabilidade (sql/contabilidade_mensagens.sql): um mural
+  // só, o do módulo (id 1), sem tabela de "ficha" — o registro é fixo.
+  contabilidade: {
+    tabela: 'contabil_mural_historico', coluna: 'mural_id', tabelaRegistro: null,
+    permissao: 'contabilidade.view', rotulo: 'a Contabilidade', pagina: 'contabilidade',
+    registroFixo: { id: 1, nome: 'Mensagens da Contabilidade' },
+    sqlArquivo: 'sql/contabilidade_mensagens.sql'
   }
 };
 
@@ -77,7 +86,7 @@ function semTabela(err) {
 
 function origemValida(origem) {
   const o = ORIGENS[origem];
-  if (!o) throw erro(400, 'Origem inválida: use prospeccao ou cliente.');
+  if (!o) throw erro(400, `Origem inválida: use ${Object.keys(ORIGENS).join(', ')}.`);
   return o;
 }
 
@@ -96,12 +105,16 @@ function textoValido(bruto, { rotulo = 'O comentário' } = {}) {
  * Marcas que a tela grava no texto do comentário:
  *   @[Ana Souza](u:12)            menção a um usuário (avisa quem foi mencionado)
  *   *[15:50 Próximo passo](e:345) citação de um registro do grupo
- * Para ler (aviso do sino, trecho), viram "@Ana Souza" e "“15:50 Próximo passo”".
+ *   '[NF-e 123 · Fornecedor](o:documento:7)  citação de um objeto do módulo
+ *                                  (Contabilidade, Contatos), que abre ao clicar
+ * Para ler (aviso do sino, trecho), viram "@Ana Souza", "“15:50 Próximo
+ * passo”" e "“NF-e 123 · Fornecedor”".
  */
 const MARCA_MENCAO = /@\[([^\]\n]{1,120})\]\(u:(\d{1,10})\)/g;
 const MARCA_CITACAO = /\*\[([^\]\n]{1,200})\]\(e:(\d{1,12})\)/g;
+const MARCA_OBJETO = /'\[([^\]\n]{1,200})\]\(o:[a-z_]{1,30}:[^)\s]{1,80}\)/g;
 function textoSimples(t) {
-  return texto(t).replace(MARCA_MENCAO, '@$1').replace(MARCA_CITACAO, '“$1”');
+  return texto(t).replace(MARCA_MENCAO, '@$1').replace(MARCA_CITACAO, '“$1”').replace(MARCA_OBJETO, '“$1”');
 }
 /** Os ids mencionados num texto, sem repetir. */
 function mencionadosNoTexto(t) {
@@ -272,6 +285,11 @@ async function nomesDosUsuarios(api) {
 /** A ficha e quem a criou (cliente antigo sem `criado_por`: o primeiro "criou" do histórico, ou o dono se for usuário). */
 async function lerRegistro(api, origem, registroId, { itens = null, nomes = null } = {}) {
   const o = origemValida(origem);
+  // Mural fixo (Contabilidade): não há ficha para ler nem quem a criou.
+  if (o.registroFixo) {
+    if (!mesmoId(registroId, o.registroFixo.id)) throw erro(404, 'Mural não encontrado.');
+    return { registro: { id: o.registroFixo.id }, nome: o.registroFixo.nome, criadorId: null, interessados: [] };
+  }
   const registro = await api.get(`/api/${o.tabelaRegistro}/${registroId}`).catch(() => null);
   if (!registro || registro.error) {
     const faltando = { cliente: 'Cliente não encontrado.', contato: 'Contato não encontrado.', tarefa: 'Tarefa não encontrada.' };
@@ -378,11 +396,11 @@ async function lerComentario(api, origem, registroId, comentarioId) {
 }
 
 /** Tabela social ausente vira 409 com a instrução (e não um 500 mudo). */
-async function escreverSocial(promessa) {
+async function escreverSocial(promessa, arquivo = 'sql/historico_social.sql') {
   try {
     return await promessa;
   } catch (err) {
-    if (semTabela(err)) throw erro(409, 'O histórico social ainda não está ativado: rode sql/historico_social.sql e reinicie a API.', { sql_pendente: true });
+    if (semTabela(err)) throw erro(409, `O histórico social ainda não está ativado: rode ${arquivo} e reinicie a API.`, { sql_pendente: true });
     throw err;
   }
 }
@@ -393,9 +411,9 @@ async function publicarObservacao(api, { origem, registroId, texto: bruto, usuar
   const { nome, criadorId, interessados = [] } = await lerRegistro(api, origem, registroId, { nomes });
   const o = ORIGENS[origem];
   const criado = await escreverSocial(api.post(`/api/${o.tabela}`, {
-    [o.coluna]: Number(registroId), tipo: 'observacao', acao: 'publicou', entidade: 'Observação',
+    [o.coluna]: Number(registroId), tipo: 'observacao', acao: 'publicou', entidade: o.registroFixo ? 'Mensagem' : 'Observação',
     observacao: conteudo, usuario_id: usuarioId ?? null
-  }));
+  }), o.sqlArquivo);
   const autor = nomes?.get(Number(usuarioId)) || 'Alguém';
   const base = { origem, registro_id: Number(registroId), item_id: criado?.id ?? null, autor_id: usuarioId ?? null };
   const mencionados = destinatarios(mencionadosNoTexto(conteudo).filter(id => !nomes || nomes.has(id)), usuarioId);
@@ -493,7 +511,7 @@ async function excluirEvento(api, { origem, registroId, itemId, usuarioId, motiv
   if (item.excluido_em) return item;
   return escreverSocial(api.put(`/api/${o.tabela}/${item.id}`, {
     excluido_em: new Date().toISOString(), excluido_por: usuarioId ?? null, motivo_exclusao: texto(motivo) || null
-  }));
+  }), o.sqlArquivo);
 }
 
 /** Sup Admin: marca o comentário como removido (as respostas continuam). */
@@ -552,7 +570,7 @@ async function lerAnexo(api, anexoId) {
 }
 
 module.exports = {
-  ORIGENS, LIMITE_ANEXO_BYTES, TAMANHO_PARTE, LIMITE_TEXTO,
+  ORIGENS, LIMITE_ANEXO_BYTES, TAMANHO_PARTE, LIMITE_TEXTO, MARCA_OBJETO,
   erro, semTabela, origemValida, textoValido, trecho, textoSimples, mencionadosNoTexto, agruparCurtidas, destinatarios, textoDoAviso,
   partesDoArquivo, nomeDeArquivo, montarLinhaDoTempo,
   nomesDosUsuarios, lerRegistro, carregarLinhaDoTempo, registrarEventos, notificar,

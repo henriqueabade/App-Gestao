@@ -385,7 +385,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const DICA_DO_TIPO = {
     tarefa_automatica: 'Pode ser desativada em Tarefas ou em Configurações.',
   };
-  const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', tarefa: 'Tarefa' };
+  const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade' };
   // O que vira notificação do Windows quando chega (não lido e novo): tudo,
   // menos curtida — que fica só no sino, para não virar ruído.
   const FORA_DO_WINDOWS = new Set(['curtida']);
@@ -595,6 +595,21 @@ window.addEventListener('DOMContentLoaded', () => {
         id: aviso.registro_id, aba: conversa ? 'conversa' : 'detalhes',
         foco: conversa ? { itemId: aviso.item_id, comentarioId: aviso.comentario_id } : null,
       });
+      return;
+    }
+    // Mensagens da Contabilidade: o módulo e o modal das mensagens, já no comentário.
+    if (aviso.origem === 'contabilidade') {
+      try {
+        await window.loadPage?.('contabilidade');
+        if (document.getElementById('content')?.dataset.activePage !== 'contabilidade' || typeof window.ContabilidadeAbrirMensagens !== 'function') {
+          window.showToast?.('Você não tem acesso a este módulo.', 'error');
+          return;
+        }
+        window.ContabilidadeAbrirMensagens({ itemId: aviso.item_id, comentarioId: aviso.comentario_id });
+      } catch (err) {
+        console.error('[sino] não foi possível abrir o aviso:', err);
+        window.showToast?.('Não foi possível abrir este aviso.', 'error');
+      }
       return;
     }
     const pagina = { cliente: 'clientes', prospeccao: 'prospeccoes', contato: 'contatos' }[aviso.origem] || null;

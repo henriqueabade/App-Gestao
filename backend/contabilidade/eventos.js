@@ -83,6 +83,8 @@ async function atividade({ api, competencia = null, limite = 50, referenciaTipo 
   return linhas.map(e => ({
     id: e.id, tipo: e.tipo, rotulo: TIPOS[e.tipo] || e.tipo, competencia: e.competencia || null,
     descricao: e.descricao || '', dados: c.jsonDe(e.dados), usuario: nomes.get(String(e.usuario_id)) || null,
+    // O id serve à foto de quem fez (modal da atividade).
+    usuario_id: e.usuario_id ?? null,
     referencia_tipo: e.referencia_tipo || null, referencia_id: e.referencia_id ?? null,
     quando: b.instanteBR(e.criado_em)
   }));

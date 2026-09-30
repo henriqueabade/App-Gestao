@@ -189,6 +189,38 @@ test('gatilho do @ e do *: só no começo de palavra', () => {
   assert.strictEqual(hs.gatilhoNoCursor('texto normal', 12), null);
 });
 
+test("objeto citado com ': marca no texto, texto simples, edição de ida e volta (29/09/2026)", () => {
+  const texto = "Olhe '[NF-e 1/123 · Madeireira](o:documento:7) e '[Crítico: 2 NF-e sem XML (08/2026)](o:pendencia:2026-08:docrec_sem_xml_7), @[Ana](u:2)";
+  assert.deepStrictEqual(daqui(hs.pedacosDoTexto(texto)), [
+    { tipo: 'texto', texto: 'Olhe ' },
+    { tipo: 'objeto', rotulo: 'NF-e 1/123 · Madeireira', objeto: 'documento', id: '7' },
+    { tipo: 'texto', texto: ' e ' },
+    { tipo: 'objeto', rotulo: 'Crítico: 2 NF-e sem XML (08/2026)', objeto: 'pendencia', id: '2026-08:docrec_sem_xml_7' },
+    { tipo: 'texto', texto: ', ' },
+    { tipo: 'mencao', nome: 'Ana', id: 2 }
+  ]);
+  assert.strictEqual(hs.textoSimples(texto), "Olhe 'NF-e 1/123 · Madeireira e 'Crítico: 2 NF-e sem XML (08/2026), @Ana");
+  const { texto: visivel, refs } = hs.paraEdicao(texto);
+  assert.strictEqual(hs.aplicarReferencias(visivel, refs), texto, 'ida e volta sem perder as marcas');
+  // A opção vira marca; o que quebraria a marca sai do rótulo; tipo/id fora do formato não entram.
+  assert.deepStrictEqual(daqui(hs.marcaDoObjeto({ tipo: 'titulo', id: 12, rotulo: 'Conta a pagar: Aluguel [set]\nsala' })),
+    { rotulo: "'Conta a pagar: Aluguel [set sala", marca: "'[Conta a pagar: Aluguel [set sala](o:titulo:12)", texto: 'Conta a pagar: Aluguel [set sala', tipo: 'titulo', id: '12' });
+  assert.strictEqual(hs.marcaDoObjeto({ tipo: 'Documento', id: 1, rotulo: 'x' }), null);
+  assert.strictEqual(hs.marcaDoObjeto({ tipo: 'documento', id: 'um id', rotulo: 'x' }), null);
+  assert.strictEqual(hs.marcaDoObjeto({ tipo: 'documento', id: 1, rotulo: '  ' }), null);
+  const marca = hs.marcaDoObjeto({ tipo: 'titulo', id: 12, rotulo: 'Conta [x]' }).marca;
+  assert.deepStrictEqual(daqui(hs.pedacosDoTexto(marca)).map(p => p.tipo), ['objeto'], 'a marca gerada é lida de volta');
+  assert.ok(hs.ICONES_OBJETO.documento && hs.ICONES_OBJETO.pessoa && hs.ICONES_OBJETO.competencia);
+});
+
+test("gatilho do ': começo de palavra, e não é engolido por uma menção antes dele", () => {
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor("veja 'nf", 8)), { simbolo: "'", busca: 'nf', inicio: 5 });
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor("'", 1)), { simbolo: "'", busca: '', inicio: 0 });
+  assert.strictEqual(hs.gatilhoNoCursor("caixa d'água", 12), null, "apóstrofo no meio da palavra não chama a lista");
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor("@Ana 'doc", 9)), { simbolo: "'", busca: 'doc', inicio: 5 });
+  assert.deepStrictEqual(daqui(hs.gatilhoNoCursor("'doc @an", 8)), { simbolo: '@', busca: 'an', inicio: 5 });
+});
+
 test('valorLegivel: datas cruas viram data brasileira', () => {
   assert.strictEqual(hs.valorLegivel('2026-08-14'), '14/08/2026');
   assert.strictEqual(hs.valorLegivel('2026-08-14T15:54'), '14/08/2026 15:54');

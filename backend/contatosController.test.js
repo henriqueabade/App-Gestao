@@ -81,7 +81,7 @@ function criarUpstream(dados) {
 
 const MODULOS = ['./apiHttpClient', './permissionsController', './contatosController', './historicoSocial', './contatoHistorico', './importacaoCsv'];
 
-async function montar(dados, { permitir = true } = {}) {
+async function montar(dados, { permitir = true, contabilidade = false } = {}) {
   const upstream = criarUpstream(dados);
   await new Promise(r => upstream.servidor.listen(0, '127.0.0.1', r));
   process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
@@ -98,7 +98,9 @@ async function montar(dados, { permitir = true } = {}) {
       },
       exigirAlgumaPermissao: () => (req, res, next) => next(),
       exigirSupAdmin: (req, res, next) => next(),
-      limparCachePermissoes: () => {}
+      limparCachePermissoes: () => {},
+      // O "'" do contato só traz documentos e contas para quem vê a Contabilidade.
+      obterPermissoesEfetivas: async () => ({ contabilidade: { ativo: contabilidade, acoes: { 'contabilidade.view': contabilidade } } })
     }
   };
   const app = express();
@@ -272,6 +274,41 @@ test('atividades: registra com a pessoa do contato, edita, exclui e tudo vai par
     assert.deepEqual(ctx.tabelas.contato_historico.map(e => [e.tipo, e.acao]), [['interacao', 'criou'], ['interacao', 'alterou'], ['interacao', 'excluiu']]);
   } finally {
     await ctx.encerrar();
+  }
+});
+
+test("citáveis do contato (o ' da linha do tempo): pessoas e atividades dele; documentos e contas só para quem vê a Contabilidade", async () => {
+  const extra = {
+    contato_interacoes: [
+      { id: 20, contato_id: 10, tipo: 'Ligação', resumo: 'Pedi orçamento do MDF', data: '2026-09-25T13:00:00.000Z' },
+      { id: 21, contato_id: 99, tipo: 'Visita', resumo: 'De outro contato', data: '2026-09-26T13:00:00.000Z' }
+    ],
+    documentos_recebidos: [
+      { id: 7, tipo: 'nfe', serie: '1', numero: '123', emitente_nome: 'Madeiras Silva', contato_id: 10, data_emissao: '2026-08-10', valor_total: 1500 },
+      { id: 8, tipo: 'nfe', serie: '1', numero: '9', emitente_nome: 'Outro', contato_id: 99, data_emissao: '2026-08-11', valor_total: 10 }
+    ],
+    titulos_pagar: [{ id: 12, descricao: 'Compra de MDF', contato_id: 10, valor_total: 1500, status: 'aberto', competencia: '2026-08' }],
+    contabil_arquivos: [], contabil_arquivo_vinculos: []
+  };
+  const semCtb = await montar(cenario(extra));
+  try {
+    const todos = await (await semCtb.chamar('GET', '/10/citaveis?busca=')).json();
+    assert.deepEqual(todos.itens.map(i => `${i.tipo}:${i.id}`), ['pessoa:5', 'interacao:20']);
+    assert.equal(todos.itens[0].rotulo, 'Pessoa: Carlos (Vendedor)');
+    assert.equal(todos.itens[1].rotulo, 'Atividade: Ligação · Pedi orçamento do MDF');
+    const busca = await (await semCtb.chamar('GET', '/10/citaveis?busca=orcamento')).json();
+    assert.deepEqual(busca.itens.map(i => `${i.tipo}:${i.id}`), ['interacao:20'], 'busca sem acento');
+  } finally {
+    await semCtb.encerrar();
+  }
+  const comCtb = await montar(cenario(extra), { contabilidade: true });
+  try {
+    const todos = await (await comCtb.chamar('GET', '/10/citaveis?busca=')).json();
+    assert.deepEqual(todos.itens.map(i => `${i.tipo}:${i.id}`), ['pessoa:5', 'interacao:20', 'documento:7', 'titulo:12'], 'só os do contato 10');
+    const mdf = await (await comCtb.chamar('GET', '/10/citaveis?busca=mdf')).json();
+    assert.deepEqual(mdf.itens.map(i => `${i.tipo}:${i.id}`), ['interacao:20', 'titulo:12']);
+  } finally {
+    await comCtb.encerrar();
   }
 });
 

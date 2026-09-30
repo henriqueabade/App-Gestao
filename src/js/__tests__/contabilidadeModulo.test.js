@@ -20,7 +20,7 @@ function puras() {
   const inicio = TELA.indexOf('const CTB_NIVEIS');
   const fim = TELA.indexOf('// ------------------------------------------------------- fim das funções puras');
   assert.ok(inicio !== -1 && fim > inicio, 'bloco de funções puras não encontrado');
-  return vm.runInContext(`${TELA.slice(inicio, fim)}\n({ ctbFiltrarPendencias, ctbContagem, ctbTextoSituacao, ctbFormatarData, ctbFormatarInstante, ctbFormatarQuando, ctbEscapar })`, vm.createContext({}));
+  return vm.runInContext(`${TELA.slice(inicio, fim)}\n({ ctbFiltrarPendencias, ctbContagem, ctbTextoSituacao, ctbFormatarData, ctbFormatarInstante, ctbFormatarQuando, ctbEscapar, ctbCitaveisLocais })`, vm.createContext({}));
 }
 
 const PENDENCIAS = [
@@ -231,6 +231,12 @@ const MODAIS_ETAPA9 = {
   'pacote': { overlay: 'ctbPacote', principal: ['ctbPacoteGerar', 'btn-primary', 'contabilidade.pacote.gerar'] }
 };
 
+// 29/09/2026: a atividade inteira e as mensagens em tamanho grande (só consulta/conversa: sem botão principal).
+const MODAIS_TELA = {
+  'atividade': { overlay: 'ctbAtividade', principal: null },
+  'mensagens': { overlay: 'ctbMensagens', principal: null }
+};
+
 const MODAIS_ETAPA8 = {
   'relatorio': { overlay: 'ctbRelatorio', principal: ['ctbRelPdf', 'btn-primary', 'contabilidade.pacote.gerar'] },
   'dossie': { overlay: 'ctbDossie', principal: null }
@@ -249,7 +255,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9 })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -344,8 +350,56 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // Etapa 9: gerar o pacote e registrar o envio são reais (os dois abrem o modal do pacote).
   for (const acao of ['pacote', 'enviar']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
   assert.ok(TELA.includes("ctbAbrirModal('pacote', m, { enviar: true })"));
-  // O roteiro marca as etapas 1 a 9 como feitas.
-  assert.equal((HTML.match(/ctb-roteiro__item" data-feita="1"/g) || []).length, 9);
+  // 29/09/2026: "Próximas etapas" saiu; no lugar, as mensagens (o social do módulo).
+  assert.ok(!HTML.includes('ctb-roteiro') && !HTML.includes('Próximas etapas'));
+  assert.ok(HTML.includes('<h2>Mensagens e comentários</h2>') && HTML.includes('data-ctb-mensagens'));
+});
+
+test('tela (29/09/2026): pendências sem "Ver todas" e com rolagem; os cartões filtram e rolam até a lista; atividade e mensagens com altura fixa e modal', () => {
+  const CSS = ler('css', 'contabilidade.css');
+  // "Todas" mostra todas: sem o botão, sem o corte.
+  assert.ok(!HTML.includes('pendencias-todas') && !TELA.includes('pendencias-todas'));
+  assert.ok(!TELA.includes('CTB_PENDENCIAS_VISIVEIS') && !TELA.includes('CTB_ATIVIDADE_VISIVEL') && !TELA.includes('ctbMostrarTodas'));
+  assert.match(HTML, /<ul class="ctb-pendencias ctb-rolagem" data-ctb-lista="pendencias"/);
+  assert.match(CSS, /\.ctb-rolagem \{\s*flex: 1 1 0;\s*min-height: 0;\s*overflow-y: auto;/);
+  assert.doesNotMatch(CSS, /::-webkit-scrollbar/, 'a barra de rolagem é a da casa (scroll.css)');
+  // Os cartões de críticos, documentais e avisos: filtram e levam a tela até a lista, suave.
+  for (const nivel of ['critico', 'documental', 'aviso']) assert.match(HTML, new RegExp(`class="ctb-kpi[^"]*"[^>]*data-ctb-acao="filtrar" data-ctb-filtro="${nivel}"`));
+  assert.ok(TELA.includes("if (alvo.classList.contains('ctb-kpi')) extra.cartao = true;"));
+  assert.ok(TELA.includes('extra?.cartao ? ctbIrParaPendencias(m, extra.filtro)'));
+  assert.ok(TELA.includes("ctbRolarAte(moduleEl.querySelector('#ctbPendenciasPainel'))") && TELA.includes("behavior: reduzir ? 'auto' : 'smooth'"));
+  assert.ok(HTML.includes('id="ctbPendenciasPainel"'));
+  // Atividade e mensagens: a mesma altura fixa; "Ver todas"/"Ver tudo" abrem os modais.
+  assert.equal((HTML.match(/class="ctb-painel ctb-painel--fixo glass-surface rounded-xl"/g) || []).length, 2);
+  assert.match(CSS, /\.ctb-painel--fixo \{ height: 34rem; \}/);
+  assert.ok(TELA.includes("'atividade-todas': { rotulo: 'Toda a atividade', abrir: m => ctbAbrirModal('atividade', m, {}) }"));
+  assert.ok(HTML.includes('data-ctb-acao="mensagens"') && TELA.includes("'mensagens': {"));
+  // O social: origem 'contabilidade', mural 1, "'" cita e abre; o sino chega nas mensagens.
+  assert.ok(TELA.includes("origem: 'contabilidade'") && TELA.includes('registroId: CTB_MURAL') && TELA.includes('objetos: ctbObjetosCitaveis'));
+  assert.ok(TELA.includes('/api/contabilidade/citaveis?busca='));
+  for (const tipo of ['competencia', 'pendencia', 'documento', 'titulo', 'movimento', 'arquivo', 'fechamento', 'pacote', 'conta_plano', 'conta_financeira', 'importacao', 'fornecedor']) {
+    assert.ok(TELA.includes(`case '${tipo}':`), `abrir ${tipo}`);
+  }
+  assert.ok(TELA.includes('window.ContabilidadeAbrirMensagens = ') && TELA.includes('window.ContabilidadeAbrirObjeto = '));
+  const SINO = ler('js', 'notifications.js');
+  assert.ok(SINO.includes("aviso.origem === 'contabilidade'") && SINO.includes('window.ContabilidadeAbrirMensagens({ itemId: aviso.item_id, comentarioId: aviso.comentario_id })'));
+  assert.ok(SINO.includes("contabilidade: 'Contabilidade'") && SINO.includes("contato: 'Contato'"));
+});
+
+test('funções puras (29/09/2026): as pendências da tela viram objetos que o "\'" cita', () => {
+  const f = puras();
+  const pend = [
+    { chave: 'docrec_sem_xml_7', nivel: 'documental', titulo: 'NF-e [1/123] sem XML', ignorada: false },
+    { chave: 'pagar_vencidas', nivel: 'critico', titulo: 'Contas vencidas', ignorada: true },
+    { chave: 'chave com espaço', nivel: 'aviso', titulo: 'x' }
+  ];
+  const todos = plano(f.ctbCitaveisLocais(pend, '2026-08', ''));
+  assert.deepEqual(todos.map(o => o.id), ['2026-08:docrec_sem_xml_7', '2026-08:pagar_vencidas'], 'chave fora do formato fica de fora');
+  assert.equal(todos[0].rotulo, 'Documental: NF-e 1/123 sem XML (08/2026)', 'colchete sai (quebraria a marca)');
+  assert.equal(todos[1].detalhe, 'Ignorada com justificativa');
+  assert.deepEqual(plano(f.ctbCitaveisLocais(pend, '2026-08', 'vencidas')).map(o => o.id), ['2026-08:pagar_vencidas']);
+  assert.deepEqual(plano(f.ctbCitaveisLocais(pend, '2026-08', 'critico')).map(o => o.id), ['2026-08:pagar_vencidas'], 'busca sem acento');
+  assert.deepEqual(plano(f.ctbCitaveisLocais(pend, null, '')), []);
 });
 
 test('funções puras do modal: dividir parcelas igual ao backend (sobra na última, fim de mês) e ler dinheiro digitado', () => {

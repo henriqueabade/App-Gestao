@@ -30,6 +30,8 @@
  *   ctbRelatorio            Relatório mensal — resumo, livro-caixa, resultado, conciliação, pendências, documentos; PDF e planilha (GET /relatorio)
  *   ctbDossie               Dossiê — tudo o que está ligado a um lançamento, conta ou documento, navegando entre eles (GET /dossie)
  *   ctbPacote               Pacote para a contabilidade — o ZIP (relatório + originais), os gerados e o envio (GET/POST /pacote)
+ *   ctbAtividade            Atividade recente inteira — linha do tempo com foto, busca, tipo e quem fez (GET /atividade)
+ *   ctbMensagens            Mensagens e comentários — o social do módulo em tamanho grande (/api/historico-social/contabilidade/1)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -3916,6 +3918,147 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ atividade
+
+  /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
+  const GRUPOS_ATIVIDADE = {
+    competencia: { rotulo: 'Competência', badge: 'badge-success', tipos: ['competencia_fechada', 'competencia_reaberta'] },
+    pendencia: { rotulo: 'Pendências', badge: 'badge-neutral', tipos: ['pendencia_ignorada', 'pendencia_restaurada'] },
+    documento: { rotulo: 'Documentos e arquivos', badge: 'badge-info', tipos: ['documento_registrado', 'documento_excluido', 'arquivo_anexado', 'arquivo_excluido', 'fornecedor_cadastrado'] },
+    pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
+    extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
+    conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
+    classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
+    pacote: { rotulo: 'Pacote', badge: 'badge-success', tipos: ['pacote_gerado', 'pacote_enviado'] }
+  };
+  const grupoDoTipo = tipo => Object.keys(GRUPOS_ATIVIDADE).find(g => GRUPOS_ATIVIDADE[g].tipos.includes(tipo)) || null;
+  const iniciaisDe = nome => String(nome || '?').trim().split(/\s+/).filter(Boolean)
+    .map((p, i, todos) => (i === 0 || i === todos.length - 1 ? p[0] : '')).join('').toUpperCase().slice(0, 2) || '?';
+
+  /** A atividade inteira em linha do tempo, com a foto de quem fez e filtros (busca, tipo, quem). */
+  function montarAtividade() {
+    const linha = el('ctbAtividadeLinha');
+    const busca = el('ctbAtividadeBusca');
+    const tipoSel = el('ctbAtividadeTipo');
+    const quemSel = el('ctbAtividadeQuem');
+    const HS = window.HistoricoSocial || {};
+    let itens = [];
+    let fotos = new Map();
+
+    for (const [chave, g] of Object.entries(GRUPOS_ATIVIDADE)) tipoSel.appendChild(opcao(chave, g.rotulo));
+
+    function avatar(item) {
+      const caixa = criar('span', 'ctb-avatar');
+      if (!item.usuario_id && !item.usuario) {
+        caixa.classList.add('ctb-avatar--sistema');
+        caixa.title = 'Sistema';
+        caixa.appendChild(icone('fa-gear'));
+        return caixa;
+      }
+      const nome = item.usuario || `Usuário ${item.usuario_id}`;
+      caixa.title = nome;
+      const foto = fotos.get(String(item.usuario_id));
+      if (foto) {
+        const img = document.createElement('img');
+        img.src = foto;
+        img.alt = nome;
+        img.loading = 'lazy';
+        // Foto que não carrega volta para as iniciais.
+        img.addEventListener('error', () => { img.remove(); caixa.textContent = iniciaisDe(nome); });
+        caixa.appendChild(img);
+      } else {
+        caixa.textContent = iniciaisDe(nome);
+        const cor = window.Beneficiarios?.cor?.(nome);
+        if (cor) caixa.style.background = cor;
+      }
+      return caixa;
+    }
+
+    const diaDe = quando => (HS.diaLocal ? HS.diaLocal(quando) : String(quando || '').slice(0, 10));
+    const rotuloDia = quando => (HS.rotuloDoDia ? HS.rotuloDoDia(quando) : formatarData(quando));
+    const horaDe = quando => (HS.horaDe ? HS.horaDe(quando) : String(quando || '').slice(11, 16));
+
+    function desenhar() {
+      const termo = normalizar(busca.value).trim();
+      const grupo = tipoSel.value;
+      const quem = quemSel.value;
+      const visiveis = itens.filter(i => (!grupo || i.grupo === grupo)
+        && (!quem || (quem === 'sistema' ? !i.usuario_id : String(i.usuario_id) === quem))
+        && (!termo || normalizar(`${i.rotulo} ${i.descricao} ${i.usuario || ''} ${rotuloCompetencia(i.competencia)}`).includes(termo)));
+      el('ctbAtividadeContagem').textContent = plural(visiveis.length, 'movimento', 'movimentos');
+      linha.replaceChildren();
+      let diaAtual = null;
+      for (const item of visiveis) {
+        const dia = diaDe(item.quando);
+        if (dia !== diaAtual) {
+          diaAtual = dia;
+          linha.appendChild(criar('li', 'ctb-linha-tempo__dia', rotuloDia(item.quando)));
+        }
+        const li = criar('li', 'ctb-linha-tempo__item');
+        const corpo = criar('div', 'ctb-linha-tempo__corpo');
+        const topo = criar('div', 'ctb-linha-tempo__topo');
+        topo.append(criar('strong', 'ctb-linha-tempo__quem', item.usuario || (item.usuario_id ? `Usuário ${item.usuario_id}` : 'Sistema')), criar('span', 'ctb-linha-tempo__hora', horaDe(item.quando)));
+        if (item.competencia) topo.appendChild(criar('span', 'ctb-linha-tempo__competencia', `· ${rotuloCompetencia(item.competencia)}`));
+        topo.appendChild(tag(item.rotulo || item.tipo, `${GRUPOS_ATIVIDADE[item.grupo]?.badge || 'badge-neutral'} ctb-linha-tempo__tag`));
+        corpo.append(topo, criar('p', 'ctb-linha-tempo__texto', item.descricao || '—'));
+        li.append(avatar(item), corpo);
+        linha.appendChild(li);
+      }
+      el('ctbAtividadeVazio').classList.toggle('hidden', visiveis.length > 0);
+    }
+
+    function montarQuem() {
+      const pessoas = new Map();
+      for (const i of itens) if (i.usuario_id !== null && i.usuario_id !== undefined) pessoas.set(String(i.usuario_id), i.usuario || `Usuário ${i.usuario_id}`);
+      quemSel.replaceChildren(opcao('', 'Todos'));
+      for (const [id, nome] of [...pessoas].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))) quemSel.appendChild(opcao(id, nome));
+      if (itens.some(i => !i.usuario_id)) quemSel.appendChild(opcao('sistema', 'Sistema'));
+    }
+
+    async function carregar() {
+      mostrarMensagem('ctbAtividadeMensagem', '');
+      let base = '';
+      try { base = (await window.apiConfig?.getApiBaseUrl?.()) || ''; } catch (_) { base = ''; }
+      // A foto é enfeite: sem a lista de usuários, ficam as iniciais.
+      const [lido, mapa] = await Promise.all([
+        fetchApi('/api/contabilidade/atividade?limite=500').catch(e => ({ erro: e })),
+        HS.carregarFotos ? HS.carregarFotos(base).catch(() => new Map()) : Promise.resolve(new Map())
+      ]);
+      if (lido?.erro) mostrarMensagem('ctbAtividadeMensagem', textoDoErro(lido.erro, 'Você não tem permissão para ver a Contabilidade.'));
+      fotos = mapa instanceof Map ? mapa : new Map();
+      itens = (Array.isArray(lido?.eventos) ? lido.eventos : []).map(e => ({ ...e, grupo: grupoDoTipo(e.tipo) }));
+      montarQuem();
+      desenhar();
+    }
+
+    busca.addEventListener('input', desenhar);
+    tipoSel.addEventListener('change', desenhar);
+    quemSel.addEventListener('change', desenhar);
+    return carregar();
+  }
+
+  // ------------------------------------------------------------ mensagens
+
+  /**
+   * O social da Contabilidade em tamanho grande: as mesmas opções do cartão
+   * da tela (ContabilidadeMensagensOpcoes), mas o objeto citado abre por
+   * cima deste modal. Ao fechar, o cartão se relê.
+   */
+  function montarMensagens() {
+    const alvo = el('ctbMensagensLinha');
+    const opcoes = window.ContabilidadeMensagensOpcoes?.({ doModal: true, foco: contexto.foco || null });
+    if (!alvo || !opcoes || typeof window.HistoricoSocial?.montar !== 'function') {
+      alvo?.replaceChildren(criar('p', 'ctb-vazio', 'Não foi possível abrir as mensagens agora.'));
+      return null;
+    }
+    const linha = window.HistoricoSocial.montar(alvo, opcoes);
+    aoDesligar.push(() => {
+      linha.destruir();
+      document.querySelector('.modulo-container.contabilidade-module')?.ctbMensagens?.recarregar?.();
+    });
+    return linha.pronto;
+  }
+
   const montadores = {
     ctbFechar: montarFechar,
     ctbReabrir: montarReabrir,
@@ -3939,7 +4082,9 @@
     ctbFechamentos: montarFechamentos,
     ctbRelatorio: montarRelatorio,
     ctbDossie: montarDossie,
-    ctbPacote: montarPacote
+    ctbPacote: montarPacote,
+    ctbAtividade: montarAtividade,
+    ctbMensagens: montarMensagens
   };
 
   let montagem;

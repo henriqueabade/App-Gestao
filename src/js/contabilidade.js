@@ -20,17 +20,21 @@
  * da própria Contabilidade (documento sem XML, pagamento sem nota…) abrem o
  * modal que as resolve.
  *
+ * A lista de pendências mostra todas (rola dentro do cartão); os cartões de
+ * erros críticos, documentais e avisos filtram E levam a tela até ela. A
+ * atividade recente rola no cartão e "Ver todas" abre a linha do tempo
+ * inteira (modal, com foto e filtros). "Mensagens e comentários" é o social
+ * do módulo (src/js/utils/historico-social.js, origem 'contabilidade'): "@"
+ * menciona um usuário e "'" cita um objeto do módulo, que abre ao clicar.
+ *
  * O menu reexecuta este arquivo a cada visita (src/js/menu.js injeta o script
  * de novo, embrulhado numa IIFE), então nada aqui registra ouvinte em
  * `document`/`window`: os ouvintes ficam no elemento do módulo, que é trocado
  * a cada navegação, e a inicialização é guardada por `dataset.iniciado`.
  */
 
-/* Quantas pendências a lista mostra antes do "Ver todas". */
-const CTB_PENDENCIAS_VISIVEIS = 6;
-
-/* Quantos movimentos a "Atividade recente" mostra (o resto em "Ver todas"). */
-const CTB_ATIVIDADE_VISIVEL = 5;
+/* O mural das mensagens da Contabilidade: um só, o do módulo. */
+const CTB_MURAL = 1;
 
 const CTB_NIVEIS = {
     critico: { rotulo: 'Erro crítico', curto: 'Crítico' },
@@ -133,6 +137,29 @@ function ctbFormatarQuando(instante, hoje) {
 function ctbEscapar(texto) {
     return String(texto ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
+
+const ctbSemAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * As pendências da competência que está na tela, para o "'" das mensagens
+ * citar (o resto — competências, documentos, contas, lançamentos… — vem de
+ * GET /api/contabilidade/citaveis). O id é 'AAAA-MM:chave'. Pura.
+ */
+function ctbCitaveisLocais(pendencias, competencia, busca = '') {
+    const comp = /^\d{4}-\d{2}$/.test(String(competencia || '')) ? String(competencia) : null;
+    if (!comp) return [];
+    const termo = ctbSemAcento(busca).trim();
+    const mes = `${comp.slice(5, 7)}/${comp.slice(0, 4)}`;
+    return (Array.isArray(pendencias) ? pendencias : [])
+        .filter(p => p && /^[\w-]{1,70}$/.test(String(p.chave || '')))
+        .map(p => ({
+            tipo: 'pendencia',
+            id: `${comp}:${p.chave}`,
+            rotulo: `${CTB_NIVEIS[p.nivel]?.curto || 'Pendência'}: ${String(p.titulo || '').replace(/[[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()} (${mes})`.slice(0, 120),
+            detalhe: p.ignorada ? 'Ignorada com justificativa' : (CTB_NIVEIS[p.nivel]?.rotulo || 'Pendência')
+        }))
+        .filter(o => !termo || ctbSemAcento(`${o.rotulo} ${o.detalhe}`).includes(termo));
+}
 // ------------------------------------------------------- fim das funções puras
 
 /* Rótulo humano de cada ação, para o aviso "em implementação". Quando a ação
@@ -145,10 +172,12 @@ const CTB_ACOES = {
     'ignorar': { rotulo: 'Ignorar pendência', abrir: (m, extra) => ctbAbrirModal('ignorar-pendencia', m, { pendencia: extra?.pendencia || null }) },
     'restaurar': { rotulo: 'Restaurar pendência', abrir: (m, extra) => ctbRestaurarPendencia(m, extra?.pendencia || null) },
     'ir-financeiro': { rotulo: 'Abrir o Financeiro', abrir: (m, extra) => ctbIrParaFinanceiro(extra) },
-    'filtrar': { rotulo: 'Filtrar pendências', abrir: (m, extra) => ctbFiltrar(m, { nivel: extra?.filtro || 'todas' }) },
+    // O chip filtra no lugar (clicar de novo tira o filtro); o cartão do topo
+    // filtra e leva a tela até a lista.
+    'filtrar': { rotulo: 'Filtrar pendências', abrir: (m, extra) => (extra?.cartao ? ctbIrParaPendencias(m, extra.filtro) : ctbFiltrar(m, { nivel: extra?.filtro || 'todas' })) },
     'filtrar-fonte': { rotulo: 'Filtrar por fonte', abrir: (m, extra) => ctbFiltrar(m, { fonte: extra?.fonte || null }) },
-    'pendencias-todas': { rotulo: 'Todas as pendências', abrir: m => ctbMostrarTodas(m, 'pendencias') },
-    'atividade-todas': { rotulo: 'Toda a atividade', abrir: m => ctbMostrarTodas(m, 'atividade') },
+    'atividade-todas': { rotulo: 'Toda a atividade', abrir: m => ctbAbrirModal('atividade', m, {}) },
+    'mensagens': { rotulo: 'Mensagens e comentários', abrir: (m, extra) => ctbAbrirModal('mensagens', m, { foco: extra?.foco || null }) },
     // Etapas 2 e 3: documentos, evidências e contas a pagar. `extra` é o
     // filtro da pendência (titulo_id, documento_id, visao…) ou vazio.
     'contas-pagar': { rotulo: 'Contas a pagar', abrir: (m, extra) => ctbAbrirModal('contas-pagar', m, { visao: extra?.visao || null }) },
@@ -214,7 +243,10 @@ const CTB_MODAIS = {
     'fechamentos': { html: 'modals/contabilidade/fechamentos.html', overlay: 'ctbFechamentos' },
     'relatorio': { html: 'modals/contabilidade/relatorio.html', overlay: 'ctbRelatorio' },
     'dossie': { html: 'modals/contabilidade/dossie.html', overlay: 'ctbDossie' },
-    'pacote': { html: 'modals/contabilidade/pacote.html', overlay: 'ctbPacote' }
+    'pacote': { html: 'modals/contabilidade/pacote.html', overlay: 'ctbPacote' },
+    // A atividade inteira (linha do tempo com foto e filtros) e as mensagens em tamanho grande.
+    'atividade': { html: 'modals/contabilidade/atividade.html', overlay: 'ctbAtividade' },
+    'mensagens': { html: 'modals/contabilidade/mensagens.html', overlay: 'ctbMensagens' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */
@@ -311,7 +343,7 @@ window.ContabilidadeAbrirModal = ctbAbrirModal;
 function ctbAvisarEmImplementacao(chave) {
     const rotulo = CTB_ACOES[chave]?.rotulo || 'Esta função';
     if (window.DialogPadrao?.info) {
-        window.DialogPadrao.info({ title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: `"${rotulo}" ainda está em implementação.`, nota: 'Chega numa das próximas etapas do módulo (veja "Próximas etapas" na tela).' });
+        window.DialogPadrao.info({ title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: `"${rotulo}" ainda está em implementação.`, nota: 'Chega numa das próximas etapas do módulo.' });
     } else {
         window.alert(`"${rotulo}" ainda está em implementação.`);
     }
@@ -476,7 +508,6 @@ function ctbRenderizarPendencias(moduleEl) {
     if (!lista) return;
     const dados = moduleEl.ctbDados || {};
     const filtro = moduleEl.ctbFiltro || { nivel: 'todas', fonte: null };
-    const todas = moduleEl.dataset.pendenciasTodas === '1';
     const escolhidas = ctbFiltrarPendencias(dados.pendencias, filtro);
     lista.replaceChildren();
     ctbPreencher(moduleEl, 'pendencias.total', String(escolhidas.length));
@@ -492,9 +523,6 @@ function ctbRenderizarPendencias(moduleEl) {
     }
     moduleEl.querySelectorAll('.ctb-fonte').forEach(cartao => cartao.classList.toggle('is-filtro', Boolean(filtro.fonte) && cartao.dataset.fonte === filtro.fonte));
 
-    const verTodas = moduleEl.querySelector('[data-ctb-acao="pendencias-todas"]');
-    if (verTodas) verTodas.classList.toggle('hidden', todas || escolhidas.length <= CTB_PENDENCIAS_VISIVEIS);
-
     if (!escolhidas.length) {
         const vazio = filtro.nivel === 'ignoradas' ? 'Nenhuma pendência ignorada nesta competência.'
             : (filtro.nivel !== 'todas' || filtro.fonte ? 'Nenhuma pendência com este filtro.' : 'Nenhuma pendência. A competência está limpa por aqui.');
@@ -502,8 +530,10 @@ function ctbRenderizarPendencias(moduleEl) {
         return;
     }
 
-    for (const p of todas ? escolhidas : escolhidas.slice(0, CTB_PENDENCIAS_VISIVEIS)) {
+    // Todas: o cartão tem altura fixa e a lista rola dentro dele.
+    for (const p of escolhidas) {
         const item = ctbCriar('li', 'ctb-pendencia');
+        item.dataset.chave = p.chave || '';
         if (p.ignorada) item.classList.add('is-ignorada');
         const status = ctbCriar('span', 'ctb-pendencia__status');
         status.dataset.nivel = p.nivel;
@@ -564,14 +594,12 @@ function ctbRenderizarAtividade(moduleEl, eventos, hoje) {
     const lista = moduleEl.querySelector('[data-ctb-lista="atividade"]');
     if (!lista) return;
     lista.replaceChildren();
-    const todas = moduleEl.dataset.atividadeTodas === '1';
-    const verTodas = moduleEl.querySelector('[data-ctb-acao="atividade-todas"]');
-    if (verTodas) verTodas.classList.toggle('hidden', todas || eventos.length <= CTB_ATIVIDADE_VISIVEL);
     if (!eventos.length) {
         lista.appendChild(ctbCriar('li', 'ctb-vazio', 'Nenhum movimento registrado ainda.'));
         return;
     }
-    for (const e of todas ? eventos : eventos.slice(0, CTB_ATIVIDADE_VISIVEL)) {
+    // Os mais recentes rolam no cartão; "Ver todas" abre o histórico inteiro, com filtros.
+    for (const e of eventos) {
         const item = ctbCriar('li', 'ctb-evento');
         const texto = ctbCriar('div', 'ctb-evento__texto');
         texto.appendChild(ctbCriar('span', 'ctb-evento__titulo', `${e.rotulo || e.tipo}${e.competencia ? ` · ${e.competencia.split('-').reverse().join('/')}` : ''}${e.usuario ? ` · ${e.usuario}` : ''}`));
@@ -614,14 +642,165 @@ function ctbFiltrar(moduleEl, { nivel, fonte } = {}) {
     ctbRenderizarPendencias(moduleEl);
 }
 
-function ctbMostrarTodas(moduleEl, qual) {
-    if (qual === 'pendencias') {
-        moduleEl.dataset.pendenciasTodas = '1';
-        ctbRenderizarPendencias(moduleEl);
-    } else {
-        moduleEl.dataset.atividadeTodas = '1';
-        ctbRenderizarAtividade(moduleEl, moduleEl.ctbAtividade || [], moduleEl.dataset.hoje);
+/**
+ * O cartão de erros críticos, documentais ou avisos: filtra a lista (sem o
+ * vai-e-volta do chip — clicar de novo continua no mesmo filtro) e a tela
+ * rola, suave, até o cartão das pendências, com a lista no começo.
+ */
+function ctbIrParaPendencias(moduleEl, nivel) {
+    const atual = moduleEl.ctbFiltro || { nivel: 'todas', fonte: null };
+    moduleEl.ctbFiltro = { ...atual, nivel: nivel || 'todas' };
+    ctbRenderizarPendencias(moduleEl);
+    const lista = moduleEl.querySelector('[data-ctb-lista="pendencias"]');
+    if (lista) lista.scrollTop = 0;
+    ctbRolarAte(moduleEl.querySelector('#ctbPendenciasPainel'));
+}
+
+/** Rola a tela até o elemento, suave (sem animação para quem pediu menos movimento). */
+function ctbRolarAte(alvo) {
+    if (!alvo || typeof alvo.scrollIntoView !== 'function') return;
+    const reduzir = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    alvo.scrollIntoView({ behavior: reduzir ? 'auto' : 'smooth', block: 'start' });
+}
+
+/* --------------------------------------------------------- mensagens */
+
+/**
+ * O que o "'" oferece enquanto se digita: as pendências da competência na
+ * tela (já lidas) e o resto do módulo pelo backend. Sem permissão ou sem
+ * rede, fica só o que é local. O ícone de cada tipo vem do componente
+ * (HistoricoSocial.ICONES_OBJETO).
+ */
+async function ctbObjetosCitaveis(busca) {
+    const raiz = document.querySelector('.modulo-container.contabilidade-module');
+    const competencia = raiz?.querySelector('#ctbCompetencia')?.value || '';
+    const locais = ctbCitaveisLocais(raiz?.ctbDados?.pendencias, competencia, busca);
+    const { corpo } = await ctbChamarApi(`/api/contabilidade/citaveis?busca=${encodeURIComponent(busca || '')}&competencia=${encodeURIComponent(competencia)}`);
+    const remotos = Array.isArray(corpo?.itens) ? corpo.itens : [];
+    // A competência vem primeiro; as pendências logo depois; o resto na ordem do backend.
+    // (no máximo 5 pendências, para os documentos e as contas também caberem na lista).
+    const [comp, resto] = [remotos.filter(o => o.tipo === 'competencia'), remotos.filter(o => o.tipo !== 'competencia')];
+    return [...comp, ...locais.slice(0, 5), ...resto];
+}
+
+/** Leva a tela para uma competência (e espera o painel dela). */
+async function ctbIrParaCompetencia(moduleEl, competencia) {
+    const campo = moduleEl?.querySelector('#ctbCompetencia');
+    if (!campo || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) return;
+    if (campo.value !== competencia) {
+        if (window.Competencia) window.Competencia.definir(campo, competencia);
+        else campo.value = competencia;
+        moduleEl.ctbFiltro = { nivel: 'todas', fonte: null };
+        await ctbRecarregar(moduleEl);
     }
+}
+
+/**
+ * Abre o objeto citado numa mensagem. Documento, conta, lançamento, pacote,
+ * fechamento e contas abrem o modal deles (por cima das mensagens, quando
+ * elas estão no modal grande); competência e pendência levam a própria tela
+ * até lá; arquivo abre no programa do computador; fornecedor abre a ficha
+ * em Contatos.
+ */
+async function ctbAbrirObjeto(objeto, { doModal = false } = {}) {
+    const raiz = document.querySelector('.modulo-container.contabilidade-module');
+    if (!objeto || !raiz) return;
+    const id = String(objeto.id ?? '');
+    const empilhar = doModal;
+    const abrir = (chave, extra = {}) => ctbAbrirModal(chave, raiz, { ...extra, empilhar });
+    // Os que mexem na própria tela fecham o modal grande antes.
+    const naTela = async fn => {
+        if (doModal) window.Modal?.close?.('ctbMensagens');
+        await fn();
+    };
+    switch (objeto.tipo) {
+        case 'competencia':
+            await naTela(async () => {
+                await ctbIrParaCompetencia(raiz, id);
+                ctbRolarAte(raiz.querySelector('.ctb-kpis'));
+            });
+            return;
+        case 'pendencia': {
+            const [competencia, chave] = [id.slice(0, 7), id.slice(8)];
+            await naTela(async () => {
+                await ctbIrParaCompetencia(raiz, competencia);
+                const pendencia = (raiz.ctbDados?.pendencias || []).find(p => p.chave === chave);
+                raiz.ctbFiltro = { nivel: pendencia?.ignorada ? 'ignoradas' : 'todas', fonte: null };
+                ctbRenderizarPendencias(raiz);
+                ctbRolarAte(raiz.querySelector('#ctbPendenciasPainel'));
+                const linha = [...raiz.querySelectorAll('.ctb-pendencia')].find(li => li.dataset.chave === chave);
+                if (!linha) {
+                    window.showToast?.('Esta pendência não aparece mais nesta competência: já foi resolvida.', 'info');
+                    return;
+                }
+                linha.scrollIntoView({ block: 'nearest' });
+                linha.classList.add('is-destaque');
+                setTimeout(() => linha.classList.remove('is-destaque'), 2600);
+            });
+            return;
+        }
+        // O id traz o que é preciso para abrir (backend/contabilidade/citaveis.js).
+        case 'documento': abrir('documento-recebido', { documento_id: Number(id) }); return;
+        case 'titulo': abrir('conta-pagar', { titulo_id: Number(id) }); return;
+        case 'movimento': abrir('dossie', { tipo: 'movimento', id: Number(id) }); return;
+        case 'fechamento': abrir('fechamentos', { competencia: id.slice(0, 7) }); return;
+        case 'pacote': abrir('pacote', { competencia: id.slice(0, 7) }); return;
+        case 'conta_plano': abrir('plano-contas'); return;
+        case 'conta_financeira': abrir('extrato', { conta_id: Number(id) }); return;
+        case 'importacao': {
+            const [conta, competencia] = id.split(':');
+            abrir('extrato', { conta_id: Number(conta), ...(/^\d{4}-\d{2}$/.test(competencia || '') ? { competencia } : {}) });
+            return;
+        }
+        case 'arquivo': await ctbAbrirArquivo(id); return;
+        case 'fornecedor':
+            if (doModal) window.Modal?.close?.('ctbMensagens');
+            await window.loadPage?.('contatos');
+            window.ContatosModulo?.abrirDetalhes?.({ id: Number(id) });
+            return;
+        default:
+            window.showToast?.('Não sei abrir este item.', 'info');
+    }
+}
+
+// Contatos também cita documentos e contas (o "'" da ficha) e abre por aqui.
+window.ContabilidadeAbrirObjeto = (objeto, opcoes) => ctbAbrirObjeto(objeto, opcoes);
+
+/** O arquivo guardado na Contabilidade, aberto no programa do computador. */
+async function ctbAbrirArquivo(id) {
+    window.showToast?.('Abrindo o arquivo…', 'info');
+    const { corpo, erro } = await ctbChamarApi(`/api/contabilidade/arquivos/${encodeURIComponent(id)}`);
+    if (erro || !corpo?.base64) {
+        window.showToast?.(erro?.status === 404 ? 'O arquivo não existe mais.' : (erro?.message || 'Não foi possível abrir o arquivo.'), 'error');
+        return;
+    }
+    const r = await window.electronAPI?.salvarArquivoBinario?.({ base64: corpo.base64, nomeSugerido: corpo.nome, abrir: true, titulo: 'Abrir arquivo' });
+    if (r && !r.success && !r.canceled) window.showToast?.(r.message || 'Não foi possível abrir o arquivo.', 'error');
+}
+
+/** As opções do social da Contabilidade (o cartão e o modal grande usam as mesmas). */
+function ctbOpcoesMensagens({ doModal = false, foco = null } = {}) {
+    return {
+        origem: 'contabilidade',
+        registroId: CTB_MURAL,
+        foco,
+        objetos: ctbObjetosCitaveis,
+        aoAbrirObjeto: objeto => ctbAbrirObjeto(objeto, { doModal }),
+        textos: {
+            placeholder: "Escreva uma mensagem… (@ menciona alguém · ' cita um item · Ctrl+Enter publica)",
+            publicar: 'Publicar', publicado: 'Mensagem publicada.', vazio: 'Nenhuma mensagem ainda. Escreva a primeira.', etiqueta: 'Mensagem',
+            sqlPendente: 'As mensagens ainda não estão ativadas: rode sql/contabilidade_mensagens.sql no banco e reinicie a API.',
+            citarObjetos: 'Citar um item da Contabilidade — abre ao clicar'
+        }
+    };
+}
+window.ContabilidadeMensagensOpcoes = ctbOpcoesMensagens;
+window.ContabilidadeAbrirMensagens = foco => ctbAbrirModal('mensagens', null, { foco: foco || null });
+
+function ctbMontarMensagens(moduleEl) {
+    const alvo = moduleEl.querySelector('[data-ctb-mensagens]');
+    if (!alvo || typeof window.HistoricoSocial?.montar !== 'function') return;
+    moduleEl.ctbMensagens = window.HistoricoSocial.montar(alvo, ctbOpcoesMensagens());
 }
 
 /** A pendência vem do Financeiro: abre o módulo (o filtro dela fica para a etapa que ligar os dois). */
@@ -696,6 +875,7 @@ function ctbLigarAcoes(moduleEl) {
         if (alvo.dataset.ctbFiltro) extra.filtro = alvo.dataset.ctbFiltro;
         if (alvo.dataset.ctbFonte !== undefined) extra.fonte = alvo.dataset.ctbFonte || null;
         if (alvo.ctbPendencia) extra.pendencia = alvo.ctbPendencia;
+        if (alvo.classList.contains('ctb-kpi')) extra.cartao = true;
         return extra;
     };
     moduleEl.addEventListener('click', evento => {
@@ -735,7 +915,6 @@ function ctbIniciar(moduleEl) {
     else if (campo) campo.value = inicial;
     campo?.addEventListener('change', () => {
         moduleEl.ctbFiltro = { nivel: 'todas', fonte: null };
-        delete moduleEl.dataset.pendenciasTodas;
         ctbRecarregar(moduleEl);
     });
     moduleEl.querySelector('#ctbHoje')?.addEventListener('click', () => {
@@ -749,6 +928,8 @@ function ctbIniciar(moduleEl) {
 
     // O menu espera esta promessa antes de tirar a máscara de carregamento.
     ctbRecarregar(moduleEl);
+    // As mensagens carregam sozinhas (e ficam ao vivo, a cada 10 s).
+    ctbMontarMensagens(moduleEl);
 }
 
 (function ctbBoot() {

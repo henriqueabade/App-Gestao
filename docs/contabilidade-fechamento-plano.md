@@ -1306,3 +1306,78 @@ sem erro de console (o gerar imprime o PDF, gera e salva).
 **Próxima:** as etapas 10+ (automáticos: NF-e de entrada pela SEFAZ, extrato
 pela API do BB, CDB, NFS-e) dependem de contratação/confirmação; a fase final
 é rodar os SQLs, testar juntos e homologar.
+
+---
+
+## Z. Tela nova, mensagens e o "'" (29/09/2026)
+
+Pedido do dono depois de rodar os SQLs 1–7 no DEV e importar o extrato
+(funcionou). A etapa 9 foi commitada por ele ("Fase 9"); esta rodada, não.
+
+**Tela principal** (`contabilidade.html/js/css`):
+- **Pendências** sem "Ver todas": "Todas" mostra todas. O cartão tem a altura
+  do das Ações (a linha da grade estica os dois; com a tela estreita, 24rem)
+  e a lista rola por dentro, com a barra da casa (`scroll.css`, nenhuma barra
+  nova).
+- Os cartões **Erros críticos / Pendências documentais / Avisos** filtram a
+  lista **e levam a tela até ela**, rolando suave (`scrollIntoView`; sem
+  animação para quem pediu menos movimento). O cartão não alterna: clicar de
+  novo mantém o filtro (o chip continua alternando).
+- **Atividade recente**: altura fixa (34rem), rola por dentro; **Ver todas**
+  abre o modal novo `atividade` — no molde da Atividade do Financeiro: dia a
+  dia, foto de quem fez (a atividade agora devolve `usuario_id`), etiqueta
+  por grupo, competência, filtros busca/tipo/quem.
+- **"Próximas etapas" saiu**; no lugar, **Mensagens e comentários**, com a
+  mesma altura, e **Ver tudo** (modal novo `mensagens`).
+
+**Mensagens e comentários** — o social da casa (`historico-social.js`) com a
+origem nova **`contabilidade`**: um **mural só**, o do módulo (id 1), sem
+tabela de ficha (`ORIGENS.contabilidade.registroFixo`). Publicar, curtir,
+comentar, responder sem limite, anexar, editar o próprio comentário, excluir
+(Sup Admin), ao vivo a cada 10 s. Permissão: `contabilidade.view`. Avisos no
+sino como nas fichas: "@" avisa o mencionado; comentário avisa quem escreveu
+a mensagem; resposta, quem foi respondido; mensagem nova sem "@" não avisa
+ninguém (mural sem dono). O aviso abre a Contabilidade e o modal já no
+comentário (`ContabilidadeAbrirMensagens`).
+
+**O "'" (objetos)** — terceira marca do social, `'[rótulo](o:tipo:id)`, ao
+lado de `@[Nome](u:id)` e `*[rótulo](e:id)`. Quem monta o social passa
+`objetos(busca)` (assíncrono) e `aoAbrirObjeto(objeto)`; a marca vira uma
+etiqueta azul clara com ícone, que abre o objeto. O "'" só abre a lista no
+começo de palavra ("d'água" não); a busca de "@" deixou de aceitar "'".
+- Na Contabilidade: `GET /api/contabilidade/citaveis?busca=&competencia=`
+  (`backend/contabilidade/citaveis.js`) — competência, documento recebido,
+  conta a pagar, lançamento do extrato (só buscando, da competência da tela),
+  arquivo, fechamento, pacote, importação de extrato, conta do banco, conta
+  do plano e fornecedor; as **pendências** vêm da própria tela (o painel já
+  lido). O id leva o que a tela precisa para abrir (fechamento
+  `AAAA-MM:vN`, pacote `AAAA-MM:id`, importação `conta:AAAA-MM:id`,
+  pendência `AAAA-MM:chave`). Abrir: documento, conta, dossiê do
+  lançamento, pacote, fechamentos, plano, extrato (por cima do modal das
+  mensagens, quando se está nele); competência e pendência mexem na tela (a
+  linha da pendência pisca); arquivo abre no programa do computador;
+  fornecedor abre a ficha em Contatos.
+- Em **Contatos** (ficha › Histórico): `GET /api/contatos/:id/citaveis` —
+  pessoas e atividades do contato e, para quem vê a Contabilidade, os
+  documentos, as contas e os arquivos dele. Pessoa e atividade abrem na aba
+  delas, piscando; documento/conta fecham a ficha e abrem na Contabilidade
+  (`ContabilidadeAbrirObjeto`).
+
+**SQL:** `sql/contabilidade_mensagens.sql` — `contabil_mural_historico` (o
+mesmo formato dos `*_historico`) e a trava `origem` das quatro tabelas do
+social refeita com `prospeccao, cliente, contato, tarefa, contabilidade`
+(tira qualquer CHECK que fale de `origem` e põe o novo). Conferido no
+Postgres descartável: **antes dele, o banco recusava `contato`** — o social
+de Contatos (28/09) não gravava curtida/comentário no banco do dono.
+
+**Conferido:** testes de tela (a tela nova, os dois modais, a função pura
+das pendências citáveis, o "'" do componente: marca, edição de ida e volta,
+gatilho), backend (citáveis: 5; social com o mural: 3 novos; contatos: 1
+novo); Postgres descartável em modo DEV: SQL duas vezes, publicar com "@" e
+"'", aviso de menção com o texto limpo, comentário, curtida, linha do tempo,
+mural 2 → 404, comentário em contato gravando, citáveis com o simulado;
+Electron sem erro de console: a tela, o cartão rolando até a lista, o "'"
+no cartão e no modal, a etiqueta abrindo o documento por cima, a atividade
+com filtros, e a ficha do contato com o "'" e a pessoa piscando.
+
+**Em aberto:** pendências 29–33 do roteiro de homologação.

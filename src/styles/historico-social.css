@@ -164,6 +164,16 @@
     display: inline-flex; align-items: center; gap: 0.3rem; padding: 0 0.45rem; border-radius: 0.4rem; font-size: 0.68rem; font-weight: 600;
     color: #5eead4; background: rgba(45, 212, 191, 0.1);
 }
+
+/* Objeto citado com "'" (documento, pendência, competência…): etiqueta azul
+   clara — a cor de "consulta dentro do app" — que abre o objeto. */
+.hs-objeto {
+    display: inline-flex; align-items: center; gap: 0.3rem; margin: 0 0.1rem; padding: 0 0.45rem; border-radius: 0.4rem;
+    font-size: 0.78rem; font-weight: 600; vertical-align: baseline; white-space: normal; text-align: left;
+    color: var(--color-blue, #8aa7f3); background: rgba(138, 167, 243, 0.12); border: 1px solid rgba(138, 167, 243, 0.35);
+}
+.hs-objeto i { font-size: 0.65rem; }
+button.hs-objeto:hover { background: rgba(138, 167, 243, 0.22); }
 .hs-sobre i { font-size: 0.58rem; }
 
 /* Sugestões do @ e do * (abaixo da caixa de texto): vidro claro com texto
@@ -183,6 +193,7 @@
 .hs-sugestao:hover, .hs-sugestao--ativa { background: rgba(182, 160, 62, 0.28); }
 .hs-sugestao .hs-avatar--p { width: 1.6rem; height: 1.6rem; font-size: 0.6rem; }
 .hs-sugestao__hora { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: #7a5c12; }
+.hs-sugestao__icone { flex-shrink: 0; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 0.45rem; font-size: 0.72rem; color: #1e3a8a; background: rgba(138, 167, 243, 0.3); }
 .hs-sugestao__texto { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-sugestao__detalhe { font-size: 0.7rem; color: #4b5563; }
 .hs-botao--icone { width: var(--ctl-altura-pequena, 2rem); padding: 0; }
@@ -332,6 +343,7 @@
 [data-menu-theme="light"] .hs-grupo__alternar, [data-menu-theme="light"] .hs-cascata__alternar,
 [data-menu-theme="light"] .hs-mencao { color: #7a5c12; }
 [data-menu-theme="light"] .hs-citacao, [data-menu-theme="light"] .hs-sobre { color: #0f766e; }
+[data-menu-theme="light"] .hs-objeto { color: #1e40af; }
 [data-menu-theme="light"] .hs-ao-vivo { color: #047857; }
 
 /* ---------------------------------------------------------------------------

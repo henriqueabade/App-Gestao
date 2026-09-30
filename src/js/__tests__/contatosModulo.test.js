@@ -120,6 +120,20 @@ test('modais: novo/editar têm o Tipo com + e −, CNPJ/CPF, endereço "end" e a
   assert.ok(excluir.includes('data-perm="ctt.delete"'));
 });
 
+test("linha do tempo do contato (29/09/2026): ' cita o que é ligado a ele; pessoa e atividade abrem na ficha, documento e conta na Contabilidade", () => {
+  const DETALHES_JS = ler('js', 'modals', 'contato-detalhes.js');
+  assert.ok(DETALHES_JS.includes('objetos: objetosDoContato, aoAbrirObjeto: abrirObjetoDoContato'));
+  assert.ok(DETALHES_JS.includes('/api/contatos/${contato.id}/citaveis?busca='));
+  // Pessoa e atividade: a aba delas, com o item piscando; o resto: fecha a ficha e abre na Contabilidade.
+  assert.ok(DETALHES_JS.includes("activateTab(document.getElementById('tab-pessoas')") && DETALHES_JS.includes("activateTab(document.getElementById('tab-atividades')"));
+  assert.ok(DETALHES_JS.includes("attrs: { 'data-atividade-id': String(a.id) }") && DETALHES_JS.includes('[data-atividade-id="${CSS.escape(String(objeto.id))}"]'));
+  assert.ok(DETALHES_JS.includes("await window.loadPage?.('contabilidade')") && DETALHES_JS.includes('window.ContabilidadeAbrirObjeto(objeto)'));
+  // A rota confere a permissão de ver a ficha e só traz documento/conta para quem vê a Contabilidade.
+  const CONTROLLER = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contatosController.js'), 'utf8');
+  assert.ok(CONTROLLER.includes("router.get('/:id/citaveis', exigirPermissao('ctt.details.view')"));
+  assert.ok(CONTROLLER.includes("permissoesRepo.can(permissoes, 'contabilidade.view')"));
+});
+
 test('o sino abre a ficha do contato e o menu trata o módulo como Clientes (a tabela rola por dentro)', () => {
   const NOTIF = ler('js', 'notifications.js');
   assert.ok(NOTIF.includes("contato: 'contatos'") && NOTIF.includes('window.ContatosModulo?.abrirDetalhes'));

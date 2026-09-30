@@ -136,12 +136,65 @@
       nota: cru(h.observacao)
     };
   }
+  // "'" cita o que é ligado ao contato (GET /api/contatos/:id/citaveis): as
+  // pessoas e as atividades abrem aqui mesmo, na aba delas; documentos,
+  // contas e arquivos abrem na Contabilidade.
+  async function objetosDoContato(busca) {
+    const res = await fetchApi(`/api/contatos/${contato.id}/citaveis?busca=${encodeURIComponent(busca || '')}`);
+    const json = await res.json().catch(() => ({}));
+    return res.ok && Array.isArray(json.itens) ? json.itens : [];
+  }
+  // O item citado pisca: linha de tabela ganha fundo dourado nas células (o
+  // contorno numa <tr> quase não aparece); o cartão da atividade, contorno.
+  const piscar = el => {
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const alvos = el.tagName === 'TR' ? [...el.children] : [el];
+    for (const a of alvos) {
+      if (el.tagName === 'TR') a.style.background = 'rgba(182, 160, 62, 0.22)';
+      else { a.style.outline = '2px solid var(--color-primary)'; a.style.outlineOffset = '2px'; }
+    }
+    setTimeout(() => alvos.forEach(a => { a.style.background = ''; a.style.outline = ''; a.style.outlineOffset = ''; }), 2600);
+  };
+  async function abrirObjetoDoContato(objeto) {
+    if (objeto.tipo === 'pessoa') {
+      activateTab(document.getElementById('tab-pessoas'), { setFocus: false });
+      const i = pessoasDoContato.findIndex(p => String(p.id) === String(objeto.id));
+      if (i < 0) { showToast('Esta pessoa não está mais no contato.', 'info'); return; }
+      piscar(document.getElementById('pessoasTabela')?.children[i]);
+      return;
+    }
+    if (objeto.tipo === 'interacao') {
+      activateTab(document.getElementById('tab-atividades'), { setFocus: false });
+      await montarAtividades();
+      const item = document.querySelector(`#contatoAtividades [data-atividade-id="${CSS.escape(String(objeto.id))}"]`);
+      if (!item) { showToast('Esta atividade não existe mais.', 'info'); return; }
+      piscar(item);
+      return;
+    }
+    // Documento, conta, arquivo…: moram na Contabilidade (é lá que abrem).
+    close();
+    await window.loadPage?.('contabilidade');
+    if (document.getElementById('content')?.dataset.activePage !== 'contabilidade' || typeof window.ContabilidadeAbrirObjeto !== 'function') {
+      showToast('Você não tem acesso à Contabilidade.', 'error');
+      return;
+    }
+    window.ContabilidadeAbrirObjeto(objeto);
+  }
+
   let linhaDoTempo = null;
   function montarHistorico(foco = null) {
     const alvo = document.getElementById('contatoHistorico');
     if (!alvo || !contato?.id || !window.HistoricoSocial) return;
     if (linhaDoTempo) { if (foco) linhaDoTempo.focar(foco); return; }
-    linhaDoTempo = window.HistoricoSocial.montar(alvo, { origem: 'contato', registroId: contato.id, descrever: descreverEventoContato, foco });
+    linhaDoTempo = window.HistoricoSocial.montar(alvo, {
+      origem: 'contato', registroId: contato.id, descrever: descreverEventoContato, foco,
+      objetos: objetosDoContato, aoAbrirObjeto: abrirObjetoDoContato,
+      textos: {
+        placeholder: "Escreva uma observação para todos que acompanham este contato… (@ menciona alguém · ' cita uma pessoa, atividade, documento ou conta dele · Ctrl+Enter publica)",
+        citarObjetos: 'Citar algo ligado a este contato — abre ao clicar'
+      }
+    });
   }
   const abaHistorico = document.getElementById('tab-historico');
   abaHistorico?.addEventListener('click', () => montarHistorico());
@@ -262,7 +315,7 @@
             pintarAtividades();
           } catch (err) { window.showToast?.(err.message, 'error'); }
         } } }, icone('fa-trash-can'))) : null;
-      const item = h('article', { class: 'cat__item' },
+      const item = h('article', { class: 'cat__item', attrs: { 'data-atividade-id': String(a.id) } },
         h('span', { class: 'cat__icone' }, icone(iconeDoTipo(a.tipo))),
         h('div', { class: 'cat__conteudo' },
           h('div', { class: 'cat__meta' }, h('strong', { text: a.tipo }), T.chip('Concluída', { icone: 'fa-circle-check', classe: 'tui-chip--sucesso' }), h('span', { text: quandoLegivel(a.data) }), a.usuario ? h('span', { text: a.usuario }) : null),
@@ -279,10 +332,13 @@
     if (editando) resumo.focus();
   }
 
+  // Devolve a promessa da pintura (o "'" espera a lista para destacar a atividade citada).
+  let pinturaDasAtividades = Promise.resolve();
   function montarAtividades() {
-    if (atividadesMontadas || !contato?.id || !window.TarefasUI) return;
+    if (atividadesMontadas || !contato?.id || !window.TarefasUI) return pinturaDasAtividades;
     atividadesMontadas = true;
-    pintarAtividades();
+    pinturaDasAtividades = pintarAtividades();
+    return pinturaDasAtividades;
   }
   document.getElementById('tab-atividades')?.addEventListener('click', montarAtividades);
   const pedidoDeFoco = window.historicoSocialFoco;
