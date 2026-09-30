@@ -1,0 +1,124 @@
+<!--
+  Classificação (etapa 6). Modal grande. Os lançamentos do extrato do mês
+  (todas as contas ou uma) com a conta do plano que vale para cada um e de
+  onde ela veio — categoria da conta a pagar, origem do dinheiro, regra, à
+  mão (GET /api/contabilidade/classificacao). A conta de cada linha se troca
+  na própria linha; marcando várias, "Classificar marcados" põe todas numa
+  conta (POST .../classificar). À mão se desfaz ("Automático"). "Regra" abre
+  as regras com a descrição do lançamento já preenchida. Embaixo, o total por
+  conta do plano: a prévia do relatório mensal.
+  Script: src/js/modals/contabilidade-modais.js (montarClassificacao).
+-->
+<div id="ctbClassificacaoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbClassTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbClassTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-tags mr-2" aria-hidden="true"></i>Classificação</h2>
+      <span id="ctbClassRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 gap-6 ctb-filtros-extrato">
+          <div>
+            <label for="ctbClassConta" class="ctl-rotulo text-gray-300">Conta do banco</label>
+            <select id="ctbClassConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todas as contas</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbClassCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbClassCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbClassCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbClassCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbClassCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbClassVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbClassVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="sem">Sem classificação</option>
+              <option value="manuais">Classificados à mão</option>
+              <option value="automaticos">Classificados sozinhos</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbClassBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbClassBusca" type="search" placeholder="Descrição, valor ou conta"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbClassTotais">
+          <div class="ctb-total" data-total="total"><span class="ctb-total__rotulo">Lançamentos no mês</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="classificados" data-tom="verde"><span class="ctb-total__rotulo">Classificados</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="sem" data-tom="bordo"><span class="ctb-total__rotulo">Sem classificação</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="manuais"><span class="ctb-total__rotulo">À mão</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">A mão vence a regra</span></div>
+        </div>
+        <p id="ctbClassNota" class="text-sm text-gray-300"></p>
+
+        <div class="ctb-lote" data-perm-hide="contabilidade.classificar">
+          <span id="ctbClassMarcados" class="text-sm text-gray-300">Nenhum marcado</span>
+          <div class="ctb-lote__campo">
+            <label for="ctbClassLoteConta" class="ctl-rotulo text-gray-300">Classificar os marcados em</label>
+            <select id="ctbClassLoteConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div class="ctb-lote__campo">
+            <label for="ctbClassLoteObs" class="ctl-rotulo text-gray-300">Observação</label>
+            <input id="ctbClassLoteObs" type="text" maxlength="500" placeholder="Opcional"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <button id="ctbClassAplicar" type="button" data-perm="contabilidade.classificar" class="btn-primary ctl-botao text-white" disabled>Classificar marcados</button>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs"><input id="ctbClassTodos" type="checkbox" class="w-4 h-4" aria-label="Marcar todos" /></th>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
+                <th class="px-4 py-3 text-left text-xs">Descrição do banco</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Conta do plano</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbClassLista"></tbody>
+          </table>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Por conta do plano</h3>
+            <span id="ctbClassResultado" class="text-sm text-gray-300"></span>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Conta</th>
+                  <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Entradas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saídas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Resultado</th>
+                </tr>
+              </thead>
+              <tbody id="ctbClassPorConta"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbClassMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbClassPlano" type="button" class="btn-neutral ctl-botao text-white">Plano de contas</button>
+      <button id="ctbClassRegras" type="button" class="btn-neutral ctl-botao text-white">Regras</button>
+    </footer>
+  </div>
+</div>

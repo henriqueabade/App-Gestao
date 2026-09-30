@@ -148,7 +148,24 @@ const PADRONIZADOS = [
     // modais (Fechar competência, Reabrir, Ignorar pendência). As etiquetas de
     // filtro (ctb-chip) e de situação das fontes ficam de fora, como as outras.
     modulo: 'contabilidade',
-    arquivos: ['html/contabilidade.html', ...['fechar', 'reabrir', 'ignorar-pendencia'].map(m => `html/modals/contabilidade/${m}.html`)]
+    arquivos: ['html/contabilidade.html', ...[
+      'fechar', 'reabrir', 'ignorar-pendencia',
+      // 28/09/2026 — etapas 2 e 3: contas a pagar, documentos e evidências.
+      'contas-pagar', 'conta-pagar', 'conta-pagar-form', 'pagar-parcela',
+      'documentos-recebidos', 'registrar-documento', 'documento-recebido', 'evidencias',
+      // 28/09/2026 — etapa 4: extrato por OFX e as contas do banco.
+      'extrato', 'importar-extrato', 'contas-financeiras',
+      // 28/09/2026 — etapa 5: a conciliação do extrato.
+      'conciliacao', 'conciliar-movimento',
+      // 29/09/2026 — etapa 6: classificação, plano de contas e regras.
+      'classificacao', 'plano-contas', 'regras-classificacao',
+      // 29/09/2026 — etapa 7: histórico dos fechamentos.
+      'fechamentos',
+      // 29/09/2026 — etapa 8: relatório mensal e dossiê.
+      'relatorio', 'dossie',
+      // 29/09/2026 — etapa 9: o pacote para a contabilidade.
+      'pacote'
+    ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
   { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },

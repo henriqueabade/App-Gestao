@@ -1,0 +1,125 @@
+<!--
+  Nova conta a pagar / editar (etapa 3). Modal médio, por cima da lista ou
+  da ficha. O fornecedor é um CONTATO do CRM (o "Novo contato" abre o cadastro
+  de Contatos por cima, com ctt.create). As parcelas: quantidade + primeiro
+  vencimento dividem o valor (a sobra de centavos vai na última) e cada uma
+  pode ser ajustada; a soma tem de bater com o valor. Conta com pagamento só
+  muda descrição, categoria, fornecedor, observação e linha digitável.
+  Grava por POST /api/contabilidade/titulos ou PUT /titulos/:id
+  (contabilidade.pagar.lancar).
+  Script: src/js/modals/contabilidade-modais.js (montarContaPagarForm).
+-->
+<div id="ctbContaPagarFormOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbContaFormTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbContaFormTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-invoice-dollar mr-2" aria-hidden="true"></i>Nova conta a pagar</h2>
+      <span id="ctbContaFormSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">Nova</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p id="ctbContaFormTravada" class="hidden ctb-aviso text-sm" role="note"></p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="md:col-span-2">
+            <label for="ctbContaFormFornecedor" class="ctl-rotulo text-gray-300">Fornecedor</label>
+            <div class="flex gap-2">
+              <select id="ctbContaFormFornecedor" class="flex-1 min-w-0 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <button id="ctbContaFormNovoContato" type="button" data-perm="ctt.create" class="btn-neutral ctl-botao text-white" title="Cadastrar em Contatos">
+                <i class="fas fa-user-plus mr-2" aria-hidden="true"></i>Novo contato
+              </button>
+            </div>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbContaFormDescricao" class="ctl-rotulo text-gray-300">Descrição <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbContaFormDescricao" type="text" maxlength="200" placeholder="Ex.: Vidros temperados da obra, Aluguel de setembro"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="ctbContaFormCategoria" class="ctl-rotulo text-gray-300">Categoria</label>
+            <input id="ctbContaFormCategoria" type="text" maxlength="80" list="ctbContaFormCategorias" placeholder="Aquisição de Bens, Serviços de Terceiros…"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <datalist id="ctbContaFormCategorias"></datalist>
+          </div>
+          <div>
+            <label for="ctbContaFormNumero" class="ctl-rotulo text-gray-300">Nº do documento</label>
+            <input id="ctbContaFormNumero" type="text" maxlength="60" placeholder="Nota, contrato, guia…"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="ctbContaFormEmissao" class="ctl-rotulo text-gray-300">Emissão</label>
+            <input id="ctbContaFormEmissao" type="date"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="ctbContaFormCompetenciaMes" class="ctl-rotulo text-gray-300">Competência <span class="ctb-obrigatorio">*</span></label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbContaFormCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbContaFormCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbContaFormCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Usar esta competência" aria-label="Usar esta competência"><i class="fas fa-check" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbContaFormCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbContaFormValor" class="ctl-rotulo text-gray-300">Valor total <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbContaFormValor" type="text" inputmode="decimal" placeholder="0,00"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="ctbContaFormDocumento" class="ctl-rotulo text-gray-300">Documento fiscal</label>
+            <select id="ctbContaFormDocumento" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbContaFormObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+            <textarea id="ctbContaFormObservacao" rows="2" maxlength="1000" placeholder="Opcional"
+                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          </div>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Parcelas</h3>
+            <span id="ctbContaFormSoma" class="ctb-soma">—</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end" id="ctbContaFormGerador">
+            <div>
+              <label for="ctbContaFormQuantidade" class="ctl-rotulo text-gray-300">Quantidade</label>
+              <input id="ctbContaFormQuantidade" type="number" min="1" max="60" step="1" value="1"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbContaFormPrimeiro" class="ctl-rotulo text-gray-300">1º vencimento</label>
+              <input id="ctbContaFormPrimeiro" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <button id="ctbContaFormDividir" type="button" class="btn-neutral ctl-botao text-white w-full">Dividir em parcelas mensais</button>
+            </div>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Nº</th>
+                  <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                  <th class="px-4 py-3 text-left text-xs">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Linha digitável do boleto</th>
+                </tr>
+              </thead>
+              <tbody id="ctbContaFormParcelas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbContaFormMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbContaFormSalvar" type="button" data-perm="contabilidade.pagar.lancar" class="btn-primary ctl-botao text-white min-w-[160px]">Salvar conta</button>
+    </footer>
+  </div>
+</div>

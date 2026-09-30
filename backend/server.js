@@ -34,12 +34,14 @@ const API_BASE_ORIGIN = (
 ).replace(/\/+$/, '').replace(/\/api$/, '');
 app.use(cors());
 // 3 MB para tudo, menos o histórico social (um anexo de até 20 MB chega em
-// base64, ~27 MB) e a planilha das Ações Rápidas (importação e a lista de ids
-// da exportação). Decidido aqui, pelo caminho, para as travas abaixo (token,
-// sessão DEV) continuarem valendo para eles também.
+// base64, ~27 MB), a planilha das Ações Rápidas (importação e a lista de ids
+// da exportação) e os arquivos da Contabilidade (XML, PDF, comprovante — o
+// anexo, o documento recebido e o pagamento com comprovante). Decidido aqui,
+// pelo caminho, para as travas abaixo (token, sessão DEV) continuarem valendo
+// para eles também.
 const jsonPadrao = express.json({ limit: '3mb' });
 const jsonGrande = express.json({ limit: '30mb' });
-const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes)\/csv\/)/;
+const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes|contatos)\/csv\/|contabilidade\/(arquivos|documentos|pacote|parcelas\/\d+\/pagar|extrato\/(previa|importar)))/;
 app.use((req, res, next) => (CORPO_GRANDE.test(req.path) ? jsonGrande : jsonPadrao)(req, res, next));
 
 if (isDev) {
@@ -387,6 +389,12 @@ if (process.versions && process.versions.electron && process.env.NODE_ENV !== 't
     require('./cobranca/agendaConciliacao').iniciarNoApp();
   } catch (err) {
     console.error('[cobranca] a conciliação automática não iniciou:', err?.message || err);
+  }
+  // As buscas automáticas da Contabilidade (NF-e na SEFAZ, extrato no BB, NFS-e no ADN).
+  try {
+    require('./contabilidade/integracoes/agenda').iniciarNoApp();
+  } catch (err) {
+    console.error('[contabilidade] a busca automática das integrações não iniciou:', err?.message || err);
   }
 }
 

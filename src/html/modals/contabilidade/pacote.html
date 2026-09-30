@@ -1,0 +1,120 @@
+<!--
+  Pacote para a contabilidade (etapa 9). Modal grande. O ZIP da competência
+  que o usuário salva e envia (GET/POST /api/contabilidade/pacote): se já dá
+  para gerar (competência fechada e sem pendência documental viva — ignorada
+  com justificativa vale), o que vai em cada pasta, o que falta (vai listado
+  no LEIA-ME), os pacotes já gerados (com o SHA-256 de cada um) e o registro
+  do envio (para quem, como). O PDF do relatório é impresso aqui mesmo pelo
+  Electron e vai junto; o ZIP não fica no app.
+  "Gerar pacote" e "Marcar como enviado" pedem "Gerar relatório e pacote"
+  (contabilidade.pacote.gerar).
+  Script: src/js/modals/contabilidade-modais.js (montarPacote).
+-->
+<div id="ctbPacoteOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbPacoteTitulo" class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbPacoteTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-archive mr-2" aria-hidden="true"></i>Pacote para a contabilidade</h2>
+      <span id="ctbPacoteSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbPacoteCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbPacoteCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbPacoteCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbPacoteCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbPacoteCompetencia" />
+            </div>
+          </div>
+          <p id="ctbPacoteNota" class="md:col-span-2 self-end text-sm text-gray-300"></p>
+        </div>
+
+        <div id="ctbPacoteBloqueiosBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Ainda não dá para gerar</h3>
+            <span class="text-xs text-gray-400">Pendência documental: resolva ou ignore com justificativa na lista da tela</span>
+          </div>
+          <ul id="ctbPacoteBloqueios" class="ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">O que vai no pacote</h3>
+            <span id="ctbPacoteNome" class="text-xs text-gray-400"></span>
+          </div>
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Pasta</th>
+                  <th class="px-4 py-3 text-left text-xs">O que é</th>
+                  <th class="px-4 py-3 text-left text-xs">Arquivos</th>
+                </tr>
+              </thead>
+              <tbody id="ctbPacotePastas"></tbody>
+            </table>
+          </div>
+          <ul id="ctbPacoteFaltando" class="hidden ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Pacotes gerados</h3>
+            <span class="text-xs text-gray-400">O ZIP não fica no app: guarde o arquivo que salvou</span>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Gerado</th>
+                  <th class="px-4 py-3 text-left text-xs">Versão</th>
+                  <th class="px-4 py-3 text-left text-xs">Arquivos</th>
+                  <th class="px-4 py-3 text-left text-xs">Tamanho</th>
+                  <th class="px-4 py-3 text-left text-xs">SHA-256</th>
+                  <th class="px-4 py-3 text-left text-xs">Envio</th>
+                </tr>
+              </thead>
+              <tbody id="ctbPacoteLista"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbPacoteEnvioBloco" class="hidden ctb-secao-modal" data-perm-hide="contabilidade.pacote.gerar">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Registrar o envio</h3>
+            <span id="ctbPacoteEnvioAlvo" class="text-xs text-gray-400"></span>
+          </div>
+          <div class="ctb-lote">
+            <div class="ctb-lote__campo">
+              <label for="ctbPacoteEnvioPara" class="ctl-rotulo text-gray-300">Para quem</label>
+              <input id="ctbPacoteEnvioPara" type="text" maxlength="200" placeholder="E-mail ou nome da contabilidade"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="ctb-lote__campo">
+              <label for="ctbPacoteEnvioMeio" class="ctl-rotulo text-gray-300">Como</label>
+              <select id="ctbPacoteEnvioMeio" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div class="ctb-lote__campo">
+              <label for="ctbPacoteEnvioObs" class="ctl-rotulo text-gray-300">Observação</label>
+              <input id="ctbPacoteEnvioObs" type="text" maxlength="500" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <button id="ctbPacoteEnviado" type="button" data-perm="contabilidade.pacote.gerar" class="btn-success ctl-botao">Marcar como enviado</button>
+          </div>
+        </div>
+
+        <div id="ctbPacoteMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbPacoteGerar" type="button" data-perm="contabilidade.pacote.gerar" class="btn-primary ctl-botao text-white min-w-[160px]">Gerar pacote (ZIP)</button>
+    </footer>
+  </div>
+</div>

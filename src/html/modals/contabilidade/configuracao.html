@@ -1,0 +1,53 @@
+<!--
+  Configurações da Contabilidade — as integrações automáticas (etapas 10 a
+  13), a estrutura para ligar e configurar as APIs:
+    NF-e de entrada (SEFAZ, Distribuição de DF-e + manifestação),
+    Extrato da conta (API de Extratos do BB),
+    NFS-e tomadas (ADN nacional),
+    Aplicações — CDB (BB; só credenciais e teste até o BB dizer qual API).
+  Em cada cartão: o que ela faz, o que falta (e o que o dono fornece), ligar,
+  ambiente, busca automática, os parâmetros, as credenciais do BB (o
+  client_secret entra e é cifrado; nunca volta), testar conexão, buscar
+  agora e as últimas execuções. O certificado A1 é o da Configuração fiscal;
+  daqui se baixa o certificado público (.cer) para o portal do BB.
+  Ver: todos com "Configurações da contabilidade"; mudar: Sup Admin.
+  Dados: GET/PUT /api/contabilidade/integracoes…
+  Script: src/js/modals/contabilidade-modais.js (montarConfiguracao).
+-->
+<div id="ctbConfiguracaoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbConfigTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbConfigTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-cog mr-2" aria-hidden="true"></i>Configurações da Contabilidade</h2>
+        <p class="text-xs text-gray-300 truncate">Integrações automáticas — SEFAZ, Banco do Brasil e ADN</p>
+      </div>
+      <span id="ctbConfigPerfil" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbConfigMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Certificado digital da empresa (A1)</h3>
+            <span class="text-xs text-gray-400">O mesmo da NF-e: cadastra-se e troca-se em Financeiro › Configuração fiscal</span>
+          </div>
+          <dl id="ctbConfigCertificado" class="ctb-dados ctb-dados--duas"></dl>
+          <div class="ctl-acoes justify-end mt-4">
+            <button id="ctbConfigBaixarCer" type="button" class="btn-secondary ctl-botao text-white" title="O certificado público (sem a chave): é o que se cadastra na aplicação do Portal Developers do BB">Baixar certificado público (.cer)</button>
+          </div>
+        </div>
+
+        <div id="ctbConfigIntegracoes" class="ctb-integracoes" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbConfigEntrada" type="button" class="btn-secondary ctl-botao text-white">NF-e e NFS-e encontradas</button>
+    </footer>
+  </div>
+</div>

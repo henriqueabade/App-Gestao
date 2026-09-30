@@ -1,0 +1,174 @@
+<!--
+  Relatório mensal (etapa 8). Modal grande. O relatório da competência para
+  a contabilidade (GET /api/contabilidade/relatorio), em abas: o resumo (o
+  resultado do mês e as contas do banco), o livro-caixa de cada conta (o
+  formato que a contabilidade recebe hoje: data, descrição, débito,
+  crédito, saldo, a conta do plano, de quem é o dinheiro e o vencimento,
+  com o total de cada dia), o resultado por conta do plano, a conciliação,
+  as pendências e os documentos. Competência fechada mostra a foto da versão;
+  aberta ou reaberta é uma PRÉVIA. Clicar num lançamento abre o dossiê dele
+  (dossie.html) por cima. "Salvar PDF" e "Salvar planilha" pedem a permissão
+  "Relatório e pacote" (contabilidade.pacote.gerar).
+  Script: src/js/modals/contabilidade-modais.js (montarRelatorio).
+-->
+<div id="ctbRelatorioOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbRelTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbRelTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-lines mr-2" aria-hidden="true"></i>Relatório mensal</h2>
+      <span id="ctbRelSituacao" class="badge-warning px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbRelCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbRelCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbRelCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbRelCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbRelCompetencia" />
+            </div>
+          </div>
+          <p id="ctbRelNota" class="md:col-span-2 self-end text-sm text-gray-300"></p>
+        </div>
+
+        <ul id="ctbRelAvisos" class="hidden ctb-lista-modal text-gray-300"></ul>
+
+        <div class="ctb-abas" role="tablist" aria-label="Partes do relatório">
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="resumo" aria-selected="true">Resumo</button>
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="livro" aria-selected="false">Livro-caixa</button>
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="resultado" aria-selected="false">Resultado</button>
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="conciliacao" aria-selected="false">Conciliação</button>
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="pendencias" aria-selected="false">Pendências</button>
+          <button type="button" class="ctb-aba" role="tab" data-ctb-aba="documentos" aria-selected="false">Documentos</button>
+        </div>
+
+        <!-- Resumo: o resultado do mês e cada conta do banco. -->
+        <div data-ctb-painel="resumo" role="tabpanel" class="space-y-6">
+          <div class="ctb-totais" id="ctbRelTotais">
+            <div class="ctb-total" data-total="receitas" data-tom="verde"><span class="ctb-total__rotulo">Receitas</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+            <div class="ctb-total" data-total="gastos" data-tom="bordo"><span class="ctb-total__rotulo">Custos e despesas</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+            <div class="ctb-total" data-total="resultado"><span class="ctb-total__rotulo">Resultado do mês</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Receitas menos deduções, custos e despesas</span></div>
+            <div class="ctb-total" data-total="sem"><span class="ctb-total__rotulo">Sem classificação</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Conta do banco</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saldo inicial</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Entradas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saídas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saldo final</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saldo do banco</th>
+                </tr>
+              </thead>
+              <tbody id="ctbRelContas"></tbody>
+            </table>
+          </div>
+          <dl id="ctbRelResumo" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+        </div>
+
+        <!-- Livro-caixa: o "Extrato de Conta" da contabilidade, com a conta do plano e de quem é o dinheiro. -->
+        <div data-ctb-painel="livro" role="tabpanel" class="hidden space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label for="ctbRelConta" class="ctl-rotulo text-gray-300">Conta do banco</label>
+              <select id="ctbRelConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div>
+              <label for="ctbRelBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+              <input id="ctbRelBusca" type="search" placeholder="Descrição, conta do plano ou observação"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <p id="ctbRelSaldoInicial" class="self-end text-sm text-gray-300"></p>
+          </div>
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Descrição</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Débito</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Crédito</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saldo</th>
+                  <th class="px-4 py-3 text-left text-xs">Conta do plano</th>
+                  <th class="px-4 py-3 text-left text-xs">Observação</th>
+                  <th class="px-4 py-3 text-left text-xs">Venc.</th>
+                </tr>
+              </thead>
+              <tbody id="ctbRelLivro"></tbody>
+            </table>
+          </div>
+          <p class="text-xs text-gray-400">Clique num lançamento para ver o dossiê dele: o que ele paga ou recebe, a conta do plano, os arquivos e o histórico.</p>
+        </div>
+
+        <div data-ctb-painel="resultado" role="tabpanel" class="hidden">
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Conta do plano</th>
+                  <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                  <th class="px-4 py-3 text-left text-xs">Lançamentos</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Entradas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Saídas</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Resultado</th>
+                </tr>
+              </thead>
+              <tbody id="ctbRelResultado"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div data-ctb-painel="conciliacao" role="tabpanel" class="hidden">
+          <div id="ctbRelConciliacao" class="space-y-6"></div>
+        </div>
+
+        <div data-ctb-painel="pendencias" role="tabpanel" class="hidden space-y-4">
+          <p id="ctbRelPendNota" class="text-sm text-gray-300"></p>
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Nível</th>
+                  <th class="px-4 py-3 text-left text-xs">Pendência</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                </tr>
+              </thead>
+              <tbody id="ctbRelPendencias"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div data-ctb-painel="documentos" role="tabpanel" class="hidden">
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Grupo</th>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Documento</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Arquivo</th>
+                </tr>
+              </thead>
+              <tbody id="ctbRelDocumentos"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbRelMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbRelPlanilha" type="button" data-perm="contabilidade.pacote.gerar" class="btn-primary ctl-botao text-white">Salvar planilha (Excel)</button>
+      <button id="ctbRelPdf" type="button" data-perm="contabilidade.pacote.gerar" class="btn-primary ctl-botao text-white min-w-[160px]">Salvar PDF</button>
+    </footer>
+  </div>
+</div>

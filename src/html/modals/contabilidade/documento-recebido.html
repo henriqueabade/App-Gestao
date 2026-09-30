@@ -1,0 +1,102 @@
+<!--
+  A ficha do documento recebido (etapa 3). Modal médio, por cima da lista ou
+  de uma pendência: os dados, os itens (NF-e), a conta a pagar ligada (ou
+  "Lançar a conta"), o pagamento de fechamento que a NFS-e documenta, os
+  arquivos (anexar o XML que faltou, o PDF) e o histórico.
+  GET /api/contabilidade/documentos/:id. Excluir pede o motivo
+  (contabilidade.documento.excluir) e cancela junto a conta sem pagamento.
+  Script: src/js/modals/contabilidade-modais.js (montarDocumentoRecebido).
+-->
+<div id="ctbDocumentoRecebidoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbDocDetTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbDocDetTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>Documento recebido</h2>
+      <span id="ctbDocDetTipo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <dl id="ctbDocDetDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+
+        <div id="ctbDocDetConta" class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Pagamento</h3>
+          </div>
+          <p id="ctbDocDetContaTexto" class="text-sm text-gray-300"></p>
+          <div class="flex flex-wrap gap-3">
+            <button id="ctbDocDetAbrirConta" type="button" class="hidden btn-secondary ctl-botao text-white">Abrir a conta a pagar</button>
+            <button id="ctbDocDetLancarConta" type="button" data-perm="contabilidade.pagar.lancar" class="hidden btn-primary ctl-botao text-white">Lançar a conta a pagar</button>
+          </div>
+        </div>
+
+        <div id="ctbDocDetItensBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Itens da nota</h3>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Item</th>
+                  <th class="px-4 py-3 text-left text-xs">NCM</th>
+                  <th class="px-4 py-3 text-left text-xs">CFOP</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Qtd.</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                </tr>
+              </thead>
+              <tbody id="ctbDocDetItens"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Arquivos</h3>
+          </div>
+          <ul id="ctbDocDetArquivos" class="ctb-arquivos"></ul>
+          <div class="ctb-anexar" data-perm-hide="contabilidade.documento.registrar">
+            <div>
+              <label for="ctbDocDetAnexoCategoria" class="ctl-rotulo text-gray-300">Tipo</label>
+              <select id="ctbDocDetAnexoCategoria" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="xml_nfe">XML de NF-e</option>
+                <option value="nota">Nota fiscal (PDF)</option>
+                <option value="nfse">NFS-e</option>
+                <option value="recibo">Recibo</option>
+                <option value="guia">Guia de imposto</option>
+                <option value="contrato">Contrato</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbDocDetAnexoDescricao" class="ctl-rotulo text-gray-300">Descrição</label>
+              <input id="ctbDocDetAnexoDescricao" type="text" maxlength="300" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocDetAnexoArquivo" class="ctl-rotulo text-gray-300">Arquivo</label>
+              <input id="ctbDocDetAnexoArquivo" type="file" accept=".pdf,.xml,.png,.jpg,.jpeg" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+            </div>
+            <button id="ctbDocDetAnexar" type="button" data-perm="contabilidade.documento.registrar" class="btn-neutral ctl-botao text-white">Anexar</button>
+          </div>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Histórico</h3>
+          </div>
+          <ol id="ctbDocDetHistorico" class="ctb-historico"></ol>
+        </div>
+
+        <div id="ctbDocDetMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbDocDetDossie" type="button" class="btn-secondary ctl-botao text-white" title="Tudo o que está ligado a este documento: contas a pagar e o banco">Dossiê</button>
+      <button id="ctbDocDetExcluir" type="button" data-perm="contabilidade.documento.excluir" class="btn-warning ctl-botao text-white">Excluir documento</button>
+    </footer>
+  </div>
+</div>

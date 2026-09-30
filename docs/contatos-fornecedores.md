@@ -34,8 +34,10 @@ ficha do cliente) **não mudaram**.
 
 A linha do tempo usa as tabelas sociais que já existem
 (`historico_comentarios`, `historico_curtidas`, `historico_anexos`,
-`notificacoes`) com `origem = 'contato'`. Se alguma tiver CHECK na coluna
-`origem`, inclua `'contato'`.
+`notificacoes`) com `origem = 'contato'`. **Elas tinham CHECK na `origem`
+sem `'contato'`** (curtir/comentar num contato era recusado pelo banco):
+`sql/contabilidade_mensagens.sql` (29/09/2026) refaz a trava com todas as
+origens — rode-o também por isso.
 
 ## Permissões (`ctt.*`, em `perm_ctt`)
 
@@ -52,7 +54,10 @@ saiu. Estão no catálogo, no SQL e em `permissoes.html`.
 `GET /csv/modelo`, `GET|POST /csv/exportar`, `POST /csv/importar`,
 `GET /:id` (ficha: contato, pessoas, tipos), `POST /`, `PUT /:id` (pessoas
 novas/alteradas/excluídas vão junto), `DELETE /:id`,
-`GET|POST|PUT|DELETE /:id/interacoes`. Sem o SQL, 409 com `sql_pendente`.
+`GET|POST|PUT|DELETE /:id/interacoes`, `GET /:id/citaveis?busca=` (o "'" da
+linha do tempo, 29/09/2026: pessoas e atividades do contato e, para quem vê
+a Contabilidade, os documentos recebidos, as contas a pagar e os arquivos
+dele). Sem o SQL, 409 com `sql_pendente`.
 A linha do tempo é gravada por `backend/contatoHistorico.js`
 (`historicoSocial.js` ganhou a origem `contato`). A planilha (modelo,
 exportar, importar) vive em `backend/importacaoCsv.js` (`COLUNAS_CONTATO`).

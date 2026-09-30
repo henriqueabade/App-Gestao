@@ -52,6 +52,10 @@
 
     // Popover (i) dos contatos — arquivo compartilhado com o modal de detalhe.
     if (!window.ProspeccaoContatoPopup) carregarScript('../js/modals/prospeccao-contato-popup.js');
+    // Origem e tipos de interação: as listas com + e −.
+    const listasProntas = window.ProspeccaoListas
+      ? Promise.resolve()
+      : carregarScript('../js/utils/prospeccao-listas.js').catch(err => console.error('Erro ao carregar as listas de prospecção', err));
 
     // -----------------------------------------------------------------
     // Abas
@@ -242,6 +246,109 @@
     }
 
     // -----------------------------------------------------------------
+    // Origem: a lista com + e − (utils/prospeccao-listas.js)
+    // -----------------------------------------------------------------
+    let origemValor = '';
+    const origemPronta = listasProntas.then(() => window.ProspeccaoListas?.ligar({
+      lista: 'origens',
+      select: get('prosOrigem'),
+      botaoMais: get('addOrigemProspeccao'),
+      botaoMenos: get('delOrigemProspeccao'),
+      valor: origemValor,
+      vazio: 'Selecione a origem'
+    })).catch(err => {
+      console.error('Erro ao carregar as origens', err);
+      return null;
+    });
+    /** Escolhe a origem (a ficha pode chegar antes da lista). */
+    function definirOrigem(v) {
+      origemValor = String(v ?? '').trim();
+      origemPronta.then(ctrl => ctrl?.recarregar(origemValor));
+    }
+
+    // -----------------------------------------------------------------
+    // Redes sociais: uma por linha — a rede, o endereço e o + no fim da
+    // linha, que abre outra igual (pedido do dono, 30/09/2026). O − tira a
+    // linha (aparece quando há mais de uma).
+    // -----------------------------------------------------------------
+    const redesDaLista = () => window.ProspeccaoListas?.redes?.() || ['Instagram', 'Facebook', 'LinkedIn', 'TikTok', 'YouTube', 'X (Twitter)', 'Pinterest', 'WhatsApp', 'Outra'];
+    const CLASSE_CAMPO = 'ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+
+    function linhaDeRede({ rede = '', valor: endereco = '' } = {}) {
+      const linha = document.createElement('div');
+      linha.className = 'pros-redes__linha';
+      const sel = document.createElement('select');
+      sel.className = `pros-redes__rede ${CLASSE_CAMPO} select-arrow appearance-none`;
+      sel.setAttribute('aria-label', 'Rede social');
+      const opcoesRede = [new Option('Rede', '')];
+      const lista = redesDaLista();
+      for (const r of lista) opcoesRede.push(new Option(r, r));
+      if (rede && !lista.includes(rede)) opcoesRede.push(new Option(rede, rede));
+      sel.replaceChildren(...opcoesRede);
+      sel.value = rede || '';
+      const campo = document.createElement('input');
+      campo.type = 'text';
+      campo.maxLength = 200;
+      campo.className = `pros-redes__valor ${CLASSE_CAMPO}`;
+      campo.placeholder = '@perfil ou endereço da página';
+      campo.setAttribute('aria-label', 'Perfil ou endereço na rede');
+      campo.value = endereco || '';
+      const menos = document.createElement('button');
+      menos.type = 'button';
+      menos.className = 'pros-redes__menos btn-neutral ctl-botao ctl-botao--icone text-white';
+      menos.title = 'Tirar esta rede';
+      menos.setAttribute('aria-label', 'Tirar esta rede');
+      menos.innerHTML = '<i class="fas fa-minus" aria-hidden="true"></i>';
+      const mais = document.createElement('button');
+      mais.type = 'button';
+      mais.className = 'pros-redes__mais btn-neutral ctl-botao ctl-botao--icone text-white';
+      mais.title = 'Mais uma rede';
+      mais.setAttribute('aria-label', 'Mais uma rede');
+      mais.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i>';
+      mais.addEventListener('click', () => {
+        const nova = linhaDeRede();
+        linha.after(nova);
+        refletirLinhasDeRede();
+        nova.querySelector('select')?.focus();
+      });
+      menos.addEventListener('click', () => {
+        const container = get('prosRedesLista');
+        linha.remove();
+        if (container && !container.children.length) container.appendChild(linhaDeRede());
+        refletirLinhasDeRede();
+      });
+      linha.append(sel, campo, menos, mais);
+      return linha;
+    }
+
+    /** O − só aparece quando há mais de uma linha. */
+    function refletirLinhasDeRede() {
+      const container = get('prosRedesLista');
+      if (!container) return;
+      const linhas = Array.from(container.children);
+      linhas.forEach(l => l.querySelector('.pros-redes__menos')?.classList.toggle('hidden', linhas.length < 2));
+    }
+
+    function setRedes(lista) {
+      const container = get('prosRedesLista');
+      if (!container) return;
+      const itens = (Array.isArray(lista) ? lista : []).filter(r => r && (r.valor || r.rede));
+      container.replaceChildren(...(itens.length ? itens : [{}]).map(linhaDeRede));
+      refletirLinhasDeRede();
+    }
+
+    function getRedes() {
+      const container = get('prosRedesLista');
+      if (!container) return [];
+      return Array.from(container.querySelectorAll('.pros-redes__linha')).map(l => ({
+        rede: l.querySelector('.pros-redes__rede')?.value || '',
+        valor: (l.querySelector('.pros-redes__valor')?.value || '').trim()
+      }));
+    }
+
+    setRedes([]);
+
+    // -----------------------------------------------------------------
     // Responsáveis e geografia
     // -----------------------------------------------------------------
     async function carregarResponsaveis(selecionadoId) {
@@ -329,7 +436,8 @@
       set('prosCnpj', p.cnpj);
       set('prosInscricaoEstadual', p.inscricao_estadual);
       set('prosSite', p.site);
-      set('prosOrigem', p.origem);
+      setRedes(p.redes_sociais);
+      definirOrigem(p.origem);
       set('prosValorEstimado', p.valor_estimado ?? '');
       set('prosProbabilidade', p.probabilidade ?? '');
       set('prosProximoPasso', p.proximo_passo);
@@ -448,6 +556,17 @@
         return reprovar('tab-pros-oportunidade', 'prosValorEstimado', 'Valor estimado não pode ser negativo');
       }
 
+      // Redes: linha com endereço precisa da rede; linha sem endereço não conta.
+      const redes = getRedes();
+      const semRede = redes.findIndex(r => r.valor && !r.rede);
+      if (semRede !== -1) {
+        activateTab(get('tab-pros-empresa'));
+        const campo = get('prosRedesLista')?.querySelectorAll('.pros-redes__rede')[semRede];
+        campo?.focus();
+        showToast('Escolha a rede social da linha preenchida', 'error');
+        return null;
+      }
+
       const probabilidade = prob.vazio ? null : prob.valor;
       const valorEstimado = val.vazio ? null : val.valor;
 
@@ -460,6 +579,7 @@
         cnpj: valor('prosCnpj') || null,
         inscricao_estadual: valor('prosInscricaoEstadual') || null,
         site: valor('prosSite') || null,
+        redes_sociais: redes.filter(r => r.valor && r.rede),
         origem: valor('prosOrigem') || null,
         etapa: valor('prosEtapa') || 'Novo',
         valor_estimado: valorEstimado ?? 0,
@@ -525,9 +645,16 @@
         contatosExcluidos.length = 0;
         (Array.isArray(lista) ? lista : []).forEach(id => contatosExcluidos.push(id));
       },
+      getRedes,
+      setRedes,
+      definirOrigem,
+      origemPronta,
       // Chamado ao fechar: sem isto o ouvinte sobrevive ao modal e um segundo
-      // cadastro receberia os contatos do primeiro.
-      destruir: () => window.removeEventListener('prospeccaoContatoSalvo', aoSalvarContato)
+      // cadastro receberia os contatos do primeiro (e a lista de origens).
+      destruir: () => {
+        window.removeEventListener('prospeccaoContatoSalvo', aoSalvarContato);
+        origemPronta.then(ctrl => ctrl?.destruir());
+      }
     };
   }
 

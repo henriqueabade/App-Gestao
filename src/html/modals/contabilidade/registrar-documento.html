@@ -1,0 +1,265 @@
+<!--
+  Registrar documento recebido (etapa 3). Modal grande com quatro abas:
+    - NF-e pelo XML: o arquivo é lido na hora (POST /documentos/previa) e a
+      tela mostra emitente, itens, duplicatas e o que bloqueia/avisa; o
+      fornecedor que ainda não existe vira contato em Contatos.
+    - NF-e pela chave: sem o XML (fica como pendência documental).
+    - NFS-e: digitada (Contagem, Belo Horizonte…), com o PDF; pode ser a nota
+      de serviço de um pagamento de comissão/produção (não vira conta).
+    - Recibo, guia ou outro.
+  Embaixo: gerar a conta a pagar junto (contabilidade.pagar.lancar) ou
+  marcar "sem pagamento". Grava por POST /api/contabilidade/documentos
+  (contabilidade.documento.registrar).
+  Script: src/js/modals/contabilidade-modais.js (montarRegistrarDocumento).
+-->
+<div id="ctbRegistrarDocumentoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbDocRegTitulo" class="w-full max-w-5xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbDocRegTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>Registrar documento recebido</h2>
+      <span id="ctbDocRegCompetencia" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <nav class="px-8 flex-shrink-0" role="tablist">
+      <div class="ctb-abas">
+        <button type="button" class="ctb-aba" role="tab" data-ctb-aba="xml" aria-selected="true">NF-e pelo XML</button>
+        <button type="button" class="ctb-aba" role="tab" data-ctb-aba="chave" aria-selected="false">NF-e pela chave</button>
+        <button type="button" class="ctb-aba" role="tab" data-ctb-aba="nfse" aria-selected="false">NFS-e</button>
+        <button type="button" class="ctb-aba" role="tab" data-ctb-aba="outro" aria-selected="false">Recibo, guia ou outro</button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+
+        <!-- NF-e pelo XML -->
+        <div data-ctb-painel="xml" class="space-y-6">
+          <div>
+            <label for="ctbDocXmlArquivo" class="ctl-rotulo text-gray-300">XML da NF-e (o que o fornecedor mandou por e-mail) <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbDocXmlArquivo" type="file" accept=".xml,text/xml,application/xml" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+          </div>
+          <div id="ctbDocXmlPrevia" class="hidden space-y-4">
+            <dl id="ctbDocXmlDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+            <ul id="ctbDocXmlBloqueios" class="hidden ctb-lista-modal ctb-aviso" role="alert"></ul>
+            <ul id="ctbDocXmlAvisos" class="hidden ctb-lista-modal text-sm" style="color: var(--color-primary-light)"></ul>
+            <label id="ctbDocXmlCriarBloco" class="hidden flex items-center gap-3 text-sm text-gray-300">
+              <input id="ctbDocXmlCriarFornecedor" type="checkbox" checked class="w-4 h-4" />
+              Cadastrar o fornecedor em Contatos (tipo Fornecedor, com o endereço da nota)
+            </label>
+            <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs">Item</th>
+                    <th class="px-4 py-3 text-left text-xs">NCM</th>
+                    <th class="px-4 py-3 text-left text-xs">CFOP</th>
+                    <th class="px-4 py-3 text-right text-xs ctb-num">Qtd.</th>
+                    <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="ctbDocXmlItens"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- NF-e pela chave -->
+        <div data-ctb-painel="chave" class="hidden space-y-6">
+          <p class="text-xs text-gray-400">Sem o XML a contabilidade fica sem o arquivo oficial: a nota entra como pendência documental até o XML ser anexado.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="md:col-span-2">
+              <label for="ctbDocChave" class="ctl-rotulo text-gray-300">Chave de acesso (44 números) <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocChave" type="text" inputmode="numeric" maxlength="60" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocChaveData" class="ctl-rotulo text-gray-300">Data de emissão <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocChaveData" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocChaveValor" class="ctl-rotulo text-gray-300">Valor total <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocChaveValor" type="text" inputmode="decimal" placeholder="0,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocChaveNome" class="ctl-rotulo text-gray-300">Nome do emitente (quando ainda não é contato)</label>
+              <input id="ctbDocChaveNome" type="text" maxlength="200" placeholder="Razão social do fornecedor"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <button id="ctbDocChaveConferir" type="button" class="btn-neutral ctl-botao text-white">Conferir a chave</button>
+              <p id="ctbDocChaveResultado" class="text-sm text-gray-300 mt-2"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- NFS-e -->
+        <div data-ctb-painel="nfse" class="hidden space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="md:col-span-2">
+              <label for="ctbDocNfseReferente" class="ctl-rotulo text-gray-300">Nota de serviço de um pagamento de comissão ou produção?</label>
+              <select id="ctbDocNfseReferente" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <p class="text-xs text-gray-400 mt-2">Ligada ao pagamento do fechamento, a NFS-e não vira conta a pagar: o pagamento já está no Financeiro.</p>
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocNfsePrestador" class="ctl-rotulo text-gray-300">Prestador</label>
+              <div class="flex gap-2">
+                <select id="ctbDocNfsePrestador" class="flex-1 min-w-0 appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+                <button id="ctbDocNfseNovoContato" type="button" data-perm="ctt.create" class="btn-neutral ctl-botao text-white" title="Cadastrar em Contatos">
+                  <i class="fas fa-user-plus mr-2" aria-hidden="true"></i>Novo contato
+                </button>
+              </div>
+            </div>
+            <div>
+              <label for="ctbDocNfseDocumento" class="ctl-rotulo text-gray-300">CNPJ/CPF do prestador (se não é contato)</label>
+              <input id="ctbDocNfseDocumento" type="text" inputmode="numeric" maxlength="18"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseNome" class="ctl-rotulo text-gray-300">Nome do prestador (se não é contato)</label>
+              <input id="ctbDocNfseNome" type="text" maxlength="200"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseNumero" class="ctl-rotulo text-gray-300">Número da NFS-e <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocNfseNumero" type="text" maxlength="20"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseVerificacao" class="ctl-rotulo text-gray-300">Código de verificação</label>
+              <input id="ctbDocNfseVerificacao" type="text" maxlength="40"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseData" class="ctl-rotulo text-gray-300">Data de emissão <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocNfseData" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseMunicipio" class="ctl-rotulo text-gray-300">Município <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocNfseMunicipio" type="text" maxlength="80" list="ctbDocNfseMunicipios" placeholder="Contagem, Belo Horizonte…"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <datalist id="ctbDocNfseMunicipios"><option value="Contagem"></option><option value="Belo Horizonte"></option></datalist>
+            </div>
+            <div>
+              <label for="ctbDocNfseValor" class="ctl-rotulo text-gray-300">Valor dos serviços <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocNfseValor" type="text" inputmode="decimal" placeholder="0,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocNfseIss" class="ctl-rotulo text-gray-300">ISS</label>
+              <input id="ctbDocNfseIss" type="text" inputmode="decimal" placeholder="0,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="flex items-center gap-2 text-xs text-gray-300 mt-2"><input id="ctbDocNfseIssRetido" type="checkbox" class="w-4 h-4" /> ISS retido pela empresa</label>
+            </div>
+            <div>
+              <label for="ctbDocNfseRetencoes" class="ctl-rotulo text-gray-300">Outras retenções (IR, INSS, PIS/COFINS/CSLL)</label>
+              <input id="ctbDocNfseRetencoes" type="text" inputmode="decimal" placeholder="0,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocNfseDescricao" class="ctl-rotulo text-gray-300">Discriminação dos serviços</label>
+              <textarea id="ctbDocNfseDescricao" rows="2" maxlength="2000"
+                        class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recibo, guia ou outro -->
+        <div data-ctb-painel="outro" class="hidden space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="ctbDocOutroEspecie" class="ctl-rotulo text-gray-300">Tipo <span class="ctb-obrigatorio">*</span></label>
+              <select id="ctbDocOutroEspecie" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="recibo">Recibo</option>
+                <option value="guia">Guia de imposto</option>
+                <option value="fatura">Fatura</option>
+                <option value="contrato">Contrato</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbDocOutroNumero" class="ctl-rotulo text-gray-300">Número</label>
+              <input id="ctbDocOutroNumero" type="text" maxlength="20"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocOutroDescricao" class="ctl-rotulo text-gray-300">Do que se trata <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocOutroDescricao" type="text" maxlength="300" placeholder="Ex.: DAS de agosto, frete da chapa, conserto da serra"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocOutroEmitente" class="ctl-rotulo text-gray-300">Emitente (contato)</label>
+              <select id="ctbDocOutroEmitente" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbDocOutroNome" class="ctl-rotulo text-gray-300">Nome do emitente (se não é contato)</label>
+              <input id="ctbDocOutroNome" type="text" maxlength="200" placeholder="Receita Federal, Prefeitura, pessoa…"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocOutroData" class="ctl-rotulo text-gray-300">Data <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocOutroData" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocOutroValor" class="ctl-rotulo text-gray-300">Valor <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbDocOutroValor" type="text" inputmode="decimal" placeholder="0,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+          </div>
+        </div>
+
+        <!-- O arquivo (PDF da NFS-e, DANFE, recibo) e a conta a pagar -->
+        <div id="ctbDocArquivoBloco" class="hidden">
+          <label for="ctbDocArquivo" class="ctl-rotulo text-gray-300">Arquivo (PDF ou imagem)</label>
+          <input id="ctbDocArquivo" type="file" accept=".pdf,.png,.jpg,.jpeg" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+        </div>
+
+        <div id="ctbDocContaBloco" class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Pagamento</h3>
+          </div>
+          <div class="flex flex-wrap gap-6 text-sm text-gray-300">
+            <label class="flex items-center gap-2"><input id="ctbDocGerarConta" type="checkbox" checked data-perm="contabilidade.pagar.lancar" class="w-4 h-4" /> Lançar a conta a pagar junto</label>
+            <label class="flex items-center gap-2"><input id="ctbDocSemPagamento" type="checkbox" class="w-4 h-4" /> Sem pagamento (bonificação, remessa, amostra)</label>
+          </div>
+          <div id="ctbDocContaCampos" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label for="ctbDocContaCategoria" class="ctl-rotulo text-gray-300">Categoria</label>
+              <input id="ctbDocContaCategoria" type="text" maxlength="80" list="ctbDocContaCategorias" placeholder="Aquisição de Bens…"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <datalist id="ctbDocContaCategorias"></datalist>
+            </div>
+            <div>
+              <label for="ctbDocContaQuantidade" class="ctl-rotulo text-gray-300">Parcelas</label>
+              <input id="ctbDocContaQuantidade" type="number" min="1" max="60" step="1" value="1"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbDocContaVencimento" class="ctl-rotulo text-gray-300">1º vencimento</label>
+              <input id="ctbDocContaVencimento" type="date"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+          </div>
+          <p id="ctbDocContaDuplicatas" class="hidden text-xs text-gray-300"></p>
+        </div>
+
+        <div>
+          <label for="ctbDocObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+          <textarea id="ctbDocObservacao" rows="2" maxlength="1000" placeholder="Opcional"
+                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+        </div>
+
+        <div id="ctbDocMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbDocRegistrar" type="button" data-perm="contabilidade.documento.registrar" class="btn-success ctl-botao min-w-[160px]">Registrar documento</button>
+    </footer>
+  </div>
+</div>

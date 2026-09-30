@@ -1,0 +1,83 @@
+<!--
+  Contas a pagar (etapa 3). Modal grande. Uma linha por PARCELA, na visão
+  escolhida: em aberto, vencidas, vencem no mês, pagas no mês, lançadas no mês
+  e canceladas (GET /api/contabilidade/titulos?visao=&competencia=). Os quatro
+  números do topo são da competência escolhida. A linha abre a conta
+  (conta-pagar.html, por cima); "Pagar" abre o pagamento direto.
+  Script: src/js/modals/contabilidade-modais.js (montarContasPagar).
+-->
+<div id="ctbContasPagarOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbContasPagarTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbContasPagarTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-invoice-dollar mr-2" aria-hidden="true"></i>Contas a pagar</h2>
+      <span id="ctbContasPagarRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbContasPagarVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbContasPagarVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="abertas">Em aberto (todas)</option>
+              <option value="vencidas">Vencidas</option>
+              <option value="mes">Vencem no mês</option>
+              <option value="pagas">Pagas no mês</option>
+              <option value="todas">Lançadas no mês</option>
+              <option value="canceladas">Canceladas no mês</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbContasPagarCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbContasPagarCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbContasPagarCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbContasPagarCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbContasPagarCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbContasPagarBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbContasPagarBusca" type="search" placeholder="Fornecedor, descrição ou nº do documento"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbContasPagarTotais">
+          <div class="ctb-total" data-total="em_aberto"><span class="ctb-total__rotulo">Em aberto</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="vencido" data-tom="bordo"><span class="ctb-total__rotulo">Vencido</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="vence_no_mes"><span class="ctb-total__rotulo">Vence no mês</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="pago_no_mes" data-tom="verde"><span class="ctb-total__rotulo">Pago no mês</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+        </div>
+        <p id="ctbContasPagarNota" class="text-xs text-gray-400"></p>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                <th class="px-4 py-3 text-left text-xs">Fornecedor</th>
+                <th class="px-4 py-3 text-left text-xs">Descrição</th>
+                <th class="px-4 py-3 text-left text-xs">Parcela</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbContasPagarLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbContasPagarMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbContasPagarRegistrarDoc" type="button" data-perm="contabilidade.documento.registrar" class="btn-neutral ctl-botao text-white">Registrar NF-e ou NFS-e</button>
+      <button id="ctbContasPagarNova" type="button" data-perm="contabilidade.pagar.lancar" class="btn-primary ctl-botao text-white min-w-[160px]">Nova conta a pagar</button>
+    </footer>
+  </div>
+</div>

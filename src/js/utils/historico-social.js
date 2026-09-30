@@ -1,15 +1,18 @@
 /**
- * Linha do tempo "de rede social" do histórico de Prospecções, Clientes e
- * Tarefas.
+ * Linha do tempo "de rede social" do histórico de Prospecções, Clientes,
+ * Contatos e Tarefas — e das mensagens da Contabilidade.
  *
  *   const linha = window.HistoricoSocial.montar(alvo, {
- *     origem: 'prospeccao' | 'cliente' | 'tarefa',
+ *     origem: 'prospeccao' | 'cliente' | 'contato' | 'tarefa' | 'contabilidade',
  *     registroId,
  *     descrever: item => ({ etiqueta, tom, acao, titulo, campo, antes, depois, riscado, retrato, nota }),
  *     aoCarregar: dados => {},          // ex.: atualizar o contador da aba
- *     foco: { itemId, comentarioId }    // abrir já no comentário do aviso
+ *     foco: { itemId, comentarioId },   // abrir já no comentário do aviso
+ *     objetos: async busca => [...],    // o que o "'" cita (opcional)
+ *     aoAbrirObjeto: objeto => {}       // clicar na etiqueta do objeto citado
  *   });
  *   linha.recarregar(); linha.focar({ itemId, comentarioId }); linha.destruir();
+ *   await linha.pronto;                 // a primeira leitura terminou (bem ou mal)
  *
  * AGRUPAMENTO (pedido do dono em 18/09/2026): quem mexe muito numa ficha não
  * pode encher o feed de cartões iguais. No mesmo dia, tudo o que tem a mesma
@@ -22,6 +25,13 @@
  * registro do grupo (o comentário vai para ele) e "@" menciona um usuário
  * (que recebe o aviso "mencionou você"). As marcas gravadas no texto são
  * @[Nome](u:id) e *[rótulo](e:id) — o backend entende as mesmas.
+ *
+ * OBJETOS (29/09/2026): quem monta pode dar `objetos(busca)` (assíncrono:
+ * [{ tipo, id, rotulo, detalhe, icone }]) e `aoAbrirObjeto(objeto)`; aí "'"
+ * cita um objeto do módulo (na Contabilidade: competência, pendência,
+ * documento, conta, lançamento, arquivo…; em Contatos: o que é ligado ao
+ * contato). A marca é '[rótulo](o:tipo:id) e vira uma etiqueta que abre o
+ * objeto ao clicar.
  *
  * AO VIVO: com a ficha aberta, a linha do tempo pergunta a cada 10 s se há
  * novidade e redesenha sem perder o que se está escrevendo (nem o cursor).
@@ -204,9 +214,17 @@
 
   // ------------------------------------------------------------ menções e citações (puro)
 
-  const MARCAS = /@\[([^\]\n]{1,120})\]\(u:(\d{1,10})\)|\*\[([^\]\n]{1,200})\]\(e:(\d{1,12})\)/g;
+  const MARCAS = /@\[([^\]\n]{1,120})\]\(u:(\d{1,10})\)|\*\[([^\]\n]{1,200})\]\(e:(\d{1,12})\)|'\[([^\]\n]{1,200})\]\(o:([a-z_]{1,30}):([^)\s]{1,80})\)/g;
 
-  /** Texto do comentário → pedaços: texto, menção (@Nome) e citação (*registro). */
+  /** O ícone de cada tipo de objeto citado com "'" (quem monta pode mandar outro no item). */
+  const ICONES_OBJETO = {
+    competencia: 'fa-calendar-check', pendencia: 'fa-triangle-exclamation', documento: 'fa-file-import', titulo: 'fa-file-invoice-dollar',
+    movimento: 'fa-money-bill-transfer', arquivo: 'fa-paperclip', fechamento: 'fa-lock', pacote: 'fa-file-archive',
+    conta_plano: 'fa-tags', conta_financeira: 'fa-university', importacao: 'fa-file-arrow-up', fornecedor: 'fa-truck',
+    pessoa: 'fa-user', interacao: 'fa-clock-rotate-left'
+  };
+
+  /** Texto do comentário → pedaços: texto, menção (@Nome), citação (*registro) e objeto ('item). */
   function pedacosDoTexto(t) {
     const s = String(t ?? '');
     const pedacos = [];
@@ -214,15 +232,30 @@
     for (const m of s.matchAll(MARCAS)) {
       if (m.index > ultimo) pedacos.push({ tipo: 'texto', texto: s.slice(ultimo, m.index) });
       if (m[1] !== undefined) pedacos.push({ tipo: 'mencao', nome: m[1], id: Number(m[2]) });
-      else pedacos.push({ tipo: 'citacao', rotulo: m[3], id: Number(m[4]) });
+      else if (m[3] !== undefined) pedacos.push({ tipo: 'citacao', rotulo: m[3], id: Number(m[4]) });
+      else pedacos.push({ tipo: 'objeto', rotulo: m[5], objeto: m[6], id: m[7] });
       ultimo = m.index + m[0].length;
     }
     if (ultimo < s.length) pedacos.push({ tipo: 'texto', texto: s.slice(ultimo) });
     return pedacos;
   }
 
-  /** Só as palavras: "@Ana Souza", "*15:50 Próximo passo". */
-  const textoSimples = t => pedacosDoTexto(t).map(p => (p.tipo === 'texto' ? p.texto : p.tipo === 'mencao' ? `@${p.nome}` : `*${p.rotulo}`)).join('');
+  /** Só as palavras: "@Ana Souza", "*15:50 Próximo passo", "'NF-e 123". */
+  const textoSimples = t => pedacosDoTexto(t).map(p => (p.tipo === 'texto' ? p.texto
+    : p.tipo === 'mencao' ? `@${p.nome}` : p.tipo === 'objeto' ? `'${p.rotulo}` : `*${p.rotulo}`)).join('');
+
+  /**
+   * Um objeto vindo de `objetos(busca)` → a opção da lista e a marca. O
+   * rótulo perde o que quebraria a marca ("]" e quebra de linha); tipo ou id
+   * fora do formato ficam de fora (null).
+   */
+  function marcaDoObjeto(o) {
+    const tipo = String(o?.tipo || '');
+    const id = String(o?.id ?? '');
+    const rotulo = String(o?.rotulo || '').replace(/[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!/^[a-z_]{1,30}$/.test(tipo) || !/^[^)\s]{1,80}$/.test(id) || !rotulo) return null;
+    return { rotulo: `'${rotulo}`, marca: `'[${rotulo}](o:${tipo}:${id})`, texto: rotulo, tipo, id };
+  }
 
   /** Os registros citados num texto (na ordem). */
   const citadosNoTexto = t => pedacosDoTexto(t).filter(p => p.tipo === 'citacao').map(p => p.id);
@@ -252,6 +285,10 @@
     const refs = [];
     const partes = pedacosDoTexto(texto).map(p => {
       if (p.tipo === 'texto') return p.texto;
+      if (p.tipo === 'objeto') {
+        refs.push({ rotulo: `'${p.rotulo}`, marca: `'[${p.rotulo}](o:${p.objeto}:${p.id})` });
+        return `'${p.rotulo}`;
+      }
       const rotulo = p.tipo === 'mencao' ? `@${p.nome}` : `*${p.rotulo}`;
       refs.push({ rotulo, marca: p.tipo === 'mencao' ? `@[${p.nome}](u:${p.id})` : `*[${p.rotulo}](e:${p.id})` });
       return rotulo;
@@ -259,10 +296,14 @@
     return { texto: partes.join(''), refs };
   }
 
-  /** O que vem depois do último "@" ou "*" antes do cursor (a busca da sugestão), ou null. */
+  /**
+   * O que vem depois do último "@", "*" ou "'" antes do cursor (a busca da
+   * sugestão), ou null. O símbolo precisa vir no começo ou depois de espaço
+   * ("d'água" não abre a lista), e a busca para no próximo símbolo.
+   */
   function gatilhoNoCursor(texto, cursor) {
     const antes = String(texto ?? '').slice(0, cursor);
-    const m = /(^|[\s(])([@*])([^\s@*\n][^@*\n]{0,40})?$/.exec(antes);
+    const m = /(^|[\s(])([@*'])([^\s@*'\n][^@*'\n]{0,40})?$/.exec(antes);
     if (!m) return null;
     return { simbolo: m[2], busca: (m[3] || '').trimEnd(), inicio: antes.length - (m[2].length + (m[3] || '').length) };
   }
@@ -338,12 +379,21 @@
 
   function montar(alvo, opcoes = {}) {
     const { origem, registroId, descrever = () => ({}), aoCarregar = () => {}, colunas = {} } = opcoes;
+    // "'" só existe onde quem monta diz o que dá para citar e como abrir.
+    const objetos = typeof opcoes.objetos === 'function' ? opcoes.objetos : null;
+    const aoAbrirObjeto = typeof opcoes.aoAbrirObjeto === 'function' ? opcoes.aoAbrirObjeto : null;
     // Textos da caixa do topo (a tarefa fala em "comentário ou arquivo", a ficha em "observação").
     const textos = {
       placeholder: 'Escreva uma observação para todos que acompanham esta ficha… (@ menciona alguém · Ctrl+Enter publica)',
       publicar: 'Publicar', publicado: 'Observação publicada.', vazio: 'Nenhum registro no histórico ainda.',
+      etiqueta: 'Observação',
+      sqlPendente: 'Curtidas, comentários e observações ainda não estão ativados: rode sql/historico_social.sql no banco e reinicie a API.',
+      citarObjetos: 'Citar um item — abre ao clicar',
       ...(opcoes.textos || {})
     };
+    // A primeira leitura (bem ou mal): o modal que embrulha a linha do tempo espera por ela.
+    let resolverPronto = () => {};
+    const pronto = new Promise(resolver => { resolverPronto = resolver; });
     // Colunas de permissão (data-perm-col) do módulo: quem não pode ver a data,
     // o tipo, o resumo ou quem fez continua sem ver, como na tabela antiga.
     const marcarColuna = (el, chave) => { if (colunas[chave]) el.setAttribute('data-perm-col', colunas[chave]); return el; };
@@ -389,7 +439,7 @@
     const avisar = (texto, tipo = 'error') => window.showToast?.(texto, tipo);
 
     const descreverItem = item => (item.tipo === 'observacao'
-      ? { etiqueta: 'Observação', tom: 'observacao', acao: 'publicou' }
+      ? { etiqueta: textos.etiqueta, tom: 'observacao', acao: 'publicou' }
       : (descrever(item) || {}));
     const etiquetaDe = item => (item.tipo === 'observacao' ? null : (descreverItem(item).etiqueta || item.tipo || null));
     /** "Prazo do próximo passo", "Campanha X · Data de envio"… — o nome curto de um registro. */
@@ -464,6 +514,18 @@
           const m = criar('span', 'hs-mencao', `@${pedaco.nome}`);
           m.title = 'Mencionado';
           p.append(m);
+        } else if (pedaco.tipo === 'objeto') {
+          // O objeto citado com "'": abre ao clicar (onde quem montou sabe abrir).
+          const conteudo = [icone(ICONES_OBJETO[pedaco.objeto] || 'fa-link'), pedaco.rotulo];
+          if (aoAbrirObjeto) {
+            const o = botao('hs-objeto', conteudo, 'Abrir');
+            o.addEventListener('click', () => aoAbrirObjeto({ tipo: pedaco.objeto, id: pedaco.id, rotulo: pedaco.rotulo }));
+            p.append(o);
+          } else {
+            const o = criar('span', 'hs-objeto');
+            o.append(conteudo[0], document.createTextNode(pedaco.rotulo));
+            p.append(o);
+          }
         } else {
           const c = botao('hs-citacao', [icone('fa-quote-right'), pedaco.rotulo], 'Ir para o registro citado');
           c.addEventListener('click', () => aoCitar?.(pedaco.id));
@@ -502,10 +564,31 @@
       let opcoesSug = [];
       let escolhida = 0;
       let gatilho = null;
-      const fecharSugestoes = () => { sugestoes.hidden = true; opcoesSug = []; gatilho = null; };
+      // "'" pergunta ao servidor: só a resposta do último pedido vale.
+      let pedidoObjetos = 0;
+      let esperaObjetos = null;
+      const fecharSugestoes = () => { sugestoes.hidden = true; opcoesSug = []; gatilho = null; pedidoObjetos += 1; clearTimeout(esperaObjetos); };
+      function buscarObjetos(termo) {
+        clearTimeout(esperaObjetos);
+        const meu = ++pedidoObjetos;
+        esperaObjetos = setTimeout(async () => {
+          let lista = [];
+          try { lista = (await objetos(termo)) || []; } catch (_) { lista = []; }
+          if (meu !== pedidoObjetos || gatilho?.simbolo !== "'") return;
+          opcoesSug = (Array.isArray(lista) ? lista : []).map(o => {
+            const m = marcaDoObjeto(o);
+            return m ? { ...m, detalhe: String(o.detalhe || ''), icone: o.icone || ICONES_OBJETO[m.tipo] || 'fa-link' } : null;
+          }).filter(Boolean).slice(0, 15);
+          if (!opcoesSug.length) { sugestoes.hidden = true; return; }
+          escolhida = Math.min(escolhida, opcoesSug.length - 1);
+          pintarSugestoes();
+        }, 180);
+      }
       function atualizarSugestoes() {
         gatilho = gatilhoNoCursor(campo.value, campo.selectionStart);
-        if (!gatilho || (gatilho.simbolo === '*' && !citaveis)) { fecharSugestoes(); return; }
+        if (!gatilho || (gatilho.simbolo === '*' && !citaveis) || (gatilho.simbolo === "'" && !objetos)) { fecharSugestoes(); return; }
+        if (gatilho.simbolo === "'") { buscarObjetos(gatilho.busca); return; }
+        pedidoObjetos += 1;
         const busca = semAcento(gatilho.busca);
         if (gatilho.simbolo === '@') {
           opcoesSug = cachePessoas
@@ -523,14 +606,19 @@
         pintarSugestoes();
       }
       function pintarSugestoes() {
-        sugestoes.replaceChildren(criar('div', 'hs-sugestoes__titulo', gatilho.simbolo === '@' ? 'Mencionar — a pessoa recebe um aviso' : 'Citar um registro deste grupo'));
+        const titulo = gatilho.simbolo === '@' ? 'Mencionar — a pessoa recebe um aviso' : (gatilho.simbolo === "'" ? textos.citarObjetos : 'Citar um registro deste grupo');
+        sugestoes.replaceChildren(criar('div', 'hs-sugestoes__titulo', titulo));
         opcoesSug.forEach((o, i) => {
           const b = botao(`hs-sugestao${i === escolhida ? ' hs-sugestao--ativa' : ''}`, []);
           b.setAttribute('role', 'option');
           if (o.usuarioId) b.append(avatar(o.usuarioId, o.texto, { pequeno: true }));
-          else b.append(criar('span', 'hs-sugestao__hora', o.detalhe));
+          else if (o.icone) {
+            const ic = criar('span', 'hs-sugestao__icone');
+            ic.appendChild(icone(o.icone));
+            b.append(ic);
+          } else b.append(criar('span', 'hs-sugestao__hora', o.detalhe));
           b.append(criar('span', 'hs-sugestao__texto', o.texto));
-          if (o.usuarioId && o.detalhe) b.append(criar('small', 'hs-sugestao__detalhe', o.detalhe));
+          if ((o.usuarioId || o.icone) && o.detalhe) b.append(criar('small', 'hs-sugestao__detalhe', o.detalhe));
           b.addEventListener('mousedown', e => { e.preventDefault(); escolher(i); });
           sugestoes.append(b);
         });
@@ -611,6 +699,11 @@
         const citar = semRoubarFoco(botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-quote-right')], 'Citar um registro deste grupo (*)'));
         citar.addEventListener('click', () => inserirGatilho('*'));
         botoes.appendChild(citar);
+      }
+      if (objetos) {
+        const citarObjeto = semRoubarFoco(botao('hs-botao hs-botao--neutro hs-botao--icone', [icone('fa-link')], `${textos.citarObjetos} (')`));
+        citarObjeto.addEventListener('click', () => inserirGatilho("'"));
+        botoes.appendChild(citarObjeto);
       }
       if (comAnexo) {
         const anexar = botao('hs-botao hs-botao--neutro', [icone('fa-paperclip'), 'Anexar'], `Até ${MAX_ANEXOS_POR_ENVIO} arquivos de até ${tamanhoLegivel(dados?.limite_anexo_bytes || 20971520)}`);
@@ -1141,7 +1234,7 @@
       }
       if (dados.sql_pendente) {
         const aviso = criar('div', 'hs-aviso');
-        aviso.append(icone('fa-triangle-exclamation'), criar('span', '', 'Curtidas, comentários e observações ainda não estão ativados: rode sql/historico_social.sql no banco e reinicie a API.'));
+        aviso.append(icone('fa-triangle-exclamation'), criar('span', '', textos.sqlPendente));
         raiz.appendChild(aviso);
       } else {
         const compor = criar('div', 'hs-compor');
@@ -1283,6 +1376,8 @@
         const raiz = criar('div', 'hs');
         raiz.appendChild(criar('div', 'hs-vazio', err.status === 403 ? 'Você não tem permissão para ver este histórico.' : `Não foi possível carregar o histórico: ${err.message}`));
         alvo.replaceChildren(raiz);
+      } finally {
+        if (!aoVivo) resolverPronto();
       }
     }
 
@@ -1324,6 +1419,7 @@
     return {
       recarregar,
       focar,
+      pronto,
       destruir() {
         destruido = true;
         clearInterval(vivo);
@@ -1337,6 +1433,7 @@
   window.HistoricoSocial = {
     montar, carregarFotos,
     montarArvore, contarNaArvore, diaLocal, rotuloDoDia, horaDe, quemCurtiu, iniciais, tamanhoLegivel, iconeDoArquivo, conferirArquivos,
-    valorLegivel, agrupar, pedacosDoTexto, textoSimples, citadosNoTexto, aplicarReferencias, paraEdicao, gatilhoNoCursor
+    valorLegivel, agrupar, pedacosDoTexto, textoSimples, citadosNoTexto, aplicarReferencias, paraEdicao, gatilhoNoCursor,
+    marcaDoObjeto, ICONES_OBJETO
   };
 })();

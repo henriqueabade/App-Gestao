@@ -38,6 +38,8 @@ const { normalizarCamposNumericos } = require('./numeros');
 const social = require('./historicoSocial');
 const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
+// Origens e tipos de interação editáveis (+ e −) e as redes sociais da empresa.
+const listas = require('./prospeccaoListas');
 // O próximo passo é espelhado numa tarefa (Tarefas/Calendário). Sem o SQL de
 // tarefas, a sincronia simplesmente não faz nada.
 const tarefas = require('./tarefasServico');
@@ -75,12 +77,9 @@ const PROBABILIDADE_PADRAO = {
   'Perdido': 0
 };
 
-const TIPOS_INTERACAO = new Set([
-  'Ligação', 'E-mail', 'Reunião', 'WhatsApp', 'Visita', 'Nota', 'Proposta',
-  // Gerado ao concluir um passo planejado. Fica fora da lista oferecida no
-  // formulário de interação: quem cria este tipo é o fluxo de conclusão.
-  'Atividade realizada'
-]);
+// Os tipos de interação vêm da lista editável (backend/prospeccaoListas.js,
+// tabela prospeccao_tipos_interacao), mais "Atividade realizada" — gerado ao
+// concluir um passo planejado, fora da lista oferecida no formulário.
 
 const STATUS_CAMPANHA = new Set(['Planejada', 'Em andamento', 'Concluída', 'Cancelada']);
 
@@ -132,6 +131,9 @@ function mapProspeccaoLista(row = {}, { nomes, contatoPrincipal }) {
     razao_social: row.razao_social,
     cnpj: row.cnpj,
     segmento: row.segmento,
+    // Site e redes sociais aparecem no popover (i) da grade, quando há.
+    site: row.site || null,
+    redes_sociais: listas.normalizarRedes(row.redes_sociais),
     origem: row.origem,
     etapa: row.etapa,
     valor_estimado: Number(row.valor_estimado ?? 0),
@@ -232,6 +234,13 @@ function montarPayload(dados = {}) {
   por('cnpj', texto(dados.cnpj), tem('cnpj'));
   por('inscricao_estadual', texto(dados.inscricao_estadual), tem('inscricao_estadual'));
   por('site', texto(dados.site), tem('site'));
+  // jsonb: vai como texto JSON (a API grava o texto e o Postgres converte).
+  // Vazio vira null — quem chama tira a chave quando o banco ainda não tem a
+  // coluna (o banco DEV recusa coluna desconhecida).
+  if (tem('redes_sociais')) {
+    const redes = listas.normalizarRedes(dados.redes_sociais);
+    payload.redes_sociais = redes.length ? JSON.stringify(redes) : null;
+  }
   por('segmento', texto(dados.segmento), tem('segmento'));
   por('origem', texto(dados.origem), tem('origem'));
   por('valor_estimado', dados.valor_estimado ?? 0, tem('valor_estimado'));
@@ -329,6 +338,7 @@ const CAMPOS_AUDITADOS = {
   cnpj: 'CNPJ',
   inscricao_estadual: 'Inscrição estadual',
   site: 'Site',
+  redes_sociais: 'Redes sociais',
   segmento: 'Segmento',
   origem: 'Origem',
   etapa: 'Etapa do funil',
@@ -380,6 +390,9 @@ function dataHoraDeBrasilia(valor) {
  */
 function paraComparacao(campo, valor) {
   if (valor === undefined || valor === null || valor === '') return null;
+  // A lista de redes (jsonb lido do banco ou texto JSON do formulário) vira
+  // "Instagram: @loja | Facebook: /loja" — comparável e legível no histórico.
+  if (campo === 'redes_sociais') return listas.redesEmTexto(valor) || null;
   if (CAMPOS_NUMERICOS.has(campo)) {
     const n = Number(valor);
     return Number.isFinite(n) ? String(n) : String(valor);
@@ -720,6 +733,46 @@ router.get('/csv/modelo', exigirPermissao('pros.import.csv'), (req, res) => {
   res.json({ nome: 'modelo-prospeccoes', conteudo: csv.modeloDeProspeccoes() });
 });
 
+// ---------------------------------------------------------------------------
+// LISTAS EDITÁVEIS (a caixa com + e −): origens e tipos de interação
+//   GET    /listas/:lista        quem vê prospecções (a tela preenche o select)
+//   POST   /listas/:lista        { nome }   pros.lists.manage
+//   DELETE /listas/:lista/:id               pros.lists.manage (recusa se em uso)
+// :lista = origens | tipos-interacao. Regras em backend/prospeccaoListas.js.
+// ---------------------------------------------------------------------------
+
+function responderLista(res, err, contexto) {
+  const status = err?.status || 500;
+  if (status >= 500) console.error(`Erro em ${contexto}:`, err);
+  res.status(status).json({ error: err?.message || 'Erro na lista', ...(err?.extra || {}) });
+}
+
+router.get('/listas/:lista', exigirPermissao('pros.view'), async (req, res) => {
+  try {
+    const r = await listas.ler(createApiClient(req), req.params.lista);
+    // As redes da caixa das "Redes sociais" vão junto (lista fixa).
+    res.json({ ...r, redes: listas.REDES });
+  } catch (err) {
+    responderLista(res, err, 'GET /api/prospeccoes/listas');
+  }
+});
+
+router.post('/listas/:lista', exigirPermissao('pros.lists.manage'), async (req, res) => {
+  try {
+    res.json(await listas.incluir(createApiClient(req), req.params.lista, req.body?.nome, usuarioDaRequisicao(req)));
+  } catch (err) {
+    responderLista(res, err, 'POST /api/prospeccoes/listas');
+  }
+});
+
+router.delete('/listas/:lista/:id', exigirPermissao('pros.lists.manage'), async (req, res) => {
+  try {
+    res.json(await listas.excluir(createApiClient(req), req.params.lista, req.params.id));
+  } catch (err) {
+    responderLista(res, err, 'DELETE /api/prospeccoes/listas');
+  }
+});
+
 // `ids` (opcional): só as prospecções da tela, na ordem da tela. GET com
 // ?ids=1,2 ou POST com { ids: [...] } (a tela usa o POST).
 const idsPedidos = req => (Array.isArray(req.body?.ids) ? req.body.ids : String(req.query?.ids || '').split(','))
@@ -763,8 +816,19 @@ async function exportarProspeccoes(req, res) {
 /**
  * Importa a planilha linha a linha, sem parar no primeiro erro (ver
  * importarClientes em clientesController.js — mesmo relatório).
+ *
+ * Interação (30/09/2026): cada linha pode trazer uma (as colunas
+ * "Interação - …"). A empresa que se repete — mesmo CNPJ ou, sem CNPJ, o
+ * mesmo nome — numa prospecção ativa ou numa linha anterior do arquivo não é
+ * cadastrada de novo: a linha acrescenta a interação (e o próximo passo,
+ * quando vem) à prospecção que já existe. Sem interação, a repetida continua
+ * recusada. Tipo fora da lista, data futura, sem tipo, sem resumo ou sem data
+ * recusam a linha inteira (decisão do dono).
+ *
+ * Duas voltas: primeiro as empresas novas; depois as interações, na ordem das
+ * linhas de cada empresa (a da linha que cria a empresa entra logo depois dela).
  */
-async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquivo = 'planilha.csv' } = {}) {
+async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquivo = 'planilha.csv', agora = Date.now() } = {}) {
   const { linhas } = csv.lerCsv(conteudo);
   if (linhas.length < 2) throw erro(400, 'A planilha está vazia: nenhuma linha de prospecção abaixo do cabeçalho.');
   const [cabecalho, ...dados] = linhas;
@@ -772,43 +836,154 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
   if (mapa.indice.nome_fantasia === undefined) {
     throw erro(400, 'O cabeçalho não tem a coluna "Empresa". Use "Salvar modelo CSV" e preencha a partir dele.');
   }
-  const [prospeccoes, usuarios] = await Promise.all([
+  const [prospeccoes, usuarios, origens, tipos] = await Promise.all([
     api.get('/api/prospeccoes'),
-    api.get('/api/usuarios').catch(() => [])
+    api.get('/api/usuarios').catch(() => []),
+    listas.ler(api, 'origens').then(r => (r.sql_pendente ? null : r.itens.map(i => i.nome))).catch(() => null),
+    listas.nomes(api, 'tipos-interacao').catch(() => listas.LISTAS['tipos-interacao'].padrao)
   ]);
-  const cnpjsAtivos = new Set((Array.isArray(prospeccoes) ? prospeccoes : [])
-    .filter(p => p.status === 'ativa').map(p => csv.digitos(p.cnpj)).filter(Boolean));
-  const cnpjsDoArquivo = new Map();
+  const ativaPorCnpj = new Map();
+  const ativaPorNome = new Map();
+  for (const p of (Array.isArray(prospeccoes) ? prospeccoes : []).filter(x => x.status === 'ativa')) {
+    const cnpj = csv.digitos(p.cnpj);
+    const nome = csv.comparavel(p.nome_fantasia);
+    if (cnpj && !ativaPorCnpj.has(cnpj)) ativaPorCnpj.set(cnpj, p);
+    if (nome && !ativaPorNome.has(nome)) ativaPorNome.set(nome, p);
+  }
   const listaUsuarios = (Array.isArray(usuarios) ? usuarios : []).map(u => ({ id: u.id, nome: u.nome, email: u.email }));
+  const tiposAceitos = [...tipos, listas.TIPO_DO_SISTEMA];
+  const texto_ = v => String(v ?? '').trim();
 
   const resultados = [];
-  const aGravar = [];
+  const aCriar = [];
+  const interacoes = [];
+  const criadoraDaEmpresa = new Map(); // chave da empresa → resultado da linha que a cria
+
   for (const linha of dados) {
     const r = csv.registroDaLinha(linha.valores, mapa.indice);
     if (csv.ehLinhaDeExemplo(r)) {
       resultados.push({ linha: linha.numero, identificacao: r.nome_fantasia || '', situacao: 'ignorado', id: null, bloqueios: [], pendencias: [], avisos: ['Linha de exemplo do modelo: ignorada.'] });
       continue;
     }
-    const conf = csv.conferirProspeccao(r, { cnpjsAtivos, cnpjsDoArquivo, usuarios: listaUsuarios });
+    const nome = texto_(r.nome_fantasia);
+    const cnpjLido = csv.digitos(r.cnpj);
+    const cnpj = cnpjLido && csv.cnpjValido(cnpjLido) ? cnpjLido : '';
+    const chaveEmpresa = cnpj ? `cnpj:${cnpj}` : (nome ? `nome:${csv.comparavel(nome)}` : null);
+    const existente = cnpj ? ativaPorCnpj.get(cnpj) : (nome ? ativaPorNome.get(csv.comparavel(nome)) : null);
+    const criadora = chaveEmpresa ? criadoraDaEmpresa.get(chaveEmpresa) : null;
+    const confInt = csv.conferirInteracao(r, { tipos, agora });
+
+    // ---- a empresa já existe (no sistema ou numa linha anterior): só a interação
+    if (existente || criadora) {
+      const resultado = {
+        linha: linha.numero, identificacao: nome || csv.formatarCnpj(cnpj), situacao: 'registrado', id: existente?.id ?? null,
+        bloqueios: [], pendencias: [], avisos: []
+      };
+      if (!confInt.interacao) {
+        resultado.bloqueios.push(existente
+          ? (cnpj ? 'Já existe uma prospecção ativa com este CNPJ.' : 'Já existe uma prospecção ativa com este nome.')
+          : (cnpj ? `CNPJ repetido: já aparece na linha ${criadora.linha}.` : `Empresa repetida: já aparece na linha ${criadora.linha}.`));
+      } else {
+        resultado.bloqueios.push(...confInt.bloqueios);
+        resultado.pendencias.push(...confInt.pendencias);
+        resultado.avisos.push(...confInt.avisos);
+      }
+      // O próximo passo desta linha passa a ser o da prospecção (como no modal).
+      let proximoPasso = null;
+      if (confInt.interacao && (texto_(r.proximo_passo) || texto_(r.proximo_passo_data))) {
+        const data = csv.lerData(r.proximo_passo_data);
+        if (data === undefined) resultado.pendencias.push(`Data do próximo passo "${r.proximo_passo_data}" inválida (use dd/mm/aaaa): não foi gravada.`);
+        proximoPasso = { proximo_passo: texto_(r.proximo_passo) || null, proximo_passo_data: data || null };
+      }
+      if (confInt.interacao) {
+        resultado.avisos.push(`${existente ? 'Empresa já cadastrada' : `Mesma empresa da linha ${criadora.linha}`}: desta linha entrou só a interação${proximoPasso ? ' e o próximo passo' : ''}.`);
+      }
+      resultado.situacao = csv.situacaoDaLinha(resultado);
+      resultados.push(resultado);
+      if (resultado.situacao !== 'nao_registrado') {
+        interacoes.push({ resultado, alvoId: existente?.id ?? null, criadora: existente ? null : criadora, interacao: confInt.interacao, proximoPasso });
+      }
+      continue;
+    }
+
+    // ---- empresa nova (com ou sem interação)
+    const conf = csv.conferirProspeccao(r, { usuarios: listaUsuarios, origens });
     const resultado = {
-      linha: linha.numero, identificacao: conf.identificacao, situacao: csv.situacaoDaLinha(conf), id: null,
-      bloqueios: conf.bloqueios, pendencias: conf.pendencias, avisos: conf.avisos
+      linha: linha.numero, identificacao: conf.identificacao, situacao: 'registrado', id: null,
+      bloqueios: [...conf.bloqueios, ...confInt.bloqueios],
+      pendencias: [...conf.pendencias, ...confInt.pendencias],
+      avisos: [...conf.avisos, ...confInt.avisos]
     };
+    resultado.situacao = csv.situacaoDaLinha(resultado);
     resultados.push(resultado);
     if (resultado.situacao === 'nao_registrado') continue;
-    if (conf.cnpj) cnpjsDoArquivo.set(conf.cnpj, linha.numero);
-    aGravar.push({ resultado, conf });
+    // A linha que cria a empresa é achada pelo CNPJ e também pelo nome (a
+    // repetida pode vir só com o nome).
+    if (cnpj) criadoraDaEmpresa.set(`cnpj:${cnpj}`, resultado);
+    if (nome && !criadoraDaEmpresa.has(`nome:${csv.comparavel(nome)}`)) criadoraDaEmpresa.set(`nome:${csv.comparavel(nome)}`, resultado);
+    aCriar.push({ resultado, conf });
+    if (confInt.interacao) interacoes.push({ resultado, alvoId: null, criadora: resultado, interacao: confInt.interacao, proximoPasso: null });
   }
 
-  await csv.emParalelo(aGravar, 4, async ({ resultado, conf }) => {
+  // ---- 1ª volta: as empresas novas
+  await csv.emParalelo(aCriar, 4, async ({ resultado, conf }) => {
     try {
       resultado.id = await criarProspeccao(api, conf.payload, usuarioId, {
         observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`,
         pendencias: conf.pendencias
       });
+      // O próximo passo vira a tarefa espelhada, como no formulário.
+      if (conf.payload.proximo_passo) await passoNaTarefa(api, resultado.id, usuarioId);
     } catch (err) {
       resultado.situacao = 'nao_registrado';
       resultado.bloqueios = [...resultado.bloqueios, err.status === 409 ? err.message : `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
+    }
+  });
+
+  // ---- 2ª volta: as interações, por empresa, na ordem das linhas
+  const porEmpresa = new Map();
+  for (const item of interacoes) {
+    const alvoId = item.alvoId ?? item.criadora?.id ?? null;
+    if (!alvoId || item.criadora?.situacao === 'nao_registrado') {
+      if (item.resultado !== item.criadora) {
+        item.resultado.situacao = 'nao_registrado';
+        item.resultado.bloqueios.push(`A empresa da linha ${item.criadora?.linha} não foi registrada: a interação desta linha ficou de fora.`);
+      }
+      continue;
+    }
+    item.resultado.id = alvoId;
+    if (!porEmpresa.has(alvoId)) porEmpresa.set(alvoId, []);
+    porEmpresa.get(alvoId).push(item);
+  }
+
+  await csv.emParalelo([...porEmpresa.entries()], 4, async ([alvoId, itens]) => {
+    const contatos = await api.get('/api/prospeccao_contatos', { query: { prospeccao_id: alvoId } }).catch(() => []);
+    for (const item of itens.sort((a, b) => a.resultado.linha - b.resultado.linha)) {
+      const { resultado, interacao } = item;
+      let contatoId = null;
+      if (interacao.com_quem) {
+        const achado = (Array.isArray(contatos) ? contatos : [])
+          .find(c => String(c.prospeccao_id) === String(alvoId) && csv.comparavel(c.nome) === csv.comparavel(interacao.com_quem));
+        if (achado) contatoId = achado.id;
+        else resultado.pendencias.push(`"Com quem" (${interacao.com_quem}) não é contato desta empresa: a interação ficou sem.`);
+      }
+      try {
+        await registrarInteracao(api, alvoId, {
+          tipo: interacao.tipo, data: interacao.data, resumo: interacao.resumo, detalhe: interacao.detalhe,
+          duracao_min: interacao.duracao_min, contato_id: contatoId,
+          ...(item.proximoPasso || {})
+        }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})` });
+      } catch (err) {
+        const motivo = err?.status && err.status < 500 ? err.message : (err?.body?.detalhe || err?.message || 'falha na API');
+        if (item.criadora === resultado) {
+          // A empresa entrou; só a interação dela falhou.
+          resultado.pendencias.push(`A interação não foi registrada: ${motivo}`);
+        } else {
+          resultado.situacao = 'nao_registrado';
+          resultado.bloqueios.push(`Interação não registrada: ${motivo}`);
+        }
+      }
+      if (resultado.situacao !== 'nao_registrado') resultado.situacao = csv.situacaoDaLinha(resultado);
     }
   });
 
@@ -863,6 +1038,7 @@ router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
         probabilidade: Number(prospeccao.probabilidade ?? 0),
         responsavel: nome(prospeccao.responsavel_id),
         criado_por_nome: nome(prospeccao.criado_por),
+        redes_sociais: listas.normalizarRedes(prospeccao.redes_sociais),
         endereco: {
           rua: prospeccao.end_logradouro,
           numero: prospeccao.end_numero,
@@ -923,6 +1099,9 @@ async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao =
     const payload = montarPayload(dados);
     validarProspeccao(payload);
     payload.criado_por = usuarioId ?? null;
+    // Sem redes, a coluna nem vai: o banco DEV sem o SQL novo recusaria a
+    // coluna desconhecida (a API remota a ignoraria).
+    if (payload.redes_sociais === null) delete payload.redes_sociais;
 
     // Mesma empresa não pode estar em prospecção ativa duas vezes. O banco
     // tem índice único parcial, mas conferir antes devolve 409 em vez de 500.
@@ -978,6 +1157,21 @@ async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao =
   }
 }
 
+/**
+ * A origem escolhida no formulário tem de estar na lista (a caixa com + e −).
+ * A que a ficha já tinha continua valendo; sem o SQL das listas, não confere.
+ * Devolve o nome como está na lista.
+ */
+async function origemDaLista(api, origem, atual = null) {
+  const valor = texto(origem);
+  if (!valor || (atual && listas.chave(atual) === listas.chave(valor))) return valor;
+  const r = await listas.ler(api, 'origens');
+  if (r.sql_pendente) return valor;
+  const achada = listas.naLista(r.itens.map(i => i.nome), valor);
+  if (!achada) throw erro(400, `A origem "${valor}" não está na lista: inclua-a pelo + ao lado do campo.`);
+  return achada;
+}
+
 router.post(
   '/',
   exigirPermissao(req =>
@@ -988,11 +1182,12 @@ router.post(
   async (req, res) => {
     try {
       const api = createApiClient(req);
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'origem')) req.body.origem = await origemDaLista(api, req.body.origem);
       const criadaId = await criarProspeccao(api, req.body || {}, usuarioDaRequisicao(req));
       await passoNaTarefa(api, criadaId, usuarioDaRequisicao(req));
       res.status(201).json({ id: criadaId });
     } catch (err) {
-      if (err.status !== 409) console.error('Erro ao criar prospecção:', err);
+      if (!err.status || err.status >= 500) console.error('Erro ao criar prospecção:', err);
       res.status(err.status || 500).json({ error: err.message || 'Erro ao criar prospecção' });
     }
   }
@@ -1031,8 +1226,12 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
         `Esta prospecção já foi convertida no cliente #${atual.cliente_id}. Edite os dados pelo módulo Clientes.`);
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'origem')) req.body.origem = await origemDaLista(api, req.body.origem, atual.origem);
     const payload = montarPayload({ ...req.body, etapa: req.body.etapa || atual.etapa });
     validarProspeccao(payload);
+    // Redes vazias numa ficha que nunca teve a coluna (banco sem o SQL novo):
+    // não manda — o banco DEV recusaria a coluna desconhecida.
+    if (payload.redes_sociais === null && !Object.prototype.hasOwnProperty.call(atual, 'redes_sociais')) delete payload.redes_sociais;
 
     // A etapa não muda por aqui: mover no funil exige `pros.stage.update` e
     // grava histórico. Quem edita a ficha não deveria conseguir pular etapas.
@@ -1499,64 +1698,78 @@ router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async
 // INTERAÇÕES
 // ---------------------------------------------------------------------------
 
-router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (req, res) => {
-  const { id } = req.params;
-  try {
-    const tipo = texto(req.body?.tipo);
-    const resumo = texto(req.body?.resumo);
-    if (!TIPOS_INTERACAO.has(tipo)) throw erro(400, `Tipo de interação inválido: ${tipo}`);
-    if (!resumo) throw erro(400, 'Informe um resumo da interação');
+/**
+ * Registra uma interação (atividade) — o mesmo caminho da tela e da planilha.
+ *
+ * O tipo tem de estar na lista (tipos de interação, com + e −) ou ser o do
+ * sistema; a data não pode ser futura. `corpo.proximo_passo` presente muda o
+ * próximo passo da prospecção junto (e a tarefa espelhada). `observacao` vai
+ * para a linha do histórico (a planilha diz de qual arquivo e linha veio).
+ * Devolve o id da interação.
+ */
+async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tiposAceitos = null, observacao = null } = {}) {
+  const tipoInformado = texto(corpo.tipo);
+  const resumo = texto(corpo.resumo);
+  const aceitos = tiposAceitos || await listas.tiposDeInteracaoAceitos(api);
+  const tipo = listas.naLista(aceitos, tipoInformado);
+  if (!tipo) throw erro(400, `Tipo de interação inválido: ${tipoInformado || '(vazio)'} — escolha um da lista.`);
+  if (!resumo) throw erro(400, 'Informe um resumo da interação');
 
-    const api = createApiClient(req);
-    await buscarProspeccao(api, id);
+  await buscarProspeccao(api, id);
 
-    // Sem esta conferência dava para pendurar a interação no contato de OUTRA
-    // prospecção: a FK aponta para prospeccao_contatos, mas nada garante que o
-    // contato seja desta prospecção.
-    const contatoId = req.body?.contato_id ?? null;
-    if (contatoId) {
-      const contato = await api.get(`/api/prospeccao_contatos/${contatoId}`).catch(() => null);
-      if (!contato || Number(contato.prospeccao_id) !== Number(id)) {
-        throw erro(400, 'Contato não pertence a esta prospecção');
-      }
+  // Sem esta conferência dava para pendurar a interação no contato de OUTRA
+  // prospecção: a FK aponta para prospeccao_contatos, mas nada garante que o
+  // contato seja desta prospecção.
+  const contatoId = corpo.contato_id ?? null;
+  if (contatoId) {
+    const contato = await api.get(`/api/prospeccao_contatos/${contatoId}`).catch(() => null);
+    if (!contato || Number(contato.prospeccao_id) !== Number(id)) {
+      throw erro(400, 'Contato não pertence a esta prospecção');
     }
+  }
 
-    const criada = await api.post('/api/prospeccao_interacoes', {
-      prospeccao_id: Number(id),
-      contato_id: contatoId,
-      tipo,
-      // Atividade é o que já aconteceu: sempre concluída, nunca no futuro.
-      data: quandoAconteceu(req.body?.data),
-      resumo,
-      detalhe: texto(req.body?.detalhe),
-      duracao_min: req.body?.duracao_min ?? null,
-      usuario_id: usuarioDaRequisicao(req)
+  const detalhe = texto(corpo.detalhe);
+  const duracao = corpo.duracao_min ?? null;
+  const criada = await api.post('/api/prospeccao_interacoes', {
+    prospeccao_id: Number(id),
+    contato_id: contatoId,
+    tipo,
+    // Atividade é o que já aconteceu: sempre concluída, nunca no futuro.
+    data: quandoAconteceu(corpo.data),
+    resumo,
+    detalhe,
+    duracao_min: duracao,
+    usuario_id: usuarioId
+  });
+
+  // Registrar contato costuma vir junto de "e o próximo passo é...". Aceitar
+  // os dois no mesmo POST evita a segunda ida à rede e o risco de esquecer.
+  if (corpo.proximo_passo !== undefined) {
+    await api.put(`/api/prospeccoes/${id}`, {
+      proximo_passo: texto(corpo.proximo_passo),
+      proximo_passo_data: corpo.proximo_passo_data || null
     });
+    await passoNaTarefa(api, id, usuarioId);
+  }
 
-    // Registrar contato costuma vir junto de "e o próximo passo é...". Aceitar
-    // os dois no mesmo POST evita a segunda ida à rede e o risco de esquecer.
-    if (req.body?.proximo_passo !== undefined) {
-      await api.put(`/api/prospeccoes/${id}`, {
-        proximo_passo: texto(req.body.proximo_passo),
-        proximo_passo_data: req.body?.proximo_passo_data || null
-      });
-      await passoNaTarefa(api, id, usuarioDaRequisicao(req));
+  await registrarHistorico(api, id, {
+    tipo: 'interacao', acao: 'criou',
+    entidade: `${tipo} — ${resumo}`,
+    valor_novo: resumo,
+    observacao,
+    detalhe: {
+      campos: retratoLegivel({ tipo, resumo, detalhe, duracao_min: duracao }, CAMPOS_INTERACAO),
+      registro: { tipo, resumo, detalhe, duracao_min: duracao }
     }
+  }, usuarioId);
 
-    await registrarHistorico(api, id, {
-      tipo: 'interacao', acao: 'criou',
-      entidade: `${tipo} — ${resumo}`,
-      valor_novo: resumo,
-      detalhe: {
-        campos: retratoLegivel({
-          tipo, resumo, detalhe: texto(req.body?.detalhe),
-          duracao_min: req.body?.duracao_min ?? null
-        }, CAMPOS_INTERACAO),
-        registro: { tipo, resumo, detalhe: texto(req.body?.detalhe), duracao_min: req.body?.duracao_min ?? null }
-      }
-    }, usuarioDaRequisicao(req));
+  return criada?.id ?? null;
+}
 
-    res.status(201).json({ id: criada?.id ?? null });
+router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (req, res) => {
+  try {
+    const id = await registrarInteracao(createApiClient(req), req.params.id, req.body || {}, usuarioDaRequisicao(req));
+    res.status(201).json({ id });
   } catch (err) {
     console.error('Erro ao registrar interação:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao registrar interação' });
@@ -1566,13 +1779,15 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
 router.put('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add'), async (req, res) => {
   const { id, interacaoId } = req.params;
   try {
-    const tipo = texto(req.body?.tipo);
-    const resumo = texto(req.body?.resumo);
-    if (!TIPOS_INTERACAO.has(tipo)) throw erro(400, `Tipo de interação inválido: ${tipo}`);
-    if (!resumo) throw erro(400, 'Informe um resumo da interação');
-
     const api = createApiClient(req);
     const antes = await filhoDaProspeccao(api, 'prospeccao_interacoes', interacaoId, id, 'Interação');
+    const resumo = texto(req.body?.resumo);
+    // O tipo que a interação já tinha continua valendo (mesmo que tenha saído
+    // da lista); trocar, só por um da lista.
+    const tipoInformado = texto(req.body?.tipo);
+    const tipo = listas.naLista([...(await listas.tiposDeInteracaoAceitos(api)), texto(antes.tipo)].filter(Boolean), tipoInformado);
+    if (!tipo) throw erro(400, `Tipo de interação inválido: ${tipoInformado || '(vazio)'} — escolha um da lista.`);
+    if (!resumo) throw erro(400, 'Informe um resumo da interação');
 
     // Mesma trava do POST: a FK aponta para prospeccao_contatos, mas nada
     // garante que o contato seja DESTA prospecção.

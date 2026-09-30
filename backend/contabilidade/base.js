@@ -13,7 +13,52 @@ const c = require('../financeiro/comum');
 
 const SQL_ARQUIVO = 'sql/contabilidade_base.sql';
 const SQL_FALTANDO = `Falta rodar ${SQL_ARQUIVO} no banco e reiniciar a API.`;
-const TABELAS = ['competencia_contabil', 'contabil_pendencias_resolucoes', 'contabil_eventos'];
+const TABELAS_BASE = ['competencia_contabil', 'contabil_pendencias_resolucoes', 'contabil_eventos'];
+
+/** Etapas 2 e 3: documentos, arquivos e contas a pagar. */
+const SQL_ARQUIVO_PAGAR = 'sql/contabilidade_contas_pagar.sql';
+const SQL_FALTANDO_PAGAR = `Falta rodar ${SQL_ARQUIVO_PAGAR} no banco e reiniciar a API.`;
+const TABELAS_PAGAR = [
+  'contabil_arquivos', 'contabil_arquivo_partes', 'contabil_arquivo_vinculos',
+  'documentos_recebidos', 'titulos_pagar', 'titulo_pagar_parcelas', 'titulo_pagar_pagamentos'
+];
+/** Etapa 4: contas financeiras e extrato bancário. */
+const SQL_ARQUIVO_EXTRATO = 'sql/contabilidade_extrato.sql';
+const SQL_FALTANDO_EXTRATO = `Falta rodar ${SQL_ARQUIVO_EXTRATO} no banco e reiniciar a API.`;
+const TABELAS_EXTRATO = ['contas_financeiras', 'extrato_importacoes', 'movimentos_bancarios'];
+/** Etapa 5: conciliação do extrato. */
+const SQL_ARQUIVO_CONCILIACAO = 'sql/contabilidade_conciliacao.sql';
+const SQL_FALTANDO_CONCILIACAO = `Falta rodar ${SQL_ARQUIVO_CONCILIACAO} no banco e reiniciar a API.`;
+const TABELAS_CONCILIACAO = ['conciliacao_vinculos'];
+/** Etapa 6: classificação (plano de contas e regras). */
+const SQL_ARQUIVO_CLASSIFICACAO = 'sql/contabilidade_classificacao.sql';
+const SQL_FALTANDO_CLASSIFICACAO = `Falta rodar ${SQL_ARQUIVO_CLASSIFICACAO} no banco e reiniciar a API.`;
+const TABELAS_CLASSIFICACAO = ['plano_contas', 'classificacao_regras', 'classificacoes'];
+/** Etapa 7: fechamento completo (versões com a foto do mês). */
+const SQL_ARQUIVO_FECHAMENTO = 'sql/contabilidade_fechamento.sql';
+const SQL_FALTANDO_FECHAMENTO = `Falta rodar ${SQL_ARQUIVO_FECHAMENTO} no banco e reiniciar a API.`;
+const TABELAS_FECHAMENTO = ['competencia_fechamentos'];
+
+const SQL_ARQUIVO_PACOTE = 'sql/contabilidade_pacote.sql';
+const SQL_FALTANDO_PACOTE = `Falta rodar ${SQL_ARQUIVO_PACOTE} no banco e reiniciar a API.`;
+const TABELAS_PACOTE = ['contabil_pacotes'];
+/** Etapas 10 a 13: as integrações automáticas (SEFAZ, BB, ADN) e a caixa de entrada. */
+const SQL_ARQUIVO_INTEGRACOES = 'sql/contabilidade_integracoes.sql';
+const SQL_FALTANDO_INTEGRACOES = `Falta rodar ${SQL_ARQUIVO_INTEGRACOES} no banco e reiniciar a API.`;
+const TABELAS_INTEGRACOES = ['contabil_integracoes', 'contabil_integracao_execucoes', 'contabil_dfe_recebidos'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO, ...TABELAS_FECHAMENTO, ...TABELAS_PACOTE, ...TABELAS_INTEGRACOES];
+
+/** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
+function sqlDaTabela(tabela) {
+  if (TABELAS_INTEGRACOES.includes(tabela)) return { arquivo: SQL_ARQUIVO_INTEGRACOES, mensagem: SQL_FALTANDO_INTEGRACOES };
+  if (TABELAS_PACOTE.includes(tabela)) return { arquivo: SQL_ARQUIVO_PACOTE, mensagem: SQL_FALTANDO_PACOTE };
+  if (TABELAS_FECHAMENTO.includes(tabela)) return { arquivo: SQL_ARQUIVO_FECHAMENTO, mensagem: SQL_FALTANDO_FECHAMENTO };
+  if (TABELAS_CLASSIFICACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CLASSIFICACAO, mensagem: SQL_FALTANDO_CLASSIFICACAO };
+  if (TABELAS_CONCILIACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CONCILIACAO, mensagem: SQL_FALTANDO_CONCILIACAO };
+  if (TABELAS_EXTRATO.includes(tabela)) return { arquivo: SQL_ARQUIVO_EXTRATO, mensagem: SQL_FALTANDO_EXTRATO };
+  if (TABELAS_PAGAR.includes(tabela)) return { arquivo: SQL_ARQUIVO_PAGAR, mensagem: SQL_FALTANDO_PAGAR };
+  return { arquivo: SQL_ARQUIVO, mensagem: SQL_FALTANDO };
+}
 
 /** Na ordem em que importam (a lista de pendências sai nesta ordem). */
 const NIVEIS = {
@@ -24,17 +69,29 @@ const NIVEIS = {
 
 const nivelValido = n => Object.prototype.hasOwnProperty.call(NIVEIS, String(n || ''));
 
-/** Tabela do módulo ausente: API remota (404 "Tabela 'x' não encontrada") ou Postgres (42P01). */
-function tabelaAusente(err) {
+/**
+ * Tabela do módulo ausente (o SQL da etapa não rodou). Três jeitos de chegar:
+ *   - API remota: 404 "Tabela 'x' não encontrada.";
+ *   - Postgres: 42P01 'relation "x" does not exist';
+ *   - banco DEV (localDatabase.safeDatabaseError): código 42P01 com a mensagem
+ *     "Tabela não disponível no banco DEV" — SEM o nome da tabela.
+ * `tabela` é a que a chamada leu/gravou: com ela, o 42P01 basta.
+ */
+function tabelaAusente(err, tabela = null) {
   const bruto = `${err?.message || ''} ${err?.body?.error || ''} ${err?.body?.detalhe || ''} ${err?.code || ''}`;
-  if (/42P01/.test(bruto) && TABELAS.some(t => bruto.includes(t))) return true;
-  const citaTabela = TABELAS.some(t => bruto.includes(t));
-  return citaTabela && (/does not exist|não encontrada|não existe/i.test(bruto) || (err?.status === 404 && /tabela/i.test(bruto)));
+  const cita = t => bruto.includes(t);
+  if (/42P01/.test(bruto)) return Boolean(tabela && TABELAS.includes(tabela)) || TABELAS.some(cita);
+  const citaTabela = TABELAS.some(cita) || Boolean(tabela && TABELAS.includes(tabela) && /tabela não disponível/i.test(bruto));
+  return citaTabela && (/does not exist|não encontrada|não existe|não disponível/i.test(bruto) || (err?.status === 404 && /tabela/i.test(bruto)));
 }
 
-function traduzir(e) {
-  if (tabelaAusente(e)) return c.erro(SQL_FALTANDO, 409, { sql_pendente: true });
-  return e;
+/** A mensagem diz QUAL SQL falta (pela tabela da chamada ou, sem ela, pela citada no erro). */
+function traduzir(e, tabela = null) {
+  if (!tabelaAusente(e, tabela)) return e;
+  const bruto = `${e?.message || ''} ${e?.body?.error || ''} ${e?.body?.detalhe || ''}`;
+  const alvo = tabela && TABELAS.includes(tabela) ? tabela : TABELAS.find(t => bruto.includes(t)) || null;
+  const { arquivo, mensagem } = sqlDaTabela(alvo);
+  return c.erro(mensagem, 409, { sql_pendente: true, sql_arquivo: arquivo });
 }
 
 /** Lê uma tabela do módulo, conferindo o filtro aqui também (a API ignora coluna que não conhece). */
@@ -43,7 +100,7 @@ async function ler(api, tabela, query = {}) {
     const linhas = c.lista(await api.get(`/api/${tabela}`, { query }));
     return linhas.filter(l => l && Object.entries(query).every(([k, v]) => String(l[k]) === String(v)));
   } catch (e) {
-    throw traduzir(e);
+    throw traduzir(e, tabela);
   }
 }
 
@@ -52,7 +109,7 @@ async function inserir(api, tabela, linha) {
     const criado = await api.post(`/api/${tabela}`, linha);
     return { ...linha, ...(criado && typeof criado === 'object' && !Array.isArray(criado) ? criado : {}) };
   } catch (e) {
-    throw traduzir(e);
+    throw traduzir(e, tabela);
   }
 }
 
@@ -60,7 +117,7 @@ async function atualizar(api, tabela, id, campos) {
   try {
     await api.put(`/api/${tabela}/${id}`, campos);
   } catch (e) {
-    throw traduzir(e);
+    throw traduzir(e, tabela);
   }
 }
 
@@ -68,7 +125,7 @@ async function excluir(api, tabela, id) {
   try {
     await api.delete(`/api/${tabela}/${id}`);
   } catch (e) {
-    throw traduzir(e);
+    throw traduzir(e, tabela);
   }
 }
 
@@ -101,7 +158,59 @@ function ultimoDia(competencia) {
   return `${competencia}-${String(ultimo).padStart(2, '0')}`;
 }
 
+/**
+ * Lê uma tabela que pode ainda não existir (SQL da etapa não rodado):
+ * `null` quando falta a tabela, as linhas quando existe. Quem chama decide
+ * o que mostrar (a fonte do checklist fica "falta o SQL").
+ */
+async function lerOpcional(api, tabela, query = {}) {
+  try {
+    return await ler(api, tabela, query);
+  } catch (e) {
+    if (e?.extra?.sql_pendente) return null;
+    throw e;
+  }
+}
+
+/**
+ * Competência fechada não aceita mudança no que ela prova (pagamento,
+ * documento, conta): a rota recusa, não só a tela (plano, seção M). Reabrir
+ * com justificativa é o caminho. Sem o SQL da base, não há o que travar.
+ */
+async function garantirAberta(api, competencia, oQue = 'alterar') {
+  if (!c.competenciaValida(competencia)) return;
+  const linha = (await lerOpcional(api, 'competencia_contabil', { competencia: String(competencia) }) || [])[0] || null;
+  if (linha?.status === 'fechada') {
+    throw c.erro(`A competência ${c.rotuloCompetencia(competencia)} está fechada na Contabilidade: reabra-a para ${oQue}.`, 409, { competencia_fechada: competencia });
+  }
+}
+
+/** Texto de dinheiro digitado ("1.234,56", "1234.56" ou número) em reais; null quando não há. */
+function valorDe(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? c.centavos(v) : null;
+  const t = String(v ?? '').replace(/[R$\s ]/g, '');
+  if (!t) return null;
+  const normal = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t;
+  const n = Number(normal);
+  return Number.isFinite(n) ? c.centavos(n) : null;
+}
+
+const digitos = v => String(v ?? '').replace(/\D/g, '');
+
+/** CNPJ (14) ou CPF (11) por extenso; outro tamanho volta como veio. */
+function documentoFormatado(doc) {
+  const d = digitos(doc);
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  return d || null;
+}
+
 module.exports = {
-  SQL_ARQUIVO, SQL_FALTANDO, TABELAS, NIVEIS, nivelValido,
-  tabelaAusente, ler, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia
+  SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, SQL_ARQUIVO_EXTRATO, SQL_FALTANDO_EXTRATO,
+  SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO, SQL_ARQUIVO_CLASSIFICACAO, SQL_FALTANDO_CLASSIFICACAO,
+  SQL_ARQUIVO_FECHAMENTO, SQL_FALTANDO_FECHAMENTO, SQL_ARQUIVO_PACOTE, SQL_FALTANDO_PACOTE, SQL_ARQUIVO_INTEGRACOES, SQL_FALTANDO_INTEGRACOES,
+  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, TABELAS_CLASSIFICACAO, TABELAS_FECHAMENTO, TABELAS_PACOTE, TABELAS_INTEGRACOES,
+  sqlDaTabela, NIVEIS, nivelValido,
+  tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
+  garantirAberta, valorDe, digitos, documentoFormatado
 };

@@ -91,9 +91,13 @@ test('catálogo e tela de permissões: toda ação nova do módulo Contatos apar
   assert.equal(PERMISSOES.includes('name="col_ctt_cliente"'), false);
   assert.deepEqual(CATALOGO.ctt.actions.map(a => a.column).filter(c => /person|type|interaction|details|delete/.test(c)),
     ['acao_details_view', 'acao_delete', 'acao_person_add', 'acao_person_edit', 'acao_person_remove', 'acao_interaction_add', 'acao_type_manage']);
-  const SQL = fs.readFileSync(path.join(RAIZ, '..', 'sql', 'contatos_fornecedores.sql'), 'utf8');
-  for (const a of CATALOGO.ctt.actions) assert.ok(SQL.includes(a.column), `${a.column} não está no SQL`);
-  for (const c of CATALOGO.ctt.columns) assert.ok(SQL.includes(c.column), `${c.column} não está no SQL`);
+  // `sql/` fica fora do git e o dono apaga o arquivo depois de rodar: sem ele, a conferência do SQL é pulada.
+  const caminhoSql = path.join(RAIZ, '..', 'sql', 'contatos_fornecedores.sql');
+  if (fs.existsSync(caminhoSql)) {
+    const SQL = fs.readFileSync(caminhoSql, 'utf8');
+    for (const a of CATALOGO.ctt.actions) assert.ok(SQL.includes(a.column), `${a.column} não está no SQL`);
+    for (const c of CATALOGO.ctt.columns) assert.ok(SQL.includes(c.column), `${c.column} não está no SQL`);
+  }
 });
 
 test('modais: novo/editar têm o Tipo com + e −, CNPJ/CPF, endereço "end" e as pessoas; detalhes tem atividades e histórico', () => {
@@ -114,6 +118,20 @@ test('modais: novo/editar têm o Tipo com + e −, CNPJ/CPF, endereço "end" e a
   assert.ok(DETALHES_JS.includes("'ctt.interaction.add'"));
   const excluir = ler('html', 'modals', 'contatos', 'excluir.html');
   assert.ok(excluir.includes('data-perm="ctt.delete"'));
+});
+
+test("linha do tempo do contato (29/09/2026): ' cita o que é ligado a ele; pessoa e atividade abrem na ficha, documento e conta na Contabilidade", () => {
+  const DETALHES_JS = ler('js', 'modals', 'contato-detalhes.js');
+  assert.ok(DETALHES_JS.includes('objetos: objetosDoContato, aoAbrirObjeto: abrirObjetoDoContato'));
+  assert.ok(DETALHES_JS.includes('/api/contatos/${contato.id}/citaveis?busca='));
+  // Pessoa e atividade: a aba delas, com o item piscando; o resto: fecha a ficha e abre na Contabilidade.
+  assert.ok(DETALHES_JS.includes("activateTab(document.getElementById('tab-pessoas')") && DETALHES_JS.includes("activateTab(document.getElementById('tab-atividades')"));
+  assert.ok(DETALHES_JS.includes("attrs: { 'data-atividade-id': String(a.id) }") && DETALHES_JS.includes('[data-atividade-id="${CSS.escape(String(objeto.id))}"]'));
+  assert.ok(DETALHES_JS.includes("await window.loadPage?.('contabilidade')") && DETALHES_JS.includes('window.ContabilidadeAbrirObjeto(objeto)'));
+  // A rota confere a permissão de ver a ficha e só traz documento/conta para quem vê a Contabilidade.
+  const CONTROLLER = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contatosController.js'), 'utf8');
+  assert.ok(CONTROLLER.includes("router.get('/:id/citaveis', exigirPermissao('ctt.details.view')"));
+  assert.ok(CONTROLLER.includes("permissoesRepo.can(permissoes, 'contabilidade.view')"));
 });
 
 test('o sino abre a ficha do contato e o menu trata o módulo como Clientes (a tabela rola por dentro)', () => {

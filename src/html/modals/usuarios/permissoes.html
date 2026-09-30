@@ -2318,6 +2318,14 @@
                     </div>
                   </label>
 
+                  <label class="usuarios-permissoes-item" data-search="gerenciar origens tipos de interacao lista mais menos">
+                    <input type="checkbox" name="pros.lists.manage" data-role="item" data-group="acoes-pros" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="text-sm font-medium">Gerenciar origens e tipos de interação</span>
+                      <p class="text-sm text-gray-400">Os botões + e − ao lado da Origem e do Tipo da interação</p>
+                    </div>
+                  </label>
+
                   <label class="usuarios-permissoes-item" data-search="adicionar nota prospeccao">
                     <input type="checkbox" name="pros.note.add" data-role="item" data-group="acoes-pros" data-item-type="action" class="w-4 h-4 mt-1" />
                     <div>
@@ -4667,13 +4675,118 @@
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Pacote e configuração (etapas seguintes)</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Documentos e arquivos</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="registrar documento nfe entrada nfse recibo guia anexar arquivo comprovante">
+                        <input type="checkbox" name="contabilidade.documento.registrar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Registrar documentos e anexar arquivos</span>
+                          <p class="text-sm text-gray-400">NF-e de entrada (XML ou chave), NFS-e, recibos e guias; anexar comprovantes e evidências</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir documento arquivo motivo">
+                        <input type="checkbox" name="contabilidade.documento.excluir" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Excluir documento ou arquivo</span>
+                          <p class="text-sm text-gray-400">Tira um documento recebido ou um arquivo, com motivo (o histórico fica)</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Contas a pagar</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="lancar conta a pagar fornecedor parcelas">
+                        <input type="checkbox" name="contabilidade.pagar.lancar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Lançar contas a pagar</span>
+                          <p class="text-sm text-gray-400">Criar e alterar a conta do fornecedor e as parcelas</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="registrar pagamento parcela comprovante">
+                        <input type="checkbox" name="contabilidade.pagar.pagar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Registrar pagamento</span>
+                          <p class="text-sm text-gray-400">Dizer quando e como a parcela foi paga, com o comprovante</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="estornar pagamento cancelar conta motivo">
+                        <input type="checkbox" name="contabilidade.pagar.estornar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Estornar pagamento e cancelar conta</span>
+                          <p class="text-sm text-gray-400">Desfazer um pagamento registrado ou cancelar a conta, com motivo</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Extrato bancário</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="importar extrato ofx banco desfazer importacao">
+                        <input type="checkbox" name="contabilidade.extrato.importar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Importar extrato</span>
+                          <p class="text-sm text-gray-400">Importar o OFX do banco e desfazer uma importação errada (com motivo)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="cadastrar contas financeiras conta corrente aplicacao caixa saldo inicial">
+                        <input type="checkbox" name="contabilidade.contas.gerir" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Cadastrar contas financeiras</span>
+                          <p class="text-sm text-gray-400">Conta corrente, aplicação e caixa: banco, agência, conta e saldo inicial</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Conciliação</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="conciliar extrato conciliacao bancaria desfazer ignorar lancamento">
+                        <input type="checkbox" name="contabilidade.conciliar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Conciliar o extrato</span>
+                          <p class="text-sm text-gray-400">Casar os lançamentos do banco com recebimentos e pagamentos, desfazer e ignorar com justificativa</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Classificação</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                      <label class="usuarios-permissoes-item" data-search="classificar lancamentos extrato conta do plano categoria">
+                        <input type="checkbox" name="contabilidade.classificar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Classificar lançamentos</span>
+                          <p class="text-sm text-gray-400">Escolher a conta do plano de cada lançamento do extrato (à mão, um ou vários) e voltar ao automático</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="plano de contas regras de classificacao categorias">
+                        <input type="checkbox" name="contabilidade.plano.gerir" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="text-sm font-medium">Plano de contas e regras</span>
+                          <p class="text-sm text-gray-400">Cadastrar e alterar as contas do plano e as regras de classificação</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório, pacote e configuração</h4>
                     <div class="grid grid-cols-1 gap-4">
                       <label class="usuarios-permissoes-item" data-search="gerar relatorio pacote zip contabilidade enviar">
                         <input type="checkbox" name="contabilidade.pacote.gerar" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
                           <span class="text-sm font-medium">Gerar relatório e pacote</span>
-                          <p class="text-sm text-gray-400">Relatório mensal e ZIP para a contabilidade (etapas seguintes)</p>
+                          <p class="text-sm text-gray-400">Salvar o relatório mensal em PDF e planilha e gerar o ZIP para a contabilidade (o ZIP chega na etapa 9)</p>
                         </div>
                       </label>
 
@@ -4681,7 +4794,7 @@
                         <input type="checkbox" name="contabilidade.config.view" data-role="item" data-group="acoes-contabilidade" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
                           <span class="text-sm font-medium">Ver configuração</span>
-                          <p class="text-sm text-gray-400">Conta, destinatário e o que bloqueia o fechamento (etapas seguintes)</p>
+                          <p class="text-sm text-gray-400">Abrir as Configurações (integrações com a SEFAZ, o BB e o ADN), ver o que falta e testar a conexão; mudar é só do Sup Admin</p>
                         </div>
                       </label>
                     </div>

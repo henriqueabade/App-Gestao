@@ -1,0 +1,80 @@
+<!--
+  NF-e e NFS-e encontradas — a caixa de entrada das buscas automáticas
+  (etapas 10 e 13): cada NF-e emitida contra o CNPJ da empresa (SEFAZ) e
+  cada NFS-e em que ela é tomadora (ADN). Da linha: dar ciência ou outra
+  manifestação (NF-e), baixar o XML completo, registrar em "Documentos
+  recebidos", ver o XML, ignorar com motivo (não é despesa da empresa) ou
+  restaurar. A nota que o emitente cancelou aparece marcada e não se
+  registra. Buscar agora na SEFAZ ou no ADN pelos botões do rodapé.
+  Dados: GET /api/contabilidade/entrada (e as ações em /entrada/:id/…).
+  Script: src/js/modals/contabilidade-modais.js (montarEntradaDfe).
+-->
+<div id="ctbEntradaDfeOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbEntradaTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbEntradaTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-inbox mr-2" aria-hidden="true"></i>NF-e e NFS-e encontradas</h2>
+        <p class="text-xs text-gray-300 truncate">SEFAZ (NF-e de entrada) e ADN (NFS-e tomadas)</p>
+      </div>
+      <span id="ctbEntradaContagem" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbEntradaOrigem" class="ctl-rotulo text-gray-300">Origem</label>
+            <select id="ctbEntradaOrigem" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todas</option>
+              <option value="sefaz_nfe">NF-e (SEFAZ)</option>
+              <option value="nfse_adn">NFS-e (ADN)</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbEntradaVisao" class="ctl-rotulo text-gray-300">Situação</label>
+            <select id="ctbEntradaVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="pendentes">Pendentes (fora dos documentos)</option>
+              <option value="registradas">Registradas</option>
+              <option value="ignoradas">Ignoradas</option>
+              <option value="todas">Todas</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbEntradaBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbEntradaBusca" type="search" placeholder="Emitente, CNPJ, número ou chave"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div id="ctbEntradaAviso" class="hidden text-sm" role="alert"></div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Emissão</th>
+                <th class="px-4 py-3 text-left text-xs">Documento</th>
+                <th class="px-4 py-3 text-left text-xs">Emitente</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbEntradaLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbEntradaMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbEntradaConfig" type="button" data-perm="contabilidade.config.view" class="btn-neutral ctl-botao text-white">Configurações</button>
+      <button id="ctbEntradaBuscarAdn" type="button" data-perm="contabilidade.documento.registrar" class="btn-secondary ctl-botao text-white">Buscar NFS-e no ADN</button>
+      <button id="ctbEntradaBuscarSefaz" type="button" data-perm="contabilidade.documento.registrar" class="btn-primary ctl-botao text-white min-w-[180px]">Buscar NF-e na SEFAZ</button>
+    </footer>
+  </div>
+</div>

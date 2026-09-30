@@ -14,7 +14,16 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="interacaoTipo" class="ctl-rotulo text-gray-300">Tipo <span class="text-[var(--color-red)]">*</span></label>
-          <select id="interacaoTipo" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
+          <!-- A lista editável com + e − (utils/prospeccao-listas.js). -->
+          <div class="relative">
+            <select id="interacaoTipo" title="Tipo da interação" class="w-full appearance-none ctl-campo ctl-campo--dois-icones bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <button type="button" id="delTipoInteracao" data-perm="pros.lists.manage" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir um tipo de interação da lista" title="Excluir um tipo de interação da lista">
+              <i class="fas fa-minus"></i>
+            </button>
+            <button type="button" id="addTipoInteracao" data-perm="pros.lists.manage" class="absolute right-2 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Incluir um tipo de interação na lista" title="Incluir um tipo de interação na lista">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
         </div>
         <div>
           <label for="interacaoData" class="ctl-rotulo text-gray-300">Quando aconteceu</label>

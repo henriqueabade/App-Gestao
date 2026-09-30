@@ -50,6 +50,10 @@ de corpo só nessas rotas (e nas de planilha); o resto continua em 3 MB.
   (lista com foto), que recebe o aviso "mencionou você" — e só esse, sem
   duplicar com o de comentário. Marcas gravadas no texto: `@[Nome](u:id)` e
   `*[rótulo](e:id)`; o backend as lê (`mencionadosNoTexto`, `textoSimples`).
+  Desde 29/09/2026 há uma terceira, `'[rótulo](o:tipo:id)`: o "'" cita um
+  objeto do módulo (na Contabilidade e em Contatos), quando quem monta o
+  social passa `objetos(busca)` e `aoAbrirObjeto(objeto)` — ver
+  `docs/contabilidade-fechamento-plano.md`, seção Z.
   A lista de sugestões é vidro branco com texto preto e **não fecha ao clicar
   nos botões `@`/`*`**: eles não roubam o foco da caixa (`mousedown` com
   `preventDefault`), e a lista só fecha quando o foco sai de verdade.

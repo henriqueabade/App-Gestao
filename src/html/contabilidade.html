@@ -21,17 +21,23 @@
     (erro crítico bloqueia o fechamento; pendência documental bloqueia o
     pacote e o envio; aviso não bloqueia), o checklist por fonte — só com o
     que o sistema já controla: NF-e de saída, recebimentos, comissões e
-    produção, devoluções; extrato, documentos recebidos, contas a pagar e
-    conciliação aparecem como "ainda não integrado" — a lista de pendências
-    e a atividade do módulo. Cada botão/cartão traz `data-ctb-acao`: quem
-    ainda não tem função real abre o aviso "em implementação".
+    produção, devoluções, documentos recebidos e contas a pagar (etapas 2 e
+    3), o extrato bancário (etapa 4), a conciliação (etapa 5) e a
+    classificação (etapa 6) — a lista de pendências, a atividade do módulo e
+    as mensagens (o social da Contabilidade, com "@" e "'").
+    Contas a pagar, documentos recebidos, os documentos da competência, o
+    extrato, a conciliação, a classificação, o histórico dos fechamentos, o
+    relatório mensal (etapa 8) e o pacote (etapa 9) abrem os modais deles. Cada
+    botão/cartão traz `data-ctb-acao`: quem ainda não tem função real abre o
+    aviso "em implementação". Os cartões de erros críticos, documentais e
+    avisos filtram a lista E rolam a tela até ela.
   -->
   <div class="modulo-container ctl-padrao contabilidade-module">
     <!-- Cabeçalho: título à esquerda, competência e ações à direita -->
     <div class="module-header ctb-cabecalho mb-8 animate-fade-in-up">
       <div>
         <h1 class="text-2xl font-semibold mb-2 module-header__title">Contabilidade</h1>
-        <p class="module-header__description">Feche o mês e prepare o que vai para a contabilidade</p>
+        <p class="module-header__description">Feche a contabilidade completa</p>
       </div>
       <div class="ctb-cabecalho__controles">
         <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
@@ -50,7 +56,7 @@
         <button type="button" data-perm="contabilidade.config.view" data-ctb-acao="configuracao" class="btn-neutral ctl-botao ctl-botao--icone text-white" title="Configuração da contabilidade" aria-label="Configuração da contabilidade">
           <i class="fas fa-cog" aria-hidden="true"></i>
         </button>
-        <!-- Consulta dentro do app (azul claro): o relatório e o pacote são as etapas 8 e 9. -->
+        <!-- Consulta dentro do app (azul claro): abre o modal do pacote (etapa 9), onde se gera o ZIP. -->
         <button id="ctbPacote" type="button" data-perm="contabilidade.pacote.gerar" data-ctb-acao="pacote" class="btn-secondary ctl-botao text-white" title="Relatório mensal e ZIP para a contabilidade">
           <i class="fas fa-file-archive mr-2" aria-hidden="true"></i>Gerar pacote
         </button>
@@ -137,16 +143,15 @@
     </div>
     <div class="ctb-fontes animate-fade-in-up" data-ctb-lista="fontes"></div>
 
-    <!-- Terceira faixa: pendências (70%) e ações (30%) -->
+    <!-- Terceira faixa: pendências (70%) e ações (30%). O cartão das
+         pendências tem a altura do das ações: a lista rola dentro dele. -->
     <div class="ctb-operacional animate-fade-in-up">
-      <section class="ctb-painel glass-surface rounded-xl">
+      <section id="ctbPendenciasPainel" class="ctb-painel ctb-painel--pendencias glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
           <div class="ctb-painel__titulo">
             <h2>Pendências</h2>
             <span class="ctb-badge ctb-badge--contagem" data-ctb="pendencias.total">0</span>
           </div>
-          <!-- A lista mostra as primeiras; "Ver todas" abre o resto no lugar. -->
-          <button type="button" class="ctb-link" data-ctb-acao="pendencias-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
         <!-- Filtro por severidade (etiquetas, fora do padrão de botão de propósito) e por fonte (quando um cartão é clicado). -->
         <div class="ctb-filtros" role="group" aria-label="Filtrar pendências">
@@ -160,7 +165,8 @@
             <button type="button" class="ctb-chip__fechar" data-ctb-acao="filtrar-fonte" data-ctb-fonte="" title="Tirar o filtro da fonte" aria-label="Tirar o filtro da fonte"><i class="fas fa-times" aria-hidden="true"></i></button>
           </span>
         </div>
-        <ul class="ctb-pendencias" data-ctb-lista="pendencias"></ul>
+        <!-- "Todas" mostra todas: a lista não corta, rola (barra da casa). -->
+        <ul class="ctb-pendencias ctb-rolagem" data-ctb-lista="pendencias" tabindex="0" aria-label="Lista de pendências"></ul>
       </section>
 
       <section class="ctb-painel glass-surface rounded-xl">
@@ -168,33 +174,53 @@
           <div class="ctb-painel__titulo"><h2>Ações</h2></div>
         </header>
         <div class="ctb-acoes">
+          <button type="button" class="ctb-acao" data-ctb-acao="contas-pagar">
+            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Contas a pagar</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-perm="contabilidade.documento.registrar" data-ctb-acao="registrar-documento">
+            <i class="fas fa-file-signature" aria-hidden="true"></i><span>Registrar NF-e, NFS-e ou recibo</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="documentos-recebidos">
+            <i class="fas fa-file-import" aria-hidden="true"></i><span>Documentos fiscais recebidos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ctb-acao" data-ctb-acao="evidencias">
+            <i class="fas fa-folder-open" aria-hidden="true"></i><span>Documentos da competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Etapas 10 e 13: o que a SEFAZ (NF-e contra o CNPJ) e o ADN (NFS-e tomadas) acharam, para registrar ou ignorar. -->
+          <button type="button" class="ctb-acao" data-ctb-acao="entrada-dfe">
+            <i class="fas fa-inbox" aria-hidden="true"></i><span>NF-e e NFS-e da SEFAZ/ADN</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Etapa 4: o extrato por OFX; a busca direto no BB (API de Extratos) é a etapa 11, dentro deste modal. -->
+          <button type="button" class="ctb-acao" data-ctb-acao="extrato">
+            <i class="fas fa-university" aria-hidden="true"></i><span>Extrato bancário</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Etapa 5: extrato × o que o app registrou (recebimentos, pagamentos, reembolsos). -->
+          <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
+            <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação bancária</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Etapa 6: a conta do plano de cada lançamento; dela se chega ao plano e às regras. -->
+          <button type="button" class="ctb-acao" data-ctb-acao="classificacao">
+            <i class="fas fa-tags" aria-hidden="true"></i><span>Classificação</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.fechar" data-ctb-acao="fechar">
             <i class="fas fa-lock" aria-hidden="true"></i><span>Fechar competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.reabrir" data-ctb-acao="reabrir">
             <i class="fas fa-lock-open" aria-hidden="true"></i><span>Reabrir competência</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
-          <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="relatorio">
+          <!-- Etapa 7: as versões do fechamento (a foto de cada uma) e as diferenças desde a última. -->
+          <button type="button" class="ctb-acao" data-ctb-acao="fechamentos">
+            <i class="fas fa-history" aria-hidden="true"></i><span>Histórico dos fechamentos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+          </button>
+          <!-- Etapa 8: ver o relatório basta ver a Contabilidade; salvar o PDF/planilha (lá dentro) pede "Relatório e pacote". -->
+          <button type="button" class="ctb-acao" data-ctb-acao="relatorio">
             <i class="fas fa-file-lines" aria-hidden="true"></i><span>Relatório mensal</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="pacote">
             <i class="fas fa-file-archive" aria-hidden="true"></i><span>Gerar pacote (ZIP)</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.pacote.gerar" data-ctb-acao="enviar">
-            <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Enviar à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <!-- Fala com o Banco do Brasil: azul escuro do BB só quando existir; até lá é aviso. -->
-          <button type="button" class="ctb-acao" data-ctb-acao="sincronizar-extrato">
-            <i class="fas fa-university" aria-hidden="true"></i><span>Sincronizar extrato do BB</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="documentos-recebidos">
-            <i class="fas fa-file-import" aria-hidden="true"></i><span>Documentos fiscais recebidos</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="contas-pagar">
-            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Contas a pagar</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="ctb-acao" data-ctb-acao="conciliacao">
-            <i class="fas fa-check-double" aria-hidden="true"></i><span>Conciliação e classificação</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
+            <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Registrar o envio à contabilidade</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
           </button>
           <button type="button" class="ctb-acao" data-perm="contabilidade.config.view" data-ctb-acao="configuracao">
             <i class="fas fa-cog" aria-hidden="true"></i><span>Configurações</span><i class="fas fa-chevron-right ctb-acao__seta" aria-hidden="true"></i>
@@ -203,31 +229,29 @@
       </section>
     </div>
 
-    <!-- Quarta faixa: atividade do módulo e o que vem a seguir -->
+    <!-- Quarta faixa: a atividade do módulo e as mensagens (o social da
+         Contabilidade), os dois com a mesma altura fixa; "Ver todas" e
+         "Ver tudo" abrem cada um no modal grande. -->
     <div class="ctb-resumos animate-fade-in-up">
-      <section class="ctb-painel glass-surface rounded-xl">
+      <section class="ctb-painel ctb-painel--fixo glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
           <div class="ctb-painel__titulo"><h2>Atividade recente</h2></div>
           <button type="button" class="ctb-link" data-ctb-acao="atividade-todas">Ver todas <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
-        <ol class="ctb-atividade" data-ctb-lista="atividade"></ol>
+        <ol class="ctb-atividade ctb-rolagem" data-ctb-lista="atividade" tabindex="0" aria-label="Atividade recente"></ol>
       </section>
 
-      <!-- O plano do módulo (docs/contabilidade-fechamento-plano.md, seção N), para se ver o que ainda vem. -->
-      <section class="ctb-painel glass-surface rounded-xl">
+      <!-- Mensagens e comentários: publicar, curtir, comentar, responder e
+           anexar, como nas fichas; "@" menciona um usuário (ele recebe o
+           aviso) e "'" cita um objeto do módulo (competência, pendência,
+           documento, conta, lançamento, arquivo, pacote…), que abre ao clicar.
+           Componente: src/js/utils/historico-social.js (origem 'contabilidade'). -->
+      <section class="ctb-painel ctb-painel--fixo glass-surface rounded-xl">
         <header class="ctb-painel__cabeca">
-          <div class="ctb-painel__titulo"><h2>Próximas etapas</h2></div>
+          <div class="ctb-painel__titulo"><h2>Mensagens e comentários</h2></div>
+          <button type="button" class="ctb-link" data-ctb-acao="mensagens">Ver tudo <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
         </header>
-        <ol class="ctb-roteiro">
-          <li class="ctb-roteiro__item" data-feita="1"><span class="ctb-roteiro__numero">1</span><div><strong>Base do módulo</strong><span>Menu, permissões, checklist com o que já existe, pendências e fechamento</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">2</span><div><strong>Documentos e evidências</strong><span>XMLs e PDFs como evidência; comprovante anexado à mão</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">3</span><div><strong>Fornecedores e contas a pagar</strong><span>NF-e de entrada e NFS-e à mão, títulos e pagamentos (os contatos já estão prontos)</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">4</span><div><strong>Extrato por OFX</strong><span>Contas, importação e a tela de movimentações</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">5</span><div><strong>Conciliação</strong><span>Extrato × recebimentos, pagamentos, reembolsos e títulos</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">6</span><div><strong>Classificação</strong><span>Plano de contas (as categorias da contabilidade) e regras</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">7–9</span><div><strong>Fechamento completo, relatório e pacote</strong><span>Totais congelados, relatório mensal, ZIP salvo pelo usuário</span></div></li>
-          <li class="ctb-roteiro__item"><span class="ctb-roteiro__numero">10+</span><div><strong>Automáticos</strong><span>NF-e de entrada pela SEFAZ, extrato pela API do BB, CDB, NFS-e</span></div></li>
-        </ol>
+        <div class="ctb-mensagens ctb-rolagem" data-ctb-mensagens data-historico-social></div>
       </section>
     </div>
   </div>

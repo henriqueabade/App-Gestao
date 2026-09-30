@@ -1,0 +1,99 @@
+<!--
+  Regras de classificação (etapa 6). Modal médio. "Quando isto, esta conta do
+  plano" (GET /api/contabilidade/regras): descrição do banco, CNPJ/CPF da
+  contrapartida, fornecedor, CFOP da NF-e ou a origem do dinheiro conciliado.
+  As sugeridas saem das classificações feitas à mão (2 ou mais iguais) e só
+  valem se alguém criar. "Testar no mês" diz quantos lançamentos a regra pega
+  sem gravar (POST .../regras/testar). Grava por POST/PUT
+  /api/contabilidade/regras (contabilidade.plano.gerir).
+  Script: src/js/modals/contabilidade-modais.js (montarRegras).
+-->
+<div id="ctbRegrasOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbRegrasTitulo" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbRegrasTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-magic mr-2" aria-hidden="true"></i>Regras de classificação</h2>
+      <span id="ctbRegrasRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Quando</th>
+                <th class="px-4 py-3 text-left text-xs">Conta do plano</th>
+                <th class="px-4 py-3 text-left text-xs">Sentido</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbRegrasLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbRegrasSugeridasBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Sugeridas pelas classificações à mão</h3>
+            <span class="text-xs text-gray-400">A mesma descrição classificada na mesma conta 2 vezes ou mais</span>
+          </div>
+          <ul id="ctbRegrasSugeridas" class="ctb-arquivos"></ul>
+        </div>
+
+        <div class="ctb-secao-modal" data-perm-hide="contabilidade.plano.gerir">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 id="ctbRegraFormTitulo" class="ctl-secao text-[var(--color-primary)]">Nova regra</h3>
+            <button id="ctbRegraNova" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">Cadastrar outra</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label for="ctbRegraCondicao" class="ctl-rotulo text-gray-300">Quando <span class="ctb-obrigatorio">*</span></label>
+              <select id="ctbRegraCondicao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbRegraValor" class="ctl-rotulo text-gray-300">Valor <span class="ctb-obrigatorio">*</span></label>
+              <input id="ctbRegraValor" type="text" maxlength="200"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="ctbRegraValorLista" aria-label="Valor" class="hidden w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <p id="ctbRegraAjuda" class="text-xs text-gray-400 mt-2"></p>
+            </div>
+            <div>
+              <label for="ctbRegraConta" class="ctl-rotulo text-gray-300">Conta do plano <span class="ctb-obrigatorio">*</span></label>
+              <select id="ctbRegraConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div>
+              <label for="ctbRegraSentido" class="ctl-rotulo text-gray-300">Sentido</label>
+              <select id="ctbRegraSentido" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
+            <div>
+              <label for="ctbRegraPrioridade" class="ctl-rotulo text-gray-300">Prioridade</label>
+              <input id="ctbRegraPrioridade" type="number" step="1" min="-100" max="100" value="0"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="md:col-span-2">
+              <label for="ctbRegraObservacao" class="ctl-rotulo text-gray-300">Observação</label>
+              <input id="ctbRegraObservacao" type="text" maxlength="500" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="flex items-end">
+              <label class="flex items-center gap-2 text-sm text-gray-300"><input id="ctbRegraAtiva" type="checkbox" checked class="w-4 h-4" /> Regra ativa</label>
+            </div>
+          </div>
+          <div class="ctl-acoes justify-end">
+            <p id="ctbRegraTeste" class="text-sm text-gray-300 flex-1"></p>
+            <button id="ctbRegraTestar" type="button" class="btn-secondary ctl-botao text-white">Testar no mês</button>
+          </div>
+        </div>
+
+        <div id="ctbRegrasMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbRegraSalvar" type="button" data-perm="contabilidade.plano.gerir" class="btn-primary ctl-botao text-white min-w-[160px]">Salvar regra</button>
+    </footer>
+  </div>
+</div>

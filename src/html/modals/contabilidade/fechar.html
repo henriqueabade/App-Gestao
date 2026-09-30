@@ -4,7 +4,10 @@
   por POST /api/contabilidade/fechar (contabilidade.fechar): o backend recalcula
   tudo e recusa se houver erro crítico ou se o mês ainda estiver em curso.
   Pendências documentais e avisos não impedem o fechamento — ficam gravados
-  na foto do fechamento e continuam bloqueando o pacote/envio.
+  na foto do fechamento e continuam bloqueando o pacote/envio. Etapa 7: "O
+  que fica congelado" vem da prévia (GET /api/contabilidade/fechar/previa) —
+  o resultado por conta do plano, o saldo do banco e, se já houve versão, o
+  que mudou desde ela.
   Script: src/js/modals/contabilidade-modais.js (montarFechar).
 -->
 <div id="ctbFecharOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
@@ -46,6 +49,16 @@
           <ul id="ctbFecharBloqueiosLista" class="ctb-lista-modal"></ul>
         </div>
 
+        <!-- Etapa 7: a foto que fica congelada (GET /api/contabilidade/fechar/previa) -->
+        <div id="ctbFecharFoto" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">O que fica congelado</h3>
+            <span id="ctbFecharVersao" class="text-xs text-gray-400"></span>
+          </div>
+          <dl id="ctbFecharFotoDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+          <p id="ctbFecharComparacao" class="hidden text-sm text-gray-300"></p>
+        </div>
+
         <div id="ctbFecharSobras" class="hidden space-y-2">
           <p class="text-xs text-gray-400 uppercase tracking-wider">Fica registrado no fechamento</p>
           <ul id="ctbFecharSobrasLista" class="ctb-lista-modal text-gray-300"></ul>
@@ -53,7 +66,7 @@
 
         <div class="ctb-aviso" role="note">
           <i class="fas fa-lock" aria-hidden="true"></i>
-          <span>Depois do fechamento, o mês só muda com "Reabrir competência" (com justificativa), e tudo fica no histórico do módulo.</span>
+          <span>Depois do fechamento, o mês só muda com "Reabrir competência" (com justificativa). A foto fica guardada como uma versão: regra nova ou mudança no Financeiro não altera o mês fechado, só aparece como diferença.</span>
         </div>
 
         <div id="ctbFecharMensagem" class="hidden text-sm" role="alert"></div>

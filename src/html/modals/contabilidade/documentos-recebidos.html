@@ -1,0 +1,78 @@
+<!--
+  Documentos fiscais recebidos (etapa 3). Modal grande: NF-e de entrada,
+  NFS-e e recibos/guias da competência (mês da emissão), com o que falta em
+  cada um (XML, arquivo, conta a pagar). GET /api/contabilidade/documentos.
+  A linha abre a ficha (documento-recebido.html, por cima); "Registrar
+  documento" abre registrar-documento.html.
+  Script: src/js/modals/contabilidade-modais.js (montarDocumentosRecebidos).
+-->
+<div id="ctbDocumentosRecebidosOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbDocsTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbDocsTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>Documentos fiscais recebidos</h2>
+      <span id="ctbDocsRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbDocsCompetenciaMes" class="ctl-rotulo text-gray-300">Competência (emissão)</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbDocsCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbDocsCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbDocsCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbDocsCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbDocsTipo" class="ctl-rotulo text-gray-300">Tipo</label>
+            <select id="ctbDocsTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+              <option value="nfe">NF-e de entrada</option>
+              <option value="nfse">NFS-e</option>
+              <option value="outro">Recibos, guias e outros</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbDocsBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbDocsBusca" type="search" placeholder="Emitente, número, CNPJ ou chave"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais ctb-totais--tres" id="ctbDocsTotais">
+          <div class="ctb-total" data-total="nfe"><span class="ctb-total__rotulo">NF-e de entrada</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="nfse"><span class="ctb-total__rotulo">NFS-e</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="outro"><span class="ctb-total__rotulo">Recibos e guias</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Emissão</th>
+                <th class="px-4 py-3 text-left text-xs">Documento</th>
+                <th class="px-4 py-3 text-left text-xs">Emitente</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Pagamento</th>
+                <th class="px-4 py-3 text-left text-xs">Arquivo</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbDocsLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbDocsMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbDocsRegistrar" type="button" data-perm="contabilidade.documento.registrar" class="btn-primary ctl-botao text-white min-w-[160px]">Registrar documento</button>
+    </footer>
+  </div>
+</div>

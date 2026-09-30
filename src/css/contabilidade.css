@@ -120,7 +120,9 @@ body {
 /* As variáveis --menu-* vêm de menu.css e trocam com o tema claro/escuro; o
    valor de reserva é o da casa no escuro. As medidas são as do Financeiro
    (a referência visual, decisão do dono em 21/09/2026). */
-.contabilidade-module {
+/* Os modais ficam no <body>, fora do módulo: as variáveis valem para os dois. */
+.contabilidade-module,
+[data-ctb-modal] {
     --ctb-espaco: 1.5rem;          /* 24px entre blocos grandes */
     --ctb-borda: var(--menu-surface-border, rgba(255, 255, 255, 0.1));
     --ctb-texto-1: var(--menu-text-strong, #fff);
@@ -133,6 +135,10 @@ body {
     --ctb-bordo-texto: #e08aa6;    /* bordô legível sobre o fundo escuro */
     --ctb-ouro-fundo: rgba(182, 160, 62, 0.18);
     --ctb-verde: var(--color-green);
+}
+
+/* Só o módulo vira coluna: o véu dos modais tem o `hidden` e o centro dele. */
+.contabilidade-module {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -194,6 +200,9 @@ body {
 }
 
 .ctb-competencia-campo__ir { flex-shrink: 0; }
+
+/* Desligado (Competencia.desabilitar): quando a visão não depende do mês. */
+.fin-competencia-campo--desligado { opacity: 0.55; }
 
 /* Nos modais o seletor cabe na coluna do filtro: o mês encolhe, ano e lupa ficam fixos. */
 .ctb-competencia-campo--modal { width: 100%; min-width: 0; }
@@ -472,6 +481,34 @@ body {
     margin-bottom: var(--ctb-espaco);
 }
 
+/* Altura fixa com rolagem dentro do cartão (pedido do dono, 29/09/2026). A
+   barra é a da casa (scroll.css, seção 3d): aqui só se diz QUE rola. Quando
+   a lista chega no fim, a roda passa a rolar a tela. */
+.ctb-rolagem {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Pendências: o cartão tem a altura do das Ações (a linha da grade estica
+   os dois); com a tela estreita, os dois empilham e ela fica em 24rem. */
+.ctb-painel--pendencias .ctb-pendencias {
+    min-height: 24rem;
+    /* As linhas avançam 0,75rem sobre o recuo do cartão (o realce do hover
+       vai de borda a borda); a lista abre esse espaço para não cortá-las. */
+    margin: 0 -0.75rem;
+    padding: 0 0.75rem;
+}
+
+/* Atividade e mensagens: a mesma altura, fixa. */
+.ctb-painel--fixo { height: 34rem; }
+
+/* A lista rola até ela: um respiro acima, para o título não colar no topo. */
+#ctbPendenciasPainel { scroll-margin-top: 1rem; }
+
+/* A pendência citada numa mensagem pisca ao chegar. */
+.ctb-pendencia.is-destaque { box-shadow: 0 0 0 2px var(--color-primary); background: var(--ctb-hover); }
+
 /* ---------------------------------------------------------- checklist */
 
 .ctb-fontes {
@@ -506,8 +543,9 @@ body {
 
 .ctb-fonte__topo {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.5rem 0.7rem;
 }
 
 .ctb-fonte__icone {
@@ -527,15 +565,17 @@ body {
 .ctb-fonte[data-estado="ok"] .ctb-fonte__icone { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
 .ctb-fonte[data-estado="indisponivel"] .ctb-fonte__icone { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
 
+/* O título quebra entre as palavras em vez de cortar ("Recebimentos e…"); e
+   quando nem assim cabe ao lado da etiqueta ("Ainda não integrado"), a
+   etiqueta desce para a linha de baixo (o topo do cartão quebra). */
 .ctb-fonte__titulo {
-    flex: 1;
+    flex: 1 1 7rem;
     min-width: 0;
     font-size: 0.95rem;
     font-weight: 600;
+    line-height: 1.25;
     color: var(--ctb-texto-1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
 }
 
 /* A situação da fonte é uma etiqueta (fora do padrão de botão, de propósito). */
@@ -773,19 +813,10 @@ body {
     list-style: none;
     margin: 0;
     padding: 0 0 0 0.25rem;
-    position: relative;
 }
 
-.ctb-atividade::before {
-    content: "";
-    position: absolute;
-    left: 0.55rem;
-    top: 0.6rem;
-    bottom: 0.6rem;
-    width: 1px;
-    background: var(--ctb-borda);
-}
-
+/* O traço que liga as bolinhas vai em cada item (e não na lista): a lista
+   rola, e um traço da lista inteira ficaria do tamanho da parte visível. */
 .ctb-evento {
     position: relative;
     display: grid;
@@ -794,9 +825,24 @@ body {
     padding: 0.35rem 0 0.9rem 1.5rem;
 }
 
+.ctb-evento::after {
+    content: "";
+    position: absolute;
+    left: calc(0.575rem - 0.5px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--ctb-borda);
+}
+
+.ctb-evento:first-child::after { top: 0.9rem; }
+.ctb-evento:last-child::after { bottom: auto; height: 0.9rem; }
+.ctb-evento:only-child::after { display: none; }
+
 .ctb-evento::before {
     content: "";
     position: absolute;
+    z-index: 1;
     left: 0.3rem;
     top: 0.65rem;
     width: 0.55rem;
@@ -817,43 +863,117 @@ body {
 .ctb-evento__titulo { display: block; font-size: 0.9rem; color: var(--ctb-texto-1); }
 .ctb-evento__detalhe { display: block; font-size: 0.8rem; color: var(--ctb-texto-2); margin-top: 0.1rem; }
 
-/* ------------------------------------------------------------- roteiro */
+/* ------------------------------------------------------------ mensagens */
 
-.ctb-roteiro {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
+/* O social da Contabilidade no cartão (src/styles/historico-social.css dá o
+   visual; aqui só o encaixe): um respiro à direita para a barra de rolagem
+   não encostar nos cartões. */
+.ctb-mensagens { padding-right: 0.35rem; }
+.ctb-mensagens .hs { gap: 0.85rem; }
+
+/* ------------------------------------ linha do tempo do modal de atividade
+   A mesma do Financeiro (financeiro.css, .fin-linha-tempo): só uma folha de
+   módulo fica carregada por vez, então o desenho mora aqui também. Um dia
+   por cabeçalho; em cada movimento, a foto (ou as iniciais) de quem fez, o
+   nome, a hora, a etiqueta do tipo e o que aconteceu. */
+.ctb-linha-tempo { list-style: none; margin: 0; padding: 0; position: relative; }
+
+.ctb-linha-tempo__dia {
+    margin: 1.5rem 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-primary-light, #d4c169);
 }
 
-.ctb-roteiro__item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    font-size: 0.85rem;
+.ctb-linha-tempo__dia:first-child { margin-top: 0; }
+
+.ctb-linha-tempo__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0 0 1.25rem;
 }
 
-.ctb-roteiro__item strong { display: block; color: var(--ctb-texto-1); font-weight: 600; }
-.ctb-roteiro__item span:last-child { display: block; color: var(--ctb-texto-2); font-size: 0.8rem; }
+/* O traço que liga um avatar ao próximo. */
+.ctb-linha-tempo__item::before {
+    content: '';
+    position: absolute;
+    left: calc(1.375rem - 1px);
+    top: 2.9rem;
+    bottom: 0.15rem;
+    width: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
 
-.ctb-roteiro__numero {
-    flex-shrink: 0;
-    min-width: 2rem;
-    height: 1.6rem;
-    padding: 0 0.5rem;
-    border-radius: 9999px;
+.ctb-linha-tempo__item:last-child::before,
+.ctb-linha-tempo__item:has(+ .ctb-linha-tempo__dia)::before { display: none; }
+
+.ctb-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.72rem;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0.85rem;
     font-weight: 700;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--ctb-texto-2);
+    color: #1a0009;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-.ctb-roteiro__item[data-feita="1"] .ctb-roteiro__numero { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
+.ctb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.ctb-avatar--sistema {
+    color: var(--color-primary-light, #d4c169);
+    background: rgba(182, 160, 62, 0.14);
+    border-color: rgba(182, 160, 62, 0.4);
+    font-size: 1rem;
+}
+
+.ctb-linha-tempo__corpo {
+    min-width: 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.ctb-linha-tempo__topo {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.ctb-linha-tempo__quem { font-size: 0.9rem; color: var(--menu-text-strong, #fff); }
+.ctb-linha-tempo__hora { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-linha-tempo__competencia { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+
+.ctb-linha-tempo__tag {
+    margin-left: auto;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ctb-linha-tempo__texto { margin: 0; font-size: 0.85rem; line-height: 1.45; color: #e5e7eb; overflow-wrap: anywhere; }
+
+/* Os filtros do modal de atividade: a busca ocupa duas partes. */
+.ctb-filtros-atividade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 768px) {
+    .ctb-filtros-atividade { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+}
 
 /* --------------------------------------------------------------- vazio */
 
@@ -889,6 +1009,151 @@ body {
 .ctb-dados__linha dt { color: var(--menu-text-secondary, #9ca3af); }
 .ctb-dados__linha dd { margin: 0; color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 
+/* Os dados em duas colunas (ficha da conta e do documento). */
+.ctb-dados--duas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+}
+.ctb-dados--duas .ctb-dados__linha:nth-last-child(2):nth-child(odd) { border-bottom: 0; }
+.ctb-dados__linha dd.ctb-dados__texto { font-weight: 400; white-space: normal; text-align: right; }
+
+/* Tabela dentro do modal: a moldura e o cabeçalho vêm de tabelas-modais.css;
+   aqui só a rolagem e o espaço entre colunas. */
+.ctb-tabela { overflow: auto; max-height: 55vh; }
+.ctb-tabela--curta { max-height: 32vh; }
+.ctb-tabela tbody td { color: #e5e7eb; vertical-align: middle; }
+.ctb-tabela td.ctb-num,
+.ctb-tabela th.ctb-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ctb-tabela td.ctb-nowrap { white-space: nowrap; }
+.ctb-tabela tr[data-ctb-linha] { cursor: pointer; }
+/* A linha que a pendência apontou (conciliação com registro que mudou). */
+.ctb-tabela tr.ctb-linha-destaque td { background: rgba(212, 175, 55, 0.14); }
+/* Total do dia e do período no livro-caixa do relatório mensal (etapa 8). */
+.ctb-tabela tr.ctb-linha-total td { background: rgba(255, 255, 255, 0.05); color: #fff; font-weight: 600; }
+/* Os botões da linha ficam numa linha só (quebrar deixava a linha com o dobro da altura). */
+.ctb-tabela .ctb-celula-acoes { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: nowrap; }
+
+/* Campo travado (conta com pagamento): apagado, para não parecer editável. */
+[data-ctb-modal] .ctl-campo:disabled,
+[data-ctb-modal] button.ctl-botao:disabled { opacity: 0.55; cursor: not-allowed; }
+.ctb-tabela .ctb-sub { display: block; font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); margin-top: 0.1rem; }
+.ctb-tabela input.ctl-campo { min-width: 0; }
+
+/* Os números do topo das listas (em aberto, vencido…). */
+.ctb-totais {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+.ctb-totais--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ctb-total {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.8rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+}
+.ctb-total__rotulo { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-total__valor { font-size: 1.2rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.ctb-total__nota { font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-total[data-tom="bordo"] { border-color: rgba(106, 21, 44, 0.75); background: rgba(106, 21, 44, 0.28); }
+.ctb-total[data-tom="bordo"] .ctb-total__valor { color: #e08aa6; }
+.ctb-total[data-tom="verde"] .ctb-total__valor { color: var(--color-green); }
+
+/* Abas do modal (Registrar documento): sublinhadas, como as das fichas. */
+.ctb-abas { display: flex; gap: 2rem; overflow-x: auto; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ctb-aba {
+    padding: 1rem 0.5rem;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--menu-text-secondary, #9ca3af);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 150ms ease;
+}
+.ctb-aba:hover { color: #fff; }
+.ctb-aba[aria-selected="true"] { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+/* Seção com título dentro do modal. */
+.ctb-secao-modal { display: flex; flex-direction: column; gap: 0.75rem; }
+.ctb-secao-modal__cabeca { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+
+/* A lista de arquivos da ficha (nome, origem, baixar). */
+.ctb-arquivos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ctb-arquivo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 0.875rem;
+}
+.ctb-arquivo > i { color: var(--color-primary-light); flex-shrink: 0; }
+.ctb-arquivo__texto { flex: 1; min-width: 0; }
+.ctb-arquivo__nome { display: block; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctb-arquivo__nota { display: block; font-size: 0.75rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-arquivo__acoes { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+/* O quadro para anexar (tipo, descrição, arquivo e o botão). */
+.ctb-anexar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+}
+.ctb-arquivo-campo::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.35rem 0.85rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+/* Os quatro filtros do extrato: a competência (mês + ano + lupa) precisa de
+   mais largura que os outros, senão o nome do mês é cortado. */
+@media (min-width: 768px) {
+    .ctb-filtros-extrato { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1fr); }
+}
+
+/* A barra de "classificar os marcados" (etapa 6): quantos, a conta, a observação e o botão. */
+.ctb-lote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+}
+.ctb-lote > span { align-self: center; min-width: 9rem; }
+.ctb-lote__campo { flex: 1 1 14rem; min-width: 0; }
+/* A conta do plano trocada na própria linha. */
+.ctb-tabela select.ctb-conta-linha { min-width: 13rem; }
+
+/* Soma das parcelas: vermelha quando não bate com o valor da conta. */
+.ctb-soma { font-size: 0.8rem; color: var(--menu-text-secondary, #9ca3af); }
+.ctb-soma[data-ok="0"] { color: var(--color-red); font-weight: 600; }
+
+/* Linha do tempo dentro do modal (histórico da conta e do documento). */
+.ctb-historico { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; }
+.ctb-historico li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem; }
+.ctb-historico__quando { color: var(--menu-text-secondary, #9ca3af); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ctb-historico__texto strong { color: #fff; font-weight: 600; }
+.ctb-historico__texto span { display: block; color: var(--menu-text-secondary, #9ca3af); }
+
 /* Lista de bloqueios/pendências dentro do modal. */
 .ctb-lista-modal {
     list-style: none;
@@ -903,6 +1168,120 @@ body {
 .ctb-lista-modal li { display: flex; gap: 0.6rem; align-items: flex-start; }
 .ctb-lista-modal li > i { margin-top: 0.2rem; flex-shrink: 0; }
 
+/* A caixa de entrada tem até cinco botões por linha: quebram em vez de vazar. */
+.ctb-tabela .ctb-celula-acoes--quebra { flex-wrap: wrap; max-width: 22rem; margin-left: auto; }
+
+/* ------------------------------------------ configurações: as integrações */
+
+.ctb-integracoes { display: flex; flex-direction: column; gap: var(--ctb-espaco); }
+/* O campo que depende de outro (e o avançado) some com [hidden]: o display dos blocos abaixo não pode vencer. */
+.ctb-integracao [hidden] { display: none !important; }
+
+/* Um cartão por integração; a faixa da esquerda diz a situação. */
+.ctb-integracao {
+    position: relative;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    border: 1px solid var(--ctb-borda);
+    border-left: 4px solid var(--ctb-texto-3);
+    background: var(--ctb-acao-fundo);
+}
+.ctb-integracao[data-estado="pronta"] { border-left-color: var(--color-green); }
+.ctb-integracao[data-estado="pendente"],
+.ctb-integracao[data-estado="erro"],
+.ctb-integracao[data-estado="sql"] { border-left-color: var(--color-red); }
+
+.ctb-integracao__topo { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.ctb-integracao__icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background: var(--ctb-ouro-fundo);
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+.ctb-integracao__titulo { min-width: 0; flex: 1 1 14rem; }
+.ctb-integracao__titulo h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--ctb-texto-1); }
+.ctb-integracao__etapa { font-size: 0.75rem; color: var(--ctb-texto-2); }
+.ctb-integracao__etiquetas { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+.ctb-integracao__descricao { margin: 0.75rem 0 0; font-size: 0.875rem; color: var(--ctb-texto-2); }
+
+.ctb-integracao__grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+.ctb-integracao__coluna { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.ctb-integracao__subtitulo {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-primary-light);
+}
+.ctb-integracao__form {
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--ctb-borda);
+    background: rgba(0, 0, 0, 0.15);
+}
+.ctb-integracao__campos { display: flex; flex-direction: column; gap: 0.75rem; }
+.ctb-integracao__campo { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.ctb-integracao__ajuda { display: block; font-size: 0.75rem; color: var(--ctb-texto-2); }
+.ctb-integracao__marcar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 0.6rem;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--ctb-texto-1);
+    cursor: pointer;
+}
+.ctb-integracao__marcar input { width: 1rem; height: 1rem; accent-color: var(--color-primary); }
+.ctb-integracao__marcar .ctb-integracao__ajuda { grid-column: 2; }
+.ctb-integracao__avancado { padding-top: 0.75rem; border-top: 1px dashed var(--ctb-borda); }
+.ctb-integracao__credenciais {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--ctb-borda);
+}
+.ctb-integracao__secret { display: flex; flex-direction: column; gap: 0.4rem; }
+.ctb-integracao__secret-controles { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.ctb-integracao__secret-controles input { flex: 1 1 12rem; }
+.ctb-integracao__secret-controles select { flex: 0 1 13rem; }
+.ctb-integracao__resultado {
+    margin: 1rem 0 0;
+    padding: 0.6rem 0.9rem;
+    border-radius: 0.6rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--ctb-borda);
+    color: var(--ctb-texto-1);
+}
+.ctb-integracao__resultado[data-tom="ok"] { border-color: var(--color-green); }
+.ctb-integracao__resultado[data-tom="aviso"] { border-color: var(--color-primary); }
+.ctb-integracao__resultado[data-tom="erro"] { border-color: var(--color-red); color: var(--ctb-bordo-texto); }
+.ctb-integracao__resultado p { margin: 0; }
+.ctb-integracao__amostra {
+    margin: 0.6rem 0 0;
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.6rem;
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: text;
+}
+.ctb-integracao__rodape { margin-top: 1rem; }
+
 /* ---------------------------------------------------------- telas menores */
 
 @media (max-width: 1280px) {
@@ -910,4 +1289,8 @@ body {
     .ctb-fontes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ctb-operacional,
     .ctb-resumos { grid-template-columns: minmax(0, 1fr); }
+    .ctb-totais { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ctb-anexar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .ctb-dados--duas { grid-template-columns: minmax(0, 1fr); }
+    .ctb-integracao__grade { grid-template-columns: minmax(0, 1fr); }
 }

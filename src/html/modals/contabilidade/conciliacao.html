@@ -1,0 +1,111 @@
+<!--
+  Conciliação bancária (etapa 5). Modal grande. Os lançamentos do extrato do
+  mês de uma conta (GET /api/contabilidade/conciliacao) com o que cada um
+  casa no app — recebimento de parcela, pagamento de conta, de comissão/
+  produção, reembolso —, a sugestão do motor para os que faltam (única,
+  soma dos boletos do dia) e os totais. "Aceitar" grava a sugestão;
+  "Escolher" (ou clicar na linha) abre conciliar-movimento.html por cima;
+  "Ignorar" e "Desfazer" pedem motivo. No rodapé, o lote: "Conciliar
+  automaticamente" (só o que tem chave exata) e "Aceitar sugestões únicas".
+  Embaixo, o que o app registrou pelo banco sem lançamento no extrato.
+  Script: src/js/modals/contabilidade-modais.js (montarConciliacao).
+-->
+<div id="ctbConciliacaoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbConcTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbConcTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-check-double mr-2" aria-hidden="true"></i>Conciliação bancária</h2>
+      <span id="ctbConcRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 gap-6 ctb-filtros-extrato">
+          <div>
+            <label for="ctbConcConta" class="ctl-rotulo text-gray-300">Conta</label>
+            <select id="ctbConcConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div>
+            <label for="ctbConcCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbConcCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbConcCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbConcCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbConcCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbConcVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbConcVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="pendentes">A conciliar</option>
+              <option value="sugestoes">Com sugestão</option>
+              <option value="conciliados">Conciliados</option>
+              <option value="ignorados">Ignorados</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbConcBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbConcBusca" type="search" placeholder="Descrição, valor ou quem"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbConcTotais">
+          <div class="ctb-total" data-total="a_conciliar" data-tom="bordo"><span class="ctb-total__rotulo">A conciliar</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="com_sugestao"><span class="ctb-total__rotulo">Com sugestão</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Aceite ou escolha outro</span></div>
+          <div class="ctb-total" data-total="conciliados" data-tom="verde"><span class="ctb-total__rotulo">Conciliados</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">—</span></div>
+          <div class="ctb-total" data-total="ignorados"><span class="ctb-total__rotulo">Ignorados</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Sem par, com justificativa</span></div>
+        </div>
+        <p id="ctbConcNota" class="text-sm text-gray-300"></p>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
+                <th class="px-4 py-3 text-left text-xs">Descrição do banco</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-left text-xs">Casa com</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbConcLista"></tbody>
+          </table>
+        </div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Registrado no app sem lançamento no extrato</h3>
+            <span class="text-xs text-gray-400">Pelo banco, no trecho que o extrato cobre: confira o dia e o valor registrados</span>
+          </div>
+          <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">O quê</th>
+                  <th class="px-4 py-3 text-left text-xs">Quem</th>
+                  <th class="px-4 py-3 text-left text-xs">Forma</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                </tr>
+              </thead>
+              <tbody id="ctbConcSemLancamento"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ctbConcMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbConcExtrato" type="button" class="btn-neutral ctl-botao text-white">Extrato do mês</button>
+      <button id="ctbConcAceitarUnicas" type="button" data-perm="contabilidade.conciliar" class="btn-success ctl-botao" title="Grava as sugestões de valor igual que só servem para um lançamento (e vice-versa)">Aceitar sugestões únicas</button>
+      <button id="ctbConcAutomatica" type="button" data-perm="contabilidade.conciliar" class="btn-primary ctl-botao text-white min-w-[160px]" title="Concilia só o que tem chave exata (CNPJ/CPF da contrapartida ou nº do documento)">Conciliar automaticamente</button>
+    </footer>
+  </div>
+</div>

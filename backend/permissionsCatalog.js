@@ -1255,6 +1255,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Lançar ligação, e-mail, reunião ou visita"
       },
       {
+        "key": "pros.lists.manage",
+        "column": "acao_lists_manage",
+        "label": "Gerenciar origens e tipos de interação",
+        "desc": "Os botões + e − ao lado da Origem e do Tipo da interação"
+      },
+      {
         "key": "pros.note.add",
         "column": "acao_note_add",
         "label": "Adicionar nota",
@@ -2459,16 +2465,76 @@ const PERMISSIONS_CATALOG = {
         "desc": "Ignora uma pendência documental ou um aviso, com justificativa (erro crítico não se ignora)"
       },
       {
+        "key": "contabilidade.documento.registrar",
+        "column": "acao_documento_registrar",
+        "label": "Registrar documentos e anexar arquivos",
+        "desc": "NF-e de entrada (XML ou chave), NFS-e, recibos e guias; anexar comprovantes e evidências"
+      },
+      {
+        "key": "contabilidade.documento.excluir",
+        "column": "acao_documento_excluir",
+        "label": "Excluir documento ou arquivo",
+        "desc": "Tira um documento recebido ou um arquivo, com motivo (o histórico fica)"
+      },
+      {
+        "key": "contabilidade.pagar.lancar",
+        "column": "acao_pagar_lancar",
+        "label": "Lançar contas a pagar",
+        "desc": "Criar e alterar a conta do fornecedor e as parcelas"
+      },
+      {
+        "key": "contabilidade.pagar.pagar",
+        "column": "acao_pagar_pagar",
+        "label": "Registrar pagamento",
+        "desc": "Dizer quando e como a parcela foi paga, com o comprovante"
+      },
+      {
+        "key": "contabilidade.pagar.estornar",
+        "column": "acao_pagar_estornar",
+        "label": "Estornar pagamento e cancelar conta",
+        "desc": "Desfazer um pagamento registrado ou cancelar a conta, com motivo"
+      },
+      {
+        "key": "contabilidade.extrato.importar",
+        "column": "acao_extrato_importar",
+        "label": "Importar extrato",
+        "desc": "Importar o OFX do banco e desfazer uma importação errada (com motivo)"
+      },
+      {
+        "key": "contabilidade.contas.gerir",
+        "column": "acao_contas_gerir",
+        "label": "Cadastrar contas financeiras",
+        "desc": "Conta corrente, aplicação e caixa: banco, agência, conta e saldo inicial"
+      },
+      {
+        "key": "contabilidade.conciliar",
+        "column": "acao_conciliar",
+        "label": "Conciliar o extrato",
+        "desc": "Casar os lançamentos do banco com recebimentos e pagamentos, desfazer e ignorar com justificativa"
+      },
+      {
+        "key": "contabilidade.classificar",
+        "column": "acao_classificar",
+        "label": "Classificar lançamentos",
+        "desc": "Escolher a conta do plano de cada lançamento do extrato (à mão, um ou vários) e voltar ao automático"
+      },
+      {
+        "key": "contabilidade.plano.gerir",
+        "column": "acao_plano_gerir",
+        "label": "Plano de contas e regras",
+        "desc": "Cadastrar e alterar as contas do plano e as regras de classificação"
+      },
+      {
         "key": "contabilidade.pacote.gerar",
         "column": "acao_pacote_gerar",
         "label": "Gerar relatório e pacote",
-        "desc": "Relatório mensal e ZIP para a contabilidade (etapas seguintes)"
+        "desc": "Salvar o relatório mensal em PDF e planilha e gerar o ZIP para a contabilidade (o ZIP chega na etapa 9)"
       },
       {
         "key": "contabilidade.config.view",
         "column": "acao_config_view",
         "label": "Ver configuração",
-        "desc": "Conta, destinatário e o que bloqueia o fechamento (etapas seguintes)"
+        "desc": "Abrir as Configurações (integrações com a SEFAZ, o BB e o ADN), ver o que falta e testar a conexão; mudar é só do Sup Admin"
       }
     ],
     "columns": []

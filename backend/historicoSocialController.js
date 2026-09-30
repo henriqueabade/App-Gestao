@@ -12,8 +12,10 @@
  *   POST /:origem/:id/anexos                           { item_id | comentario_id, nome, tipo, base64 }
  *   GET  /:origem/:id/anexos/:anexoId                  { nome, tipo, tamanho, base64 }
  *
- * `origem` é `prospeccao` ou `cliente`; ver quem pode é a permissão de ver
- * detalhes de cada módulo (pros.details.view / cli.details.view). Curtir,
+ * `origem` é `prospeccao`, `cliente`, `contato`, `tarefa` ou `contabilidade`
+ * (o mural das mensagens, id 1); ver quem pode é a permissão de cada módulo
+ * (pros.details.view / cli.details.view / ctt.details.view /
+ * contabilidade.view; a tarefa é conferida tarefa a tarefa). Curtir,
  * comentar, publicar e anexar vêm com ela. Excluir é do Sup Admin, conferido
  * aqui de novo (esconder o botão não basta).
  *
@@ -31,7 +33,7 @@ const router = express.Router();
 
 /** Origem desconhecida para aqui, antes de qualquer permissão. */
 router.param('origem', (req, res, next, origem) => {
-  if (!social.ORIGENS[origem]) return res.status(400).json({ error: 'Origem inválida: use prospeccao ou cliente.' });
+  if (!social.ORIGENS[origem]) return res.status(400).json({ error: `Origem inválida: use ${Object.keys(social.ORIGENS).join(', ')}.` });
   return next();
 });
 

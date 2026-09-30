@@ -774,3 +774,693 @@ do último dia dele.
   `padraoControles.test.js`.
 - **Próxima:** etapa 2 (documentos e evidências) ou 3 (fornecedores e
   contas a pagar — os Contatos já estão prontos), a escolher pelo dono.
+
+---
+
+## S. Etapas 2 e 3 entregues (28/09/2026) — documentos, evidências e contas a pagar
+
+Branch `Implementando-Modulo-Contabilidade`. O dono pediu para seguir as
+fases; as duas foram juntas porque a conta a pagar precisa do arquivo (a nota,
+o comprovante) e o documento recebido precisa da conta.
+
+**SQL:** `sql/contabilidade_contas_pagar.sql` (rodar e reiniciar a API):
+`contabil_arquivos` (+ partes de 512 KB + vínculos), `documentos_recebidos`,
+`titulos_pagar`, `titulo_pagar_parcelas`, `titulo_pagar_pagamentos`,
+referência em `contabil_eventos` e cinco permissões novas em
+`perm_contabilidade`. Dados de teste só para o banco DEV:
+`sql/contabilidade_dados_simulados_dev.sql` (trava: só roda em banco com
+dev/local/test/homolog no nome, ou com `SET app.confirmo_dev = 'sim'`; apaga
+a simulação anterior antes; julho/2026 fechado, agosto cheio de pendências,
+setembro corrente).
+
+**Permissões novas:** `contabilidade.documento.registrar` (registrar NF-e,
+NFS-e, recibo/guia e anexar arquivos), `contabilidade.documento.excluir`,
+`contabilidade.pagar.lancar`, `contabilidade.pagar.pagar`,
+`contabilidade.pagar.estornar` (estorno e cancelamento). Registrar o
+documento já lançando a conta pede as duas.
+
+**Regras (as decisões em aberto estão no fim):**
+
+- **Arquivos** (`backend/contabilidade/arquivos.js`): sha256, origem
+  `oficial` (XML autorizado) / `interno` / `fornecido` (anexado à mão),
+  competência e vínculos (competência, documento, conta, pagamento, pagamento
+  de fechamento). O mesmo arquivo não é guardado duas vezes (ganha só o
+  vínculo). Excluir marca, com motivo.
+- **Documentos recebidos** (`documentosRecebidos.js`): NF-e pelo XML (lida
+  por `xmlDevolucao.lerNota` + duplicatas, endereço, IE e tributos; bloqueia
+  nota da própria empresa, destinatário errado e chave repetida), NF-e só pela
+  chave (confere o dígito e o mês), NFS-e digitada (Contagem, BH…) e recibo /
+  guia / fatura. Competência = mês da emissão. O emitente vira **contato**
+  quando não existe (Fornecedor; na NFS-e, Prestador de serviço). A NFS-e de
+  comissão/produção **liga ao pagamento do fechamento** e não vira conta.
+  Excluir cancela junto a conta sem pagamento.
+- **Contas a pagar** (`titulos.js`): conta + parcelas (divididas em centavos,
+  sobra na última, mensais) + um pagamento valendo por parcela; pago acima
+  vira juros/multa, abaixo vira desconto; estorno e cancelamento com motivo;
+  conta com pagamento só muda descrição, categoria, fornecedor, observação e
+  linha digitável. Categorias: as quatro do relatório atual da contabilidade
+  + as já usadas (a lista completa vem na etapa 6).
+- **Competência fechada** recusa, pela rota, lançamento, pagamento, estorno,
+  documento e exclusão nela (`base.garantirAberta`). Anexar arquivo continua
+  livre (evidência pode chegar depois).
+- **Checklist**: as fontes "NF-e de entrada e NFS-e" e "Contas a pagar"
+  passaram a contar. Documental (uma por item, para justificar uma a uma):
+  NF-e sem o XML, NFS-e/recibo sem o arquivo, pagamento de fechamento do mês
+  sem NFS-e (a soma das NFS-e ligadas cobre o valor pago), pagamento do mês
+  sem nota/recibo/guia. Aviso (junta tudo): documento sem conta a pagar,
+  pagamento sem comprovante, parcela vencida sem pagamento. As pendências da
+  Contabilidade abrem o modal que as resolve.
+- **Documentos da competência** (`evidencias.js`): NF-e de saída (e de fora),
+  notas de devolução, documentos recebidos com os arquivos, comprovantes e
+  anexos soltos; o que falta aparece como FALTA. Os XML de saída/devolução
+  saem por `contabilidade.view` (quem fecha não precisa da permissão de NF-e).
+
+**Banco DEV (`BANCO=DEV`):** `localDataClient` não ignora coluna que não
+existe (a API remota ignora) e `safeDatabaseError` tira o nome da tabela do
+erro 42P01. Por isso a detecção de "falta o SQL" usa a tabela da chamada
+(`base.traduzir(e, tabela)`). Conferido num Postgres 17 descartável: os três
+SQLs (duas vezes cada), o backend em modo DEV lendo e gravando, e a trava do
+SQL simulado num banco "producao_x".
+
+**Tela:** 8 modais novos (Contas a pagar, Conta a pagar, Nova conta/Editar,
+Registrar pagamento, Documentos recebidos, Registrar documento — XML, chave,
+NFS-e, recibo —, Ficha do documento, Documentos da competência), no padrão;
+"Novo contato" abre o cadastro de Contatos por cima (pede `ctt.create`).
+Conferidos com o Electron (janela offscreen, CSS e scripts reais, API falsa):
+nenhum erro de console em 15 casos.
+
+**Testes:** `backend/contabilidade/{base,titulos,documentosRecebidos,arquivos}.test.js`,
+`checklist.test.js` (+3), `backend/contabilidadeContasPagar.test.js` (7, de
+ponta a ponta), `contabilidadeModulo.test.js` (+3) e `padraoControles.test.js`.
+
+**Em aberto (para o dono):**
+1. A NFS-e de cada pagamento de comissão/produção é **documental** (bloqueia
+   o pacote). Quem não emite nota (ex.: colaborador sem MEI) se resolve com
+   "Ignorar" + justificativa. Confirmar.
+2. Pagamento sem nota/recibo é documental; sem comprovante é só aviso (o
+   extrato prova o pagamento). Confirmar.
+3. P11 (a partir de qual mês a Contabilidade vale) continua em aberto.
+4. A lista de categorias da contabilidade (plano de contas) — pedir na etapa 6.
+
+**Próxima:** etapa 4 (extrato por OFX: contas, importação, movimentos) —
+depende de um OFX de exemplo do BB.
+
+## T. Etapa 4 entregue (28/09/2026) — extrato bancário por OFX
+
+Branch `Implementando-Modulo-Contabilidade`. Sem OFX real do BB ainda: o
+leitor segue o formato OFX 1.x (SGML) que o BB exporta e o 2.x (XML); o dono
+vai mandar um arquivo de verdade para conferir (pendência abaixo).
+
+**SQL:** `sql/contabilidade_extrato.sql` (rodar e reiniciar a API):
+`contas_financeiras` (nome, tipo corrente/aplicação/caixa, banco, agência,
+conta, saldo inicial, ativa; única por banco + agência + conta),
+`extrato_importacoes` (conta, origem ofx/api/manual, situação, período, saldo
+informado, o OFX guardado, lidos/novos/repetidos, quem desfez e por quê) e
+`movimentos_bancarios` (data, competência, valor com sinal, descrição,
+documento, FITID, identidade `hash` única por conta, estado da conciliação —
+a etapa 5 usa). Duas permissões novas em `perm_contabilidade`. Dados de teste
+só para o banco DEV: `sql/contabilidade_dados_simulados_dev.sql` ganhou a
+conta do BB SIMULADA (ag. 9999-9, c/c 99999-9), agosto importado até dia 28
+(falta 29 a 31 → pendência), setembro até dia 20 e uma importação desfeita;
+`sql/contabilidade_extrato_exemplo_dev.ofx` completa agosto.
+
+**Permissões novas:** `contabilidade.extrato.importar` (importar e desfazer
+importação) e `contabilidade.contas.gerir` (cadastrar e alterar as contas).
+Ver o extrato pede só `contabilidade.view`.
+
+**Regras:**
+
+- **Leitor** (`backend/contabilidade/extrato/ofx.js`): Windows-1252 ou UTF-8,
+  tags sem fechamento, data cortada como texto (sem fuso), valor com ponto ou
+  vírgula; linhas de valor zero (o "Saldo anterior" do BB) saem com aviso;
+  recusa o que não é OFX e extrato de cartão.
+- **Identidade** de cada lançamento: sha256 de conta + data + valor + FITID
+  (sem FITID: documento + descrição), com número de ordem para linhas iguais
+  no mesmo arquivo. Importar o mesmo período de novo só acrescenta o que
+  faltava; o que tem o mesmo documento, dia e valor vindo de outra origem
+  (a API do BB, etapa 11) também fica de fora.
+- **Importar** (`extrato.js`): a prévia lê sem gravar e diz se a conta do
+  arquivo confere com a escolhida (aviso, não bloqueio). Bloqueia conta
+  desativada e lançamento novo em competência fechada. O OFX original fica
+  guardado como arquivo OFICIAL dos meses dele (aparece em "Documentos da
+  competência").
+- **Movimento é dado do banco**: não se edita. Importação errada se desfaz,
+  com motivo, enquanto nenhum lançamento dela estiver conciliado; quando os
+  períodos se cruzam, desfaz primeiro a mais nova (senão o período ficaria
+  "coberto" sem os lançamentos). O OFX desfeito sai das evidências (a não ser
+  que outra importação use o mesmo arquivo). Mês fechado recusa desfazer.
+- **Cobertura**: de que dia a que dia o mês já tem extrato, por conta (só as
+  importações vivas). No mês em curso, cobra até ontem.
+- **Checklist** (fonte "Extrato bancário"): sem conta corrente ativa =
+  documental "Cadastre a conta do banco"; mês encerrado sem o extrato inteiro
+  de cada conta corrente ativa = documental, com os dias que faltam e o botão
+  que abre a importação já com a conta. Aplicação e caixa não entram na
+  cobrança. O mês em curso fica "Mês em curso".
+
+**Tela:** 3 modais novos, no padrão: **Extrato bancário** (conta,
+competência, entradas/saídas, busca; entradas, saídas, resultado e o saldo
+que o banco informou; a cobertura; os lançamentos; as importações que tocam
+o mês com "Salvar OFX" e "Desfazer"; "Buscar no BB" em azul do BB avisa que
+é a etapa 11), **Importar extrato (OFX)** (conta + arquivo → prévia com a
+conta do arquivo, período, saldo, novos e já importados, bloqueios e avisos,
+e as linhas com "Novo"/"Já importado") e **Contas do banco** (lista +
+cadastro; a conta dos boletos da Configuração de cobrança aparece como
+sugestão). O "Sincronizar extrato do BB" do painel de Ações virou "Extrato
+bancário". Conferidos com o Electron: nenhum erro de console.
+
+**Banco DEV:** conferido num Postgres 17 descartável — os SQLs duas vezes
+cada, o SQL simulado sem o SQL do extrato (pula a parte com aviso), a trava
+do nome do banco, e o backend em modo DEV: pendência de agosto com os dias
+que faltam, prévia do OFX de exemplo (2 novos, 2 já importados — a
+identidade calculada no SQL é a mesma do app), importar, reimportar (0 novos),
+desfazer fora de ordem recusado, desfazer, julho fechado recusado, conta
+repetida 409, e sem o SQL: 409 dizendo qual arquivo.
+
+**Testes:** `backend/contabilidade/extrato/ofx.test.js` (7),
+`backend/contabilidadeExtrato.test.js` (6, de ponta a ponta),
+`checklist.test.js` (+3), `contabilidadeModulo.test.js` e
+`padraoControles.test.js`.
+
+**Em aberto (para o dono):**
+1. Mandar um OFX de verdade do BB (qualquer mês) para conferir o leitor.
+2. Extrato incompleto de mês encerrado é **documental** (bloqueia o pacote,
+   não o fechamento). Confirmar.
+3. Desfazer importação com motivo, da mais nova para a mais antiga. Confirmar.
+4. Existe caixa físico (dinheiro) que precise de conta própria? Hoje o caixa
+   pode ser cadastrado, mas não é cobrado no checklist.
+5. API de Extratos do BB (etapa 11): ativação no portal do BB, credenciais e
+   escopo.
+
+**Próxima:** etapa 5 (conciliação: extrato × recebimentos, pagamentos,
+reembolsos e contas a pagar).
+
+## U. Etapa 5 entregue (28/09/2026) — conciliação do extrato
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (junto da etapa 4).
+O dono ainda não rodou os SQLs das etapas 2 a 5 nem respondeu as pendências;
+pediu para seguir e deixar as perguntas para a próxima fase.
+
+**SQL:** `sql/contabilidade_conciliacao.sql` (rodar depois do do extrato e
+reiniciar a API): `conciliacao_vinculos` (lançamento ↔ recebimento,
+pagamento de conta, pagamento de comissão/produção ou reembolso; a parte de
+cada um; o critério; desfazer marca, não apaga), quatro colunas em
+`movimentos_bancarios` (a diferença aceita, a justificativa, quem e quando)
+e a permissão `contabilidade.conciliar`. O SQL simulado do DEV ganhou dois
+lançamentos conciliados, um ignorado e os outros com sugestão.
+
+**As "liquidações"** (`backend/contabilidade/conciliacao/liquidacoes.js`): o
+que o app registrou como dinheiro que entrou ou saiu, das tabelas dos seus
+módulos, sem mexer nelas: `recebimentos` (confirmados), `titulo_pagar_pagamentos`,
+`financeiro_pagamentos` e `reembolsos` (pagos). Dinheiro fica fora; cartão
+entra como candidato, com a data incerta.
+
+**O motor** (`motor.js`, puro): pontua cada par (mesmo sentido, janela de
+datas, mesmo valor, CNPJ/CPF da contrapartida, nº do documento, nome na
+descrição).
+- **Automático** só com par ÚNICO dos dois lados + chave (CNPJ/CPF da
+  contrapartida, que a API do BB vai trazer, ou o nº do documento).
+- **Sugestão** com o mesmo valor na janela; "única" quando o par é único dos
+  dois lados (pode ser aceita em lote).
+- **Soma** (composição): várias liquidações que dão o lançamento — o crédito
+  de cobrança que junta os boletos do dia. Nunca automática.
+- Janelas: boleto recebido até 5 dias depois (a data de crédito, quando há,
+  é o alvo); cartão até 35; os outros 3 antes e 4 depois.
+
+**Regras** (`conciliacao.js`):
+- A soma tem de dar o lançamento; diferença só com justificativa, e fica
+  gravada. O que já está ligado e o outro sentido são recusados.
+- Desfazer e ignorar pedem motivo; reativar volta a "a conciliar".
+- Débito sem conta no app vira conta paga e conciliada de uma vez (pede
+  conciliar + lançar + pagar).
+- Pagamento de conta conciliado não se estorna (desfaça antes); importação
+  com lançamento conciliado ou ignorado não se desfaz.
+- Competência fechada recusa tudo nela.
+
+**Checklist** (a fonte virou "Conciliação bancária"):
+- documental: lançamentos do mês sem conciliação (uma pendência, com o
+  total e quantos têm sugestão);
+- crítico: conciliação com recebimento/pagamento que foi estornado ou mudou
+  de valor (um por lançamento; resolve desfazendo);
+- aviso: o que o app registrou pelo banco, no trecho que o extrato cobre,
+  sem lançamento possível (nem de mesmo valor, nem numa soma sugerida).
+
+**Tela:** 2 modais novos — **Conciliação bancária** (conta, competência,
+visão, busca; a conciliar, com sugestão, conciliados, ignorados; cada
+lançamento com o que casa e Aceitar/Escolher/Ignorar/Desfazer/Reativar; o
+lote "Conciliar automaticamente" e "Aceitar sugestões únicas"; o que o app
+registrou sem lançamento) e **Conciliar lançamento** (as candidatas com
+caixa de marcar e a soma, a justificativa da diferença, "Lançar como conta
+paga" para débito, desfazer/reativar). A linha do extrato abre a
+conciliação dela; o painel de Ações ganhou "Conciliação bancária" e
+"Classificação (plano de contas)" (etapa 6, em implementação).
+
+**Conferido:** testes puros do motor (9), de ponta a ponta das rotas (9),
+checklist (+1); Postgres 17 descartável com o backend em modo DEV (os SQLs
+duas vezes, com e sem o da etapa 5, o SQL simulado, lote, conta criada,
+estorno travado, desfazer, julho fechado); Electron sem erro de console.
+
+**Em aberto (para o dono):**
+1. Lançamento do extrato sem conciliação é **documental** (bloqueia o
+   pacote). Confirmar.
+2. Automático só com chave exata (CNPJ/CPF ou nº do documento). Aceitar
+   sozinho quando valor e dia batem e o nome aparece na descrição?
+3. Conciliação com recebimento estornado é **crítico** (bloqueia o
+   fechamento). Confirmar.
+4. O banco desconta tarifa do crédito de cobrança, ou lança a tarifa à
+   parte? (Com desconto, cada crédito pede justificativa da diferença.)
+
+**Próxima:** etapa 6 (classificação: plano de contas e regras) — depende da
+lista de categorias da contabilidade.
+
+## V. Etapa 6 entregue (29/09/2026) — classificação (plano de contas e regras)
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 5 foi
+commitada pelo dono como "Fase 5"). A lista de categorias da contabilidade
+não veio: o plano começa com as quatro do relatório atual e as que o app
+precisa para classificar sozinho, tudo editável na tela.
+
+**SQL:** `sql/contabilidade_classificacao.sql` (rodar depois do da
+conciliação e reiniciar a API): `plano_contas` (nome único sem ligar para
+maiúsculas, tipo, código opcional, ativa; 10 contas iniciais),
+`classificacao_regras` (9 regras iniciais: origem do dinheiro, TARIFA,
+SIMPLES NACIONAL, APLICACAO, RESGATE e os CFOPs de compra) e
+`classificacoes` (a escolha à mão; reclassificar substitui e guarda a
+anterior). Duas permissões: `contabilidade.classificar` e
+`contabilidade.plano.gerir`. Sem centro de custo (resposta do dono).
+
+**A conta de cada lançamento** (`backend/contabilidade/classificacao/`),
+nesta ordem:
+1. à mão;
+2. pela conciliação: a categoria da conta a pagar (ou a regra do
+   fornecedor dela), a origem do dinheiro (recebimento, reembolso, comissão,
+   produção); todas as partes na mesma conta — partes em contas diferentes
+   pedem a mão;
+3. pela regra de descrição do banco ou CNPJ/CPF da contrapartida;
+4. sem classificação.
+Só a escolha à mão é gravada; o resto é calculado a cada leitura (o
+fechamento completo, etapa 7, congela o mês).
+
+**Regras:** palavra inteira, sem acento ("TARIFA" não pega "TARIFAÇO"); vence
+a maior prioridade, depois o texto mais longo. Tipos: descrição do banco,
+CNPJ/CPF da contrapartida, fornecedor, CFOP da NF-e, origem do dinheiro. A
+conta a pagar nova sem categoria ganha a da regra do fornecedor ou do CFOP
+(e a prévia da NF-e já mostra a sugerida). **Sugeridas:** 2 ou mais
+classificações à mão com a mesma descrição, sentido e conta, que nenhuma
+regra cobre, viram proposta; só valem se alguém criar. "Testar no mês" diz
+quantos lançamentos a regra pega sem gravar.
+
+**Plano:** o tipo diz se a conta entra no resultado (receita, dedução,
+custo, despesa) ou não (transferência, patrimônio). Não se apaga: desativa;
+conta com regra ativa não desativa. Renomear leva a categoria das contas a
+pagar junto. A lista de categorias do formulário de conta a pagar passou a
+vir do plano.
+
+**Checklist:** a fonte volta a se chamar "Conciliação e classificação";
+lançamento sem classificação é documental (uma pendência, com o total).
+
+**Tela:** 3 modais novos — **Classificação** (a conta de cada lançamento
+trocada na própria linha, marcar vários e classificar de uma vez, voltar ao
+automático, "Regra" a partir do lançamento, o total por conta do plano e o
+resultado do mês), **Plano de contas** e **Regras de classificação** (com as
+sugeridas e o teste). O painel de Ações ganhou "Classificação".
+
+**Conferido:** testes puros (6), de ponta a ponta das rotas (7), checklist e
+tela; Postgres 17 descartável com o backend em modo DEV (os SQLs duas vezes,
+com e sem o da etapa 6; plano, regras, sugerida, teste, lote, voltar ao
+automático, renomear, CFOP); Electron sem erro de console.
+
+**Em aberto (para o dono):**
+1. A lista de categorias da contabilidade (e se ela usa código de conta).
+2. Os nomes das contas que o app criou: Receita de vendas, Devoluções e
+   reembolsos, Comissões sobre vendas, Produção (colaboradores), Despesas
+   bancárias, Transferência entre contas.
+3. Lançamento sem classificação é **documental** (bloqueia o pacote).
+   Confirmar.
+4. Um lançamento só cai numa conta (não se divide entre duas). Precisa
+   dividir?
+
+**Próxima:** etapa 7 (fechamento completo: congelar os totais do mês).
+
+## W. Etapa 7 entregue (29/09/2026) — fechamento completo (versões)
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 6 foi
+commitada pelo dono como "Fase 6").
+
+**SQL:** `sql/contabilidade_fechamento.sql` (rodar depois do da
+classificação e reiniciar a API): `competencia_fechamentos`, uma linha por
+fechamento (versão 1, 2, 3… de cada competência, com número único), com a
+foto do mês, os lançamentos com a conta que valia, as pendências que
+sobraram ou foram ignoradas, um hash (sha256) dos lançamentos e, se foi
+reaberta, quando, por quem e por quê. Sem permissão nova: fechar e reabrir
+continuam com as da etapa 1. **Todos os SQLs da Contabilidade** passaram a
+começar com `SET client_encoding = 'UTF8'`: sem isso, o `psql` do Windows
+lê o arquivo como WIN1252 e grava "ServiÃ§os" no lugar de "Serviços" (no
+pgAdmin não muda nada).
+
+**O que o fechamento congela** (`backend/contabilidade/fechamento.js` e
+`versoes.js`):
+- o resultado do mês por conta do plano (receitas, deduções, custos,
+  despesas, o que fica fora do resultado e o sem classificação);
+- o extrato de cada conta (lançamentos, entradas, saídas, o saldo que o
+  banco informou e se o mês está completo);
+- os números da conciliação e das outras fontes do checklist;
+- cada lançamento do extrato com a conta do plano que valia.
+
+**Depois de fechado:** a classificação do mês passa a ser a congelada (a
+tela mostra "Hoje seria: …" quando uma regra nova mudaria a conta). Se algo
+mudar depois — regra nova, lançamento que entrou ou saiu, valor, os números
+de NF-e, recebimentos, documentos recebidos e contas a pagar —, o painel
+mostra **um aviso** "N diferenças desde o fechamento (versão X)" e a lista
+fica no histórico. Nada muda na foto.
+
+**Reabrir** marca a versão (quando, por quem, a justificativa); **fechar de
+novo** cria a próxima. A prévia do "Fechar competência" já mostra o número
+da versão, o resultado, o extrato e, se houve versão antes, o que mudou.
+
+**Sem o SQL da etapa 7:** fechar continua funcionando (como na etapa 1), com
+um aviso de que a foto completa não ficou guardada; o histórico responde
+dizendo qual arquivo falta.
+
+**Tela:** o modal "Fechar competência" ganhou a seção "O que fica
+congelado"; modal novo **Histórico dos fechamentos** (as diferenças desde a
+foto, as versões com a que vale, a comparação entre elas, o resultado por
+conta e o extrato da versão escolhida, e os botões Reabrir/Fechar conforme a
+permissão). O painel de Ações ganhou "Histórico dos fechamentos"; o texto da
+situação diz a versão e as diferenças.
+
+**Conferido:** testes puros das versões (6), de ponta a ponta das rotas (5),
+checklist e tela; Postgres 17 descartável com o backend em modo DEV (os SQLs
+duas vezes, com e sem o da etapa 7: prévia sem gravar, versão 1 com hash que
+confere, classificação congelada, classificar no mês fechado recusado, regra
+nova → 2 diferenças, fechar duas vezes recusado, versão repetida recusada
+pelo índice único, reabrir, versão 2 com a comparação, setembro em curso não
+fecha; sem o SQL: fecha com aviso e o histórico responde 409); Electron sem
+erro de console.
+
+**Em aberto (para o dono):**
+1. A diferença depois do fechamento é só **aviso** (não bloqueia nada).
+   Confirmar.
+2. Hoje dá para reabrir agosto com setembro fechado. Deve travar?
+3. Hoje dá para fechar setembro com agosto aberto. Deve exigir o mês
+   anterior fechado?
+4. Mês fechado antes da etapa 7 (julho, no DEV) não tem foto: para ter,
+   reabrir e fechar de novo. Está bom assim?
+
+**Próxima:** etapas 8 e 9 (relatório mensal, dossiê e pacote para a
+contabilidade).
+
+## X. Etapa 8 entregue (29/09/2026) — relatório mensal e dossiê
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 7 foi
+commitada pelo dono como "Fase 7"). **Sem SQL novo**:
+as duas coisas são leituras do que as etapas anteriores gravaram.
+
+**Relatório mensal** (`backend/contabilidade/relatorio/`: `relatorio.js` monta,
+`documento.js` faz o HTML do PDF, `planilha.js` a planilha). Partes:
+- **Resumo:** receitas, deduções, custos, despesas, o resultado do mês, o que
+  ficou fora do resultado e sem classificação; cada conta do banco com saldo
+  inicial, entradas, saídas, saldo final e o saldo que o banco informou; os
+  números da conciliação, das pendências e dos documentos.
+- **Livro-caixa** de cada conta, no formato do "Extrato de Conta" que a
+  contabilidade recebe hoje (seção 0): data, número, descrição do banco,
+  débito, crédito, saldo, a conta do plano (o "Tipo"), a observação (de quem
+  é o dinheiro: fornecedor/cliente e a conta ou a parcela que ele paga; o
+  motivo do ignorado; "a conciliar") e o vencimento do título; com o total de
+  cada dia e do período. O saldo inicial sai do saldo que o banco informou no
+  OFX (sem ele, a coluna é o acumulado do mês).
+- **Resultado** por conta do plano; **Conciliação** (a conciliar, ignorados
+  com a justificativa, conciliados com diferença e o que o app registrou sem
+  lançamento no extrato); **Pendências**; **Documentos** da competência (com
+  o que falta).
+- Na planilha, também **Partidas** (duas linhas por lançamento, banco × conta
+  do plano, como o relatório de hoje) e **Lançamentos** (uma linha por
+  lançamento, para filtrar). Datas são datas do Excel; valores, números.
+
+**Mês fechado = a foto:** com versão (etapa 7), os lançamentos, as contas do
+plano, o resultado, o saldo do banco e as pendências são os da versão; o que
+mudou depois aparece como diferença no alto. **Mês aberto ou reaberto =
+PRÉVIA**, com a marca em toda folha do PDF. Fechado antes da etapa 7: os
+números de hoje, avisando.
+
+**Permissões:** ver na tela basta ver a Contabilidade; salvar o PDF e a
+planilha pede "Gerar relatório e pacote" (`contabilidade.pacote.gerar`, a
+mesma do ZIP da etapa 9). Nada é gravado ao gerar (o pacote, que é o que vai
+para a contabilidade, terá o registro com hash).
+
+**Dossiê** (`relatorio/dossie.js`, `GET /dossie?tipo=&id=`): tudo o que está
+ligado a um **lançamento do banco** (de que OFX veio, o que ele paga ou
+recebe — inclusive a NF-e do pedido —, o que foi desfeito, a conta do plano
+que vale, a congelada e as escolhas à mão), a uma **conta a pagar** (parcelas,
+pagamentos, o lançamento do banco de cada um, o documento) ou a um
+**documento recebido** (as contas que gerou ou o pagamento de comissão/produção
+que prova, e o banco). Cada item ligado abre o dossiê dele ali mesmo ("←
+Anterior" volta); arquivos e histórico de tudo. Só leitura.
+
+**Tela:** 2 modais novos — **Relatório mensal** (abas Resumo, Livro-caixa,
+Resultado, Conciliação, Pendências, Documentos; clicar num lançamento abre o
+dossiê; "Salvar PDF" e "Salvar planilha (Excel)") e **Dossiê**. O botão
+"Dossiê" (azul claro) entrou na conta a pagar, no documento recebido e no
+"Conciliar lançamento". O "Relatório mensal" do painel de Ações é real.
+
+**Conferido:** testes puros (8), de ponta a ponta das rotas (6), checklist e
+tela; Postgres 17 descartável com o backend em modo DEV em três bancos (todos
+os SQLs; sem o da etapa 7; sem o do extrato): livro-caixa com saldo e total
+do dia, observação, resultado, conciliação, partidas somando zero, PDF,
+planilha com as 8 abas, dossiê lançamento → conta → documento e volta, mês
+fechado com a foto e sem a marca de prévia; Electron sem erro de console,
+e o PDF impresso de verdade (7 folhas no exemplo). O SQL simulado do DEV
+passou a gravar nos eventos o id do lançamento e da importação, como o app.
+
+**Em aberto (para o dono):**
+1. O formato para a contabilidade: livro-caixa (uma linha por lançamento) e
+   "Partidas" (duas linhas, como o Finance de hoje) vão os dois na planilha.
+   Qual ela usa? Precisa de mais alguma coluna?
+2. Ver o relatório na tela: quem vê a Contabilidade; salvar PDF/planilha:
+   "Gerar relatório e pacote". Está bom?
+3. Dá para salvar a PRÉVIA (mês aberto), com a marca em toda folha. Deve
+   salvar só o de mês fechado?
+4. O saldo inicial vem do saldo que o banco informa no OFX. Sem ele, a
+   coluna é o acumulado do mês (não usa o saldo inicial cadastrado na conta).
+   Está bom?
+
+**Próxima:** etapa 9 (o pacote ZIP com os originais e o relatório).
+
+## Y. Etapa 9 entregue (29/09/2026) — o pacote para a contabilidade
+
+Branch `Implementando-Modulo-Contabilidade`, sem commit (a etapa 8 foi
+commitada pelo dono como "Fase 8"). Resposta do dono (Q,
+item 8): **zipar tudo e o usuário salvar e enviar ele mesmo** — o app não
+manda e-mail; ele gera o ZIP, registra e guarda o envio que o usuário marca.
+
+**SQL:** `sql/contabilidade_pacote.sql` (rodar depois do da etapa 7 e
+reiniciar a API): `contabil_pacotes`, um registro por pacote gerado — a
+competência, a versão do fechamento, o nome, o **SHA-256 do ZIP**, o tamanho,
+a lista dos arquivos (pasta, nome, SHA-256, origem) e o que faltou; e, ao
+marcar, para quem, como e quando foi enviado. O ZIP em si não fica no banco.
+Sem permissão nova ("Gerar relatório e pacote", da etapa 1).
+
+**Sem biblioteca nova:** o ZIP é montado pelo próprio app
+(`backend/contabilidade/pacote/zip.js`, com a compressão do Node): nomes em
+UTF-8, conferido pelo Windows (Expand-Archive e o leitor .NET) e pelo Python.
+
+**O pacote** (`pacote/pacote.js`), `Contabilidade-AAAA-MM-vN.zip`:
+- `LEIA-ME.txt` (empresa, competência, versão, quem gerou, o resultado, o que
+  tem em cada pasta, **o que falta** e as pendências ignoradas com a
+  justificativa) e `indice.csv` (cada arquivo com a pasta, a origem e o
+  SHA-256 — dá para conferir que é o original);
+- `01-Relatorio` (o PDF — a tela imprime pelo Electron e manda junto — e a
+  planilha), `02-Extrato` (o OFX original de cada importação e o extrato em
+  PDF), `03-NF-e-de-saida`, `04-Devolucoes`, `05-Recebidos` (NF-e de entrada,
+  NFS-e, recibos, guias), `06-Comprovantes`, `07-Outros` — os arquivos são os
+  **originais** guardados no app (os Documentos da competência).
+
+**Quando sai:** só com a competência **fechada** e **sem pendência documental
+viva** (ignorada com justificativa vale) — a regra das três severidades do
+dono. Com o mês fechado, o painel mostra um **aviso** até o pacote ser
+marcado como enviado; se a competência for reaberta e fechada de novo, outro
+aviso: "o pacote enviado é da versão X".
+
+**Tela:** modal novo **Pacote para a contabilidade** (o que vai em cada pasta,
+o que falta, os bloqueios, os pacotes gerados com o SHA-256 e o registro do
+envio — para quem, como, observação). O "Gerar pacote" do cabeçalho e o painel
+de Ações ("Gerar pacote (ZIP)" e "Registrar o envio à contabilidade") abrem
+esse modal; a situação no topo diz "pacote enviado em …".
+
+**Conferido:** testes puros (ZIP e pacote: 4), de ponta a ponta das rotas (4),
+checklist (o aviso do pacote), tela; Postgres 17 descartável com o backend em
+modo DEV (com e sem o SQL da etapa 9): bloqueado com o mês aberto, fechar e
+ignorar as documentais, gerar, os originais conferidos pelo SHA-256 guardado
+no app, o registro, marcar como enviado, refechar → "pacote desatualizado";
+o ZIP aberto pelo Windows com os 10 SHA-256 do índice conferidos; Electron
+sem erro de console (o gerar imprime o PDF, gera e salva).
+
+**Em aberto (para o dono):**
+1. O app não manda o e-mail (decisão sua): marca-se como enviado à mão.
+   Quer que ele mande direto (pelo SMTP da NF-e) no futuro?
+2. O e-mail da contabilidade: hoje o último usado vira a sugestão. Quer um
+   cadastro fixo (na Configuração da contabilidade)?
+3. O ZIP não fica guardado no app (só o SHA-256 e a lista). Deve guardar uma
+   cópia (ocupa espaço no banco)?
+4. "Pacote ainda não enviado" é aviso (não bloqueia nada). Confirmar.
+
+**Próxima:** as etapas 10+ (automáticos: NF-e de entrada pela SEFAZ, extrato
+pela API do BB, CDB, NFS-e) dependem de contratação/confirmação; a fase final
+é rodar os SQLs, testar juntos e homologar.
+
+---
+
+## Z. Tela nova, mensagens e o "'" (29/09/2026)
+
+Pedido do dono depois de rodar os SQLs 1–7 no DEV e importar o extrato
+(funcionou). A etapa 9 foi commitada por ele ("Fase 9"); esta rodada, não.
+
+**Tela principal** (`contabilidade.html/js/css`):
+- **Pendências** sem "Ver todas": "Todas" mostra todas. O cartão tem a altura
+  do das Ações (a linha da grade estica os dois; com a tela estreita, 24rem)
+  e a lista rola por dentro, com a barra da casa (`scroll.css`, nenhuma barra
+  nova).
+- Os cartões **Erros críticos / Pendências documentais / Avisos** filtram a
+  lista **e levam a tela até ela**, rolando suave (`scrollIntoView`; sem
+  animação para quem pediu menos movimento). O cartão não alterna: clicar de
+  novo mantém o filtro (o chip continua alternando).
+- **Atividade recente**: altura fixa (34rem), rola por dentro; **Ver todas**
+  abre o modal novo `atividade` — no molde da Atividade do Financeiro: dia a
+  dia, foto de quem fez (a atividade agora devolve `usuario_id`), etiqueta
+  por grupo, competência, filtros busca/tipo/quem.
+- **"Próximas etapas" saiu**; no lugar, **Mensagens e comentários**, com a
+  mesma altura, e **Ver tudo** (modal novo `mensagens`).
+
+**Mensagens e comentários** — o social da casa (`historico-social.js`) com a
+origem nova **`contabilidade`**: um **mural só**, o do módulo (id 1), sem
+tabela de ficha (`ORIGENS.contabilidade.registroFixo`). Publicar, curtir,
+comentar, responder sem limite, anexar, editar o próprio comentário, excluir
+(Sup Admin), ao vivo a cada 10 s. Permissão: `contabilidade.view`. Avisos no
+sino como nas fichas: "@" avisa o mencionado; comentário avisa quem escreveu
+a mensagem; resposta, quem foi respondido; mensagem nova sem "@" não avisa
+ninguém (mural sem dono). O aviso abre a Contabilidade e o modal já no
+comentário (`ContabilidadeAbrirMensagens`).
+
+**O "'" (objetos)** — terceira marca do social, `'[rótulo](o:tipo:id)`, ao
+lado de `@[Nome](u:id)` e `*[rótulo](e:id)`. Quem monta o social passa
+`objetos(busca)` (assíncrono) e `aoAbrirObjeto(objeto)`; a marca vira uma
+etiqueta azul clara com ícone, que abre o objeto. O "'" só abre a lista no
+começo de palavra ("d'água" não); a busca de "@" deixou de aceitar "'".
+- Na Contabilidade: `GET /api/contabilidade/citaveis?busca=&competencia=`
+  (`backend/contabilidade/citaveis.js`) — competência, documento recebido,
+  conta a pagar, lançamento do extrato (só buscando, da competência da tela),
+  arquivo, fechamento, pacote, importação de extrato, conta do banco, conta
+  do plano e fornecedor; as **pendências** vêm da própria tela (o painel já
+  lido). O id leva o que a tela precisa para abrir (fechamento
+  `AAAA-MM:vN`, pacote `AAAA-MM:id`, importação `conta:AAAA-MM:id`,
+  pendência `AAAA-MM:chave`). Abrir: documento, conta, dossiê do
+  lançamento, pacote, fechamentos, plano, extrato (por cima do modal das
+  mensagens, quando se está nele); competência e pendência mexem na tela (a
+  linha da pendência pisca); arquivo abre no programa do computador;
+  fornecedor abre a ficha em Contatos.
+- Em **Contatos** (ficha › Histórico): `GET /api/contatos/:id/citaveis` —
+  pessoas e atividades do contato e, para quem vê a Contabilidade, os
+  documentos, as contas e os arquivos dele. Pessoa e atividade abrem na aba
+  delas, piscando; documento/conta fecham a ficha e abrem na Contabilidade
+  (`ContabilidadeAbrirObjeto`).
+
+**SQL:** `sql/contabilidade_mensagens.sql` — `contabil_mural_historico` (o
+mesmo formato dos `*_historico`) e a trava `origem` das quatro tabelas do
+social refeita com `prospeccao, cliente, contato, tarefa, contabilidade`
+(tira qualquer CHECK que fale de `origem` e põe o novo). Conferido no
+Postgres descartável: **antes dele, o banco recusava `contato`** — o social
+de Contatos (28/09) não gravava curtida/comentário no banco do dono.
+
+**Conferido:** testes de tela (a tela nova, os dois modais, a função pura
+das pendências citáveis, o "'" do componente: marca, edição de ida e volta,
+gatilho), backend (citáveis: 5; social com o mural: 3 novos; contatos: 1
+novo); Postgres descartável em modo DEV: SQL duas vezes, publicar com "@" e
+"'", aviso de menção com o texto limpo, comentário, curtida, linha do tempo,
+mural 2 → 404, comentário em contato gravando, citáveis com o simulado;
+Electron sem erro de console: a tela, o cartão rolando até a lista, o "'"
+no cartão e no modal, a etiqueta abrindo o documento por cima, a atividade
+com filtros, e a ficha do contato com o "'" e a pessoa piscando.
+
+**Em aberto:** pendências 29–33 do roteiro de homologação.
+
+---
+
+## AA. Etapas 10 a 13 — a estrutura das integrações (30/09/2026)
+
+Pedido do dono ("JA RODEI TUDO"): deixar pronta a estrutura para ele inserir
+e configurar as APIs, e um roteiro completo do que fazer e fornecer —
+`docs/contabilidade-integracoes-roteiro.md`.
+
+**As quatro integrações** (`backend/contabilidade/integracoes/`):
+
+| Chave | Etapa | Faz | Automática |
+|---|---|---|---|
+| `sefaz_nfe` | 10 | NF-e emitidas contra o CNPJ: Distribuição de DF-e (NT 2014.002, `distNSU`/`consChNFe`, docZip gzip+base64) e manifestação no Ambiente Nacional (cOrgao 91; ciência 210210, confirmação 210200, desconhecimento 210220, não realizada 210240) | a cada 60 min (1 h de espera após 137 / NSU no máximo; 656 respeitado) |
+| `bb_extrato` | 11 | API de Extratos do BB (OAuth client_credentials, `gw-dev-app-key`/`gw-app-key`, datas DDMMAAAA, páginas de 200, mTLS opcional); grava no Extrato bancário como importação `origem = 'api'` | 1 vez por dia, relendo `dias_para_tras` |
+| `nfse_adn` | 13 | ADN da NFS-e: `GET {base}/DFe/{NSU}?lote=true` com mTLS, só as NFS-e em que a empresa é tomadora | a cada 3 h |
+| `bb_investimentos` | 12 | CDB: só credenciais + teste de sondagem (escopo e caminho configuráveis; a amostra vai para o mapeamento) | não |
+
+**Módulos:** `catalogo` (definição, campos da tela, endereços padrão
+trocáveis no "Avançado"), `configuracao` (ler/validar/gravar, ambiente
+efetivo, pendências, linha pública), `segredos` (banco → cofre do Windows →
+`.env`; certificado A1 pela Configuração fiscal; o `.cer` público), `rede`
+(https com o certificado), `sefazDistribuicao`, `nfseAdn`, `bbExtrato`,
+`execucoes` (registro e trava por faixa), `entrada` (a caixa de entrada:
+mesclar sem rebaixar, eventos, registrar/ignorar/restaurar), `servico`
+(tudo junto), `agenda` (verifica a cada ~5 min, só dentro do Electron, só com
+sessão; `server.js` liga) e `rotas` (montadas pelo `contabilidadeController`).
+
+**Regras:**
+- **Ambiente:** o do banco, mas as travas do `.env` vencem —
+  `NFE_AMBIENTE=homologacao` (SEFAZ/ADN), `BB_AMBIENTE=sandbox|homologacao`
+  (BB) e a nova `CONTABILIDADE_INTEGRACOES_AMBIENTE=homologacao` (todas).
+  Ligar a produção exige a palavra **PRODUCAO** (conferida no servidor).
+- **Homologação só grava no banco DEV** (`BANCO=DEV`); num banco de produção
+  busca e teste só contam.
+- **Busca manual só com a integração ligada** (na SEFAZ ela dá ciência); o
+  teste de conexão roda sempre e não grava (só o registro).
+- **Caixa de entrada:** uma linha por (origem, chave); nunca rebaixa (o XML
+  fica, cancelada fica, registrada/ignorada são finais); eventos em `jsonb`.
+  Pendentes = nova/completa **e não cancelada**. Registrar liga a um
+  documento já registrado à mão (mesma chave; na NFS-e, número + emitente).
+- **Registro automático** (padrão ligado) da NF-e completa e da NFS-e; a que
+  não entra (mês fechado, dado faltando) fica com o motivo na linha e **não**
+  vira "último erro" da integração; entra depois pelo botão da linha.
+- **Painel:** `entrada_pendente` (documental, agregada, abre a caixa),
+  `entrada_cancelada_<id>` (aviso, abre o documento) e
+  `integracao_erro_<chave>` (aviso, abre as Configurações).
+- **Documentos recebidos:** origens novas `sefaz` e `adn`; o XML anexado é
+  "oficial". **Extrato:** `gravar()` comum ao OFX e à API, com as colunas da
+  contrapartida; a evidência (JSON da resposta) só na busca do mês.
+- **Permissões:** ver/testar = Ver configuração; mudar e segredos = Sup
+  Admin; buscar NF-e/NFS-e e as ações da caixa = Registrar documentos;
+  buscar extrato = Importar extrato.
+
+**Tela:** `configuracao.html` (certificado + um cartão por integração: o que
+falta, o que se fornece, situação, últimas execuções, formulário com
+`quando`/avançado, credenciais do BB, Salvar/Testar/Buscar agora) e
+`entrada-dfe.html` (filtros, tabela, ações da linha, manifestação com
+justificativa). Ações ganhou "NF-e e NFS-e da SEFAZ/ADN"; "Configurações"
+deixou de ser "em implementação"; "Buscar no BB" do Extrato busca de verdade.
+A atividade conhece `integracao_configurada`, `nfe_manifestada` e
+`entrada_ignorada`.
+
+**SQL 9:** `sql/contabilidade_integracoes.sql` — `contabil_integracoes` (as 4,
+desligadas, em homologação), `contabil_integracao_execucoes` (chave UNIQUE =
+trava da faixa) e `contabil_dfe_recebidos` (UNIQUE origem+chave).
+
+**Conferido:** backend — clientes (7), núcleo (6), rotas com rede de mentira
+(6: SEFAZ, mês fechado, ADN, BB, estado/permissões, sem SQL) e as 23 baterias
+da Contabilidade; tela — 1236 (1 falha antiga, o logout). Postgres
+descartável em modo DEV: SQL duas vezes; SEFAZ com resumo + ciência,
+completa registrada, cancelamento em `jsonb`, nota de mês fechado com o
+motivo (sem "último erro"), espera de 1 h, baixar XML, ignorar/restaurar,
+painel de agosto com a pendência documental; ADN com chave de 50 dígitos e
+ISS retido; BB com credenciais próprias, conta de teste, contrapartida e
+"já importados"; a agenda com duas máquinas (a segunda: "outra_maquina",
+pelo UNIQUE de verdade); homologação sem `BANCO=DEV` não gravou. Electron:
+os dois modais, as caixas de PRODUCAO e de manifestação, a visão só de
+leitura e o cartão do BB escondendo os campos pelo `quando`.
+
+**A confirmar com a primeira resposta real:** o formato do ADN e o do BB
+(os campos vieram da documentação; o "Testar conexão" mostra a resposta).
+**Em aberto:** pendências 34–47 do roteiro das integrações.

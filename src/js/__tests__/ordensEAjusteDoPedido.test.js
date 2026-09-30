@@ -199,3 +199,46 @@ test('Visualizar: a linha "Adicional"/"Desconto" no fim dos itens, com a justifi
   assert.ok(VISUALIZAR.includes('if (itensTbody && Math.abs(ajuste) > 0.005) itensTbody.appendChild(linhaDoAjuste(data, ajuste, fmtCurrency));'));
   assert.ok(VIS_HTML.includes('id="ajustePedidoChip"'));
 });
+
+// ------------------------------------------- à vista e parcela travada
+
+test('parcela travada recriada ao trocar de condição: vem com o valor e o prazo dela; sem o prazo, ele fica livre', () => {
+  const texto = 'Tem pagamento registrado de R$ 12.800,25: o valor fica em R$ 12.774,28 ou vai exatamente para R$ 12.800,25.';
+  const escolher1 = (P, registro, id, dias) => {
+    P.init(id, { getTotal: () => 1277428, permitirDiferenca: true, travas: [{ atual: 1277428, permitido: 1280025, texto, dias }] });
+    const select = registro.get(`${id}_count`);
+    select.value = '1';
+    select._escutas.get('change').forEach(fn => fn());
+    const linhas = registro.get(`${id}_rows`).filhos;
+    return { dados: P.getData(id), linha: linhas[linhas.length - 1] };
+  };
+
+  // Prazo desconhecido (`dias: null`): o valor é o da parcela e o prazo se digita.
+  const semPrazo = montarParcelamento();
+  semPrazo.preparar('s', 1);
+  const livre = escolher1(semPrazo.P, semPrazo.registro, 's', null);
+  assert.strictEqual(livre.dados.items[0].amount, 1277428);
+  assert.match(livre.linha.innerHTML, /id="s_amount_0"[^>]*readonly/, 'o valor continua travado');
+  assert.doesNotMatch(livre.linha.innerHTML, /id="s_due_0"[^>]*readonly/, 'travado e vazio não havia como preencher');
+
+  // Prazo conhecido: vem preenchido e travado (o backend mantém o vencimento dela).
+  const comPrazo = montarParcelamento();
+  comPrazo.preparar('c', 1);
+  const fixo = escolher1(comPrazo.P, comPrazo.registro, 'c', 0);
+  assert.strictEqual(fixo.dados.items[0].dueInDays, 0);
+  assert.match(fixo.linha.innerHTML, /id="c_due_0"[^>]*readonly value="0"/);
+});
+
+test('à vista: o valor da parcela única se edita e, fora dos itens, pede justificativa como nas parcelas', () => {
+  const centavosDoTexto = funcao(PAGAMENTO_PEDIDO, 'centavosDoTexto');
+  assert.strictEqual(centavosDoTexto('R$ 12.800,25'), 1280025);
+  assert.strictEqual(centavosDoTexto('12800,25'), 1280025);
+  assert.strictEqual(centavosDoTexto(''), 0);
+
+  assert.ok(PAGAMENTO_PEDIDO.includes('id="pagamentoPedidoValorVista"'), 'à vista tem o campo Valor');
+  // O prazo da parcela travada volta com ela; a soma à vista é o valor digitado.
+  assert.match(PAGAMENTO_PEDIDO, /t\.dias = Number\.isFinite\(prazos\[i\]\) \? prazos\[i\] : null/);
+  assert.match(PAGAMENTO_PEDIDO, /if \(condicaoSel\.value !== 'prazo'\) return valorVista;/);
+  assert.match(PAGAMENTO_PEDIDO, /parcelas: \[\{ valor: valorVista \/ 100,/);
+  assert.match(PAGAMENTO_PEDIDO, /const ajuste = ajusteDasParcelas\(soma, total\);/, 'a diferença vale nas duas condições');
+});

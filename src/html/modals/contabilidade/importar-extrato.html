@@ -1,0 +1,72 @@
+<!--
+  Importar extrato (etapa 4). Modal médio, por cima do Extrato ou aberto
+  direto pela pendência "Extrato não importado". Escolhe a conta e o OFX; a
+  prévia (POST /api/contabilidade/extrato/previa) lê o arquivo SEM gravar e
+  mostra a conta do arquivo (se confere com a escolhida), o período, o saldo,
+  quantos lançamentos são novos e quantos já estavam importados, e o que
+  bloqueia (mês fechado, conta desativada) ou só avisa. "Importar" grava os
+  novos e guarda o OFX como evidência oficial dos meses dele
+  (POST /api/contabilidade/extrato/importar, contabilidade.extrato.importar).
+  Script: src/js/modals/contabilidade-modais.js (montarImportarExtrato).
+-->
+<div id="ctbImportarExtratoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbImpExtTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <h2 id="ctbImpExtTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-file-import mr-2" aria-hidden="true"></i>Importar extrato (OFX)</h2>
+      <span id="ctbImpExtSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">Escolha o arquivo</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="ctbImpExtConta" class="ctl-rotulo text-gray-300">Conta <span class="ctb-obrigatorio">*</span></label>
+            <select id="ctbImpExtConta" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div>
+            <label for="ctbImpExtArquivo" class="ctl-rotulo text-gray-300">Arquivo OFX <span class="ctb-obrigatorio">*</span></label>
+            <input id="ctbImpExtArquivo" type="file" accept=".ofx,.OFX" class="ctb-arquivo-campo block w-full text-sm text-gray-300" />
+          </div>
+        </div>
+        <p class="text-xs text-gray-400">Baixe o extrato da conta corrente em OFX no internet banking do Banco do Brasil (de preferência o mês inteiro). Importar o mesmo período de novo não duplica: só entra o que faltava.</p>
+
+        <div id="ctbImpExtPrevia" class="hidden space-y-6">
+          <dl id="ctbImpExtDados" class="ctb-dados ctb-dados--duas glass-surface rounded-xl border border-white/10"></dl>
+          <ul id="ctbImpExtBloqueios" class="hidden ctb-lista-modal ctb-aviso" role="alert"></ul>
+          <ul id="ctbImpExtAvisos" class="hidden ctb-lista-modal text-sm" style="color: var(--color-primary-light)"></ul>
+
+          <div class="ctb-secao-modal">
+            <div class="ctb-secao-modal__cabeca">
+              <h3 class="ctl-secao text-[var(--color-primary)]">Lançamentos do arquivo</h3>
+              <span id="ctbImpExtContagem" class="text-xs text-gray-400"></span>
+            </div>
+            <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs">Data</th>
+                    <th class="px-4 py-3 text-left text-xs">Descrição</th>
+                    <th class="px-4 py-3 text-left text-xs">Documento</th>
+                    <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                    <th class="px-4 py-3 text-left text-xs">Entra?</th>
+                  </tr>
+                </thead>
+                <tbody id="ctbImpExtLinhas"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="ctbImpExtMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Cancelar</button>
+      <button id="ctbImpExtContas" type="button" class="btn-neutral ctl-botao text-white">Contas do banco</button>
+      <button id="ctbImpExtConfirmar" type="button" data-perm="contabilidade.extrato.importar" class="btn-success ctl-botao min-w-[160px]" disabled>Importar</button>
+    </footer>
+  </div>
+</div>

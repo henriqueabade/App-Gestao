@@ -383,21 +383,77 @@
     posicionarBotaoDatas(box, botaoDatas);
   }
 
+  // ------------------------------------------------------- valor à vista
+  // À vista a parcela é uma só, mas o valor dela também se edita, como nas
+  // parcelas "Diferentes": fora do total dos itens vira Adicional/Desconto,
+  // com justificativa. Com boleto, pagamento ou ordem (a trava), só vale o
+  // valor atual ou exatamente o do boleto/pagamento — o botão "Usar R$ X".
+  let valorVista = 0;
+
+  /** "R$ 12.800,25" → 1280025 centavos (a mesma leitura do parcelamento). */
+  function centavosDoTexto(texto) {
+    const limpo = String(texto ?? '').replace(/\s/g, '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = Number(limpo);
+    return Number.isFinite(n) ? Math.round(n * 100) : 0;
+  }
+
+  function pintarValorVista() {
+    const campo = el('pagamentoPedidoValorVista');
+    if (campo) campo.value = formatarMoeda(valorVista / 100);
+    const aviso = el('pagamentoPedidoTravaVista');
+    const trava = travas[0];
+    if (!aviso || !trava) return;
+    aviso.textContent = '';
+    const texto = document.createElement('span');
+    texto.textContent = trava.texto || 'Parcela travada.';
+    aviso.appendChild(texto);
+    const outro = valorVista === trava.permitido ? trava.atual : trava.permitido;
+    if (outro !== null && outro !== undefined && outro !== valorVista) {
+      const usar = document.createElement('button');
+      usar.type = 'button';
+      usar.className = 'btn-neutral ctl-botao ctl-botao--pequeno text-white';
+      usar.textContent = `Usar ${formatarMoeda(outro / 100)}`;
+      usar.addEventListener('click', () => { valorVista = outro; pintarValorVista(); pintarAjuste(); });
+      aviso.appendChild(usar);
+    }
+  }
+
   // ------------------------------------------------------------- condição
   function montarCampoCondicao(prefill) {
     if (condicaoSel.value === 'vista') {
+      const trava = travas[0] || null;
       box.innerHTML = `
         <div class="flex flex-wrap items-center gap-4" data-linha-prazo-vista>
+          <div class="relative" style="width: 14rem">
+            <input id="pagamentoPedidoValorVista" type="text" inputmode="decimal"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white text-right${trava ? ' bg-gray-800/40' : ''}"${trava ? ' readonly' : ''} />
+            <label for="pagamentoPedidoValorVista" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-300 pointer-events-none">Valor</label>
+          </div>
           <div class="relative w-48">
             <input id="pagamentoPedidoPrazoVista" type="number" min="0" step="1" placeholder=" "
                    class="peer w-full ctl-campo bg-input border border-inputBorder text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             <label for="pagamentoPedidoPrazoVista" class="absolute left-3 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Prazo (dias)</label>
           </div>
-        </div>`;
+        </div>${trava ? `
+        <div id="pagamentoPedidoTravaVista" class="mt-2 flex flex-wrap items-center gap-2 text-xs" style="color: var(--color-primary-light)"></div>` : ''}`;
       const input = el('pagamentoPedidoPrazoVista');
-      if (prefill?.items?.[0]?.dueInDays != null) input.value = prefill.items[0].dueInDays;
+      const diasConhecidos = prefill?.items?.[0]?.dueInDays ?? trava?.dias;
+      if (diasConhecidos != null) input.value = diasConhecidos;
+
+      valorVista = Number.isFinite(prefill?.valorVista) ? prefill.valorVista
+        : (trava ? trava.atual : totalEmCentavos());
+      const campoValor = el('pagamentoPedidoValorVista');
+      if (campoValor && !trava) {
+        campoValor.addEventListener('blur', () => {
+          valorVista = centavosDoTexto(campoValor.value);
+          pintarValorVista();
+        });
+        window.CampoZerado?.ligar?.(campoValor);
+      }
+      pintarValorVista();
       garantirBotaoDatas();
       pintarVencimentos();
+      pintarAjuste();
       return Promise.resolve();
     }
 
@@ -445,9 +501,9 @@
     pintarAjuste();
   });
 
-  /** A soma das parcelas (centavos) — a prazo, do parcelamento; à vista, o total. */
+  /** A soma das parcelas (centavos) — a prazo, do parcelamento; à vista, o valor da parcela única. */
   function somaDasParcelas() {
-    if (condicaoSel.value !== 'prazo') return totalEmCentavos();
+    if (condicaoSel.value !== 'prazo') return valorVista;
     const dados = window.Parcelamento?.getData('pagamentoPedidoParcelamento');
     return (dados?.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
   }
@@ -458,10 +514,11 @@
     if (!caixa) return;
     const total = totalEmCentavos();
     const soma = somaDasParcelas();
-    const ajuste = condicaoSel.value === 'prazo' ? ajusteDasParcelas(soma, total) : 0;
+    const ajuste = ajusteDasParcelas(soma, total);
     caixa.classList.toggle('hidden', !ajuste);
     if (!ajuste) return;
-    el('pagamentoPedidoAjusteTexto').textContent = `As parcelas somam ${formatarMoeda(soma / 100)}: ${formatarMoeda(Math.abs(ajuste) / 100)} ${ajuste > 0 ? 'a mais' : 'a menos'} que os itens (${ajuste > 0 ? 'Adicional' : 'Desconto'}). O total do pedido passa a ser ${formatarMoeda(soma / 100)}.`;
+    const inicio = condicaoSel.value === 'prazo' ? 'As parcelas somam' : 'O valor à vista é';
+    el('pagamentoPedidoAjusteTexto').textContent = `${inicio} ${formatarMoeda(soma / 100)}: ${formatarMoeda(Math.abs(ajuste) / 100)} ${ajuste > 0 ? 'a mais' : 'a menos'} que os itens (${ajuste > 0 ? 'Adicional' : 'Desconto'}). O total do pedido passa a ser ${formatarMoeda(soma / 100)}.`;
   }
 
   // ------------------------------------------------------ datas do pedido
@@ -572,6 +629,9 @@
       const respCobranca = await fetchApi(`/api/cobranca/pedidos/${pedidoId}/boletos`);
       if (respCobranca.ok) travas = travasDasLinhas((await respCobranca.json())?.parcelas);
     } catch (_) { travas = []; }
+    // O prazo de cada parcela travada: ao trocar de condição ela é recriada
+    // nas linhas e volta com o prazo que tem (o backend mantém o vencimento).
+    travas.forEach((t, i) => { if (t) t.dias = Number.isFinite(prazos[i]) ? prazos[i] : null; });
     // Pedido já ajustado (soma ≠ itens) abre em "Diferentes", com a justificativa de antes.
     const jaAjustado = Math.abs(Number(pedido.ajuste_valor) || 0) > 0.02;
     if (el('pagamentoPedidoJustificativa')) el('pagamentoPedidoJustificativa').value = pedido.ajuste_motivo || '';
@@ -585,6 +645,11 @@
     };
     if (!prefill.items.length && prazos.length) {
       prefill.items = prazos.map(d => ({ amount: 0, dueInDays: d }));
+    }
+    // À vista: o valor gravado da parcela quando ele é o combinado (travada ou
+    // já ajustada); senão, o total dos itens.
+    if (condicaoOriginal === 'vista' && prefill.items[0] && (travas[0] || jaAjustado)) {
+      prefill.valorVista = prefill.items[0].amount;
     }
 
     await montarCampoCondicao(prefill);
@@ -620,10 +685,24 @@
     if (condicaoSel.value === 'vista') {
       const dias = el('pagamentoPedidoPrazoVista')?.value;
       if (dias === '' || dias == null) return { erro: 'Informe o prazo em dias.' };
+      // Parcela travada além da 1ª (boleto, pagamento, ordem) não pode sumir.
+      const outraTravada = travas.findIndex((t, i) => i > 0 && t);
+      if (outraTravada > 0) {
+        return { erro: `A ${outraTravada + 1}ª parcela tem boleto, pagamento ou ordem de pagamento: o pedido não pode passar para à vista.` };
+      }
+      const campoValor = el('pagamentoPedidoValorVista');
+      if (campoValor && !campoValor.readOnly) valorVista = centavosDoTexto(campoValor.value);
+      if (!(valorVista > 0)) return { erro: 'Informe o valor da parcela.' };
+      const ajuste = ajusteDasParcelas(valorVista, Math.round(totais.total * 100));
+      const justificativa = (el('pagamentoPedidoJustificativa')?.value || '').trim();
+      if (ajuste && justificativa.length < 10) {
+        return { erro: `O valor à vista fica ${formatarMoeda(Math.abs(ajuste) / 100)} ${ajuste > 0 ? 'acima' : 'abaixo'} dos itens: escreva a justificativa (ao menos 10 letras) para salvar.` };
+      }
       return {
+        ajuste, soma: valorVista, justificativa: ajuste ? justificativa : '',
         prazo: String(Number(dias)),
         tipoParcela: 'a vista',
-        parcelas: [{ valor: totais.total, data_vencimento: vencimentoEm(dias), numero_parcela: 1 }]
+        parcelas: [{ valor: valorVista / 100, data_vencimento: vencimentoEm(dias), numero_parcela: 1 }]
       };
     }
 
