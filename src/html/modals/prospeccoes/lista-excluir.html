@@ -1,0 +1,27 @@
+<!--
+  "−" da Origem e do Tipo da interação: exclui um nome da lista
+  (pros.lists.manage). Recusado enquanto alguma prospecção/interação usa o
+  nome (decisão do dono, 30/09/2026). Confirmação no próprio botão: o
+  primeiro clique avisa, o segundo exclui. Cancelar e Excluir vermelhos, como
+  o "−" do Tipo de Contatos (padrão dos modais: padroesDeTela.test.js).
+  Script: js/modals/prospeccao-lista-excluir.js.
+-->
+<div id="excluirListaProspeccaoOverlay" class="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="relative px-6 py-4 border-b border-white/10">
+      <h2 id="excluirListaTitulo" class="ctl-modal-titulo text-center text-white">EXCLUIR</h2>
+      <button id="fecharExcluirLista" type="button" class="btn-danger ctl-botao ctl-botao--pequeno ctl-botao--icone absolute right-4 top-4 text-white" aria-label="Fechar">✕</button>
+    </header>
+    <form id="excluirListaForm" class="p-6">
+      <label id="excluirListaRotulo" for="excluirListaNome" class="ctl-rotulo text-gray-300">Escolha</label>
+      <select id="excluirListaNome" name="id" required class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+        <option value="">Carregando…</option>
+      </select>
+      <p id="excluirListaAviso" class="mt-4 text-sm text-red-400 hidden" role="alert"></p>
+    </form>
+    <footer class="ctl-acoes justify-end px-6 py-4 border-t border-white/10">
+      <button type="button" id="cancelarExcluirLista" class="btn-danger ctl-botao text-white active:scale-95">Cancelar</button>
+      <button type="button" id="confirmarExcluirLista" data-perm="pros.lists.manage" class="btn-danger ctl-botao text-white active:scale-95">Excluir</button>
+    </footer>
+  </div>
+</div>

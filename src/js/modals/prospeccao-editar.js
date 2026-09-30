@@ -129,10 +129,15 @@
       abaAtiva: form.abaAtiva(),
       responsavel: document.getElementById('prosResponsavel')?.value || '',
       pais: document.getElementById('endPais')?.value || '',
-      estado: document.getElementById('endEstado')?.value || ''
+      estado: document.getElementById('endEstado')?.value || '',
+      // Origem (lista vinda por fetch) e as linhas das redes (montadas por JS).
+      origem: document.getElementById('prosOrigem')?.value || '',
+      redes: form.getRedes()
     }),
     restaurar: async dados => {
       if (!dados) return;
+      if (Array.isArray(dados.redes)) form.setRedes(dados.redes);
+      if (dados.origem !== undefined) form.definirOrigem(dados.origem);
 
       if (Array.isArray(dados.contatos) && dados.contatos.length) {
         form.setContatos(dados.contatos);

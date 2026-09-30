@@ -12,6 +12,7 @@ const http = require('node:http');
 const express = require('express');
 
 const csv = require('./importacaoCsv');
+const listas = require('./prospeccaoListas');
 
 const tokenDe = id => `x.${Buffer.from(JSON.stringify({ id })).toString('base64')}.y`;
 
@@ -172,10 +173,13 @@ const COLUNAS = {
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
   cliente_historico: ['id', 'cliente_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   prospeccoes: [
-    'id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site', 'segmento', 'origem', 'etapa', 'valor_estimado',
+    'id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site', 'redes_sociais', 'segmento', 'origem', 'etapa', 'valor_estimado',
     'probabilidade', 'responsavel_id', 'proximo_passo', 'proximo_passo_data', 'end_logradouro', 'end_numero', 'end_complemento',
     'end_bairro', 'end_cidade', 'end_uf', 'end_pais', 'end_cep', 'status', 'anotacoes', 'criado_por', 'criado_em', 'atualizado_em'
   ],
+  prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id'],
+  prospeccao_origens: ['id', 'nome', 'criado_por', 'criado_em'],
+  prospeccao_tipos_interacao: ['id', 'nome', 'criado_por', 'criado_em'],
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
   prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   perm_cli: ['id', 'modelo_id', 'modulo_ativo', 'acao_view', 'acao_create', 'acao_export_csv', 'acao_import_csv'],
@@ -422,6 +426,175 @@ test('prospecções: exportar e importar (CNPJ ativo bloqueia; o resto vira pend
     assert.ok(rascunho.pendencias.some(p => p.startsWith('Etapa "Fechando" não existe')));
     assert.ok(r.json.linhas.find(l => l.linha === 5).bloqueios.includes('Já existe uma prospecção ativa com este CNPJ.'));
     assert.ok(ctx.tabelas.prospeccao_historico.some(h => h.acao === 'criou' && /Importada da planilha leads\.csv/.test(h.observacao || '')));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Prospecções (30/09/2026): redes sociais, a interação na planilha e as
+// listas editáveis (origens e tipos de interação, com + e −)
+// ---------------------------------------------------------------------------
+
+test('modelo de prospecções: a coluna das redes sociais e as da interação', () => {
+  const { linhas } = csv.lerCsv(csv.modeloDeProspeccoes());
+  const cabecalho = linhas[0].valores;
+  assert.ok(cabecalho.includes('Redes sociais (Rede: endereço | Rede: endereço)'));
+  for (const c of csv.COLUNAS_INTERACAO) assert.ok(cabecalho.includes(c.titulo), c.titulo);
+  const mapa = csv.mapearCabecalho(['Redes sociais', 'Interação - Tipo', 'Interacao - Quando aconteceu'], csv.COLUNAS_PROSPECCAO);
+  assert.deepStrictEqual(Object.keys(mapa.indice).sort(), ['interacao_data', 'interacao_tipo', 'redes_sociais']);
+  // A linha de exemplo continua ignorada (a interação dela tem data passada e tipo da lista padrão).
+  assert.ok(csv.ehLinhaDeExemplo(csv.registroDaLinha(linhas[1].valores, csv.mapearCabecalho(cabecalho, csv.COLUNAS_PROSPECCAO).indice)));
+});
+
+test('redes sociais: a célula da planilha vira uma rede por linha; a lista é limpa', () => {
+  const r = listas.lerRedesDoCsv('Instagram: @loja | https://www.facebook.com/loja\nwa.me/5531999 | Threads: @loja | @solta');
+  assert.deepStrictEqual(r.redes, [
+    { rede: 'Instagram', valor: '@loja' }, { rede: 'Facebook', valor: 'https://www.facebook.com/loja' },
+    { rede: 'WhatsApp', valor: 'wa.me/5531999' }, { rede: 'Outra', valor: 'Threads: @loja' }, { rede: 'Outra', valor: '@solta' }
+  ]);
+  assert.strictEqual(r.pendencias.length, 2);
+  assert.strictEqual(listas.redesEmTexto(JSON.stringify(r.redes.slice(0, 2))), 'Instagram: @loja | Facebook: https://www.facebook.com/loja');
+  assert.deepStrictEqual(listas.normalizarRedes([{ rede: 'instagram', valor: ' @a ' }, { rede: 'Instagram', valor: '@A' }, { rede: 'X', valor: '' }]), [{ rede: 'Instagram', valor: '@a' }]);
+  assert.deepStrictEqual(listas.lerRedesDoCsv('').redes, []);
+});
+
+test('interação da planilha: recusa data futura, tipo fora da lista e o que o modal exige', () => {
+  const agora = Date.parse('2026-09-30T12:00:00-03:00');
+  const tipos = ['Ligação', 'Reunião', 'Videochamada'];
+  const ok = csv.conferirInteracao({ interacao_tipo: 'ligacao', interacao_data: '29/09/2026 10:15', interacao_resumo: 'Falei com o João', interacao_duracao: '15', interacao_contato: 'João' }, { tipos, agora });
+  assert.deepStrictEqual([ok.bloqueios, ok.interacao.tipo, ok.interacao.data, ok.interacao.duracao_min, ok.interacao.com_quem], [[], 'Ligação', '2026-09-29T10:15:00-03:00', 15, 'João']);
+  assert.match(csv.conferirInteracao({ interacao_tipo: 'Reunião', interacao_data: '30/09/2026 12:05', interacao_resumo: 'x' }, { tipos, agora }).bloqueios[0], /está no futuro/);
+  assert.match(csv.conferirInteracao({ interacao_tipo: 'Telepatia', interacao_data: '01/09/2026', interacao_resumo: 'x' }, { tipos, agora }).bloqueios[0], /"Telepatia" não está entre os registrados \(Ligação, Reunião, Videochamada\)/);
+  assert.deepStrictEqual(csv.conferirInteracao({ interacao_tipo: 'Reunião' }, { tipos, agora }).bloqueios, ['Interação sem o resumo.', 'Interação sem a data (Quando aconteceu).']);
+  assert.deepStrictEqual(csv.conferirInteracao({ interacao_resumo: 'só o resumo', interacao_data: '01/09/2026' }, { tipos, agora }).bloqueios, ['Interação sem o tipo.']);
+  assert.match(csv.conferirInteracao({ interacao_tipo: 'Reunião', interacao_data: '31/02/2026', interacao_resumo: 'x' }, { tipos, agora }).bloqueios[0], /inválida/);
+  const semHora = csv.conferirInteracao({ interacao_tipo: 'Reunião', interacao_data: '2026-09-01', interacao_resumo: 'x', interacao_duracao: 'meia hora' }, { tipos, agora });
+  assert.deepStrictEqual([semHora.bloqueios, semHora.interacao.data, semHora.avisos.length, semHora.pendencias.length], [[], '2026-09-01T00:00:00-03:00', 1, 1]);
+  assert.strictEqual(csv.conferirInteracao({ nome_fantasia: 'Só a empresa' }, { tipos, agora }).interacao, null);
+});
+
+function dadosComListas() {
+  const dados = baseDados();
+  Object.assign(dados, {
+    prospeccao_interacoes: [],
+    prospeccao_tipos_interacao: [{ id: 1, nome: 'Ligação' }, { id: 2, nome: 'Reunião' }, { id: 3, nome: 'Videochamada' }],
+    prospeccao_origens: [{ id: 1, nome: 'Indicação' }, { id: 2, nome: 'Feira' }]
+  });
+  return dados;
+}
+
+test('prospecções pela planilha com interação: a empresa repetida recebe só a interação; futura e tipo fora da lista recusam', async () => {
+  const ctx = await montar(dadosComListas());
+  try {
+    const I = (tipo, data, resumo, extra = {}) => ({ interacao_tipo: tipo, interacao_data: data, interacao_resumo: resumo, ...extra });
+    const conteudo = planilha(csv.COLUNAS_PROSPECCAO, [
+      // 2: cria a empresa e já registra a primeira ligação (com a Carla, contato da própria linha)
+      { nome_fantasia: 'Loja Nova', cnpj: '11.222.333/0001-81', origem: 'feira', redes_sociais: 'Instagram: @lojanova | https://facebook.com/lojanova',
+        contato_nome: 'Carla', contato_email: 'carla@x.com', ...I('ligacao', '10/09/2026 09:30', 'Primeiro contato', { interacao_contato: 'carla', interacao_duracao: '12' }) },
+      // 3: mesma empresa pelo CNPJ — a interação e o próximo passo
+      { cnpj: '11222333000181', ...I('Videochamada', '20/09/2026 15:00', 'Apresentação do catálogo'), proximo_passo: 'Mandar proposta', proximo_passo_data: '05/10/2026' },
+      // 4: mesma empresa pelo nome (sem CNPJ)
+      { nome_fantasia: 'loja nova', ...I('Reunião', '21/09/2026', 'Visita à loja') },
+      // 5: empresa já cadastrada — só a interação
+      { nome_fantasia: 'Ativa SA', cnpj: '04.252.011/0001-10', ...I('Ligação', '25/09/2026 11:00', 'Retorno') },
+      // 6: já cadastrada e sem interação — continua recusada
+      { nome_fantasia: 'Ativa SA', cnpj: '04.252.011/0001-10' },
+      // 7: data futura — recusada (a empresa não entra)
+      { nome_fantasia: 'Futura LTDA', ...I('Ligação', '10/10/2099 10:00', 'Ainda vai acontecer') },
+      // 8: tipo fora da lista — recusada
+      { nome_fantasia: 'Estranha LTDA', ...I('Telepatia', '01/09/2026', 'x') },
+      // 9: origem fora da lista — entra como veio, com pendência
+      { nome_fantasia: 'Origem Nova', origem: 'Outdoor' }
+    ]);
+    const r = await chamar(ctx.porta, '/api/prospeccoes/csv/importar', { usuario: 1, corpo: { conteudo, nome_arquivo: 'com-atividades.csv' } });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    assert.deepStrictEqual(r.json.resumo, { linhas: 8, registrados: 3, com_pendencias: 2, nao_registrados: 3, ignorados: 0 });
+    const L = new Map(r.json.linhas.map(l => [l.linha, l]));
+    assert.deepStrictEqual([2, 3, 4, 5, 6, 7, 8, 9].map(n => L.get(n).situacao), [
+      'registrado_com_pendencias', 'registrado', 'registrado', 'registrado', 'nao_registrado', 'nao_registrado', 'nao_registrado', 'registrado_com_pendencias'
+    ]);
+    assert.ok(L.get(3).avisos.includes('Mesma empresa da linha 2: desta linha entrou só a interação e o próximo passo.'));
+    assert.ok(L.get(5).avisos.includes('Empresa já cadastrada: desta linha entrou só a interação.'));
+    assert.ok(L.get(6).bloqueios.includes('Já existe uma prospecção ativa com este CNPJ.'));
+    assert.match(L.get(7).bloqueios.join(' '), /está no futuro/);
+    assert.match(L.get(8).bloqueios.join(' '), /"Telepatia" não está entre os registrados/);
+    assert.ok(L.get(9).pendencias.some(p => /Origem "Outdoor" não está na lista/.test(p)));
+
+    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Loja Nova');
+    assert.strictEqual(nova.origem, 'Feira', 'a origem fica com o nome da lista');
+    assert.deepStrictEqual(JSON.parse(nova.redes_sociais), [{ rede: 'Instagram', valor: '@lojanova' }, { rede: 'Facebook', valor: 'https://facebook.com/lojanova' }]);
+    assert.deepStrictEqual([nova.proximo_passo, nova.proximo_passo_data], ['Mandar proposta', '2026-10-05']);
+    assert.ok(!ctx.tabelas.prospeccoes.some(p => ['Futura LTDA', 'Estranha LTDA'].includes(p.nome_fantasia)), 'as recusadas não entram');
+    assert.strictEqual(ctx.tabelas.prospeccoes.filter(p => /loja nova/i.test(p.nome_fantasia)).length, 1, 'a empresa não se repete');
+
+    const daNova = ctx.tabelas.prospeccao_interacoes.filter(i => i.prospeccao_id === nova.id);
+    assert.deepStrictEqual(daNova.map(i => [i.tipo, i.resumo]), [['Ligação', 'Primeiro contato'], ['Videochamada', 'Apresentação do catálogo'], ['Reunião', 'Visita à loja']]);
+    const carla = ctx.tabelas.prospeccao_contatos.find(c => c.prospeccao_id === nova.id && c.nome === 'Carla');
+    assert.deepStrictEqual([daNova[0].contato_id, daNova[0].duracao_min, daNova[0].data, daNova[0].usuario_id], [carla.id, 12, '2026-09-10T12:30:00.000Z', 1]);
+    assert.deepStrictEqual(ctx.tabelas.prospeccao_interacoes.filter(i => i.prospeccao_id === 1).map(i => i.resumo), ['Retorno']);
+    assert.ok(ctx.tabelas.prospeccao_historico.some(h => h.tipo === 'interacao' && /com-atividades\.csv \(linha 3\)/.test(h.observacao || '')));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('listas de prospecção: ler, incluir (com a permissão), recusar a repetida e excluir só o que ninguém usa', async () => {
+  const dados = dadosComListas();
+  dados.prospeccoes[0].origem = 'Indicação';
+  dados.prospeccao_interacoes.push({ id: 1, prospeccao_id: 1, tipo: 'Ligação', resumo: 'x', data: '2026-09-01T10:00:00Z' });
+  const ctx = await montar(dados);
+  try {
+    const lida = await chamar(ctx.porta, '/api/prospeccoes/listas/origens', { usuario: 2 });
+    assert.strictEqual(lida.status, 200);
+    assert.deepStrictEqual([lida.json.itens.map(i => i.nome), lida.json.sql_pendente, lida.json.redes.includes('Instagram')], [['Feira', 'Indicação'], false, true]);
+
+    assert.strictEqual((await chamar(ctx.porta, '/api/prospeccoes/listas/origens', { usuario: 2, corpo: { nome: 'Outdoor' } })).status, 403, 'sem "Gerenciar origens e tipos" não inclui');
+    const nova = await chamar(ctx.porta, '/api/prospeccoes/listas/origens', { usuario: 1, corpo: { nome: '  Outdoor ' } });
+    assert.strictEqual(nova.status, 200);
+    assert.deepStrictEqual([nova.json.item.nome, nova.json.itens.length, ctx.tabelas.prospeccao_origens.at(-1).criado_por], ['Outdoor', 3, 1]);
+    const repetida = await chamar(ctx.porta, '/api/prospeccoes/listas/origens', { usuario: 1, corpo: { nome: 'feira' } });
+    assert.deepStrictEqual([repetida.status, repetida.json.item.nome], [409, 'Feira']);
+
+    const emUso = await chamar(ctx.porta, '/api/prospeccoes/listas/origens/1', { usuario: 1, method: 'DELETE' });
+    assert.deepStrictEqual([emUso.status, emUso.json.dependente, emUso.json.error], [409, true, 'Indicação está em 1 prospecção: troque antes de excluir.']);
+    const livre = await chamar(ctx.porta, '/api/prospeccoes/listas/origens/2', { usuario: 1, method: 'DELETE' });
+    assert.deepStrictEqual([livre.status, livre.json.removido.nome], [200, 'Feira']);
+    const tipoUsado = await chamar(ctx.porta, '/api/prospeccoes/listas/tipos-interacao/1', { usuario: 1, method: 'DELETE' });
+    assert.deepStrictEqual([tipoUsado.status, tipoUsado.json.error], [409, 'Ligação está em 1 interação: troque antes de excluir.']);
+    assert.strictEqual((await chamar(ctx.porta, '/api/prospeccoes/listas/tipos-interacao', { usuario: 1, corpo: { nome: 'Atividade realizada' } })).status, 400, 'o tipo do sistema não entra na lista');
+    assert.strictEqual((await chamar(ctx.porta, '/api/prospeccoes/listas/redes-quaisquer', { usuario: 1 })).status, 404);
+
+    // A interação aceita o tipo da lista (com o nome da lista) e recusa o de fora.
+    const reuniao = await chamar(ctx.porta, '/api/prospeccoes/1/interacoes', { usuario: 1, corpo: { tipo: 'videochamada', resumo: 'Call de alinhamento', data: '2026-09-02T10:00:00Z' } });
+    assert.strictEqual(reuniao.status, 201, JSON.stringify(reuniao.json));
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.at(-1).tipo, 'Videochamada');
+    assert.strictEqual((await chamar(ctx.porta, '/api/prospeccoes/1/interacoes', { usuario: 1, corpo: { tipo: 'Telepatia', resumo: 'x' } })).status, 400);
+
+    // A origem do formulário tem de estar na lista; a da lista é gravada com o nome dela.
+    const foraDaLista = await chamar(ctx.porta, '/api/prospeccoes', { usuario: 1, corpo: { nome_fantasia: 'Com origem estranha', origem: 'Carro de som' } });
+    assert.deepStrictEqual([foraDaLista.status, /não está na lista/.test(foraDaLista.json.error)], [400, true]);
+    const daLista = await chamar(ctx.porta, '/api/prospeccoes', { usuario: 1, corpo: { nome_fantasia: 'Com origem boa', origem: 'outdoor', redes_sociais: [{ rede: 'Instagram', valor: '@boa' }, { rede: '', valor: '' }] } });
+    assert.strictEqual(daLista.status, 201, JSON.stringify(daLista.json));
+    const criada = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Com origem boa');
+    assert.deepStrictEqual([criada.origem, JSON.parse(criada.redes_sociais)], ['Outdoor', [{ rede: 'Instagram', valor: '@boa' }]]);
+    const semRedes = await chamar(ctx.porta, '/api/prospeccoes', { usuario: 1, corpo: { nome_fantasia: 'Sem redes', redes_sociais: [] } });
+    assert.strictEqual(semRedes.status, 201);
+    assert.ok(!('redes_sociais' in ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Sem redes')), 'sem redes, a coluna nem vai (banco DEV sem o SQL)');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('listas de prospecção sem o SQL: a lista padrão continua valendo e o + avisa o que rodar', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const lida = await chamar(ctx.porta, '/api/prospeccoes/listas/tipos-interacao', { usuario: 1 });
+    assert.deepStrictEqual([lida.status, lida.json.sql_pendente, lida.json.itens.length], [200, true, 7]);
+    const mais = await chamar(ctx.porta, '/api/prospeccoes/listas/tipos-interacao', { usuario: 1, corpo: { nome: 'Videochamada' } });
+    assert.deepStrictEqual([mais.status, mais.json.sql_pendente, mais.json.error], [409, true, 'Falta rodar sql/prospeccoes_listas_redes.sql no banco e reiniciar a API.']);
+    // A origem não é conferida (qualquer uma passa, como antes).
+    assert.strictEqual((await chamar(ctx.porta, '/api/prospeccoes', { usuario: 1, corpo: { nome_fantasia: 'Antes do SQL', origem: 'Carro de som' } })).status, 201);
   } finally {
     await ctx.encerrar();
   }

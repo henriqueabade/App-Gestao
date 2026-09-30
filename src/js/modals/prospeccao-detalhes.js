@@ -252,6 +252,18 @@
       ? `<a href="${esc(p.site)}" data-external target="_blank" rel="noopener noreferrer" class="text-primary hover:text-primary-light">${esc(p.site)}</a>`
       : null;
 
+    // Redes sociais: "Instagram: @loja", uma por linha; endereço vira link.
+    const redes = (Array.isArray(p.redes_sociais) ? p.redes_sociais : []).filter(r => r && r.valor);
+    const ehEndereco = v => /^(https?:\/\/|www\.)/i.test(String(v || '').trim());
+    const redesHtml = redes.length
+      ? redes.map(r => {
+        const valor = ehEndereco(r.valor)
+          ? `<a href="${esc(/^https?:\/\//i.test(r.valor) ? r.valor : `https://${r.valor}`)}" data-external class="text-primary hover:text-primary-light">${esc(r.valor)}</a>`
+          : esc(r.valor);
+        return `<div><span class="text-white/60">${esc(r.rede)}:</span> ${valor}</div>`;
+      }).join('')
+      : null;
+
     get('detProspEmpresaDados').innerHTML = [
       campo('Razão Social', texto(p.razao_social)),
       campo('Nome Fantasia', texto(p.nome_fantasia)),
@@ -259,6 +271,7 @@
       campo('Inscrição Estadual', texto(p.inscricao_estadual)),
       campo('Segmento', texto(p.segmento)),
       campo('Site', site),
+      campo('Redes sociais', redesHtml),
       campo('Cadastrada por', texto(p.criado_por_nome)),
       campo('Cadastrada em', esc(formatarDataHora(p.criado_em)))
     ].join('');
@@ -572,7 +585,7 @@
    */
   const ROTULO_CAMPO = {
     nome_fantasia: 'Nome fantasia', razao_social: 'Razão social', cnpj: 'CNPJ',
-    inscricao_estadual: 'Inscrição estadual', site: 'Site', segmento: 'Segmento',
+    inscricao_estadual: 'Inscrição estadual', site: 'Site', redes_sociais: 'Redes sociais', segmento: 'Segmento',
     origem: 'Origem', etapa: 'Etapa do funil', valor_estimado: 'Valor estimado',
     probabilidade: 'Probabilidade', responsavel_id: 'Responsável',
     proximo_passo: 'Próximo passo', proximo_passo_data: 'Prazo do próximo passo',

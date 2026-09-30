@@ -799,6 +799,48 @@ body {
     color: var(--color-green);
 }
 
+/* Site e redes no popover (30/09/2026): o nome da rede antes do endereço e o
+   endereço clicável (abre no navegador do sistema). */
+.popup-rede-nome {
+    color: rgba(255, 255, 255, 0.55);
+    flex-shrink: 0;
+}
+.popup-link {
+    color: var(--color-primary-light, #d4c169);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.popup-link:hover { color: #fff; }
+
+/* Os botões + e − dentro do campo Origem e do Tipo da interação (o mesmo
+   desenho do "Tipo" de Contatos e do "Desenhado por" da peça). */
+.icon-only {
+    width: 1.75rem;
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+}
+.icon-only.hidden { display: none; }
+
+/* Redes sociais: uma por linha — a rede, o endereço, o − e o + no fim. */
+.pros-redes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.pros-redes__linha {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.pros-redes__rede { flex: 0 0 12rem; min-width: 0; }
+.pros-redes__valor { flex: 1 1 auto; min-width: 0; }
+.pros-redes__linha > button { flex-shrink: 0; }
+
 /* ------------------------------------------------------------------
    Funil compacto: sete cartões lado a lado em vez de sete barras
    empilhadas. Com a coluna lateral removida sobra largura, e o que

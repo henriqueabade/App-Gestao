@@ -1255,6 +1255,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Lançar ligação, e-mail, reunião ou visita"
       },
       {
+        "key": "pros.lists.manage",
+        "column": "acao_lists_manage",
+        "label": "Gerenciar origens e tipos de interação",
+        "desc": "Os botões + e − ao lado da Origem e do Tipo da interação"
+      },
+      {
         "key": "pros.note.add",
         "column": "acao_note_add",
         "label": "Adicionar nota",

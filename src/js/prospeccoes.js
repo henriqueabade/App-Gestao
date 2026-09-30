@@ -448,6 +448,13 @@ function renderResumo(lista) {
 
 let popupLinhaAtual = null;
 
+/** Ícone de cada rede no popover (Font Awesome 6). */
+const ICONE_REDE = {
+    'Instagram': 'fab fa-instagram', 'Facebook': 'fab fa-facebook', 'LinkedIn': 'fab fa-linkedin',
+    'TikTok': 'fab fa-tiktok', 'YouTube': 'fab fa-youtube', 'X (Twitter)': 'fab fa-twitter',
+    'Pinterest': 'fab fa-pinterest', 'WhatsApp': 'fab fa-whatsapp', 'Outra': 'fas fa-share-nodes'
+};
+
 /**
  * O que saiu das colunas da tabela mora aqui.
  *
@@ -495,6 +502,22 @@ function criarConteudoPopupLinha(p) {
              <p class="popup-info-value text-white/50">Nenhum contato cadastrado</p>
            </div>`;
 
+    // Site e redes sociais: só aparecem quando há. O que é endereço abre no
+    // navegador do sistema; tudo tem o botão de copiar.
+    const ehEndereco = v => /^(https?:\/\/|www\.)/i.test(String(v || '').trim());
+    const hrefDe = v => (/^https?:\/\//i.test(String(v).trim()) ? String(v).trim() : `https://${String(v).trim()}`);
+    const valorComLink = (valor, rotulo, sempreLink = false) => (sempreLink || ehEndereco(valor)
+        ? `<a href="${esc(hrefDe(valor))}" data-link-externo class="popup-contato-texto popup-link">${esc(valor)}</a>${copiar(valor, rotulo)}`
+        : `<span class="popup-contato-texto">${esc(valor)}</span>${copiar(valor, rotulo)}`);
+    const redes = Array.isArray(p.redes_sociais) ? p.redes_sociais.filter(r => r && r.valor) : [];
+    const blocoWeb = (texto(p.site) || redes.length)
+        ? `<div class="popup-secao">
+             <p class="popup-info-label">Site e redes sociais</p>
+             ${texto(p.site) ? `<p class="popup-contato-linha"><i class="fas fa-globe text-white/40"></i>${valorComLink(p.site, 'Site', true)}</p>` : ''}
+             ${redes.map(r => `<p class="popup-contato-linha"><i class="${ICONE_REDE[r.rede] || 'fas fa-share-nodes'} text-white/40" title="${esc(r.rede)}"></i><span class="popup-rede-nome">${esc(r.rede)}</span>${valorComLink(r.valor, r.rede)}</p>`).join('')}
+           </div>`
+        : '';
+
     const proximoPasso = p.proximo_passo ? esc(p.proximo_passo) : '—';
     const dia = diaDe(p.proximo_passo_data);
     const atrasado = dia && dia < hojeZerado();
@@ -510,6 +533,7 @@ function criarConteudoPopupLinha(p) {
       </div>
       <div class="popup-body">
         ${blocoContato}
+        ${blocoWeb}
         <div class="popup-secao">
           <div class="popup-info-grid" style="margin-bottom:0">
             ${info('Valor estimado', esc(formatarMoeda(p.valor_estimado)), 'col_pros_valor')}
@@ -585,6 +609,15 @@ function mostrarPopupLinha(icone, p) {
 
     // Delegação: os botões nascem junto com o HTML do popover.
     popup.addEventListener('click', async e => {
+        // Site/rede: abre no navegador do sistema, não dentro do app.
+        const link = e.target.closest('a[data-link-externo]');
+        if (link) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (window.electronAPI?.openExternal) window.electronAPI.openExternal(link.href);
+            else window.open(link.href, '_blank', 'noopener');
+            return;
+        }
         const botao = e.target.closest('.popup-copiar');
         if (!botao) return;
         e.preventDefault();

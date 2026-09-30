@@ -22,6 +22,8 @@
  * Funções puras: quem grava é o controller de cada módulo.
  */
 
+const listas = require('./prospeccaoListas');
+
 const SEPARADOR = ';';
 const BOM = String.fromCharCode(0xfeff);
 const MARCA_EXEMPLO = 'EXEMPLO (apague esta linha)';
@@ -184,6 +186,26 @@ function lerData(v) {
   return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/**
+ * Data e hora de Brasília ("31/12/2026 14:30", "31/12/2026", "2026-12-31 14:30")
+ * → `{ iso, semHora }` (o instante, com o fuso -03:00); vazio → null;
+ * inválido → undefined. Sem hora vale 00:00 daquele dia.
+ */
+function lerDataHora(v) {
+  const s = texto(v);
+  if (!s) return null;
+  const m = /^(\S+)(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
+  if (!m) return undefined;
+  const dia = lerData(m[1]);
+  if (!dia) return undefined;
+  const semHora = m[2] === undefined;
+  const h = Number(m[2] ?? 0);
+  const min = Number(m[3] ?? 0);
+  if (h > 23 || min > 59) return undefined;
+  const iso = `${dia}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00-03:00`;
+  return { iso, semHora };
+}
+
 /** "2026-12-31" → "31/12/2026" (para a exportação). */
 function dataBr(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(texto(v));
@@ -274,12 +296,29 @@ const COLUNAS_CLIENTE = [
   { chave: 'anotacoes', titulo: 'Anotações' }
 ];
 
+/**
+ * A interação (atividade) de uma linha de prospecção (30/09/2026). Uma por
+ * linha; para lançar mais de uma, repete-se a empresa (mesmo CNPJ ou, sem
+ * CNPJ, o mesmo nome) numa linha nova só com estas colunas — a importação
+ * acrescenta a interação à prospecção que já existe. O próximo passo usa as
+ * colunas da própria prospecção ("Próximo passo" e a data dele).
+ */
+const COLUNAS_INTERACAO = [
+  { chave: 'interacao_tipo', titulo: 'Interação - Tipo' },
+  { chave: 'interacao_data', titulo: 'Interação - Quando aconteceu (dd/mm/aaaa hh:mm)' },
+  { chave: 'interacao_contato', titulo: 'Interação - Com quem (nome do contato)' },
+  { chave: 'interacao_duracao', titulo: 'Interação - Duração (min)' },
+  { chave: 'interacao_resumo', titulo: 'Interação - Resumo' },
+  { chave: 'interacao_detalhe', titulo: 'Interação - Detalhes' }
+];
+
 const COLUNAS_PROSPECCAO = [
   { chave: 'nome_fantasia', titulo: 'Empresa', obrigatoria: true, alternativas: ['Nome fantasia', 'Nome da empresa'] },
   { chave: 'razao_social', titulo: 'Razão social' },
   { chave: 'cnpj', titulo: 'CNPJ' },
   { chave: 'inscricao_estadual', titulo: 'Inscrição estadual' },
   { chave: 'site', titulo: 'Site' },
+  { chave: 'redes_sociais', titulo: 'Redes sociais (Rede: endereço | Rede: endereço)', alternativas: ['Redes sociais', 'Rede social'] },
   { chave: 'segmento', titulo: 'Segmento' },
   { chave: 'origem', titulo: 'Origem' },
   { chave: 'etapa', titulo: 'Etapa' },
@@ -295,7 +334,8 @@ const COLUNAS_PROSPECCAO = [
   { chave: 'contato_telefone_fixo', titulo: 'Contato principal - Telefone fixo' },
   { chave: 'contato_telefone_celular', titulo: 'Contato principal - Celular' },
   { chave: 'contato_decisor', titulo: 'Contato principal - Decisor (Sim ou Não)' },
-  { chave: 'anotacoes', titulo: 'Anotações' }
+  { chave: 'anotacoes', titulo: 'Anotações' },
+  ...COLUNAS_INTERACAO
 ];
 
 const ETAPAS_PROSPECCAO = ['Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'];
@@ -316,11 +356,17 @@ const EXEMPLO_CLIENTE = {
 
 const EXEMPLO_PROSPECCAO = {
   nome_fantasia: MARCA_EXEMPLO, razao_social: 'Loja Exemplo LTDA', cnpj: '11.222.333/0001-81', segmento: 'Decoração',
+  site: 'www.exemplo.com.br', redes_sociais: 'Instagram: @lojaexemplo | LinkedIn: linkedin.com/company/loja-exemplo',
   origem: 'Indicação', etapa: 'Novo', valor_estimado: '15.000,00', probabilidade: '10', responsavel: 'Nome ou e-mail do usuário',
   proximo_passo: 'Ligar para apresentar o catálogo', proximo_passo_data: '30/09/2026', end_cep: '30820-272', end_rua: 'Av. Exemplo',
   end_numero: '100', end_bairro: 'Centro', end_cidade: 'Belo Horizonte', end_estado: 'MG', end_pais: 'Brasil',
   contato_nome: 'João Souza', contato_cargo: 'Sócio', contato_email: 'joao@exemplo.com.br', contato_telefone_celular: '(31) 98888-7777',
-  contato_decisor: 'Sim', anotacoes: `Etapas: ${ETAPAS_PROSPECCAO.join(', ')}. Colunas com * são obrigatórias.`
+  contato_decisor: 'Sim',
+  anotacoes: `Etapas: ${ETAPAS_PROSPECCAO.join(', ')}. Colunas com * são obrigatórias. O tipo da interação precisa estar na lista `
+    + 'do cadastro (a caixa com + e −) e a data dela não pode ser futura. Para mais de uma interação, repita a empresa (mesmo CNPJ '
+    + 'ou nome) numa linha nova só com as colunas "Interação".',
+  interacao_tipo: 'Ligação', interacao_data: '15/09/2026 14:30', interacao_contato: 'João Souza', interacao_duracao: '20',
+  interacao_resumo: 'Apresentei a empresa e pedi o catálogo', interacao_detalhe: 'Quer uma proposta para as cinco lojas.'
 };
 
 const modeloDeClientes = () => gerarCsv(COLUNAS_CLIENTE, [EXEMPLO_CLIENTE]);
@@ -481,7 +527,8 @@ function clienteParaLinha(c = {}, contato = null) {
 function prospeccaoParaLinha(p = {}, contato = null, responsavel = '') {
   return {
     nome_fantasia: p.nome_fantasia, razao_social: p.razao_social, cnpj: formatarCnpj(p.cnpj) || texto(p.cnpj),
-    inscricao_estadual: p.inscricao_estadual, site: p.site, segmento: p.segmento, origem: p.origem, etapa: p.etapa,
+    inscricao_estadual: p.inscricao_estadual, site: p.site, redes_sociais: listas.redesEmTexto(p.redes_sociais),
+    segmento: p.segmento, origem: p.origem, etapa: p.etapa,
     valor_estimado: numeroBr(p.valor_estimado), probabilidade: p.probabilidade ?? '', responsavel,
     proximo_passo: p.proximo_passo, proximo_passo_data: dataBr(p.proximo_passo_data),
     end_cep: p.end_cep, end_rua: p.end_logradouro, end_numero: p.end_numero, end_complemento: p.end_complemento,
@@ -696,6 +743,18 @@ function conferirProspeccao(r = {}, contexto = {}) {
   const data = lerData(r.proximo_passo_data);
   if (data === undefined) pendencias.push(`Data do próximo passo "${r.proximo_passo_data}" inválida (use dd/mm/aaaa): não foi gravada.`);
 
+  // A origem vem da lista do cadastro (a caixa com + e −). Fora dela entra
+  // como veio, com a pendência de incluí-la na lista.
+  let origem = texto(r.origem) || null;
+  if (origem && Array.isArray(contexto.origens)) {
+    const achada = listas.naLista(contexto.origens, origem);
+    if (achada) origem = achada;
+    else pendencias.push(`Origem "${origem}" não está na lista (inclua-a na caixa com + e −): gravada como veio.`);
+  }
+
+  const { redes, pendencias: pendenciasDasRedes } = listas.lerRedesDoCsv(r.redes_sociais);
+  pendencias.push(...pendenciasDasRedes);
+
   const endereco = enderecoDe(r, 'end');
   if (endereco.estado && !/^[A-Z]{2}$/.test(endereco.estado)) {
     pendencias.push(`UF "${endereco.estado}" inválida (use a sigla, ex.: MG): não foi gravada.`);
@@ -727,8 +786,9 @@ function conferirProspeccao(r = {}, contexto = {}) {
     cnpj: cnpj ? formatarCnpj(cnpj) : null,
     inscricao_estadual: texto(r.inscricao_estadual) || null,
     site: texto(r.site) || null,
+    redes_sociais: redes,
     segmento: texto(r.segmento) || null,
-    origem: texto(r.origem) || null,
+    origem,
     etapa,
     valor_estimado: valor,
     probabilidade: Math.round(probabilidade),
@@ -740,6 +800,69 @@ function conferirProspeccao(r = {}, contexto = {}) {
     contatos
   };
   return { payload, bloqueios, pendencias, avisos, cnpj, identificacao: nome || texto(r.razao_social) || cnpj };
+}
+
+/** A linha traz alguma coluna da interação? */
+const temInteracao = (r = {}) => COLUNAS_INTERACAO.some(c => texto(r[c.chave]));
+
+/** Um minuto de folga para o relógio da máquina (o mesmo do modal e do backend). */
+const FOLGA_DO_RELOGIO_MS = 60 * 1000;
+
+/**
+ * A interação de uma linha → `{ interacao, bloqueios, pendencias, avisos }`.
+ * `interacao` é null quando a linha não traz nenhuma coluna dela.
+ *
+ * Recusa a linha (decisão do dono, 30/09/2026): tipo fora dos registrados na
+ * lista, data no futuro — a interação registra o que JÁ aconteceu —, e o que
+ * o modal também exige: tipo, resumo e a data. "Com quem" é casado depois,
+ * com os contatos da empresa (quem grava faz isso).
+ *
+ * contexto: { tipos: [nomes da lista], agora: ms }
+ */
+function conferirInteracao(r = {}, contexto = {}) {
+  const bloqueios = [];
+  const pendencias = [];
+  const avisos = [];
+  if (!temInteracao(r)) return { interacao: null, bloqueios, pendencias, avisos };
+
+  const tipos = Array.isArray(contexto.tipos) ? contexto.tipos : [];
+  const tipoInformado = texto(r.interacao_tipo);
+  const tipo = listas.naLista(tipos, tipoInformado);
+  if (!tipoInformado) bloqueios.push('Interação sem o tipo.');
+  else if (!tipo) bloqueios.push(`Tipo de interação "${tipoInformado}" não está entre os registrados (${tipos.join(', ')}): inclua-o na caixa com + e − antes de importar.`);
+
+  let resumo = texto(r.interacao_resumo);
+  if (!resumo) bloqueios.push('Interação sem o resumo.');
+  else if (resumo.length > 255) {
+    resumo = resumo.slice(0, 255);
+    pendencias.push('Resumo da interação com mais de 255 letras: foi cortado (o resto cabe em "Detalhes").');
+  }
+
+  const agora = Number.isFinite(contexto.agora) ? contexto.agora : Date.now();
+  const quando = lerDataHora(r.interacao_data);
+  if (quando === null) bloqueios.push('Interação sem a data (Quando aconteceu).');
+  else if (quando === undefined) bloqueios.push(`Data da interação "${r.interacao_data}" inválida (use dd/mm/aaaa hh:mm).`);
+  else if (new Date(quando.iso).getTime() > agora + FOLGA_DO_RELOGIO_MS) {
+    bloqueios.push(`A interação registra o que já aconteceu: a data "${r.interacao_data}" está no futuro. Para algo que ainda vai acontecer, use o próximo passo.`);
+  } else if (quando.semHora) avisos.push('Interação sem a hora: registrada às 00:00 do dia.');
+
+  let duracao = null;
+  const duracaoBruta = texto(r.interacao_duracao);
+  if (duracaoBruta) {
+    const n = lerNumero(duracaoBruta);
+    if (Number.isNaN(n) || n === null || n < 0 || n > 32767) pendencias.push(`Duração "${duracaoBruta}" inválida (minutos): não foi gravada.`);
+    else duracao = Math.round(n);
+  }
+
+  const interacao = {
+    tipo: tipo || tipoInformado,
+    data: quando?.iso || null,
+    resumo,
+    detalhe: String(r.interacao_detalhe ?? '').trim() || null,
+    duracao_min: duracao,
+    com_quem: texto(r.interacao_contato) || null
+  };
+  return { interacao, bloqueios, pendencias, avisos };
 }
 
 /**
@@ -776,8 +899,8 @@ function resumirImportacao(resultados = []) {
 }
 
 module.exports = {
-  SEPARADOR, BOM, MARCA_EXEMPLO, COLUNAS_CLIENTE, COLUNAS_PROSPECCAO, COLUNAS_CONTATO, ETAPAS_PROSPECCAO,
-  modeloDeContatos, contatoParaLinha, conferirContato,
+  SEPARADOR, BOM, MARCA_EXEMPLO, COLUNAS_CLIENTE, COLUNAS_PROSPECCAO, COLUNAS_INTERACAO, COLUNAS_CONTATO, ETAPAS_PROSPECCAO,
+  modeloDeContatos, contatoParaLinha, conferirContato, temInteracao, conferirInteracao, lerDataHora,
   lerCsv, gerarCsv, celula, detectarSeparador, mapearCabecalho, registroDaLinha, tituloDaColuna,
   lerSimNao, lerNumero, lerData, dataBr, numeroBr, cnpjValido, cpfValido, formatarCnpj, formatarCpf, digitos, comparavel,
   ehLinhaDeExemplo, modeloDeClientes, modeloDeProspeccoes, clienteParaLinha, prospeccaoParaLinha,
