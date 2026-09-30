@@ -1381,3 +1381,86 @@ no cartão e no modal, a etiqueta abrindo o documento por cima, a atividade
 com filtros, e a ficha do contato com o "'" e a pessoa piscando.
 
 **Em aberto:** pendências 29–33 do roteiro de homologação.
+
+---
+
+## AA. Etapas 10 a 13 — a estrutura das integrações (30/09/2026)
+
+Pedido do dono ("JA RODEI TUDO"): deixar pronta a estrutura para ele inserir
+e configurar as APIs, e um roteiro completo do que fazer e fornecer —
+`docs/contabilidade-integracoes-roteiro.md`.
+
+**As quatro integrações** (`backend/contabilidade/integracoes/`):
+
+| Chave | Etapa | Faz | Automática |
+|---|---|---|---|
+| `sefaz_nfe` | 10 | NF-e emitidas contra o CNPJ: Distribuição de DF-e (NT 2014.002, `distNSU`/`consChNFe`, docZip gzip+base64) e manifestação no Ambiente Nacional (cOrgao 91; ciência 210210, confirmação 210200, desconhecimento 210220, não realizada 210240) | a cada 60 min (1 h de espera após 137 / NSU no máximo; 656 respeitado) |
+| `bb_extrato` | 11 | API de Extratos do BB (OAuth client_credentials, `gw-dev-app-key`/`gw-app-key`, datas DDMMAAAA, páginas de 200, mTLS opcional); grava no Extrato bancário como importação `origem = 'api'` | 1 vez por dia, relendo `dias_para_tras` |
+| `nfse_adn` | 13 | ADN da NFS-e: `GET {base}/DFe/{NSU}?lote=true` com mTLS, só as NFS-e em que a empresa é tomadora | a cada 3 h |
+| `bb_investimentos` | 12 | CDB: só credenciais + teste de sondagem (escopo e caminho configuráveis; a amostra vai para o mapeamento) | não |
+
+**Módulos:** `catalogo` (definição, campos da tela, endereços padrão
+trocáveis no "Avançado"), `configuracao` (ler/validar/gravar, ambiente
+efetivo, pendências, linha pública), `segredos` (banco → cofre do Windows →
+`.env`; certificado A1 pela Configuração fiscal; o `.cer` público), `rede`
+(https com o certificado), `sefazDistribuicao`, `nfseAdn`, `bbExtrato`,
+`execucoes` (registro e trava por faixa), `entrada` (a caixa de entrada:
+mesclar sem rebaixar, eventos, registrar/ignorar/restaurar), `servico`
+(tudo junto), `agenda` (verifica a cada ~5 min, só dentro do Electron, só com
+sessão; `server.js` liga) e `rotas` (montadas pelo `contabilidadeController`).
+
+**Regras:**
+- **Ambiente:** o do banco, mas as travas do `.env` vencem —
+  `NFE_AMBIENTE=homologacao` (SEFAZ/ADN), `BB_AMBIENTE=sandbox|homologacao`
+  (BB) e a nova `CONTABILIDADE_INTEGRACOES_AMBIENTE=homologacao` (todas).
+  Ligar a produção exige a palavra **PRODUCAO** (conferida no servidor).
+- **Homologação só grava no banco DEV** (`BANCO=DEV`); num banco de produção
+  busca e teste só contam.
+- **Busca manual só com a integração ligada** (na SEFAZ ela dá ciência); o
+  teste de conexão roda sempre e não grava (só o registro).
+- **Caixa de entrada:** uma linha por (origem, chave); nunca rebaixa (o XML
+  fica, cancelada fica, registrada/ignorada são finais); eventos em `jsonb`.
+  Pendentes = nova/completa **e não cancelada**. Registrar liga a um
+  documento já registrado à mão (mesma chave; na NFS-e, número + emitente).
+- **Registro automático** (padrão ligado) da NF-e completa e da NFS-e; a que
+  não entra (mês fechado, dado faltando) fica com o motivo na linha e **não**
+  vira "último erro" da integração; entra depois pelo botão da linha.
+- **Painel:** `entrada_pendente` (documental, agregada, abre a caixa),
+  `entrada_cancelada_<id>` (aviso, abre o documento) e
+  `integracao_erro_<chave>` (aviso, abre as Configurações).
+- **Documentos recebidos:** origens novas `sefaz` e `adn`; o XML anexado é
+  "oficial". **Extrato:** `gravar()` comum ao OFX e à API, com as colunas da
+  contrapartida; a evidência (JSON da resposta) só na busca do mês.
+- **Permissões:** ver/testar = Ver configuração; mudar e segredos = Sup
+  Admin; buscar NF-e/NFS-e e as ações da caixa = Registrar documentos;
+  buscar extrato = Importar extrato.
+
+**Tela:** `configuracao.html` (certificado + um cartão por integração: o que
+falta, o que se fornece, situação, últimas execuções, formulário com
+`quando`/avançado, credenciais do BB, Salvar/Testar/Buscar agora) e
+`entrada-dfe.html` (filtros, tabela, ações da linha, manifestação com
+justificativa). Ações ganhou "NF-e e NFS-e da SEFAZ/ADN"; "Configurações"
+deixou de ser "em implementação"; "Buscar no BB" do Extrato busca de verdade.
+A atividade conhece `integracao_configurada`, `nfe_manifestada` e
+`entrada_ignorada`.
+
+**SQL 9:** `sql/contabilidade_integracoes.sql` — `contabil_integracoes` (as 4,
+desligadas, em homologação), `contabil_integracao_execucoes` (chave UNIQUE =
+trava da faixa) e `contabil_dfe_recebidos` (UNIQUE origem+chave).
+
+**Conferido:** backend — clientes (7), núcleo (6), rotas com rede de mentira
+(6: SEFAZ, mês fechado, ADN, BB, estado/permissões, sem SQL) e as 23 baterias
+da Contabilidade; tela — 1236 (1 falha antiga, o logout). Postgres
+descartável em modo DEV: SQL duas vezes; SEFAZ com resumo + ciência,
+completa registrada, cancelamento em `jsonb`, nota de mês fechado com o
+motivo (sem "último erro"), espera de 1 h, baixar XML, ignorar/restaurar,
+painel de agosto com a pendência documental; ADN com chave de 50 dígitos e
+ISS retido; BB com credenciais próprias, conta de teste, contrapartida e
+"já importados"; a agenda com duas máquinas (a segunda: "outra_maquina",
+pelo UNIQUE de verdade); homologação sem `BANCO=DEV` não gravou. Electron:
+os dois modais, as caixas de PRODUCAO e de manifestação, a visão só de
+leitura e o cartão do BB escondendo os campos pelo `quando`.
+
+**A confirmar com a primeira resposta real:** o formato do ADN e o do BB
+(os campos vieram da documentação; o "Testar conexão" mostra a resposta).
+**Em aberto:** pendências 34–47 do roteiro das integrações.

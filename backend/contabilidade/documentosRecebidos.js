@@ -26,7 +26,8 @@ const externas = require('../fiscal/externas');
 const { UFS } = require('../fiscal/municipios');
 
 const TIPOS = { nfe: 'NF-e', nfse: 'NFS-e', outro: 'Outro documento' };
-const ORIGENS = { xml: 'XML', chave: 'Chave de acesso', manual: 'Digitado' };
+// sefaz/adn: registrados pela busca automática (etapas 10 e 13), com o XML oficial.
+const ORIGENS = { xml: 'XML', chave: 'Chave de acesso', manual: 'Digitado', sefaz: 'SEFAZ (automático)', adn: 'ADN (automático)' };
 const ESPECIES = { recibo: 'Recibo', guia: 'Guia de imposto', fatura: 'Fatura', contrato: 'Contrato', outro: 'Outro' };
 /** Os municípios em que a empresa toma NFS-e (resposta do dono, 28/09/2026); outro é digitado. */
 const MUNICIPIOS_NFSE = ['Contagem', 'Belo Horizonte'];
@@ -429,8 +430,12 @@ async function previa(api, { entrada = {}, hoje }) {
   };
 }
 
-/** O documento a gravar (e o XML, quando há) a partir da entrada. */
-async function documentoDaEntrada(api, entrada) {
+/**
+ * O documento a gravar (e o XML, quando há) a partir da entrada.
+ * `automatico` ('sefaz' | 'adn') só vem do backend (a busca automática),
+ * nunca da tela: marca a origem do documento.
+ */
+async function documentoDaEntrada(api, entrada, automatico = null) {
   const tipo = TIPOS[entrada.tipo] ? entrada.tipo : null;
   if (!tipo) throw c.erro('Escolha o tipo do documento (NF-e, NFS-e ou outro).');
   if (tipo === 'nfe' && entrada.xml) {
@@ -441,7 +446,7 @@ async function documentoDaEntrada(api, entrada) {
     return {
       nota,
       doc: {
-        tipo: 'nfe', origem: 'xml', chave_acesso: nota.chave_acesso, modelo: nota.modelo || null, serie: String(nota.serie ?? ''), numero: String(nota.numero ?? ''),
+        tipo: 'nfe', origem: automatico === 'sefaz' ? 'sefaz' : 'xml', chave_acesso: nota.chave_acesso, modelo: nota.modelo || null, serie: String(nota.serie ?? ''), numero: String(nota.numero ?? ''),
         emitente_documento: nota.emitente_documento || null, emitente_nome: nota.emitente_nome || null, data_emissao: nota.data_emissao,
         natureza_operacao: c.texto(nota.natureza_operacao, 120) || null, valor_total: nota.valor_total, valor_produtos: nota.valor_produtos,
         itens: JSON.stringify(nota.itens), cfops: nota.cfops.join(', ').slice(0, 120) || null, protocolo: nota.protocolo
@@ -454,7 +459,11 @@ async function documentoDaEntrada(api, entrada) {
     if (empresa && lida.emitente_documento === empresa) throw c.erro('Esta nota foi emitida pela própria empresa: é NF-e de saída, não de entrada.', 422);
     return { nota: null, doc: lida };
   }
-  if (tipo === 'nfse') return { nota: null, doc: nfseDigitada(entrada) };
+  if (tipo === 'nfse') {
+    const doc = nfseDigitada(entrada);
+    if (automatico === 'adn') doc.origem = 'adn';
+    return { nota: null, doc };
+  }
   return { nota: null, doc: outroDigitado(entrada) };
 }
 
@@ -464,8 +473,8 @@ async function documentoDaEntrada(api, entrada) {
  * um fechamento. O que falhar DEPOIS de o documento estar gravado vira aviso
  * (o documento fica; o resto se faz pela ficha dele).
  */
-async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar = false }) {
-  const { nota, doc } = await documentoDaEntrada(api, entrada);
+async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar = false, automatico = null }) {
+  const { nota, doc } = await documentoDaEntrada(api, entrada, automatico);
   doc.competencia = String(doc.data_emissao).slice(0, 7);
   if (doc.data_emissao > c.dia(hoje)) throw c.erro('A data de emissão não pode ser futura.');
   await b.garantirAberta(api, doc.competencia, 'registrar documentos nela');
@@ -527,9 +536,10 @@ async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar
   }
   if (entrada.arquivo?.base64) {
     try {
+      // O XML que veio do ADN é o oficial; o que a pessoa anexa, fornecido.
       await arquivos.salvar(api, {
         nome: entrada.arquivo.nome, tipo: entrada.arquivo.tipo, base64: entrada.arquivo.base64, categoria: categoriaDoArquivo(doc.tipo, doc.especie),
-        origem: 'fornecido', competencia: doc.competencia, vinculos: [ref], usuarioId, registrarEvento: false
+        origem: automatico ? 'oficial' : 'fornecido', competencia: doc.competencia, vinculos: [ref], usuarioId, registrarEvento: false
       });
     } catch (e) {
       avisos.push(`O arquivo não foi guardado: ${e.message}. Anexe-o pela ficha do documento.`);

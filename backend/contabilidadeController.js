@@ -79,6 +79,11 @@
  *   POST /pacote                      { competencia, pdf_base64 } — gera, registra e devolve { nome, base64, hash }  (contabilidade.pacote.gerar)
  *   POST /pacote/:id/enviado          { para, meio, observacao } — marca como enviado                              (contabilidade.pacote.gerar)
  *
+ * Etapas 10 a 13 (integrações automáticas — rotas em contabilidade/integracoes/rotas.js):
+ *
+ *   GET/PUT /integracoes[/:chave], credenciais, testar, sincronizar, execuções, certificado público
+ *   GET /entrada e as ações da caixa de entrada (manifestar, baixar XML, registrar, ignorar, restaurar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -398,5 +403,9 @@ router.post('/pacote', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pa
 
 router.post('/pacote/:id/enviado', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote/:id/enviado', ({ api, req, usuarioId }) =>
   pacote.marcarEnviado(api, req.params.id, { entrada: req.body || {}, usuarioId })));
+
+// Etapas 10 a 13: integrações automáticas (SEFAZ, BB, ADN) e a caixa de entrada —
+// /integracoes/* e /entrada/* (backend/contabilidade/integracoes/rotas.js).
+router.use(require('./contabilidade/integracoes/rotas').criarRouter());
 
 module.exports = router;

@@ -42,10 +42,15 @@ const TABELAS_FECHAMENTO = ['competencia_fechamentos'];
 const SQL_ARQUIVO_PACOTE = 'sql/contabilidade_pacote.sql';
 const SQL_FALTANDO_PACOTE = `Falta rodar ${SQL_ARQUIVO_PACOTE} no banco e reiniciar a API.`;
 const TABELAS_PACOTE = ['contabil_pacotes'];
-const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO, ...TABELAS_FECHAMENTO, ...TABELAS_PACOTE];
+/** Etapas 10 a 13: as integrações automáticas (SEFAZ, BB, ADN) e a caixa de entrada. */
+const SQL_ARQUIVO_INTEGRACOES = 'sql/contabilidade_integracoes.sql';
+const SQL_FALTANDO_INTEGRACOES = `Falta rodar ${SQL_ARQUIVO_INTEGRACOES} no banco e reiniciar a API.`;
+const TABELAS_INTEGRACOES = ['contabil_integracoes', 'contabil_integracao_execucoes', 'contabil_dfe_recebidos'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO, ...TABELAS_FECHAMENTO, ...TABELAS_PACOTE, ...TABELAS_INTEGRACOES];
 
 /** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
 function sqlDaTabela(tabela) {
+  if (TABELAS_INTEGRACOES.includes(tabela)) return { arquivo: SQL_ARQUIVO_INTEGRACOES, mensagem: SQL_FALTANDO_INTEGRACOES };
   if (TABELAS_PACOTE.includes(tabela)) return { arquivo: SQL_ARQUIVO_PACOTE, mensagem: SQL_FALTANDO_PACOTE };
   if (TABELAS_FECHAMENTO.includes(tabela)) return { arquivo: SQL_ARQUIVO_FECHAMENTO, mensagem: SQL_FALTANDO_FECHAMENTO };
   if (TABELAS_CLASSIFICACAO.includes(tabela)) return { arquivo: SQL_ARQUIVO_CLASSIFICACAO, mensagem: SQL_FALTANDO_CLASSIFICACAO };
@@ -203,8 +208,9 @@ function documentoFormatado(doc) {
 module.exports = {
   SQL_ARQUIVO, SQL_FALTANDO, SQL_ARQUIVO_PAGAR, SQL_FALTANDO_PAGAR, SQL_ARQUIVO_EXTRATO, SQL_FALTANDO_EXTRATO,
   SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO, SQL_ARQUIVO_CLASSIFICACAO, SQL_FALTANDO_CLASSIFICACAO,
-  SQL_ARQUIVO_FECHAMENTO, SQL_FALTANDO_FECHAMENTO, SQL_ARQUIVO_PACOTE, SQL_FALTANDO_PACOTE,
-  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, TABELAS_CLASSIFICACAO, TABELAS_FECHAMENTO, TABELAS_PACOTE, sqlDaTabela, NIVEIS, nivelValido,
+  SQL_ARQUIVO_FECHAMENTO, SQL_FALTANDO_FECHAMENTO, SQL_ARQUIVO_PACOTE, SQL_FALTANDO_PACOTE, SQL_ARQUIVO_INTEGRACOES, SQL_FALTANDO_INTEGRACOES,
+  TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, TABELAS_CLASSIFICACAO, TABELAS_FECHAMENTO, TABELAS_PACOTE, TABELAS_INTEGRACOES,
+  sqlDaTabela, NIVEIS, nivelValido,
   tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
   garantirAberta, valorDe, digitos, documentoFormatado
 };

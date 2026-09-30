@@ -14,8 +14,10 @@
  * - A cobertura diz de que dia a que dia o mês já tem extrato: o checklist
  *   cobra o mês inteiro das contas correntes ativas.
  *
- * A API de Extratos do BB (etapa 11) vai gravar nas mesmas tabelas, com
- * `origem = 'api'` e os identificadores dela.
+ * A API de Extratos do BB (etapa 11, integracoes/bbExtrato.js) grava nas
+ * mesmas tabelas pelo mesmo caminho (`analisar` + `gravar`), com
+ * `origem = 'api'` e os campos que só ela traz (contrapartida, histórico,
+ * sistema de pagamento); a resposta da API fica como evidência.
  */
 const c = require('../../financeiro/comum');
 const b = require('../base');
@@ -167,6 +169,20 @@ async function preparar(api, { contaId, base64 }) {
   if (!buffer.length) throw c.erro('Escolha o arquivo OFX do extrato.');
   const lido = ofx.lerOfx(buffer);
   const { extrato, confere } = extratoDaConta(lido, conta);
+  const p = await analisar(api, { conta, extrato, confere, origem: 'ofx', versao: lido.versao });
+  if (lido.extratos.length > 1) {
+    const aviso = `O arquivo tem ${lido.extratos.length} extratos; entra só o da conta escolhida.`;
+    p.avisos.push(aviso);
+  }
+  return { ...p, lido };
+}
+
+/**
+ * O extrato já lido (do OFX ou da API do BB) contra o que a conta tem:
+ * novos × já importados, meses fechados, conta desativada, outra origem no
+ * mesmo período. Nada é gravado. `extrato` tem o formato do leitor do OFX.
+ */
+async function analisar(api, { conta, extrato, confere = null, origem = 'ofx', versao = null }) {
   const [existentes, importacoes, competencias] = await Promise.all([
     b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id) }),
     b.ler(api, 'extrato_importacoes', { conta_id: Number(conta.id) }),
@@ -193,15 +209,14 @@ async function preparar(api, { contaId, base64 }) {
   if (extrato.moeda && extrato.moeda !== 'BRL') avisos.push(`A moeda do extrato é ${extrato.moeda}.`);
   if (extrato.zerados) avisos.push(`${c.plural(extrato.zerados, 'linha de valor zero (saldo) foi ignorada', 'linhas de valor zero (saldo) foram ignoradas')}.`);
   if (extrato.invalidos) avisos.push(`${c.plural(extrato.invalidos, 'lançamento sem data ou valor foi ignorado', 'lançamentos sem data ou valor foram ignorados')}.`);
-  if (lido.extratos.length > 1) avisos.push(`O arquivo tem ${lido.extratos.length} extratos; entra só o da conta escolhida.`);
   const inicio = extrato.inicio || linhas.map(l => l.data).sort()[0] || null;
   const fim = extrato.fim || linhas.map(l => l.data).sort().at(-1) || null;
-  const outraOrigem = importacoes.filter(viva).filter(i => i.origem !== 'ofx' && c.dia(i.periodo_inicio) <= fim && c.dia(i.periodo_fim) >= inicio);
+  const outraOrigem = importacoes.filter(viva).filter(i => i.origem !== origem && c.dia(i.periodo_inicio) <= fim && c.dia(i.periodo_fim) >= inicio);
   if (outraOrigem.length) avisos.push(`Já há extrato de outra origem (${ORIGENS[outraOrigem[0].origem] || outraOrigem[0].origem}) neste período: o que tiver o mesmo documento, dia e valor fica de fora.`);
   return {
-    conta, lido, extrato, linhas, novos, bloqueios, avisos, inicio, fim, meses: [...new Set(linhas.map(l => l.competencia))].sort(),
+    conta, extrato, linhas, novos, bloqueios, avisos, inicio, fim, meses: [...new Set(linhas.map(l => l.competencia))].sort(),
     resumo: {
-      conta: contaPublica(conta), versao: lido.versao, confere,
+      conta: contaPublica(conta), versao, origem, confere,
       arquivo: { banco: extrato.banco, agencia: extrato.agencia, conta: extrato.conta, moeda: extrato.moeda },
       periodo: { inicio, fim }, saldo: extrato.saldo,
       lidos: linhas.length, novos: novos.length, repetidos: linhas.length - novos.length,
@@ -219,34 +234,54 @@ async function previa(api, { contaId, base64 }) {
 
 async function importar(api, { contaId, nome, base64, usuarioId = null }) {
   const p = await preparar(api, { contaId, base64 });
+  return gravar(api, p, {
+    origem: 'ofx', usuarioId, nomeImportacao: nome || 'extrato.ofx',
+    evidencia: { nome: nome || `extrato-${p.inicio || 'sem-data'}-${p.fim || ''}.ofx`, tipo: 'application/x-ofx', base64, rotulo: 'O arquivo OFX' }
+  });
+}
+
+/** Corta o texto (ou null) no tamanho da coluna. */
+const corte = (v, n) => (v === null || v === undefined || v === '' ? undefined : String(v).slice(0, n));
+
+/**
+ * Grava o que `analisar` separou: a evidência (o OFX ou a resposta da API),
+ * a importação e os lançamentos novos. Bloqueio para aqui. `origem` 'ofx' |
+ * 'api'.
+ */
+async function gravar(api, p, { origem = 'ofx', usuarioId = null, nomeImportacao = null, evidencia = null }) {
   if (p.bloqueios.length) throw c.erro(p.bloqueios[0], 422, { bloqueios: p.bloqueios });
-  // O OFX original, como evidência oficial dos meses que ele cobre.
+  // O original (OFX ou o JSON da API), como evidência oficial dos meses que ele cobre.
   let arquivoId = null;
-  try {
-    const r = await arquivos.salvar(api, {
-      nome: nome || `extrato-${p.inicio || 'sem-data'}-${p.fim || ''}.ofx`, tipo: 'application/x-ofx', base64, categoria: 'extrato', origem: 'oficial',
-      competencia: (p.fim || p.inicio || '').slice(0, 7) || null, descricao: `Extrato ${p.conta.nome}`,
-      vinculos: p.meses.map(m => ({ alvo_tipo: 'competencia', alvo_id: m })), usuarioId, registrarEvento: false
-    });
-    arquivoId = r.arquivo?.id ?? null;
-  } catch (e) {
-    if (e?.extra?.sql_pendente) throw e;
-    // O arquivo não é o essencial: sem ele, a importação segue (e avisa).
-    p.avisos.push(`O arquivo OFX não foi guardado como evidência: ${e.message}`);
+  if (evidencia?.base64) {
+    try {
+      const r = await arquivos.salvar(api, {
+        nome: evidencia.nome, tipo: evidencia.tipo, base64: evidencia.base64, categoria: 'extrato', origem: 'oficial',
+        competencia: (p.fim || p.inicio || '').slice(0, 7) || null, descricao: `Extrato ${p.conta.nome}${origem === 'api' ? ' (API do BB)' : ''}`,
+        vinculos: p.meses.map(m => ({ alvo_tipo: 'competencia', alvo_id: m })), usuarioId, registrarEvento: false
+      });
+      arquivoId = r.arquivo?.id ?? null;
+    } catch (e) {
+      if (e?.extra?.sql_pendente) throw e;
+      // O arquivo não é o essencial: sem ele, a importação segue (e avisa).
+      p.avisos.push(`${evidencia.rotulo || 'O arquivo'} não foi guardado como evidência: ${e.message}`);
+    }
   }
   const importacao = await b.inserir(api, 'extrato_importacoes', {
-    conta_id: Number(p.conta.id), origem: 'ofx', status: 'importando', periodo_inicio: p.inicio, periodo_fim: p.fim,
+    conta_id: Number(p.conta.id), origem, status: 'importando', periodo_inicio: p.inicio, periodo_fim: p.fim,
     saldo_final: p.extrato.saldo?.valor ?? null, saldo_final_data: p.extrato.saldo?.data ?? null, arquivo_id: arquivoId,
-    nome_arquivo: arquivos.nomeDeArquivo(nome || 'extrato.ofx'), linhas_lidas: p.linhas.length, criado_por: usuarioId, criado_em: c.agora()
+    nome_arquivo: arquivos.nomeDeArquivo(nomeImportacao || (origem === 'api' ? 'API de Extratos do BB' : 'extrato.ofx')), linhas_lidas: p.linhas.length, criado_por: usuarioId, criado_em: c.agora()
   });
   let novos = 0;
   let repetidos = p.linhas.length - p.novos.length;
   for (const l of p.novos) {
     try {
+      // Os campos só da API vão quando vieram (o `undefined` fica de fora do INSERT).
       await b.inserir(api, 'movimentos_bancarios', {
         conta_id: Number(p.conta.id), importacao_id: Number(importacao.id), data: l.data, competencia: l.competencia, valor: l.valor, tipo: l.tipo,
         descricao: l.descricao ? l.descricao.slice(0, 2000) : null, documento: l.documento ? l.documento.slice(0, 60) : null,
         identificador: l.identificador ? l.identificador.slice(0, 120) : null, tipo_banco: l.tipo_banco ? l.tipo_banco.slice(0, 20) : null,
+        contrapartida_documento: corte(l.contrapartida_documento, 14), contrapartida_tipo: corte(l.contrapartida_tipo, 2),
+        codigo_historico: corte(l.codigo_historico, 10), codigo_sub_historico: corte(l.codigo_sub_historico, 10), sistema_pagamento: corte(l.sistema_pagamento, 20),
         hash: l.hash, estado_conciliacao: 'pendente', criado_em: c.agora()
       });
       novos++;
@@ -259,8 +294,8 @@ async function importar(api, { contaId, nome, base64, usuarioId = null }) {
   await b.atualizar(api, 'extrato_importacoes', importacao.id, { status: 'completa', novos, repetidos });
   await eventos.registrar(api, {
     tipo: 'extrato_importado', competencia: (p.fim || p.inicio || '').slice(0, 7) || null, usuarioId,
-    descricao: `Extrato ${p.conta.nome} de ${c.impressa(p.inicio)} a ${c.impressa(p.fim)}: ${c.plural(novos, 'lançamento novo', 'lançamentos novos')}${repetidos ? `, ${c.plural(repetidos, 'já importado', 'já importados')}` : ''}`,
-    dados: { importacao_id: importacao.id, conta_id: p.conta.id, novos, repetidos }
+    descricao: `Extrato ${p.conta.nome}${origem === 'api' ? ' (API do BB)' : ''} de ${c.impressa(p.inicio)} a ${c.impressa(p.fim)}: ${c.plural(novos, 'lançamento novo', 'lançamentos novos')}${repetidos ? `, ${c.plural(repetidos, 'já importado', 'já importados')}` : ''}`,
+    dados: { importacao_id: importacao.id, conta_id: p.conta.id, novos, repetidos, origem }
   });
   return { importacao_id: importacao.id, novos, repetidos, periodo: { inicio: p.inicio, fim: p.fim }, avisos: p.avisos };
 }
@@ -370,5 +405,5 @@ async function movimentos(api, { contaId = null, competencia, hoje }) {
 
 module.exports = {
   TIPOS_CONTA, ORIGENS, BANCOS, rotuloDaConta, contaPublica, validarConta, listarContas, salvarConta,
-  cobertura, faixaImpressa, extratoDaConta, preparar, previa, importar, desfazer, movimentoPublico, importacaoPublica, saldoDoBanco, totaisDe, movimentos
+  cobertura, faixaImpressa, extratoDaConta, preparar, analisar, gravar, lerConta, previa, importar, desfazer, movimentoPublico, importacaoPublica, saldoDoBanco, totaisDe, movimentos
 };

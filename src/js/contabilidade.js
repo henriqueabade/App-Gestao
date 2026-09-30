@@ -12,8 +12,10 @@
  * contas do banco), a Conciliação bancária e a Classificação (plano de
  * contas, regras), o Histórico dos fechamentos, o Relatório mensal, o
  * Dossiê e o Pacote (gerar o ZIP e registrar o envio) são reais (modais
- * próprios, src/js/modals/contabilidade-modais.js); a configuração abre o
- * aviso "em implementação" até a etapa dela.
+ * próprios, src/js/modals/contabilidade-modais.js). As Configurações (etapas
+ * 10 a 13) ligam e configuram as integrações — NF-e de entrada na SEFAZ,
+ * extrato pela API do BB, NFS-e tomadas no ADN, aplicações (CDB) — e "NF-e
+ * e NFS-e encontradas" é a caixa de entrada do que elas acharam.
  *
  * As pendências que vêm do Financeiro (NF-e, cobrança, fechamentos,
  * reembolsos) levam para lá: o botão da linha abre o módulo Financeiro. As
@@ -214,8 +216,9 @@ const CTB_ACOES = {
     // Etapa 9: o pacote (ZIP) que o usuário salva e envia; "enviar" abre o mesmo modal no registro do envio.
     'pacote': { rotulo: 'Gerar pacote (ZIP)', abrir: m => ctbAbrirModal('pacote', m, {}) },
     'enviar': { rotulo: 'Registrar o envio à contabilidade', abrir: m => ctbAbrirModal('pacote', m, { enviar: true }) },
-    // Etapas seguintes (docs/contabilidade-fechamento-plano.md, seção N).
-    'configuracao': { rotulo: 'Configurações da contabilidade' }
+    // Etapas 10 a 13: as integrações (SEFAZ, BB, ADN) e a caixa de entrada das notas que elas acham.
+    'configuracao': { rotulo: 'Configurações da contabilidade', abrir: m => ctbAbrirModal('configuracao', m, {}) },
+    'entrada-dfe': { rotulo: 'NF-e e NFS-e encontradas', abrir: m => ctbAbrirModal('entrada-dfe', m, {}) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -246,7 +249,10 @@ const CTB_MODAIS = {
     'pacote': { html: 'modals/contabilidade/pacote.html', overlay: 'ctbPacote' },
     // A atividade inteira (linha do tempo com foto e filtros) e as mensagens em tamanho grande.
     'atividade': { html: 'modals/contabilidade/atividade.html', overlay: 'ctbAtividade' },
-    'mensagens': { html: 'modals/contabilidade/mensagens.html', overlay: 'ctbMensagens' }
+    'mensagens': { html: 'modals/contabilidade/mensagens.html', overlay: 'ctbMensagens' },
+    // Etapas 10 a 13: as integrações e a caixa de entrada (NF-e da SEFAZ, NFS-e do ADN).
+    'configuracao': { html: 'modals/contabilidade/configuracao.html', overlay: 'ctbConfiguracao' },
+    'entrada-dfe': { html: 'modals/contabilidade/entrada-dfe.html', overlay: 'ctbEntradaDfe' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

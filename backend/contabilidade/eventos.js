@@ -39,7 +39,11 @@ const TIPOS = {
   plano_conta_salva: 'Plano de contas alterado',
   regra_salva: 'Regra de classificação',
   pacote_gerado: 'Pacote gerado',
-  pacote_enviado: 'Pacote enviado à contabilidade'
+  pacote_enviado: 'Pacote enviado à contabilidade',
+  // Etapas 10 a 13: as integrações automáticas e a caixa de entrada.
+  integracao_configurada: 'Integração configurada',
+  nfe_manifestada: 'NF-e manifestada na SEFAZ',
+  entrada_ignorada: 'Documento da SEFAZ/ADN ignorado'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

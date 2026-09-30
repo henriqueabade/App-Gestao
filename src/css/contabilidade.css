@@ -1168,6 +1168,120 @@ body {
 .ctb-lista-modal li { display: flex; gap: 0.6rem; align-items: flex-start; }
 .ctb-lista-modal li > i { margin-top: 0.2rem; flex-shrink: 0; }
 
+/* A caixa de entrada tem até cinco botões por linha: quebram em vez de vazar. */
+.ctb-tabela .ctb-celula-acoes--quebra { flex-wrap: wrap; max-width: 22rem; margin-left: auto; }
+
+/* ------------------------------------------ configurações: as integrações */
+
+.ctb-integracoes { display: flex; flex-direction: column; gap: var(--ctb-espaco); }
+/* O campo que depende de outro (e o avançado) some com [hidden]: o display dos blocos abaixo não pode vencer. */
+.ctb-integracao [hidden] { display: none !important; }
+
+/* Um cartão por integração; a faixa da esquerda diz a situação. */
+.ctb-integracao {
+    position: relative;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    border: 1px solid var(--ctb-borda);
+    border-left: 4px solid var(--ctb-texto-3);
+    background: var(--ctb-acao-fundo);
+}
+.ctb-integracao[data-estado="pronta"] { border-left-color: var(--color-green); }
+.ctb-integracao[data-estado="pendente"],
+.ctb-integracao[data-estado="erro"],
+.ctb-integracao[data-estado="sql"] { border-left-color: var(--color-red); }
+
+.ctb-integracao__topo { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.ctb-integracao__icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background: var(--ctb-ouro-fundo);
+    color: var(--color-primary-light);
+    flex-shrink: 0;
+}
+.ctb-integracao__titulo { min-width: 0; flex: 1 1 14rem; }
+.ctb-integracao__titulo h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--ctb-texto-1); }
+.ctb-integracao__etapa { font-size: 0.75rem; color: var(--ctb-texto-2); }
+.ctb-integracao__etiquetas { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+.ctb-integracao__descricao { margin: 0.75rem 0 0; font-size: 0.875rem; color: var(--ctb-texto-2); }
+
+.ctb-integracao__grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+.ctb-integracao__coluna { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.ctb-integracao__subtitulo {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-primary-light);
+}
+.ctb-integracao__form {
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--ctb-borda);
+    background: rgba(0, 0, 0, 0.15);
+}
+.ctb-integracao__campos { display: flex; flex-direction: column; gap: 0.75rem; }
+.ctb-integracao__campo { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.ctb-integracao__ajuda { display: block; font-size: 0.75rem; color: var(--ctb-texto-2); }
+.ctb-integracao__marcar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 0.6rem;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--ctb-texto-1);
+    cursor: pointer;
+}
+.ctb-integracao__marcar input { width: 1rem; height: 1rem; accent-color: var(--color-primary); }
+.ctb-integracao__marcar .ctb-integracao__ajuda { grid-column: 2; }
+.ctb-integracao__avancado { padding-top: 0.75rem; border-top: 1px dashed var(--ctb-borda); }
+.ctb-integracao__credenciais {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--ctb-borda);
+}
+.ctb-integracao__secret { display: flex; flex-direction: column; gap: 0.4rem; }
+.ctb-integracao__secret-controles { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.ctb-integracao__secret-controles input { flex: 1 1 12rem; }
+.ctb-integracao__secret-controles select { flex: 0 1 13rem; }
+.ctb-integracao__resultado {
+    margin: 1rem 0 0;
+    padding: 0.6rem 0.9rem;
+    border-radius: 0.6rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--ctb-borda);
+    color: var(--ctb-texto-1);
+}
+.ctb-integracao__resultado[data-tom="ok"] { border-color: var(--color-green); }
+.ctb-integracao__resultado[data-tom="aviso"] { border-color: var(--color-primary); }
+.ctb-integracao__resultado[data-tom="erro"] { border-color: var(--color-red); color: var(--ctb-bordo-texto); }
+.ctb-integracao__resultado p { margin: 0; }
+.ctb-integracao__amostra {
+    margin: 0.6rem 0 0;
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.6rem;
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: text;
+}
+.ctb-integracao__rodape { margin-top: 1rem; }
+
 /* ---------------------------------------------------------- telas menores */
 
 @media (max-width: 1280px) {
@@ -1178,4 +1292,5 @@ body {
     .ctb-totais { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ctb-anexar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .ctb-dados--duas { grid-template-columns: minmax(0, 1fr); }
+    .ctb-integracao__grade { grid-template-columns: minmax(0, 1fr); }
 }

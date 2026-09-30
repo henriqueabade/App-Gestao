@@ -511,10 +511,56 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
  * receber (ou null, com `receberErro` dizendo por quê); `fechamentos` é a
  * lista de fechamentos fechados de todas as competências (null = sem o SQL).
  */
+/** O nome de cada integração para as pendências (o catálogo completo mora em integracoes/catalogo.js). */
+const NOME_INTEGRACAO = { sefaz_nfe: 'NF-e de entrada (SEFAZ)', bb_extrato: 'Extrato pela API do BB', nfse_adn: 'NFS-e tomadas (ADN)', bb_investimentos: 'Aplicações (BB)' };
+const FONTE_INTEGRACAO = { sefaz_nfe: 'documentos_recebidos', nfse_adn: 'documentos_recebidos', bb_extrato: 'extrato', bb_investimentos: 'extrato' };
+
+/**
+ * Etapas 10 a 13: o que as buscas automáticas acharam e ainda não entrou.
+ *   - NF-e / NFS-e do mês na caixa de entrada, fora dos documentos ... documental (junta todas)
+ *   - nota registrada que o emitente cancelou ......................... aviso, uma por nota
+ *   - integração ligada com erro na última busca ........................ aviso, uma por integração
+ * `entradaDfe` / `integracoes` null = falta o SQL das integrações (nada aparece). Pura.
+ */
+function pendenciasDasIntegracoes({ entradaDfe = null, integracoes = null, competencia }) {
+  const pend = [];
+  if (Array.isArray(entradaDfe)) {
+    const doMes = entradaDfe.filter(l => l && String(c.dia(l.data_emissao) || '').startsWith(competencia));
+    const abertas = doMes.filter(l => (l.status === 'nova' || l.status === 'completa') && l.situacao_nota !== 'cancelada');
+    if (abertas.length) {
+      const nfe = abertas.filter(l => l.tipo === 'nfe').length;
+      const nfse = abertas.length - nfe;
+      const partes = [nfe ? c.plural(nfe, 'NF-e', 'NF-e') : null, nfse ? c.plural(nfse, 'NFS-e', 'NFS-e') : null].filter(Boolean).join(' e ');
+      pend.push(pendencia({
+        nivel: 'documental', chave: 'entrada_pendente', fonte: 'documentos_recebidos',
+        titulo: `${partes} da SEFAZ/ADN ainda fora dos documentos`,
+        descricao: `Total: ${c.reais(abertas.reduce((s, l) => s + (Number(l.valor) || 0), 0))} · registre, dê ciência ou ignore com o motivo (não é despesa da empresa)`,
+        data: abertas.map(l => c.dia(l.data_emissao)).filter(Boolean).sort()[0] || null, acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'entrada-dfe' }
+      }));
+    }
+    for (const l of entradaDfe.filter(x => x && x.status === 'registrada' && x.situacao_nota === 'cancelada' && x.documento_recebido_id)) {
+      pend.push(pendencia({
+        nivel: 'aviso', chave: `entrada_cancelada_${l.id}`, fonte: 'documentos_recebidos',
+        titulo: `${l.tipo === 'nfse' ? 'NFS-e' : 'NF-e'} ${l.numero || ''} de ${l.emitente_nome || 'emitente'} foi cancelada pelo emitente`.replace(/\s+/g, ' '),
+        descricao: 'A nota está registrada nos documentos: confira e exclua o documento (e a conta) se a compra não valeu',
+        data: c.dia(l.data_emissao), acao: 'Abrir', destino: 'contabilidade', filtro: { acao: 'documento-recebido', documento_id: l.documento_recebido_id }
+      }));
+    }
+  }
+  for (const i of c.lista(integracoes).filter(x => x && x.ativa && x.ultimo_erro && NOME_INTEGRACAO[x.chave])) {
+    pend.push(pendencia({
+      nivel: 'aviso', chave: `integracao_erro_${i.chave}`, fonte: FONTE_INTEGRACAO[i.chave],
+      titulo: `${NOME_INTEGRACAO[i.chave]}: a última busca deu erro`,
+      descricao: String(i.ultimo_erro).slice(0, 200), data: c.dia(i.ultima_execucao_em), acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'configuracao' }
+    }));
+  }
+  return pend;
+}
+
 function montar({
   competencia, hoje, notas = [], externas = [], aguardando = null, receber = null, receberErro = null,
   fechamentos: lista = [], reembolsosPendencias = [], situacao = null, resolucoes = [], nomes = new Map(), sqlPendente = false,
-  pagar = null, extrato = null, conciliacao = null, versao = null, pacotes = null
+  pagar = null, extrato = null, conciliacao = null, versao = null, pacotes = null, entradaDfe = null, integracoes = null
 }) {
   const comp = competenciaValida(competencia, hoje);
   const diaDeHoje = c.dia(hoje);
@@ -569,9 +615,12 @@ function montar({
     }
   }
 
+  // Etapas 10 a 13: a caixa de entrada e os erros das buscas automáticas.
+  const doIntegracoes = pendenciasDasIntegracoes({ entradaDfe, integracoes, competencia: comp });
+
   // As ignoradas: continuam na lista, marcadas, sem contar para os bloqueios.
   const ignoradas = new Map(c.lista(resolucoes).map(r => [String(r.chave), r]));
-  const pendencias = [...Object.values(partes).flatMap(p => p.pendencias), ...doFechamento, ...doPacote].map(p => {
+  const pendencias = [...Object.values(partes).flatMap(p => p.pendencias), ...doFechamento, ...doPacote, ...doIntegracoes].map(p => {
     const r = ignoradas.get(p.chave);
     if (!r || p.nivel === 'critico') return p;
     return { ...p, ignorada: true, justificativa: r.justificativa || '', ignorada_em: b.instanteBR(r.criado_em), ignorada_por: nomes.get(String(r.usuario_id)) || null, resolucao_id: r.id };
@@ -741,6 +790,10 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   const versao = situacao?.status === 'fechada' ? versoes.ultima((await versoes.lerVersoes(api, comp)) || []) : null;
   // Etapa 9: os pacotes da competência (null sem o SQL da etapa 9).
   const pacotes = sqlPendente ? null : await b.lerOpcional(api, 'contabil_pacotes', { competencia: comp });
+  // Etapas 10 a 13: a caixa de entrada e o estado das integrações (null sem o SQL delas).
+  const [entradaDfe, integracoes] = sqlPendente ? [null, null] : await Promise.all([
+    b.lerOpcional(api, 'contabil_dfe_recebidos').catch(() => null), b.lerOpcional(api, 'contabil_integracoes').catch(() => null)
+  ]);
   const [pagar, extrato] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp)]);
   const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje), versao);
   const aguardando = fiscalPainel.pedidosAguardandoNfe({ pedidos, notas: notas.map(semXml), desde: `${comp}-01`, hoje, externas });
@@ -748,12 +801,12 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
     fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao,
-    versao: versao ? { versao, lancamentos: conciliacao?.lancamentosAtuais ?? null } : null, pacotes
+    versao: versao ? { versao, lancamentos: conciliacao?.lancamentosAtuais ?? null } : null, pacotes, entradaDfe, integracoes
   });
   return { ...painel, situacao_bruta: situacao };
 }
 
 module.exports = {
-  FONTES, NIVEL_DA_COBRANCA, competenciaValida, fonteNfe, fonteRecebimentos, fonteFechamentos, fonteDevolucoes,
+  FONTES, NIVEL_DA_COBRANCA, competenciaValida, fonteNfe, fonteRecebimentos, fonteFechamentos, fonteDevolucoes, pendenciasDasIntegracoes,
   fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, fonteConciliacao, lerContasPagar, lerExtrato, lerConciliacao, montar, carregar
 };

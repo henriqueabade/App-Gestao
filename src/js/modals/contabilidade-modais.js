@@ -32,6 +32,8 @@
  *   ctbPacote               Pacote para a contabilidade — o ZIP (relatório + originais), os gerados e o envio (GET/POST /pacote)
  *   ctbAtividade            Atividade recente inteira — linha do tempo com foto, busca, tipo e quem fez (GET /atividade)
  *   ctbMensagens            Mensagens e comentários — o social do módulo em tamanho grande (/api/historico-social/contabilidade/1)
+ *   ctbConfiguracao         Configurações — as integrações automáticas (SEFAZ, BB, ADN): ligar, parâmetros, credenciais, testar (/integracoes)
+ *   ctbEntradaDfe           NF-e e NFS-e encontradas — a caixa de entrada das buscas: ciência, registrar, ignorar (/entrada)
  *
  * Toda gravação avisa os outros modais abertos (`contabilidade:alterado`),
  * que se releem; ao fechar, a tela relê o painel (ContabilidadeRecarregar).
@@ -302,7 +304,7 @@
   }
 
   /** Uma caixa com campo de texto (o motivo), acima dos modais. null = desistiu. */
-  function pedirTexto({ titulo, mensagem, placeholder = 'Motivo (obrigatório)', confirmar = 'Confirmar', minimo = 5 }) {
+  function pedirTexto({ titulo, mensagem, placeholder = 'Motivo (obrigatório)', confirmar = 'Confirmar', minimo = 5, erro = null }) {
     return new Promise(resolver => {
       const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
       const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
@@ -315,7 +317,7 @@
       campo.maxLength = 500;
       campo.placeholder = placeholder;
       caixa.appendChild(campo);
-      const erroEl = criar('p', 'hidden text-sm', `Escreva o motivo (ao menos ${minimo} letras).`);
+      const erroEl = criar('p', 'hidden text-sm', erro || `Escreva o motivo (ao menos ${minimo} letras).`);
       erroEl.style.color = 'var(--color-red)';
       caixa.appendChild(erroEl);
       const rodape = criar('div', 'ctl-acoes justify-end');
@@ -1921,9 +1923,20 @@
     el('ctbExtratoImportar').addEventListener('click', () => abrirOutro('importar-extrato', { conta_id: contaEscolhida, competencia: compCampo.value }));
     el('ctbExtratoContas').addEventListener('click', () => abrirOutro('contas-financeiras', { competencia: compCampo.value }));
     el('ctbExtratoConciliacao').addEventListener('click', () => abrirOutro('conciliacao', { conta_id: contaEscolhida, competencia: compCampo.value }));
-    el('ctbExtratoBuscarBB').addEventListener('click', () => {
-      const aviso = { title: 'Função em implementação', tom: 'aviso', icone: 'fa-person-digging', message: '"Buscar o extrato no BB" ainda está em implementação.', nota: 'Chega com a API de Extratos do Banco do Brasil (etapa 11). Até lá, importe o OFX.' };
-      if (window.DialogPadrao?.info) window.DialogPadrao.info(aviso); else window.alert(aviso.message);
+    // Etapa 11: o extrato da competência pela API de Extratos do BB (a conta é a da integração, em Configurações).
+    acionar(el('ctbExtratoBuscarBB'), async () => {
+      mostrarMensagem('ctbExtratoMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/integracoes/bb_extrato/sincronizar', 'POST', { competencia: compCampo.value });
+        window.showToast?.(r.resumo || 'Extrato buscado no BB.', r.gravou === false ? 'info' : 'success');
+        if (r.avisos?.length) mostrarMensagem('ctbExtratoMensagem', r.avisos.join(' '), 'aviso');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        const faltas = Array.isArray(e?.corpo?.pendencias) && e.corpo.pendencias.length
+          ? `Antes de buscar no BB: ${e.corpo.pendencias.join(' ')} (Contabilidade › Configurações).` : null;
+        mostrarMensagem('ctbExtratoMensagem', faltas || textoDoErro(e, 'Buscar no BB pede a permissão "Importar extrato".'));
+      }
     });
     ouvirAlteracoes(carregar);
     return carregar();
@@ -3918,13 +3931,559 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ configurações (integrações)
+
+  const cnpjFormatado = v => {
+    const d = String(v || '').replace(/\D/g, '');
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (d || '—');
+  };
+
+  /** Uma caixa de marcar com o texto ao lado (o padrão da casa para sim/não). */
+  function caixaDeMarcar(texto, marcada, ajuda = null) {
+    const rotulo = criar('label', 'ctb-integracao__marcar');
+    const caixa = criar('input');
+    caixa.type = 'checkbox';
+    caixa.checked = Boolean(marcada);
+    rotulo.append(caixa, criar('span', null, texto));
+    if (ajuda) rotulo.append(criar('small', 'ctb-integracao__ajuda', ajuda));
+    return { rotulo, caixa };
+  }
+
+  const classeDoCampo = 'w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+
+  function campoDeTexto(valor, { tipo = 'text', placeholder = '', min = null, max = null } = {}) {
+    const input = criar('input', classeDoCampo);
+    input.type = tipo;
+    input.value = valor === null || valor === undefined ? '' : String(valor);
+    if (placeholder) input.placeholder = placeholder;
+    if (min !== null) input.min = String(min);
+    if (max !== null) input.max = String(max);
+    input.autocomplete = 'off';
+    return input;
+  }
+
+  function campoDeEscolha(opcoes, valor) {
+    const s = criar('select', `${classeDoCampo} appearance-none select-arrow`);
+    for (const [v, t] of opcoes) s.appendChild(opcao(v, t));
+    s.value = valor === null || valor === undefined ? '' : String(valor);
+    return s;
+  }
+
+  function blocoDeCampo(rotulo, controle, ajuda = null) {
+    const wrap = criar('div', 'ctb-integracao__campo');
+    const r = criar('label', 'ctl-rotulo text-gray-300', rotulo);
+    wrap.append(r, controle);
+    if (ajuda) wrap.append(criar('small', 'ctb-integracao__ajuda', ajuda));
+    return wrap;
+  }
+
+  /** O valor de um controle, no tipo do campo. */
+  function valorDoControle(controle, tipo) {
+    if (controle.type === 'checkbox') return controle.checked;
+    const v = String(controle.value ?? '').trim();
+    if (tipo === 'inteiro' || tipo === 'conta') return v === '' ? null : Number(v);
+    return v === '' ? null : v;
+  }
+
+  /**
+   * Configurações: o certificado da empresa e um cartão por integração
+   * (o que falta, o que se fornece, ligar, ambiente, busca automática,
+   * parâmetros, credenciais do BB, testar e buscar agora, execuções).
+   */
+  function montarConfiguracao() {
+    const lista = el('ctbConfigIntegracoes');
+    let dados = null;
+    const avancadosAbertos = new Set();
+    const resultados = new Map();
+
+    function pintarCertificado() {
+      const cert = dados?.certificado || {};
+      preencherDados(el('ctbConfigCertificado'), cert.configurado ? [
+        ['Titular', cert.titular || '—'], ['CNPJ', cnpjFormatado(cert.cnpj)],
+        ['Válido até', `${formatarData(cert.validoAte)}${cert.vencido ? ' — VENCIDO' : (cert.venceEmBreve ? ` — vence em ${cert.diasRestantes} dias` : '')}`],
+        ['Guardado', cert.origem === 'banco' ? 'No banco (vale para todas as máquinas)' : 'Neste computador']
+      ] : [['Situação', cert.erro || 'Certificado não encontrado'], ['Onde cadastrar', 'Financeiro › Configuração fiscal']]);
+      el('ctbConfigBaixarCer').classList.toggle('hidden', !dados?.pode_editar || !cert.configurado);
+      pintarEtiqueta(el('ctbConfigPerfil'), dados?.pode_editar ? 'Sup Admin: pode mudar' : 'Só leitura', dados?.pode_editar ? 'badge-success' : 'badge-neutral');
+    }
+
+    /** O bloco das credenciais do BB: as da cobrança (só mostra) ou as próprias (guardar o secret de cada ambiente). */
+    function blocoDeCredenciais(i, podeEditar, controles) {
+      const bloco = criar('div', 'ctb-integracao__credenciais');
+      const cr = i.credenciais || {};
+      const usaCobranca = () => valorDoControle(controles.get('usar_credenciais_da_cobranca'), 'booleano') !== false;
+      const desenharBloco = () => {
+        bloco.replaceChildren(criar('h4', 'ctb-integracao__subtitulo', 'Credenciais do BB'));
+        if (usaCobranca()) {
+          bloco.append(criar('p', 'text-sm text-gray-300', cr.origem === 'cobranca'
+            ? `Da Configuração de cobrança (${i.ambiente === 'producao' ? 'produção' : 'homologação'}): client_id ${cr.client_id ? 'ok' : 'FALTA'}, app key ${cr.app_key ? 'ok' : 'FALTA'}, client_secret ${cr.secret_guardado ? `guardado (${cr.secret_origem === 'banco' ? 'no banco' : (cr.secret_origem === 'env' ? 'no .env' : 'neste computador')})` : 'FALTA'}.`
+            : 'Salve para passar a usar as credenciais da Configuração de cobrança.'));
+          return;
+        }
+        if (!cr.ambientes) bloco.append(criar('p', 'text-sm text-gray-400', 'Salve com esta caixa desmarcada para usar credenciais próprias; depois guarde o client_secret de cada ambiente aqui.'));
+        for (const amb of ['homologacao', 'producao']) {
+          const estado = cr.ambientes?.[amb] || {};
+          const linha = criar('div', 'ctb-integracao__secret');
+          const nome = amb === 'producao' ? 'produção' : 'homologação';
+          linha.append(criar('span', 'text-sm text-gray-300', `client_secret (${nome}): ${estado.secret_guardado ? `guardado ${estado.origem === 'banco' ? 'no banco' : (estado.origem === 'env' ? 'no .env' : 'neste computador')}` : 'não guardado'}${estado.erro ? ` — ${estado.erro}` : ''}`));
+          if (podeEditar) {
+            const campo = campoDeTexto('', { tipo: 'password', placeholder: `Cole o client_secret de ${nome}` });
+            const destino = campoDeEscolha([['banco', 'No banco (todas as máquinas)'], ['computador', 'Só neste computador']], dados?.banco_chave_mestra ? 'banco' : 'computador');
+            const guardar = botaoPequeno('Guardar', 'btn-primary', async () => {
+              if (!campo.value.trim()) { campo.focus(); return; }
+              try {
+                dados = await enviar(`/api/contabilidade/integracoes/${i.chave}/credenciais`, 'POST', { ambiente: amb, client_secret: campo.value.trim(), destino: destino.value });
+                campo.value = '';
+                window.showToast?.(`client_secret de ${nome} guardado.`, 'success');
+                pintar();
+              } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Guardar o segredo é do Sup Admin.')); }
+            });
+            const remover = botaoPequeno('Remover', 'btn-danger', async () => {
+              const ok = window.DialogPadrao?.confirm ? await window.DialogPadrao.confirm({ title: 'Remover o client_secret?', message: `O de ${nome} sai do banco e deste computador.`, confirmText: 'Remover', confirmVariant: 'danger' }) : window.confirm('Remover?');
+              if (!ok) return;
+              try {
+                dados = await fetchApi(`/api/contabilidade/integracoes/${i.chave}/credenciais?ambiente=${amb}&destino=ambos`, { method: 'DELETE' });
+                pintar();
+              } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Remover o segredo é do Sup Admin.')); }
+            });
+            const controlesLinha = criar('div', 'ctb-integracao__secret-controles');
+            controlesLinha.append(campo, destino, guardar);
+            if (estado.secret_guardado) controlesLinha.append(remover);
+            linha.append(controlesLinha);
+          }
+          bloco.append(linha);
+        }
+      };
+      desenharBloco();
+      bloco.repintar = desenharBloco;
+      return bloco;
+    }
+
+    function cartao(i) {
+      const podeEditar = Boolean(dados?.pode_editar) && i.sql_pronto;
+      const art = criar('article', 'ctb-integracao');
+      art.dataset.integracao = i.chave;
+      art.dataset.estado = !i.sql_pronto ? 'sql' : (!i.ativa ? 'desligada' : (!i.pronta ? 'pendente' : (i.estado?.ultimo_erro ? 'erro' : 'pronta')));
+
+      const topo = criar('header', 'ctb-integracao__topo');
+      const simbolo = criar('span', 'ctb-integracao__icone');
+      simbolo.appendChild(icone(i.icone));
+      const titulo = criar('div', 'ctb-integracao__titulo');
+      titulo.append(criar('h3', null, i.nome), criar('span', 'ctb-integracao__etapa', `Etapa ${i.etapa}`));
+      const etiquetas = criar('div', 'ctb-integracao__etiquetas');
+      etiquetas.append(
+        tag(i.ativa ? 'Ligada' : 'Desligada', i.ativa ? 'badge-success' : 'badge-neutral'),
+        tag(i.ambiente === 'producao' ? 'Produção' : 'Homologação', i.ambiente === 'producao' ? 'badge-warning' : 'badge-info'),
+        i.pronta ? tag('Pronta', 'badge-success') : tag(plural(i.pendencias.length, 'pendência', 'pendências'), 'badge-danger')
+      );
+      if (i.travada_em_homologacao) etiquetas.append(tag('Máquina presa em homologação', 'badge-neutral', 'O .env desta máquina prende as integrações em homologação'));
+      topo.append(simbolo, titulo, etiquetas);
+      art.append(topo, criar('p', 'ctb-integracao__descricao', i.descricao));
+
+      const grade = criar('div', 'ctb-integracao__grade');
+      // ---- a situação: o que falta, o que se fornece, o estado e as execuções
+      const situacao = criar('div', 'ctb-integracao__coluna');
+      situacao.append(criar('h4', 'ctb-integracao__subtitulo', i.pronta ? 'Pronta para usar' : 'O que falta'));
+      const faltas = criar('ul', 'ctb-lista-modal text-gray-300');
+      if (i.pronta) faltas.append(itemDaLista('Nada: dá para testar e buscar.', 'fa-circle-check', 'var(--color-green)'));
+      for (const p of i.pendencias) faltas.append(itemDaLista(p, 'fa-circle-exclamation', 'var(--color-red)'));
+      situacao.append(faltas, criar('h4', 'ctb-integracao__subtitulo', 'O que você fornece'));
+      const fornecer = criar('ul', 'ctb-lista-modal text-gray-300');
+      for (const f of i.fornecer || []) fornecer.append(itemDaLista(f, 'fa-hand-point-right', 'var(--color-primary)'));
+      situacao.append(fornecer);
+      const est = i.estado || {};
+      const linhasEstado = [];
+      if (est.ultima_execucao_em) linhasEstado.push(['Última busca', formatarInstante(est.ultima_execucao_em)]);
+      if (est.ultimo_sucesso_em) linhasEstado.push(['Último sucesso', formatarInstante(est.ultimo_sucesso_em)]);
+      if (est.ultimo_nsu) linhasEstado.push(['NSU', `${est.ultimo_nsu}${est.max_nsu ? ` (máximo ${est.max_nsu})` : ''}`]);
+      if (est.proxima_consulta_apos) linhasEstado.push(['Próxima consulta à SEFAZ', formatarInstante(est.proxima_consulta_apos)]);
+      if (est.ultimo_erro) linhasEstado.push(['Último erro', est.ultimo_erro]);
+      if (!i.grava_no_banco) linhasEstado.push(['Atenção', 'Homologação num banco de produção: busca e teste só contam, nada é gravado.']);
+      if (linhasEstado.length) {
+        const dl = criar('dl', 'ctb-dados');
+        preencherDados(dl, linhasEstado);
+        situacao.append(criar('h4', 'ctb-integracao__subtitulo', 'Situação'), dl);
+      }
+      if (i.execucoes?.length) {
+        const ol = criar('ol', 'ctb-historico');
+        for (const x of i.execucoes.slice(0, 5)) {
+          const li = criar('li');
+          const texto = criar('div', 'ctb-historico__texto');
+          texto.append(criar('strong', null, x.tipo_rotulo), criar('span', null, x.erro ? `Falhou: ${x.erro}` : (x.resumo || 'Em andamento…')));
+          li.append(criar('span', 'ctb-historico__quando', formatarInstante(x.iniciado_em)), texto);
+          ol.appendChild(li);
+        }
+        situacao.append(criar('h4', 'ctb-integracao__subtitulo', 'Últimas execuções'), ol);
+      }
+
+      // ---- o formulário
+      const form = criar('div', 'ctb-integracao__coluna ctb-integracao__form');
+      const controles = new Map();
+      const ativa = caixaDeMarcar('Ligada (a busca só roda com a integração ligada)', i.ativa);
+      form.append(ativa.rotulo);
+      const ambiente = campoDeEscolha([['homologacao', 'Homologação (testes)'], ['producao', 'Produção']], i.ambiente_no_banco);
+      form.append(blocoDeCampo('Ambiente', ambiente, i.travada_em_homologacao ? 'Nesta máquina vale homologação (trava do .env).' : null));
+      let automatica = null;
+      let intervalo = null;
+      if (i.tem_automatica) {
+        automatica = caixaDeMarcar('Buscar sozinha (a agenda do app)', i.automatica);
+        intervalo = campoDeTexto(i.intervalo_min, { tipo: 'number', min: i.intervalo_limites.min, max: i.intervalo_limites.max });
+        form.append(automatica.rotulo, blocoDeCampo(`A cada quantos minutos (${i.intervalo_limites.min} a ${i.intervalo_limites.max})`, intervalo));
+      }
+      const basicos = criar('div', 'ctb-integracao__campos');
+      const avancados = criar('div', 'ctb-integracao__campos ctb-integracao__avancado');
+      avancados.hidden = !avancadosAbertos.has(i.chave);
+      const blocos = [];
+      for (const campo of i.campos) {
+        const variantes = campo.porAmbiente ? [['homologacao', ' (homologação)'], ['producao', ' (produção)']] : [[null, '']];
+        for (const [amb, sufixo] of variantes) {
+          const nome = amb ? `${campo.chave}_${amb}` : campo.chave;
+          const valor = i.parametros?.[nome];
+          let controle;
+          let bloco;
+          if (campo.tipo === 'booleano') {
+            const m = caixaDeMarcar(`${campo.rotulo}${sufixo}`, valor === true || (valor === undefined && campo.padrao === true), campo.ajuda || null);
+            controle = m.caixa;
+            bloco = m.rotulo;
+          } else {
+            if (campo.tipo === 'opcao') controle = campoDeEscolha(Object.entries(campo.opcoes), valor ?? campo.padrao ?? '');
+            else if (campo.tipo === 'conta') controle = campoDeEscolha([['', 'Escolha a conta'], ...(dados?.contas || []).map(x => [String(x.id), `${x.nome}${x.ativa ? '' : ' (desativada)'}`])], valor ?? '');
+            else controle = campoDeTexto(valor ?? '', { tipo: campo.tipo === 'inteiro' ? 'number' : 'text', placeholder: campo.tipo === 'url' ? 'Vazio = o endereço padrão' : '', min: campo.min ?? null, max: campo.tipo === 'inteiro' ? campo.max : null });
+            bloco = blocoDeCampo(`${campo.rotulo}${sufixo}`, controle, campo.ajuda || null);
+          }
+          controle.dataset.tipo = campo.tipo;
+          controles.set(nome, controle);
+          bloco.dataset.quando = campo.quando ? JSON.stringify(campo.quando) : '';
+          blocos.push(bloco);
+          (campo.avancado ? avancados : basicos).append(bloco);
+        }
+      }
+      form.append(basicos);
+      let credenciais = null;
+      const aplicarQuando = () => {
+        for (const bloco of blocos) {
+          if (!bloco.dataset.quando) continue;
+          const q = JSON.parse(bloco.dataset.quando);
+          bloco.hidden = !Object.entries(q).every(([k, v]) => valorDoControle(controles.get(k), 'booleano') === v);
+        }
+        credenciais?.repintar?.();
+      };
+      if (i.banco) {
+        credenciais = blocoDeCredenciais(i, podeEditar, controles);
+        form.append(credenciais);
+        controles.get('usar_credenciais_da_cobranca')?.addEventListener('change', aplicarQuando);
+      }
+      if (avancados.children.length) {
+        const textoAvancado = i.banco ? 'Mostrar o avançado (endereços, conta de teste…)' : 'Mostrar o avançado (endereços, NSU inicial…)';
+        const alternar = criar('button', 'ctb-link', avancados.hidden ? textoAvancado : 'Esconder o avançado');
+        alternar.type = 'button';
+        alternar.addEventListener('click', () => {
+          avancados.hidden = !avancados.hidden;
+          if (avancados.hidden) avancadosAbertos.delete(i.chave); else avancadosAbertos.add(i.chave);
+          alternar.textContent = avancados.hidden ? textoAvancado : 'Esconder o avançado';
+        });
+        form.append(alternar, avancados);
+      }
+      aplicarQuando();
+      // Quem não é Sup Admin vê, mas não muda.
+      if (!podeEditar) form.querySelectorAll('input, select').forEach(x => { x.disabled = true; });
+      grade.append(situacao, form);
+      art.append(grade);
+
+      // ---- o resultado do teste/busca e os botões
+      // O resultado fica guardado por integração: recarregar redesenha os
+      // cartões e o cartão novo mostra o último. A amostra (teste do CDB) vem
+      // num bloco rolável, para copiar e mandar para o mapeamento.
+      const resultado = criar('div', 'ctb-integracao__resultado hidden');
+      const desenharResultado = () => {
+        const r = resultados.get(i.chave);
+        resultado.replaceChildren();
+        if (r?.texto) resultado.append(criar('p', null, r.texto));
+        if (r?.amostra) resultado.append(criar('pre', 'ctb-integracao__amostra', r.amostra));
+        resultado.dataset.tom = r?.tom || 'ok';
+        resultado.classList.toggle('hidden', !r?.texto);
+      };
+      const mostrarResultado = (texto, tom = 'ok', amostra = null) => {
+        if (texto) resultados.set(i.chave, { texto, tom, amostra }); else resultados.delete(i.chave);
+        desenharResultado();
+      };
+      desenharResultado();
+      const rodape = criar('footer', 'ctl-acoes justify-end ctb-integracao__rodape');
+      if (podeEditar) {
+        rodape.append(botaoPequeno('Salvar', 'btn-primary', async () => {
+          const parametros = {};
+          for (const [nome, controle] of controles) parametros[nome] = valorDoControle(controle, controle.dataset.tipo);
+          const corpo = { ativa: ativa.caixa.checked, ambiente: ambiente.value, parametros };
+          if (automatica) { corpo.automatica = automatica.caixa.checked; corpo.intervalo_min = Number(intervalo.value) || null; }
+          if (corpo.ambiente === 'producao' && i.ambiente_no_banco !== 'producao') {
+            const palavra = await pedirTexto({ titulo: `Ligar a produção — ${i.nome}`, mensagem: 'Em produção a integração busca os documentos reais da empresa (e a SEFAZ registra as manifestações). Digite PRODUCAO para confirmar.', placeholder: 'PRODUCAO', confirmar: 'Ligar produção', minimo: 8, erro: 'Digite PRODUCAO para confirmar.' });
+            if (!palavra) return;
+            corpo.confirmacao = palavra;
+          }
+          try {
+            dados = await enviar(`/api/contabilidade/integracoes/${i.chave}`, 'PUT', corpo);
+            window.showToast?.(`${i.nome}: configuração salva.`, 'success');
+            resultados.delete(i.chave);
+            avisarAlteracao();
+            pintar();
+          } catch (e) { mostrarResultado(textoDoErro(e, 'Mudar a configuração é do Sup Admin.'), 'erro'); }
+        }, { titulo: 'Grava a configuração desta integração' }));
+      }
+      rodape.append(botaoPequeno('Testar conexão', i.banco ? 'btn-bb' : 'btn-secondary', async () => {
+        mostrarResultado('Testando…', 'aviso');
+        try {
+          const r = await enviar(`/api/contabilidade/integracoes/${i.chave}/testar`, 'POST', {});
+          mostrarResultado(r.resumo || 'Conexão ok.', 'ok', r.amostra || null);
+          await recarregar();
+        } catch (e) {
+          const faltas = Array.isArray(e?.corpo?.pendencias) ? e.corpo.pendencias.join(' ') : null;
+          mostrarResultado(faltas ? `Antes de testar: ${faltas}` : textoDoErro(e, 'Testar pede "Configurações da contabilidade".'), 'erro');
+          await recarregar();
+        }
+      }, { titulo: 'Fala com o serviço e não grava nada' }));
+      if (i.tem_automatica) {
+        rodape.append(botaoPequeno('Buscar agora', 'btn-success', async () => {
+          mostrarResultado('Buscando…', 'aviso');
+          try {
+            const r = await enviar(`/api/contabilidade/integracoes/${i.chave}/sincronizar`, 'POST', {});
+            mostrarResultado(r.resumo || 'Busca feita.', r.situacao === 'aguardando' ? 'aviso' : 'ok');
+            avisarAlteracao();
+            await recarregar();
+          } catch (e) {
+            const faltas = Array.isArray(e?.corpo?.pendencias) ? e.corpo.pendencias.join(' ') : null;
+            mostrarResultado(faltas ? `Antes de buscar: ${faltas}` : textoDoErro(e, 'Buscar pede a permissão desta integração.'), 'erro');
+            await recarregar();
+          }
+        }, { perm: i.permissao_executar, titulo: 'A busca de verdade (a mesma da agenda)' }));
+      }
+      art.append(resultado, rodape);
+      return art;
+    }
+
+    function pintar() {
+      pintarCertificado();
+      lista.replaceChildren();
+      if (dados?.sql_pendente) mostrarMensagem('ctbConfigMensagem', 'As integrações ainda não estão ativadas: rode sql/contabilidade_integracoes.sql no banco e reinicie a API.', 'aviso');
+      for (const i of dados?.integracoes || []) lista.appendChild(cartao(i));
+      try { window.Permissoes?.aplicarAcoesEColunas?.(lista); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function recarregar() {
+      try {
+        dados = await fetchApi('/api/contabilidade/integracoes');
+        pintar();
+      } catch (e) {
+        mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Ver as configurações pede "Configurações da contabilidade".'));
+      }
+    }
+
+    acionar(el('ctbConfigBaixarCer'), async () => {
+      try {
+        const r = await fetchApi('/api/contabilidade/integracoes/certificado/publico');
+        const onde = await salvarBase64(r.base64, r.nome, 'Salvar o certificado público', 'application/x-x509-ca-cert');
+        if (onde) window.showToast?.('Certificado público salvo: cadastre-o na aplicação do Portal Developers do BB.', 'success');
+      } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Baixar o certificado público é do Sup Admin.')); }
+    });
+    el('ctbConfigEntrada').addEventListener('click', () => abrirOutro('entrada-dfe', {}));
+    ouvirAlteracoes(recarregar);
+    return recarregar();
+  }
+
+  // ------------------------------------------------------------ caixa de entrada (NF-e e NFS-e)
+
+  const TOM_ENTRADA = { nova: 'badge-warning', completa: 'badge-info', registrada: 'badge-success', ignorada: 'badge-neutral' };
+  const MANIFESTACOES_TELA = [
+    ['confirmacao', 'Confirmação da operação', 'A compra aconteceu e a mercadoria chegou.'],
+    ['desconhecimento', 'Desconhecimento da operação', 'A empresa não fez esta compra (a nota foi emitida contra o CNPJ sem pedido).'],
+    ['nao_realizada', 'Operação não realizada', 'Houve o pedido, mas a compra não se concretizou (devolvida, recusada): pede justificativa.']
+  ];
+
+  /** Escolher a manifestação (e a justificativa, quando pede). null = desistiu. */
+  function pedirManifestacao(linha) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Manifestar na SEFAZ'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', `NF-e ${linha.numero || ''} de ${linha.emitente_nome || 'emitente'} (${formatarMoeda(linha.valor)}). A manifestação é uma declaração à SEFAZ e fica registrada.`));
+      const escolha = campoDeEscolha(MANIFESTACOES_TELA.map(([v, t]) => [v, t]), 'confirmacao');
+      const explicacao = () => MANIFESTACOES_TELA.find(([v]) => v === escolha.value)?.[2] || '';
+      const justificativa = criar('textarea', classeDoCampo);
+      justificativa.rows = 3;
+      justificativa.maxLength = 255;
+      justificativa.placeholder = 'Justificativa (15 a 255 letras)';
+      const blocoJust = blocoDeCampo('Justificativa', justificativa);
+      blocoJust.style.display = 'none';
+      const blocoEscolha = blocoDeCampo('Manifestação', escolha, explicacao());
+      escolha.addEventListener('change', () => {
+        blocoJust.style.display = escolha.value === 'nao_realizada' ? '' : 'none';
+        blocoEscolha.querySelector('.ctb-integracao__ajuda').textContent = explicacao();
+      });
+      caixa.append(blocoEscolha, blocoJust);
+      const erroEl = criar('p', 'hidden text-sm', 'Escreva a justificativa (de 15 a 255 letras).');
+      erroEl.style.color = 'var(--color-red)';
+      caixa.appendChild(erroEl);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-danger ctl-botao text-white', 'Cancelar');
+      const ok = criar('button', 'btn-success ctl-botao', 'Manifestar');
+      voltar.type = 'button';
+      ok.type = 'button';
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => {
+        const t = justificativa.value.trim();
+        if (escolha.value === 'nao_realizada' && (t.length < 15 || t.length > 255)) { erroEl.classList.remove('hidden'); justificativa.focus(); return; }
+        sair({ tipo: escolha.value, justificativa: escolha.value === 'nao_realizada' ? t : null });
+      });
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      escolha.focus();
+    });
+  }
+
+  /** A caixa de entrada: o que a SEFAZ e o ADN acharam e o que dá para fazer com cada um. */
+  function montarEntradaDfe() {
+    const corpo = el('ctbEntradaLista');
+    const origemSel = el('ctbEntradaOrigem');
+    const visaoSel = el('ctbEntradaVisao');
+    const busca = el('ctbEntradaBusca');
+    let dados = null;
+
+    const acao = (id, caminho, sucesso, corpoEnvio = {}) => async () => {
+      mostrarMensagem('ctbEntradaMensagem', '');
+      try {
+        const r = await enviar(`/api/contabilidade/entrada/${encodeURIComponent(id)}/${caminho}`, 'POST', corpoEnvio);
+        window.showToast?.(typeof sucesso === 'function' ? sucesso(r) : sucesso, 'success');
+        if (r?.avisos?.length) mostrarMensagem('ctbEntradaMensagem', r.avisos.join(' '), 'aviso');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbEntradaMensagem', textoDoErro(e, 'Isto pede a permissão "Registrar documentos".'));
+      }
+    };
+
+    function acoesDaLinha(l) {
+      const botoes = [];
+      // Ciência só faz sentido para a que veio só com o resumo (é ela que libera o XML).
+      if (l.pode.manifestar && !l.manifestacao && l.so_resumo) botoes.push(botaoPequeno('Ciência', 'btn-secondary', acao(l.id, 'manifestar', 'Ciência registrada na SEFAZ: o XML completo chega na próxima busca.', { tipo: 'ciencia' }),
+        { perm: 'contabilidade.documento.registrar', titulo: 'Ciência da operação: libera o XML completo' }));
+      if (l.pode.baixar_xml) botoes.push(botaoPequeno('Baixar XML', 'btn-secondary', acao(l.id, 'baixar-xml', 'XML completo recebido.'), { perm: 'contabilidade.documento.registrar' }));
+      if (l.pode.registrar) botoes.push(botaoPequeno('Registrar', 'btn-success', acao(l.id, 'registrar', r => (r.ligado ? 'Já estava registrado: foi ligado.' : 'Registrado em Documentos recebidos.')), { perm: 'contabilidade.documento.registrar' }));
+      if (l.pode.manifestar) {
+        botoes.push(botaoPequeno('Manifestar…', 'btn-neutral', async () => {
+          const escolha = await pedirManifestacao(l);
+          if (!escolha) return;
+          await acao(l.id, 'manifestar', 'Manifestação registrada na SEFAZ.', escolha)();
+        }, { perm: 'contabilidade.documento.registrar', titulo: 'Confirmação, desconhecimento ou operação não realizada' }));
+      }
+      if (l.pode.ignorar) {
+        botoes.push(botaoPequeno('Ignorar', 'btn-neutral', async () => {
+          const motivo = await pedirTexto({ titulo: 'Ignorar este documento?', mensagem: 'Ele sai das pendências (não é despesa da empresa, é repetido…). Diga o motivo.', confirmar: 'Ignorar' });
+          if (!motivo) return;
+          await acao(l.id, 'ignorar', 'Documento ignorado.', { motivo })();
+        }, { perm: 'contabilidade.documento.registrar' }));
+      }
+      if (l.pode.restaurar) botoes.push(botaoPequeno('Restaurar', 'btn-neutral', acao(l.id, 'restaurar', 'Documento restaurado.'), { perm: 'contabilidade.documento.registrar' }));
+      if (l.documento_recebido_id) botoes.push(botaoPequeno('Abrir documento', 'btn-secondary', () => abrirOutro('documento-recebido', { documento_id: l.documento_recebido_id })));
+      if (!l.so_resumo) botoes.push(botaoPequeno('XML', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/entrada/${encodeURIComponent(l.id)}/xml`, { abrir: false }), { titulo: 'Salvar o XML' }));
+      return botoes;
+    }
+
+    function desenhar() {
+      const termo = normalizar(busca.value).trim();
+      const linhas = (dados?.linhas || []).filter(l => !termo || normalizar(`${l.emitente_nome || ''} ${l.emitente_documento || ''} ${l.numero || ''} ${l.chave || ''} ${l.municipio || ''}`).includes(termo));
+      if (!linhas.length) {
+        linhaVazia(corpo, 6, dados?.sql_pendente ? 'As integrações ainda não estão ativadas (falta o SQL).' : 'Nada por aqui. As buscas automáticas trazem as notas assim que forem ligadas em Configurações.');
+        return;
+      }
+      corpo.replaceChildren(...linhas.map(l => {
+        const tr = criar('tr');
+        const doc = `${l.tipo_rotulo} ${l.numero || ''}${l.serie ? `/${l.serie}` : ''}`.trim();
+        const situacao = [tag(l.status_rotulo, TOM_ENTRADA[l.status] || 'badge-neutral')];
+        if (l.cancelada) situacao.push(tag('Cancelada pelo emitente', 'badge-danger'));
+        const deuCiencia = ['ciencia', 'confirmacao'].includes(l.manifestacao);
+        const sub = [
+          l.so_resumo && l.tipo === 'nfe' ? (deuCiencia ? 'só o resumo: o XML vem na próxima busca (ou em "Baixar XML")' : 'só o resumo (falta a ciência)') : null,
+          l.manifestacao ? `manifestada: ${({ ciencia: 'ciência', confirmacao: 'confirmação', desconhecimento: 'desconhecimento', nao_realizada: 'operação não realizada' })[l.manifestacao] || l.manifestacao}` : null,
+          l.manifestacao_erro ? `manifestação falhou: ${l.manifestacao_erro}` : null,
+          l.erro ? `registro falhou: ${l.erro}` : null,
+          l.ignorado_motivo ? `motivo: ${l.ignorado_motivo}` : null
+        ].filter(Boolean).join(' · ');
+        tr.append(
+          celula(formatarData(l.data_emissao)),
+          celula(doc, 'px-4 py-3', `${l.origem_rotulo}${l.municipio ? ` · ${l.municipio}` : ''} · ${String(l.chave || '').slice(0, 22)}…`),
+          celula(l.emitente_nome || '—', 'px-4 py-3', l.emitente_documento || null),
+          celula(formatarMoeda(l.valor), 'px-4 py-3 text-right ctb-num'),
+          celula(situacao, 'px-4 py-3', sub || null),
+          celula(criarAcoes(acoesDaLinha(l)), 'px-4 py-3 text-right')
+        );
+        return tr;
+      }));
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    function criarAcoes(botoes) {
+      const d = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+      d.append(...botoes);
+      return d;
+    }
+
+    async function carregar() {
+      mostrarMensagem('ctbEntradaAviso', '');
+      try {
+        dados = await fetchApi(`/api/contabilidade/entrada?origem=${encodeURIComponent(origemSel.value)}&visao=${encodeURIComponent(visaoSel.value)}`);
+        const c = dados.contagem || {};
+        pintarEtiqueta(el('ctbEntradaContagem'), `${c.pendentes || 0} ${Number(c.pendentes) === 1 ? 'pendente' : 'pendentes'}`, c.pendentes ? 'badge-warning' : 'badge-success');
+        if (dados.sql_pendente) mostrarMensagem('ctbEntradaAviso', 'As integrações ainda não estão ativadas: rode sql/contabilidade_integracoes.sql no banco e reinicie a API.', 'aviso');
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('ctbEntradaAviso', textoDoErro(e, 'Ver a caixa de entrada pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    const buscarAgora = chave => async () => {
+      mostrarMensagem('ctbEntradaMensagem', '');
+      try {
+        const r = await enviar(`/api/contabilidade/integracoes/${chave}/sincronizar`, 'POST', {});
+        window.showToast?.(r.resumo || 'Busca feita.', r.situacao === 'aguardando' ? 'info' : 'success');
+        if (r.situacao === 'aguardando') mostrarMensagem('ctbEntradaMensagem', r.resumo, 'aviso');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        const faltas = Array.isArray(e?.corpo?.pendencias) ? `Antes de buscar: ${e.corpo.pendencias.join(' ')} (Configurações).` : null;
+        mostrarMensagem('ctbEntradaMensagem', faltas || textoDoErro(e, 'Buscar pede a permissão "Registrar documentos".'));
+      }
+    };
+    acionar(el('ctbEntradaBuscarSefaz'), buscarAgora('sefaz_nfe'));
+    acionar(el('ctbEntradaBuscarAdn'), buscarAgora('nfse_adn'));
+    el('ctbEntradaConfig').addEventListener('click', () => abrirOutro('configuracao', {}));
+    origemSel.addEventListener('change', carregar);
+    visaoSel.addEventListener('change', carregar);
+    busca.addEventListener('input', desenhar);
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
   const GRUPOS_ATIVIDADE = {
     competencia: { rotulo: 'Competência', badge: 'badge-success', tipos: ['competencia_fechada', 'competencia_reaberta'] },
     pendencia: { rotulo: 'Pendências', badge: 'badge-neutral', tipos: ['pendencia_ignorada', 'pendencia_restaurada'] },
-    documento: { rotulo: 'Documentos e arquivos', badge: 'badge-info', tipos: ['documento_registrado', 'documento_excluido', 'arquivo_anexado', 'arquivo_excluido', 'fornecedor_cadastrado'] },
+    documento: { rotulo: 'Documentos e arquivos', badge: 'badge-info', tipos: ['documento_registrado', 'documento_excluido', 'arquivo_anexado', 'arquivo_excluido', 'fornecedor_cadastrado', 'nfe_manifestada', 'entrada_ignorada'] },
+    integracao: { rotulo: 'Integrações', badge: 'badge-neutral', tipos: ['integracao_configurada'] },
     pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
@@ -4084,7 +4643,9 @@
     ctbDossie: montarDossie,
     ctbPacote: montarPacote,
     ctbAtividade: montarAtividade,
-    ctbMensagens: montarMensagens
+    ctbMensagens: montarMensagens,
+    ctbConfiguracao: montarConfiguracao,
+    ctbEntradaDfe: montarEntradaDfe
   };
 
   let montagem;

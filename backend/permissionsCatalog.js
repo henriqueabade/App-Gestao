@@ -2528,7 +2528,7 @@ const PERMISSIONS_CATALOG = {
         "key": "contabilidade.config.view",
         "column": "acao_config_view",
         "label": "Ver configuração",
-        "desc": "Conta, destinatário e o que bloqueia o fechamento (etapas seguintes)"
+        "desc": "Abrir as Configurações (integrações com a SEFAZ, o BB e o ADN), ver o que falta e testar a conexão; mudar é só do Sup Admin"
       }
     ],
     "columns": []

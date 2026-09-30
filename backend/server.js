@@ -390,6 +390,12 @@ if (process.versions && process.versions.electron && process.env.NODE_ENV !== 't
   } catch (err) {
     console.error('[cobranca] a conciliação automática não iniciou:', err?.message || err);
   }
+  // As buscas automáticas da Contabilidade (NF-e na SEFAZ, extrato no BB, NFS-e no ADN).
+  try {
+    require('./contabilidade/integracoes/agenda').iniciarNoApp();
+  } catch (err) {
+    console.error('[contabilidade] a busca automática das integrações não iniciou:', err?.message || err);
+  }
 }
 
 module.exports = app;

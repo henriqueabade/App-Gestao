@@ -1,18 +1,23 @@
 # Contabilidade — roteiro para colocar no ar e homologar
 
-Data: 29/09/2026. Tudo o que o dono precisa fazer para as etapas 1 a 9 do
-módulo Contabilidade funcionarem — e a rodada seguinte (tela nova, mensagens
-e comentários, o "'" que cita objetos, também em Contatos): preparar o banco,
-reiniciar a API, dar as permissões, testar no programa (primeiro no DEV, com
-os dados simulados) e depois passar para a produção. O plano e as regras de
-cada etapa estão em `docs/contabilidade-fechamento-plano.md` (seções R a Z).
+Data: 29/09/2026 (atualizado em 30/09/2026). Tudo o que o dono precisa fazer
+para as etapas 1 a 9 do módulo Contabilidade funcionarem — e as rodadas
+seguintes (tela nova, mensagens e comentários, o "'" que cita objetos, também
+em Contatos; e a **estrutura das integrações, etapas 10 a 13**): preparar o
+banco, reiniciar a API, dar as permissões, testar no programa (primeiro no
+DEV, com os dados simulados) e depois passar para a produção. O plano e as
+regras de cada etapa estão em `docs/contabilidade-fechamento-plano.md`
+(seções R a AA). **As integrações (SEFAZ, BB, ADN, CDB) têm roteiro próprio:
+`docs/contabilidade-integracoes-roteiro.md`** — o que fazer no portal do BB,
+o que fornecer, como ligar e testar.
 
 ---
 
 ## 0. Antes de começar
 
-1. A etapa 9 já está no git ("Fase 9"). **Esta rodada (seção Z do plano) não
-   está**: faça o commit dela como fez com as outras.
+1. As rodadas até a seção Z do plano já estão no git ("Fase 10"). **A das
+   integrações (seção AA) não está**: faça o commit dela como fez com as
+   outras.
 2. **Cópia de segurança do banco DEV** (opcional, recomendado). No pgAdmin:
    botão direito no banco › Backup… (formato Custom) › Backup.
 3. Conferir se o app está em **modo DEV** (`BANCO=DEV` no `.env` do
@@ -22,7 +27,7 @@ cada etapa estão em `docs/contabilidade-fechamento-plano.md` (seções R a Z).
 
 Estão na pasta `sql/` do App-Gestão. Já rodaram antes (não precisa de novo):
 `contatos_fornecedores.sql` e `contabilidade_base.sql`. **Em 29/09 você já
-rodou os de 1 a 7 no DEV**: falta só o **8**.
+rodou os de 1 a 8 no DEV** ("JA RODEI TUDO"): falta só o **9**.
 
 **Rodar, nesta ordem:**
 
@@ -36,6 +41,7 @@ rodou os de 1 a 7 no DEV**: falta só o **8**.
 | 6 | `contabilidade_pacote.sql` | o registro dos pacotes |
 | 7 | `contabilidade_dados_simulados_dev.sql` | **só no DEV**: um mês de exemplo (julho fechado, agosto cheio, setembro em curso) |
 | 8 | `contabilidade_mensagens.sql` | as **Mensagens e comentários** da Contabilidade (1 tabela) e a trava de origem do social refeita — **conserta também o social de Contatos**, que o banco recusava (curtir/comentar num contato dava erro) |
+| 9 | `contabilidade_integracoes.sql` | as **integrações** (etapas 10 a 13): a configuração das 4 (desligadas, em homologação), o registro das buscas e a caixa de entrada das NF-e/NFS-e (3 tabelas). Ver `docs/contabilidade-integracoes-roteiro.md` |
 
 O 8 precisa do `historico_social.sql` (rodado em 18/09). Todos podem rodar de
 novo sem estragar nada. O modelo **Administrador** já
@@ -66,6 +72,7 @@ set PSQL="C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -p PORTA -U 
 %PSQL% -f sql\contabilidade_pacote.sql
 %PSQL% -f sql\contabilidade_dados_simulados_dev.sql
 %PSQL% -f sql\contabilidade_mensagens.sql
+%PSQL% -f sql\contabilidade_integracoes.sql
 ```
 
 Os arquivos começam com `SET client_encoding = 'UTF8'`: os acentos saem
@@ -94,6 +101,9 @@ SELECT nome FROM plano_contas WHERE nome LIKE 'Servi%';
 SELECT to_regclass('public.contabil_mural_historico') IS NOT NULL AS mural;
 SELECT conrelid::regclass, pg_get_constraintdef(oid) FROM pg_constraint
  WHERE conname LIKE 'historico_%_origem_check';
+
+-- SQL 9: as 4 integrações, desligadas e em homologação (tem de dar 4 linhas):
+SELECT chave, ativa, ambiente FROM contabil_integracoes ORDER BY id;
 ```
 
 ## 2. Reiniciar
@@ -109,8 +119,9 @@ SELECT conrelid::regclass, pg_get_constraintdef(oid) FROM pg_constraint
 - Conferir a API: abra `http://ENDERECO_DA_API:PORTA/status` no navegador
   (a porta é a `API_PORT` da API; 3010 se não mudou). Anote o número
   `tabelas_carregadas` **antes** de rodar os SQLs: depois de reiniciar, ele
-  tem de estar **17** a mais (16 das etapas + a das mensagens). Se os 1 a 6
-  já tinham rodado e a API já foi reiniciada, o 8 soma **1**.
+  tem de estar **20** a mais (16 das etapas + a das mensagens + as 3 das
+  integrações). Se os 1 a 8 já tinham rodado e a API já foi reiniciada, o 9
+  soma **3**.
 
 ## 3. Permissões
 
@@ -298,6 +309,11 @@ não bater, tire um print e me mande com o passo.
    piscando; atividade → aba "Atividades" com o cartão destacado; documento
    ou conta → fecha a ficha e abre na Contabilidade.
 
+### 4.12 Integrações (depois do SQL 9)
+Siga `docs/contabilidade-integracoes-roteiro.md`: a Parte G é o checklist
+visual (Configurações, os quatro cartões, a caixa de entrada, "Buscar no BB"
+no Extrato) e as Partes B a E, uma integração por vez.
+
 ## 5. Testes automáticos (opcional)
 
 No terminal, na pasta do App-Gestão:
@@ -306,7 +322,7 @@ No terminal, na pasta do App-Gestão:
 node --test src/js/__tests__/
 ```
 
-Esperado: 1234 testes, 1 falha antiga (o logout automático, que já falhava
+Esperado: 1236 testes, 1 falha antiga (o logout automático, que já falhava
 antes do módulo). Os da Contabilidade no backend, um de cada vez:
 
 ```bat
@@ -314,6 +330,9 @@ node --test backend/contabilidade/checklist.test.js
 node --test backend/contabilidadePacote.test.js
 node --test backend/contabilidade/citaveis.test.js
 node --test backend/historicoSocial.test.js
+node --test backend/contabilidadeIntegracoes.test.js
+node --test backend/contabilidade/integracoes/clientes.test.js
+node --test backend/contabilidade/integracoes/nucleo.test.js
 ```
 
 (os outros: `backend/contabilidade*.test.js`, os de
@@ -324,9 +343,10 @@ node --test backend/historicoSocial.test.js
 Só depois do "ok" no DEV.
 
 1. **Backup** do banco de produção.
-2. Rodar os SQLs **1 a 6 e o 8** do passo 1 no banco de produção. **Nunca**
-   o 7 (simulado) — ele se recusa a rodar se o nome do banco não for de DEV.
-3. Reiniciar a **API do banco** (passo 2) e conferir o `/status` (+17
+2. Rodar os SQLs **1 a 6, o 8 e o 9** do passo 1 no banco de produção.
+   **Nunca** o 7 (simulado) — ele se recusa a rodar se o nome do banco não
+   for de DEV.
+3. Reiniciar a **API do banco** (passo 2) e conferir o `/status` (+20
    tabelas).
 4. Fechar e abrir o App-Gestão; conferir as permissões (passo 3).
 5. Configuração inicial com dados reais:
@@ -337,7 +357,9 @@ Só depois do "ok" no DEV.
      importar o **OFX real** do BB desse mês (Gerenciador Financeiro ›
      extrato › exportar OFX).
 6. Fechar o primeiro mês real seguindo 4.2 a 4.8.
-7. A pasta `sql/` pode ser limpa depois de rodar (como você faz).
+7. Ligar as integrações em produção pelo roteiro próprio
+   (`docs/contabilidade-integracoes-roteiro.md`, Partes A a E).
+8. A pasta `sql/` pode ser limpa depois de rodar (como você faz).
 
 ## 7. O que me mandar de volta
 
@@ -367,8 +389,9 @@ dos relatórios de cada etapa.
 6. Extrato incompleto de mês encerrado é **documental**. Confirmar.
 7. Desfazer importação com motivo, da mais nova para a mais antiga. Confirmar.
 8. Existe caixa físico (dinheiro) que precise de conta própria?
-9. API de Extratos do BB (etapa 11): ativar no portal do BB e passar as
-   credenciais quando quiser essa etapa.
+9. API de Extratos do BB (etapa 11): a estrutura está pronta — o passo a
+   passo (portal do BB, credenciais, conta de teste) está na Parte C do
+   roteiro das integrações.
 
 **Conciliação**
 10. Lançamento sem conciliação é **documental**. Confirmar.
@@ -418,3 +441,6 @@ dos relatórios de cada etapa.
 33. No "'" de Contatos, documentos e contas só aparecem para quem vê a
     Contabilidade, e clicar neles fecha a ficha do contato e abre na
     Contabilidade. Ok?
+
+**Integrações (30/09)** — as pendências **34 a 47** estão no fim de
+`docs/contabilidade-integracoes-roteiro.md`.

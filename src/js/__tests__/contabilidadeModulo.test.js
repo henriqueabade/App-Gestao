@@ -246,6 +246,12 @@ const MODAIS_ETAPA7 = {
   'fechamentos': { overlay: 'ctbFechamentos', principal: null }
 };
 
+// Etapas 10 a 13: as Configurações (cartões das integrações; os botões são de cada cartão) e a caixa de entrada.
+const MODAIS_ETAPA10 = {
+  'configuracao': { overlay: 'ctbConfiguracao', principal: null },
+  'entrada-dfe': { overlay: 'ctbEntradaDfe', principal: ['ctbEntradaBuscarSefaz', 'btn-primary', 'contabilidade.documento.registrar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -255,7 +261,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -319,8 +325,43 @@ test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botã
   const pac = ler('html', 'modals', 'contabilidade', 'pacote.html');
   assert.match(pac, /id="ctbPacoteEnviado" type="button" data-perm="contabilidade\.pacote\.gerar" class="btn-success ctl-botao"/);
   assert.ok(pac.includes('data-perm-hide="contabilidade.pacote.gerar"'), 'o registro do envio some sem a permissão');
-  // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e por enquanto só avisa.
+  // "Buscar no BB" (API de Extratos, etapa 11) é o azul do BB e busca de verdade a competência da tela.
   assert.match(ler('html', 'modals', 'contabilidade', 'extrato.html'), /id="ctbExtratoBuscarBB" type="button" data-perm="contabilidade\.extrato\.importar" class="btn-bb ctl-botao text-white"/);
+  assert.ok(MODAIS.includes("enviar('/api/contabilidade/integracoes/bb_extrato/sincronizar', 'POST', { competencia: compCampo.value })"), 'Buscar no BB chama a busca da integração');
+  assert.ok(!/ctbExtratoBuscarBB[\s\S]{0,300}em implementação/.test(MODAIS), 'Buscar no BB não é mais aviso');
+});
+
+test('etapas 10 a 13 (30/09/2026): Configurações com as integrações e a caixa de entrada da SEFAZ/ADN', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  // A tela abre os dois; o painel aponta para eles (pendência da caixa de entrada e erro de integração).
+  for (const acao of ['configuracao', 'entrada-dfe']) assert.match(TELA, new RegExp(`'${acao}': \\{[^}]*abrir:`), `${acao} tem abrir`);
+  assert.ok(HTML.includes('data-ctb-acao="entrada-dfe"') && HTML.includes('data-ctb-acao="configuracao"'));
+  // As rotas: ver, salvar, credenciais, testar, buscar, certificado público; a caixa de entrada e as ações da linha.
+  for (const rota of [
+    "fetchApi('/api/contabilidade/integracoes')", "/api/contabilidade/integracoes/${i.chave}`, 'PUT'", "/api/contabilidade/integracoes/${i.chave}/credenciais`, 'POST'",
+    "/credenciais?ambiente=${amb}&destino=ambos`, { method: 'DELETE' }", "/api/contabilidade/integracoes/${i.chave}/testar`, 'POST'",
+    "/api/contabilidade/integracoes/${i.chave}/sincronizar`, 'POST'", "fetchApi('/api/contabilidade/integracoes/certificado/publico')",
+    "/api/contabilidade/entrada?origem=", "/api/contabilidade/entrada/${encodeURIComponent(id)}/${caminho}`, 'POST'", "/api/contabilidade/entrada/${encodeURIComponent(l.id)}/xml`",
+    "/api/contabilidade/integracoes/${chave}/sincronizar`, 'POST'"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  for (const caminho of ["'manifestar'", "'baixar-xml'", "'registrar'", "'ignorar'", "'restaurar'"]) assert.ok(MODAIS.includes(`acao(l.id, ${caminho}`), `ação ${caminho}`);
+  // Produção pede a palavra PRODUCAO; o client_secret entra num campo de senha e nunca é mostrado.
+  assert.ok(MODAIS.includes("corpo.confirmacao = palavra") && MODAIS.includes("placeholder: 'PRODUCAO'"));
+  assert.ok(MODAIS.includes("campoDeTexto('', { tipo: 'password'"));
+  assert.ok(!/client_secret:\s*i\.|\.secret\b(?!_)/.test(MODAIS.slice(MODAIS.indexOf('function montarConfiguracao'), MODAIS.indexOf('function montarEntradaDfe'))), 'a tela não lê segredo nenhum');
+  // Buscar agora pede a permissão da integração; quem não é Sup Admin vê tudo travado.
+  assert.ok(MODAIS.includes("{ perm: i.permissao_executar, titulo: 'A busca de verdade (a mesma da agenda)' }"));
+  assert.ok(MODAIS.includes("if (!podeEditar) form.querySelectorAll('input, select').forEach(x => { x.disabled = true; });"));
+  // Cores: testar o BB é o azul do BB; buscar é verde; salvar é o principal; remover segredo é vermelho.
+  assert.ok(MODAIS.includes("botaoPequeno('Testar conexão', i.banco ? 'btn-bb' : 'btn-secondary'") && MODAIS.includes("botaoPequeno('Buscar agora', 'btn-success'"));
+  assert.ok(MODAIS.includes("botaoPequeno('Salvar', 'btn-primary'") && MODAIS.includes("botaoPequeno('Remover', 'btn-danger'"));
+  const cfg = ler('html', 'modals', 'contabilidade', 'configuracao.html');
+  assert.match(cfg, /id="ctbConfigBaixarCer" type="button" class="btn-secondary ctl-botao text-white"/);
+  const ent = ler('html', 'modals', 'contabilidade', 'entrada-dfe.html');
+  assert.match(ent, /id="ctbEntradaBuscarAdn" type="button" data-perm="contabilidade\.documento\.registrar" class="btn-secondary ctl-botao text-white"/);
+  assert.match(ent, /id="ctbEntradaConfig" type="button" data-perm="contabilidade\.config\.view" class="btn-neutral ctl-botao text-white"/);
+  // A atividade conhece os eventos novos.
+  for (const tipo of ['integracao_configurada', 'nfe_manifestada', 'entrada_ignorada']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
 });
 
 test('ações da tela: contas a pagar, registrar documento, documentos recebidos e da competência são reais; as pendências da Contabilidade abrem o modal do filtro', () => {
@@ -332,7 +373,7 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // As pendências do backend usam só ações que a tela conhece.
   const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
   const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
-  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documentos-recebidos', 'fechamentos', 'importar-extrato', 'pacote', 'registrar-documento']);
+  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'configuracao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documento-recebido', 'documentos-recebidos', 'entrada-dfe', 'fechamentos', 'importar-extrato', 'pacote', 'registrar-documento']);
   for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
   assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
   // Etapa 4: o extrato é real (o "Sincronizar extrato do BB" virou "Buscar no BB" dentro dele).

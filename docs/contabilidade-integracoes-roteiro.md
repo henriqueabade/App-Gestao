@@ -1,0 +1,344 @@
+# Contabilidade — integrações automáticas (etapas 10 a 13): o que fazer e o que fornecer
+
+Data: 30/09/2026. A estrutura está pronta: as quatro integrações têm tela,
+backend, agenda automática, registro de cada busca e testes. **Falta só você
+ligar, preencher e testar** — este roteiro diz tudo, na ordem.
+
+| Etapa | Integração | Onde fala | O que precisa de novo |
+|---|---|---|---|
+| 10 | **NF-e de entrada** (notas emitidas contra o CNPJ) | SEFAZ — Distribuição de DF-e e manifestação (Ambiente Nacional) | nada: usa o certificado A1 e a Configuração fiscal que já existem |
+| 11 | **Extrato da conta** | BB — API de Extratos | incluir a API na aplicação do Portal Developers (a mesma da cobrança) |
+| 13 | **NFS-e tomadas** (serviços que a empresa contrata) | ADN — Ambiente de Dados Nacional da NFS-e | nada, em princípio: usa o certificado A1 |
+| 12 | **Aplicações — CDB** | BB — API ainda a definir | o BB dizer qual API consulta o CDB da empresa |
+
+Na tela: **Contabilidade › Ações › Configurações** (os cartões das quatro) e
+**Contabilidade › Ações › NF-e e NFS-e da SEFAZ/ADN** (a caixa de entrada do
+que as buscas acham). O plano técnico está em
+`docs/contabilidade-fechamento-plano.md` (seção AA).
+
+> **Segurança.** Nenhum segredo passa pelo chat nem fica no código: o
+> client_secret do BB é colado **só na tela** (é cifrado e nunca volta), a
+> senha do certificado continua onde está (Configuração fiscal). O
+> "certificado público (.cer)" que a tela baixa **não tem a chave privada**:
+> pode ser enviado ao portal do BB sem risco.
+
+---
+
+## Parte A — uma vez só (banco, reinício, permissões, travas)
+
+### A1. Commit
+Esta rodada **não está no git**. Faça o commit como nas outras ("Fase 11",
+por exemplo) antes de rodar os SQLs.
+
+### A2. O SQL novo (9)
+Arquivo: `sql/contabilidade_integracoes.sql`. Cria 3 tabelas:
+
+| Tabela | Para quê |
+|---|---|
+| `contabil_integracoes` | a configuração de cada integração (ligada, ambiente, busca automática, parâmetros, NSU, último erro) — já vem com as 4, **desligadas e em homologação** |
+| `contabil_integracao_execucoes` | o registro de cada busca/teste (e a trava para duas máquinas não buscarem ao mesmo tempo) |
+| `contabil_dfe_recebidos` | a caixa de entrada: cada NF-e e NFS-e encontrada, com o XML e os eventos |
+
+Rode **primeiro no DEV** (pgAdmin › Query Tool › abrir o arquivo › F5, ou
+pelo psql como no roteiro de homologação). Pode rodar de novo sem estragar
+nada. Conferir:
+
+```sql
+-- Tem de dar 4 linhas, todas ativa = false e ambiente = homologacao:
+SELECT chave, ativa, ambiente, automatica, intervalo_min FROM contabil_integracoes ORDER BY id;
+-- Tem de dar 3:
+SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'
+ AND table_name IN ('contabil_integracoes','contabil_integracao_execucoes','contabil_dfe_recebidos');
+```
+
+### A3. Reiniciar
+- **DEV:** feche o App-Gestão por inteiro e abra de novo.
+- **Produção:** rode o mesmo SQL no banco de produção, **reinicie a API do
+  banco** (Santissimo-db-API) e confira o `/status`: `tabelas_carregadas`
+  tem de subir **3**. Depois feche e abra o App-Gestão.
+
+Sem o SQL, a tela de Configurações avisa "rode
+sql/contabilidade_integracoes.sql" — nada quebra.
+
+### A4. Permissões (Usuários › Modelos de Permissão › Contabilidade)
+Não há permissão nova; as integrações usam as que já existem:
+
+| O quê | Permissão |
+|---|---|
+| Abrir Configurações, ver o que falta, **Testar conexão** | Ver configuração |
+| **Mudar** a configuração, guardar/remover o client_secret, ligar a produção, baixar o .cer | só o **Sup Admin** |
+| Buscar NF-e na SEFAZ, buscar NFS-e no ADN, e na caixa de entrada: ciência, manifestar, baixar XML, registrar, ignorar, restaurar | Registrar documentos e anexar arquivos |
+| Buscar o extrato no BB | Importar extrato |
+| Ver a caixa de entrada | Ver o fechamento |
+
+### A5. As travas do `.env` (por máquina)
+Três variáveis prendem **a máquina** em homologação, mesmo que a tela diga
+"Produção" (o cartão mostra a etiqueta **"Máquina presa em homologação"**):
+
+| Variável | Prende | Observação |
+|---|---|---|
+| `NFE_AMBIENTE=homologacao` | SEFAZ e ADN | é a **mesma** da emissão de NF-e: se estiver no `.env`, a emissão também fica em homologação |
+| `BB_AMBIENTE=sandbox` (ou `homologacao`) | Extrato e CDB | é a **mesma** da cobrança |
+| `CONTABILIDADE_INTEGRACOES_AMBIENTE=homologacao` | as quatro | **nova**, só das integrações: use no computador de testes para nunca buscar em produção sem mexer na NF-e nem na cobrança |
+
+Para usar produção numa máquina, ela não pode ter nenhuma dessas travas
+valendo para a integração. Depois de mexer no `.env`, feche e abra o app.
+
+### A6. Onde o client_secret fica guardado
+Na hora de guardar, a tela pergunta:
+- **No banco (todas as máquinas)** — cifrado com a `SEGREDOS_CHAVE_MESTRA`
+  do `.env` (a mesma que já guarda os segredos da cobrança). Cada máquina
+  que for buscar precisa ter essa mesma chave no `.env`.
+- **Só neste computador** — no cofre do Windows desta máquina.
+
+Se a cobrança já funciona com o secret "no banco", a chave-mestra já está
+certa.
+
+---
+
+## Parte B — NF-e de entrada pela SEFAZ (etapa 10)
+
+**Você fornece:** nada de novo. Confira só que o certificado A1 aparece no
+alto das Configurações (titular, CNPJ, validade) e que a Configuração fiscal
+tem CNPJ e UF (a mesma da emissão).
+
+**Antes de ligar, decida** (pendências 34, 35 e 38): ciência automática
+(padrão **sim**), registro automático (padrão **sim**), lançar a conta a
+pagar junto (padrão **não**).
+
+1. Configurações › cartão **NF-e de entrada (SEFAZ)** › marque **Ligada**,
+   ambiente **Homologação** › **Salvar**.
+2. **Testar conexão**. → Esperado: "SEFAZ 137 — Nenhum documento localizado"
+   (a homologação não tem notas de verdade) ou 138 com documentos de teste.
+   Erro de certificado aparece aqui (vencido, senha, CNPJ errado).
+3. **Produção:** ambiente **Produção** › **Salvar** › digite **PRODUCAO** na
+   caixa de confirmação. → A etiqueta muda para "Produção".
+4. **Buscar agora**. → A primeira busca traz o que a SEFAZ ainda guarda
+   (**cerca de 90 dias**): cada NF-e emitida contra o CNPJ.
+   - Veio só o **resumo**: a ciência é dada sozinha e o XML completo chega
+     na próxima busca (ou pelo botão **Baixar XML** na caixa de entrada).
+   - Veio **completa**: é registrada sozinha em "Documentos recebidos"
+     (origem "SEFAZ (automático)", com o XML oficial anexado).
+   - **Cancelada** pelo emitente: aparece marcada e não se registra; se já
+     estava registrada, o painel avisa.
+   - Nota de **mês fechado**: fica na caixa com o motivo ("competência
+     fechada"). Para registrar: reabrir o mês e clicar **Registrar** na
+     linha — ou **Ignorar** com motivo.
+5. Marque **Buscar sozinha** (a cada 60 min) › **Salvar**.
+
+**Regras da SEFAZ que o app já respeita:** depois de uma consulta sem nota
+nova, só se pode consultar de novo **1 hora** depois (o botão avisa o
+horário); consultar demais dá bloqueio por "consumo indevido" (656) — o app
+espera sozinho.
+
+**Manifestação** (na caixa de entrada, **Manifestar…**): **Confirmação**
+(a compra aconteceu), **Desconhecimento** (a empresa não comprou) ou
+**Operação não realizada** (com justificativa). É uma declaração à SEFAZ,
+registrada lá; as duas últimas tiram a nota das pendências (fica "Ignorada").
+
+## Parte C — Extrato pela API do BB (etapa 11)
+
+**Você faz no Portal Developers do BB** (developers.bb.com.br, com o login
+da empresa — o mesmo da aplicação da cobrança):
+
+1. Abra a **aplicação da cobrança** › adicionar API › **API de Extratos**
+   (conta corrente). Anote o **escopo** que o portal mostrar para ela (o app
+   usa `extrato-info`; se for outro, troque no cartão).
+2. Na documentação da API de Extratos, pegue a **conta de teste da
+   homologação** (agência e conta). A da cobrança (452 / 123873) **pode não
+   valer** para o extrato.
+3. Para **produção**: peça a liberação da API em produção para a aplicação
+   (o portal mostra o caminho; o BB pode pedir a autorização do titular da
+   conta ou do gerente — siga o que ele indicar).
+4. Se o BB exigir **certificado na conexão** (mTLS, comum nas APIs de conta
+   em produção): no nosso cartão, **Baixar certificado público (.cer)** (no
+   alto das Configurações) e cadastre esse arquivo na aplicação do portal.
+
+**No app:**
+
+1. Contabilidade › Extrato bancário › **Contas do banco**: tenha a conta do
+   BB cadastrada ("Usar a conta dos boletos" traz a da cobrança).
+2. Configurações › cartão **Extrato da conta (API do BB)**:
+   - **Usar a mesma aplicação da cobrança**: deixe marcado (client_id, app
+     key e client_secret vêm da Configuração de cobrança; nada a colar). Se
+     preferir uma aplicação separada, desmarque, **Salvar**, preencha
+     client_id e app key de cada ambiente e **Guarde** o client_secret de
+     cada um no bloco "Credenciais do BB".
+   - **Conta do Extrato bancário** que recebe os lançamentos.
+   - **Agência e conta sem o dígito** (se digitar "1614-4", o app guarda
+     "1614").
+   - **Avançado › Agência/Conta de teste** (a do passo 2 do portal).
+   - Certificado na conexão (mTLS): **Automático** (só em produção).
+   - **Salvar**.
+3. **Testar conexão** (homologação). → "Token e extrato ok … Ontem: N
+   lançamentos. Nada foi gravado."
+   - 401 no token: client_id/secret/app key errados ou a API não está na
+     aplicação.
+   - 403: escopo ou autorização da conta.
+   - Erro de certificado: o .cer não foi cadastrado no portal.
+4. **Produção:** ambiente **Produção** › Salvar › PRODUCAO › **Testar
+   conexão** de novo.
+5. Contabilidade › **Extrato bancário** › escolha o mês › **Buscar no BB**. →
+   Os lançamentos do mês entram como uma importação "API" (sem repetir o que
+   o OFX já trouxe; buscar de novo diz "já importados"). A resposta do banco
+   fica guardada como evidência do mês.
+6. Marque **Buscar sozinha** (1 vez por dia; relê os últimos 5 dias, por
+   causa dos lançamentos que o banco lança atrasado) › Salvar.
+
+Com a API funcionando, o **OFX vira opcional** (os dois convivem sem
+duplicar).
+
+## Parte D — NFS-e tomadas pelo ADN (etapa 13)
+
+**Você fornece:** nada de novo, em princípio: o ADN reconhece a empresa pelo
+**certificado A1** do CNPJ.
+
+1. Configurações › cartão **NFS-e tomadas (ADN nacional)** › **Ligada**,
+   **Homologação** (é a "produção restrita" do ADN, sem notas de verdade) ›
+   Salvar › **Testar conexão**. → "ADN respondeu …" e os **campos da
+   resposta**.
+2. **Produção** › Salvar › PRODUCAO › **Testar conexão** › **Buscar agora**.
+   → Cada NFS-e em que a empresa é **tomadora** entra (a que a empresa
+   prestou fica de fora) e é registrada em "Documentos recebidos" (origem
+   "ADN (automático)", com o XML, ISS retido quando houver).
+3. **Buscar sozinha** (a cada 3 horas) › Salvar.
+4. **Mande-me um print** do resultado do primeiro "Testar conexão" e da
+   primeira busca em produção: o formato da resposta do ADN foi montado pela
+   documentação e se confirma com a primeira resposta real.
+
+Se o ADN responder **401/403**: o certificado não está sendo aceito para o
+CNPJ — confira no Emissor Nacional (nfse.gov.br) se a empresa está
+habilitada com esse certificado e me mande a mensagem.
+
+**Confirme** (pendência 47): as NFS-e dos prestadores de **Contagem** e de
+**Belo Horizonte** aparecem no ADN (a primeira busca em produção mostra).
+
+## Parte E — Aplicações / CDB (etapa 12)
+
+O catálogo público do BB tem a API de **Fundos de Investimento**, não uma de
+CDB. Por isso esta integração ficou só com **credenciais + teste de
+sondagem**: não busca sozinha e não grava nada.
+
+**Você pergunta ao BB (gerente PJ ou suporte do Portal Developers):**
+1. Qual API do portal consulta a **posição do CDB** (renda fixa) de uma
+   **empresa**?
+2. Qual o **escopo** (scope) e o **caminho** da consulta?
+3. Se essa API vai na mesma aplicação da cobrança.
+
+**Depois, no app:** cartão **Aplicações — CDB (BB)** › escopo › caminho da
+consulta (com `{agencia}` e `{conta}` onde entram os números) › agência e
+conta › Salvar › **Testar conexão**. → Aparece uma **amostra** da resposta
+num quadro: copie e mande para mim. Com ela eu faço o mapeamento (quanto
+tem, quanto rendeu no mês, IR) numa próxima rodada.
+
+## Parte F — Como funciona no dia a dia
+
+- **A agenda** roda **dentro do App-Gestão aberto** (a cada ~5 minutos
+  verifica o que está na hora) e **só com alguém logado**. SEFAZ a cada 60
+  min, ADN a cada 3 h, extrato 1 vez por dia (trocáveis no cartão). Com
+  vários computadores abertos, **só um** faz cada busca (a trava fica no
+  banco).
+- **Caixa de entrada** (Ações › NF-e e NFS-e da SEFAZ/ADN): filtros por
+  origem e situação; em cada linha, o que dá para fazer. "Pendentes" são as
+  que ainda não viraram documento (a cancelada que nunca foi registrada não
+  conta).
+- **No painel do mês:**
+  - NF-e/NFS-e do mês ainda fora dos documentos → **pendência documental**
+    (abre a caixa de entrada).
+  - Nota registrada que o emitente cancelou → **aviso** (abre o documento).
+  - A última busca de uma integração deu erro → **aviso** (abre as
+    Configurações).
+  - Nota que não entrou por um motivo dela (ex.: mês fechado) fica na caixa
+    com o motivo e **não** marca a integração como "com erro".
+- **Atividade recente**: "Integração configurada", "NF-e manifestada na
+  SEFAZ", "Documento da SEFAZ/ADN ignorado".
+- **Segurança da homologação:** em homologação, busca e teste **só gravam no
+  banco DEV**. Num banco de produção, a homologação só conta ("nada foi
+  gravado"), para nota de teste nunca misturar com a de verdade.
+- Cada cartão mostra as **últimas execuções** (automática, manual, teste)
+  com o resumo ou o erro.
+
+## Parte G — Checklist visual (faça e me diga "ok" ou mande o print)
+
+**No DEV, depois do SQL 9 e de reabrir o app:**
+1. Ações tem **"NF-e e NFS-e da SEFAZ/ADN"** e **"Configurações"** abre o
+   modal novo (não mais o aviso "em implementação").
+2. Configurações: no alto, o **certificado** (titular, CNPJ, validade,
+   "No banco" ou "Neste computador") e o botão **Baixar certificado público
+   (.cer)** (só para o Sup Admin); à direita do título, **"Sup Admin: pode
+   mudar"** (ou "Só leitura" para os outros).
+3. Quatro cartões com a faixa colorida à esquerda (verde = pronta; vermelha =
+   falta algo ou deu erro; cinza = desligada), as etiquetas **Ligada/
+   Desligada, Homologação/Produção, Pronta/N pendências**, "O que falta",
+   "O que você fornece" e o formulário à direita.
+4. No cartão do BB: com **"Usar a mesma aplicação da cobrança"** marcado,
+   os campos de client_id/app key **somem**; desmarcado, aparecem.
+5. **Mostrar o avançado** abre endereços, NSU inicial / conta de teste.
+6. Trocar para **Produção** e **Salvar** pede a palavra **PRODUCAO**
+   (Voltar desiste; nada muda).
+7. Com um usuário que **não** é Sup Admin: tudo visível, campos travados,
+   sem "Salvar"; **Testar conexão** funciona.
+8. Caixa de entrada: tabela com Emissão, Documento, Emitente, Valor,
+   Situação, Ações; rodapé com **Fechar** (vermelho), **Configurações**,
+   **Buscar NFS-e no ADN** (azul claro) e **Buscar NF-e na SEFAZ**
+   (dourado).
+9. Extrato bancário › **Buscar no BB**: sem configurar, diz o que falta
+   ("Antes de buscar no BB: … (Contabilidade › Configurações)").
+10. SEFAZ em homologação: **Testar conexão** responde (137/138 ou o erro do
+    certificado).
+
+**Em produção (depois do "ok" no DEV), na ordem:** Parte A (SQL, reiniciar
+a API, permissões, travas) → B → C → D → E.
+
+## Parte H — O que me mandar de volta
+
+1. O resultado da Parte G (ok ou print).
+2. Print do **Testar conexão** de cada integração em produção (principalmente
+   o do **ADN** e o do **BB**: confirmam o formato das respostas).
+3. A resposta do BB sobre o **CDB** (Parte E) e a **amostra** do teste.
+4. Um **extrato real** pela API (qualquer mês) conferido contra o OFX do
+   mesmo mês — se algum lançamento vier diferente (descrição, sinal, data),
+   me mande o print dos dois.
+5. As respostas das pendências 34 a 47 (pode ser "ok" nas que concordar).
+
+## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
+
+**NF-e de entrada (SEFAZ)**
+34. **Ciência automática** para toda NF-e nova (é o que libera o XML; não
+    confirma a compra). Ok?
+35. **Registro automático** da NF-e/NFS-e completa em Documentos recebidos
+    (sim) e **sem** lançar a conta a pagar junto (o checklist avisa
+    "documento sem conta"). Ok, ou quer a conta lançada pelas duplicatas?
+36. NF-e/NFS-e do mês ainda na caixa de entrada é **documental** (segura o
+    pacote). Confirmar.
+37. **Desconhecimento** e **Operação não realizada** tiram a nota das
+    pendências (fica "Ignorada"). Ok?
+38. A primeira busca traz ~90 dias: as notas de **meses já fechados** ficam
+    na caixa com o motivo. Prefere que o app as **ignore sozinho** (com o
+    motivo "mês já fechado"), ou decide uma a uma?
+
+**Agenda e segurança**
+39. A busca automática roda **só com o App-Gestão aberto e alguém logado**.
+    Serve, ou quer que rode no servidor da API (sempre ligado)?
+40. Quem busca: NF-e/NFS-e pedem "Registrar documentos"; extrato pede
+    "Importar extrato"; mudar a configuração só o Sup Admin. Ok?
+41. Homologação num banco de produção **só conta, não grava**. Confirmar.
+
+**Extrato (BB)**
+42. A resposta do BB é guardada como evidência **só na busca do mês** (botão
+    no Extrato), não na automática diária. Ok?
+43. O extrato pela API **vale como o extrato do mês**: a pendência "extrato
+    incompleto" some quando a API cobre o mês, e o OFX vira opcional (os dois
+    convivem sem duplicar). Confirmar.
+
+**CDB, comprovantes e pagamentos**
+44. CDB: só credenciais e teste até o BB dizer a API (Parte E). Ok.
+45. **Comprovantes** de pagamento: o BB não tem API pública para buscá-los;
+    continuam anexados à mão (PDF). Ok?
+46. **Pagamentos em lote** pelo BB (API de Pagamentos) fica para uma fase
+    futura, se quiser.
+
+**NFS-e (ADN)**
+47. Confirmar, na primeira busca em produção, que as NFS-e de **Contagem** e
+    de **Belo Horizonte** aparecem (o formato da resposta do ADN também se
+    confirma aí).
