@@ -11,6 +11,7 @@
  */
 
 const { registrarEventos } = require('./historicoSocial');
+const avisos = require('./avisosEnvolvidos');
 
 /** Os campos acompanhados, com o rótulo que a linha do tempo mostra. */
 const CAMPOS_CLIENTE = {
@@ -122,13 +123,20 @@ function eventosDosFilhos({ contatosNovos = [], contatosAtualizados = [], contat
   return eventos;
 }
 
-/** Grava no histórico do cliente (sem derrubar quem chamou). */
-function registrarNoCliente(api, clienteId, eventos, usuarioId) {
-  if (!eventos?.length || !clienteId) return Promise.resolve([]);
-  return registrarEventos(api, 'cliente', clienteId, eventos, usuarioId).catch(err => {
+/**
+ * Grava no histórico do cliente (sem derrubar quem chamou) e avisa no sino
+ * quem tem o cliente — o dono e quem cadastrou (backend/avisosEnvolvidos.js,
+ * 01/10/2026). `aviso`: opções do aviso (situacao, troca, autores, extras…)
+ * ou `false` para não avisar.
+ */
+async function registrarNoCliente(api, clienteId, eventos, usuarioId, aviso = {}) {
+  if (!eventos?.length || !clienteId) return [];
+  const criados = await registrarEventos(api, 'cliente', clienteId, eventos, usuarioId).catch(err => {
     console.error('[clientes] histórico não gravado:', err?.message || err);
     return [];
   });
+  if (aviso !== false) await avisos.avisarDaFicha(api, { origem: 'cliente', registroId: clienteId, eventos, usuarioId, ...aviso });
+  return criados;
 }
 
 /** Quem cadastrou (coluna nova): num PUT à parte, para o cadastro não depender do SQL. */

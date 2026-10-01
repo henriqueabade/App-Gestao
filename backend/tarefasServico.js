@@ -20,6 +20,7 @@
 const R = require('./tarefasRegras');
 const A = require('./tarefasAutomaticas');
 const social = require('./historicoSocial');
+const avisos = require('./avisosEnvolvidos');
 const permissoesRepo = require('./permissionsRepository');
 
 const lista = r => (Array.isArray(r) ? r : []);
@@ -62,7 +63,14 @@ async function registrarNaFicha(api, t, evento, usuarioId) {
   const alvos = [];
   if (t?.prospeccao_id) alvos.push(['prospeccao', t.prospeccao_id]);
   if (t?.cliente_id) alvos.push(['cliente', t.cliente_id]);
-  for (const [origem, id] of alvos) await social.registrarEventos(api, origem, id, [evento], usuarioId);
+  for (const [origem, id] of alvos) {
+    await social.registrarEventos(api, origem, id, [evento], usuarioId);
+    // Quem tem a ficha fica sabendo (01/10/2026); quem tem a tarefa já recebe o
+    // aviso dela. A tarefa que o sistema cria sozinho (automática, a próxima
+    // da série) não avisa: o fato que a gerou já avisou.
+    if (['automacao', 'recorrencia', 'proximo_passo'].includes(t.origem) && evento?.acao === 'criou') continue;
+    await avisos.avisarDaFicha(api, { origem, registroId: id, eventos: [evento], usuarioId, excluir: [t.responsavel_id, t.criado_por] });
+  }
 }
 
 /** Linha do tempo da própria tarefa. */
@@ -113,7 +121,9 @@ async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participa
       mensagem: A.mensagemDoAviso({ gatilho, titulo: t.titulo, prazo: prazoLegivel(t) }),
       origem: 'tarefa', registro_id: Number(t.id), autor_id: null
     });
-  } else if (t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
+  } else if (t.origem !== 'proximo_passo' && t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
+    // A tarefa-espelho do próximo passo não avisa: quem responde pela
+    // prospecção já recebe o aviso dela (backend/avisosEnvolvidos.js).
     await avisar(api, [Number(t.responsavel_id)], {
       tipo: 'tarefa_atribuida', titulo: 'Nova tarefa para você',
       mensagem: `${autor} atribuiu: ${t.titulo} — ${prazoLegivel(t)}`,
@@ -148,9 +158,10 @@ async function convidar(api, t, ids = [], { usuarioId, nomes = new Map(), mensag
     valor_novo: convidados.map(id => nomes.get(id) || `#${id}`).join(', '),
     observacao: texto(mensagem) || null
   }], usuarioId);
+  // O recado do convite vai como nota do aviso (01/10/2026).
   await avisar(api, convidados, {
     tipo: 'convite_tarefa', titulo: 'Convite para tarefa em conjunto',
-    mensagem: `${autor} convidou você: ${t.titulo} — ${prazoLegivel(t)}${texto(mensagem) ? ` · “${texto(mensagem)}”` : ''}`,
+    mensagem: avisos.comporMensagem(`${autor} convidou você: ${t.titulo} — ${prazoLegivel(t)}`, [], avisos.notasDosEventos([], mensagem)),
     origem: 'tarefa', registro_id: Number(t.id), autor_id: usuarioId ?? null
   });
   return convidados;

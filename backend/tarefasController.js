@@ -37,6 +37,8 @@ const { usuarioDaRequisicao } = require('./usuarioAtual');
 const R = require('./tarefasRegras');
 const S = require('./tarefasServico');
 const social = require('./historicoSocial');
+// "Algo seu" no sino: quem criou, responde ou participa da tarefa (01/10/2026).
+const avisos = require('./avisosEnvolvidos');
 const acoes = require('./tarefasAcoes');
 const automaticas = require('./tarefasAutomaticas');
 
@@ -889,18 +891,25 @@ router.get('/:id', precisa('tarefas.view'), async (req, res) => {
 // ------------------------------------------------------------ editar
 
 /** O próximo passo da prospecção acompanha a tarefa-espelho (título/data, ou some se cancelada). */
-async function refletirNoPasso(ctx, t, dados) {
+/** Quem tem a tarefa: já recebe o aviso dela, não precisa do da prospecção também. */
+const envolvidosDaTarefa = (t, participantes = []) => [
+  t.responsavel_id, t.criado_por,
+  ...lista(participantes).filter(p => mesmoId(p.tarefa_id, t.id) && p.status === 'aceito').map(p => p.usuario_id)
+];
+
+async function refletirNoPasso(ctx, t, dados, participantes = []) {
   if (t.origem !== 'proximo_passo' || !t.prospeccao_id) return;
   const pros = require('./prospeccoesController');
+  const aviso = { excluir: [...envolvidosDaTarefa(t, participantes), dados.responsavel_id] };
   if (dados.status === 'cancelada') {
-    await pros.atualizarPassoPelaTarefa(ctx.api, t.prospeccao_id, { passo: null, data: null }, ctx.usuarioId);
+    await pros.atualizarPassoPelaTarefa(ctx.api, t.prospeccao_id, { passo: null, data: null }, ctx.usuarioId, aviso);
     return;
   }
   if (!('titulo' in dados) && !('data' in dados)) return;
   await pros.atualizarPassoPelaTarefa(ctx.api, t.prospeccao_id, {
     passo: dados.titulo ?? t.titulo,
     data: 'data' in dados ? dados.data : R.diaISO(t.data)
-  }, ctx.usuarioId);
+  }, ctx.usuarioId, aviso);
 }
 
 async function editar(req, res, { mover = false } = {}) {
@@ -943,22 +952,37 @@ async function editar(req, res, { mover = false } = {}) {
   });
   if (mover && eventos.length) eventos.forEach(e => { e.observacao = e.observacao || 'Arrastada no calendário/quadro'; });
   await S.registrarNaTarefa(api, t.id, eventos, ctx.usuarioId);
-  await refletirNoPasso(ctx, t, dados);
+  await refletirNoPasso(ctx, t, dados, participantes);
 
   const autor = nomes.get(ctx.usuarioId) || 'Alguém';
-  if ('responsavel_id' in dados && dados.responsavel_id && !mesmoId(dados.responsavel_id, t.responsavel_id) && !mesmoId(dados.responsavel_id, ctx.usuarioId)) {
+  const trocouResponsavel = 'responsavel_id' in dados && !mesmoId(dados.responsavel_id, t.responsavel_id);
+  const avisados = [];
+  if (trocouResponsavel && dados.responsavel_id && !mesmoId(dados.responsavel_id, ctx.usuarioId)) {
     await social.notificar(api, [dados.responsavel_id], {
       tipo: 'tarefa_atribuida', titulo: 'Nova tarefa para você',
       mensagem: `${autor} passou para você: ${dados.titulo || t.titulo} — ${S.prazoLegivel({ ...t, ...dados })}`,
       origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
     });
+    avisados.push(dados.responsavel_id);
   } else if (('data' in dados || 'hora' in dados) && t.responsavel_id && !mesmoId(t.responsavel_id, ctx.usuarioId) && eventos.some(e => ['data', 'hora'].includes(e.campo))) {
+    // O prazo novo na 1ª linha; o resto do que mudou e a observação, abaixo.
+    const outras = eventos.filter(e => !['data', 'hora'].includes(e.campo));
     await social.notificar(api, [t.responsavel_id], {
       tipo: 'tarefa_alterada', titulo: 'Tarefa reagendada',
-      mensagem: `${autor} mudou o prazo: ${t.titulo} — agora ${S.prazoLegivel({ ...t, ...dados })}`,
+      mensagem: avisos.comporMensagem(`${autor} mudou o prazo: ${t.titulo} — agora ${S.prazoLegivel({ ...t, ...dados })}`,
+        outras.map(avisos.linhaDoEvento), avisos.notasDosEventos(eventos)),
       origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
     });
+    avisados.push(t.responsavel_id);
   }
+  // Os demais que têm a tarefa (01/10/2026): quem deixou de responder, quem
+  // criou e quem participa — o que mudou, ou "cancelada".
+  await avisos.avisarDaFicha(api, {
+    origem: 'tarefa', registroId: t.id, registro: { ...t, ...dados }, eventos, usuarioId: ctx.usuarioId, nomes,
+    troca: trocouResponsavel ? { de: t.responsavel_id ?? null, para: dados.responsavel_id ?? null } : null,
+    situacao: dados.status === 'cancelada' && t.status !== 'cancelada' ? 'cancelou' : null,
+    excluir: avisados
+  });
   if (dados.status === 'cancelada' && t.status !== 'cancelada') {
     await S.registrarNaFicha(api, t, S.eventoNaFicha('cancelou', t, { nomes, valor: 'Cancelada' }), ctx.usuarioId);
   }
@@ -1034,7 +1058,8 @@ router.post('/:id/concluir', precisa('tarefas.view'), async (req, res) => {
     if (t.origem === 'proximo_passo' && t.prospeccao_id) {
       const pros = require('./prospeccoesController');
       const legivel = [R.RESULTADOS[resultado], nota].filter(Boolean).join(' — ');
-      const id = await pros.concluirPassoPelaTarefa(api, t.prospeccao_id, { nota: legivel || 'Concluído', tarefaId: t.id }, ctx.usuarioId);
+      const id = await pros.concluirPassoPelaTarefa(api, t.prospeccao_id, { nota: legivel || 'Concluído', tarefaId: t.id }, ctx.usuarioId,
+        { excluir: envolvidosDaTarefa(t, participantes) });
       if (id) interacao = { origem: 'prospeccao', id };
       registrarFicha = false;
     } else if (t.prospeccao_id || t.cliente_id) {
@@ -1052,7 +1077,8 @@ router.post('/:id/concluir', precisa('tarefas.view'), async (req, res) => {
     if (pedido && texto(pedido.titulo)) {
       if (t.origem === 'proximo_passo' && t.prospeccao_id) {
         const pros = require('./prospeccoesController');
-        await pros.atualizarPassoPelaTarefa(api, t.prospeccao_id, { passo: texto(pedido.titulo), data: R.diaISO(pedido.data) || null }, ctx.usuarioId);
+        await pros.atualizarPassoPelaTarefa(api, t.prospeccao_id, { passo: texto(pedido.titulo), data: R.diaISO(pedido.data) || null }, ctx.usuarioId,
+          { excluir: envolvidosDaTarefa(t, participantes) });
       } else {
         const dados = R.normalizarTarefa({
           titulo: pedido.titulo, tipo: pedido.tipo || t.tipo, prioridade: pedido.prioridade || t.prioridade,
@@ -1069,9 +1095,12 @@ router.post('/:id/concluir', precisa('tarefas.view'), async (req, res) => {
     const interessados = [t.criado_por, t.responsavel_id, ...participantes.filter(p => mesmoId(p.tarefa_id, t.id) && p.status === 'aceito').map(p => p.usuario_id)];
     const para = social.destinatarios(interessados, ctx.usuarioId);
     if (para.length) {
+      // A nota de quem concluiu vai junto (01/10/2026), como no histórico.
       await social.notificar(api, para, {
         tipo: 'tarefa_concluida', titulo: 'Tarefa concluída',
-        mensagem: `${nomes.get(ctx.usuarioId) || 'Alguém'} concluiu: ${t.titulo}${R.RESULTADOS[resultado] && resultado !== 'feito' ? ` — ${R.RESULTADOS[resultado]}` : ''}`,
+        mensagem: avisos.comporMensagem(
+          `${nomes.get(ctx.usuarioId) || 'Alguém'} concluiu: ${t.titulo}${R.RESULTADOS[resultado] && resultado !== 'feito' ? ` — ${R.RESULTADOS[resultado]}` : ''}`,
+          [], avisos.notasDosEventos([], nota)),
         origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
       });
     }
@@ -1093,8 +1122,12 @@ router.post('/:id/reabrir', precisa('tarefas.view'), async (req, res) => {
       status: 'a_fazer', concluida_em: null, concluida_por: null, resultado: null, resultado_nota: null,
       origem: t.origem === 'proximo_passo' ? 'manual' : t.origem, atualizado_em: agoraISO()
     });
-    await S.registrarNaTarefa(api, t.id, [{ tipo: 'situacao', acao: 'reabriu', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status], valor_novo: 'A fazer' }], ctx.usuarioId);
-    await S.registrarNaFicha(api, t, S.eventoNaFicha('reabriu', t, { nomes: await social.nomesDosUsuarios(api), valor: 'Reaberta' }), ctx.usuarioId);
+    const eventos = [{ tipo: 'situacao', acao: 'reabriu', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status], valor_novo: 'A fazer' }];
+    await S.registrarNaTarefa(api, t.id, eventos, ctx.usuarioId);
+    const nomes = await social.nomesDosUsuarios(api);
+    await S.registrarNaFicha(api, t, S.eventoNaFicha('reabriu', t, { nomes, valor: 'Reaberta' }), ctx.usuarioId);
+    // Quem criou, responde e participa fica sabendo que voltou a ficar aberta.
+    await avisos.avisarDaFicha(api, { origem: 'tarefa', registroId: t.id, registro: t, eventos, usuarioId: ctx.usuarioId, nomes });
     res.json({ success: true });
   } catch (err) {
     responderErro(res, err, 'reabrir');
@@ -1105,13 +1138,19 @@ router.delete('/:id', precisa('tarefas.delete'), async (req, res) => {
   try {
     const ctx = req.ctxTarefas;
     const { api } = ctx;
-    const { t } = await carregarTarefa(ctx, req.params.id);
+    const { t, participantes } = await carregarTarefa(ctx, req.params.id);
     if (!R.podeExcluirTarefa(t, { usuarioId: ctx.usuarioId, escopo: ctx.escopo })) throw erro(403, 'Só quem criou a tarefa (ou Admin/Sup Admin) exclui.');
     const motivo = texto(req.body?.motivo || req.query?.motivo) || null;
     await api.put(`/api/tarefas/${t.id}`, { excluida_em: agoraISO(), excluida_por: ctx.usuarioId, motivo_exclusao: motivo, atualizado_em: agoraISO() });
     await S.registrarNaTarefa(api, t.id, [{ tipo: 'situacao', acao: 'excluiu', entidade: 'Tarefa', valor_anterior: t.titulo, observacao: motivo }], ctx.usuarioId);
-    await S.registrarNaFicha(api, t, S.eventoNaFicha('excluiu', t, { nomes: await social.nomesDosUsuarios(api), observacao: motivo }), ctx.usuarioId);
-    if (R.ABERTOS.has(t.status)) await refletirNoPasso(ctx, t, { status: 'cancelada' });
+    const nomes = await social.nomesDosUsuarios(api);
+    await S.registrarNaFicha(api, t, S.eventoNaFicha('excluiu', t, { nomes, observacao: motivo }), ctx.usuarioId);
+    if (R.ABERTOS.has(t.status)) await refletirNoPasso(ctx, t, { status: 'cancelada' }, participantes);
+    // Quem responde e quem participa ficam sabendo, com o motivo.
+    await avisos.avisarDaFicha(api, {
+      origem: 'tarefa', registroId: t.id, registro: t, usuarioId: ctx.usuarioId, nomes,
+      situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+    });
     res.json({ success: true });
   } catch (err) {
     responderErro(res, err, 'excluir');
@@ -1234,7 +1273,22 @@ router.delete('/:id/participantes/:usuarioId', precisa('tarefas.view'), async (r
     if (!p) throw erro(404, 'Esta pessoa não participa da tarefa.');
     await api.put(`/api/tarefa_participantes/${p.id}`, { status: 'saiu', respondido_em: agoraISO() });
     const nomes = await social.nomesDosUsuarios(api);
-    await S.registrarNaTarefa(api, t.id, [{ tipo: 'participantes', acao: 'alterou', entidade: 'Participantes', valor_anterior: nomes.get(alvo) || `#${alvo}`, observacao: saindo ? 'Saiu da tarefa' : 'Removido da tarefa' }], ctx.usuarioId);
+    const eventos = [{ tipo: 'participantes', acao: 'alterou', entidade: 'Participantes', valor_anterior: nomes.get(alvo) || `#${alvo}`, observacao: saindo ? 'Saiu da tarefa' : 'Removido da tarefa' }];
+    await S.registrarNaTarefa(api, t.id, eventos, ctx.usuarioId);
+    // Quem foi tirado fica sabendo; quem criou e quem responde também (01/10/2026).
+    const tirado = saindo ? [] : social.destinatarios([alvo], ctx.usuarioId);
+    if (tirado.length) {
+      await social.notificar(api, tirado, {
+        tipo: 'participante_removido', titulo: 'Você saiu de uma tarefa',
+        mensagem: `${nomes.get(ctx.usuarioId) || 'Alguém'} tirou você da tarefa “${t.titulo}”.`,
+        origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
+      });
+    }
+    await avisos.avisarDaFicha(api, {
+      origem: 'tarefa', registroId: t.id, registro: t, usuarioId: ctx.usuarioId, nomes,
+      resumo: `${nomes.get(ctx.usuarioId) || 'Alguém'} ${saindo ? 'saiu' : `tirou ${nomes.get(alvo) || 'alguém'}`} da tarefa “${t.titulo}”.`,
+      excluir: [alvo]
+    });
     res.json({ success: true });
   } catch (err) {
     responderErro(res, err, 'participantes');

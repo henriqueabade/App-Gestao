@@ -34,6 +34,8 @@ const COLUNAS = {
   // excluido_*: sql/historico_social.sql (a exclusão do Sup Admin é por marca).
   prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em', 'excluido_em', 'excluido_por', 'motivo_exclusao'],
   prospeccao_notas: ['id', 'prospeccao_id', 'titulo', 'conteudo', 'usuario_id', 'criado_em'],
+  // O sino (01/10/2026: avisos de "algo seu"). Só os testes que o querem põem a tabela.
+  notificacoes: ['id', 'usuario_id', 'tipo', 'titulo', 'mensagem', 'origem', 'registro_id', 'item_id', 'comentario_id', 'autor_id', 'lida_em', 'criado_em'],
   prospeccao_campanhas: ['id', 'prospeccao_id', 'nome', 'canal', 'status', 'data_envio', 'resposta', 'observacao', 'usuario_id'],
   prospeccao_anexos: ['id', 'prospeccao_id', 'nota_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'usuario_id', 'criado_em'],
   orcamentos: ['id', 'numero', 'cliente_id', 'prospeccao_id', 'situacao'],
@@ -2203,6 +2205,48 @@ test('editar campanha também recusa data retroativa', async () => {
     assert.strictEqual(resp.status, 400);
     assert.strictEqual(
       ctx.tabelas.prospeccao_campanhas.find(c => c.id === 60).data_envio, '2026-08-01');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('"algo seu" (01/10/2026): trocar o responsável, excluir a interação de outro e perder avisam — com a observação', async () => {
+  const dados = baseDados();
+  dados.notificacoes = [];
+  dados.prospeccoes.find(p => p.id === 1).criado_por = 3;
+  const ctx = await montar(dados);
+  const avisosDe = id => ctx.tabelas.notificacoes.filter(n => n.usuario_id === id);
+  try {
+    // O Sup Admin passa a Antiga Ltda do João para a Ana, dizendo por quê.
+    const troca = await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      method: 'PUT', body: JSON.stringify({ responsavel_id: 2, observacao: 'João de férias até dia 20' })
+    });
+    assert.strictEqual(troca.status, 200);
+    const ana = avisosDe(2)[0];
+    assert.strictEqual(ana.tipo, 'responsavel_novo');
+    assert.strictEqual(ana.titulo, 'Prospecção agora é sua');
+    assert.strictEqual(ana.mensagem, 'Henrique passou a prospecção Antiga Ltda para você.\n» João de férias até dia 20');
+    assert.deepStrictEqual([ana.origem, ana.registro_id, ana.autor_id], ['prospeccao', 1, 1]);
+    const joao = avisosDe(3)[0];
+    assert.strictEqual(joao.tipo, 'responsavel_saiu');
+    assert.strictEqual(joao.mensagem, 'Henrique passou a prospecção Antiga Ltda para Vendedora Ana.\n» João de férias até dia 20');
+    assert.strictEqual(avisosDe(1).length, 0, 'quem agiu não se avisa');
+
+    // A interação 20 foi registrada pelo João: ele sabe que saiu; a Ana (responde) também.
+    const exclusao = await chamar(ctx.porta, '/api/prospeccoes/1/interacoes/20', { method: 'DELETE' });
+    assert.strictEqual(exclusao.status, 200);
+    const doJoao = avisosDe(3).find(n => n.tipo === 'item_excluido');
+    assert.strictEqual(doJoao.mensagem, 'Henrique excluiu um registro seu na prospecção Antiga Ltda.\n• Excluiu Ligação — Primeiro contato');
+    assert.ok(avisosDe(2).some(n => n.tipo === 'registro_alterado'));
+
+    // Perdido com motivo: a responsável recebe a mudança de etapa e o motivo.
+    const perda = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Perdido', motivo_perda: 'Fechou com o concorrente' })
+    });
+    assert.strictEqual(perda.status, 200);
+    const perdida = avisosDe(2).filter(n => n.tipo === 'registro_alterado').pop();
+    assert.match(perdida.mensagem, /^Henrique atualizou a prospecção Antiga Ltda\.\n• Etapa do funil: Qualificado → Perdido\n/);
+    assert.match(perdida.mensagem, /\n» Fechou com o concorrente$/);
   } finally {
     await ctx.encerrar();
   }

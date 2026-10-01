@@ -20,6 +20,8 @@ const { usuarioDaRequisicao } = require('./usuarioAtual');
 const historico = require('./contatoHistorico');
 const csv = require('./importacaoCsv');
 const social = require('./historicoSocial');
+// Aviso no sino para quem cadastrou quando outra pessoa mexe no contato.
+const avisos = require('./avisosEnvolvidos');
 const { quandoAconteceu } = require('./tarefasRegras');
 
 const SQL_ARQUIVO = 'sql/contatos_fornecedores.sql';
@@ -421,7 +423,7 @@ router.post('/:id/interacoes', exigirPermissao('ctt.interaction.add'), async (re
     await historico.registrarNoContato(api, req.params.id, [{
       tipo: 'interacao', acao: 'criou', entidade: `${dados.tipo} — ${dados.resumo}`, valor_novo: dados.resumo,
       detalhe: { campos: retratoDaAtividade(dados), atividade_id: criada?.id ?? null }
-    }], usuarioId);
+    }], usuarioId, { nota: dados.detalhe || null });
     res.status(201).json({ id: criada?.id ?? null });
   } catch (err) {
     responder(res, err, 'POST /api/contatos/:id/interacoes');
@@ -449,7 +451,8 @@ router.put('/:id/interacoes/:atividadeId', exigirPermissao('ctt.interaction.add'
         tipo: 'interacao', acao: 'alterou', entidade: `${antes.tipo} — ${antes.resumo}`, campo,
         valor_anterior: antes[campo] ?? null, valor_novo: dados[campo] ?? null, detalhe: { rotulo }
       }));
-    await historico.registrarNoContato(api, req.params.id, eventos, usuarioDaRequisicao(req));
+    // Quem registrou a atividade fica sabendo que outra pessoa a mudou.
+    await historico.registrarNoContato(api, req.params.id, eventos, usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
     res.json({ success: true });
   } catch (err) {
     responder(res, err, 'PUT /api/contatos/:id/interacoes/:atividadeId');
@@ -465,7 +468,7 @@ router.delete('/:id/interacoes/:atividadeId', exigirPermissao('ctt.interaction.a
       tipo: 'interacao', acao: 'excluiu', entidade: `${antes.tipo} — ${antes.resumo}`,
       valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
       detalhe: { campos: retratoDaAtividade(antes) }
-    }], usuarioDaRequisicao(req));
+    }], usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
     res.json({ success: true });
   } catch (err) {
     responder(res, err, 'DELETE /api/contatos/:id/interacoes/:atividadeId');
@@ -545,7 +548,8 @@ async function criarContato(api, payload, pessoas, tipos, usuarioId, { observaca
   const contatoId = criado?.id || criado?.[0]?.id || criado?.data?.id;
   const limpas = (Array.isArray(pessoas) ? pessoas : []).map(limparPessoa);
   for (const p of limpas) await api.post('/api/contato_pessoas', { ...p, contato_id: contatoId, criado_em: agora() });
-  await historico.registrarNoContato(api, contatoId, historico.eventosDaCriacao(paraHistorico(payload, tipos), limpas, { observacao, pendencias }), usuarioId);
+  // Sem aviso: quem cadastra é quem cria, e o contato não tem responsável.
+  await historico.registrarNoContato(api, contatoId, historico.eventosDaCriacao(paraHistorico(payload, tipos), limpas, { observacao, pendencias }), usuarioId, false);
   return contatoId;
 }
 
@@ -621,6 +625,12 @@ router.delete('/:id', exigirPermissao('ctt.delete'), async (req, res) => {
     // As pessoas, atividades e a linha do tempo caem em cascata no banco
     // (ON DELETE CASCADE); aqui só o contato.
     await api.delete(`/api/contatos/${id}`);
+    // Quem cadastrou fica sabendo (com o motivo, se veio).
+    const motivo = String(req.body?.motivo || '').trim();
+    await avisos.avisarDaFicha(api, {
+      origem: 'contato', registroId: id, registro: contato, usuarioId: usuarioDaRequisicao(req),
+      situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+    });
     res.json({ success: true });
   } catch (err) {
     responder(res, err, 'DELETE /api/contatos/:id');

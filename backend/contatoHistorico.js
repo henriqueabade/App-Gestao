@@ -9,6 +9,7 @@
  */
 
 const { registrarEventos } = require('./historicoSocial');
+const avisos = require('./avisosEnvolvidos');
 
 /** Os campos acompanhados, com o rótulo que a linha do tempo mostra. */
 const CAMPOS_CONTATO = {
@@ -106,13 +107,19 @@ function eventosDasPessoas({ pessoasNovas = [], pessoasAtualizadas = [], pessoas
   return eventos;
 }
 
-/** Grava no histórico do contato (sem derrubar quem chamou). */
-function registrarNoContato(api, contatoId, eventos, usuarioId) {
-  if (!eventos?.length || !contatoId) return Promise.resolve([]);
-  return registrarEventos(api, 'contato', contatoId, eventos, usuarioId).catch(err => {
+/**
+ * Grava no histórico do contato (sem derrubar quem chamou) e avisa no sino
+ * quem o cadastrou (backend/avisosEnvolvidos.js, 01/10/2026). `aviso`:
+ * opções do aviso ou `false` para não avisar.
+ */
+async function registrarNoContato(api, contatoId, eventos, usuarioId, aviso = {}) {
+  if (!eventos?.length || !contatoId) return [];
+  const criados = await registrarEventos(api, 'contato', contatoId, eventos, usuarioId).catch(err => {
     console.error('[contatos] histórico não gravado:', err?.message || err);
     return [];
   });
+  if (aviso !== false) await avisos.avisarDaFicha(api, { origem: 'contato', registroId: contatoId, eventos, usuarioId, ...aviso });
+  return criados;
 }
 
 module.exports = {

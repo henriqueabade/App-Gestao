@@ -23,6 +23,7 @@ const regras = require('./regras');
 const auditoria = require('./auditoria');
 const base = require('./base');
 const unidades = require('./producaoUnidades');
+const avisos = require('../avisosEnvolvidos');
 const { estadoDosFechamentos, competenciaAlvo } = require('./comissoes');
 const { carregarInsumos, carregarRota } = require('../cancelamentoEstorno');
 
@@ -479,6 +480,12 @@ async function estornar({ api, id, motivo, usuarioId = null, hoje }) {
   await auditoria.registrar(api, {
     tipo: 'producao_estornada', pedidoId: evento.pedido_id, referenciaId: evento.id, usuarioId,
     descricao: `Estorno de ${evento.quantidade} peça(s) do registro ${evento.id}${fechado ? ` (já fechado em ${c.rotuloCompetencia(fechado.competencia)}: desconta no próximo fechamento)` : ''}: ${texto}`
+  });
+  // Quem registrou a produção fica sabendo, com o motivo (01/10/2026).
+  await avisos.avisarPessoa(api, {
+    para: evento.criado_por, usuarioId, origem: 'financeiro', tipo: 'registro_cancelado', titulo: 'Uma produção sua foi estornada',
+    frase: autor => `${autor} estornou ${evento.quantidade} peça(s) que você registrou na produção (registro ${evento.id}).`,
+    nota: `Motivo: ${texto}`
   });
   return { evento: { ...evento, ...campos, status: fechado ? evento.status : 'estornado' }, negativo, ja_fechado: Boolean(fechado) };
 }

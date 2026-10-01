@@ -15,6 +15,7 @@
  */
 const boletos = require('./boletos');
 const calculo = require('./boletoCalculo');
+const avisos = require('../avisosEnvolvidos');
 
 const ORIGENS = { boleto: 'boleto pago', quitado_por_fora: 'boleto quitado por fora', manual: 'registrado à mão' };
 const FORMAS = ['Pix', 'Transferência', 'Depósito', 'Dinheiro', 'Cheque', 'Cartão de crédito', 'Outro'];
@@ -309,6 +310,14 @@ async function estornar({ api, id, motivo, usuarioId = null }) {
       });
     }
   }
+  // Quem registrou o recebimento fica sabendo, com o motivo (01/10/2026).
+  const pedido = r.criado_por && String(r.criado_por) !== String(usuarioId)
+    ? await api.get(`/api/pedidos/${r.pedido_id}`).catch(() => null) : null;
+  await avisos.avisarPessoa(api, {
+    para: r.criado_por, usuarioId, origem: 'financeiro', tipo: 'registro_cancelado', titulo: 'Um recebimento seu foi estornado',
+    frase: autor => `${autor} estornou o recebimento de ${reais(r.valor_recebido)} que você registrou (parcela ${r.numero_parcela} do pedido ${pedido?.numero || `#${r.pedido_id}`}).`,
+    nota: `Motivo: ${texto}`
+  });
   return { ...r, ...campos };
 }
 

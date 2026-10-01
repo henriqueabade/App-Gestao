@@ -8,9 +8,12 @@
  * Convite de tarefa em conjunto (tipo convite_tarefa) volta com
  * `convite_pendente`: enquanto for true, o sino mostra Aceitar/Recusar.
  *
- * Quem grava os avisos é quem gera o fato (hoje, o histórico social de
- * Prospecções e Clientes — backend/historicoSocial.js). Cada um só lê e marca
- * os PRÓPRIOS avisos: o id vem do token, nunca do corpo.
+ * Quem grava os avisos é quem gera o fato: o histórico social
+ * (backend/historicoSocial.js), as Tarefas e, desde 01/10/2026, os avisos de
+ * "algo seu" de cada módulo (backend/avisosEnvolvidos.js), com a nota que
+ * veio junto. Cada item volta com `mensagem` (o texto principal),
+ * `mudancas` e `notas` (partesDaMensagem). Cada um só lê e marca os PRÓPRIOS
+ * avisos: o id vem do token, nunca do corpo.
  *
  * Sem a tabela (sql/historico_social.sql não rodou) responde vazio com
  * `sql_pendente`, e o sino fica quieto em vez de dar erro.
@@ -25,6 +28,36 @@ const router = express.Router();
 const LIMITE = 50;
 
 /**
+ * A mensagem gravada em linhas (backend/avisosEnvolvidos.js) → o que o sino
+ * mostra: o texto principal, o que mudou ("• …") e as notas ("» …", uma nota
+ * de várias linhas; "»" sozinho separa uma nota da outra). Mensagem antiga,
+ * de uma linha só, volta igual e sem listas. Pura.
+ */
+function partesDaMensagem(bruta) {
+  const principal = [];
+  const mudancas = [];
+  const notas = [];
+  let nota = null;
+  const fecharNota = () => {
+    if (nota !== null && nota.join('\n').trim()) notas.push(nota.join('\n').trim());
+    nota = null;
+  };
+  for (const linha of String(bruta || '').split('\n')) {
+    if (linha.startsWith('» ') || linha === '»') {
+      if (linha === '»') { fecharNota(); continue; }
+      if (nota === null) nota = [];
+      nota.push(linha.slice(2));
+      continue;
+    }
+    fecharNota();
+    if (linha.startsWith('• ')) mudancas.push(linha.slice(2).trim());
+    else if (linha.trim()) principal.push(linha.trim());
+  }
+  fecharNota();
+  return { mensagem: principal.join(' '), mudancas, notas };
+}
+
+/**
  * Os avisos de um usuário, do mais novo ao mais antigo, com o nome do autor.
  * Os dispensados ficam de fora. `convitesPendentes`: ids das tarefas com
  * convite meu ainda sem resposta. Pura.
@@ -37,7 +70,7 @@ function montarAvisos(linhas = [], nomes = new Map(), limite = LIMITE, convitesP
   return {
     nao_lidas: todos.filter(n => !n.lida_em).length,
     itens: todos.slice(0, limite).map(n => ({
-      id: n.id, tipo: n.tipo, titulo: n.titulo, mensagem: n.mensagem || '',
+      id: n.id, tipo: n.tipo, titulo: n.titulo, ...partesDaMensagem(n.mensagem),
       origem: n.origem || null, registro_id: n.registro_id ?? null, item_id: n.item_id ?? null,
       comentario_id: n.comentario_id ?? null, autor_id: n.autor_id ?? null,
       autor: n.autor_id ? nomes.get(Number(n.autor_id)) || null : null,
@@ -106,3 +139,4 @@ router.post('/dispensar', async (req, res) => {
 
 module.exports = router;
 module.exports.montarAvisos = montarAvisos;
+module.exports.partesDaMensagem = partesDaMensagem;

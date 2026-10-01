@@ -111,13 +111,22 @@ test('Configurações: a senha nova vai em hash bcrypt (nunca crua) e o hash nã
 
 test('Configurações: sem senha nova, a senha nem vai no corpo; PUT /:id também faz hash', async () => {
   const ctx = await montarUsuarios();
+  // Só as gravações do cadastro: o PUT /:id também lê o cadastro antes e avisa
+  // o dono no sino (01/10/2026).
+  const gravacoes = () => ctx.recebidos.filter(r => r.metodo === 'PUT' && r.url.startsWith('/api/usuarios/'));
   try {
     assert.strictEqual((await ctx.put('/me', { nome: 'Maria', senha: '' })).status, 200);
-    assert.strictEqual('senha' in ctx.recebidos[0].corpo, false);
+    assert.strictEqual('senha' in gravacoes()[0].corpo, false);
     assert.strictEqual((await ctx.put('/5', { senha: SENHA_BOA })).status, 200);
-    assert.ok(await bcrypt.compare(SENHA_BOA, ctx.recebidos[1].corpo.senha));
+    assert.ok(await bcrypt.compare(SENHA_BOA, gravacoes()[1].corpo.senha));
     assert.strictEqual((await ctx.put('/5', { senha: 'fraca' })).status, 400);
-    assert.strictEqual(ctx.recebidos.length, 2);
+    assert.strictEqual(gravacoes().length, 2);
+    // O aviso diz que a senha mudou — nunca a senha.
+    const aviso = ctx.recebidos.find(r => r.metodo === 'POST' && r.url === '/api/notificacoes');
+    assert.ok(aviso, 'o dono do cadastro é avisado');
+    assert.strictEqual(aviso.corpo.usuario_id, 5);
+    assert.match(aviso.corpo.mensagem, /\n• Redefiniu a senha$/);
+    assert.ok(!aviso.corpo.mensagem.includes(SENHA_BOA));
   } finally {
     await ctx.encerrar();
   }

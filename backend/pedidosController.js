@@ -9,6 +9,9 @@ const pedidoParcelas = require('./pedidoParcelas');
 const datasDoEnvio = require('./datasDoEnvio');
 // Tarefa automática "pedido entregue → pós-venda" (sql/tarefas_calendario.sql).
 const tarefas = require('./tarefasServico');
+// "Algo seu" no sino: o dono do pedido e quem responde pelo cliente (01/10/2026).
+// (`sino`, e não `avisos`: as rotas já usam `avisos` para a lista de recados da resposta.)
+const sino = require('./avisosEnvolvidos');
 const confirmacaoDaProducao = require('./financeiro/producaoConfirmacao');
 const {
   hojeEmSaoPaulo,
@@ -305,7 +308,18 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     }
 
     const payload = payloadDeStatus(status, new Date(), atual, dataDeEnvio);
+    // Para o aviso (01/10/2026): a situação de antes, quando ainda não foi lida.
+    const anterior = atual || await api.get(`/api/pedidos/${id}`).catch(() => null);
     await api.put(`/api/pedidos/${id}`, payload);
+    // O dono do pedido e quem responde pelo cliente ficam sabendo — o
+    // cancelamento com aviso próprio.
+    if (anterior && !anterior.error && String(anterior.situacao || '') !== String(status)) {
+      await sino.avisarDaVenda(api, {
+        origem: 'pedido', registro: { ...anterior, id: Number(id) }, usuarioId: idDoUsuarioDaRequisicao(req),
+        situacao: status === 'Cancelado' ? 'cancelou' : null,
+        eventos: status === 'Cancelado' ? [] : [{ acao: 'alterou', entidade: 'Situação', campo: 'situacao', valor_anterior: anterior.situacao || null, valor_novo: status }]
+      });
+    }
 
     // Cancelado: a produção pendente não vai para o mês seguinte — paga-se só o
     // trecho que cada peça andou (o estágio de volta menos o de saída, gravados
@@ -1023,7 +1037,16 @@ router.delete('/:id', exigirPermissao('ped.delete'), exigirSupAdmin, async (req,
   const { id } = req.params;
   try {
     const api = createApiClient(req);
+    // Lido antes: depois de excluído não há de onde tirar o número e o dono.
+    const antes = await api.get(`/api/pedidos/${id}`).catch(() => null);
     const { removidos, avisos } = await excluirPedidoEmCascata(api, id);
+    if (antes && !antes.error) {
+      const motivo = String(req.body?.motivo || '').trim();
+      await sino.avisarDaVenda(api, {
+        origem: 'pedido', registro: { ...antes, id: Number(id) }, usuarioId: idDoUsuarioDaRequisicao(req),
+        situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+      });
+    }
     res.json({ success: true, removidos, avisos });
   } catch (err) {
     console.error('Erro ao excluir pedido:', err);

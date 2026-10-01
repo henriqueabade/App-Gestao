@@ -21,6 +21,7 @@ const regras = require('./regras');
 const auditoria = require('./auditoria');
 const base = require('./base');
 const boletos = require('../cobranca/boletos');
+const avisos = require('../avisosEnvolvidos');
 
 const TIPOS = comissoes.TIPOS_AJUSTE;
 
@@ -148,6 +149,12 @@ async function cancelar({ api, id, motivo, usuarioId = null, hoje, desde = null 
   await auditoria.registrar(api, {
     tipo: 'ajuste_cancelado', pedidoId: ajuste.pedido_id, numeroParcela: ajuste.numero_parcela, referenciaId: ajuste.id, valor: Number(ajuste.valor), usuarioId,
     descricao: `${TIPOS[ajuste.tipo] || ajuste.tipo} de ${c.reais(ajuste.valor)} cancelado (parcela ${ajuste.numero_parcela}): ${texto}`
+  });
+  // Quem lançou o ajuste fica sabendo, com o motivo (01/10/2026).
+  await avisos.avisarPessoa(api, {
+    para: ajuste.criado_por, usuarioId, origem: 'financeiro', tipo: 'registro_cancelado', titulo: 'Um ajuste seu foi cancelado',
+    frase: autor => `${autor} cancelou o ajuste (${TIPOS[ajuste.tipo] || ajuste.tipo}) de ${c.reais(ajuste.valor)} que você lançou na parcela ${ajuste.numero_parcela} do pedido ${alvo?.pedido || ajuste.pedido_id}.`,
+    nota: `Motivo: ${texto}`
   });
   return { ...ajuste, ...campos };
 }

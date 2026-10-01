@@ -18,6 +18,8 @@ const crypto = require('node:crypto');
 const c = require('../financeiro/comum');
 const b = require('./base');
 const eventos = require('./eventos');
+// Aviso no sino de "algo seu" (01/10/2026).
+const sino = require('../avisosEnvolvidos');
 
 const LIMITE_BYTES = 20 * 1024 * 1024;
 const TAMANHO_PARTE = 512 * 1024;
@@ -228,6 +230,12 @@ async function excluir(api, id, { motivo, usuarioId = null }) {
   await eventos.registrar(api, {
     tipo: 'arquivo_excluido', competencia: arquivo.competencia, usuarioId, referenciaTipo: 'arquivo', referenciaId: arquivo.id,
     descricao: `${CATEGORIAS[arquivo.categoria] || 'Arquivo'} excluído: ${arquivo.nome_arquivo} — ${m}`
+  });
+  // Quem enviou o arquivo fica sabendo, com o motivo (01/10/2026).
+  await sino.avisarPessoa(api, {
+    para: arquivo.criado_por, usuarioId, origem: 'contabil', tipo: 'item_excluido', titulo: 'Um arquivo seu foi excluído',
+    frase: autor => `${autor} excluiu o arquivo “${arquivo.nome_arquivo}” (${CATEGORIAS[arquivo.categoria] || 'arquivo'}) que você enviou à Contabilidade.`,
+    nota: `Motivo: ${m}`
   });
   return { id: arquivo.id, excluido: true };
 }

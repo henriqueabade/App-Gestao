@@ -13,6 +13,60 @@ const router = express.Router();
  * Cria um client interno já com o JWT que está salvo no tokenStore.
  * Esse client só faz proxy HTTP, sem nenhuma transformação pesada.
  */
+// ---------------------------------------------------------------------------
+// "Algo seu" no sino (01/10/2026): quem tem o cadastro mexido por OUTRA
+// pessoa (perfil de permissões, dados, acesso, senha) fica sabendo. As
+// observações internas do cadastro não entram no aviso: são do administrador.
+// ---------------------------------------------------------------------------
+const avisos = require('./avisosEnvolvidos');
+const ROTULO_ACESSO = { ativo: 'Ativo', aguardando_aprovacao: 'Inativo', nao_confirmado: 'Não confirmado' };
+const CAMPOS_DA_CONTA = {
+  nome: 'Nome', email: 'E-mail', telefone: 'Telefone', perfil: 'Perfil',
+  modelo_permissoes_id: 'Modelo de permissões', status: 'Acesso'
+};
+
+/** O que mudou no cadastro, em eventos do aviso. A senha só diz que mudou. Pura. */
+function mudancasDaConta(antes = {}, depois = {}, modelos = new Map()) {
+  const legivel = (campo, v) => {
+    if (v === null || v === undefined || v === '') return null;
+    if (campo === 'status') return ROTULO_ACESSO[v] || String(v);
+    if (campo === 'modelo_permissoes_id') return modelos.get(String(v)) || `#${v}`;
+    return String(v);
+  };
+  const eventos = Object.entries(CAMPOS_DA_CONTA)
+    .filter(([campo]) => campo in depois && depois[campo] !== undefined
+      && String(antes?.[campo] ?? '').trim() !== String(depois[campo] ?? '').trim())
+    .map(([campo, rotulo]) => ({ acao: 'alterou', entidade: rotulo, campo, valor_anterior: legivel(campo, antes?.[campo]), valor_novo: legivel(campo, depois[campo]) }));
+  if (depois.senha) eventos.push({ acao: 'redefiniu', entidade: 'a senha' });
+  return eventos;
+}
+
+/** Grava o aviso para o dono do cadastro (nunca quando ele mesmo mexeu). Falha só vai para o log. */
+async function avisarDaConta(api, req, id, antes, depois) {
+  try {
+    const ator = resolverUsuarioAtual(req);
+    if (!ator || !antes || antes.error || String(ator) === String(id)) return;
+    const modelos = 'modelo_permissoes_id' in depois
+      ? new Map((await api.get('/api/modelos_permissoes').catch(() => []) || []).map(m => [String(m.id), m.nome]))
+      : new Map();
+    const eventos = mudancasDaConta(antes, depois, modelos);
+    if (!eventos.length) return;
+    const nomes = await require('./historicoSocial').nomesDosUsuarios(api);
+    const autor = nomes.get(Number(ator)) || 'Alguém';
+    const soAcesso = eventos.length === 1 && eventos[0].campo === 'status';
+    const primeira = soAcesso
+      ? `${autor} ${depois.status === 'ativo' ? 'liberou' : 'desativou'} o seu acesso ao sistema.`
+      : `${autor} alterou o seu cadastro.`;
+    await avisos.gravar(api, [{
+      usuario_id: Number(id), tipo: 'conta_alterada', titulo: 'Seu cadastro foi alterado',
+      mensagem: avisos.comporMensagem(primeira, soAcesso ? [] : eventos.map(avisos.linhaDoEvento)),
+      origem: 'usuario', registro_id: Number(id), autor_id: Number(ator)
+    }]);
+  } catch (err) {
+    console.warn('[usuarios] aviso do cadastro não gravado:', err?.message || err);
+  }
+}
+
 function createInternalApiClient() {
   const token = getToken();
   return createApiClient({
@@ -503,8 +557,10 @@ router.put('/:id/permissoes', async (req, res) => {
   const modeloId = req.body?.modeloPermissoesId ?? req.body?.modelo_permissoes_id ?? null;
   try {
     const api = createInternalApiClient();
+    const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
     await api.put(`/api/usuarios/${id}`, { modelo_permissoes_id: modeloId });
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    await avisarDaConta(api, req, id, antes, { modelo_permissoes_id: modeloId });
     res.json({ success: true, modeloPermissoesId: modeloId });
   } catch (err) {
     console.error('Erro ao aplicar permissões ao usuário:', err);
@@ -785,8 +841,10 @@ router.put('/:id/dados', async (req, res) => {
       payload.modelo_permissoes_id = body.modeloPermissoesId || null;
     }
 
+    const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
     await api.put(`/api/usuarios/${id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    await avisarDaConta(api, req, id, antes, payload);
     // devolve o usuário completo para o front atualizar a linha sem recarregar
     const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
     res.json({
@@ -816,8 +874,10 @@ router.patch('/:id/status', async (req, res) => {
     const payload = { status };
     // registra quando o acesso foi (re)ativado, usado no tooltip da listagem
     if (status === 'ativo') payload.data_ativacao = new Date().toISOString();
+    const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
     await api.put(`/api/usuarios/${id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    await avisarDaConta(api, req, id, antes, { status });
     // devolve o usuário completo: o front usa isso para atualizar só aquela
     // linha da tabela, em vez de recarregar/refiltrar a lista inteira.
     const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
@@ -1116,7 +1176,9 @@ router.put('/:id', async (req, res) => {
   try {
     const payload = await payloadDeEdicao(req.body);
     const api = createInternalApiClient();
+    const antes = await api.get(`/api/usuarios/${req.params.id}`).catch(() => null);
     await api.put(`/api/usuarios/${req.params.id}`, payload);
+    await avisarDaConta(api, req, req.params.id, antes, payload);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err);
@@ -1146,4 +1208,5 @@ router.extrairUsuarioCriado = extrairUsuarioCriado;
 router.extrairUsuarioId = extrairUsuarioId;
 module.exports = router;
 module.exports.normalizeAvatar = normalizeAvatar;
+module.exports.mudancasDaConta = mudancasDaConta;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;

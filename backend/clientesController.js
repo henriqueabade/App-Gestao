@@ -5,6 +5,8 @@ const { usuarioDaRequisicao } = require('./usuarioAtual');
 const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
 const social = require('./historicoSocial');
+// Aviso no sino para o dono e quem cadastrou quando outra pessoa mexe no cliente.
+const avisos = require('./avisosEnvolvidos');
 const { quandoAconteceu } = require('./tarefasRegras');
 
 const router = express.Router();
@@ -262,13 +264,24 @@ async function importarClientes(api, conteudo, { usuarioId = null, nomeArquivo =
     try {
       resultado.id = await criarCliente(api, conf.payload, usuarioId, {
         observacao: `Importado da planilha ${nomeArquivo} (linha ${resultado.linha})`,
-        pendencias: conf.pendencias
+        pendencias: conf.pendencias,
+        avisar: false
       });
     } catch (err) {
       resultado.situacao = 'nao_registrado';
       resultado.bloqueios = [...resultado.bloqueios, `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
     }
   });
+
+  // Um aviso por dono (01/10/2026), não um por cliente importado.
+  const nomesUsuarios = new Map((Array.isArray(usuarios) ? usuarios : []).map(u => [Number(u.id), u.nome]));
+  const fichas = aGravar.filter(g => g.resultado.id && g.resultado.situacao !== 'nao_registrado')
+    .map(g => ({ id: g.resultado.id, nome: g.conf.payload.nome_fantasia, para: [avisos.idPeloNome(g.conf.payload.dono_cliente, nomesUsuarios)] }));
+  if (fichas.length && usuarioId) {
+    await avisos.gravar(api, avisos.avisosDaPlanilha({
+      origem: 'cliente', ator: usuarioId, autor: nomesUsuarios.get(Number(usuarioId)) || 'Alguém', arquivo: nomeArquivo, fichas
+    }));
+  }
 
   return {
     arquivo: nomeArquivo,
@@ -401,7 +414,7 @@ router.post('/:id/interacoes', exigirPermissao('cli.interaction.add'), async (re
     await clienteHistorico.registrarNoCliente(api, req.params.id, [{
       tipo: 'interacao', acao: 'criou', entidade: `${dados.tipo} — ${dados.resumo}`, valor_novo: dados.resumo,
       detalhe: { campos: retratoDaAtividade(dados), atividade_id: criada?.id ?? null }
-    }], usuarioId);
+    }], usuarioId, { nota: dados.detalhe || null });
     res.status(201).json({ id: criada?.id ?? null });
   } catch (err) {
     responderAtividade(res, err, 'registrar');
@@ -429,7 +442,8 @@ router.put('/:id/interacoes/:atividadeId', exigirPermissao('cli.interaction.add'
         tipo: 'interacao', acao: 'alterou', entidade: `${antes.tipo} — ${antes.resumo}`, campo,
         valor_anterior: antes[campo] ?? null, valor_novo: dados[campo] ?? null, detalhe: { rotulo }
       }));
-    await clienteHistorico.registrarNoCliente(api, req.params.id, eventos, usuarioDaRequisicao(req));
+    // Quem registrou a atividade fica sabendo que outra pessoa a mudou.
+    await clienteHistorico.registrarNoCliente(api, req.params.id, eventos, usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
     res.json({ success: true });
   } catch (err) {
     responderAtividade(res, err, 'editar');
@@ -445,7 +459,7 @@ router.delete('/:id/interacoes/:atividadeId', exigirPermissao('cli.interaction.a
       tipo: 'interacao', acao: 'excluiu', entidade: `${antes.tipo} — ${antes.resumo}`,
       valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
       detalhe: { campos: retratoDaAtividade(antes) }
-    }], usuarioDaRequisicao(req));
+    }], usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
     res.json({ success: true });
   } catch (err) {
     responderAtividade(res, err, 'excluir');
@@ -551,7 +565,7 @@ router.get('/:id/resumo', exigirPermissao('cli.details.view'), async (req, res) 
  * Cadastra o cliente com os contatos e grava quem cadastrou e o histórico.
  * O mesmo caminho do formulário (POST /) e da importação da planilha.
  */
-async function criarCliente(api, cli, usuarioId, { observacao = 'Cadastro inicial', pendencias = [] } = {}) {
+async function criarCliente(api, cli, usuarioId, { observacao = 'Cadastro inicial', pendencias = [], avisar = true } = {}) {
   const payload = buildPayload(cli);
   const created = await api.post('/api/clientes', payload);
   const clienteId = created?.id || created?.[0]?.id || created?.data?.id;
@@ -567,7 +581,10 @@ async function criarCliente(api, cli, usuarioId, { observacao = 'Cadastro inicia
     });
   }
   await clienteHistorico.marcarCriador(api, clienteId, usuarioId);
-  await clienteHistorico.registrarNoCliente(api, clienteId, clienteHistorico.eventosDaCriacao(payload, contatos, { observacao, pendencias }), usuarioId);
+  // Cadastrado já com outra pessoa como dona: ela fica sabendo (a planilha
+  // avisa uma vez só, no fim).
+  await clienteHistorico.registrarNoCliente(api, clienteId, clienteHistorico.eventosDaCriacao(payload, contatos, { observacao, pendencias }), usuarioId,
+    avisar ? { situacao: 'criou', registro: { ...payload, id: clienteId, criado_por: usuarioId } } : false);
   return clienteId;
 }
 
@@ -704,6 +721,8 @@ router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
     if (Array.isArray(orcRes) && orcRes.length) {
       return res.status(400).json({ error: 'Não é possível excluir: cliente possui orçamentos vinculados' });
     }
+    // Lido antes: depois de excluído não há de onde tirar o nome e o dono.
+    const antes = await api.get(`/api/clientes/${id}`).catch(() => null);
 
     try {
       const contatos = await api.get('/api/contatos_cliente', { query: { id_cliente: id } });
@@ -736,6 +755,15 @@ router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
       }
     } catch (_) {}
     await api.delete(`/api/clientes/${id}`);
+
+    // O dono e quem cadastrou ficam sabendo (com o motivo, se veio).
+    if (antes && !antes.error) {
+      const motivo = String(req.body?.motivo || '').trim();
+      await avisos.avisarDaFicha(api, {
+        origem: 'cliente', registroId: id, registro: antes, usuarioId: usuarioDaRequisicao(req),
+        situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+      });
+    }
 
     res.json({ success: true });
   } catch (err) {

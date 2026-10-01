@@ -40,6 +40,8 @@ const clienteHistorico = require('./clienteHistorico');
 const csv = require('./importacaoCsv');
 // Origens e tipos de interação editáveis (+ e −) e as redes sociais da empresa.
 const listas = require('./prospeccaoListas');
+// Aviso no sino para quem tem a prospecção quando outra pessoa mexe nela.
+const avisos = require('./avisosEnvolvidos');
 // O próximo passo é espelhado numa tarefa (Tarefas/Calendário). Sem o SQL de
 // tarefas, a sincronia simplesmente não faz nada.
 const tarefas = require('./tarefasServico');
@@ -402,8 +404,16 @@ function paraComparacao(campo, valor) {
   return String(valor).trim() || null;
 }
 
-/** Grava um ou vários eventos. Silencioso em caso de falha, por decisão. */
-async function registrarHistorico(api, prospeccaoId, eventos, usuarioId) {
+/**
+ * Grava um ou vários eventos. Silencioso em caso de falha, por decisão.
+ *
+ * Depois avisa no sino quem tem a prospecção — o responsável e quem a criou
+ * (backend/avisosEnvolvidos.js, 01/10/2026): troca de responsável, o que
+ * mudou e a observação que veio junto. `aviso`: opções do aviso (situacao,
+ * troca, autores, excluir…) ou `false` para não avisar (a planilha avisa uma
+ * vez só, no fim).
+ */
+async function registrarHistorico(api, prospeccaoId, eventos, usuarioId, aviso = {}) {
   const lista = (Array.isArray(eventos) ? eventos : [eventos]).filter(Boolean);
   if (!lista.length) return;
 
@@ -425,6 +435,9 @@ async function registrarHistorico(api, prospeccaoId, eventos, usuarioId) {
       console.error('[prospeccoes] falha ao gravar histórico:', err?.message || err);
     }
   }));
+  if (aviso !== false) {
+    await avisos.avisarDaFicha(api, { origem: 'prospeccao', registroId: prospeccaoId, eventos: lista, usuarioId, ...aviso });
+  }
 }
 
 /**
@@ -901,7 +914,7 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
       resultado.situacao = csv.situacaoDaLinha(resultado);
       resultados.push(resultado);
       if (resultado.situacao !== 'nao_registrado') {
-        interacoes.push({ resultado, alvoId: existente?.id ?? null, criadora: existente ? null : criadora, interacao: confInt.interacao, proximoPasso });
+        interacoes.push({ resultado, alvoId: existente?.id ?? null, existente: existente || null, criadora: existente ? null : criadora, interacao: confInt.interacao, proximoPasso });
       }
       continue;
     }
@@ -928,9 +941,11 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
   // ---- 1ª volta: as empresas novas
   await csv.emParalelo(aCriar, 4, async ({ resultado, conf }) => {
     try {
+      // Sem aviso por linha: o responsável recebe um só, no fim.
       resultado.id = await criarProspeccao(api, conf.payload, usuarioId, {
         observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`,
-        pendencias: conf.pendencias
+        pendencias: conf.pendencias,
+        avisar: false
       });
       // O próximo passo vira a tarefa espelhada, como no formulário.
       if (conf.payload.proximo_passo) await passoNaTarefa(api, resultado.id, usuarioId);
@@ -972,7 +987,8 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
           tipo: interacao.tipo, data: interacao.data, resumo: interacao.resumo, detalhe: interacao.detalhe,
           duracao_min: interacao.duracao_min, contato_id: contatoId,
           ...(item.proximoPasso || {})
-        }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})` });
+        }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`, aviso: false });
+        if (item.existente) item.gravada = true;
       } catch (err) {
         const motivo = err?.status && err.status < 500 ? err.message : (err?.body?.detalhe || err?.message || 'falha na API');
         if (item.criadora === resultado) {
@@ -986,6 +1002,19 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
       if (resultado.situacao !== 'nao_registrado') resultado.situacao = csv.situacaoDaLinha(resultado);
     }
   });
+
+  // Um aviso por pessoa (01/10/2026): o responsável das prospecções novas e
+  // quem tem as que já existiam e ganharam interação.
+  const fichas = [
+    ...aCriar.filter(c => c.resultado.id && c.resultado.situacao !== 'nao_registrado')
+      .map(c => ({ id: c.resultado.id, nome: c.conf.payload.nome_fantasia, para: [c.conf.payload.responsavel_id] })),
+    ...interacoes.filter(i => i.gravada)
+      .map(i => ({ id: i.existente.id, nome: i.existente.nome_fantasia, para: [i.existente.responsavel_id, i.existente.criado_por], interacao: true }))
+  ];
+  if (fichas.length && usuarioId) {
+    const autor = listaUsuarios.find(u => String(u.id) === String(usuarioId))?.nome || 'Alguém';
+    await avisos.gravar(api, avisos.avisosDaPlanilha({ ator: usuarioId, autor, arquivo: nomeArquivo, fichas }));
+  }
 
   return {
     arquivo: nomeArquivo,
@@ -1093,7 +1122,7 @@ router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
  * pelo índice único do CNPJ. Desfazemos — o CASCADE leva junto os contatos que
  * chegaram a entrar.
  */
-async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao = 'Cadastro inicial', pendencias = [] } = {}) {
+async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao = 'Cadastro inicial', pendencias = [], avisar = true } = {}) {
   let criadaId = null;
   try {
     const payload = montarPayload(dados);
@@ -1139,7 +1168,10 @@ async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao =
       ...contatos.map(c => ({
         tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c
       }))
-    ], usuarioId);
+    ], usuarioId, avisar
+      // Criada já com outra pessoa como responsável: ela fica sabendo.
+      ? { situacao: 'criou', troca: { de: null, para: payload.responsavel_id ?? null }, registro: { ...payload, id: criadaId } }
+      : false);
 
     return criadaId;
   } catch (err) {
@@ -1522,23 +1554,26 @@ async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contato
  * atividade "Atividade realizada" com o combinado, o passo limpo e o
  * histórico. Devolve o id da atividade.
  */
-async function concluirPassoPelaTarefa(api, id, { nota, tarefaId }, usuarioId) {
+async function concluirPassoPelaTarefa(api, id, { nota, tarefaId }, usuarioId, aviso = {}) {
   const alvo = await buscarProspeccao(api, id);
   if (!texto(alvo.proximo_passo)) return null;
   const eventos = await concluirPassoPlanejado(api, id, alvo, { nota, tarefaId }, usuarioId);
   const interacaoId = eventos.interacaoId ?? null;
   await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null });
   eventos.push(...diferencasDaFicha(alvo, { proximo_passo: null, proximo_passo_data: null }));
-  await registrarHistorico(api, id, eventos, usuarioId);
+  await registrarHistorico(api, id, eventos, usuarioId, aviso);
   return interacaoId;
 }
 
-/** Tarefas: editar o título/data da tarefa-espelho (ou cancelá-la) muda o passo aqui. */
-async function atualizarPassoPelaTarefa(api, id, { passo, data }, usuarioId) {
+/**
+ * Tarefas: editar o título/data da tarefa-espelho (ou cancelá-la) muda o passo
+ * aqui. `aviso.excluir`: quem já recebeu o aviso da tarefa não recebe outro.
+ */
+async function atualizarPassoPelaTarefa(api, id, { passo, data }, usuarioId, aviso = {}) {
   const alvo = await buscarProspeccao(api, id);
   const novo = { proximo_passo: texto(passo) || null, proximo_passo_data: texto(passo) ? (data || null) : null };
   await api.put(`/api/prospeccoes/${id}`, novo);
-  await registrarHistorico(api, id, diferencasDaFicha(alvo, novo), usuarioId);
+  await registrarHistorico(api, id, diferencasDaFicha(alvo, novo), usuarioId, aviso);
   await passoNaTarefa(api, id, usuarioId);
 }
 
@@ -1707,7 +1742,7 @@ router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async
  * para a linha do histórico (a planilha diz de qual arquivo e linha veio).
  * Devolve o id da interação.
  */
-async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tiposAceitos = null, observacao = null } = {}) {
+async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tiposAceitos = null, observacao = null, aviso = {} } = {}) {
   const tipoInformado = texto(corpo.tipo);
   const resumo = texto(corpo.resumo);
   const aceitos = tiposAceitos || await listas.tiposDeInteracaoAceitos(api);
@@ -1761,7 +1796,7 @@ async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tipos
       campos: retratoLegivel({ tipo, resumo, detalhe, duracao_min: duracao }, CAMPOS_INTERACAO),
       registro: { tipo, resumo, detalhe, duracao_min: duracao }
     }
-  }, usuarioId);
+  }, usuarioId, aviso);
 
   return criada?.id ?? null;
 }
@@ -1840,7 +1875,8 @@ router.put('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add
       });
     }
 
-    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
+    // Quem registrou a interação fica sabendo que outra pessoa a mudou.
+    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
 
     res.json({ success: true });
   } catch (err) {
@@ -1863,7 +1899,7 @@ router.delete('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.
       entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
       valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
       detalhe: { campos: retratoLegivel(antes, CAMPOS_INTERACAO), registro: antes }
-    }, usuarioDaRequisicao(req));
+    }, usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
 
     res.json({ success: true });
   } catch (err) {
@@ -1929,7 +1965,7 @@ router.put('/:id/notas/:notaId', exigirPermissao('pros.note.add'), async (req, r
       entidade: `Nota ${texto(antes.titulo) || '(sem título)'}`,
       antes, depois,
       rotulos: CAMPOS_NOTA
-    }), usuarioDaRequisicao(req));
+    }), usuarioDaRequisicao(req), { autores: [antes.usuario_id] });
 
     res.json({ success: true });
   } catch (err) {
@@ -1960,7 +1996,7 @@ router.delete('/:id/notas/:notaId', exigirPermissao('pros.note.remove'), async (
       entidade: texto(nota.titulo) || 'Nota',
       valor_anterior: nota.conteudo,
       detalhe: { campos: retratoLegivel(nota, CAMPOS_NOTA), registro: nota }
-    }, usuarioDaRequisicao(req));
+    }, usuarioDaRequisicao(req), { autores: [nota.usuario_id] });
 
     res.json({ success: true });
   } catch (err) {
@@ -2162,7 +2198,7 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
       valor_anterior: 'Prospecção', valor_novo: p.nome_fantasia,
       observacao: `Convertido da prospecção #${id} (${(Array.isArray(contatos) ? contatos : []).length} contato(s) copiado(s))`,
       detalhe: { prospeccaoId: Number(id) }
-    }], usuarioId);
+    }], usuarioId, { situacao: 'criou' }); // o dono escolhido na conversão fica sabendo
 
     const deParaContatos = [];
     for (const c of Array.isArray(contatos) ? contatos : []) {
@@ -2210,7 +2246,8 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
         tipo: 'arquivamento', acao: 'alterou', entidade: 'Situação', campo: 'status',
         valor_anterior: p.status, valor_novo: 'arquivada'
       }
-    ], usuarioId);
+      // Vinda da aprovação de um orçamento, o aviso é o do orçamento.
+    ], usuarioId, opcoes.avisar === false ? false : {});
 
     await passoNaTarefa(api, id, usuarioId);
     await tarefas.criarTarefaAutomatica(api, 'prospeccao_convertida', {
@@ -2395,6 +2432,13 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
     // Contatos, interações, histórico, notas, anexos e campanhas caem por
     // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
     await api.delete(`/api/prospeccoes/${id}`);
+
+    // O responsável e quem criou ficam sabendo (com o motivo, se veio).
+    const motivo = texto(req.body?.motivo);
+    await avisos.avisarDaFicha(api, {
+      origem: 'prospeccao', registroId: id, registro: p, usuarioId: usuarioDaRequisicao(req),
+      situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+    });
 
     res.json({ success: true });
   } catch (err) {

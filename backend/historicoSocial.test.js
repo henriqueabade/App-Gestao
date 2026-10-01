@@ -383,9 +383,19 @@ test('excluir é do Sup Admin e é por marca: o vendedor deixa de ver, o banco g
     assert.ok(ctx.tabelas.historico_comentarios[0].excluido_em);
     assert.strictEqual(ctx.tabelas.historico_comentarios[0].motivo_exclusao, 'teste');
 
+    // Quem escreveu fica sabendo, com o motivo (01/10/2026).
+    const removido = avisosDe(ctx, 2).find(n => n.tipo === 'removido_historico');
+    assert.ok(removido, 'a Ana (autora do comentário) é avisada');
+    assert.strictEqual(removido.titulo, 'Seu comentário foi removido');
+    assert.strictEqual(removido.mensagem, 'Henrique tirou do histórico seu comentário “algo” em ACME.\n» Motivo: teste');
+
     await chamar(ctx.porta, '/api/historico-social/prospeccao/7/itens/1/excluir', { usuario: 1, corpo: {} });
     assert.ok(ctx.tabelas.prospeccao_historico[0].excluido_em);
     assert.strictEqual(ctx.tabelas.prospeccao_historico[0].excluido_por, 1);
+    // O evento era da Ana (ela moveu a etapa): aviso sem motivo, sem linha de nota.
+    const evento = avisosDe(ctx, 2).filter(n => n.tipo === 'removido_historico')[1];
+    assert.strictEqual(evento.titulo, 'Um registro seu saiu do histórico');
+    assert.strictEqual(evento.mensagem, 'Henrique tirou do histórico um registro seu (Etapa do funil: Proposta) em ACME.');
 
     const vendedor = await chamar(ctx.porta, '/api/historico-social/prospeccao/7', { usuario: 2 });
     assert.strictEqual(vendedor.json.itens.length, 0);
@@ -520,7 +530,8 @@ test('mensagens da Contabilidade: mural fixo, publicar com @ e \', comentar avis
     assert.strictEqual(aviso.tipo, 'mencao');
     assert.strictEqual(aviso.origem, 'contabilidade');
     assert.strictEqual(aviso.registro_id, 1);
-    assert.match(aviso.mensagem, /Ana mencionou você em Mensagens da Contabilidade: “@João veja “NF-e 1\/123 · Madeira” antes de fechar”/);
+    // O texto inteiro vem como nota do aviso (linha "» "), com as marcas lidas.
+    assert.strictEqual(aviso.mensagem, 'Ana mencionou você em Mensagens da Contabilidade.\n» @João veja “NF-e 1/123 · Madeira” antes de fechar');
     assert.strictEqual(avisosDe(ctx, 2).length, 0, 'quem publicou não se avisa');
     assert.strictEqual(avisosDe(ctx, 1).length, 0, 'mural sem dono: ninguém mais é avisado de uma mensagem nova');
 

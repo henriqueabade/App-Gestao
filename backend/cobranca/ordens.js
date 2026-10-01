@@ -22,6 +22,7 @@
 const boletos = require('./boletos');
 const recebimentos = require('./recebimentos');
 const externas = require('../fiscal/externas');
+const avisos = require('../avisosEnvolvidos');
 
 const SQL_ARQUIVO = 'sql/ordens_pagamento.sql';
 const SQL_FALTANDO = `Falta rodar ${SQL_ARQUIVO} no banco e reiniciar a API.`;
@@ -144,6 +145,14 @@ async function cancelar({ api, id, motivo = '', usuarioId = null }) {
     motivo_cancelamento: String(motivo || '').replace(/\s+/g, ' ').trim().slice(0, 500) || null, atualizado_em: agora()
   };
   await api.put(`/api/ordens_pagamento/${o.id}`, campos);
+  // Quem criou a ordem fica sabendo, com o motivo (01/10/2026).
+  const pedido = o.criado_por && String(o.criado_por) !== String(usuarioId)
+    ? await api.get(`/api/pedidos/${o.pedido_id}`).catch(() => null) : null;
+  await avisos.avisarPessoa(api, {
+    para: o.criado_por, usuarioId, origem: 'financeiro', tipo: 'registro_cancelado', titulo: 'Uma ordem de pagamento sua foi cancelada',
+    frase: autor => `${autor} cancelou a ordem de pagamento que você criou (parcela ${o.numero_parcela} do pedido ${pedido?.numero || `#${o.pedido_id}`}${o.data_prevista ? `, prevista para ${impressa(String(o.data_prevista).slice(0, 10))}` : ''}).`,
+    nota: campos.motivo_cancelamento ? `Motivo: ${campos.motivo_cancelamento}` : null
+  });
   return { ordem: { ...o, ...campos } };
 }
 

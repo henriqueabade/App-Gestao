@@ -2,8 +2,12 @@
  * O sino do topo — avisos por usuário (/api/notificacoes).
  *
  * Quem recebe: quem criou a prospecção/o cliente e quem fez a ação comentada
- * ou curtida no histórico social (backend/historicoSocial.js). Vale para
- * TODOS os perfis — cada um vê só os próprios avisos (o id vem do token).
+ * ou curtida no histórico social (backend/historicoSocial.js) e, desde
+ * 01/10/2026, quem teve "algo seu" passado, tirado, alterado, cancelado ou
+ * excluído por outra pessoa (backend/avisosEnvolvidos.js) — com o que mudou
+ * (`mudancas`) e a nota/motivo que veio junto (`notas`), desenhados abaixo
+ * da mensagem. Vale para TODOS os perfis — cada um vê só os próprios avisos
+ * (o id vem do token).
  *
  *   - o número no sino é o total de não lidos;
  *   - clicar num aviso marca como lido, abre o módulo, a ficha e a aba
@@ -379,13 +383,31 @@ window.addEventListener('DOMContentLoaded', () => {
     mencao: 'fa-at',
     acao_concluida: 'fa-bolt',
     tarefa_automatica: 'fa-robot',
+    // "Algo seu" (01/10/2026, backend/avisosEnvolvidos.js).
+    responsavel_novo: 'fa-user-tag',
+    responsavel_saiu: 'fa-user-minus',
+    registro_alterado: 'fa-pen',
+    registro_excluido: 'fa-trash-can',
+    registro_cancelado: 'fa-ban',
+    item_alterado: 'fa-pen-to-square',
+    item_excluido: 'fa-eraser',
+    removido_historico: 'fa-comment-slash',
+    participante_removido: 'fa-user-xmark',
+    conta_alterada: 'fa-user-shield',
   };
   // O texto pequeno, abaixo da mensagem, de cada tipo de aviso que tem um.
   // Tarefa automática: onde desligar (decisão do dono, 24/09/2026).
   const DICA_DO_TIPO = {
     tarefa_automatica: 'Pode ser desativada em Tarefas ou em Configurações.',
   };
-  const ORIGEM = { prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade' };
+  const ORIGEM = {
+    prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade',
+    orcamento: 'Orçamento', pedido: 'Pedido', usuario: 'Usuários', financeiro: 'Financeiro', contabil: 'Contabilidade',
+  };
+  // Avisos de "algo seu" do Financeiro e da Contabilidade: abrem só o módulo.
+  const SO_O_MODULO = { financeiro: 'financeiro', contabil: 'contabilidade' };
+  // A ficha não existe mais: o aviso só marca como lido (abrir daria "não encontrado").
+  const SEM_FICHA = new Set(['registro_excluido']);
   // O que vira notificação do Windows quando chega (não lido e novo): tudo,
   // menos curtida — que fica só no sino, para não virar ruído.
   const FORA_DO_WINDOWS = new Set(['curtida']);
@@ -449,6 +471,18 @@ window.addEventListener('DOMContentLoaded', () => {
     corpo.appendChild(criar('span', 'sino-aviso__titulo', aviso.titulo || aviso.message || 'Aviso'));
     const dica = DICA_DO_TIPO[aviso.tipo];
     if (aviso.mensagem) corpo.appendChild(criar('span', `sino-aviso__texto${dica ? ' sino-aviso__texto--longo' : ''}`, aviso.mensagem));
+    // O que mudou e a nota/motivo que veio com a ação (como no histórico).
+    const mudancas = Array.isArray(aviso.mudancas) ? aviso.mudancas.filter(Boolean) : [];
+    if (mudancas.length) {
+      const lista = criar('ul', 'sino-aviso__mudancas');
+      mudancas.forEach((m) => lista.appendChild(criar('li', null, m)));
+      corpo.appendChild(lista);
+    }
+    (Array.isArray(aviso.notas) ? aviso.notas.filter(Boolean) : []).forEach((n) => {
+      const nota = criar('span', 'sino-aviso__nota', n);
+      nota.title = n;
+      corpo.appendChild(nota);
+    });
     if (dica) corpo.appendChild(criar('span', 'sino-aviso__dica', dica));
     const rodape = criar('span', 'sino-aviso__rodape');
     if (ORIGEM[aviso.origem]) rodape.appendChild(criar('span', 'sino-aviso__origem', ORIGEM[aviso.origem]));
@@ -517,7 +551,7 @@ window.addEventListener('DOMContentLoaded', () => {
       lista.appendChild(vazio);
     } else if (!avisos.length) {
       const vazio = criar('div', 'sino-vazio');
-      vazio.append(icone('fa-bell-slash'), criar('span', null, isFetching ? 'Carregando avisos…' : 'Nenhum aviso por aqui. Quando comentarem, responderem ou curtirem algo seu em Prospecções ou Clientes, aparece aqui.'));
+      vazio.append(icone('fa-bell-slash'), criar('span', null, isFetching ? 'Carregando avisos…' : 'Nenhum aviso por aqui. Quando passarem algo para você, mexerem em algo seu, comentarem ou mencionarem você, aparece aqui.'));
       lista.appendChild(vazio);
     } else {
       avisos.forEach((aviso) => lista.appendChild(linhaDoAviso(aviso)));
@@ -588,6 +622,16 @@ window.addEventListener('DOMContentLoaded', () => {
       updateIcon();
       marcarLidas({ ids: [aviso.id] });
     }
+    // Excluído não tem o que abrir; o aviso de cadastro (Usuários) fica só no sino.
+    if (SEM_FICHA.has(aviso.tipo) || aviso.origem === 'usuario') return;
+    if (SO_O_MODULO[aviso.origem]) {
+      try {
+        await window.loadPage?.(SO_O_MODULO[aviso.origem]);
+      } catch (err) {
+        console.error('[sino] não foi possível abrir o aviso:', err);
+      }
+      return;
+    }
     // Tarefa abre o editor por cima de onde a pessoa estiver (o comentário, na aba da conversa).
     if (aviso.origem === 'tarefa' && aviso.registro_id && window.TarefasUI?.abrirEditor) {
       const conversa = ['comentario', 'resposta', 'observacao', 'curtida', 'mencao'].includes(aviso.tipo);
@@ -612,8 +656,30 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       return;
     }
+    // Orçamento e pedido: o módulo e a visualização dele.
+    if ((aviso.origem === 'orcamento' || aviso.origem === 'pedido') && aviso.registro_id) {
+      const destino = aviso.origem === 'orcamento' ? 'orcamentos' : 'pedidos';
+      try {
+        await window.loadPage?.(destino);
+        if (document.getElementById('content')?.dataset.activePage !== destino) {
+          window.showToast?.('Você não tem acesso a este módulo.', 'error');
+          return;
+        }
+        if (aviso.origem === 'orcamento') window.OrcamentosModulo?.abrirVisualizar?.(aviso.registro_id);
+        else window.PedidosModulo?.abrirVisualizar?.(aviso.registro_id);
+      } catch (err) {
+        console.error('[sino] não foi possível abrir o aviso:', err);
+        window.showToast?.('Não foi possível abrir este aviso.', 'error');
+      }
+      return;
+    }
     const pagina = { cliente: 'clientes', prospeccao: 'prospeccoes', contato: 'contatos' }[aviso.origem] || null;
-    if (!pagina || !aviso.registro_id) return;
+    if (!pagina) return;
+    // Aviso de várias fichas (a planilha importada): abre só o módulo.
+    if (!aviso.registro_id) {
+      await window.loadPage?.(pagina);
+      return;
+    }
     window.historicoSocialFoco = {
       origem: aviso.origem,
       registroId: aviso.registro_id,
@@ -689,7 +755,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
     for (const aviso of novos.filter((n) => vaiParaOWindows(n.tipo)).slice(0, 4)) {
       try {
-        const corpo = [aviso.mensagem, DICA_DO_TIPO[aviso.tipo]].filter(Boolean).join('\n');
+        // A nota (motivo, observação) vai junto, cortada: o Windows mostra pouco.
+        const nota = Array.isArray(aviso.notas) && aviso.notas[0] ? `“${aviso.notas[0].replace(/\s+/g, ' ').slice(0, 160)}”` : '';
+        const corpo = [aviso.mensagem, nota, DICA_DO_TIPO[aviso.tipo]].filter(Boolean).join('\n');
         const n = new Notification(aviso.titulo || 'Aviso', { body: corpo, tag: `sd-aviso-${aviso.id}` });
         n.onclick = () => { try { window.focus(); } catch (_) { /* segue */ } abrirAviso(aviso); n.close(); };
       } catch (err) {

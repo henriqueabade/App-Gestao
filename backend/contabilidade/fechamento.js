@@ -18,6 +18,8 @@ const b = require('./base');
 const checklist = require('./checklist');
 const eventos = require('./eventos');
 const versoes = require('./versoes');
+// Aviso no sino de "algo seu" (01/10/2026).
+const sino = require('../avisosEnvolvidos');
 const classificacao = require('./classificacao/classificacao');
 const extratoMod = require('./extrato/extrato');
 
@@ -163,6 +165,12 @@ async function reabrir({ api, competencia, justificativa, usuarioId = null }) {
     tipo: 'competencia_reaberta', competencia: comp, usuarioId,
     descricao: `Competência ${c.rotuloCompetencia(comp)} reaberta${ultimaVersao ? ` (a versão ${ultimaVersao.versao} fica guardada)` : ''}: ${j}`,
     dados: { fechada_em: linha.fechada_em, fechada_por: linha.fechada_por, versao: ultimaVersao?.versao ?? null }
+  });
+  // Quem fechou fica sabendo, com a justificativa (01/10/2026).
+  await sino.avisarPessoa(api, {
+    para: linha.fechada_por, usuarioId, origem: 'contabil', tipo: 'registro_alterado', titulo: 'Competência reaberta',
+    frase: autor => `${autor} reabriu a competência ${c.rotuloCompetencia(comp)}, que você tinha fechado${ultimaVersao ? ` (a versão ${ultimaVersao.versao} fica guardada)` : ''}.`,
+    nota: `Justificativa: ${j}`
   });
   return { id: linha.id, competencia: comp, status: 'reaberta', reaberta_em: b.instanteBR(agora), versao: ultimaVersao?.versao ?? null };
 }

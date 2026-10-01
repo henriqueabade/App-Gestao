@@ -22,6 +22,8 @@ const b = require('./base');
 const eventos = require('./eventos');
 const arquivos = require('./arquivos');
 const regras = require('./classificacao/regras');
+// Aviso no sino de "algo seu" (01/10/2026).
+const sino = require('../avisosEnvolvidos');
 
 const FORMAS =['Pix', 'Boleto', 'TED/DOC', 'Transferência', 'Débito automático', 'Cartão', 'Dinheiro', 'Cheque'];
 
@@ -499,7 +501,7 @@ async function editar(api, id, { entrada = {}, usuarioId = null, hoje }) {
   return { id: t.id, alterado: partes };
 }
 
-async function cancelar(api, id, { motivo, usuarioId = null }) {
+async function cancelar(api, id, { motivo, usuarioId = null, avisar = true }) {
   const m = c.texto(motivo, 500);
   if (m.length < 5) throw c.erro('Diga por que a conta é cancelada (ao menos 5 letras).');
   const t = await lerTitulo(api, id);
@@ -512,6 +514,14 @@ async function cancelar(api, id, { motivo, usuarioId = null }) {
     tipo: 'titulo_cancelado', competencia: t.competencia, usuarioId, referenciaTipo: 'titulo', referenciaId: t.id,
     descricao: `${t.descricao} (${c.reais(t.valor_total)}) cancelada: ${m}`
   });
+  // Quem lançou a conta fica sabendo, com o motivo (01/10/2026).
+  if (avisar) {
+    await sino.avisarPessoa(api, {
+      para: t.criado_por, usuarioId, origem: 'contabil', tipo: 'registro_cancelado', titulo: 'Uma conta sua foi cancelada',
+      frase: autor => `${autor} cancelou a conta a pagar “${t.descricao}” (${c.reais(t.valor_total)}) que você lançou.`,
+      nota: `Motivo: ${m}`
+    });
+  }
   return { id: t.id, status: 'cancelado' };
 }
 
@@ -590,6 +600,12 @@ async function estornar(api, pagamentoId, { motivo, usuarioId = null }) {
     tipo: 'pagamento_estornado', competencia: p.competencia, usuarioId, referenciaTipo: 'titulo', referenciaId: t.id,
     descricao: `Pagamento de ${c.reais(p.valor_pago)} em ${c.impressa(p.data_pagamento)} de "${t.descricao}" estornado: ${m}`,
     dados: { pagamento_id: p.id, parcela_id: p.parcela_id }
+  });
+  // Quem registrou o pagamento fica sabendo, com o motivo (01/10/2026).
+  await sino.avisarPessoa(api, {
+    para: p.criado_por, usuarioId, origem: 'contabil', tipo: 'registro_cancelado', titulo: 'Um pagamento seu foi estornado',
+    frase: autor => `${autor} estornou o pagamento de ${c.reais(p.valor_pago)} em ${c.impressa(p.data_pagamento)} que você registrou na conta “${t.descricao}”.`,
+    nota: `Motivo: ${m}`
   });
   return { id: p.id, estornado: true };
 }

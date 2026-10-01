@@ -476,3 +476,27 @@ button.hs-objeto:hover { background: rgba(138, 167, 243, 0.22); }
 .sino-avatar__tipo--convite_tarefa { background: #2563eb; }
 [data-menu-theme="light"] .sino-aviso__botao--nao { background: rgba(15, 23, 42, 0.08); color: #334155; }
 [data-menu-theme="light"] .sino-aviso__tirar { color: #64748b; }
+
+/* Sino — "algo seu" (01/10/2026): o que mudou e a nota/motivo da ação. */
+.sino-aviso__mudancas {
+    /* Marcador por dentro: o item corta o que passa da linha (reticências). */
+    margin: 0.15rem 0 0; padding: 0; list-style: disc inside;
+    font-size: 0.72rem; line-height: 1.4; color: rgba(255, 255, 255, 0.62);
+}
+.sino-aviso__mudancas li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sino-aviso__nota {
+    margin-top: 0.2rem; padding: 0.3rem 0.55rem; border-left: 3px solid var(--color-primary, #b6a03e);
+    border-radius: 0 0.4rem 0.4rem 0; background: rgba(255, 255, 255, 0.06);
+    font-size: 0.75rem; line-height: 1.4; font-style: italic; color: rgba(255, 255, 255, 0.82);
+    white-space: pre-line; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
+}
+.sino-avatar__tipo--responsavel_novo { background: #16a34a; }
+.sino-avatar__tipo--responsavel_saiu { background: #d97706; }
+.sino-avatar__tipo--registro_alterado, .sino-avatar__tipo--item_alterado { background: var(--color-primary, #b6a03e); }
+.sino-avatar__tipo--registro_excluido, .sino-avatar__tipo--item_excluido,
+.sino-avatar__tipo--removido_historico, .sino-avatar__tipo--participante_removido { background: #dc2626; }
+.sino-avatar__tipo--registro_cancelado { background: #b45309; }
+.sino-avatar__tipo--conta_alterada { background: #2563eb; }
+[data-menu-theme="light"] .sino-aviso__mudancas { color: #475569; }
+[data-menu-theme="light"] .sino-aviso__nota { background: rgba(182, 160, 62, 0.1); color: #334155; border-left-color: #7a5c12; }

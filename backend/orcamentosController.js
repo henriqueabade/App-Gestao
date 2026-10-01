@@ -13,6 +13,8 @@ const {
 } = require('./faturamentoPedido');
 const parcelaMinima = require('./cobranca/parcelaMinima');
 const clienteHistorico = require('./clienteHistorico');
+// "Algo seu" no sino: o dono do orçamento e quem responde pelo cliente/prospecção.
+const avisos = require('./avisosEnvolvidos');
 // Tarefa automática "orçamento enviado → follow-up" (sql/tarefas_calendario.sql).
 const tarefas = require('./tarefasServico');
 
@@ -215,18 +217,54 @@ async function numeroDeClienteLivre(api) {
  * registrar. Nunca derruba a operação principal — perder uma linha de histórico
  * é ruim, desfazer um orçamento já gravado por causa disso é pior.
  */
-async function anotarNaProspeccao(api, req, orcamento, evento) {
+async function anotarNaProspeccao(api, req, orcamento, evento, aviso = {}) {
   // O cliente também tem histórico (e o calendário mostra estes marcos).
+  // Os históricos não avisam: o aviso é um só, o do orçamento (abaixo).
   if (orcamento?.cliente_id) {
-    await clienteHistorico.registrarNoCliente(api, orcamento.cliente_id, [evento], idDoUsuarioDaRequisicao(req));
+    await clienteHistorico.registrarNoCliente(api, orcamento.cliente_id, [evento], idDoUsuarioDaRequisicao(req), false);
   }
   const prospeccaoId = orcamento?.prospeccao_id;
-  if (!prospeccaoId) return;
-  try {
-    await registrarHistorico(api, prospeccaoId, evento, idDoUsuarioDaRequisicao(req));
-  } catch (err) {
-    console.error('[orcamentos] falha ao anotar no histórico da prospecção:', err?.message || err);
+  if (prospeccaoId) {
+    try {
+      await registrarHistorico(api, prospeccaoId, evento, idDoUsuarioDaRequisicao(req), false);
+    } catch (err) {
+      console.error('[orcamentos] falha ao anotar no histórico da prospecção:', err?.message || err);
+    }
   }
+  if (aviso !== false) await avisarDoOrcamento(api, req, aviso.registro || orcamento, aviso.eventos || [evento], aviso);
+}
+
+/**
+ * Aviso no sino (01/10/2026) para o dono do orçamento e quem responde pelo
+ * cliente/prospecção dele, quando OUTRA pessoa mexe: muda a situação, edita,
+ * exclui, ou cria já com outro dono. Lê o orçamento quando só veio o vínculo.
+ */
+async function avisarDoOrcamento(api, req, orcamento, eventos, { situacao = null, nota = null } = {}) {
+  let registro = orcamento;
+  const id = orcamento?.id ?? eventos?.[0]?.detalhe?.orcamento_id;
+  if (!registro?.numero && id) registro = { ...(await api.get(`/api/orcamentos/${id}`).catch(() => null) || {}), ...orcamento, id };
+  if (!registro?.id) return;
+  await avisos.avisarDaVenda(api, { origem: 'orcamento', registro, eventos, usuarioId: idDoUsuarioDaRequisicao(req), situacao, nota });
+}
+
+/** O que a edição mudou no orçamento, para o aviso (itens e parcelas não entram: são regravados). Pura. */
+const CAMPOS_DO_AVISO = {
+  situacao: 'Situação', dono: 'Dono', valor_final: 'Valor final', validade: 'Validade',
+  prazo: 'Prazo', forma_pagamento: 'Forma de pagamento', transportadora: 'Transportadora', observacoes: 'Observações'
+};
+function mudancasDoOrcamento(antes = {}, depois = {}) {
+  const igual = (a, b) => String(a ?? '').trim() === String(b ?? '').trim()
+    || (a !== null && b !== null && a !== '' && b !== '' && Number.isFinite(Number(a)) && Number(a) === Number(b));
+  const reais = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))
+    ? v : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  const eventos = Object.entries(CAMPOS_DO_AVISO)
+    .filter(([campo]) => campo in depois && depois[campo] !== undefined && !igual(antes?.[campo], depois[campo]))
+    .map(([campo, rotulo]) => ({
+      acao: 'alterou', entidade: rotulo, campo,
+      valor_anterior: campo === 'valor_final' ? reais(antes?.[campo]) : antes?.[campo] ?? null,
+      valor_novo: campo === 'valor_final' ? reais(depois[campo]) : depois[campo] ?? null
+    }));
+  return eventos.length ? eventos : [{ acao: 'alterou', entidade: 'Itens e condições' }];
 }
 
 /**
@@ -279,7 +317,8 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
   // só porque o primeiro já criou o cliente.
   const resultado = await converterProspeccaoEmCliente(api, orcamento.prospeccao_id, {
     dono_cliente: orcamento.dono,
-    origem: `Orçamento ${orcamento.numero}`
+    origem: `Orçamento ${orcamento.numero}`,
+    avisar: false
   }, conversao?.decisaoBy ?? null);
 
   // O contato da prospecção foi copiado para `contatos_cliente` com id NOVO.
@@ -351,6 +390,7 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
     prospeccao_contato_id: orcamento.prospeccao_contato_id ?? null
   });
 
+  // Parte da aprovação: o aviso é o da situação do orçamento, não estes.
   if (numeroNovo) {
     await registrarHistorico(api, orcamento.prospeccao_id, {
       tipo: 'orcamento', acao: 'alterou',
@@ -360,7 +400,7 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
       valor_novo: numeroNovo,
       observacao: 'Renumerado ao virar orçamento de cliente',
       detalhe: { rotulo: 'Número', orcamento_id: orcamento.id }
-    }, conversao?.decisaoBy ?? null);
+    }, conversao?.decisaoBy ?? null, false);
   }
 
   await registrarHistorico(api, orcamento.prospeccao_id, {
@@ -380,7 +420,7 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
       clienteJaExistia: resultado.jaExistia,
       transportadora
     }
-  }, conversao?.decisaoBy ?? null);
+  }, conversao?.decisaoBy ?? null, false);
 
   return patch;
 }
@@ -835,15 +875,17 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
           valor_final: body.valor_final ?? null,
           itens: itens.length
         }
-      }, idDoUsuarioDaRequisicao(req));
+      }, idDoUsuarioDaRequisicao(req), false);
     }
 
     if (temCliente) {
       await clienteHistorico.registrarNoCliente(api, body.cliente_id, [{
         tipo: 'orcamento', acao: 'criou', entidade: `Orçamento ${numero}`, valor_novo: numero,
         detalhe: { orcamento_id: orcamentoId, situacao: body.situacao || null, valor_final: body.valor_final ?? null, itens: itens.length }
-      }], idDoUsuarioDaRequisicao(req));
+      }], idDoUsuarioDaRequisicao(req), false);
     }
+    // Feito para outro vendedor (o dono): ele fica sabendo.
+    await avisarDoOrcamento(api, req, { ...body, id: orcamentoId, numero }, [], { situacao: 'criou' });
     if (body.situacao === 'Pendente') {
       await tarefaDoOrcamentoEnviado(api, req, { id: orcamentoId, numero, cliente_id: body.cliente_id || null, prospeccao_id: body.prospeccao_id || null });
     }
@@ -969,6 +1011,10 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
         valor_final: body.valor_final ?? null,
         itens: itens.length
       }
+    }, {
+      // O aviso diz o que de fato mudou (o dono trocado avisa o novo e o antigo).
+      registro: { ...(atual || {}), ...payload, id: Number(id), numero: atual?.numero || payload.numero },
+      eventos: mudancasDoOrcamento(atual || {}, payload)
     });
 
     let convertido = false;
@@ -1044,6 +1090,9 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
       valor_anterior: antes?.situacao ?? null,
       valor_novo: situacao ?? null,
       detalhe: { orcamento_id: Number(id) }
+    }, {
+      registro: { ...(antes || {}), id: Number(id) },
+      eventos: [{ acao: 'alterou', entidade: 'Situação', campo: 'situacao', valor_anterior: antes?.situacao ?? null, valor_novo: situacao ?? null }]
     });
 
     let convertido = false;
@@ -1122,7 +1171,7 @@ router.post('/:id/clone', exigirPermissao(['orc.clone', 'orc.create']), async (r
       valor_novo: numero,
       observacao: `Cópia do orçamento ${orcamento.numero || id}`,
       detalhe: { orcamento_id: novoId, copia_de: Number(id), situacao: 'Rascunho' }
-    });
+    }, { situacao: 'criou', registro: { ...orcamento, id: novoId, numero } });
 
     res.json({ success: true, id: novoId, numero });
   } catch (err) {
@@ -1164,7 +1213,10 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
         valor_final: antes?.valor_final ?? null,
         data_emissao: antes?.data_emissao ?? null
       }
-    });
+    }, antes ? {
+      situacao: 'excluiu', registro: { ...antes, id: Number(id) },
+      nota: String(req.body?.motivo || '').trim() ? `Motivo: ${String(req.body.motivo).trim()}` : null
+    } : false);
 
     res.json({ success: true, removidos, avisos });
   } catch (err) {

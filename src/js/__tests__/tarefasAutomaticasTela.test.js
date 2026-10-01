@@ -35,7 +35,8 @@ test('sino: o aviso da tarefa automática tem ícone próprio, a dica pequena e 
   assert.ok(SINO.includes("tarefa_automatica: 'fa-robot',"));
   assert.ok(SINO.includes("tarefa_automatica: 'Pode ser desativada em Tarefas ou em Configurações.',"));
   assert.ok(SINO.includes("if (dica) corpo.appendChild(criar('span', 'sino-aviso__dica', dica));"), 'a dica numa linha própria, por textContent');
-  assert.ok(SINO.includes("const corpo = [aviso.mensagem, DICA_DO_TIPO[aviso.tipo]].filter(Boolean).join('\\n');"));
+  // A dica vai para o Windows junto da mensagem (e da nota do aviso, desde 01/10/2026).
+  assert.ok(SINO.includes("const corpo = [aviso.mensagem, nota, DICA_DO_TIPO[aviso.tipo]].filter(Boolean).join('\\n');"));
   assert.ok(SINO.includes('{ body: corpo, tag: `sd-aviso-${aviso.id}` }'));
   assert.match(SINO_CSS, /\.sino-aviso__dica \{[^}]*font-size: 0\.68rem/);
   assert.match(SINO_CSS, /\.sino-aviso__texto--longo \{ -webkit-line-clamp: 3; \}/);

@@ -707,8 +707,60 @@ test('ação de módulo: só vale o que o responsável pode fazer, e a tarefa co
     for (let i = 0; i < 40 && t.status !== 'concluida'; i++) await new Promise(r => setTimeout(r, 50));
     assert.strictEqual(t.status, 'concluida');
     assert.match(t.resultado_nota, /João despachou o pedido \(PED-40 — Loja Boa\)/);
+    // A conclusão roda depois da resposta do pedido, e o aviso vem no fim dela
+    // (antes, os avisos da ficha do cliente — 01/10/2026): espera o aviso também.
+    for (let i = 0; i < 60 && !avisosDe(ctx, 1, 'acao_concluida').length; i++) await new Promise(r => setTimeout(r, 50));
     assert.strictEqual(avisosDe(ctx, 1, 'acao_concluida').length, 1, 'quem criou e responde é avisado');
     assert.strictEqual(avisosDe(ctx, 3, 'acao_concluida').length, 0, 'quem fez a ação não');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('"algo seu" (01/10/2026): passar, concluir com nota, reabrir, tirar da tarefa e excluir com motivo avisam quem tem a tarefa — com o texto', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // A Carla (Admin) cria para a Ana, ligada ao cliente da Ana.
+    const criada = await chamar(ctx.porta, '/api/tarefas', { usuario: 4, corpo: { titulo: 'Visitar a Loja Boa', responsavel_id: 2, data: dia(2), cliente_id: 7 } });
+    assert.strictEqual(criada.status, 201);
+    const id = criada.json.id;
+    assert.strictEqual(avisosDe(ctx, 2, 'tarefa_atribuida').length, 1);
+    assert.strictEqual(avisosDe(ctx, 2, 'registro_alterado').length, 0, 'a dona do cliente já recebeu o aviso da tarefa');
+
+    // Passa para o João: ele recebe "Nova tarefa"; a Ana, "passou para outra pessoa".
+    await chamar(ctx.porta, `/api/tarefas/${id}`, { usuario: 4, method: 'PUT', corpo: { responsavel_id: 3, prioridade: 'alta' } });
+    assert.strictEqual(avisosDe(ctx, 3, 'tarefa_atribuida').length, 1);
+    const saiu = avisosDe(ctx, 2, 'responsavel_saiu')[0];
+    assert.strictEqual(saiu.titulo, 'Tarefa passou para outra pessoa');
+    assert.strictEqual(saiu.mensagem, 'Carla passou a tarefa “Visitar a Loja Boa” para João.');
+    assert.strictEqual(avisosDe(ctx, 4).length, 0, 'quem agiu não se avisa');
+
+    // O João conclui com nota: a Carla (criou) recebe com a nota; a Ana (dona do cliente), a ficha atualizada.
+    await chamar(ctx.porta, `/api/tarefas/${id}/concluir`, { usuario: 3, corpo: { resultado: 'feito', nota: 'Cliente comprou mais 3 peças' } });
+    const concluida = avisosDe(ctx, 4, 'tarefa_concluida')[0];
+    assert.strictEqual(concluida.mensagem, 'João concluiu: Visitar a Loja Boa\n» Cliente comprou mais 3 peças');
+    const sino = await chamar(ctx.porta, '/api/notificacoes', { usuario: 4 });
+    assert.deepStrictEqual(sino.json.itens.find(n => n.tipo === 'tarefa_concluida').notas, ['Cliente comprou mais 3 peças']);
+    const daFicha = avisosDe(ctx, 2, 'registro_alterado').find(n => n.origem === 'cliente');
+    assert.ok(daFicha, 'a dona do cliente sabe da conclusão');
+    assert.match(daFicha.mensagem, /^João atualizou o cliente Loja Boa\./);
+
+    // A Carla reabre: o João (responde) fica sabendo.
+    await chamar(ctx.porta, `/api/tarefas/${id}/reabrir`, { usuario: 4, corpo: {} });
+    assert.match(avisosDe(ctx, 3, 'registro_alterado').find(n => n.origem === 'tarefa').mensagem, /Carla atualizou a tarefa “Visitar a Loja Boa”\.\n• Reabriu Tarefa: A fazer/);
+
+    // Tarefa em conjunto: a Bia aceita e a Carla a tira — ela recebe; o João também sabe.
+    await chamar(ctx.porta, `/api/tarefas/${id}/participantes`, { usuario: 4, corpo: { usuarios: [5] } });
+    await chamar(ctx.porta, `/api/tarefas/${id}/convite`, { usuario: 5, corpo: { resposta: 'aceitar' } });
+    await chamar(ctx.porta, `/api/tarefas/${id}/participantes/5`, { usuario: 4, method: 'DELETE' });
+    assert.strictEqual(avisosDe(ctx, 5, 'participante_removido')[0].mensagem, 'Carla tirou você da tarefa “Visitar a Loja Boa”.');
+    assert.ok(avisosDe(ctx, 3).some(n => n.mensagem === 'Carla tirou Bia da tarefa “Visitar a Loja Boa”.'));
+
+    // Excluir com motivo: o João recebe, com o motivo como nota.
+    await chamar(ctx.porta, `/api/tarefas/${id}`, { usuario: 4, method: 'DELETE', corpo: { motivo: 'Cliente cancelou a visita' } });
+    const excluida = avisosDe(ctx, 3, 'registro_excluido')[0];
+    assert.strictEqual(excluida.titulo, 'Tarefa excluída');
+    assert.strictEqual(excluida.mensagem, 'Carla excluiu a tarefa “Visitar a Loja Boa”.\n» Motivo: Cliente cancelou a visita');
   } finally {
     await ctx.encerrar();
   }

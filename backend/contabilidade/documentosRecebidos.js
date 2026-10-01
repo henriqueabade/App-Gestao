@@ -20,6 +20,8 @@ const b = require('./base');
 const eventos = require('./eventos');
 const arquivos = require('./arquivos');
 const titulos = require('./titulos');
+// Aviso no sino de "algo seu" (01/10/2026).
+const sino = require('../avisosEnvolvidos');
 const regras = require('./classificacao/regras');
 const xmlNota = require('../devolucoes/xmlDevolucao');
 const externas = require('../fiscal/externas');
@@ -593,10 +595,17 @@ async function excluir(api, id, { motivo, usuarioId = null }) {
     if (pagos.length) throw c.erro(`A conta "${t.descricao}" deste documento tem pagamento: estorne-o antes de excluir o documento.`, 409);
   }
   await b.atualizar(api, 'documentos_recebidos', d.id, { excluido_em: c.agora(), excluido_por: usuarioId, motivo_exclusao: m });
-  for (const t of contas) await titulos.cancelar(api, t.id, { motivo: `Documento excluído: ${m}`, usuarioId });
+  // Quem lançou o documento recebe UM aviso (abaixo), com as contas que caíram junto.
+  for (const t of contas) await titulos.cancelar(api, t.id, { motivo: `Documento excluído: ${m}`, usuarioId, avisar: String(t.criado_por) !== String(d.criado_por) });
   await eventos.registrar(api, {
     tipo: 'documento_excluido', competencia: d.competencia, usuarioId, referenciaTipo: 'documento_recebido', referenciaId: d.id,
     descricao: `${rotuloDoDocumento(d)} de ${d.emitente_nome || 'emitente'} (${c.reais(d.valor_total)}) excluído: ${m}${contas.length ? ` — ${c.plural(contas.length, 'conta cancelada', 'contas canceladas')} junto` : ''}`
+  });
+  await sino.avisarPessoa(api, {
+    para: d.criado_por, usuarioId, origem: 'contabil', tipo: 'item_excluido', titulo: 'Um documento seu foi excluído',
+    frase: autor => `${autor} excluiu ${rotuloDoDocumento(d)} de ${d.emitente_nome || 'emitente'} (${c.reais(d.valor_total)}) que você lançou na Contabilidade.`,
+    mudancas: contas.map(t => `Conta cancelada junto: ${t.descricao}`),
+    nota: `Motivo: ${m}`
   });
   return { id: d.id, excluido: true, contas_canceladas: contas.map(t => t.id) };
 }

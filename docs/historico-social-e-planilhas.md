@@ -87,6 +87,10 @@ mostra os avisos de cada um (`/api/notificacoes`, `backend/notificacoesControlle
 A antiga `/api/notifications` (só Admin, uma vez por dia) nunca teve tabela
 na API; o sino deixou de usá-la.
 
+Desde 01/10/2026 o sino também avisa "algo seu" em todos os módulos (passar,
+tirar, alterar, cancelar, excluir, com a nota que veio junto) e os avisos de
+comentário trazem o texto inteiro: ver `docs/avisos-de-algo-seu.md`.
+
 ## 3. Ações Rápidas: planilha CSV
 
 Prospecções ganhou o botão **Ações Rápidas** de Clientes, com as mesmas

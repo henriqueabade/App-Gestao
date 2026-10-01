@@ -23,6 +23,8 @@
  * (só leitura) e a resposta traz `sql_pendente: true`.
  */
 
+const avisos = require('./avisosEnvolvidos');
+
 const LIMITE_ANEXO_BYTES = 20 * 1024 * 1024;
 const TAMANHO_PARTE = 512 * 1024;
 const LIMITE_TEXTO = 5000;
@@ -164,16 +166,20 @@ function destinatarios(candidatos = [], ator) {
   return saida;
 }
 
-/** O que o aviso diz, por tipo. */
+/**
+ * O que o aviso diz, por tipo. O texto escrito vai inteiro (até 600 letras),
+ * como nota do aviso — o sino o mostra destacado (01/10/2026: o texto da ação
+ * aparece no aviso como aparece no histórico).
+ */
 function textoDoAviso(tipo, { autor = 'Alguém', registro = '', conteudo = '', alvo = 'evento' } = {}) {
   const onde = registro ? ` em ${registro}` : '';
-  const citado = conteudo ? `: “${trecho(conteudo)}”` : '';
+  const comNota = primeira => avisos.comporMensagem(primeira, [], conteudo ? avisos.notasDosEventos([], conteudo) : []);
   switch (tipo) {
-    case 'comentario': return { titulo: 'Novo comentário', mensagem: `${autor} comentou${onde}${citado}` };
-    case 'resposta': return { titulo: 'Resposta ao seu comentário', mensagem: `${autor} respondeu${onde}${citado}` };
-    case 'observacao': return { titulo: 'Nova observação', mensagem: `${autor} publicou uma observação${onde}${citado}` };
+    case 'comentario': return { titulo: 'Novo comentário', mensagem: comNota(`${autor} comentou${onde}.`) };
+    case 'resposta': return { titulo: 'Resposta ao seu comentário', mensagem: comNota(`${autor} respondeu${onde}.`) };
+    case 'observacao': return { titulo: 'Nova observação', mensagem: comNota(`${autor} publicou uma observação${onde}.`) };
     case 'curtida': return { titulo: 'Curtida', mensagem: `${autor} curtiu ${alvo === 'comentario' ? 'seu comentário' : 'seu registro'}${onde}` };
-    case 'mencao': return { titulo: 'Você foi mencionado', mensagem: `${autor} mencionou você${onde}${citado}` };
+    case 'mencao': return { titulo: 'Você foi mencionado', mensagem: comNota(`${autor} mencionou você${onde}.`) };
     default: return { titulo: 'Histórico', mensagem: `${autor} mexeu no histórico${onde}` };
   }
 }
@@ -504,23 +510,55 @@ async function alternarCurtida(api, { origem, registroId, itemId = null, comenta
   return { curti: true };
 }
 
+/**
+ * Quem escreveu o comentário (ou fez o registro) que o Sup Admin tirou do
+ * histórico fica sabendo, com o motivo (01/10/2026: "excluíram algo que era
+ * meu"). Falha só vai para o log.
+ */
+async function avisarRemocao(api, { origem, registroId, autorId, usuarioId, motivo, comentario = null, item = null }) {
+  try {
+    const para = destinatarios([autorId], usuarioId);
+    if (!para.length) return;
+    const nomes = await nomesDosUsuarios(api);
+    const { nome } = await lerRegistro(api, origem, registroId, { nomes });
+    const quem = nomes.get(Number(usuarioId)) || 'Alguém';
+    const oQue = comentario
+      ? `seu comentário “${trecho(comentario.texto, 70)}”`
+      : `um registro seu (${trecho([item?.entidade, item?.valor_novo || item?.observacao].filter(Boolean).join(': '), 70) || 'evento'})`;
+    const motivoTexto = texto(motivo);
+    await notificar(api, para, {
+      tipo: 'removido_historico',
+      titulo: comentario ? 'Seu comentário foi removido' : 'Um registro seu saiu do histórico',
+      mensagem: avisos.comporMensagem(`${quem} tirou do histórico ${oQue} em ${nome}.`, [], motivoTexto ? avisos.notasDosEventos([], `Motivo: ${motivoTexto}`) : []),
+      origem, registro_id: Number(registroId), item_id: Number(comentario?.item_id ?? item?.id) || null,
+      comentario_id: comentario ? Number(comentario.id) : null, autor_id: usuarioId ?? null
+    });
+  } catch (err) {
+    console.warn('[historico-social] aviso da remoção não gravado:', err?.message || err);
+  }
+}
+
 /** Sup Admin: marca o evento como excluído (nada sai do banco). */
 async function excluirEvento(api, { origem, registroId, itemId, usuarioId, motivo }) {
   const o = origemValida(origem);
   const item = await lerEvento(api, origem, registroId, itemId);
   if (item.excluido_em) return item;
-  return escreverSocial(api.put(`/api/${o.tabela}/${item.id}`, {
+  const feito = await escreverSocial(api.put(`/api/${o.tabela}/${item.id}`, {
     excluido_em: new Date().toISOString(), excluido_por: usuarioId ?? null, motivo_exclusao: texto(motivo) || null
   }), o.sqlArquivo);
+  await avisarRemocao(api, { origem, registroId, autorId: item.usuario_id, usuarioId, motivo, item });
+  return feito;
 }
 
 /** Sup Admin: marca o comentário como removido (as respostas continuam). */
 async function excluirComentario(api, { origem, registroId, comentarioId, usuarioId, motivo }) {
   const c = await lerComentario(api, origem, registroId, comentarioId);
   if (c.excluido_em) return c;
-  return api.put(`/api/historico_comentarios/${c.id}`, {
+  const feito = await api.put(`/api/historico_comentarios/${c.id}`, {
     excluido_em: new Date().toISOString(), excluido_por: usuarioId ?? null, motivo_exclusao: texto(motivo) || null
   });
+  await avisarRemocao(api, { origem, registroId, autorId: c.usuario_id, usuarioId, motivo, comentario: c });
+  return feito;
 }
 
 /**
