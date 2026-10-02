@@ -87,9 +87,13 @@ function secaoResultado(rel) {
 }
 
 function secaoLivro(livro) {
-  const saldoTexto = livro.saldo_conhecido
-    ? `Saldo inicial ${esc(c.reais(livro.saldo_inicial))} (calculado do saldo que o banco informou em ${data(livro.saldo_banco.data)}: ${esc(c.reais(livro.saldo_banco.valor))}).`
-    : 'Sem o saldo informado pelo banco: a coluna Saldo é o acumulado do mês.';
+  const conf = livro.conferencia;
+  const saldoTexto = livro.saldo_origem === 'digitado'
+    ? `Saldo inicial ${esc(c.reais(livro.saldo_inicial))} (pelo saldo de abertura digitado na conta, de ${data(livro.abertura?.data)}).`
+      + (conf ? (Math.abs(conf.diferenca) > 0.009 ? ` Não confere com o banco em ${data(conf.data)}: livro ${esc(c.reais(conf.livro))} × banco ${esc(c.reais(conf.banco))}.` : ` Confere com o saldo do banco em ${data(conf.data)}.`) : '')
+    : livro.saldo_conhecido
+      ? `Saldo inicial ${esc(c.reais(livro.saldo_inicial))} (calculado do saldo que o banco informou em ${data(livro.saldo_banco.data)}: ${esc(c.reais(livro.saldo_banco.valor))}).`
+      : 'Sem o saldo informado pelo banco: a coluna Saldo é o acumulado do mês.';
   const corpo = [];
   const porDia = new Map(livro.dias.map(d => [d.data, d]));
   livro.linhas.forEach((l, i) => {

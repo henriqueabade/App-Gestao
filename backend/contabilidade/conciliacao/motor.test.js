@@ -3,7 +3,10 @@
  * única das liquidações (liquidacoes.js) e as contas da conciliação
  * (conciliacao.js). O que fica preso:
  *   - automático SÓ com par único dos dois lados + chave (CNPJ/CPF da
- *     contrapartida ou nº do documento); o resto é sugestão;
+ *     contrapartida ou nº do documento) ou o nome na descrição a até 3 dias
+ *     (16b do dono, 02/10/2026); o resto é sugestão;
+ *   - as obrigações (fase A): parcela em aberto e nota sem conta, janela de
+ *     30 dias, automático com CNPJ (30 dias) ou nome (5 dias), nunca em soma;
  *   - as janelas de data (boleto: crédito em até 5 dias; cartão: 35; os
  *     outros: 3 antes a 4 depois) e o sentido (entrada × saída);
  *   - dois débitos iguais para um pagamento: sugestão, nunca única;
@@ -69,21 +72,24 @@ test('pontuar: sentido, janela, mesmo valor, CNPJ e nº de documento (chaves), n
   assert.ok(motor.pontuar(mov(1, '2026-10-20', -600), pag, { livre: true }), 'livre: fora da janela ainda pontua');
 });
 
-test('sugerir: automático só com par único + chave; sem chave é sugestão única; dois débitos iguais para um pagamento não são únicos', () => {
+test('sugerir: automático só com par único + chave (ou nome a até 3 dias, 16b); sem chave é sugestão única; dois débitos iguais para um pagamento não são únicos', () => {
   const aluguel = liq('titulo_pagamento', 1, '2026-08-05', 2500, { nome: 'Imobiliária Centro', cnpj: '23132546000100' });
   const vidros = liq('titulo_pagamento', 2, '2026-08-20', 600, { nome: 'Vidros Norte' });
   const das = liq('titulo_pagamento', 3, '2026-08-20', 321.45, { nome: null });
+  const madeira = liq('titulo_pagamento', 4, '2026-08-10', 777, { nome: 'Madeireira Ipê' });
   const movs = [
     mov(10, '2026-08-05', -2500, { cnpj: '23132546000100' }),
     mov(11, '2026-08-20', -600, { descricao: 'PIX ENVIADO - VIDROS NORTE' }),
     mov(12, '2026-08-20', -321.45),
     mov(13, '2026-08-21', -321.45),
-    mov(14, '2026-08-31', -12.9, { descricao: 'Tarifa' })
+    mov(14, '2026-08-31', -12.9, { descricao: 'Tarifa' }),
+    mov(15, '2026-08-14', -777, { descricao: 'PIX ENVIADO - MADEIREIRA IPE' })
   ];
-  const r = motor.sugerir(movs, [aluguel, vidros, das]);
+  const r = motor.sugerir(movs, [aluguel, vidros, das, madeira]);
   assert.deepEqual([r.get(10).tipo, r.get(10).unica, r.get(10).itens], ['automatico', true, ['titulo_pagamento:1']]);
-  assert.deepEqual([r.get(11).tipo, r.get(11).unica], ['sugestao', true]);
+  assert.deepEqual([r.get(11).tipo, r.get(11).unica], ['automatico', true], '16b: valor + dia + nome na descrição');
   assert.ok(r.get(11).motivos.includes('nome na descrição'));
+  assert.deepEqual([r.get(15).tipo, r.get(15).unica], ['sugestao', true], 'o nome a 4 dias não basta: alguém confirma');
   assert.deepEqual([r.get(12).tipo, r.get(12).unica, r.get(13).tipo, r.get(13).unica], ['sugestao', false, 'sugestao', false], 'o mesmo DAS serve para os dois débitos');
   assert.equal(r.has(14), false, 'a tarifa não tem par');
 });
@@ -103,6 +109,58 @@ test('sugerir: estornado, já ligado (restante 0) e o outro sentido ficam de for
   const ligado = liq('recebimento', 2, '2026-08-10', 500, { restante: 0 });
   const saida = liq('titulo_pagamento', 3, '2026-08-10', 500);
   assert.equal(motor.sugerir([mov(1, '2026-08-10', 500)], [estornado, ligado, saida]).size, 0);
+});
+
+/** A NFS-e 17 do Bruno (02/10/2026): registrada sem conta, paga por Pix no mesmo dia. */
+const nota = (id, data, valor, extra = {}) => ({
+  ...L.deDocumento({
+    id, tipo: 'nfse', numero: extra.numero || '17', emitente_nome: extra.nome || 'BRUNO HENRIQUE VIGATO MAIA', emitente_documento: extra.cnpj || '61234567000190',
+    data_emissao: data, competencia: data.slice(0, 7), valor_total: valor, valor_retencoes: extra.retencoes ?? null, iss_retido: extra.iss_retido || false, valor_iss: extra.iss ?? null
+  }),
+  restante: undefined
+});
+const semRestante = l => ({ ...l, restante: l.valor_abs });
+
+test('obrigações (fase A): a nota sem conta e a parcela em aberto casam com o débito; automático com nome (5 dias) ou CNPJ (30)', () => {
+  const bruno = semRestante(nota(4, '2026-09-08', 2800));
+  assert.deepEqual([bruno.chave, bruno.valor, bruno.obrigacao, bruno.rotulo, bruno.documento_recebido_id, bruno.competencia_documento], ['documento:4', -2800, true, 'NFS-e 17', 4, '2026-09']);
+  assert.deepEqual(motor.janela(bruno), { alvo: '2026-09-08', de: '2026-08-09', ate: '2026-10-08' });
+  const r = motor.sugerir([mov(1, '2026-09-08', -2800, { descricao: 'PIX ENVIADO - BRUNO HENRIQUE VIGATO MAI' })], [bruno]);
+  assert.deepEqual([r.get(1).tipo, r.get(1).itens], ['automatico', ['documento:4']], 'o caso do Bruno concilia sozinho');
+
+  // CNPJ da contrapartida (API do BB) a 20 dias: automático; só o nome a 10 dias: sugestão.
+  const nf = semRestante(nota(5, '2026-09-01', 1250, { nome: 'Madeireira Ipê', cnpj: '84031759000121', numero: '4521' }));
+  assert.equal(motor.sugerir([mov(2, '2026-09-21', -1250, { cnpj: '84031759000121' })], [nf]).get(2).tipo, 'automatico');
+  assert.equal(motor.sugerir([mov(3, '2026-09-11', -1250, { descricao: 'PIX ENVIADO - MADEIREIRA IPE' })], [nf]).get(3).tipo, 'sugestao');
+  assert.equal(motor.sugerir([mov(4, '2026-10-05', -1250, { cnpj: '84031759000121' })], [nf]).size, 0, 'fora dos 30 dias');
+
+  const parcela = semRestante(L.deParcela({ id: 31, titulo_id: 9, numero: 2, vencimento: '2026-09-10', valor: 500 }, {
+    titulo: { id: 9, descricao: 'Aluguel', contato_id: 5, numero_documento: null, categoria: 'Aluguel' }, contato: { id: 5, nome: 'Imobiliária Centro', cnpj: '23132546000100' }, de: 3
+  }));
+  assert.deepEqual([parcela.chave, parcela.rotulo, parcela.titulo_id, parcela.nome], ['parcela:31', 'Aluguel · parcela 2/3', 9, 'Imobiliária Centro']);
+  assert.equal(motor.sugerir([mov(5, '2026-09-12', -500, { descricao: 'PAGAMENTO DE BOLETO IMOBILIARIA CENTRO' })], [parcela]).get(5).tipo, 'automatico');
+
+  // A mesma saída serve para a nota e para um pagamento já registrado: ninguém é único; nunca entra em soma.
+  const pago = liq('titulo_pagamento', 8, '2026-09-08', 2800, { nome: 'Bruno Henrique Vigato Maia' });
+  const ambos = motor.sugerir([mov(6, '2026-09-08', -2800, { descricao: 'PIX ENVIADO - BRUNO HENRIQUE VIGATO MAI' })], [bruno, pago]).get(6);
+  assert.deepEqual([ambos.tipo, ambos.unica, ambos.alternativas], ['sugestao', false, 1]);
+  const metade = semRestante(nota(6, '2026-09-08', 1400, { numero: '18' }));
+  const outra = semRestante(nota(7, '2026-09-08', 1400, { numero: '19' }));
+  assert.equal(motor.sugerir([mov(7, '2026-09-08', -2800, { descricao: 'PIX' })], [metade, outra]).size, 0);
+});
+
+test('obrigações: o valor que sai do banco desconta as retenções; a forma vem da descrição do banco', () => {
+  assert.equal(L.valorAPagar({ valor_total: 1000, valor_retencoes: 50 }), 950);
+  assert.equal(L.valorAPagar({ valor_total: 1000, iss_retido: true, valor_iss: 30 }), 970);
+  assert.equal(L.valorAPagar({ valor_total: 1000, iss_retido: false, valor_iss: 30 }), 1000);
+  assert.equal(L.valorAPagar({ valor_total: 1000, valor_retencoes: 1000 }), 1000, 'retenção do valor inteiro é dado errado: vale o total');
+  assert.equal(nota(1, '2026-09-01', 1000, { retencoes: 50 }).detalhe.replace(/ /g, ' '),'emitida em 01/09/2026 · R$ 1.000,00 menos as retenções');
+  const contas = new Map([['2', [{ id: 1, status: 'cancelado' }]], ['3', [{ id: 2, status: 'aberto' }]]]);
+  assert.deepEqual([1, 2, 3].map(id => L.documentoSemConta({ id, valor_total: 10 }, contas)), [true, true, false]);
+  assert.equal(L.documentoSemConta({ id: 1, valor_total: 10, financeiro_pagamento_id: 7 }, contas), false, 'NFS-e de comissão já tem o pagamento');
+  assert.equal(L.documentoSemConta({ id: 1, valor_total: 10, sem_pagamento: true }, contas), false);
+  assert.deepEqual(['PIX ENVIADO - ANA', 'PAGAMENTO DE BOLETO', 'DEB.AUTOMATICO CEMIG', 'TED 001 0001', 'PAGTO CARTAO CREDITO', 'TRANSFERENCIA ENVIADA'].map(motor.formaDaDescricao),
+    ['Pix', 'Boleto', 'Débito automático', 'TED/DOC', 'Cartão', 'Transferência']);
 });
 
 test('candidatas da escolha à mão: mesmo sentido, na janela de dias, as de mesmo valor primeiro', () => {

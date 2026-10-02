@@ -43,7 +43,9 @@ const TIPOS = {
   // Etapas 10 a 13: as integrações automáticas e a caixa de entrada.
   integracao_configurada: 'Integração configurada',
   nfe_manifestada: 'NF-e manifestada na SEFAZ',
-  entrada_ignorada: 'Documento da SEFAZ/ADN ignorado'
+  entrada_ignorada: 'Documento da SEFAZ/ADN ignorado',
+  // Fase A (02/10/2026): o início da Contabilidade e o saldo de abertura.
+  parametros_alterados: 'Configurações gerais'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

@@ -511,6 +511,8 @@ test("textoSimples: o objeto citado com ' vira o rótulo entre aspas (aviso do s
 function baseContabilidade({ semMural = false } = {}) {
   const dados = baseDados();
   dados.perm_contabilidade = [{ id: 1, modelo_id: 9, modulo_ativo: true, acao_view: true }];
+  // A Carla tem o perfil que vê, mas o acesso dela ainda não foi liberado.
+  dados.usuarios.push({ id: 5, nome: 'Carla', perfil: 'Vendedor', modelo_permissoes_id: 9, status: 'aguardando_aprovacao' });
   if (!semMural) dados.contabil_mural_historico = [];
   return dados;
 }
@@ -533,7 +535,13 @@ test('mensagens da Contabilidade: mural fixo, publicar com @ e \', comentar avis
     // O texto inteiro vem como nota do aviso (linha "» "), com as marcas lidas.
     assert.strictEqual(aviso.mensagem, 'Ana mencionou você em Mensagens da Contabilidade.\n» @João veja “NF-e 1/123 · Madeira” antes de fechar');
     assert.strictEqual(avisosDe(ctx, 2).length, 0, 'quem publicou não se avisa');
-    assert.strictEqual(avisosDe(ctx, 1).length, 0, 'mural sem dono: ninguém mais é avisado de uma mensagem nova');
+    assert.strictEqual(avisosDe(ctx, 3).length, 1, 'o mencionado recebe só a menção');
+    // 28b (02/10/2026): a mensagem nova vai para todos que veem a Contabilidade — o Sup Admin vê tudo; o Beto não vê.
+    const geral = avisosDe(ctx, 1);
+    assert.deepStrictEqual(geral.map(a => [a.tipo, a.titulo, a.origem]), [['observacao', 'Nova mensagem', 'contabilidade']]);
+    assert.match(geral[0].mensagem, /^Ana escreveu em Mensagens da Contabilidade\./);
+    assert.strictEqual(avisosDe(ctx, 4).length, 0, 'quem não vê o módulo não é avisado');
+    assert.strictEqual(avisosDe(ctx, 5).length, 0, 'acesso não liberado: não é avisado');
 
     // O João comenta: a Ana (autora da mensagem) recebe.
     const com = await chamar(ctx.porta, `/api/historico-social/contabilidade/1/itens/${linha.id}/comentarios`, { usuario: 3, corpo: { texto: 'Vou ver' } });

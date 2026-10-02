@@ -94,6 +94,7 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao } = require('./permissionsController');
 const configuracaoCobranca = require('./cobranca/configuracaoCobranca');
+const { somarMeses } = require('./financeiro/comum');
 const checklist = require('./contabilidade/checklist');
 const fechamento = require('./contabilidade/fechamento');
 const arquivos = require('./contabilidade/arquivos');
@@ -264,8 +265,20 @@ router.post('/documentos/previa', exigirPermissao(REGISTRAR_DOCUMENTO), rota('PO
 /** Registrar e já gerar a conta pede as duas permissões. */
 const permissoesDoRegistro = req => (req.body?.gerar_titulo === true ? [REGISTRAR_DOCUMENTO, LANCAR] : [REGISTRAR_DOCUMENTO]);
 
-router.post('/documentos', exigirPermissao(permissoesDoRegistro), rota('POST /api/contabilidade/documentos', ({ api, req, hoje, usuarioId }) =>
-  documentos.registrar(api, { entrada: req.body || {}, usuarioId, hoje, podeLancar: req.body?.gerar_titulo === true })));
+/**
+ * Fase A (02/10/2026): depois de gravar o que pode ser o par de um lançamento
+ * do banco (extrato, nota, conta), a conciliação automática roda sozinha nos
+ * meses tocados. Nunca derruba a resposta de quem chamou.
+ */
+async function comConciliacao(api, resposta, { competencias, contaId = null, usuarioId, hoje }) {
+  const feito = await conciliacao.automaticaDosMeses(api, { competencias, contaId, usuarioId, hoje }).catch(() => null);
+  return { ...resposta, conciliacao: feito, conciliacao_resumo: conciliacao.resumoDaAutomatica(feito) };
+}
+
+router.post('/documentos', exigirPermissao(permissoesDoRegistro), rota('POST /api/contabilidade/documentos', async ({ api, req, hoje, usuarioId }) => {
+  const r = await documentos.registrar(api, { entrada: req.body || {}, usuarioId, hoje, podeLancar: req.body?.gerar_titulo === true });
+  return comConciliacao(api, r, { competencias: [r.competencia, somarMeses(r.competencia, 1)], usuarioId, hoje });
+}));
 
 router.post('/documentos/:id/excluir', exigirPermissao(EXCLUIR_DOCUMENTO), rota('POST /api/contabilidade/documentos/:id/excluir', ({ api, req, usuarioId }) =>
   documentos.excluir(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
@@ -278,8 +291,12 @@ router.get('/titulos', exigirPermissao(VER), rota('GET /api/contabilidade/titulo
 router.get('/titulos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/titulos/:id', ({ api, req, hoje }) =>
   titulos.detalhe(api, req.params.id, { hoje })));
 
-router.post('/titulos', exigirPermissao(LANCAR), rota('POST /api/contabilidade/titulos', ({ api, req, hoje, usuarioId }) =>
-  titulos.criar(api, { entrada: req.body || {}, usuarioId, hoje })));
+router.post('/titulos', exigirPermissao(LANCAR), rota('POST /api/contabilidade/titulos', async ({ api, req, hoje, usuarioId }) => {
+  const r = await titulos.criar(api, { entrada: req.body || {}, usuarioId, hoje });
+  // As parcelas vencem de um mês em diante: o débito pode estar no mês do 1º vencimento ou perto dele.
+  const primeiro = String((Array.isArray(req.body?.parcelas) && req.body.parcelas[0]?.vencimento) || req.body?.primeiro_vencimento || '').slice(0, 7);
+  return comConciliacao(api, r, { competencias: [r.competencia, primeiro].filter(Boolean), usuarioId, hoje });
+}));
 
 router.put('/titulos/:id', exigirPermissao(LANCAR), rota('PUT /api/contabilidade/titulos/:id', ({ api, req, hoje, usuarioId }) =>
   titulos.editar(api, req.params.id, { entrada: req.body || {}, usuarioId, hoje })));
@@ -309,8 +326,10 @@ router.get('/extrato', exigirPermissao(VER), rota('GET /api/contabilidade/extrat
 router.post('/extrato/previa', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/previa', ({ api, req }) =>
   extrato.previa(api, { contaId: req.body?.conta_id, base64: req.body?.base64 })));
 
-router.post('/extrato/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importar', ({ api, req, usuarioId }) =>
-  extrato.importar(api, { contaId: req.body?.conta_id, nome: req.body?.nome, base64: req.body?.base64, usuarioId })));
+router.post('/extrato/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importar', async ({ api, req, usuarioId, hoje }) => {
+  const r = await extrato.importar(api, { contaId: req.body?.conta_id, nome: req.body?.nome, base64: req.body?.base64, usuarioId });
+  return comConciliacao(api, r, { competencias: r.meses, contaId: req.body?.conta_id, usuarioId, hoje });
+}));
 
 router.post('/extrato/importacoes/:id/desfazer', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/extrato/importacoes/:id/desfazer', ({ api, req, usuarioId }) =>
   extrato.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
@@ -323,8 +342,16 @@ router.get('/conciliacao', exigirPermissao(VER), rota('GET /api/contabilidade/co
 router.get('/conciliacao/movimentos/:id', exigirPermissao(VER), rota('GET /api/contabilidade/conciliacao/movimentos/:id', ({ api, req }) =>
   conciliacao.candidatos(api, req.params.id, { dias: req.query?.dias })));
 
-router.post('/conciliacao/movimentos/:id/conciliar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/conciliar', ({ api, req, usuarioId }) =>
-  conciliacao.conciliar(api, req.params.id, { itens: req.body?.itens, justificativa: req.body?.justificativa, criterio: req.body?.criterio, usuarioId })));
+// Conciliar com uma obrigação (fase A) paga a parcela — ou lança a conta da nota e a paga: pede essas permissões também.
+const permissoesDaConciliacao = req => {
+  const tipos = (Array.isArray(req.body?.itens) ? req.body.itens : []).map(i => i?.tipo);
+  if (tipos.includes('documento')) return [CONCILIAR, LANCAR, PAGAR];
+  if (tipos.includes('parcela')) return [CONCILIAR, PAGAR];
+  return [CONCILIAR];
+};
+
+router.post('/conciliacao/movimentos/:id/conciliar', exigirPermissao(permissoesDaConciliacao), rota('POST /api/contabilidade/conciliacao/movimentos/:id/conciliar', ({ api, req, usuarioId, hoje }) =>
+  conciliacao.conciliar(api, req.params.id, { itens: req.body?.itens, justificativa: req.body?.justificativa, criterio: req.body?.criterio, usuarioId, hoje })));
 
 router.post('/conciliacao/movimentos/:id/desfazer', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/conciliacao/movimentos/:id/desfazer', ({ api, req, usuarioId }) =>
   conciliacao.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));

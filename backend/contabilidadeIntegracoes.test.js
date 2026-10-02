@@ -37,6 +37,7 @@ const AGORA = Date.parse('2026-09-15T12:00:00-03:00');
 const gz = t => zlib.gzipSync(Buffer.from(t, 'utf8')).toString('base64');
 
 const COLUNAS = {
+  contabil_parametros: ['id', 'chave', 'valor', 'atualizado_em', 'atualizado_por'],
   pedidos: ['id', 'numero', 'situacao', 'cliente_id', 'valor_final', 'embarcar_real'],
   notas_fiscais: ['id', 'pedido_id', 'serie', 'numero', 'status_fiscal', 'valor_total', 'data_emissao', 'criado_em', 'xml_autorizado', 'chave_acesso', 'destinatario'],
   notas_devolucao: ['id', 'pedido_id'],
@@ -351,6 +352,35 @@ test('SEFAZ: resumo ganha ciência, a completa é registrada sozinha, o cancelam
   }
 });
 
+test('22b: desconhecimento na SEFAZ não tira a nota das pendências; só sai quando alguém ignora à mão', async () => {
+  const ctx = await montar(cenario());
+  try {
+    await ctx.chamar('PUT', '/integracoes/sefaz_nfe', { ativa: true });
+    assert.equal((await ctx.chamar('POST', '/integracoes/sefaz_nfe/sincronizar', {})).status, 200);
+    const a = naEntrada(ctx, CHAVE_A);
+    const m = await ctx.chamar('POST', `/entrada/${a.id}/manifestar`, { tipo: 'desconhecimento' });
+    assert.equal(m.status, 200, JSON.stringify(m.corpo));
+    assert.equal(m.corpo.recusada, true);
+    assert.match(ctx.chamadas.at(-1).corpo, /<tpEvento>210220<\/tpEvento>/);
+    assert.deepEqual([naEntrada(ctx, CHAVE_A).status, naEntrada(ctx, CHAVE_A).manifestacao], ['nova', 'desconhecimento'], 'continua pendente');
+
+    const lista = await ctx.chamar('GET', '/entrada?visao=pendentes');
+    const linha = lista.corpo.linhas.find(l => l.chave === CHAVE_A);
+    assert.deepEqual([linha.recusada, linha.pode.ignorar], [true, true]);
+    assert.match(linha.recusada_texto, /como desconhecimento: continua pendente até alguém ignorar/);
+    const painel = await ctx.chamar('GET', '/painel?competencia=2026-08');
+    const pend = painel.corpo.pendencias.find(p => p.chave === 'entrada_pendente');
+    assert.deepEqual([pend.nivel, /1 já manifestada como desconhecida\/não realizada: falta ignorar à mão/.test(pend.descricao)], ['documental', true]);
+
+    assert.equal((await ctx.chamar('POST', `/entrada/${a.id}/ignorar`, { motivo: 'Não compramos da Vidros Norte' })).status, 200);
+    assert.equal(naEntrada(ctx, CHAVE_A).status, 'ignorada');
+    const depois = await ctx.chamar('GET', '/painel?competencia=2026-08');
+    assert.ok(!depois.corpo.pendencias.some(p => p.chave === 'entrada_pendente'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('ADN: a NFS-e tomada entra nos documentos com o XML oficial e o ISS retido; a prestada fica de fora; o NSU anda', async () => {
   const ctx = await montar(cenario());
   try {
@@ -479,6 +509,30 @@ test('BB (Extratos v2): credenciais próprias no cofre, conta de teste com o có
   }
 });
 
+test('fase A: a linha do OFX que a API repete ganha o CPF/CNPJ da contrapartida (o resto da linha não muda)', async () => {
+  const doOfx = {
+    id: 50, conta_id: 1, importacao_id: 9, data: '2026-08-05', competencia: '2026-08', valor: -2500, tipo: 'debito', descricao: 'Pagto cobranca',
+    documento: '123', identificador: 'OFX1', hash: 'ofx-50', estado_conciliacao: 'pendente'
+  };
+  const ctx = await montar(cenario({ movimentos_bancarios: [doOfx] }));
+  try {
+    await ctx.chamar('PUT', '/integracoes/bb_extrato', {
+      ativa: true,
+      parametros: { usar_credenciais_da_cobranca: false, client_id_homologacao: 'cid', app_key_homologacao: 'app', conta_id: 1, agencia: '1614', conta: '16773', homologacao_agencia: '452', homologacao_conta: '123873' }
+    });
+    await ctx.chamar('POST', '/integracoes/bb_extrato/credenciais', { ambiente: 'homologacao', client_secret: 'sec', destino: 'banco' });
+    const r = await ctx.chamar('POST', '/integracoes/bb_extrato/sincronizar', { competencia: '2026-08' });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.deepEqual([r.corpo.novos, r.corpo.repetidos], [1, 1], 'o boleto já veio pelo OFX (mesmo dia, valor e documento)');
+    const linha = ctx.tabelas.movimentos_bancarios.find(m => m.id === 50);
+    assert.deepEqual([linha.contrapartida_documento, linha.contrapartida_tipo, linha.codigo_historico, linha.descricao, linha.identificador, linha.hash],
+      ['12345678000199', 'J', '109', 'Pagto cobranca', 'OFX1', 'ofx-50']);
+    assert.match(ctx.tabelas.contabil_eventos.find(e => e.tipo === 'extrato_importado').descricao, /\(1 completado com o CPF\/CNPJ da API\)/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('SEFAZ com o mês fechado (30/09/2026): a nota fica na caixa com o motivo e a integração não fica "com erro"; a cancelada nunca registrada não é pendente', async () => {
   const ctx = await montar(cenario({ competencia_contabil: [{ id: 1, competencia: '2026-08', status: 'fechada' }] }));
   try {
@@ -524,6 +578,34 @@ test('estado, certificado público, CDB fora de uso, produção só com a palavr
     assert.deepEqual((await ctx.chamar('POST', '/integracoes/bb_extrato/sincronizar', {})).corpo.pedidas, ['contabilidade.extrato.importar']);
     assert.equal((await ctx.chamar('POST', '/integracoes/pix/testar', {})).status, 404);
     assert.equal((await ctx.chamar('GET', '/entrada')).status, 200);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fase A: o início da Contabilidade (cartão Geral) — sem o SQL avisa; com ele vale setembro; o Sup Admin muda; o mês de antes sai da cobrança', async () => {
+  const sem = await montar(cenario());
+  try {
+    const r = await sem.chamar('GET', '/integracoes');
+    assert.deepEqual([r.corpo.parametros.sql_pendente, r.corpo.parametros.sql_arquivo, r.corpo.parametros.valores.inicio_competencia], [true, 'sql/contabilidade_fase_a.sql', null]);
+    const put = await sem.chamar('PUT', '/parametros', { inicio_competencia: '2026-09' });
+    assert.deepEqual([put.status, put.corpo.sql_arquivo], [409, 'sql/contabilidade_fase_a.sql']);
+    assert.equal((await sem.chamar('GET', '/painel?competencia=2026-08')).corpo.antes_do_inicio, null, 'sem o SQL, nenhum corte');
+  } finally {
+    await sem.encerrar();
+  }
+  const ctx = await montar(cenario({ contabil_parametros: [{ id: 1, chave: 'inicio_competencia', valor: '2026-09' }] }));
+  try {
+    assert.equal((await ctx.chamar('GET', '/integracoes')).corpo.parametros.valores.inicio_competencia, '2026-09');
+    const antes = await ctx.chamar('GET', '/painel?competencia=2026-08');
+    assert.deepEqual([antes.corpo.antes_do_inicio?.rotulo, antes.corpo.contagem.total, antes.corpo.pode.fechar], ['setembro/2026', 0, false]);
+    assert.equal((await ctx.chamar('PUT', '/parametros', { inicio_competencia: '13/2026' })).status, 400);
+    const mudou = await ctx.chamar('PUT', '/parametros', { inicio_competencia: '08/2026' });
+    assert.equal(mudou.status, 200, JSON.stringify(mudou.corpo));
+    assert.equal(mudou.corpo.parametros.valores.inicio_competencia, '2026-08');
+    assert.equal(ctx.tabelas.contabil_parametros[0].valor, '2026-08');
+    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao, /^Configurações gerais: Início da Contabilidade: agosto\/2026$/);
+    assert.equal((await ctx.chamar('GET', '/painel?competencia=2026-08')).corpo.antes_do_inicio, null);
   } finally {
     await ctx.encerrar();
   }

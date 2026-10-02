@@ -82,17 +82,25 @@ function vencimentoDe(vinculos, vencPorChave = new Map()) {
 /**
  * O livro-caixa de uma conta: cada lançamento com débito (saída), crédito
  * (entrada) e o saldo depois dele; o total de cada dia e do período. O saldo
- * inicial sai do saldo que o banco informou (no OFX): saldo informado menos
- * o que entrou e saiu até aquele dia. Sem saldo do banco, a coluna é só o
- * acumulado do mês (`saldo_conhecido: false`). Pura.
+ * inicial é o de ABERTURA digitado na conta (19b do dono: `abertura`, já
+ * levado até a véspera do mês) e, sem ele, o que sai do saldo que o banco
+ * informou (no OFX): saldo informado menos o que entrou e saiu até aquele
+ * dia. Com os dois, `conferencia` diz se o livro bate com o banco. Sem
+ * nenhum, a coluna é só o acumulado do mês (`saldo_conhecido: false`). Pura.
  */
-function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null }) {
+function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null, abertura = null }) {
   const ordenadas = c.lista(linhas).slice()
     .sort((x, y) => String(x.data).localeCompare(String(y.data)) || Number(x.id) - Number(y.id));
-  const conhecido = Boolean(saldoBanco && saldoBanco.data && Number.isFinite(Number(saldoBanco.valor)));
-  const saldoInicial = conhecido
-    ? c.centavos(Number(saldoBanco.valor) - soma(ordenadas.filter(l => String(l.data) <= saldoBanco.data), l => l.valor))
-    : null;
+  const doBanco = Boolean(saldoBanco && saldoBanco.data && Number.isFinite(Number(saldoBanco.valor)));
+  const digitado = Boolean(abertura && Number.isFinite(Number(abertura.valor)));
+  const conhecido = digitado || doBanco;
+  const peloBanco = doBanco ? c.centavos(Number(saldoBanco.valor) - soma(ordenadas.filter(l => String(l.data) <= saldoBanco.data), l => l.valor)) : null;
+  const saldoInicial = digitado ? c.centavos(abertura.valor) : peloBanco;
+  const conferencia = digitado && doBanco ? {
+    data: saldoBanco.data, banco: c.centavos(saldoBanco.valor),
+    livro: c.centavos(saldoInicial + soma(ordenadas.filter(l => String(l.data) <= saldoBanco.data), l => l.valor)),
+    diferenca: c.centavos(saldoInicial - peloBanco)
+  } : null;
   let saldo = saldoInicial ?? 0;
   const comSaldo = ordenadas.map(l => {
     saldo = c.centavos(saldo + Number(l.valor || 0));
@@ -116,7 +124,8 @@ function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null }
   const resultado = c.centavos(entradas + saidas);
   return {
     conta_id: conta?.id ?? null, conta: conta?.nome || 'Conta', tipo: conta?.tipo || null,
-    saldo_conhecido: conhecido, saldo_inicial: saldoInicial, saldo_banco: conhecido ? { valor: c.centavos(saldoBanco.valor), data: saldoBanco.data } : null,
+    saldo_conhecido: conhecido, saldo_inicial: saldoInicial, saldo_banco: doBanco ? { valor: c.centavos(saldoBanco.valor), data: saldoBanco.data } : null,
+    saldo_origem: digitado ? 'digitado' : (doBanco ? 'banco' : null), abertura: digitado ? { valor: c.centavos(abertura.valor), data: abertura.data || null } : null, conferencia,
     saldo_final: saldoInicial === null ? null : c.centavos(saldoInicial + resultado),
     completo,
     linhas: comSaldo, dias,
@@ -316,14 +325,30 @@ async function montar(api, { competencia, hoje, desde = null }) {
 
   const fotoExtrato = new Map(c.lista(versao?.foto?.extrato).map(x => [String(x.conta_id), x]));
   const contasDoMes = contas.filter(ct => ct.ativa || itens.some(i => String(i.movimento.conta_id) === String(ct.id)));
+  // 19b: o saldo de abertura digitado (no fim do dia da data), levado até a véspera do mês.
+  const vespera = new Date(Date.UTC(Number(comp.slice(0, 4)), Number(comp.slice(5, 7)) - 1, 0)).toISOString().slice(0, 10);
+  const aberturas = new Map();
+  for (const conta of contasDoMes) {
+    const digitado = extratoMod.saldoDigitado(conta);
+    if (!digitado || digitado.data > vespera) continue;
+    const daConta = digitado.data === vespera ? [] : ((await b.lerOpcional(api, 'movimentos_bancarios', { conta_id: Number(conta.id) })) || []);
+    aberturas.set(String(conta.id), { valor: extratoMod.saldoNoFimDoDia(digitado, daConta, vespera), data: digitado.data });
+  }
   const livro = contasDoMes.map(conta => {
     const imps = importacoes.filter(i => String(i.conta_id) === String(conta.id));
     const daFoto = fotoExtrato.get(String(conta.id)) || null;
     const saldoBanco = daFoto ? daFoto.saldo_banco || null : extratoMod.saldoDoBanco(imps, comp);
     const completo = daFoto ? daFoto.completo ?? null : (conta.tipo === 'corrente' ? extratoMod.cobertura(imps, comp, { hoje }).completa : null);
-    return livroDaConta({ conta, linhas: itens.filter(i => String(i.movimento.conta_id) === String(conta.id)).map(linhaDoLivro), saldoBanco, completo });
+    return livroDaConta({
+      conta, linhas: itens.filter(i => String(i.movimento.conta_id) === String(conta.id)).map(linhaDoLivro), saldoBanco, completo, abertura: aberturas.get(String(conta.id)) || null
+    });
   });
   for (const l of livro) if (l.completo === false) avisos.push(`O extrato de ${l.conta} não cobre o mês inteiro: importe o que falta.`);
+  for (const l of livro) {
+    if (l.conferencia && Math.abs(l.conferencia.diferenca) > 0.009) {
+      avisos.push(`O saldo de ${l.conta} não confere com o banco em ${c.impressa(l.conferencia.data)}: livro ${c.reais(l.conferencia.livro)} × banco ${c.reais(l.conferencia.banco)} (confira o saldo de abertura digitado e o extrato).`);
+    }
+  }
 
   const resultado = resultadoComRotulos(versao?.foto?.resultado
     || (classificados ? versoes.resultadoDe(classificacao.porConta(itens.map(i => ({ valor: i.movimento.valor, classificacao: i.classificacao })))) : null));

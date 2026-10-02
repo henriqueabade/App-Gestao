@@ -308,7 +308,7 @@ test('regras: criar, testar sem gravar, sugeridas pelas classificações à mão
   }
 });
 
-test('checklist: lançamento sem classificação é documental na fonte "Conciliação e classificação"; classificado, some', async () => {
+test('checklist: lançamento sem classificação é crítico (C7) na fonte "Conciliação e classificação"; classificado, some', async () => {
   const ctx = await montar(cenario());
   try {
     const antes = await ctx.chamar('GET', '/painel?competencia=2026-08');
@@ -317,7 +317,7 @@ test('checklist: lançamento sem classificação é documental na fonte "Concili
     assert.equal(fonte.titulo, 'Conciliação e classificação');
     assert.equal(fonte.resumo.find(r => r.rotulo === 'Sem classificação').valor.replace(/ /g, ' '), '1 · R$ 1.850,00');
     const p = antes.corpo.pendencias.find(x => x.chave === 'classificacao_pendente');
-    assert.deepEqual([p.nivel, p.titulo, p.filtro], ['documental', '1 lançamento do extrato sem classificação', { acao: 'classificacao', visao: 'sem' }]);
+    assert.deepEqual([p.nivel, p.titulo, p.filtro], ['critico', '1 lançamento do extrato sem classificação', { acao: 'classificacao', visao: 'sem' }]);
     await ctx.chamar('POST', '/classificacao/classificar', { ids: [4], conta_id: 1 });
     const depois = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.ok(!depois.corpo.pendencias.some(x => x.chave === 'classificacao_pendente'));

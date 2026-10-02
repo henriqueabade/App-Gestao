@@ -169,6 +169,7 @@ const regra = (id, condicao_tipo, valor, sentido, conta_id) => ({ id, condicao_t
 const CHAVE = '31260811444777000161550020000000891000000895';
 const XML_NFE = `<?xml version="1.0" encoding="UTF-8"?><nfeProc versao="4.00"><NFe><infNFe Id="NFe${CHAVE}"/></NFe></nfeProc>`;
 const BOLETO = Buffer.from('%PDF-1.4 boleto do aluguel de agosto');
+const COMPROVANTE = Buffer.from('%PDF-1.4 comprovante do aluguel de agosto');
 const OFX = Buffer.from('OFXHEADER:100\r\nDATA:OFXSGML\r\n<OFX></OFX>');
 
 function cenario(extra = {}) {
@@ -189,11 +190,13 @@ function cenario(extra = {}) {
     contabil_eventos: [{ id: 1, tipo: 'conciliacao_feita', competencia: '2026-08', descricao: 'Lançamento de 05/08/2026 conciliado', dados: JSON.stringify({ movimento_id: 1 }), usuario_id: 3, criado_em: '2026-09-01T12:00:00Z' }],
     contabil_arquivos: [
       { id: 9, nome_arquivo: 'boleto-aluguel.pdf', tipo_mime: 'application/pdf', tamanho_bytes: BOLETO.length, sha256: 'a'.repeat(64), categoria: 'boleto', origem: 'fornecido', competencia: '2026-08', criado_em: '2026-08-02T10:00:00Z', completo: true, partes: 1 },
-      { id: 20, nome_arquivo: 'agosto.ofx', tipo_mime: 'application/x-ofx', tamanho_bytes: OFX.length, sha256: 'b'.repeat(64), categoria: 'extrato', origem: 'oficial', competencia: '2026-08', descricao: 'Extrato BB — conta corrente', criado_em: '2026-09-01T11:00:00Z', completo: true, partes: 1 }
+      { id: 20, nome_arquivo: 'agosto.ofx', tipo_mime: 'application/x-ofx', tamanho_bytes: OFX.length, sha256: 'b'.repeat(64), categoria: 'extrato', origem: 'oficial', competencia: '2026-08', descricao: 'Extrato BB — conta corrente', criado_em: '2026-09-01T11:00:00Z', completo: true, partes: 1 },
+      // 02/10/2026 (C3 crítico): o pagamento do aluguel tem o comprovante do banco.
+      { id: 21, nome_arquivo: 'comprovante-aluguel.pdf', tipo_mime: 'application/pdf', tamanho_bytes: COMPROVANTE.length, sha256: 'c'.repeat(64), categoria: 'comprovante', origem: 'oficial', competencia: '2026-08', criado_em: '2026-08-05T10:00:00Z', completo: true, partes: 1 }
     ],
-    contabil_arquivo_partes: [{ id: 1, arquivo_id: 9, ordem: 0, dados: BOLETO.toString('base64') }, { id: 2, arquivo_id: 20, ordem: 0, dados: OFX.toString('base64') }],
+    contabil_arquivo_partes: [{ id: 1, arquivo_id: 9, ordem: 0, dados: BOLETO.toString('base64') }, { id: 2, arquivo_id: 20, ordem: 0, dados: OFX.toString('base64') }, { id: 3, arquivo_id: 21, ordem: 0, dados: COMPROVANTE.toString('base64') }],
     contabil_pacotes: [],
-    contabil_arquivo_vinculos: [{ id: 1, arquivo_id: 9, alvo_tipo: 'titulo', alvo_id: '1' }],
+    contabil_arquivo_vinculos: [{ id: 1, arquivo_id: 9, alvo_tipo: 'titulo', alvo_id: '1' }, { id: 2, arquivo_id: 21, alvo_tipo: 'pagamento', alvo_id: '101' }],
     documentos_recebidos: [{ id: 4, tipo: 'nfse', numero: '77', emitente_nome: 'Imobiliária Centro', contato_id: 5, data_emissao: '2026-08-01', competencia: '2026-08', valor_total: 2500, origem: 'manual', itens: '[]' }],
     titulos_pagar: [{ id: 1, contato_id: 5, documento_recebido_id: 4, descricao: 'Aluguel de agosto', categoria: 'Serviços de Terceiros', competencia: '2026-08', valor_total: 2500, status: 'aberto', origem: 'nfse' }],
     titulo_pagar_parcelas: [{ id: 11, titulo_id: 1, numero: 1, vencimento: '2026-08-05', valor: 2500 }],
@@ -203,8 +206,9 @@ function cenario(extra = {}) {
     movimentos_bancarios: [
       mov(1, '2026-08-05', -2500, 'Pagamento de boleto - Imobiliária Centro', 'conciliado', { documento: '000123' }),
       mov(2, '2026-08-11', 3700, 'LIQUIDAÇÃO DE COBRANÇA', 'conciliado'),
-      mov(3, '2026-08-31', -12.9, 'Tarifa pacote de serviços'),
-      mov(4, '2026-08-12', 1850, 'PIX RECEBIDO - CLIENTE <b>DA</b> LOJA', 'pendente', { contrapartida_documento: '12345678909' }),
+      // C5 (crítico): nada fica a conciliar — a tarifa e o Pix de balcão ficaram sem par, com justificativa.
+      mov(3, '2026-08-31', -12.9, 'Tarifa pacote de serviços', 'ignorado'),
+      mov(4, '2026-08-12', 1850, 'PIX RECEBIDO - CLIENTE <b>DA</b> LOJA', 'ignorado', { contrapartida_documento: '12345678909' }),
       mov(5, '2026-08-15', -900, 'PIX ENVIADO - ANA', 'conciliado')
     ],
     conciliacao_vinculos: [
@@ -216,7 +220,11 @@ function cenario(extra = {}) {
       { id: 1, nome: 'Receita de vendas', tipo: 'receita', ativa: true, origem: 'padrao' }, { id: 2, nome: 'Serviços de Terceiros', tipo: 'despesa', ativa: true, origem: 'padrao' },
       { id: 3, nome: 'Despesas bancárias', tipo: 'despesa', ativa: true, origem: 'padrao' }, { id: 4, nome: 'Comissões sobre vendas', tipo: 'despesa', ativa: true, origem: 'padrao' }
     ],
-    classificacao_regras: [regra(1, 'origem', 'recebimento', 'credito', 1), regra(2, 'origem', 'comissao', 'debito', 4), regra(3, 'descricao', 'TARIFA', 'debito', 3)],
+    // C7 (crítico): tudo classificado.
+    classificacao_regras: [
+      regra(1, 'origem', 'recebimento', 'credito', 1), regra(2, 'origem', 'comissao', 'debito', 4), regra(3, 'descricao', 'TARIFA', 'debito', 3),
+      regra(4, 'descricao', 'PIX RECEBIDO', 'credito', 1)
+    ],
     classificacoes: [],
     competencia_fechamentos: [],
     ...extra
@@ -267,7 +275,7 @@ test('pacote: bloqueado até fechar e sem documental viva; o ZIP com as pastas, 
       'Contabilidade-2026-08-v1/LEIA-ME.txt', 'Contabilidade-2026-08-v1/indice.csv',
       'Contabilidade-2026-08-v1/01-Relatorio/Relatorio-2026-08-v1.pdf', 'Contabilidade-2026-08-v1/01-Relatorio/Relatorio-2026-08-v1.xlsx',
       'Contabilidade-2026-08-v1/02-Extrato/agosto.ofx', `Contabilidade-2026-08-v1/03-NF-e-de-saida/${CHAVE}-procNFe.xml`,
-      'Contabilidade-2026-08-v1/07-Outros/boleto-aluguel.pdf'
+      'Contabilidade-2026-08-v1/06-Comprovantes/comprovante-aluguel.pdf', 'Contabilidade-2026-08-v1/07-Outros/boleto-aluguel.pdf'
     ], 'na ordem das pastas');
     const arq = nome => dentro.find(x => x.nome.endsWith(nome)).dados;
     assert.ok(arq('agosto.ofx').equals(OFX) && arq('boleto-aluguel.pdf').equals(BOLETO) && arq(`${CHAVE}-procNFe.xml`).toString('utf8') === XML_NFE, 'os originais, byte a byte');
@@ -280,8 +288,8 @@ test('pacote: bloqueado até fechar e sem documental viva; o ZIP com as pastas, 
 
     const reg = ctx.tabelas.contabil_pacotes[0];
     assert.deepEqual([reg.competencia, reg.versao, reg.hash, reg.tamanho_bytes], ['2026-08', 1, r.corpo.hash, bytes.length]);
-    assert.equal(JSON.parse(reg.arquivos).length, 5);
-    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao, /^Pacote de agosto\/2026 \(versão 1\) gerado: 5 arquivos, .* 1 faltando · SHA-256 [0-9a-f]{12}…$/);
+    assert.equal(JSON.parse(reg.arquivos).length, 6);
+    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao, /^Pacote de agosto\/2026 \(versão 1\) gerado: 6 arquivos, .* 1 faltando · SHA-256 [0-9a-f]{12}…$/);
 
     const semEnviar = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.match(semEnviar.corpo.pendencias.find(x => x.chave === 'pacote_nao_enviado').descricao, /^Gerado em /);

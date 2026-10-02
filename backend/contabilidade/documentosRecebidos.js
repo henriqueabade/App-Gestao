@@ -14,12 +14,19 @@
  *   pagamento do fechamento (financeiro_pagamentos), que já é a saída.
  * - Excluir é marcar (com motivo); a conta a pagar ligada, sem pagamento, é
  *   cancelada junto.
+ * - 5.4 do dono (fase A, 02/10/2026): antes de lançar conta nova, a nota
+ *   procura a conta que já existe para ela (lançada à mão ou paga pelo
+ *   extrato) ou o pagamento de comissão/produção — mesmo fornecedor (ou
+ *   CNPJ/CPF), mesmo valor e data perto. Um só: liga. Mais de um: não lança
+ *   nada e avisa (a escolha é na ficha).
  */
 const c = require('../financeiro/comum');
 const b = require('./base');
 const eventos = require('./eventos');
 const arquivos = require('./arquivos');
 const titulos = require('./titulos');
+const motor = require('./conciliacao/motor');
+const { valorAPagar } = require('./conciliacao/liquidacoes');
 // Aviso no sino de "algo seu" (01/10/2026).
 const sino = require('../avisosEnvolvidos');
 const regras = require('./classificacao/regras');
@@ -236,6 +243,101 @@ function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new M
     observacao: d.observacao || null,
     criado_em: b.instanteBR(d.criado_em)
   };
+}
+
+// ------------------------------------------------------------------ 5.4: a conta que já existe
+
+/** Até quantos dias da emissão a conta (emissão ou vencimento) ou o pagamento podem estar. */
+const DIAS_PAR = 30;
+
+/**
+ * Quem recebeu a comissão é o emitente da nota? A regra do nome da
+ * conciliação, ou todas as palavras do nome curto ("Ana") no nome inteiro
+ * ("Ana Souza"). Pura.
+ */
+function mesmaPessoa(curto, inteiro) {
+  if (motor.nomeNaDescricao(curto, inteiro) || motor.nomeNaDescricao(inteiro, curto)) return true;
+  const palavras = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(p => p.length >= 3);
+  const doCurto = palavras(curto);
+  const doInteiro = new Set(palavras(inteiro));
+  return doCurto.length > 0 && doCurto.every(p => doInteiro.has(p));
+}
+
+/**
+ * O que já existe e pode ser desta nota (5.4 do dono). `contas` = [{ t
+ * (titulo cru), parcelas, contato, movimento }] — `movimento` é o lançamento
+ * do banco conciliado com o pagamento dela, quando há (a conta lançada do
+ * extrato não tem fornecedor: o CPF/CNPJ ou o nome vêm do banco).
+ * `pagamentos` = os de comissão/produção ainda sem nota. Valor: o total ou o
+ * líquido das retenções. Pura.
+ */
+function paresDaNota(doc, { contas = [], pagamentos = [] } = {}) {
+  const cent = v => Math.round(Math.abs(Number(v) || 0) * 100);
+  const valores = new Set([cent(doc.valor_total), cent(valorAPagar(doc))]);
+  const emissao = c.dia(doc.data_emissao);
+  const perto = d => Boolean(c.dia(d) && emissao) && Math.abs(motor.diasEntre(emissao, c.dia(d))) <= DIAS_PAR;
+  const docDig = b.digitos(doc.emitente_documento);
+  const nome = doc.emitente_nome || '';
+  const pares = [];
+  for (const { t, parcelas = [], contato = null, movimento = null } of contas) {
+    if (!t || t.status === 'cancelado' || (t.documento_recebido_id !== null && t.documento_recebido_id !== undefined)) continue;
+    if (!valores.has(cent(t.valor_total))) continue;
+    if (!(perto(t.data_emissao) || parcelas.some(p => perto(p.vencimento)))) continue;
+    const doContato = b.digitos(contato?.cnpj || contato?.cpf);
+    const mesmo = (doc.contato_id !== null && doc.contato_id !== undefined && String(t.contato_id) === String(doc.contato_id))
+      || (docDig && doContato === docDig)
+      || (docDig && movimento && b.digitos(movimento.contrapartida_documento) === docDig)
+      || ((t.contato_id === null || t.contato_id === undefined) && movimento && nome && motor.nomeNaDescricao(nome, movimento.descricao));
+    if (mesmo) pares.push({ tipo: 'conta', id: t.id, rotulo: `a conta "${t.descricao}" (${c.reais(t.valor_total)})`, titulo: t });
+  }
+  for (const p of pagamentos) {
+    if (!valores.has(cent(p.valor)) || !perto(p.data)) continue;
+    if (p.beneficiario && nome && mesmaPessoa(p.beneficiario, nome)) {
+      pares.push({ tipo: 'pagamento', id: p.id, rotulo: `o pagamento ${p.rotulo} (${c.reais(p.valor)})`, pagamento: p });
+    }
+  }
+  return pares;
+}
+
+/** Lê o que `paresDaNota` precisa (sem o SQL de alguma parte, ela só não entra). */
+async function lerParesDaNota(api, doc) {
+  const [contasLidas, parcelas, pagamentos, vinculos, docs, contatos, fechamento] = await Promise.all([
+    b.lerOpcional(api, 'titulos_pagar').then(x => x || []), b.lerOpcional(api, 'titulo_pagar_parcelas').then(x => x || []),
+    b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'conciliacao_vinculos').then(x => x || []),
+    b.lerOpcional(api, 'documentos_recebidos').then(x => x || []), lerContatos(api), lerPagamentosDeFechamento(api)
+  ]);
+  const abertas = contasLidas.filter(t => t && t.status !== 'cancelado' && (t.documento_recebido_id === null || t.documento_recebido_id === undefined));
+  const contas = [];
+  for (const t of abertas) {
+    const pags = pagamentos.filter(p => String(p.titulo_id) === String(t.id) && !p.estornado_em).map(p => String(p.id));
+    const v = vinculos.find(x => !x.desfeito_em && x.alvo_tipo === 'titulo_pagamento' && pags.includes(String(x.alvo_id)));
+    const movimento = v ? (await b.ler(api, 'movimentos_bancarios', { id: Number(v.movimento_id) }).catch(() => []))[0] || null : null;
+    contas.push({ t, parcelas: parcelas.filter(p => String(p.titulo_id) === String(t.id)), contato: t.contato_id !== null && t.contato_id !== undefined ? contatos.get(String(t.contato_id)) || null : null, movimento });
+  }
+  const jaTemNota = new Set(docs.filter(d => vivo(d) && d.financeiro_pagamento_id && String(d.id) !== String(doc.id)).map(d => String(d.financeiro_pagamento_id)));
+  return paresDaNota(doc, { contas, pagamentos: [...fechamento.values()].filter(p => !jaTemNota.has(String(p.id))) });
+}
+
+/** Liga a nota ao par achado. Mês fechado da conta: não liga (devolve o aviso). */
+async function ligarPar(api, gravado, par, { contatoId = null, usuarioId = null, rotuloDoc }) {
+  if (par.tipo === 'pagamento') {
+    await b.atualizar(api, 'documentos_recebidos', gravado.id, { financeiro_pagamento_id: Number(par.id) });
+    return { ligado: { tipo: 'pagamento', id: par.id, rotulo: par.rotulo }, aviso: null };
+  }
+  const t = par.titulo;
+  try {
+    await b.garantirAberta(api, t.competencia, 'ligar a nota à conta dela');
+  } catch (e) {
+    return { ligado: null, aviso: `${rotuloDoc} parece ser de ${par.rotulo}, mas ${e.message.charAt(0).toLowerCase()}${e.message.slice(1)}` };
+  }
+  await b.atualizar(api, 'titulos_pagar', t.id, {
+    documento_recebido_id: Number(gravado.id), ...((t.contato_id === null || t.contato_id === undefined) && contatoId ? { contato_id: Number(contatoId) } : {}), atualizado_em: c.agora()
+  });
+  await eventos.registrar(api, {
+    tipo: 'titulo_alterado', competencia: t.competencia, usuarioId, referenciaTipo: 'titulo', referenciaId: t.id,
+    descricao: `${t.descricao}: ligada a ${rotuloDoc}, que chegou depois (a mesma conta, sem duplicar)`
+  });
+  return { ligado: { tipo: 'conta', id: t.id, rotulo: par.rotulo }, aviso: null };
 }
 
 // ------------------------------------------------------------------ leitura
@@ -548,9 +650,28 @@ async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar
     }
   }
 
+  // 5.4 (fase A): a conta ou o pagamento que já existe para esta nota — liga em vez de duplicar.
+  let ligadoA = null;
+  let duvida = false;
+  if (!pagamentoFechamento && entrada.sem_pagamento !== true) {
+    try {
+      const pares = await lerParesDaNota(api, { ...doc, id: gravado.id, contato_id: contato?.id ?? null });
+      if (pares.length === 1) {
+        const r = await ligarPar(api, gravado, pares[0], { contatoId: contato?.id ?? null, usuarioId, rotuloDoc: rotuloDoDocumento(doc) });
+        ligadoA = r.ligado;
+        if (r.aviso) { avisos.push(r.aviso); duvida = true; }
+      } else if (pares.length > 1) {
+        duvida = true;
+        avisos.push(`${rotuloDoDocumento(doc)} pode ser de ${pares.map(p => p.rotulo).join(' ou de ')}: nenhuma conta nova foi lançada. Confira qual é e ligue a nota à conta certa (ou lance a conta pela ficha do documento).`);
+      }
+    } catch (e) {
+      avisos.push(`Não deu para procurar a conta que já existe para esta nota: ${e.message}`);
+    }
+  }
+
   // A conta a pagar, com as parcelas da tela (ou as duplicatas do XML).
   let tituloId = null;
-  if (gerarTitulo) {
+  if (gerarTitulo && !ligadoA && !duvida) {
     const t = entrada.titulo || {};
     try {
       const parcelas = Array.isArray(t.parcelas) && t.parcelas.length ? t.parcelas
@@ -580,8 +701,12 @@ async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar
     tipo: 'documento_registrado', competencia: doc.competencia, usuarioId, referenciaTipo: 'documento_recebido', referenciaId: gravado.id,
     descricao: `${rotuloDoDocumento(doc)} de ${contato?.nome || doc.emitente_nome || 'emitente não informado'}: ${c.reais(doc.valor_total)} (${c.impressa(doc.data_emissao)})`
       + `${pagamentoFechamento ? ` — referente a ${pagamentoFechamento.rotulo}` : ''}${tituloId ? ' — com conta a pagar' : ''}`
+      + `${ligadoA ? ` — ligada a ${ligadoA.rotulo}, que já existia` : ''}`
   });
-  return { id: gravado.id, competencia: doc.competencia, contato_id: contato?.id ?? null, contato_criado: contatoCriado, titulo_id: tituloId, avisos };
+  return {
+    id: gravado.id, competencia: doc.competencia, contato_id: contato?.id ?? null, contato_criado: contatoCriado,
+    titulo_id: tituloId ?? (ligadoA?.tipo === 'conta' ? ligadoA.id : null), ligado_a: ligadoA, avisos
+  };
 }
 
 async function excluir(api, id, { motivo, usuarioId = null }) {
@@ -613,6 +738,6 @@ async function excluir(api, id, { motivo, usuarioId = null }) {
 module.exports = {
   TIPOS, ORIGENS, ESPECIES, MUNICIPIOS_NFSE, TIPOS_FECHAMENTO,
   categoriaDoArquivo, lerNfeEntrada, conferirNfeEntrada, parcelasSugeridas, nfeDaChave, nfseDigitada, outroDigitado,
-  rotuloDoDocumento, rotuloDoPagamentoDeFechamento, linhaDoDocumento,
+  rotuloDoDocumento, rotuloDoPagamentoDeFechamento, linhaDoDocumento, paresDaNota, lerParesDaNota,
   lerPagamentosDeFechamento, lerTudo, listar, detalhe, fornecedorDoEmitente, fornecedores, pagamentosDeFechamento, previa, registrar, excluir
 };

@@ -1545,7 +1545,11 @@
         processando = false;
         const partes = ['Documento registrado'];
         if (r.contato_criado) partes.push('fornecedor cadastrado em Contatos');
-        if (r.titulo_id) partes.push('conta a pagar lançada');
+        // 5.4 (fase A): a conta (ou o pagamento de comissão) que já existia ganhou a nota — nada duplicado.
+        if (r.ligado_a) partes.push(r.ligado_a.tipo === 'conta' ? 'ligado à conta a pagar que já existia' : 'ligado ao pagamento de comissão/produção');
+        else if (r.titulo_id) partes.push('conta a pagar lançada');
+        // Fase A: a nota pode ser o débito que já estava no extrato (conciliou sozinha).
+        if (r.conciliacao_resumo) partes.push(r.conciliacao_resumo);
         window.showToast?.(`${partes.join(', ')}.`, 'success');
         if (r.avisos?.length && window.DialogPadrao?.info) {
           await window.DialogPadrao.info({ title: 'Registrado, com avisos', tom: 'aviso', message: r.avisos.join('\n') });
@@ -2050,7 +2054,8 @@
       processando = true;
       try {
         const r = await enviar('/api/contabilidade/extrato/importar', 'POST', { conta_id: contaSel.value, nome: arquivo.nome, base64: arquivo.base64 });
-        window.showToast?.(r.novos ? `${plural(r.novos, 'lançamento novo importado', 'lançamentos novos importados')}.` : 'Período registrado: nenhum lançamento novo.', 'success');
+        const importou = r.novos ? plural(r.novos, 'lançamento novo importado', 'lançamentos novos importados') : 'Período registrado: nenhum lançamento novo';
+        window.showToast?.(`${importou}${r.conciliacao_resumo ? ` · ${r.conciliacao_resumo}` : ''}.`, 'success');
         processando = false;
         avisarAlteracao();
         // Os avisos da prévia já foram vistos; aqui só o que apareceu ao gravar.
@@ -2163,7 +2168,7 @@
         const tr = criar('tr');
         tr.append(
           celula(c.nome, 'px-4 py-3', c.observacao),
-          celula(c.tipo === 'caixa' ? '—' : c.rotulo, 'px-4 py-3', c.saldo_inicial !== null ? `Saldo inicial ${formatarMoeda(c.saldo_inicial)} em ${formatarData(c.saldo_inicial_data)}` : null),
+          celula(c.tipo === 'caixa' ? '—' : c.rotulo, 'px-4 py-3', c.saldo_inicial !== null ? `Saldo de abertura ${formatarMoeda(c.saldo_inicial)} no fim de ${formatarData(c.saldo_inicial_data)}` : null),
           celula(c.tipo_rotulo, 'px-4 py-3'),
           celula(c.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3'),
           celula(acoes, 'px-4 py-3')
@@ -2195,7 +2200,7 @@
       };
       const erro = corpoConta.nome.length < 2 ? 'Dê um nome à conta (ex.: BB — conta corrente).'
         : (!caixa && (!soDigitos(banco.value) || !soDigitos(agencia.value) || !soDigitos(conta.value))) ? 'Informe banco, agência e conta.'
-          : (corpoConta.saldo_inicial !== null && !corpoConta.saldo_inicial_data) ? 'Informe a data do saldo inicial.' : '';
+          : (corpoConta.saldo_inicial !== null && !corpoConta.saldo_inicial_data) ? 'Informe o dia do saldo de abertura (o saldo no fim dele).' : '';
       if (erro) { mostrarMensagem('ctbContasFinMensagem', erro); return; }
       processando = true;
       try {
@@ -2236,6 +2241,18 @@
   const rotuloDaLiq = l => (l ? `${l.rotulo}${l.nome ? ` · ${l.nome}` : ''}` : '—');
   const corDoValor = (td, valor) => { td.style.color = Number(valor) < 0 ? '#e08aa6' : 'var(--color-green)'; return td; };
   const CRITERIO_DA_SUGESTAO = { automatico: 'automatico', sugestao: 'sugestao', composicao: 'composicao' };
+
+  /** Fase A: conciliar com a nota sem conta (ou a conta em aberto) paga a conta com o dia do banco. */
+  function textoDaConciliacao(r) {
+    if (r?.conta_criada) return 'Conciliado: a nota virou conta a pagar, paga com o dia e o valor do banco.';
+    if (r?.pagamento_id) return 'Conciliado: a conta foi paga com o dia e o valor do banco.';
+    return 'Lançamento conciliado.';
+  }
+
+  function textoDoDesfazer(r) {
+    if (!r?.estornados) return 'Conciliação desfeita.';
+    return 'Conciliação desfeita: o pagamento que ela registrou foi estornado (a conta lançada da nota, cancelada).';
+  }
 
   function montarConciliacao() {
     const contaSel = el('ctbConcConta');
@@ -2325,10 +2342,10 @@
         if (!confirmado) return;
       }
       try {
-        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/conciliar`, 'POST', {
+        const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/conciliar`, 'POST', {
           itens: s.itens.map(i => ({ tipo: i.tipo, id: i.id })), criterio: CRITERIO_DA_SUGESTAO[s.tipo] || 'sugestao'
         });
-        window.showToast?.('Lançamento conciliado.', 'success');
+        window.showToast?.(textoDaConciliacao(r), 'success');
         avisarAlteracao();
         await carregar();
       } catch (e) {
@@ -2358,8 +2375,9 @@
       if (motivo === null) return;
       try {
         const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(l.id)}/desfazer`, 'POST', { motivo });
-        window.showToast?.('Conciliação desfeita.', 'success');
+        window.showToast?.(textoDoDesfazer(r), 'success');
         if (r?.conta_criada_continua) window.showToast?.('A conta lançada do extrato continua: estorne-a em Contas a pagar, se foi engano.', 'info');
+        if (r?.avisos?.length) window.showToast?.(r.avisos.join(' '), 'warning');
         avisarAlteracao();
         await carregar();
       } catch (e) {
@@ -2473,7 +2491,7 @@
           title: aceitarSugestoes ? 'Aceitar as sugestões únicas?' : 'Conciliar automaticamente?',
           message: aceitarSugestoes
             ? 'Grava o que tem chave exata e as sugestões de mesmo valor que só servem para um lançamento (e vice-versa). A soma de vários fica para você conferir.'
-            : 'Grava só o que tem chave exata: o CNPJ/CPF da contrapartida ou o número do documento batem. O resto continua como sugestão.',
+            : 'Grava só o que tem chave exata (o CNPJ/CPF da contrapartida ou o número do documento batem) ou o nome na descrição do banco a até 3 dias. A nota sem conta e a conta em aberto que casarem são pagas com o dia e o valor do banco. O resto continua como sugestão.',
           confirmText: 'Conciliar'
         })
         : Promise.resolve(window.confirm('Conciliar em lote?')));
@@ -2482,7 +2500,12 @@
       try {
         const r = await enviar('/api/contabilidade/conciliacao/automatica', 'POST', { conta_id: contaEscolhida, competencia: compCampo.value, aceitar_sugestoes: aceitarSugestoes });
         processando = false;
-        window.showToast?.(r.total ? `${plural(r.total, 'lançamento conciliado', 'lançamentos conciliados')}.` : 'Nada para conciliar em lote: confira as sugestões uma a uma.', r.total ? 'success' : 'info');
+        const contas = [
+          r.contas_pagas ? plural(r.contas_pagas, 'conta paga', 'contas pagas') : null,
+          r.contas_lancadas ? plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
+        ].filter(Boolean).join(', ');
+        window.showToast?.(r.total ? `${plural(r.total, 'lançamento conciliado', 'lançamentos conciliados')}${contas ? ` (${contas})` : ''}.` : 'Nada para conciliar em lote: confira as sugestões uma a uma.', r.total ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbConcMensagem', `Não deu para conciliar: ${r.falhas.join(' · ')}`, 'aviso');
         avisarAlteracao();
         await carregar();
       } catch (e) {
@@ -2557,7 +2580,10 @@
       const p = el('ctbConcMovSoma');
       if (!marcadas.size) { p.textContent = `Marque o que forma ${formatarMoeda(alvo)}.`; delete p.dataset.ok; }
       else {
-        p.textContent = `Marcado: ${formatarMoeda(soma)} de ${formatarMoeda(alvo)}${dif ? ` · diferença de ${formatarMoeda(dif)}` : ' · bate'}`;
+        // Fase A: a nota sem conta / a conta em aberto é paga pela própria conciliação.
+        const paga = [...marcadas].some(k => candidata(k)?.obrigacao);
+        p.textContent = `Marcado: ${formatarMoeda(soma)} de ${formatarMoeda(alvo)}${dif ? ` · diferença de ${formatarMoeda(dif)}` : ' · bate'}`
+          + (paga ? ' · ao conciliar, a conta é paga (a nota vira conta) com o dia e o valor do banco' : '');
         p.dataset.ok = dif ? '0' : '1';
       }
       el('ctbConcMovJustificativaBloco').classList.toggle('hidden', !marcadas.size || !dif);
@@ -2598,7 +2624,7 @@
         tr.append(
           celula(caixa, 'px-4 py-3'),
           celula(formatarData(x.data), 'px-4 py-3 ctb-nowrap', x.data_credito && x.data_credito !== x.data ? `crédito ${formatarData(x.data_credito)}` : null),
-          celula(x.rotulo, 'px-4 py-3', [x.tipo_rotulo, x.nome, x.forma].filter(Boolean).join(' · ')),
+          celula(x.rotulo, 'px-4 py-3', [x.tipo_rotulo, x.nome, x.forma, x.obrigacao ? x.detalhe : null].filter(Boolean).join(' · ')),
           corDoValor(celula(formatarMoeda(x.valor < 0 ? -x.restante : x.restante), 'px-4 py-3 ctb-num', Math.abs(x.valor) !== x.restante ? `de ${formatarMoeda(x.valor)}` : null), x.valor),
           celPorque
         );
@@ -2670,11 +2696,11 @@
       const criterio = sug && mesmoConjunto(chaves, sug.itens.map(i => i.chave)) ? (CRITERIO_DA_SUGESTAO[sug.tipo] || 'sugestao') : 'manual';
       processando = true;
       try {
-        await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/conciliar`, 'POST', {
+        const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/conciliar`, 'POST', {
           itens: chaves.map(k => candidata(k)).filter(Boolean).map(x => ({ tipo: x.tipo, id: x.id })), justificativa: dif ? justificativa : '', criterio
         });
         processando = false;
-        window.showToast?.('Lançamento conciliado.', 'success');
+        window.showToast?.(textoDaConciliacao(r), 'success');
         avisarAlteracao();
         fechar();
       } catch (e) {
@@ -2706,8 +2732,9 @@
       if (motivo === null) return;
       try {
         const r = await enviar(`/api/contabilidade/conciliacao/movimentos/${encodeURIComponent(id)}/desfazer`, 'POST', { motivo });
-        window.showToast?.('Conciliação desfeita.', 'success');
+        window.showToast?.(textoDoDesfazer(r), 'success');
         if (r?.conta_criada_continua) window.showToast?.('A conta lançada do extrato continua: estorne-a em Contas a pagar, se foi engano.', 'info');
+        if (r?.avisos?.length) mostrarMensagem('ctbConcMovMensagem', r.avisos.join(' '), 'aviso');
         avisarAlteracao();
         primeira = true;
         await carregar();
@@ -3480,9 +3507,16 @@
       sel.disabled = livros.length < 2;
       const livro = livros.find(l => String(l.conta_id) === sel.value) || livros[0] || null;
       const corpo = el('ctbRelLivro');
-      el('ctbRelSaldoInicial').textContent = !livro ? '' : (livro.saldo_conhecido
-        ? `Saldo inicial ${formatarMoeda(livro.saldo_inicial)} (pelo saldo do banco em ${formatarData(livro.saldo_banco.data)})`
-        : 'Sem o saldo do banco: a coluna Saldo é o acumulado do mês.');
+      // 19b (fase A): o saldo de abertura digitado vale primeiro; o do banco confere.
+      const conf = livro?.conferencia;
+      const conferido = !conf ? '' : (Math.abs(conf.diferenca) > 0.009
+        ? ` · não confere com o banco em ${formatarData(conf.data)}: livro ${formatarMoeda(conf.livro)} × banco ${formatarMoeda(conf.banco)}`
+        : ` · confere com o banco em ${formatarData(conf.data)}`);
+      el('ctbRelSaldoInicial').textContent = !livro ? '' : (livro.saldo_origem === 'digitado'
+        ? `Saldo inicial ${formatarMoeda(livro.saldo_inicial)} (pelo saldo de abertura digitado)${conferido}`
+        : livro.saldo_conhecido
+          ? `Saldo inicial ${formatarMoeda(livro.saldo_inicial)} (pelo saldo do banco em ${formatarData(livro.saldo_banco.data)})`
+          : 'Sem o saldo do banco: a coluna Saldo é o acumulado do mês.');
       if (!livro) { linhaVazia(corpo, 8, dados ? 'Nenhuma conta do banco (ou falta o SQL do extrato).' : '—'); return; }
       const busca = normalizar(el('ctbRelBusca').value.trim());
       const linhas = busca
@@ -4307,8 +4341,22 @@
       return art;
     }
 
+    /** Fase A: o cartão Geral — o mês em que a Contabilidade começa (muda só o Sup Admin). */
+    function pintarGeral() {
+      const p = dados?.parametros || {};
+      const campo = el('ctbConfigInicio');
+      const salvar = el('ctbConfigSalvarGeral');
+      campo.value = p.valores?.inicio_competencia || '';
+      campo.disabled = !dados?.pode_editar || Boolean(p.sql_pendente);
+      salvar.classList.toggle('hidden', !dados?.pode_editar || Boolean(p.sql_pendente));
+      el('ctbConfigInicioNota').textContent = p.sql_pendente
+        ? `Ainda não ativado: rode ${p.sql_arquivo || 'sql/contabilidade_fase_a.sql'} no banco e reinicie a API (até lá, nenhum mês fica de fora).`
+        : 'As notas do mês anterior ao início esperam a sua decisão na caixa de entrada (registrar ou guardar como histórico). O saldo de abertura de cada conta (o do fim do dia anterior ao início) é digitado em Contas do banco.';
+    }
+
     function pintar() {
       pintarCertificado();
+      pintarGeral();
       lista.replaceChildren();
       if (dados?.sql_pendente) mostrarMensagem('ctbConfigMensagem', 'As integrações ainda não estão ativadas: rode sql/contabilidade_integracoes.sql no banco e reinicie a API.', 'aviso');
       for (const i of dados?.integracoes || []) lista.appendChild(cartao(i));
@@ -4330,6 +4378,15 @@
         const onde = await salvarBase64(r.base64, r.nome, 'Salvar o certificado público', 'application/x-x509-ca-cert');
         if (onde) window.showToast?.('Certificado público salvo: cadastre-o na aplicação do Portal Developers do BB.', 'success');
       } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Baixar o certificado público é do Sup Admin.')); }
+    });
+    acionar(el('ctbConfigSalvarGeral'), async () => {
+      mostrarMensagem('ctbConfigMensagem', '');
+      try {
+        await enviar('/api/contabilidade/parametros', 'PUT', { inicio_competencia: el('ctbConfigInicio').value });
+        window.showToast?.('Início da Contabilidade salvo.', 'success');
+        avisarAlteracao();
+        await recarregar();
+      } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Mudar as configurações gerais é do Sup Admin.')); }
     });
     el('ctbConfigEntrada').addEventListener('click', () => abrirOutro('entrada-dfe', {}));
     ouvirAlteracoes(recarregar);
@@ -4426,7 +4483,7 @@
       if (l.pode.manifestar && !l.manifestacao && l.so_resumo) botoes.push(botaoPequeno('Ciência', 'btn-secondary', acao(l.id, 'manifestar', 'Ciência registrada na SEFAZ: o XML completo chega na próxima busca.', { tipo: 'ciencia' }),
         { perm: 'contabilidade.documento.registrar', titulo: 'Ciência da operação: libera o XML completo' }));
       if (l.pode.baixar_xml) botoes.push(botaoPequeno('Baixar XML', 'btn-secondary', acao(l.id, 'baixar-xml', 'XML completo recebido.'), { perm: 'contabilidade.documento.registrar' }));
-      if (l.pode.registrar) botoes.push(botaoPequeno('Registrar', 'btn-success', acao(l.id, 'registrar', r => (r.ligado ? 'Já estava registrado: foi ligado.' : 'Registrado em Documentos recebidos.')), { perm: 'contabilidade.documento.registrar' }));
+      if (l.pode.registrar) botoes.push(botaoPequeno('Registrar', 'btn-success', acao(l.id, 'registrar', r => `${r.ligado ? 'Já estava registrado: foi ligado.' : 'Registrado em Documentos recebidos.'}${r.conciliacao_resumo ? ` ${r.conciliacao_resumo}.` : ''}`), { perm: 'contabilidade.documento.registrar' }));
       // A nota do mês anterior ao início: ou registra, ou guarda como histórico (é da empresa, mas não entra).
       if (l.pode.historico) botoes.push(botaoPequeno('Guardar como histórico', 'btn-neutral', acao(l.id, 'historico', 'Guardada como histórico: saiu das pendências.'),
         { perm: 'contabilidade.documento.registrar', titulo: 'É da empresa, mas é de antes do início da Contabilidade: não entra nos documentos' }));
@@ -4434,12 +4491,20 @@
         botoes.push(botaoPequeno('Manifestar…', 'btn-neutral', async () => {
           const escolha = await pedirManifestacao(l);
           if (!escolha) return;
-          await acao(l.id, 'manifestar', 'Manifestação registrada na SEFAZ.', escolha)();
+          await acao(l.id, 'manifestar', r => (r?.recusada
+            ? 'Manifestação registrada na SEFAZ. A nota continua pendente: ignore-a quando terminar de conferir.'
+            : 'Manifestação registrada na SEFAZ.'), escolha)();
         }, { perm: 'contabilidade.documento.registrar', titulo: 'Confirmação, desconhecimento ou operação não realizada' }));
       }
       if (l.pode.ignorar) {
         botoes.push(botaoPequeno('Ignorar', 'btn-neutral', async () => {
-          const motivo = await pedirTexto({ titulo: 'Ignorar este documento?', mensagem: 'Ele sai das pendências (não é despesa da empresa, é repetido…). Diga o motivo.', confirmar: 'Ignorar' });
+          const motivo = await pedirTexto({
+            titulo: 'Ignorar este documento?',
+            mensagem: l.recusada
+              ? 'Ele já foi recusado na SEFAZ e agora sai das pendências. Diga o motivo (o que foi conferido).'
+              : 'Ele sai das pendências (não é despesa da empresa, é repetido…). Diga o motivo.',
+            confirmar: 'Ignorar'
+          });
           if (!motivo) return;
           await acao(l.id, 'ignorar', 'Documento ignorado.', { motivo })();
         }, { perm: 'contabilidade.documento.registrar' }));
@@ -4462,12 +4527,16 @@
         const doc = `${l.tipo_rotulo} ${l.numero || ''}${l.serie ? `/${l.serie}` : ''}`.trim();
         const situacao = [tag(l.status_rotulo, l.historico ? 'badge-info' : (TOM_ENTRADA[l.status] || 'badge-neutral'))];
         if (l.decidir) situacao.push(tag('Decidir', 'badge-warning', l.decidir_texto || ''));
+        // 22b do dono: recusada na SEFAZ continua pendente até alguém ignorar à mão.
+        if (l.recusada) situacao.push(tag('Recusada na SEFAZ', 'badge-warning', l.recusada_texto || ''));
         if (l.cancelada) situacao.push(tag('Cancelada pelo emitente', 'badge-danger'));
         const deuCiencia = ['ciencia', 'confirmacao'].includes(l.manifestacao);
         const sub = [
           l.decidir_texto || null,
-          l.so_resumo && l.tipo === 'nfe' ? (deuCiencia ? 'só o resumo: o XML vem na próxima busca (ou em "Baixar XML")' : 'só o resumo (falta a ciência)') : null,
-          l.manifestacao ? `manifestada: ${({ ciencia: 'ciência', confirmacao: 'confirmação', desconhecimento: 'desconhecimento', nao_realizada: 'operação não realizada' })[l.manifestacao] || l.manifestacao}` : null,
+          l.recusada_texto || null,
+          // Recusada (22b): o texto acima já diz tudo; "falta a ciência" não vale mais.
+          l.so_resumo && l.tipo === 'nfe' && !l.recusada ? (deuCiencia ? 'só o resumo: o XML vem na próxima busca (ou em "Baixar XML")' : 'só o resumo (falta a ciência)') : null,
+          l.manifestacao && !l.recusada ? `manifestada: ${({ ciencia: 'ciência', confirmacao: 'confirmação', desconhecimento: 'desconhecimento', nao_realizada: 'operação não realizada' })[l.manifestacao] || l.manifestacao}` : null,
           l.manifestacao_erro ? `manifestação falhou: ${l.manifestacao_erro}` : null,
           l.erro ? `registro falhou: ${l.erro}` : null,
           l.ignorado_motivo && !l.historico ? `motivo: ${l.ignorado_motivo}` : null,
@@ -4536,7 +4605,7 @@
     competencia: { rotulo: 'Competência', badge: 'badge-success', tipos: ['competencia_fechada', 'competencia_reaberta'] },
     pendencia: { rotulo: 'Pendências', badge: 'badge-neutral', tipos: ['pendencia_ignorada', 'pendencia_restaurada'] },
     documento: { rotulo: 'Documentos e arquivos', badge: 'badge-info', tipos: ['documento_registrado', 'documento_excluido', 'arquivo_anexado', 'arquivo_excluido', 'fornecedor_cadastrado', 'nfe_manifestada', 'entrada_ignorada'] },
-    integracao: { rotulo: 'Integrações', badge: 'badge-neutral', tipos: ['integracao_configurada'] },
+    integracao: { rotulo: 'Integrações', badge: 'badge-neutral', tipos: ['integracao_configurada', 'parametros_alterados'] },
     pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },

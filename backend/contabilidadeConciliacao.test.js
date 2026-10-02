@@ -6,8 +6,11 @@
  *   - o painel do mês: cada lançamento com o estado, a sugestão do motor
  *     (única, composição dos boletos do dia) e o que o app registrou pelo
  *     banco sem lançamento no extrato;
- *   - em lote: automático só com chave (CNPJ da contrapartida); as
- *     sugestões únicas só quando pedido; composição nunca;
+ *   - em lote: automático só com chave (CNPJ da contrapartida) ou o nome a
+ *     até 3 dias (16b); as sugestões únicas só quando pedido; composição nunca;
+ *   - fase A (02/10/2026): a nota sem conta e a parcela em aberto casam com o
+ *     débito — o lote lança/paga a conta e concilia; desfazer estorna e
+ *     cancela; registrar a nota já concilia sozinho;
  *   - conciliar à mão: a soma tem de bater (ou justificar a diferença, que
  *     fica gravada); o que já está ligado e o outro sentido são recusados;
  *   - desfazer e ignorar pedem motivo; reativar volta a "a conciliar";
@@ -38,7 +41,9 @@ const COLUNAS = {
   competencia_contabil: ['id', 'competencia', 'status'],
   contabil_pendencias_resolucoes: ['id', 'competencia', 'chave', 'justificativa', 'usuario_id', 'criado_em'],
   contabil_eventos: ['id', 'tipo', 'competencia', 'descricao', 'dados', 'usuario_id', 'criado_em', 'referencia_tipo', 'referencia_id'],
-  contabil_arquivos: ['id'], contabil_arquivo_vinculos: ['id', 'arquivo_id', 'alvo_tipo', 'alvo_id'], documentos_recebidos: ['id'],
+  contabil_arquivos: ['id'], contabil_arquivo_vinculos: ['id', 'arquivo_id', 'alvo_tipo', 'alvo_id'],
+  documentos_recebidos: ['id', 'tipo', 'origem', 'numero', 'serie', 'municipio', 'emitente_nome', 'emitente_documento', 'contato_id', 'data_emissao', 'competencia', 'valor_total',
+    'valor_iss', 'iss_retido', 'valor_retencoes', 'financeiro_pagamento_id', 'sem_pagamento', 'excluido_em', 'descricao', 'observacao', 'criado_por', 'criado_em'],
   titulos_pagar: ['id', 'contato_id', 'documento_recebido_id', 'descricao', 'categoria', 'numero_documento', 'data_emissao', 'competencia', 'valor_total', 'status', 'origem', 'observacao',
     'criado_por', 'criado_em', 'atualizado_em', 'cancelado_em', 'cancelado_por', 'motivo_cancelamento'],
   titulo_pagar_parcelas: ['id', 'titulo_id', 'numero', 'vencimento', 'valor', 'linha_digitavel'],
@@ -193,7 +198,7 @@ function cenario(extra = {}) {
     contas_financeiras: [{ id: 1, nome: 'BB — conta corrente', tipo: 'corrente', banco_codigo: '001', agencia: '1234', conta: '123456', ativa: true }],
     extrato_importacoes: [{ id: 1, conta_id: 1, origem: 'ofx', status: 'completa', periodo_inicio: '2026-08-01', periodo_fim: '2026-08-31', saldo_final: 1000, saldo_final_data: '2026-08-31' }],
     movimentos_bancarios: [
-      mov(1, '2026-08-05', -2500, 'Pagamento de boleto - Imobiliária Centro'),
+      mov(1, '2026-08-09', -2500, 'Pagamento de boleto - Imobiliária Centro'),
       mov(2, '2026-08-11', 3700, 'LIQUIDAÇÃO DE COBRANÇA'),
       mov(3, '2026-08-20', -600, 'PIX ENVIADO', { contrapartida_documento: '84031759000121' }),
       mov(4, '2026-08-31', -12.9, 'Tarifa pacote de serviços')
@@ -327,15 +332,15 @@ test('débito sem conta vira conta paga e conciliada; pagamento conciliado não 
   }
 });
 
-test('checklist: pendentes = documental; conciliação com recebimento estornado = crítico; tudo resolvido = em dia', async () => {
+test('checklist: pendentes = crítico (C5); conciliação com recebimento estornado = crítico; tudo resolvido = em dia', async () => {
   const ctx = await montar(cenario());
   try {
     const antes = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.equal(antes.status, 200);
     const fonte = antes.corpo.fontes.find(f => f.chave === 'conciliacao');
-    assert.deepEqual([fonte.titulo, fonte.estado, fonte.pendencias], ['Conciliação e classificação', 'pendente', 2]);
+    assert.deepEqual([fonte.titulo, fonte.estado, fonte.pendencias], ['Conciliação e classificação', 'critico', 2]);
     const doc = antes.corpo.pendencias.find(p => p.chave === 'conciliacao_pendente');
-    assert.deepEqual([doc.nivel, doc.filtro], ['documental', { acao: 'conciliacao', visao: 'pendentes' }]);
+    assert.deepEqual([doc.nivel, doc.filtro], ['critico', { acao: 'conciliacao', visao: 'pendentes' }]);
     assert.match(semNbsp(doc.descricao), /^Total R\$ 6\.812,90 · 3 com sugestão/);
     assert.equal(antes.corpo.pendencias.find(p => p.chave === 'conciliacao_sem_lancamento').nivel, 'aviso');
 
@@ -370,6 +375,102 @@ test('permissões: ver pede só "ver"; conciliar, desfazer, ignorar, reativar e 
     for (const acao of ['conciliar', 'desfazer', 'ignorar', 'reativar']) assert.deepEqual(await pedidas(`/conciliacao/movimentos/1/${acao}`), ['contabilidade.conciliar'], acao);
     assert.deepEqual(await pedidas('/conciliacao/automatica'), ['contabilidade.conciliar']);
     assert.deepEqual(await pedidas('/conciliacao/movimentos/1/criar-conta'), ['contabilidade.conciliar', 'contabilidade.pagar.lancar', 'contabilidade.pagar.pagar']);
+    // Fase A: conciliar com a nota sem conta lança e paga; com a parcela em aberto, paga.
+    assert.deepEqual(await pedidas('/conciliacao/movimentos/1/conciliar', { itens: [{ tipo: 'documento', id: 4 }] }), ['contabilidade.conciliar', 'contabilidade.pagar.lancar', 'contabilidade.pagar.pagar']);
+    assert.deepEqual(await pedidas('/conciliacao/movimentos/1/conciliar', { itens: [{ tipo: 'parcela', id: 31 }] }), ['contabilidade.conciliar', 'contabilidade.pagar.pagar']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+/** O caso do Bruno (NFS-e 17 sem conta, Pix no mesmo dia) e a conta de energia em aberto paga por boleto. */
+function cenarioFaseA() {
+  const base = cenario();
+  return cenario({
+    contatos: [...base.contatos, { id: 7, nome: 'Bruno Henrique Vigato Maia', cpf: '12345678909' }, { id: 8, nome: 'CEMIG Distribuição', cnpj: '06981180000116' }],
+    documentos_recebidos: [{
+      id: 4, tipo: 'nfse', origem: 'adn', numero: '17', emitente_nome: 'BRUNO HENRIQUE VIGATO MAIA', emitente_documento: '61234567000190', contato_id: 7,
+      data_emissao: '2026-08-08', competencia: '2026-08', valor_total: 2800
+    }],
+    titulos_pagar: [...base.titulos_pagar, { id: 3, contato_id: 8, descricao: 'Energia de agosto', categoria: 'Energia', competencia: '2026-08', valor_total: 410.55, status: 'aberto' }],
+    titulo_pagar_parcelas: [...base.titulo_pagar_parcelas, { id: 31, titulo_id: 3, numero: 1, vencimento: '2026-08-25', valor: 410.55 }],
+    movimentos_bancarios: [
+      ...base.movimentos_bancarios,
+      mov(6, '2026-08-08', -2800, 'PIX ENVIADO - BRUNO HENRIQUE VIGATO MAI'),
+      mov(7, '2026-08-26', -410.55, 'PAGAMENTO DE BOLETO', { contrapartida_documento: '06981180000116' })
+    ]
+  });
+}
+
+test('fase A: a nota sem conta e a conta em aberto casam com o débito; o lote lança/paga e concilia; desfazer estorna e cancela', async () => {
+  const ctx = await montar(cenarioFaseA());
+  try {
+    const painel = await ctx.chamar('GET', '/conciliacao?competencia=2026-08');
+    assert.equal(painel.status, 200, JSON.stringify(painel.corpo));
+    const porId = new Map(painel.corpo.linhas.map(l => [l.id, l]));
+    const s6 = porId.get(6).sugestao;
+    assert.deepEqual([s6.tipo, s6.itens[0].tipo, s6.itens[0].obrigacao, s6.itens[0].rotulo, s6.itens[0].tipo_rotulo], ['automatico', 'documento', true, 'NFS-e 17', 'Nota sem conta a pagar']);
+    assert.deepEqual([porId.get(7).sugestao.tipo, porId.get(7).sugestao.itens[0].chave], ['automatico', 'parcela:31']);
+    assert.ok(!painel.corpo.sem_lancamento.some(l => l.obrigacao), 'obrigação não é "registrado sem lançamento"');
+
+    // A escolha à mão mostra a nota entre as candidatas.
+    const cand = await ctx.chamar('GET', '/conciliacao/movimentos/6');
+    assert.deepEqual([cand.corpo.candidatos[0].chave, cand.corpo.candidatos[0].exato], ['documento:4', true]);
+
+    const lote = await ctx.chamar('POST', '/conciliacao/automatica', { conta_id: 1, competencia: '2026-08' });
+    assert.equal(lote.status, 200, JSON.stringify(lote.corpo));
+    assert.deepEqual([lote.corpo.automatico, lote.corpo.contas_pagas, lote.corpo.contas_lancadas, lote.corpo.falhas], [3, 1, 1, []]);
+    const conta = ctx.tabelas.titulos_pagar.find(t => t.documento_recebido_id === 4);
+    assert.deepEqual([conta.descricao, conta.valor_total, conta.competencia, conta.contato_id, conta.origem], ['NFS-e 17 — Bruno Henrique Vigato Maia', 2800, '2026-08', 7, 'nfse']);
+    const pagNota = ctx.tabelas.titulo_pagar_pagamentos.find(p => p.titulo_id === conta.id);
+    assert.deepEqual([pagNota.data_pagamento, pagNota.valor_pago, pagNota.forma], ['2026-08-08', 2800, 'Pix']);
+    assert.match(pagNota.observacao, /Pago pela conciliação com o extrato \(08\/08\/2026, PIX ENVIADO - BRUNO/);
+    const pagEnergia = ctx.tabelas.titulo_pagar_pagamentos.find(p => p.parcela_id === 31);
+    assert.deepEqual([pagEnergia.data_pagamento, pagEnergia.valor_pago, pagEnergia.forma], ['2026-08-26', 410.55, 'Boleto']);
+    const vinc = movId => ctx.tabelas.conciliacao_vinculos.filter(v => v.movimento_id === movId && !v.desfeito_em).map(v => [v.alvo_tipo, v.alvo_id, v.valor, v.criterio]);
+    assert.deepEqual(vinc(6), [['titulo_pagamento', pagNota.id, 2800, 'documento_pago']]);
+    assert.deepEqual(vinc(7), [['titulo_pagamento', pagEnergia.id, 410.55, 'parcela_paga']]);
+    assert.match(ctx.tabelas.contabil_eventos.find(e => e.tipo === 'conciliacao_automatica').descricao, /3 lançamentos conciliados em lote \(3 automáticos; 1 conta paga, 1 nota lançada e paga\)/);
+
+    // Misturar a nota com outro registro não pode (ela é paga sozinha).
+    const desfeito = await ctx.chamar('POST', '/conciliacao/movimentos/6/desfazer', { motivo: 'Era outro Pix do Bruno' });
+    assert.equal(desfeito.status, 200, JSON.stringify(desfeito.corpo));
+    assert.deepEqual([desfeito.corpo.estornados, desfeito.corpo.avisos], [1, []]);
+    assert.ok(ctx.tabelas.titulo_pagar_pagamentos.find(p => p.id === pagNota.id).estornado_em, 'o pagamento foi estornado');
+    assert.equal(ctx.tabelas.titulos_pagar.find(t => t.id === conta.id).status, 'cancelado', 'a conta lançada da nota caiu junto');
+    assert.match(ctx.tabelas.contabil_eventos.filter(e => e.tipo === 'conciliacao_desfeita').at(-1).descricao, /a conta lançada da nota foi cancelada/);
+    const misturado = await ctx.chamar('POST', '/conciliacao/movimentos/6/conciliar', { itens: [{ tipo: 'documento', id: 4 }, { tipo: 'financeiro_pagamento', id: 70 }], justificativa: 'tentativa' });
+    assert.deepEqual([misturado.status, /paga sozinha/.test(misturado.corpo.error)], [422, true]);
+
+    // À mão, de novo: a nota volta a ser obrigação e concilia (e lança a conta outra vez).
+    const mao = await ctx.chamar('POST', '/conciliacao/movimentos/6/conciliar', { itens: [{ tipo: 'documento', id: 4 }] });
+    assert.equal(mao.status, 200, JSON.stringify(mao.corpo));
+    assert.equal(mao.corpo.conta_criada, true);
+    assert.equal(ctx.tabelas.titulos_pagar.filter(t => t.documento_recebido_id === 4 && t.status !== 'cancelado').length, 1);
+
+    // Desfazer a conta paga: o pagamento é estornado e a parcela volta a ficar em aberto (a conta continua).
+    assert.equal((await ctx.chamar('POST', '/conciliacao/movimentos/7/desfazer', { motivo: 'Boleto de outra unidade' })).status, 200);
+    assert.ok(ctx.tabelas.titulo_pagar_pagamentos.find(p => p.id === pagEnergia.id).estornado_em);
+    assert.equal(ctx.tabelas.titulos_pagar.find(t => t.id === 3).status, 'aberto');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fase A: registrar a nota já concilia sozinho o Pix que esperava no extrato', async () => {
+  const base = cenario();
+  const ctx = await montar(cenario({ movimentos_bancarios: [...base.movimentos_bancarios, mov(8, '2026-08-14', -350, 'PIX ENVIADO - MARCENARIA SILVA')] }));
+  try {
+    const r = await ctx.chamar('POST', '/documentos', {
+      tipo: 'nfse', numero: '88', municipio: 'Belo Horizonte', emitente_nome: 'Marcenaria Silva Ltda', emitente_documento: '11222333000181',
+      data_emissao: '2026-08-13', valor_total: 350, criar_fornecedor: false
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.conciliacao_resumo, '2 lançamentos conciliados sozinhos (1 nota lançada e paga)', 'o Pix da marcenaria e o da Vidros Norte (CNPJ)');
+    assert.equal(ctx.tabelas.movimentos_bancarios.find(m => m.id === 8).estado_conciliacao, 'conciliado');
+    const conta = ctx.tabelas.titulos_pagar.find(t => t.documento_recebido_id === r.corpo.id);
+    assert.deepEqual([conta.valor_total, conta.descricao], [350, 'NFS-e 88 — Marcenaria Silva Ltda']);
+    assert.match(ctx.tabelas.contabil_eventos.find(e => e.tipo === 'conciliacao_automatica').descricao, /conciliados sozinhos/);
   } finally {
     await ctx.encerrar();
   }

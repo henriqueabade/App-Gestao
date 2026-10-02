@@ -31,6 +31,28 @@ test('livro-caixa: saldo inicial pelo saldo que o banco informou, saldo linha a 
   assert.deepEqual([semSaldo.saldo_conhecido, semSaldo.saldo_inicial, semSaldo.saldo_final, semSaldo.linhas.map(l => l.saldo)], [false, null, null, [-50, 30]], 'sem o saldo do banco: o acumulado do mês');
 });
 
+test('livro-caixa (19b, fase A): o saldo de abertura digitado vale primeiro e é conferido com o do banco', () => {
+  const linhas = [lin(1, '2026-08-05', -2500), lin(2, '2026-08-11', 3700)];
+  const bate = r.livroDaConta({ conta: { id: 1, nome: 'BB' }, linhas, saldoBanco: { valor: 5000, data: '2026-08-11' }, abertura: { valor: 3800, data: '2026-07-31' } });
+  assert.deepEqual([bate.saldo_origem, bate.saldo_inicial, bate.saldo_final, bate.abertura], ['digitado', 3800, 5000, { valor: 3800, data: '2026-07-31' }]);
+  assert.deepEqual(bate.conferencia, { data: '2026-08-11', banco: 5000, livro: 5000, diferenca: 0 });
+  const naoBate = r.livroDaConta({ conta: { id: 1, nome: 'BB' }, linhas, saldoBanco: { valor: 5000, data: '2026-08-11' }, abertura: { valor: 3700, data: '2026-07-31' } });
+  assert.deepEqual([naoBate.saldo_inicial, naoBate.conferencia.livro, naoBate.conferencia.diferenca], [3700, 4900, -100]);
+  const soDigitado = r.livroDaConta({ conta: { id: 1, nome: 'BB' }, linhas, abertura: { valor: 100, data: '2026-07-31' } });
+  assert.deepEqual([soDigitado.saldo_conhecido, soDigitado.saldo_origem, soDigitado.conferencia, soDigitado.saldo_final], [true, 'digitado', null, 1300]);
+});
+
+test('saldo no fim do dia (19b): anda para a frente e para trás a partir do saldo conhecido', () => {
+  const extrato = require('../extrato/extrato');
+  const movs = [{ data: '2026-09-05', valor: 700 }, { data: '2026-09-10', valor: -250 }, { data: '2026-10-02', valor: 50 }];
+  assert.equal(extrato.saldoNoFimDoDia({ valor: 1000, data: '2026-08-31' }, movs, '2026-09-30'), 1450);
+  assert.equal(extrato.saldoNoFimDoDia({ valor: 1000, data: '2026-08-31' }, movs, '2026-08-31'), 1000);
+  assert.equal(extrato.saldoNoFimDoDia({ valor: 1500, data: '2026-10-02' }, movs, '2026-09-05'), 1700, 'para trás: desfaz o que veio depois do dia (−250 + 50)');
+  assert.deepEqual(extrato.saldoDigitado({ saldo_inicial: '1234.5', saldo_inicial_data: '2026-08-31T00:00:00.000Z' }), { valor: 1234.5, data: '2026-08-31' });
+  assert.equal(extrato.saldoDigitado({ saldo_inicial: null, saldo_inicial_data: '2026-08-31' }), null);
+  assert.deepEqual(extrato.conferirSaldo({ saldo_inicial: 1000, saldo_inicial_data: '2026-08-31' }, movs, { valor: 1500, data: '2026-09-30' }), { data: '2026-09-30', banco: 1500, livro: 1450, diferenca: -50 });
+});
+
 test('observação: de quem é o dinheiro, justificativa do ignorado, a conciliar e a escolha à mão', () => {
   const liqs = new Map([
     ['titulo_pagamento:101', { rotulo: 'Aluguel de agosto · parcela 1/12', nome: 'Imobiliária Centro' }],

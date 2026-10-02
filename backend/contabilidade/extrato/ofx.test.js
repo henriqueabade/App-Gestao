@@ -180,7 +180,7 @@ test('conta financeira: validação, rótulo e o saldo que o banco informou no m
   assert.throws(() => ext.validarConta({ nome: 'X' }), /nome/);
   assert.throws(() => ext.validarConta({ nome: 'BB', tipo: 'corrente' }), /banco, agência e conta/);
   assert.equal(ext.validarConta({ nome: 'Caixa da loja', tipo: 'caixa' }).banco_codigo, null, 'caixa não pede banco');
-  assert.throws(() => ext.validarConta({ nome: 'BB', banco_codigo: '001', agencia: '1', conta: '2', saldo_inicial: 10 }), /data do saldo/);
+  assert.throws(() => ext.validarConta({ nome: 'BB', banco_codigo: '001', agencia: '1', conta: '2', saldo_inicial: 10 }), /dia do saldo de abertura/);
   const saldo = ext.saldoDoBanco([
     { id: 1, status: 'completa', saldo_final: '100.00', saldo_final_data: '2026-08-15' },
     { id: 2, status: 'completa', saldo_final: '250.00', saldo_final_data: '2026-08-31' },

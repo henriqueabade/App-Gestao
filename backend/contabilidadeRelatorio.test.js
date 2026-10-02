@@ -207,6 +207,19 @@ function cenario(extra = {}) {
   };
 }
 
+/**
+ * 02/10/2026 (C3, C5, C7 críticos): para fechar, o aluguel pago tem o comprovante,
+ * a tarifa e o Pix de balcão ficaram sem par (ignorados) e o Pix tem regra.
+ */
+const fechavel = dados => ({
+  ...dados,
+  contabil_arquivos: [...dados.contabil_arquivos, { id: 10, nome_arquivo: 'comprovante-aluguel.pdf', tipo_mime: 'application/pdf', tamanho_bytes: 900, sha256: 'c'.repeat(64), categoria: 'comprovante', origem: 'oficial', competencia: '2026-08', criado_em: '2026-08-05T10:00:00Z', completo: true, partes: 1 }],
+  contabil_arquivo_vinculos: [...dados.contabil_arquivo_vinculos, { id: 2, arquivo_id: 10, alvo_tipo: 'pagamento', alvo_id: '101' }],
+  movimentos_bancarios: dados.movimentos_bancarios.map(m => ([3, 4].includes(m.id) ? { ...m, estado_conciliacao: 'ignorado' } : m)),
+  plano_contas: [...dados.plano_contas, { id: 5, nome: 'Aporte de Capital', tipo: 'patrimonio', ativa: true, origem: 'padrao' }],
+  classificacao_regras: [...dados.classificacao_regras, regra(4, 'descricao', 'PIX RECEBIDO', 'credito', 1)]
+});
+
 const semNbsp = t => String(t).replace(/ /g, ' ');
 
 test('mês aberto: prévia com o livro-caixa (saldo pelo banco, conta do plano, de quem é o dinheiro, vencimento), resultado e conciliação', async () => {
@@ -239,20 +252,20 @@ test('mês aberto: prévia com o livro-caixa (saldo pelo banco, conta do plano, 
   }
 });
 
-test('mês fechado: o relatório é a foto da versão; regra nova depois não muda o livro e vira diferença na nota', async () => {
-  const ctx = await montar(cenario());
+test('mês fechado: o relatório é a foto da versão; regra mudada depois não muda o livro e vira diferença na nota', async () => {
+  const ctx = await montar(fechavel(cenario()));
   try {
     const f = await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
     assert.equal(f.status, 200, JSON.stringify(f.corpo));
-    const nova = await ctx.chamar('POST', '/regras', { condicao_tipo: 'descricao', valor: 'PIX RECEBIDO', sentido: 'credito', conta_id: 1 });
+    const nova = await ctx.chamar('PUT', '/regras/4', { condicao_tipo: 'descricao', valor: 'PIX RECEBIDO', sentido: 'credito', conta_id: 5 });
     assert.equal(nova.status, 200, JSON.stringify(nova.corpo));
     const r = await ctx.chamar('GET', '/relatorio?competencia=2026-08');
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
     const rel = r.corpo;
     assert.deepEqual([rel.situacao.previa, rel.situacao.versao, rel.situacao.diferencas, rel.arquivo], [false, 1, 1, 'contabilidade-2026-08-relatorio-v1']);
     assert.match(rel.situacao.nota, /versão 1\. Os números são os da foto do fechamento\. Há 1 diferença desde o fechamento/);
-    assert.equal(rel.livro[0].linhas.find(x => x.id === 4).conta_plano, null, 'vale a conta congelada');
-    assert.equal(rel.resultado.resultado, 287.1);
+    assert.equal(rel.livro[0].linhas.find(x => x.id === 4).conta_plano, 'Receita de vendas', 'vale a conta congelada');
+    assert.equal(rel.resultado.resultado, 2137.1);
     assert.equal(rel.pendencias.origem, 'fechamento');
   } finally {
     await ctx.encerrar();

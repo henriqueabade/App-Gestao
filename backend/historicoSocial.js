@@ -178,6 +178,7 @@ function textoDoAviso(tipo, { autor = 'Alguém', registro = '', conteudo = '', a
     case 'comentario': return { titulo: 'Novo comentário', mensagem: comNota(`${autor} comentou${onde}.`) };
     case 'resposta': return { titulo: 'Resposta ao seu comentário', mensagem: comNota(`${autor} respondeu${onde}.`) };
     case 'observacao': return { titulo: 'Nova observação', mensagem: comNota(`${autor} publicou uma observação${onde}.`) };
+    case 'mensagem': return { titulo: 'Nova mensagem', mensagem: comNota(`${autor} escreveu${onde}.`) };
     case 'curtida': return { titulo: 'Curtida', mensagem: `${autor} curtiu ${alvo === 'comentario' ? 'seu comentário' : 'seu registro'}${onde}` };
     case 'mencao': return { titulo: 'Você foi mencionado', mensagem: comNota(`${autor} mencionou você${onde}.`) };
     default: return { titulo: 'Histórico', mensagem: `${autor} mexeu no histórico${onde}` };
@@ -285,6 +286,34 @@ async function nomesDosUsuarios(api) {
   } catch (err) {
     console.warn('[historico-social] sem nomes de usuário:', err?.message || err);
     return new Map();
+  }
+}
+
+const STATUS_ATIVO = ['ativo', 'ativa', 'active'];
+
+/**
+ * Os usuários ativos que têm a permissão (28b do dono, 02/10/2026: mensagem
+ * nova da Contabilidade avisa todos que veem o módulo). As permissões são
+ * lidas uma vez por perfil. Falha na leitura: ninguém — o aviso é extra e não
+ * pode derrubar a mensagem.
+ */
+async function quemTemPermissao(api, permissao) {
+  const permissoes = require('./permissionsRepository');
+  try {
+    const porPerfil = new Map();
+    const saida = [];
+    for (const u of lista(await api.get('/api/usuarios'))) {
+      if (!u || (u.status && !STATUS_ATIVO.includes(String(u.status).trim().toLowerCase()))) continue;
+      const perfil = permissoes.isSupAdmin(u) ? 'sup' : `${u.modelo_permissoes_id ?? ''}|${texto(u.perfil).toLowerCase()}`;
+      if (!porPerfil.has(perfil)) {
+        porPerfil.set(perfil, permissoes.loadPermissionsForUsuario(api, u).then(p => permissoes.can(p, permissao)).catch(() => false));
+      }
+      if (await porPerfil.get(perfil)) saida.push(Number(u.id));
+    }
+    return saida;
+  } catch (err) {
+    console.warn('[historico-social] sem a lista de quem vê o módulo:', err?.message || err);
+    return [];
   }
 }
 
@@ -424,8 +453,10 @@ async function publicarObservacao(api, { origem, registroId, texto: bruto, usuar
   const base = { origem, registro_id: Number(registroId), item_id: criado?.id ?? null, autor_id: usuarioId ?? null };
   const mencionados = destinatarios(mencionadosNoTexto(conteudo).filter(id => !nomes || nomes.has(id)), usuarioId);
   if (mencionados.length) await notificar(api, mencionados, { tipo: 'mencao', ...textoDoAviso('mencao', { autor, registro: nome, conteudo }), ...base });
-  const demais = destinatarios([criadorId, ...interessados], usuarioId).filter(id => !mencionados.includes(id));
-  await notificar(api, demais, { tipo: 'observacao', ...textoDoAviso('observacao', { autor, registro: nome, conteudo }), ...base });
+  // 28b: no mural fixo (Contabilidade) a mensagem nova vai para todos que veem o módulo.
+  const doModulo = o.registroFixo ? await quemTemPermissao(api, o.permissao) : [];
+  const demais = destinatarios([criadorId, ...interessados, ...doModulo], usuarioId).filter(id => !mencionados.includes(id));
+  await notificar(api, demais, { tipo: 'observacao', ...textoDoAviso(o.registroFixo ? 'mensagem' : 'observacao', { autor, registro: nome, conteudo }), ...base });
   return criado;
 }
 
@@ -611,7 +642,7 @@ module.exports = {
   ORIGENS, LIMITE_ANEXO_BYTES, TAMANHO_PARTE, LIMITE_TEXTO, MARCA_OBJETO,
   erro, semTabela, origemValida, textoValido, trecho, textoSimples, mencionadosNoTexto, agruparCurtidas, destinatarios, textoDoAviso,
   partesDoArquivo, nomeDeArquivo, montarLinhaDoTempo,
-  nomesDosUsuarios, lerRegistro, carregarLinhaDoTempo, registrarEventos, notificar,
+  nomesDosUsuarios, quemTemPermissao, lerRegistro, carregarLinhaDoTempo, registrarEventos, notificar,
   publicarObservacao, comentar, editarComentario, alternarCurtida, excluirEvento, excluirComentario,
   salvarAnexo, lerAnexo
 };

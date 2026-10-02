@@ -166,7 +166,13 @@ function cenario(extra = {}) {
     recebimentos: [{ id: 1, pedido_id: 1, numero_parcela: 1, origem: 'boleto', forma: 'Boleto', data_recebimento: '2026-08-10', valor_recebido: 3700, status: 'confirmado' }],
     reembolsos: [], usuarios: [{ id: 3, nome: 'Henrique' }],
     contatos: [{ id: 5, nome: 'Imobiliária Centro' }, { id: 6, nome: 'Vidros Norte', cnpj: '84031759000121' }],
-    competencia_contabil: [], contabil_pendencias_resolucoes: [], contabil_eventos: [], contabil_arquivos: [], contabil_arquivo_vinculos: [], documentos_recebidos: [],
+    competencia_contabil: [], contabil_pendencias_resolucoes: [], contabil_eventos: [], documentos_recebidos: [],
+    // 02/10/2026 (C2, C3 críticos): o aluguel pago tem o recibo na conta e o comprovante no pagamento.
+    contabil_arquivos: [
+      { id: 1, nome_arquivo: 'recibo-aluguel.pdf', categoria: 'recibo', origem: 'fornecido', competencia: '2026-08' },
+      { id: 2, nome_arquivo: 'comprovante-aluguel.pdf', categoria: 'comprovante', origem: 'fornecido', competencia: '2026-08' }
+    ],
+    contabil_arquivo_vinculos: [{ id: 1, arquivo_id: 1, alvo_tipo: 'titulo', alvo_id: '1' }, { id: 2, arquivo_id: 2, alvo_tipo: 'pagamento', alvo_id: '101' }],
     titulos_pagar: [{ id: 1, contato_id: 5, descricao: 'Aluguel de agosto', categoria: 'Serviços de Terceiros', competencia: '2026-08', valor_total: 2500, status: 'aberto' }],
     titulo_pagar_parcelas: [{ id: 11, titulo_id: 1, numero: 1, vencimento: '2026-08-05', valor: 2500 }],
     titulo_pagar_pagamentos: [{ id: 101, parcela_id: 11, titulo_id: 1, data_pagamento: '2026-08-05', competencia: '2026-08', valor_pago: 2500, forma: 'Boleto' }],
@@ -175,8 +181,9 @@ function cenario(extra = {}) {
     movimentos_bancarios: [
       mov(1, '2026-08-05', -2500, 'Pagamento de boleto - Imobiliária Centro', 'conciliado'),
       mov(2, '2026-08-11', 3700, 'LIQUIDAÇÃO DE COBRANÇA', 'conciliado'),
-      mov(3, '2026-08-31', -12.9, 'Tarifa pacote de serviços'),
-      mov(4, '2026-08-12', 1850, 'PIX RECEBIDO - CLIENTE DA LOJA'),
+      // C5 (crítico): nada fica "a conciliar" — a tarifa e o Pix de balcão ficaram sem par, com justificativa.
+      mov(3, '2026-08-31', -12.9, 'Tarifa pacote de serviços', 'ignorado'),
+      mov(4, '2026-08-12', 1850, 'PIX RECEBIDO - CLIENTE DA LOJA', 'ignorado'),
       mov(5, '2026-08-15', -900, 'PIX ENVIADO - ANA', 'conciliado')
     ],
     conciliacao_vinculos: [
@@ -189,9 +196,11 @@ function cenario(extra = {}) {
       { id: 3, nome: 'Despesas bancárias', tipo: 'despesa', ativa: true, origem: 'padrao' }, { id: 4, nome: 'Comissões sobre vendas', tipo: 'despesa', ativa: true, origem: 'padrao' },
       { id: 5, nome: 'Aquisição de Bens', tipo: 'custo', ativa: true, origem: 'padrao' }, { id: 6, nome: 'Aporte de Capital', tipo: 'patrimonio', ativa: true, origem: 'padrao' }
     ],
+    // C7 (crítico): tudo classificado — o Pix de balcão pela regra 5 (a que muda depois do fechamento).
     classificacao_regras: [
       regra(1, 'origem', 'recebimento', 'credito', 1), regra(2, 'origem', 'comissao', 'debito', 4),
-      regra(3, 'descricao', 'TARIFA', 'debito', 3), regra(4, 'fornecedor', '6', 'ambos', 5)
+      regra(3, 'descricao', 'TARIFA', 'debito', 3), regra(4, 'fornecedor', '6', 'ambos', 5),
+      regra(5, 'descricao', 'CLIENTE DA LOJA', 'credito', 1)
     ],
     classificacoes: [],
     competencia_fechamentos: [],
@@ -207,25 +216,25 @@ test('prévia sem gravar; fechar grava a versão 1 com a foto; o mês fechado us
   try {
     const previa = await ctx.chamar('GET', '/fechar/previa?competencia=2026-08');
     assert.equal(previa.status, 200, JSON.stringify(previa.corpo));
-    assert.deepEqual([previa.corpo.versao, previa.corpo.lancamentos, previa.corpo.sem_classificacao, previa.corpo.comparacao], [1, 5, 1, null]);
+    assert.deepEqual([previa.corpo.versao, previa.corpo.lancamentos, previa.corpo.sem_classificacao, previa.corpo.comparacao], [1, 5, 0, null]);
     const r = previa.corpo.resultado;
-    assert.deepEqual([r.receitas, r.despesas, r.resultado, r.sem_classificacao], [3700, -3412.9, 287.1, 1850]);
+    assert.deepEqual([r.receitas, r.despesas, r.resultado, r.sem_classificacao], [5550, -3412.9, 2137.1, 0]);
     assert.deepEqual(previa.corpo.extrato.map(x => [x.conta, x.lancamentos, x.resultado, x.completo]), [['BB — conta corrente', 5, 2137.1, true]]);
     assert.equal(ctx.tabelas.competencia_fechamentos.length, 0, 'a prévia não grava');
 
     const f = await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
     assert.equal(f.status, 200, JSON.stringify(f.corpo));
-    assert.deepEqual([f.corpo.versao, f.corpo.resultado, f.corpo.lancamentos, f.corpo.aviso], [1, 287.1, 5, null]);
+    assert.deepEqual([f.corpo.versao, f.corpo.resultado, f.corpo.lancamentos, f.corpo.aviso], [1, 2137.1, 5, null]);
     const v = ctx.tabelas.competencia_fechamentos[0];
     const lancamentos = JSON.parse(v.lancamentos);
-    assert.deepEqual(lancamentos.map(l => [l.id, l.conta]), [[1, 'Serviços de Terceiros'], [2, 'Receita de vendas'], [4, null], [5, 'Comissões sobre vendas'], [3, 'Despesas bancárias']]);
+    assert.deepEqual(lancamentos.map(l => [l.id, l.conta]), [[1, 'Serviços de Terceiros'], [2, 'Receita de vendas'], [4, 'Receita de vendas'], [5, 'Comissões sobre vendas'], [3, 'Despesas bancárias']]);
     assert.equal(v.hash.length, 64);
-    assert.equal(JSON.parse(ctx.tabelas.competencia_contabil[0].totais).resultado.resultado, 287.1);
-    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao.replace(/\u00a0/g, ' '), /fechada \(versão 1\).*resultado do mês R\$ 287,10/);
+    assert.equal(JSON.parse(ctx.tabelas.competencia_contabil[0].totais).resultado.resultado, 2137.1);
+    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao.replace(/\u00a0/g, ' '), /fechada \(versão 1\).*resultado do mês R\$ 2\.137,10/);
 
     const cls = await ctx.chamar('GET', '/classificacao?competencia=2026-08');
     assert.deepEqual([cls.corpo.fechada, cls.corpo.versao], [true, 1]);
-    assert.deepEqual(cls.corpo.linhas.map(l => l.classificacao.criterio), ['fechamento', 'fechamento', 'sem', 'fechamento', 'fechamento']);
+    assert.deepEqual(cls.corpo.linhas.map(l => l.classificacao.criterio), ['fechamento', 'fechamento', 'fechamento', 'fechamento', 'fechamento']);
     const painel = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.deepEqual([painel.corpo.situacao.status, painel.corpo.situacao.versao, painel.corpo.situacao.diferencas], ['fechada', 1, 0]);
   } finally {
@@ -233,23 +242,24 @@ test('prévia sem gravar; fechar grava a versão 1 com a foto; o mês fechado us
   }
 });
 
-test('regra nova depois do fechamento: o mês não muda; vira diferença (aviso) com a lista no histórico', async () => {
+test('regra mudada depois do fechamento: o mês não muda; vira diferença (documental, C8) com a lista no histórico', async () => {
   const ctx = await montar(cenario());
   try {
-    await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
-    const regra = await ctx.chamar('POST', '/regras', { condicao_tipo: 'descricao', valor: 'CLIENTE DA LOJA', sentido: 'credito', conta_id: 1 });
+    const f = await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
+    assert.equal(f.status, 200, JSON.stringify(f.corpo));
+    const regra = await ctx.chamar('PUT', '/regras/5', { condicao_tipo: 'descricao', valor: 'CLIENTE DA LOJA', sentido: 'credito', conta_id: 6 });
     assert.equal(regra.status, 200, 'regra é do app inteiro: grava mesmo com o mês fechado');
     const cls = await ctx.chamar('GET', '/classificacao?competencia=2026-08');
     const pix = cls.corpo.linhas.find(l => l.id === 4);
-    assert.deepEqual([pix.classificacao.conta, pix.atual.conta], [null, 'Receita de vendas'], 'vale a congelada; a de hoje vai junto');
+    assert.deepEqual([pix.classificacao.conta, pix.atual.conta], ['Receita de vendas', 'Aporte de Capital'], 'vale a congelada; a de hoje vai junto');
     const painel = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.equal(painel.corpo.situacao.diferencas, 1);
     const aviso = painel.corpo.pendencias.find(p => p.chave === 'fechamento_diferencas');
-    assert.deepEqual([aviso.nivel, aviso.titulo], ['aviso', '1 diferença desde o fechamento (versão 1)']);
+    assert.deepEqual([aviso.nivel, aviso.titulo], ['documental', '1 diferença desde o fechamento (versão 1)']);
     const hist = await ctx.chamar('GET', '/fechamentos?competencia=2026-08');
     assert.equal(hist.status, 200, JSON.stringify(hist.corpo));
     assert.deepEqual([hist.corpo.status, hist.corpo.versoes.length, hist.corpo.versoes[0].versao, hist.corpo.diferencas.length], ['fechada', 1, 1, 1]);
-    assert.equal(semNbsp(hist.corpo.diferencas[0].descricao), 'no fechamento: sem classificação; hoje: Receita de vendas');
+    assert.equal(semNbsp(hist.corpo.diferencas[0].descricao), 'no fechamento: Receita de vendas; hoje: Aporte de Capital');
   } finally {
     await ctx.encerrar();
   }
@@ -259,7 +269,7 @@ test('reabrir marca a versão; fechar de novo cria a 2; a prévia e o histórico
   const ctx = await montar(cenario());
   try {
     await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
-    await ctx.chamar('POST', '/regras', { condicao_tipo: 'descricao', valor: 'CLIENTE DA LOJA', sentido: 'credito', conta_id: 1 });
+    await ctx.chamar('PUT', '/regras/5', { condicao_tipo: 'descricao', valor: 'CLIENTE DA LOJA', sentido: 'credito', conta_id: 6 });
     const reab = await ctx.chamar('POST', '/reabrir', { competencia: '2026-08', justificativa: 'Classificar o Pix de balcão' });
     assert.deepEqual([reab.status, reab.corpo.versao], [200, 1]);
     const v1 = ctx.tabelas.competencia_fechamentos[0];
@@ -267,7 +277,7 @@ test('reabrir marca a versão; fechar de novo cria a 2; a prévia e o histórico
     const cls = await ctx.chamar('GET', '/classificacao?competencia=2026-08');
     assert.equal(cls.corpo.linhas.find(l => l.id === 4).classificacao.criterio, 'regra', 'reaberta: vale a de hoje');
     const previa = await ctx.chamar('GET', '/fechar/previa?competencia=2026-08');
-    assert.deepEqual([previa.corpo.versao, previa.corpo.comparacao.reclassificados, previa.corpo.comparacao.resultado], [2, 1, { antes: 287.1, depois: 2137.1 }]);
+    assert.deepEqual([previa.corpo.versao, previa.corpo.comparacao.reclassificados, previa.corpo.comparacao.resultado], [2, 1, { antes: 2137.1, depois: 287.1 }]);
     const f2 = await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
     assert.deepEqual([f2.status, f2.corpo.versao], [200, 2]);
     const hist = await ctx.chamar('GET', '/fechamentos?competencia=2026-08');

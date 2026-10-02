@@ -92,7 +92,7 @@ test('mês fechado: vale a conta congelada; a de hoje vai em "atual" quando é o
   assert.equal(C.aplicarCongelado(itens, null), itens);
 });
 
-test('checklist fechado com diferenças: um aviso (não bloqueia) e a lista na situação', () => {
+test('checklist fechado com diferenças: uma documental (C8, segura o pacote) e a lista na situação', () => {
   const base = {
     competencia: '2026-08', hoje: '2026-09-28', notas: [], aguardando: { pedidos: [] }, receber: { pendencias: [] },
     fechamentos: [{ tipo: 'comissao', competencia: '2026-08', total: 10, falta_pagar: 0 }, { tipo: 'producao', competencia: '2026-08', total: 10, falta_pagar: 0 }],
@@ -101,7 +101,7 @@ test('checklist fechado com diferenças: um aviso (não bloqueia) e a lista na s
   const versao = { versao: 2, fechada_em: '2026-09-02T10:00:00-03:00', lancamentos: [lanc(1, '2026-08-12', 1850, null, null)], foto: { fontes: [] } };
   const p = ck.montar({ ...base, versao: { versao, lancamentos: [lanc(1, '2026-08-12', 1850, 1, 'Receita de vendas')] } });
   const aviso = p.pendencias.find(x => x.chave === 'fechamento_diferencas');
-  assert.deepEqual([aviso.nivel, aviso.titulo, aviso.filtro], ['aviso', '1 diferença desde o fechamento (versão 2)', { acao: 'fechamentos' }]);
+  assert.deepEqual([aviso.nivel, aviso.titulo, aviso.filtro], ['documental', '1 diferença desde o fechamento (versão 2)', { acao: 'fechamentos' }]);
   assert.deepEqual([p.situacao.versao, p.situacao.diferencas, p.situacao.diferencas_lista[0].tipo], [2, 1, 'classificacao']);
   assert.equal(p.pode.reabrir, true);
   const semDiferenca = ck.montar({ ...base, versao: { versao, lancamentos: [lanc(1, '2026-08-12', 1850, null, null)] } });

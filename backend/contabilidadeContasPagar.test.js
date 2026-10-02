@@ -356,6 +356,65 @@ test('NFS-e do pagamento de comissão: liga ao pagamento (não vira conta) e a p
   }
 });
 
+test('5.4 (fase A): a nota que chega para uma conta já lançada liga nela (sem conta nova); a de comissão acha o pagamento; na dúvida, nada é lançado e avisa', async () => {
+  const ctx = await montar(cenario({
+    contatos: [{ id: 6, nome: 'Vidros Norte', cnpj: '84031759000121', tipo_id: 1 }],
+    titulos_pagar: [
+      { id: 1, contato_id: 6, descricao: 'Vidros de agosto', categoria: 'Aquisição de Bens', competencia: '2026-08', valor_total: 600, status: 'aberto', data_emissao: '2026-08-02' },
+      { id: 2, contato_id: null, descricao: 'PIX ENVIADO - MARCENARIA SILVA', competencia: '2026-08', valor_total: 350, status: 'aberto', data_emissao: '2026-08-14' },
+      { id: 3, contato_id: null, descricao: 'PIX ENVIADO - MARCENARIA SILVA', competencia: '2026-08', valor_total: 350, status: 'aberto', data_emissao: '2026-08-20' }
+    ],
+    titulo_pagar_parcelas: [
+      { id: 11, titulo_id: 1, numero: 1, vencimento: '2026-08-20', valor: 600 },
+      { id: 21, titulo_id: 2, numero: 1, vencimento: '2026-08-14', valor: 350 }, { id: 31, titulo_id: 3, numero: 1, vencimento: '2026-08-20', valor: 350 }
+    ],
+    titulo_pagar_pagamentos: [
+      { id: 201, parcela_id: 21, titulo_id: 2, data_pagamento: '2026-08-14', competencia: '2026-08', valor_pago: 350, forma: 'Pix' },
+      { id: 301, parcela_id: 31, titulo_id: 3, data_pagamento: '2026-08-20', competencia: '2026-08', valor_pago: 350, forma: 'Pix' }
+    ],
+    conciliacao_vinculos: [
+      { id: 1, movimento_id: 8, alvo_tipo: 'titulo_pagamento', alvo_id: 201, valor: 350, criterio: 'conta_criada' },
+      { id: 2, movimento_id: 9, alvo_tipo: 'titulo_pagamento', alvo_id: 301, valor: 350, criterio: 'conta_criada' }
+    ],
+    movimentos_bancarios: [
+      { id: 8, conta_id: 1, data: '2026-08-14', competencia: '2026-08', valor: -350, descricao: 'PIX ENVIADO - MARCENARIA SILVA', estado_conciliacao: 'conciliado' },
+      { id: 9, conta_id: 1, data: '2026-08-20', competencia: '2026-08', valor: -350, descricao: 'PIX ENVIADO - MARCENARIA SILVA', estado_conciliacao: 'conciliado' }
+    ]
+  }));
+  try {
+    // A conta dos vidros já estava lançada (sem nota): a NFS-e liga nela, mesmo com "lançar a conta junto".
+    const vidros = await ctx.chamar('POST', '/documentos', {
+      tipo: 'nfse', numero: '900', municipio: 'Contagem', emitente_documento: '84031759000121', emitente_nome: 'Vidros Norte', data_emissao: '2026-08-05',
+      valor_total: 600, gerar_titulo: true, titulo: { primeiro_vencimento: '2026-08-20' }
+    });
+    assert.equal(vidros.status, 200, JSON.stringify(vidros.corpo));
+    assert.deepEqual([vidros.corpo.titulo_id, vidros.corpo.ligado_a.tipo, vidros.corpo.avisos], [1, 'conta', []]);
+    assert.equal(ctx.tabelas.titulos_pagar.length, 3, 'nenhuma conta nova');
+    assert.equal(ctx.tabelas.titulos_pagar.find(t => t.id === 1).documento_recebido_id, vidros.corpo.id);
+    assert.match(ctx.tabelas.contabil_eventos.find(e => e.tipo === 'documento_registrado').descricao, /ligada a a conta "Vidros de agosto"/);
+
+    // A NFS-e da Ana acha o pagamento da comissão (mesmo valor, nome e data perto) sem ninguém escolher.
+    const ana = await ctx.chamar('POST', '/documentos', {
+      tipo: 'nfse', numero: '46', municipio: 'Contagem', emitente_documento: '12345678909', emitente_nome: 'Ana Souza', data_emissao: '2026-08-09', valor_total: 1000
+    });
+    assert.equal(ana.status, 200, JSON.stringify(ana.corpo));
+    assert.deepEqual([ana.corpo.ligado_a.tipo, ana.corpo.ligado_a.id], ['pagamento', 70]);
+    assert.equal(ctx.tabelas.documentos_recebidos.find(x => x.id === ana.corpo.id).financeiro_pagamento_id, 70);
+
+    // Duas contas da marcenaria lançadas do extrato servem para a nota: nada é lançado nem ligado; avisa.
+    const silva = await ctx.chamar('POST', '/documentos', {
+      tipo: 'nfse', numero: '88', municipio: 'Belo Horizonte', emitente_documento: '11222333000181', emitente_nome: 'Marcenaria Silva Ltda', data_emissao: '2026-08-13',
+      valor_total: 350, gerar_titulo: true, titulo: { primeiro_vencimento: '2026-08-13' }
+    });
+    assert.equal(silva.status, 200, JSON.stringify(silva.corpo));
+    assert.deepEqual([silva.corpo.titulo_id, silva.corpo.ligado_a], [null, null]);
+    assert.match(silva.corpo.avisos[0], /pode ser de a conta "PIX ENVIADO - MARCENARIA SILVA" .* ou de a conta "PIX ENVIADO - MARCENARIA SILVA" .*nenhuma conta nova foi lançada/);
+    assert.equal(ctx.tabelas.titulos_pagar.length, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('evidências: o XML das notas de saída e de devolução sai por aqui; anexar à competência e excluir com motivo', async () => {
   const ctx = await montar(cenario({
     pedidos: [{ id: 1, numero: '2540' }],

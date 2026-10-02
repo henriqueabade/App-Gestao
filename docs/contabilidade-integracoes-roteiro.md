@@ -359,18 +359,92 @@ a API, permissões, travas) → B → C → D → E.
    me mande o print dos dois.
 5. As respostas das pendências 34 a 47 (pode ser "ok" nas que concordar).
 
+## Parte I — Fase A (02/10/2026): conciliação nota × extrato, níveis do dono, início e saldo de abertura
+
+**O que mudou**
+- **Níveis das pendências (as respostas C1–C10):** pagamento sem nota/recibo
+  (C2), sem comprovante (C3), OFX que falta (C4), lançamento a conciliar (C5)
+  e sem classificação (C7) são **erro crítico** — seguram o fechamento.
+  Tarifa do banco não pede nota nem comprovante (o extrato prova). Diferença
+  depois do fechamento é **documental** (C8). NFS-e que falta de comissão é
+  **aviso** (C1).
+- **OFX obrigatório (20b)** mesmo com a API (ver pendência 43).
+- **Recusada na SEFAZ (22b)** continua pendente até ignorar à mão (ver 37).
+- **Mensagem nova (28b)** no mural da Contabilidade avisa **todos que veem a
+  Contabilidade** (usuários com acesso liberado).
+- **Conciliação nota × extrato (o caso da NFS-e 17 do Bruno):** o débito do
+  banco agora casa também com a **nota registrada sem conta** e com a
+  **parcela em aberto**. Sozinho, só quando o par é único, o valor é o mesmo
+  e o **CPF/CNPJ** bate (até 30 dias) ou o **nome** está na descrição do
+  banco (até 5 dias). Ao conciliar, o app **lança a conta da nota e paga**
+  (ou paga a parcela) com o dia e o valor do banco; desfazer **estorna** (e
+  cancela a conta lançada). Dúvida = sugestão com as opções, você escolhe.
+- **16b:** recebimento/pagamento já registrado com o **mesmo valor, nome na
+  descrição e até 3 dias** concilia sozinho.
+- **Roda sozinha** depois de importar o OFX, buscar o extrato pela API,
+  registrar nota (à mão, pela caixa de entrada ou pela busca da SEFAZ/ADN) e
+  lançar conta a pagar.
+- **5.4 — sem duplicar:** a nota que chega para uma conta que já existe
+  (mesmo fornecedor/CNPJ, valor e data perto — inclusive a conta lançada do
+  extrato) **liga nela**; a NFS-e de comissão/produção acha o pagamento pelo
+  nome. Duas possíveis = **nada é lançado** e o aviso diz quais.
+- **Início da Contabilidade:** Configurações › **Geral** (setembro/2026, só o
+  Sup Admin muda). O mês de antes aparece "Antes do início": nada é cobrado
+  nem fechado.
+- **Saldo de abertura (19b):** Contas do banco › Editar › **Saldo de
+  abertura / No fim do dia**. O livro-caixa começa por ele e é conferido com
+  o saldo do banco (aviso "Saldo … não confere com o banco").
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_a.sql` (DEV e produção) e **reiniciar a
+   API** (DEV: fechar e abrir o app). Ele cria `contabil_parametros` com o
+   início em **2026-09**.
+2. Contas do banco › **BB — conta corrente** › Editar: **Saldo de abertura** =
+   o saldo do fim de **31/08/2026** (no extrato do BB) e **No fim do dia** =
+   31/08/2026. Salvar.
+3. Cartões da **SEFAZ** e do **ADN** (Configurações): marcar **"Lançar a conta
+   a pagar junto"** e Salvar (7b; sem risco de duplicar).
+4. Conciliação de **setembro**: clicar **Conciliar automaticamente** — o Pix de
+   08/09 do Bruno deve casar com a **NFS-e 17** (a conta é lançada e paga).
+
+**Checklist visual**
+1. Configurações: no alto, o cartão **Geral** com "Início da Contabilidade =
+   setembro de 2026" e **Salvar** (sem o SQL: o aviso de qual arquivo rodar).
+2. Painel de **agosto/2026**: faixa "Este mês é de antes do início…", cartões
+   das fontes com **"Antes do início"** (apagados) e zero pendências.
+3. Painel de setembro: o OFX que falta é **erro crítico**; tarifa sem nota
+   **não** aparece como "pagamento sem nota".
+4. Conciliação de setembro: o Pix do Bruno com **Automático** e "Nota sem
+   conta a pagar · NFS-e 17"; abrir o lançamento mostra a nota marcada e o
+   rodapé "ao conciliar, a conta é paga (a nota vira conta)…".
+5. Depois de conciliar: em Contas a pagar, a conta **"NFS-e 17 — …"** paga em
+   08/09 (Pix). Desfazer a conciliação: o pagamento é estornado e a conta,
+   cancelada.
+6. Caixa de entrada: manifestar **Desconhecimento** numa NF-e → ela continua
+   na lista com **"Recusada na SEFAZ"**; só sai com **Ignorar**.
+7. Registrar uma NFS-e de um fornecedor que já tem a conta lançada (mesmo
+   valor) → mensagem **"ligado à conta a pagar que já existia"** e nenhuma
+   conta nova.
+8. Relatório › Livro-caixa: "Saldo inicial … (pelo saldo de abertura
+   digitado)" e "confere/não confere com o banco em …".
+9. Mensagens da Contabilidade: escrever uma mensagem → quem vê a
+   Contabilidade recebe "Nova mensagem" no sino.
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
 34. **Ciência automática** para toda NF-e nova (é o que libera o XML; não
     confirma a compra). Ok?
-35. **Registro automático** da NF-e/NFS-e completa em Documentos recebidos
-    (sim) e **sem** lançar a conta a pagar junto (o checklist avisa
-    "documento sem conta"). Ok, ou quer a conta lançada pelas duplicatas?
+35. ~~Registro automático sem a conta~~ — **respondido (7b, 02/10/2026):** a
+    nota completa registra **e** lança a conta pelas duplicatas (marque
+    "Lançar a conta a pagar junto" nos cartões da SEFAZ e do ADN). Desde a
+    Fase A, se a conta já existir, a nota **liga nela** em vez de duplicar.
 36. NF-e/NFS-e do mês ainda na caixa de entrada é **documental** (segura o
     pacote). Confirmar.
-37. **Desconhecimento** e **Operação não realizada** tiram a nota das
-    pendências (fica "Ignorada"). Ok?
+37. ~~Desconhecimento tira a nota das pendências~~ — **respondido (22b,
+    02/10/2026; feito na Fase A):** a nota manifestada como desconhecimento ou
+    operação não realizada **continua pendente** (etiqueta "Recusada na
+    SEFAZ") até alguém **Ignorar** à mão, com o motivo.
 38. A primeira busca traz ~90 dias: as notas de **meses já fechados** ficam
     na caixa com o motivo. Prefere que o app as **ignore sozinho** (com o
     motivo "mês já fechado"), ou decide uma a uma?
@@ -385,9 +459,10 @@ a API, permissões, travas) → B → C → D → E.
 **Extrato (BB)**
 42. A resposta do BB é guardada como evidência **só na busca do mês** (botão
     no Extrato), não na automática diária. Ok?
-43. O extrato pela API **vale como o extrato do mês**: a pendência "extrato
-    incompleto" some quando a API cobre o mês, e o OFX vira opcional (os dois
-    convivem sem duplicar). Confirmar.
+43. ~~A API vale como o extrato do mês~~ — **respondido (20b, 02/10/2026;
+    feito na Fase A):** o **OFX é obrigatório** mesmo com a API (erro crítico
+    "OFX de … não importado/incompleto"); a API adianta a conciliação e
+    completa a linha do OFX com o CPF/CNPJ de quem recebeu/pagou.
 
 **CDB, comprovantes e pagamentos**
 44. CDB: só credenciais e teste até o BB dizer a API (Parte E). Ok.

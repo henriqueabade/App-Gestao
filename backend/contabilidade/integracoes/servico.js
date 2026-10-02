@@ -244,16 +244,14 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const campos = {
       manifestacao: tipo, manifestacao_em: c.agora(), manifestacao_protocolo: r.evento?.nProt || null, manifestacao_erro: null, atualizado_em: c.agora()
     };
-    // Desconhecer ou dizer que não houve operação: a nota não é despesa da empresa.
-    if (tipo === 'desconhecimento' || tipo === 'nao_realizada') {
-      Object.assign(campos, { status: 'ignorada', ignorado_motivo: `Manifestada: ${def.rotulo}${justificativa ? ` — ${justificativa}` : ''}`.slice(0, 500), ignorado_por: usuarioId, ignorado_em: c.agora() });
-    }
+    // 22b do dono (02/10/2026): desconhecer ou dizer que não houve operação NÃO tira a nota
+    // das pendências — ela fica na caixa até alguém ignorar à mão, com o motivo.
     await b.atualizar(api, entrada.TABELA, l.id, campos);
     await eventos.registrar(api, {
       tipo: 'nfe_manifestada', usuarioId, competencia: String(c.dia(l.data_emissao) || '').slice(0, 7) || null,
       descricao: `${def.rotulo} da NF-e ${l.numero || l.chave.slice(25, 34)} de ${l.emitente_nome || 'emitente'}${r.duplicado ? ' (já estava registrada na SEFAZ)' : ''}`
     });
-    return { id: l.id, manifestacao: tipo, protocolo: r.evento?.nProt || null, duplicado: r.duplicado };
+    return { id: l.id, manifestacao: tipo, protocolo: r.evento?.nProt || null, duplicado: r.duplicado, recusada: entrada.RECUSAS.includes(tipo) };
   }
 
   async function sincronizarSefaz(api, ctx, { usuarioId }) {
@@ -275,6 +273,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const indice = entrada.indexar(linhasEntrada);
     const primeira = params.primeira_competencia || null;
     const cont = { lotes: 0, documentos: 0, novas: 0, completas: 0, eventos: 0, canceladas: 0, canceladas_registradas: 0, proprias: 0, antigas: 0, manifestadas: 0, registradas: 0, decidir: 0, erros: [], nao_registradas: [] };
+    const datasRegistradas = [];
     let aguardarAte = null;
     for (let i = 0; i < LIMITE_LOTES; i++) {
       const ret = await sefazDist.consultar({ url, transporte: rede_, xmlDados: sefazDist.xmlDistribuicao({ ambiente, uf: fiscal.uf, cnpj, ultNSU: ult }) });
@@ -323,6 +322,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
         const r = await registrarPendentes(api, 'sefaz_nfe', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj, primeira });
         cont.registradas += r.registradas;
         cont.nao_registradas.push(...r.erros);
+        datasRegistradas.push(...r.datas);
       }
       cont.decidir = contarDecidir(indice, 'sefaz_nfe', primeira);
     }
@@ -343,7 +343,26 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     if (!gravar) partes.push('homologação num banco de produção: nada foi gravado');
     if (cont.nao_registradas.length) partes.push(`${c.plural(cont.nao_registradas.length, 'não registrada', 'não registradas')} (o motivo está na caixa de entrada)`);
     if (cont.erros.length) partes.push(c.plural(cont.erros.length, 'erro', 'erros'));
-    return { situacao: 'rodou', resumo: partes.join(' · '), resultado: { ...cont, ultimo_nsu: ult, max_nsu: max, gravou: gravar }, ...cont, aguardar_ate: aguardarAte ? b.instanteBR(new Date(aguardarAte)) : null };
+    return {
+      situacao: 'rodou', resumo: partes.join(' · '), resultado: { ...cont, ultimo_nsu: ult, max_nsu: max, gravou: gravar }, ...cont, aguardar_ate: aguardarAte ? b.instanteBR(new Date(aguardarAte)) : null,
+      meses_conciliar: mesesDasNotas(datasRegistradas)
+    };
+  }
+
+  /** As notas registradas: o mês delas e o seguinte (a nota de um mês é paga no outro). */
+  const mesesDasNotas = datas => require('../conciliacao/conciliacao').mesesParaConciliar(datas, { comSeguinte: true });
+
+  /**
+   * Fase A (02/10/2026): depois de gravar extrato ou notas, a conciliação
+   * automática roda sozinha nos meses tocados (só o automático; nada aqui
+   * derruba a busca).
+   */
+  async function conciliarSozinho(api, r, { usuarioId, contaId = null }) {
+    if (!r || r.situacao !== 'rodou' || !r.meses_conciliar?.length) return r;
+    const conciliacao = require('../conciliacao/conciliacao');
+    const feito = await conciliacao.automaticaDosMeses(api, { competencias: r.meses_conciliar, contaId, usuarioId, hoje: hojeBR() });
+    const frase = conciliacao.resumoDaAutomatica(feito);
+    return { ...r, resumo: frase ? `${r.resumo} · ${frase}` : r.resumo, conciliacao: feito };
   }
 
   /** Quantas notas do mês anterior ao início ainda esperam a decisão na caixa de entrada. */
@@ -371,11 +390,12 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const abertas = linhas.filter(l => l.origem === origem && (l.status === 'nova' || l.status === 'completa') && l.situacao_nota !== 'cancelada');
     const foraDoInicio = l => ['anterior', 'antes'].includes(entrada.faseDaNota(l.data_emissao, primeira));
     const prontas = abertas.filter(l => l.status === 'completa' && !l.erro && (l.tipo !== 'nfe' || l.xml) && !foraDoInicio(l)).slice(0, LIMITE_REGISTROS);
-    const saida = { registradas: 0, erros: [] };
+    const saida = { registradas: 0, erros: [], datas: [] };
     for (const l of prontas) {
       try {
         await entrada.registrar(api, l, { usuarioId, hoje: hojeBR(), podeLancar: gerarTitulo, gerarTitulo, cnpjEmpresa: cnpj });
         saida.registradas++;
+        saida.datas.push(l.data_emissao);
       } catch (e) {
         saida.erros.push(`${l.tipo === 'nfe' ? 'NF-e' : 'NFS-e'} ${l.numero || ''} de ${l.emitente_nome || 'emitente'}: ${e.message}`);
       }
@@ -432,10 +452,12 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       }
       if (gravar) await configuracao.atualizarEstado(api, linha, { ultimo_nsu: ult });
     }
+    const datasRegistradas = [];
     if (gravar && params.registrar_automaticamente !== false) {
       const r = await registrarPendentes(api, 'nfse_adn', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj, primeira });
       cont.registradas += r.registradas;
       cont.nao_registradas.push(...r.erros);
+      datasRegistradas.push(...r.datas);
     }
     if (gravar) cont.decidir = contarDecidir(indice, 'nfse_adn', primeira);
     await configuracao.atualizarEstado(api, linha, {
@@ -451,7 +473,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     if (!gravar) partes.push('homologação num banco de produção: nada foi gravado');
     if (cont.nao_registradas.length) partes.push(`${c.plural(cont.nao_registradas.length, 'não registrada', 'não registradas')} (o motivo está na caixa de entrada)`);
     if (cont.erros.length) partes.push(c.plural(cont.erros.length, 'erro', 'erros'));
-    return { situacao: 'rodou', resumo: partes.join(' · '), resultado: { ...cont, ultimo_nsu: ult, gravou: gravar }, ...cont };
+    return { situacao: 'rodou', resumo: partes.join(' · '), resultado: { ...cont, ultimo_nsu: ult, gravou: gravar }, ...cont, meses_conciliar: mesesDasNotas(datasRegistradas) };
   }
 
   // ------------------------------------------------------------ BB — extrato
@@ -523,7 +545,8 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       : `Homologação num banco de produção: ${c.plural(lidos, 'lançamento lido', 'lançamentos lidos')} de ${c.impressa(inicio)} a ${c.impressa(fim)}, nada gravado`;
     return {
       situacao: 'rodou', resumo, periodo: { inicio, fim }, lidos, novos: gravado?.novos ?? p.novos.length, repetidos: gravado?.repetidos ?? (p.linhas.length - p.novos.length),
-      avisos: p.avisos, gravou: gravar, resultado: { inicio, fim, lidos, novos: gravado?.novos ?? null, repetidos: gravado?.repetidos ?? null, gravou: gravar }
+      avisos: p.avisos, gravou: gravar, resultado: { inicio, fim, lidos, novos: gravado?.novos ?? null, repetidos: gravado?.repetidos ?? null, gravou: gravar },
+      meses_conciliar: gravado?.meses || [], conta_conciliar: conta.id
     };
   }
 
@@ -541,9 +564,12 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     }
     const rodar = async () => {
       try {
-        if (chave === 'sefaz_nfe') return await sincronizarSefaz(api, ctx, { usuarioId });
-        if (chave === 'nfse_adn') return await sincronizarAdn(api, ctx, { usuarioId });
-        if (chave === 'bb_extrato') return await sincronizarExtrato(api, ctx, { usuarioId, competencia });
+        if (chave === 'sefaz_nfe') return await conciliarSozinho(api, await sincronizarSefaz(api, ctx, { usuarioId }), { usuarioId });
+        if (chave === 'nfse_adn') return await conciliarSozinho(api, await sincronizarAdn(api, ctx, { usuarioId }), { usuarioId });
+        if (chave === 'bb_extrato') {
+          const r = await sincronizarExtrato(api, ctx, { usuarioId, competencia });
+          return await conciliarSozinho(api, r, { usuarioId, contaId: r.conta_conciliar ?? null });
+        }
         throw c.erro(`${ctx.def.nome}: ainda não há busca (só o teste de conexão).`, 409);
       } catch (e) {
         await configuracao.atualizarEstado(api, ctx.linha, { ultima_execucao_em: c.agora(), ultimo_erro: String(e.message).slice(0, 2000) });
@@ -667,13 +693,21 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     if (ctx.params.registrar_automaticamente !== false && podeGravar(ctx.ambiente) && !esperaDecisao) {
       registrado = await entrada.registrar(api, l.id, { usuarioId, hoje: hojeBR(), podeLancar: ctx.params.gerar_conta === true, gerarTitulo: ctx.params.gerar_conta === true, cnpjEmpresa: b.digitos(ctx.fiscal.cnpj) }).catch(e => ({ erro: e.message }));
     }
+    if (registrado && !registrado.erro) {
+      const feito = await conciliarSozinho(api, { situacao: 'rodou', resumo: '', meses_conciliar: mesesDasNotas([l.data_emissao]) }, { usuarioId });
+      registrado.conciliacao_resumo = require('../conciliacao/conciliacao').resumoDaAutomatica(feito.conciliacao);
+    }
     return { id: l.id, completa: true, registrado };
   }
 
   /** Registrar pela caixa de entrada (botão). */
   async function registrarDaEntrada(api, id, { usuarioId = null, gerarTitulo = false, podeLancar = false } = {}) {
     const fiscal = await configuracaoFiscal.carregar(api).catch(() => null);
-    return entrada.registrar(api, id, { usuarioId, hoje: hojeBR(), podeLancar, gerarTitulo, cnpjEmpresa: b.digitos(fiscal?.cnpj) });
+    const r = await entrada.registrar(api, id, { usuarioId, hoje: hojeBR(), podeLancar, gerarTitulo, cnpjEmpresa: b.digitos(fiscal?.cnpj) });
+    // Fase A: a nota registrada pode ser o débito que espera no extrato.
+    const l = await entrada.lerLinha(api, id).catch(() => null);
+    const feito = await conciliarSozinho(api, { situacao: 'rodou', resumo: '', meses_conciliar: mesesDasNotas([l?.data_emissao]) }, { usuarioId });
+    return { ...r, conciliacao: feito.conciliacao || null, conciliacao_resumo: require('../conciliacao/conciliacao').resumoDaAutomatica(feito.conciliacao) };
   }
 
   async function ignorarDaEntrada(api, id, { motivo, usuarioId = null }) {

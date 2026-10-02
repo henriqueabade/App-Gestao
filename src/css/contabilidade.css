@@ -538,8 +538,10 @@ body {
 .ctb-fonte.is-filtro { border-color: var(--color-primary); }
 
 /* Ainda não integrada: apagada e sem clique. */
-.ctb-fonte[data-estado="indisponivel"] { opacity: 0.6; cursor: default; }
-.ctb-fonte[data-estado="indisponivel"]:hover { transform: none; border-color: var(--ctb-borda); }
+.ctb-fonte[data-estado="indisponivel"],
+.ctb-fonte[data-estado="fora"] { opacity: 0.6; cursor: default; }
+.ctb-fonte[data-estado="indisponivel"]:hover,
+.ctb-fonte[data-estado="fora"]:hover { transform: none; border-color: var(--ctb-borda); }
 
 .ctb-fonte__topo {
     display: flex;
@@ -563,7 +565,8 @@ body {
 
 .ctb-fonte[data-estado="critico"] .ctb-fonte__icone { background: var(--ctb-bordo-fundo); color: var(--ctb-bordo-texto); }
 .ctb-fonte[data-estado="ok"] .ctb-fonte__icone { background: rgba(162, 255, 166, 0.18); color: var(--ctb-verde); }
-.ctb-fonte[data-estado="indisponivel"] .ctb-fonte__icone { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
+.ctb-fonte[data-estado="indisponivel"] .ctb-fonte__icone,
+.ctb-fonte[data-estado="fora"] .ctb-fonte__icone { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
 
 /* O título quebra entre as palavras em vez de cortar ("Recebimentos e…"); e
    quando nem assim cabe ao lado da etiqueta ("Ainda não integrado"), a
@@ -595,7 +598,8 @@ body {
 .ctb-fonte__estado[data-estado="aviso"] { background: rgba(163, 148, 167, 0.2); color: var(--color-violet); }
 .ctb-fonte__estado[data-estado="critico"] { background: var(--ctb-bordo-fundo); color: var(--ctb-bordo-texto); }
 .ctb-fonte__estado[data-estado="em_curso"] { background: rgba(138, 167, 243, 0.2); color: var(--color-blue); }
-.ctb-fonte__estado[data-estado="indisponivel"] { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
+.ctb-fonte__estado[data-estado="indisponivel"],
+.ctb-fonte__estado[data-estado="fora"] { background: rgba(255, 255, 255, 0.08); color: var(--ctb-texto-3); }
 
 .ctb-fonte__resumo {
     margin: 0;

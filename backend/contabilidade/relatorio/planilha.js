@@ -114,7 +114,9 @@ function abaLivro(livro, rel) {
   for (const l of rel.livro) {
     const titulo = p.addRow({ descricao: `Conta: ${l.conta}` });
     titulo.font = { bold: true, size: 12 };
-    const inicial = p.addRow({ descricao: l.saldo_conhecido ? `Saldo inicial (do saldo do banco em ${c.impressa(l.saldo_banco.data)})` : 'Sem o saldo do banco: a coluna Saldo é o acumulado do mês', saldo: numero(l.saldo_inicial) });
+    const origem = l.saldo_origem === 'digitado' ? `Saldo inicial (do saldo de abertura digitado, de ${c.impressa(l.abertura?.data)})`
+      : (l.saldo_conhecido ? `Saldo inicial (do saldo do banco em ${c.impressa(l.saldo_banco.data)})` : 'Sem o saldo do banco: a coluna Saldo é o acumulado do mês');
+    const inicial = p.addRow({ descricao: origem, saldo: numero(l.saldo_inicial) });
     inicial.font = { italic: true };
     const porDia = new Map(l.dias.map(d => [d.data, d]));
     l.linhas.forEach((x, i) => {

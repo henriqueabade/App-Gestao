@@ -84,18 +84,19 @@
                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label for="ctbContasFinSaldo" class="ctl-rotulo text-gray-300">Saldo inicial</label>
+              <label for="ctbContasFinSaldo" class="ctl-rotulo text-gray-300">Saldo de abertura</label>
               <input id="ctbContasFinSaldo" type="text" inputmode="decimal" placeholder="Opcional"
                      class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label for="ctbContasFinSaldoData" class="ctl-rotulo text-gray-300">Data do saldo</label>
+              <label for="ctbContasFinSaldoData" class="ctl-rotulo text-gray-300">No fim do dia</label>
               <input id="ctbContasFinSaldoData" type="date"
                      class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div class="flex items-end">
               <label class="flex items-center gap-2 text-sm text-gray-300"><input id="ctbContasFinAtiva" type="checkbox" checked class="w-4 h-4" /> Conta ativa</label>
             </div>
+            <p class="md:col-span-3 text-xs text-gray-400">O saldo de abertura é o do fim do dia antes do início da Contabilidade (ex.: o de 31/08/2026 abre setembro). O livro-caixa começa por ele e é conferido com o saldo que o banco informa no extrato.</p>
             <div class="md:col-span-3">
               <label for="ctbContasFinObservacao" class="ctl-rotulo text-gray-300">Observação</label>
               <textarea id="ctbContasFinObservacao" rows="2" maxlength="500" placeholder="Opcional"

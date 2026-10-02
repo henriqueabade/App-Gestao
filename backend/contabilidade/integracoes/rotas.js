@@ -10,6 +10,8 @@
  *   POST   /integracoes/:chave/sincronizar        { competencia? } — a busca de verdade  a permissão da integração
  *   GET    /integracoes/:chave/execucoes          o registro das buscas                  contabilidade.config.view
  *   GET    /integracoes/certificado/publico       o .cer para o portal do BB             Sup Admin
+ *   PUT    /parametros                            { inicio_competencia } (cartão Geral)  Sup Admin
+ *     (o GET /integracoes já traz `parametros`: o início da Contabilidade — fase A)
  *
  *   GET    /entrada?origem=&visao=&competencia=   a caixa de entrada (NF-e / NFS-e)      contabilidade.view
  *   GET    /entrada/:id/xml                       o XML guardado                         contabilidade.view
@@ -29,6 +31,7 @@ const { createApiClient } = require('../../apiHttpClient');
 const { exigirPermissao, exigirSupAdmin, ehSupAdmin } = require('../../permissionsController');
 const catalogo = require('./catalogo');
 const servicoMod = require('./servico');
+const parametros = require('../parametros');
 
 const VER = 'contabilidade.view';
 const VER_CONFIG = 'contabilidade.config.view';
@@ -74,7 +77,12 @@ function criarRouter({ servico = null } = {}) {
   });
 
   router.get('/integracoes', exigirPermissao(VER_CONFIG), rota('GET /integracoes', async ({ req, api }) => ({
-    ...(await s.estado(api)), pode_editar: await ehSupAdmin(req)
+    ...(await s.estado(api)), pode_editar: await ehSupAdmin(req), parametros: await parametros.ler(api)
+  })));
+
+  // Fase A: o cartão "Geral" das Configurações (o mês em que a Contabilidade começa).
+  router.put('/parametros', exigirSupAdmin, rota('PUT /parametros', async ({ req, api, usuarioId }) => ({
+    parametros: await parametros.salvar(api, req.body || {}, { usuarioId })
   })));
 
   router.get('/integracoes/certificado/publico', exigirSupAdmin, rota('GET /integracoes/certificado/publico', async ({ api }) => {

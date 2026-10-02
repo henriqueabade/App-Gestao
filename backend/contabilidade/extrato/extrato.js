@@ -63,8 +63,8 @@ function validarConta(entrada = {}) {
   if (tipo !== 'caixa' && (!banco || !agencia || !conta)) throw c.erro('Informe banco, agência e conta (só números; o dígito da conta vai junto, no fim).');
   const saldo = entrada.saldo_inicial === null || entrada.saldo_inicial === undefined || entrada.saldo_inicial === '' ? null : b.valorDe(entrada.saldo_inicial);
   const dataSaldo = String(entrada.saldo_inicial_data || '').slice(0, 10);
-  if (saldo !== null && !c.dataValida(dataSaldo)) throw c.erro('Informe a data do saldo inicial.');
-  if (dataSaldo && !c.dataValida(dataSaldo)) throw c.erro('Data do saldo inicial inválida.');
+  if (saldo !== null && !c.dataValida(dataSaldo)) throw c.erro('Informe o dia do saldo de abertura (o saldo no fim dele).');
+  if (dataSaldo && !c.dataValida(dataSaldo)) throw c.erro('Dia do saldo de abertura inválido.');
   return {
     nome, tipo, banco_codigo: banco ? banco.padStart(3, '0') : null, agencia: agencia || null,
     agencia_dv: String(entrada.agencia_dv || '').replace(/[^0-9xX]/g, '').slice(0, 1).toUpperCase() || null, conta: conta || null,
@@ -188,15 +188,25 @@ async function analisar(api, { conta, extrato, confere = null, origem = 'ofx', v
     b.ler(api, 'extrato_importacoes', { conta_id: Number(conta.id) }),
     b.lerOpcional(api, 'competencia_contabil')
   ]);
-  const hashes = new Set(existentes.map(m => String(m.hash).trim()));
+  const porHash = new Map(existentes.map(m => [String(m.hash).trim(), m]));
   // Já veio por outra origem (a API do BB, digitado)? Mesmo dia, valor e documento.
-  const parecidos = new Set(existentes.filter(m => m.documento).map(m => `${c.dia(m.data)}|${c.centavos(m.valor).toFixed(2)}|${m.documento}`));
+  const parecidoDe = (data, valor, documento) => `${data}|${c.centavos(valor).toFixed(2)}|${documento}`;
+  const parecidos = new Map(existentes.filter(m => m.documento).map(m => [parecidoDe(c.dia(m.data), m.valor, m.documento), m]));
   const linhas = ofx.comHash(conta.id, extrato.lancamentos).map(l => {
-    const repetido = hashes.has(l.hash) || (l.documento && parecidos.has(`${l.data}|${l.valor.toFixed(2)}|${l.documento}`));
+    const repetido = porHash.has(l.hash) || (l.documento && parecidos.has(parecidoDe(l.data, l.valor, l.documento)));
     return { ...l, competencia: l.data.slice(0, 7), novo: !repetido };
   });
   const novos = linhas.filter(l => l.novo);
   const fechadas = new Set((competencias || []).filter(x => x.status === 'fechada').map(x => x.competencia));
+  // Fase A: a linha que já veio (do OFX) ganha o que só a API traz — o CPF/CNPJ da
+  // contrapartida e os códigos —, sem mudar o resto. Mês fechado fica como está.
+  const enriquecer = linhas.filter(l => !l.novo && !fechadas.has(l.competencia)).map(l => {
+    const m = porHash.get(l.hash) || (l.documento ? parecidos.get(parecidoDe(l.data, l.valor, l.documento)) : null);
+    if (!m) return null;
+    const campos = {};
+    for (const [campo, tamanho] of CAMPOS_SO_DA_API) if (l[campo] && !m[campo]) campos[campo] = String(l[campo]).slice(0, tamanho);
+    return Object.keys(campos).length ? { id: m.id, campos, competencia: l.competencia } : null;
+  }).filter(Boolean);
   const bloqueios = [];
   const avisos = [];
   if (conta.ativa === false || conta.ativa === 'false') bloqueios.push('Esta conta está desativada.');
@@ -214,12 +224,12 @@ async function analisar(api, { conta, extrato, confere = null, origem = 'ofx', v
   const outraOrigem = importacoes.filter(viva).filter(i => i.origem !== origem && c.dia(i.periodo_inicio) <= fim && c.dia(i.periodo_fim) >= inicio);
   if (outraOrigem.length) avisos.push(`Já há extrato de outra origem (${ORIGENS[outraOrigem[0].origem] || outraOrigem[0].origem}) neste período: o que tiver o mesmo documento, dia e valor fica de fora.`);
   return {
-    conta, extrato, linhas, novos, bloqueios, avisos, inicio, fim, meses: [...new Set(linhas.map(l => l.competencia))].sort(),
+    conta, extrato, linhas, novos, enriquecer, bloqueios, avisos, inicio, fim, meses: [...new Set(linhas.map(l => l.competencia))].sort(),
     resumo: {
       conta: contaPublica(conta), versao, origem, confere,
       arquivo: { banco: extrato.banco, agencia: extrato.agencia, conta: extrato.conta, moeda: extrato.moeda },
       periodo: { inicio, fim }, saldo: extrato.saldo,
-      lidos: linhas.length, novos: novos.length, repetidos: linhas.length - novos.length,
+      lidos: linhas.length, novos: novos.length, repetidos: linhas.length - novos.length, completados: enriquecer.length,
       creditos: c.centavos(novos.filter(l => l.valor > 0).reduce((s, l) => s + l.valor, 0)),
       debitos: c.centavos(novos.filter(l => l.valor < 0).reduce((s, l) => s + l.valor, 0)),
       linhas: linhas.slice(0, 300).map(l => ({ data: l.data, valor: l.valor, tipo: l.tipo, descricao: l.descricao, documento: l.documento, novo: l.novo })),
@@ -242,6 +252,11 @@ async function importar(api, { contaId, nome, base64, usuarioId = null }) {
 
 /** Corta o texto (ou null) no tamanho da coluna. */
 const corte = (v, n) => (v === null || v === undefined || v === '' ? undefined : String(v).slice(0, n));
+
+/** As colunas que só a API do BB preenche (o OFX não traz), com o tamanho de cada uma. */
+const CAMPOS_SO_DA_API = [
+  ['contrapartida_documento', 14], ['contrapartida_tipo', 2], ['codigo_historico', 10], ['codigo_sub_historico', 10], ['sistema_pagamento', 20], ['tipo_banco', 20]
+];
 
 /**
  * Grava o que `analisar` separou: a evidência (o OFX ou a resposta da API),
@@ -291,13 +306,26 @@ async function gravar(api, p, { origem = 'ofx', usuarioId = null, nomeImportacao
       else throw e;
     }
   }
+  // A linha que já estava (do OFX) ganha o CPF/CNPJ da contrapartida que a API trouxe (a conciliação usa).
+  let completados = 0;
+  for (const e of p.enriquecer || []) {
+    try {
+      await b.atualizar(api, 'movimentos_bancarios', e.id, e.campos);
+      completados++;
+    } catch (_) { /* completar é ajuda: a importação segue */ }
+  }
   await b.atualizar(api, 'extrato_importacoes', importacao.id, { status: 'completa', novos, repetidos });
   await eventos.registrar(api, {
     tipo: 'extrato_importado', competencia: (p.fim || p.inicio || '').slice(0, 7) || null, usuarioId,
-    descricao: `Extrato ${p.conta.nome}${origem === 'api' ? ' (API do BB)' : ''} de ${c.impressa(p.inicio)} a ${c.impressa(p.fim)}: ${c.plural(novos, 'lançamento novo', 'lançamentos novos')}${repetidos ? `, ${c.plural(repetidos, 'já importado', 'já importados')}` : ''}`,
-    dados: { importacao_id: importacao.id, conta_id: p.conta.id, novos, repetidos, origem }
+    descricao: `Extrato ${p.conta.nome}${origem === 'api' ? ' (API do BB)' : ''} de ${c.impressa(p.inicio)} a ${c.impressa(p.fim)}: ${c.plural(novos, 'lançamento novo', 'lançamentos novos')}${repetidos ? `, ${c.plural(repetidos, 'já importado', 'já importados')}` : ''}`
+      + `${completados ? ` (${c.plural(completados, 'completado', 'completados')} com o CPF/CNPJ da API)` : ''}`,
+    dados: { importacao_id: importacao.id, conta_id: p.conta.id, novos, repetidos, completados, origem }
   });
-  return { importacao_id: importacao.id, novos, repetidos, periodo: { inicio: p.inicio, fim: p.fim }, avisos: p.avisos };
+  // Os meses com lançamento novo: a conciliação automática roda neles (fase A).
+  const meses = [...new Set(p.novos.map(l => l.competencia))].sort();
+  // Linha completada também é chance de conciliar (o CPF/CNPJ é chave do automático).
+  const comCompletadas = [...new Set([...meses, ...(p.enriquecer || []).map(e => e.competencia)])].sort();
+  return { importacao_id: importacao.id, novos, repetidos, completados, periodo: { inicio: p.inicio, fim: p.fim }, meses: comCompletadas, avisos: p.avisos };
 }
 
 async function desfazer(api, importacaoId, { motivo, usuarioId = null }) {
@@ -369,6 +397,35 @@ function saldoDoBanco(importacoes, competencia) {
   return candidatos[0] ? { valor: c.centavos(candidatos[0].saldo_final), data: c.dia(candidatos[0].saldo_final_data) } : null;
 }
 
+/**
+ * O saldo no FIM de um dia, partindo de um saldo conhecido no fim de outro
+ * (o digitado na conta — 19b do dono — ou o que o banco informou): soma o
+ * que entrou e saiu entre os dois dias. `movimentos` = os da conta. Pura.
+ */
+function saldoNoFimDoDia(conhecido, movimentos, dia) {
+  if (!conhecido?.data || !Number.isFinite(Number(conhecido.valor)) || !dia) return null;
+  const base = c.dia(conhecido.data);
+  const entre = (de, ate) => c.lista(movimentos).filter(m => m && c.dia(m.data) > de && c.dia(m.data) <= ate).reduce((s, m) => s + Number(m.valor || 0), 0);
+  return c.centavos(dia >= base ? Number(conhecido.valor) + entre(base, dia) : Number(conhecido.valor) - entre(dia, base));
+}
+
+/** O saldo de abertura digitado na conta (19b: no fim do dia da data), ou null. Pura. */
+function saldoDigitado(conta) {
+  if (!conta || conta.saldo_inicial === null || conta.saldo_inicial === undefined || conta.saldo_inicial === '' || !c.dia(conta.saldo_inicial_data)) return null;
+  return { valor: c.centavos(conta.saldo_inicial), data: c.dia(conta.saldo_inicial_data) };
+}
+
+/**
+ * O saldo do livro (a partir do digitado) × o que o banco informou no mesmo
+ * dia: { data, banco, livro, diferenca }, ou null sem um dos dois. Pura.
+ */
+function conferirSaldo(conta, movimentos, saldoBanco) {
+  const digitado = saldoDigitado(conta);
+  if (!digitado || !saldoBanco?.data || !Number.isFinite(Number(saldoBanco.valor))) return null;
+  const livro = saldoNoFimDoDia(digitado, movimentos, saldoBanco.data);
+  return { data: saldoBanco.data, banco: c.centavos(saldoBanco.valor), livro, diferenca: c.centavos(livro - Number(saldoBanco.valor)) };
+}
+
 function totaisDe(movimentos) {
   const entradas = movimentos.filter(x => Number(x.valor) > 0);
   const saidas = movimentos.filter(x => Number(x.valor) < 0);
@@ -405,5 +462,6 @@ async function movimentos(api, { contaId = null, competencia, hoje }) {
 
 module.exports = {
   TIPOS_CONTA, ORIGENS, BANCOS, rotuloDaConta, contaPublica, validarConta, listarContas, salvarConta,
-  cobertura, faixaImpressa, extratoDaConta, preparar, analisar, gravar, lerConta, previa, importar, desfazer, movimentoPublico, importacaoPublica, saldoDoBanco, totaisDe, movimentos
+  cobertura, faixaImpressa, extratoDaConta, preparar, analisar, gravar, lerConta, previa, importar, desfazer, movimentoPublico, importacaoPublica, saldoDoBanco,
+  saldoNoFimDoDia, saldoDigitado, conferirSaldo, totaisDe, movimentos
 };

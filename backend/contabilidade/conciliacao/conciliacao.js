@@ -10,7 +10,14 @@
  *   descontada, juros) só com justificativa, e fica gravada.
  * - Desfazer não apaga o vínculo: marca quem, quando e por quê.
  * - Competência fechada recusa qualquer mudança nela (reabra antes).
- * - O motor (motor.js) só propõe; automático é só com chave exata.
+ * - O motor (motor.js) só propõe; automático é só com chave exata (ou o
+ *   nome na descrição bem perto do dia — 16b do dono).
+ * - Fase A (02/10/2026): o débito também casa com uma OBRIGAÇÃO — a parcela
+ *   em aberto ou a nota registrada sem conta. Conciliar com ela paga a
+ *   parcela (ou lança a conta da nota e a paga) com o dia e o valor do
+ *   banco; desfazer estorna esse pagamento (e cancela a conta lançada).
+ *   Depois de importar o extrato e de registrar notas, `automaticaDosMeses`
+ *   roda sozinha.
  */
 const c = require('../../financeiro/comum');
 const b = require('../base');
@@ -22,8 +29,11 @@ const motor = require('./motor');
 
 const ESTADOS = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
 const CRITERIOS = {
-  automatico: 'Automático', sugestao: 'Sugestão aceita', composicao: 'Soma aceita', manual: 'Escolhido à mão', conta_criada: 'Conta lançada do extrato'
+  automatico: 'Automático', sugestao: 'Sugestão aceita', composicao: 'Soma aceita', manual: 'Escolhido à mão', conta_criada: 'Conta lançada do extrato',
+  parcela_paga: 'Conta paga pelo extrato', documento_pago: 'Nota lançada e paga pelo extrato'
 };
+/** O vínculo que nasceu pagando uma obrigação: desfazer estorna o pagamento (e cancela a conta da nota). */
+const CRITERIOS_QUE_PAGAM = ['parcela_paga', 'documento_pago'];
 const VISOES = { pendentes: 'A conciliar', sugestoes: 'Com sugestão', conciliados: 'Conciliados', ignorados: 'Ignorados', todos: 'Todos' };
 
 const ativo = v => v && !v.desfeito_em;
@@ -51,7 +61,8 @@ function liqPublica(l) {
   if (!l) return null;
   return {
     chave: l.chave, tipo: l.tipo, tipo_rotulo: l.tipo_rotulo, id: l.id, data: l.data, data_credito: l.data_credito, valor: l.valor,
-    restante: l.restante ?? l.valor_abs, forma: l.forma, rotulo: l.rotulo, detalhe: l.detalhe, nome: l.nome, estornado: l.estornado
+    restante: l.restante ?? l.valor_abs, forma: l.forma, rotulo: l.rotulo, detalhe: l.detalhe, nome: l.nome, estornado: l.estornado,
+    obrigacao: Boolean(l.obrigacao)
   };
 }
 
@@ -91,7 +102,7 @@ function coberto(diaIso, cob, competencia) {
 function semLancamento(liqs, { competencia, coberturas, movimentos = [], sugestoes = new Map() }) {
   const sugeridas = new Set([...sugestoes.values()].flatMap(s => s.itens || []).map(i => (typeof i === 'string' ? i : i?.chave)));
   return liqs
-    .filter(l => l.competencia === competencia && l.no_banco && !l.data_incerta && !l.estornado && c.centavos(l.restante) > 0.009)
+    .filter(l => !l.obrigacao && l.competencia === competencia && l.no_banco && !l.data_incerta && !l.estornado && c.centavos(l.restante) > 0.009)
     .filter(l => coberturas.some(cob => coberto(l.data, cob, competencia)))
     .filter(l => !sugeridas.has(l.chave) && !movimentos.some(m => motor.pontuar(m, l)?.exato))
     .map(liqPublica);
@@ -158,7 +169,7 @@ async function painel(api, { contaId = null, competencia, hoje, visao = 'todos' 
   const idsDoMes = new Set(movs.map(m => String(m.id)));
   const ligados = vinculos.filter(v => ativo(v) && idsDoMes.has(String(v.movimento_id)));
   const { de, ate } = janelaDoMes(comp);
-  const liqs = comRestante(await liquidacoes.carregar(api, { de, ate, incluir: ligados.map(v => liquidacoes.chaveDe(v.alvo_tipo, v.alvo_id)) }), vinculos);
+  const liqs = comRestante(await liquidacoes.carregar(api, { de, ate, incluir: ligados.map(v => liquidacoes.chaveDe(v.alvo_tipo, v.alvo_id)), obrigacoes: true }), vinculos);
   const porChave = new Map(liqs.map(l => [l.chave, l]));
   const pendentes = movs.filter(m => estadoDe(m) === 'pendente');
   const sugestoes = motor.sugerir(pendentes.map(paraMotor), liqs);
@@ -198,7 +209,7 @@ async function candidatos(api, movimentoId, { dias = 10 } = {}) {
   const vinculos = await lerVinculos(api);
   const janelaDias = Math.min(Math.max(Number(dias) || 10, 1), 90);
   const d = c.dia(m.data);
-  const liqs = comRestante(await liquidacoes.carregar(api, { de: motor.somarDias(d, -janelaDias - 35), ate: motor.somarDias(d, janelaDias) }), vinculos);
+  const liqs = comRestante(await liquidacoes.carregar(api, { de: motor.somarDias(d, -janelaDias - 35), ate: motor.somarDias(d, janelaDias), obrigacoes: true }), vinculos);
   const mov = paraMotor(m);
   const lista = motor.candidatasDoMovimento(mov, liqs, { dias: janelaDias });
   const sug = estadoDe(m) === 'pendente' ? motor.sugerir([mov], liqs).get(m.id) || null : null;
@@ -246,10 +257,85 @@ async function gravar(api, m, itens, { criterio, detalhe = null, justificativa =
 const rotulosDe = itens => itens.map(l => `${l.rotulo}${l.nome ? ` (${l.nome})` : ''}`).join(' + ');
 
 /**
+ * Paga a obrigação com o lançamento do banco (fase A): a parcela em aberto
+ * recebe o pagamento com o dia e o valor do banco (a diferença vira
+ * juros/desconto na conta); a nota sem conta ganha a conta — com o
+ * fornecedor, a categoria da regra e o documento — já paga. A forma vem da
+ * descrição do banco. Falhou no meio: cancela a conta que lançou.
+ */
+async function pagarObrigacao(api, m, liq, { usuarioId = null, hoje, observacao = null }) {
+  const dia = c.dia(m.data);
+  const valor = abs(m.valor);
+  const nota = [observacao, `Pago pela conciliação com o extrato (${c.impressa(dia)}${m.descricao ? `, ${m.descricao}` : ''}).`].filter(Boolean).join(' ').slice(0, 500);
+  let tituloId = liq.titulo_id ?? null;
+  let parcelaId = liq.tipo === 'parcela' ? liq.id : null;
+  let criouConta = false;
+  if (liq.tipo === 'documento') {
+    const doc = (await b.ler(api, 'documentos_recebidos', { id: Number(liq.documento_recebido_id) }))[0] || null;
+    if (!doc || doc.excluido_em) throw c.erro('A nota não existe mais: atualize a lista.', 404);
+    const criada = await titulos.criar(api, {
+      entrada: {
+        descricao: `${liq.rotulo} — ${liq.nome || 'fornecedor'}`, numero_documento: doc.numero || null,
+        data_emissao: c.dia(doc.data_emissao), competencia: liq.competencia_documento, valor_total: liq.valor_abs,
+        contato_id: doc.contato_id ?? null, documento_recebido_id: doc.id, quantidade_parcelas: 1, primeiro_vencimento: dia,
+        observacao: `Lançada pela conciliação com o extrato de ${c.impressa(dia)}.`
+      },
+      usuarioId, hoje, origem: ['nfe', 'nfse'].includes(doc.tipo) ? doc.tipo : 'outro'
+    });
+    tituloId = criada.id;
+    criouConta = true;
+    parcelaId = (await b.ler(api, 'titulo_pagar_parcelas', { titulo_id: Number(criada.id) }))[0]?.id ?? null;
+  }
+  try {
+    const pago = await titulos.pagar(api, parcelaId, { entrada: { data_pagamento: dia, valor_pago: valor, forma: motor.formaDaDescricao(m.descricao), observacao: nota }, usuarioId, hoje });
+    return { pagamento_id: pago.pagamento.id, titulo_id: tituloId, criou_conta: criouConta };
+  } catch (e) {
+    if (criouConta) await titulos.cancelar(api, tituloId, { motivo: 'Falhou ao pagar a nota pela conciliação', usuarioId, avisar: false }).catch(() => null);
+    throw e;
+  }
+}
+
+/** Desfaz o que `pagarObrigacao` gravou (estorna; cancela a conta lançada). Não lança erro: devolve o aviso. */
+async function desfazerPagamento(api, { pagamentoId, tituloId = null, criouConta = false, motivo, usuarioId = null }) {
+  try {
+    await titulos.estornar(api, pagamentoId, { motivo, usuarioId });
+    if (criouConta && tituloId) await titulos.cancelar(api, tituloId, { motivo, usuarioId, avisar: false });
+    return null;
+  } catch (e) {
+    return `${criouConta ? 'A conta lançada pela conciliação' : 'O pagamento registrado pela conciliação'} não pôde ser desfeito (${e.message}): resolva em Contas a pagar.`;
+  }
+}
+
+/**
+ * Concilia o lançamento com UMA obrigação (sem `hoje`, vale o dia do banco):
+ * paga, liga e registra. A diferença de valor, com justificativa, vira
+ * juros/desconto no pagamento.
+ */
+async function conciliarObrigacao(api, m, liq, { justificativa = null, criterio, usuarioId = null, hoje = null }) {
+  const pago = await pagarObrigacao(api, m, liq, { usuarioId, hoje: hoje || c.dia(m.data), observacao: justificativa });
+  const crit = liq.tipo === 'parcela' ? 'parcela_paga' : 'documento_pago';
+  const item = { tipo: 'titulo_pagamento', id: pago.pagamento_id, restante: abs(m.valor) };
+  try {
+    await gravar(api, m, [item], { criterio: crit, detalhe: `${CRITERIOS[criterio] || CRITERIOS.manual} · ${liq.rotulo}`, justificativa, usuarioId });
+  } catch (e) {
+    await desfazerPagamento(api, { pagamentoId: pago.pagamento_id, tituloId: pago.titulo_id, criouConta: pago.criou_conta, motivo: 'Falhou ao conciliar com o extrato', usuarioId });
+    throw e;
+  }
+  await eventos.registrar(api, {
+    tipo: 'conciliacao_feita', competencia: m.competencia, usuarioId, referenciaTipo: 'titulo', referenciaId: pago.titulo_id,
+    descricao: `Lançamento de ${dataDoMov(m)} ${liq.tipo === 'parcela' ? 'pagou' : 'virou a conta paga de'} ${rotulosDe([liq])}`
+      + ` (${(CRITERIOS[criterio] || CRITERIOS.manual).toLowerCase()})${justificativa ? ` — ${justificativa}` : ''}`,
+    dados: { movimento_id: m.id, criterio: crit, itens: [liq.chave], titulo_id: pago.titulo_id, pagamento_id: pago.pagamento_id, conta_criada: pago.criou_conta }
+  });
+  return { id: m.id, estado: 'conciliado', vinculos: 1, diferenca: 0, titulo_id: pago.titulo_id, pagamento_id: pago.pagamento_id, conta_criada: pago.criou_conta };
+}
+
+/**
  * Concilia o lançamento com as liquidações escolhidas. A soma tem de dar o
  * valor do lançamento; senão, só com justificativa (e a diferença fica gravada).
+ * Uma obrigação (parcela em aberto, nota sem conta) vai sozinha e é paga.
  */
-async function conciliar(api, movimentoId, { itens = [], justificativa = '', criterio = 'manual', usuarioId = null }) {
+async function conciliar(api, movimentoId, { itens = [], justificativa = '', criterio = 'manual', usuarioId = null, hoje = null }) {
   const pedidos = [...new Map(c.lista(itens).map(i => [liquidacoes.chaveDe(i?.tipo, i?.id), i])).values()]
     .filter(i => liquidacoes.TIPOS[i?.tipo] && /^\d+$/.test(String(i?.id)));
   if (!pedidos.length) throw c.erro('Escolha o que casa com este lançamento.');
@@ -269,13 +355,19 @@ async function conciliar(api, movimentoId, { itens = [], justificativa = '', cri
     if (Math.sign(l.valor) !== Math.sign(Number(m.valor))) throw c.erro(`${l.rotulo} é ${l.valor > 0 ? 'uma entrada' : 'uma saída'} e o lançamento é ${Number(m.valor) > 0 ? 'um crédito' : 'um débito'}.`, 422);
     if (!(l.restante > 0.009)) throw c.erro(`${l.rotulo} já está conciliado com outro lançamento.`, 409);
   }
+  if (escolhidas.some(l => l.obrigacao) && escolhidas.length > 1) {
+    throw c.erro('A conta em aberto (ou a nota sem conta) é paga sozinha com o lançamento: escolha só ela.', 422);
+  }
   const soma = c.centavos(escolhidas.reduce((s, l) => s + l.restante, 0));
   const diferenca = c.centavos(abs(m.valor) - soma);
   const texto = c.texto(justificativa, 500);
   if (Math.abs(diferenca) > 0.009 && texto.length < 5) {
     throw c.erro(`A soma escolhida (${c.reais(soma)}) não bate com o lançamento (${c.reais(abs(m.valor))}): diferença de ${c.reais(diferenca)}. Justifique para conciliar assim (tarifa descontada, juros…).`, 422, { diferenca, soma });
   }
-  const crit = CRITERIOS[criterio] && criterio !== 'conta_criada' ? criterio : 'manual';
+  const crit = CRITERIOS[criterio] && !['conta_criada', ...CRITERIOS_QUE_PAGAM].includes(criterio) ? criterio : 'manual';
+  if (escolhidas[0].obrigacao) {
+    return conciliarObrigacao(api, m, escolhidas[0], { justificativa: Math.abs(diferenca) > 0.009 ? texto : (texto || null), criterio: crit, usuarioId, hoje });
+  }
   await gravar(api, m, escolhidas, { criterio: crit, justificativa: Math.abs(diferenca) > 0.009 ? texto : (texto || null), diferenca, usuarioId });
   await eventos.registrar(api, {
     tipo: 'conciliacao_feita', competencia: m.competencia, usuarioId,
@@ -297,12 +389,28 @@ async function desfazer(api, movimentoId, { motivo, usuarioId = null }) {
     estado_conciliacao: 'pendente', conciliacao_diferenca: null, conciliacao_observacao: null, conciliado_em: null, conciliado_por: null
   });
   const criouConta = ligados.some(v => v.criterio === 'conta_criada');
+  // Fase A: o pagamento que a própria conciliação registrou é estornado (e a conta da nota, cancelada).
+  const avisos = [];
+  const estornados = [];
+  for (const v of ligados.filter(x => CRITERIOS_QUE_PAGAM.includes(x.criterio) && x.alvo_tipo === 'titulo_pagamento')) {
+    const p = (await b.ler(api, 'titulo_pagar_pagamentos', { id: Number(v.alvo_id) }))[0] || null;
+    if (!p || p.estornado_em) continue;
+    const aviso = await desfazerPagamento(api, {
+      pagamentoId: p.id, tituloId: p.titulo_id, criouConta: v.criterio === 'documento_pago', motivo: `Conciliação desfeita: ${texto}`, usuarioId
+    });
+    if (aviso) avisos.push(aviso); else estornados.push(v.criterio);
+  }
+  const partes = [
+    estornados.includes('parcela_paga') ? 'o pagamento da conta foi estornado (ela volta a ficar em aberto)' : null,
+    estornados.includes('documento_pago') ? 'a conta lançada da nota foi cancelada (a nota volta a ficar sem conta)' : null,
+    criouConta ? 'a conta lançada do extrato continua; estorne-a em Contas a pagar se foi engano' : null
+  ].filter(Boolean);
   await eventos.registrar(api, {
     tipo: 'conciliacao_desfeita', competencia: m.competencia, usuarioId,
-    descricao: `Conciliação do lançamento de ${dataDoMov(m)} desfeita (${c.plural(ligados.length, 'vínculo', 'vínculos')}): ${texto}${criouConta ? ' — a conta lançada do extrato continua; estorne-a em Contas a pagar se foi engano' : ''}`,
-    dados: { movimento_id: m.id, vinculos: ligados.map(v => v.id) }
+    descricao: `Conciliação do lançamento de ${dataDoMov(m)} desfeita (${c.plural(ligados.length, 'vínculo', 'vínculos')}): ${texto}${partes.length ? ` — ${partes.join('; ')}` : ''}`,
+    dados: { movimento_id: m.id, vinculos: ligados.map(v => v.id), estornados }
   });
-  return { id: m.id, estado: 'pendente', desfeitos: ligados.length, conta_criada_continua: criouConta };
+  return { id: m.id, estado: 'pendente', desfeitos: ligados.length, conta_criada_continua: criouConta, estornados: estornados.length, avisos };
 }
 
 async function ignorar(api, movimentoId, { motivo, usuarioId = null }) {
@@ -340,9 +448,11 @@ async function reativar(api, movimentoId, { usuarioId = null }) {
 /**
  * Concilia em lote o mês de uma conta: o que o motor decide como automático
  * e, com `aceitarSugestoes`, as sugestões únicas (um par só dos dois lados).
- * Composição (soma de várias) nunca entra em lote.
+ * Composição (soma de várias) nunca entra em lote; obrigação (paga ou lança
+ * a conta) só quando é automático. O lançamento que falhar fica a conciliar
+ * e vai em `falhas`.
  */
-async function automatica(api, { contaId, competencia, aceitarSugestoes = false, usuarioId = null, hoje }) {
+async function automatica(api, { contaId, competencia, aceitarSugestoes = false, usuarioId = null, hoje, sozinha = false }) {
   if (!c.competenciaValida(competencia)) throw c.erro('Escolha a competência.');
   await b.garantirAberta(api, competencia, 'conciliar lançamentos nela');
   const vinculos = await lerVinculos(api);
@@ -350,31 +460,102 @@ async function automatica(api, { contaId, competencia, aceitarSugestoes = false,
   if (!conta) throw c.erro('Escolha a conta.', 404);
   const movs = (await b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id), competencia: String(competencia) })).filter(m => estadoDe(m) === 'pendente');
   const { de, ate } = janelaDoMes(competencia);
-  const liqs = comRestante(await liquidacoes.carregar(api, { de, ate }), vinculos);
+  const liqs = comRestante(await liquidacoes.carregar(api, { de, ate, obrigacoes: true }), vinculos);
   const porChave = new Map(liqs.map(l => [l.chave, l]));
   const decisoes = motor.sugerir(movs.map(paraMotor), liqs);
   const usados = new Set();
-  const feitos = { automatico: 0, sugestao: 0 };
+  const feitos = { automatico: 0, sugestao: 0, contas_pagas: 0, contas_lancadas: 0 };
+  const falhas = [];
   for (const m of movs) {
     const d = decisoes.get(m.id);
     if (!d || d.tipo === 'composicao') continue;
     if (d.tipo !== 'automatico' && !(aceitarSugestoes && d.unica)) continue;
     const itens = d.itens.map(k => porChave.get(k)).filter(Boolean);
     if (!itens.length || itens.some(l => usados.has(l.chave))) continue;
-    await gravar(api, m, itens, { criterio: d.tipo, detalhe: d.motivos.join('; '), usuarioId });
+    if (itens[0].obrigacao && d.tipo !== 'automatico') continue;
+    try {
+      if (itens[0].obrigacao) {
+        const r = await conciliarObrigacao(api, m, itens[0], { criterio: 'automatico', usuarioId, hoje });
+        feitos[r.conta_criada ? 'contas_lancadas' : 'contas_pagas'] += 1;
+      } else {
+        await gravar(api, m, itens, { criterio: d.tipo, detalhe: d.motivos.join('; '), usuarioId });
+      }
+    } catch (e) {
+      falhas.push(`${dataDoMov(m)}: ${e.message}`);
+      continue;
+    }
     itens.forEach(l => usados.add(l.chave));
     feitos[d.tipo === 'automatico' ? 'automatico' : 'sugestao'] += 1;
   }
   const total = feitos.automatico + feitos.sugestao;
   if (total) {
+    const obrig = [
+      feitos.contas_pagas ? c.plural(feitos.contas_pagas, 'conta paga', 'contas pagas') : null,
+      feitos.contas_lancadas ? c.plural(feitos.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
+    ].filter(Boolean).join(', ');
     await eventos.registrar(api, {
       tipo: 'conciliacao_automatica', competencia, usuarioId,
-      descricao: `${conta.nome}, ${c.rotuloCompetencia(competencia)}: ${c.plural(total, 'lançamento conciliado', 'lançamentos conciliados')} em lote`
-        + ` (${c.plural(feitos.automatico, 'automático', 'automáticos')}${aceitarSugestoes ? `, ${c.plural(feitos.sugestao, 'sugestão aceita', 'sugestões aceitas')}` : ''})`,
+      descricao: `${conta.nome}, ${c.rotuloCompetencia(competencia)}: ${c.plural(total, 'lançamento conciliado', 'lançamentos conciliados')} ${sozinha ? 'sozinho' + (total > 1 ? 's' : '') : 'em lote'}`
+        + ` (${c.plural(feitos.automatico, 'automático', 'automáticos')}${aceitarSugestoes ? `, ${c.plural(feitos.sugestao, 'sugestão aceita', 'sugestões aceitas')}` : ''}${obrig ? `; ${obrig}` : ''})`,
       dados: { conta_id: conta.id, ...feitos }
     });
   }
-  return { ...feitos, total, restantes: movs.length - total };
+  return { ...feitos, total, restantes: movs.length - total, falhas };
+}
+
+/**
+ * A conciliação que roda sozinha (fase A): depois de importar o extrato (OFX
+ * ou API) e de registrar notas (SEFAZ/ADN/à mão). Cada conta ativa (ou só a
+ * `contaId`) × cada mês ABERTO com lançamento a conciliar; só o automático,
+ * nunca sugestão. Nada aqui derruba quem chamou: sem o SQL, não faz nada;
+ * erro vira `falhas`.
+ */
+async function automaticaDosMeses(api, { competencias = [], contaId = null, usuarioId = null, hoje }) {
+  const total = { conciliados: 0, contas_pagas: 0, contas_lancadas: 0, falhas: [] };
+  const meses = [...new Set(c.lista(competencias).filter(x => c.competenciaValida(x)).map(String))].sort();
+  if (!meses.length) return total;
+  try {
+    await lerVinculos(api);
+    const { contas } = await extrato.listarContas(api);
+    const alvo = contas.filter(x => (contaId !== null && contaId !== undefined ? String(x.id) === String(contaId) : x.ativa !== false && x.ativa !== 'false'));
+    for (const comp of meses) {
+      if (await competenciaFechada(api, comp)) continue;
+      for (const conta of alvo) {
+        const pendentes = (await b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id), competencia: comp })).filter(m => estadoDe(m) === 'pendente');
+        if (!pendentes.length) continue;
+        const r = await automatica(api, { contaId: conta.id, competencia: comp, usuarioId, hoje, sozinha: true });
+        total.conciliados += r.total;
+        total.contas_pagas += r.contas_pagas;
+        total.contas_lancadas += r.contas_lancadas;
+        total.falhas.push(...r.falhas);
+      }
+    }
+  } catch (e) {
+    if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
+  }
+  return total;
+}
+
+/** A frase para o resumo de quem chamou ("3 conciliados sozinhos (1 conta paga)"), ou null. Pura. */
+function resumoDaAutomatica(r) {
+  if (!r?.conciliados) return null;
+  const extra = [
+    r.contas_pagas ? c.plural(r.contas_pagas, 'conta paga', 'contas pagas') : null,
+    r.contas_lancadas ? c.plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
+  ].filter(Boolean).join(', ');
+  return `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`;
+}
+
+/** Os meses que um conjunto de datas toca, com o seguinte (a nota de um mês é paga no outro). Pura. */
+function mesesParaConciliar(datas, { comSeguinte = false } = {}) {
+  const meses = new Set();
+  for (const d of c.lista(datas)) {
+    const mes = String(c.dia(d) || '').slice(0, 7);
+    if (!c.competenciaValida(mes)) continue;
+    meses.add(mes);
+    if (comSeguinte) meses.add(c.somarMeses(mes, 1));
+  }
+  return [...meses].sort();
 }
 
 /**
@@ -425,7 +606,7 @@ async function criarConta(api, movimentoId, { entrada = {}, usuarioId = null, ho
 }
 
 module.exports = {
-  ESTADOS, CRITERIOS, VISOES,
-  paraMotor, comRestante, liqPublica, vinculosInvalidos, coberto, semLancamento, totaisDe, naVisao, janelaDoMes,
-  lerVinculos, painel, candidatos, conciliar, desfazer, ignorar, reativar, automatica, criarConta
+  ESTADOS, CRITERIOS, CRITERIOS_QUE_PAGAM, VISOES,
+  paraMotor, comRestante, liqPublica, vinculosInvalidos, coberto, semLancamento, totaisDe, naVisao, janelaDoMes, resumoDaAutomatica, mesesParaConciliar,
+  lerVinculos, painel, candidatos, conciliar, desfazer, ignorar, reativar, automatica, automaticaDosMeses, criarConta
 };

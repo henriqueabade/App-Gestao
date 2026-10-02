@@ -286,7 +286,7 @@ test('desfazer: pede motivo; a mais nova primeiro; tira os lançamentos e o OFX 
 
     const painel = await ctx.chamar('GET', '/painel?competencia=2026-08');
     const pend = painel.corpo.pendencias.find(p => p.chave === 'extrato_1');
-    assert.deepEqual([pend.nivel, pend.titulo, pend.filtro], ['documental', 'Extrato de agosto/2026 — BB — conta corrente não importado', { acao: 'importar-extrato', conta_id: 1 }]);
+    assert.deepEqual([pend.nivel, pend.titulo, pend.filtro], ['critico', 'OFX de agosto/2026 — BB — conta corrente não importado', { acao: 'importar-extrato', conta_id: 1 }]);
 
     // Reimportar depois de desfazer: os lançamentos voltam e o OFX volta a ser evidência.
     const volta = await ctx.chamar('POST', '/extrato/importar', { conta_id: 1, nome: 'agosto.ofx', base64: AGOSTO() });

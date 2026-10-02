@@ -50,7 +50,9 @@ const CTB_ESTADOS = {
     aviso: { rotulo: 'Com avisos', icone: 'fa-info-circle' },
     critico: { rotulo: 'Erro crítico', icone: 'fa-exclamation-triangle' },
     em_curso: { rotulo: 'Mês em curso', icone: 'fa-clock' },
-    indisponivel: { rotulo: 'Ainda não integrado', icone: 'fa-plug' }
+    indisponivel: { rotulo: 'Ainda não integrado', icone: 'fa-plug' },
+    // Fase A: o mês de antes do início da Contabilidade.
+    fora: { rotulo: 'Antes do início', icone: 'fa-ban' }
 };
 
 const CTB_SITUACOES = {
@@ -470,7 +472,7 @@ function ctbRenderizarFontes(moduleEl, fontes, filtroFonte) {
         const cartao = ctbCriar('article', 'ctb-fonte glass-surface rounded-xl');
         cartao.dataset.estado = estado;
         cartao.dataset.fonte = f.chave;
-        if (estado !== 'indisponivel') {
+        if (estado !== 'indisponivel' && estado !== 'fora') {
             // Como os cartões do alto: filtra e leva até o cartão das pendências (02/10/2026).
             cartao.dataset.ctbAcao = 'ir-fonte';
             cartao.dataset.ctbFonte = f.chave;
@@ -503,7 +505,7 @@ function ctbRenderizarFontes(moduleEl, fontes, filtroFonte) {
             }
             cartao.appendChild(dl);
         }
-        if (estado !== 'indisponivel') {
+        if (estado !== 'indisponivel' && estado !== 'fora') {
             const n = Number(f.pendencias) || 0;
             cartao.appendChild(ctbCriar('p', 'ctb-fonte__rodape', n ? (n === 1 ? '1 pendência' : `${n} pendências`) : 'Nenhuma pendência'));
         }
@@ -631,7 +633,11 @@ function ctbRenderizar(moduleEl, dados, hoje) {
         ctbRenderizarAtividade(moduleEl, atividade || [], hoje);
         return;
     }
-    ctbMostrarAviso(moduleEl, painel.sql_pendente ? 'A Contabilidade ainda não foi ativada no banco: rode sql/contabilidade_base.sql e reinicie a API. Até lá o checklist aparece, mas nada é gravado.' : '');
+    ctbMostrarAviso(moduleEl, painel.sql_pendente
+        ? 'A Contabilidade ainda não foi ativada no banco: rode sql/contabilidade_base.sql e reinicie a API. Até lá o checklist aparece, mas nada é gravado.'
+        : (painel.antes_do_inicio
+            ? `Este mês é de antes do início da Contabilidade (${painel.antes_do_inicio.rotulo}): nada é cobrado nem fechado. As notas dele esperam a sua decisão na caixa de entrada (registrar ou guardar como histórico).`
+            : ''));
     ctbRenderizarSituacao(moduleEl, painel);
     ctbRenderizarContagem(moduleEl, painel.contagem);
     ctbRenderizarFontes(moduleEl, painel.fontes, moduleEl.ctbFiltro?.fonte || null);

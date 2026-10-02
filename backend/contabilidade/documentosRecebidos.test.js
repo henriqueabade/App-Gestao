@@ -106,6 +106,33 @@ test('linhaDoDocumento: o rótulo, o emitente pelo contato e as marcas de falta'
   assert.deepEqual([recibo.rotulo, recibo.falta_arquivo, recibo.sem_conta], ['Recibo', true, false]);
 });
 
+test('5.4 (fase A): a nota acha a conta que já existe — mesmo fornecedor/CNPJ, valor e data perto — ou o pagamento de comissão; nada de duplicar', () => {
+  const nota = { id: 9, tipo: 'nfse', numero: '17', emitente_nome: 'BRUNO HENRIQUE VIGATO MAIA', emitente_documento: '61.234.567/0001-90', contato_id: 7, data_emissao: '2026-09-08', valor_total: 2800 };
+  const conta = (id, extra = {}) => ({
+    t: { id, descricao: `Conta ${id}`, contato_id: 7, valor_total: 2800, data_emissao: '2026-09-01', status: 'aberto', documento_recebido_id: null, ...extra.t },
+    parcelas: extra.parcelas || [{ id: id * 10, titulo_id: id, vencimento: '2026-09-10', valor: 2800 }], contato: extra.contato ?? null, movimento: extra.movimento ?? null
+  });
+  const so = lista => d.paresDaNota(nota, { contas: lista }).map(p => [p.tipo, p.id]);
+  assert.deepEqual(so([conta(1)]), [['conta', 1]], 'mesmo fornecedor, valor e vencimento perto');
+  assert.deepEqual(so([conta(2, { t: { valor_total: 2700 } })]), [], 'outro valor');
+  assert.deepEqual(so([conta(3, { t: { documento_recebido_id: 4 } })]), [], 'já tem nota');
+  assert.deepEqual(so([conta(4, { t: { status: 'cancelado' } })]), []);
+  assert.deepEqual(so([conta(5, { t: { data_emissao: '2026-06-01' }, parcelas: [{ vencimento: '2026-06-10' }] })]), [], 'longe demais');
+  assert.deepEqual(so([conta(6, { t: { contato_id: 8 }, contato: { id: 8, cnpj: '61234567000190' } })]), [['conta', 6]], 'outro contato, mas o mesmo CNPJ');
+  // A conta lançada do extrato (sem fornecedor): o CPF/CNPJ ou o nome vêm do lançamento do banco.
+  assert.deepEqual(so([conta(7, { t: { contato_id: null }, movimento: { contrapartida_documento: '61234567000190', descricao: 'PIX' } })]), [['conta', 7]]);
+  assert.deepEqual(so([conta(8, { t: { contato_id: null }, movimento: { descricao: 'PIX ENVIADO - BRUNO HENRIQUE VIGATO MAI' } })]), [['conta', 8]]);
+  assert.deepEqual(so([conta(9, { t: { contato_id: null }, movimento: { descricao: 'PIX ENVIADO - OUTRA PESSOA' } })]), []);
+  assert.deepEqual(so([conta(1), conta(10)]), [['conta', 1], ['conta', 10]], 'duas servem: quem chama não lança nada e avisa');
+  // O valor líquido (ISS retido) também vale.
+  assert.deepEqual(d.paresDaNota({ ...nota, valor_total: 3000, iss_retido: true, valor_iss: 200 }, { contas: [conta(11)] }).map(p => p.id), [11]);
+  // O pagamento de comissão/produção pelo nome de quem recebeu.
+  const pag = { id: 70, valor: 2800, data: '2026-09-08', beneficiario: 'Bruno Henrique', rotulo: 'Produção de agosto/2026 — Bruno Henrique' };
+  const r = d.paresDaNota(nota, { pagamentos: [pag, { ...pag, id: 71, beneficiario: 'Ana' }, { ...pag, id: 72, valor: 100 }] });
+  assert.deepEqual(r.map(p => [p.tipo, p.id]), [['pagamento', 70]]);
+  assert.match(r[0].rotulo.replace(/ /g, ' '), /^o pagamento Produção de agosto\/2026 — Bruno Henrique \(R\$ 2\.800,00\)$/);
+});
+
 test('rotuloDoPagamentoDeFechamento: tipo, competência e quem recebeu', () => {
   assert.equal(d.rotuloDoPagamentoDeFechamento({ competencia: '2026-08', beneficiario: 'Ana', tipo_comissao: 'royalty' }, { tipo: 'comissao' }), 'Comissões de agosto/2026 — Ana (Royalty)');
   assert.equal(d.rotuloDoPagamentoDeFechamento({ competencia: '2026-08 ' }, { tipo: 'producao' }), 'Produção de agosto/2026');

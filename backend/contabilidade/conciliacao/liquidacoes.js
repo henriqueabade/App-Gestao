@@ -15,6 +15,17 @@
  * - Cartão: o dinheiro chega (repasse da operadora) ou sai (fatura) em outro
  *   dia e às vezes com desconto de taxa — entra como candidato, mas não é
  *   cobrado como "sem lançamento no extrato".
+ *
+ * Fase A (02/10/2026, o caso da NFS-e do Bruno): com `obrigacoes`, entram
+ * também as OBRIGAÇÕES — o que ainda não foi pago no app, mas pode ser o
+ * débito do banco:
+ *
+ *   parcela               parcela de conta a pagar em aberto             saída
+ *   documento             NF-e/NFS-e/recibo registrado sem conta a pagar saída
+ *
+ * Elas não viram vínculo: conciliar com uma delas PAGA a parcela (ou lança a
+ * conta do documento e a paga) com o dia e o valor do banco, e o vínculo é
+ * com esse pagamento (conciliacao.js).
  */
 const c = require('../../financeiro/comum');
 const b = require('../base');
@@ -23,8 +34,12 @@ const TIPOS = {
   recebimento: { rotulo: 'Recebimento', sinal: 1 },
   titulo_pagamento: { rotulo: 'Pagamento de conta', sinal: -1 },
   financeiro_pagamento: { rotulo: 'Comissão/produção', sinal: -1 },
-  reembolso: { rotulo: 'Reembolso', sinal: -1 }
+  reembolso: { rotulo: 'Reembolso', sinal: -1 },
+  parcela: { rotulo: 'Conta a pagar em aberto', sinal: -1, obrigacao: true },
+  documento: { rotulo: 'Nota sem conta a pagar', sinal: -1, obrigacao: true }
 };
+/** Até quantos dias antes ou depois do vencimento (ou da emissão) a obrigação pode ter sido paga. */
+const JANELA_OBRIGACAO = 30;
 const FORA_DO_BANCO = new Set(['Dinheiro']);
 const DATA_INCERTA = new Set(['Cartão', 'Cartão de crédito']);
 const TIPOS_FECHAMENTO = { comissao: 'Comissões', producao: 'Produção' };
@@ -46,7 +61,7 @@ function base(tipo, id, {
     data: c.dia(data), data_credito: c.dia(dataCredito), competencia: String(c.dia(data) || '').slice(0, 7),
     valor: c.centavos(abs * TIPOS[tipo].sinal), valor_abs: abs, forma: forma || null,
     rotulo, detalhe, nome, documento, referencia: referencia ? String(referencia) : null,
-    estornado: Boolean(estornado),
+    estornado: Boolean(estornado), obrigacao: Boolean(TIPOS[tipo].obrigacao),
     no_banco: !FORA_DO_BANCO.has(forma), data_incerta: DATA_INCERTA.has(forma),
     categoria: categoria || null, contato_id: contatoId === null || contatoId === undefined ? null : Number(contatoId), subtipo: subtipo || null
   };
@@ -104,6 +119,55 @@ function deReembolso(r, { pedidos = new Map(), clientes = new Map() } = {}) {
   });
 }
 
+/** A parcela em aberto (obrigação). `titulo` e `contato` crus; `de` = quantas parcelas a conta tem. */
+function deParcela(p, { titulo, contato = null, de = 1 }) {
+  return {
+    ...base('parcela', p.id, {
+      data: p.vencimento, valor: p.valor, forma: null,
+      rotulo: `${titulo.descricao}${de > 1 ? ` · parcela ${p.numero}/${de}` : ''}`,
+      detalhe: `vence em ${c.impressa(c.dia(p.vencimento))}`, nome: contato?.nome || null, documento: docDe(contato),
+      referencia: titulo.numero_documento || null, categoria: titulo.categoria || null, contatoId: titulo.contato_id ?? null
+    }),
+    titulo_id: Number(titulo.id)
+  };
+}
+
+/**
+ * O valor que sai do banco por um documento: o total menos as retenções (o
+ * ISS retido fica para a guia da prefeitura). Pura.
+ */
+function valorAPagar(d) {
+  const total = c.centavos(d.valor_total);
+  const retido = d.valor_retencoes !== null && d.valor_retencoes !== undefined && d.valor_retencoes !== ''
+    ? c.centavos(d.valor_retencoes)
+    : ((d.iss_retido === true || d.iss_retido === 'true') ? c.centavos(d.valor_iss) : 0);
+  return c.centavos(Math.max(0, total - (retido > 0 && retido < total ? retido : 0)));
+}
+
+const ROTULO_DOC = { nfe: 'NF-e', nfse: 'NFS-e' };
+
+/** O documento sem conta (obrigação). `contato` cru ou null. */
+function deDocumento(d, { contato = null } = {}) {
+  const valor = valorAPagar(d);
+  const rotulo = `${ROTULO_DOC[d.tipo] || 'Documento'} ${d.numero || ''}`.trim();
+  return {
+    ...base('documento', d.id, {
+      data: d.data_emissao, valor, forma: null, rotulo,
+      detalhe: `emitida em ${c.impressa(c.dia(d.data_emissao))}${valor !== c.centavos(d.valor_total) ? ` · ${c.reais(d.valor_total)} menos as retenções` : ''}`,
+      nome: contato?.nome || d.emitente_nome || null, documento: b.digitos(d.emitente_documento) || docDe(contato),
+      contatoId: d.contato_id ?? null
+    }),
+    documento_recebido_id: Number(d.id), competencia_documento: d.competencia || String(c.dia(d.data_emissao) || '').slice(0, 7)
+  };
+}
+
+/** O documento está sem conta e sem pagamento ligado (como em documentosRecebidos.linhaDoDocumento)? Pura. */
+function documentoSemConta(d, contasPorDocumento) {
+  if (!d || d.excluido_em || d.financeiro_pagamento_id || d.sem_pagamento === true || d.sem_pagamento === 'true') return false;
+  if (!(c.centavos(d.valor_total) > 0)) return false;
+  return !(contasPorDocumento.get(String(d.id)) || []).some(t => t.status !== 'cancelado');
+}
+
 // ------------------------------------------------------------ leitura
 
 const lerSePuder = (api, tabela) => api.get(`/api/${tabela}`).then(c.lista).catch(() => []);
@@ -119,34 +183,71 @@ async function porId(api, tabela, ids) {
 /**
  * As liquidações cuja data (ou a de crédito) cai em [de, ate], mais as de
  * `incluir` (chaves já ligadas a lançamentos, em qualquer data). Sem o SQL de
- * alguma fonte, ela só não aparece.
+ * alguma fonte, ela só não aparece. Com `obrigacoes`, também as parcelas em
+ * aberto e os documentos sem conta com vencimento/emissão até 30 dias fora
+ * de [de, ate] (fase A).
  */
-async function carregar(api, { de = null, ate = null, incluir = [] } = {}) {
+async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes = false } = {}) {
   const extras = new Set(incluir);
   const quer = (tipo, id, ...datas) => extras.has(chaveDe(tipo, id)) || datas.some(d => naJanela(c.dia(d), de, ate));
-  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas] = await Promise.all([
+  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos] = await Promise.all([
     lerSePuder(api, 'recebimentos'), lerSePuder(api, 'reembolsos'),
     lerSePuder(api, 'financeiro_pagamentos'), lerSePuder(api, 'financeiro_fechamentos'),
     b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'titulos_pagar').then(x => x || []),
-    b.lerOpcional(api, 'titulo_pagar_parcelas').then(x => x || [])
+    b.lerOpcional(api, 'titulo_pagar_parcelas').then(x => x || []),
+    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'documentos_recebidos').then(x => x || []) : Promise.resolve([])
   ]);
   const recs = recebimentos.filter(r => r && quer('recebimento', r.id, r.data_recebimento, r.data_credito));
   const reems = reembolsos.filter(r => r && r.data_pagamento && quer('reembolso', r.id, r.data_pagamento));
   const fins = finPags.filter(p => p && quer('financeiro_pagamento', p.id, p.data_pagamento));
   const tits = titPags.filter(p => p && quer('titulo_pagamento', p.id, p.data_pagamento));
 
+  // As obrigações: só com vencimento/emissão perto do período (ou pedidas pela chave).
+  const largo = {
+    de: de ? somarDias(de, -JANELA_OBRIGACAO) : null, ate: ate ? somarDias(ate, JANELA_OBRIGACAO) : null
+  };
+  const querObrigacao = (tipo, id, data) => extras.has(chaveDe(tipo, id)) || (obrigacoes && naJanela(c.dia(data), largo.de, largo.ate));
+  const titulos = new Map(titulosLidos.map(t => [String(t.id), t]));
+  const pagas = new Set(titPags.filter(p => p && !p.estornado_em).map(p => String(p.parcela_id)));
+  const abertas = parcelasLidas.filter(p => p && !pagas.has(String(p.id)) && titulos.get(String(p.titulo_id))?.status !== 'cancelado'
+    && titulos.has(String(p.titulo_id)) && querObrigacao('parcela', p.id, p.vencimento));
+  const contasPorDocumento = new Map();
+  for (const t of titulosLidos) {
+    if (t?.documento_recebido_id === null || t?.documento_recebido_id === undefined) continue;
+    const k = String(t.documento_recebido_id);
+    contasPorDocumento.set(k, [...(contasPorDocumento.get(k) || []), t]);
+  }
+  const docs = docsLidos.filter(d => documentoSemConta(d, contasPorDocumento) && querObrigacao('documento', d.id, d.data_emissao));
+
   const pedidos = await porId(api, 'pedidos', [...recs, ...reems].map(r => r.pedido_id));
   const clientes = await porId(api, 'clientes', [...pedidos.values()].map(p => p.cliente_id));
-  const titulos = new Map(titulosLidos.map(t => [String(t.id), t]));
-  const contatos = await porId(api, 'contatos', tits.map(p => titulos.get(String(p.titulo_id))?.contato_id));
+  const contatos = await porId(api, 'contatos', [
+    ...tits.map(p => titulos.get(String(p.titulo_id))?.contato_id),
+    ...abertas.map(p => titulos.get(String(p.titulo_id))?.contato_id),
+    ...docs.map(d => d.contato_id)
+  ]);
   const parcelas = new Map(parcelasLidas.map(p => [String(p.id), p]));
   const fechs = new Map(fechamentos.map(f => [String(f.id), f]));
+  const quantas = id => parcelasLidas.filter(x => String(x.titulo_id) === String(id)).length;
+  const contatoDe = id => (id === null || id === undefined ? null : contatos.get(String(id)) || null);
   return [
     ...recs.map(r => deRecebimento(r, { pedidos, clientes })),
     ...tits.map(p => deTituloPagamento(p, { titulos, contatos, parcelas })),
     ...fins.map(p => deFinanceiroPagamento(p, { fechamentos: fechs })),
-    ...reems.map(r => deReembolso(r, { pedidos, clientes }))
+    ...reems.map(r => deReembolso(r, { pedidos, clientes })),
+    ...abertas.map(p => {
+      const t = titulos.get(String(p.titulo_id));
+      return deParcela(p, { titulo: t, contato: contatoDe(t.contato_id), de: quantas(t.id) });
+    }),
+    ...docs.map(d => deDocumento(d, { contato: contatoDe(d.contato_id) }))
   ].filter(l => l.data).sort((x, y) => x.data.localeCompare(y.data) || x.chave.localeCompare(y.chave));
+}
+
+/** A data + n dias ('YYYY-MM-DD'). */
+function somarDias(iso, n) {
+  const [a, m, d] = String(iso).split('-').map(Number);
+  const t = new Date(Date.UTC(a, m - 1, d + n));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
 }
 
 /** Quanto de cada liquidação ainda não está ligado a um lançamento (vínculos valendo). Pura. */
@@ -161,6 +262,7 @@ function restantes(liquidacoes, vinculos) {
 }
 
 module.exports = {
-  TIPOS, FORA_DO_BANCO, DATA_INCERTA, chaveDe,
-  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, carregar, restantes
+  TIPOS, FORA_DO_BANCO, DATA_INCERTA, JANELA_OBRIGACAO, chaveDe,
+  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, valorAPagar, documentoSemConta,
+  carregar, restantes
 };

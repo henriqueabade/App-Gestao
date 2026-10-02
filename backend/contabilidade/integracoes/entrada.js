@@ -126,6 +126,10 @@ async function aplicarEvento(api, indice, { origem, tipo, evento }) {
 /** O índice origem|chave → linha. */
 const indexar = linhas => new Map(c.lista(linhas).filter(Boolean).map(l => [chaveDe(l.origem, l.chave), l]));
 
+/** As manifestações que dizem "não é nossa" (22b: a nota fica pendente até ser ignorada à mão). */
+const RECUSAS = ['desconhecimento', 'nao_realizada'];
+const ROTULO_RECUSA = { desconhecimento: 'desconhecimento', nao_realizada: 'operação não realizada' };
+
 /** Foi guardada como histórico (uma "ignorada" que é da empresa, de antes do início)? Pura. */
 const ehHistorico = l => l?.status === 'ignorada' && String(l.ignorado_motivo || '').startsWith(PREFIXO_HISTORICO);
 
@@ -141,8 +145,10 @@ function linhaPublica(l, { primeira = null } = {}) {
   const nfe = l.tipo === 'nfe';
   const manifestou = ['ciencia', 'confirmacao'].includes(l.manifestacao);
   const decidir = aberta && !cancelada && faseDaNota(l.data_emissao, primeira) === 'anterior';
+  const recusada = aberta && RECUSAS.includes(l.manifestacao);
   return {
     decidir, decidir_texto: decidir ? `De ${c.rotuloCompetencia(c.somarMeses(primeira, -1))}, antes do início da Contabilidade (${c.rotuloCompetencia(primeira)}): registre ou guarde como histórico.` : null,
+    recusada, recusada_texto: recusada ? `Manifestada na SEFAZ como ${ROTULO_RECUSA[l.manifestacao]}: continua pendente até alguém ignorar, com o motivo.` : null,
     historico: ehHistorico(l),
     id: l.id, origem: l.origem, origem_rotulo: ORIGENS[l.origem] || l.origem, tipo: l.tipo, tipo_rotulo: nfe ? 'NF-e' : 'NFS-e',
     chave: l.chave, nsu: l.nsu || null, numero: l.numero || null, serie: l.serie || null, municipio: l.municipio || null,
@@ -292,6 +298,6 @@ function pendenciasDoMes(linhas, competencia) {
 }
 
 module.exports = {
-  TABELA, ORIGENS, STATUS, VISOES, PREFIXO_HISTORICO, lerTodas, chaveDe, mesclar, gravar, aplicarEvento, indexar, faseDaNota, ehHistorico,
+  TABELA, ORIGENS, STATUS, VISOES, PREFIXO_HISTORICO, RECUSAS, lerTodas, chaveDe, mesclar, gravar, aplicarEvento, indexar, faseDaNota, ehHistorico,
   linhaPublica, listar, lerLinha, entradaDaNfse, registrar, ignorar, guardarComoHistorico, restaurar, pendenciasDoMes
 };
