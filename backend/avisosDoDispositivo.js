@@ -21,8 +21,13 @@ const LIMITE = 30;
 const ABERTOS = ["a_fazer", "em_andamento", "aguardando"];
 const TIPOS_DE_LEMBRETE = new Set(["tarefa_lembrete", "tarefa_atrasada"]);
 const RE_CHAVE = /^(lembrete|atraso):(\d{1,12}):[0-9: -]{0,30}$/;
-// O "último uso" do computador é regravado no máximo a cada 10 minutos.
+// A lista de computadores, sem a tabela, é procurada de novo a cada 10 minutos.
 const TOQUE_MS = 10 * 60 * 1000;
+// O "último uso" do computador é regravado no máximo a cada 1 minuto: é o
+// sinal de que o programa está rodando (mesmo só perto do relógio), e
+// Usuários mostra a pessoa "Ausente" enquanto ele chega; parou de chegar há
+// alguns minutos = programa fechado, "Offline" (decisão do dono, 02/10/2026).
+const SINAL_MS = 60 * 1000;
 
 const NEGADO = { status: 401, corpo: { error: "Este aparelho não tem mais os avisos ligados: entre de novo no programa." } };
 const INATIVO = { status: 403, corpo: { error: "Usuário inativo: os avisos foram desligados." } };
@@ -112,7 +117,7 @@ function criarAvisosDoDispositivo({ pool, assinar, verificar, agora = () => new 
     );
     const c = rows[0];
     if (!c || c.cancelado_em) return false;
-    if (!c.ultimo_uso_em || agora().getTime() - new Date(c.ultimo_uso_em).getTime() > TOQUE_MS) {
+    if (!c.ultimo_uso_em || agora().getTime() - new Date(c.ultimo_uso_em).getTime() > SINAL_MS) {
       await pool.query("UPDATE avisos_dispositivos SET ultimo_uso_em = now() WHERE id = $1", [c.id]);
     }
     return true;
@@ -216,4 +221,4 @@ function rota(acao) {
   };
 }
 
-module.exports = { criarAvisosDoDispositivo, rota, ESCOPO, VALIDADE_DIAS, RENOVAR_COM_DIAS, LIMITE };
+module.exports = { criarAvisosDoDispositivo, rota, ESCOPO, VALIDADE_DIAS, RENOVAR_COM_DIAS, LIMITE, SINAL_MS };

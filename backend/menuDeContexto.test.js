@@ -49,11 +49,11 @@ test('corretor em português quando existe; liga o menu uma vez por janela; main
   assert.deepStrictEqual(escolhidos, [['pt-BR']]);
   assert.doesNotThrow(() => M.configurarCorretor({ availableSpellCheckerLanguages: ['en-US'], setSpellCheckerLanguages: () => { throw new Error('não deveria'); } }));
 
-  let ouvintes = 0;
-  const win = { webContents: { on: () => { ouvintes += 1; } } };
+  const ouvintes = [];
+  const win = { webContents: { on: evento => { ouvintes.push(evento); } } };
   M.ligar(win);
   M.ligar(win);
-  assert.strictEqual(ouvintes, 1);
+  assert.deepStrictEqual(ouvintes, ['dom-ready', 'context-menu'], 'uma vez só por janela');
 
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   const inicio = main.indexOf("app.on('browser-window-created'");
@@ -61,4 +61,60 @@ test('corretor em português quando existe; liga o menu uma vez por janela; main
   const sandbox = main.indexOf('if (webPreferences.sandbox) {');
   assert.ok(inicio > 0 && ligacao > inicio && ligacao < sandbox, 'antes do retorno das janelas com sandbox (login e menu são sandbox)');
   assert.ok(main.includes("configurarCorretor(require('electron').session.defaultSession)"));
+});
+
+test('texto já salvo (02/10/2026): o clique que dá o foco ao campo é refeito até a conferência marcar a palavra', () => {
+  const campo = { isEditable: true, misspelledWord: '' };
+  assert.strictEqual(M.precisaReler(campo, { tentativa: 0, focoNovo: true }), true, '1º clique trocou o campo');
+  assert.strictEqual(M.precisaReler(campo, { tentativa: 0, focoNovo: false }), false, 'já estava digitando nele: menu na hora');
+  assert.strictEqual(M.precisaReler(campo, { tentativa: 1 }), true);
+  assert.strictEqual(M.precisaReler(campo, { tentativa: M.TENTATIVAS }), false, 'no máximo 3 vezes');
+  assert.strictEqual(M.precisaReler({ ...campo, misspelledWord: 'mêses' }, { tentativa: 0, focoNovo: true }), false, 'veio marcada: menu já');
+  assert.strictEqual(M.precisaReler({ isEditable: false }, { tentativa: 0, focoNovo: true }), false, 'fora de campo, nunca');
+});
+
+test('ligar: refaz o clique na mesma posição e só abre o menu quando a palavra vem marcada (ou acabam as tentativas)', async () => {
+  const idElectron = require.resolve('electron');
+  const antes = require.cache[idElectron];
+  const abertos = [];
+  require.cache[idElectron] = { id: idElectron, filename: idElectron, loaded: true, exports: {
+    Menu: { buildFromTemplate: modelo => ({ popup: () => abertos.push(modelo.map(i => i.label)) }) }
+  } };
+  try {
+    const ouvintes = {};
+    const cliques = [];
+    let agora = 1000;
+    const pendentes = [];
+    const wc = {
+      on: (evento, fn) => { ouvintes[evento] = fn; },
+      executeJavaScript: async () => true, // o clique trocou o campo ativo
+      sendInputEvent: e => cliques.push(`${e.type}@${e.x},${e.y}`),
+      isDestroyed: () => false,
+      replaceMisspelling: () => {}, session: { addWordToSpellCheckerDictionary: () => {} }
+    };
+    M.ligar({ webContents: wc }, { relogio: () => agora, aguardar: (fn, ms) => pendentes.push({ fn, ms }) });
+    await ouvintes['context-menu']({}, { isEditable: true, misspelledWord: '', x: 50, y: 20, editFlags: {} });
+    assert.strictEqual(abertos.length, 0, 'ainda não abriu');
+    assert.strictEqual(pendentes[0].ms, M.RELER_MS);
+    pendentes.shift().fn();
+    assert.deepStrictEqual(cliques, ['mouseDown@50,20', 'mouseUp@50,20']);
+    agora += 120;
+    await ouvintes['context-menu']({}, { isEditable: true, misspelledWord: 'mêses', dictionarySuggestions: ['meses'], x: 50, y: 20, editFlags: {} });
+    assert.strictEqual(abertos.length, 1);
+    assert.strictEqual(abertos[0][0], 'meses', 'a sugestão em cima');
+
+    // Palavra certa: tenta 3 vezes e abre o menu normal.
+    abertos.length = 0;
+    agora += 5000;
+    await ouvintes['context-menu']({}, { isEditable: true, misspelledWord: '', x: 9, y: 9, editFlags: {} });
+    for (let i = 0; i < M.TENTATIVAS; i++) {
+      pendentes.shift().fn();
+      agora += 120;
+      await ouvintes['context-menu']({}, { isEditable: true, misspelledWord: '', x: 9, y: 9, editFlags: {} });
+    }
+    assert.strictEqual(abertos.length, 1);
+    assert.strictEqual(abertos[0][0], 'Desfazer');
+  } finally {
+    if (antes) require.cache[idElectron] = antes; else delete require.cache[idElectron];
+  }
 });

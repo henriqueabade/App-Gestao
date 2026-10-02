@@ -299,6 +299,34 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * Presença (decisão do dono, 02/10/2026): Online = sessão aberta no programa;
+ * Ausente = o programa está rodando, só perto do relógio (o computador
+ * manda sinal a cada 1 minuto pelos avisos do Windows — avisos_dispositivos,
+ * ultimo_uso_em); Offline = programa fechado de verdade (sem sinal há mais de
+ * SINAL_VALE_MS). Junta a cada usuário `ultimo_sinal_em` (o sinal mais novo
+ * dos computadores não cancelados dele) e `programa_rodando`. Pura.
+ */
+const SINAL_VALE_MS = 3 * 60 * 1000;
+function comSinalDoPrograma(usuarios = [], computadores = [], agora = Date.now()) {
+  const ultimo = new Map();
+  for (const c of Array.isArray(computadores) ? computadores : []) {
+    if (!c || c.cancelado_em || !c.ultimo_uso_em) continue;
+    const quando = new Date(c.ultimo_uso_em).getTime();
+    if (!Number.isFinite(quando)) continue;
+    const k = String(c.usuario_id);
+    if (!ultimo.has(k) || quando > ultimo.get(k)) ultimo.set(k, quando);
+  }
+  return (Array.isArray(usuarios) ? usuarios : []).map(u => {
+    const quando = ultimo.get(String(u?.id));
+    return {
+      ...u,
+      ultimo_sinal_em: quando ? new Date(quando).toISOString() : null,
+      programa_rodando: Boolean(quando) && agora - quando <= SINAL_VALE_MS
+    };
+  });
+}
+
+/**
  * GET /usuarios/lista
  * Rota usada na TELA DE USUÁRIOS.
  * Faz um SELECT super leve e NÃO mexe em avatar nem histórico pesado.
@@ -316,7 +344,9 @@ router.get('/lista', async (req, res) => {
     // Sem estas colunas no select ele só conseguia montar meia frase.
     const camposAlteracao = 'ultima_alteracao_em,local_ultima_alteracao,especificacao_ultima_alteracao';
 
-    const query = { order: 'nome', ...req.query };
+    // ?presenca=1 (a tela de Usuários): junta o sinal do programa de cada um.
+    const { presenca, ...semPresenca } = req.query || {};
+    const query = { order: 'nome', ...semPresenca };
 
     // Degradação em etapas. O select é tudo-ou-nada no upstream: uma coluna que
     // ainda não exista derruba a consulta inteira. Antes a única alternativa era
@@ -357,6 +387,11 @@ router.get('/lista', async (req, res) => {
       ? usuarios.map(user => normalizeAvatar(user))
       : [];
 
+    if (presenca) {
+      const computadores = await api.get('/api/avisos_dispositivos').catch(() => null);
+      res.status(200).json(comSinalDoPrograma(payload, computadores));
+      return;
+    }
     res.status(200).json(payload);
   } catch (err) {
     console.error('Erro ao listar usuários (rota /lista):', err);
@@ -1274,4 +1309,6 @@ module.exports = router;
 module.exports.normalizeAvatar = normalizeAvatar;
 module.exports.mudancasDaConta = mudancasDaConta;
 module.exports.montarComputadores = montarComputadores;
+module.exports.comSinalDoPrograma = comSinalDoPrograma;
+module.exports.SINAL_VALE_MS = SINAL_VALE_MS;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;

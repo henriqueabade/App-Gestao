@@ -478,6 +478,18 @@
   /** "2026-09" → "09/2026". */
   const competenciaLegivel = c => (/^\d{4}-\d{2}$/.test(String(c || '')) ? `${c.slice(5, 7)}/${c.slice(0, 4)}` : String(c || ''));
 
+  /**
+   * A ação que a tarefa cobra, em texto curto (a etiqueta da lista e o card do
+   * calendário — pedido do dono, 02/10/2026): "Fechar a competência de
+   * comissões · 09/2026", "Despachar o pedido (Enviado) — PED-40". Pura.
+   */
+  function textoDaAcao(t) {
+    const a = t?.acao;
+    if (!a?.chave && !a?.rotulo) return '';
+    if (a.registroTipo === 'competencia') return `${a.rotulo} · ${competenciaLegivel(a.registro)}`;
+    return a.registroRotulo ? `${a.rotulo} — ${a.registroRotulo}` : String(a.rotulo || '');
+  }
+
   /** "Fazer agora": abre o registro no módulo onde a ação acontece. */
   async function abrirAcao(acao) {
     if (!acao) return;
@@ -612,6 +624,14 @@
     caixa.trocarResponsavel = async id => {
       try {
         catalogo = await catalogoDeAcoes(id);
+        // A API ainda não grava a ação (02/10/2026): avisa em vez de deixar
+        // escolher uma ação que sumiria ao salvar.
+        if (catalogo?.sql_pendente) {
+          editor.hidden = false;
+          editor.replaceChildren(h('p', { class: 'tui-dica tui-dica--aviso' }, icone('fa-triangle-exclamation'), ` ${catalogo.mensagem || 'Rode sql/tarefas_acoes.sql e reinicie a API do banco para ligar ações do sistema.'}`));
+          pintarResumo();
+          return;
+        }
         montarEditor();
         pintarResumo();
       } catch (err) {
@@ -1219,6 +1239,14 @@
           abrirEditor({ preset: presetDaCopia(fonte, { euId: eu.id, podeAtribuir: ctx.pode?.atribuir }) });
         } } }, icone('fa-copy'), ' Copiar'));
       }
+      // Cancelar (02/10/2026): para quem edita, em tarefa aberta. Não apaga.
+      if (original && !['concluida', 'cancelada'].includes(original.status) && pode.editar) {
+        esquerda.append(h('button', { type: 'button', class: 'btn-warning tui-botao', title: 'Cancela sem apagar: ela fica em Tarefas › Canceladas', on: { click: async () => {
+          if (alterado && !somenteLeitura) { const ok = await gravar({ fecharDepois: false }); if (!ok) return; }
+          d.fechar();
+          cancelarTarefa(original);
+        } } }, icone('fa-ban'), ' Cancelar tarefa'));
+      }
       if (original && ['concluida', 'cancelada'].includes(original.status) && pode.concluir) {
         esquerda.append(h('button', { type: 'button', class: 'btn-warning tui-botao', on: { click: async () => {
           try { await api(`/${original.id}/reabrir`, { method: 'POST', corpo: {} }); avisar('Tarefa reaberta.', 'success'); gravou = true; mudou({ id: original.id }); d.fechar(); abrirEditor({ id: original.id }); } catch (err) { avisar(err.message, 'error'); }
@@ -1420,6 +1448,42 @@
     });
   }
 
+  /**
+   * Cancelar (decisão do dono, 02/10/2026): diferente de excluir — a tarefa
+   * fica guardada como "Cancelada" (Tarefas › Canceladas) e pode ser
+   * reaberta. O motivo é opcional; vai no histórico e no aviso de quem tem a
+   * tarefa. Devolve uma promessa com true se cancelou.
+   */
+  function cancelarTarefa(t) {
+    return new Promise(resolver => {
+      let feito = false;
+      const d = dialogo({ classe: 'tui-dialogo--concluir', rotulo: 'Cancelar tarefa', aoFechar: () => resolver(feito) });
+      const motivo = h('textarea', { class: 'tui-campo', rows: 3, maxLength: 600, placeholder: 'Por que a tarefa foi cancelada? (opcional)', attrs: { 'aria-label': 'Motivo do cancelamento' } });
+      const botaoCancelar = h('button', { type: 'button', class: 'btn-warning tui-botao' }, icone('fa-ban'), ' Cancelar tarefa');
+      const voltar = h('button', { type: 'button', class: 'btn-neutral tui-botao', text: 'Voltar', on: { click: () => d.fechar() } });
+      botaoCancelar.addEventListener('click', async () => {
+        try {
+          await api(`/${t.id}/cancelar`, { method: 'POST', corpo: { motivo: motivo.value.trim() || null } });
+          feito = true;
+          avisar('Tarefa cancelada. Ela fica em Tarefas › Canceladas.', 'success');
+          mudou({ id: t.id });
+          d.fechar();
+        } catch (err) { avisar(err.message, 'error'); }
+      });
+      d.append(h('div', { class: 'tui-cartao tui-cartao--estreito' },
+        h('header', { class: 'tui-concluir__topo' }, h('span', { class: 'tui-concluir__icone tui-concluir__icone--cancelar' }, icone('fa-ban')), h('div', {}, h('h3', { class: 'tui-concluir__titulo', text: 'Cancelar tarefa' }), h('p', { class: 'tui-concluir__sub', text: t.titulo }))),
+        h('div', { class: 'tui-concluir__corpo' },
+          h('span', { class: 'tui-rotulo', text: 'Motivo' }), motivo,
+          h('p', { class: 'tui-dica' }, icone('fa-circle-info'), ' Cancelar não apaga: a tarefa fica em Tarefas › Canceladas e pode ser reaberta. Quem tem a tarefa recebe o aviso com o motivo.'),
+          t.acao ? h('p', { class: 'tui-dica tui-dica--aviso' }, icone('fa-bolt'), ` Cancelada, ela não conclui mais quando "${t.acao.rotulo}" for feito no módulo.`) : null),
+        h('footer', { class: 'tui-rodape' }, h('div', { class: 'tui-rodape__lado' }), h('div', { class: 'tui-rodape__lado' }, voltar, botaoCancelar))
+      ));
+      d.addEventListener('cancel', e => { e.preventDefault(); d.fechar(); });
+      d.showModal();
+      motivo.focus();
+    });
+  }
+
   async function responderConvite(id, resposta) {
     try {
       await api(`/${id}/convite`, { method: 'POST', corpo: { resposta } });
@@ -1508,17 +1572,18 @@
     const agora = agoraEmBrasilia();
     const aberta = ['a_fazer', 'em_andamento', 'aguardando'].includes(t.status);
     const atrasadaAgora = aberta && atrasada(t, agora);
+    const cancelada = t.status === 'cancelada';
     const el = h('article', {
-      class: `tui-tarefa${atrasadaAgora ? ' tui-tarefa--atrasada' : ''}${!aberta ? ' tui-tarefa--concluida' : ''}${convite ? ' tui-tarefa--convite' : ''}${t.origem === 'proximo_passo' ? ' tui-tarefa--passo' : ''}`,
+      class: `tui-tarefa${atrasadaAgora ? ' tui-tarefa--atrasada' : ''}${!aberta ? ' tui-tarefa--concluida' : ''}${cancelada ? ' tui-tarefa--cancelada' : ''}${convite ? ' tui-tarefa--convite' : ''}${t.origem === 'proximo_passo' ? ' tui-tarefa--passo' : ''}`,
       attrs: { tabindex: '0', 'aria-label': t.titulo }, dataset: { tarefaId: t.id }
     });
     el.style.setProperty('--tui-prioridade-cor', PRIORIDADES[t.prioridade]?.cor || '#8aa7f3');
 
     const check = h('button', {
       type: 'button', class: 'tui-tarefa__check',
-      title: !aberta ? 'Concluída — clique para abrir' : t.origem === 'proximo_passo' ? 'Concluir o passo (abre o "Concluir passo planejado")' : 'Concluir (Shift+clique conclui direto)',
-      attrs: { 'aria-label': aberta ? 'Concluir' : 'Concluída' }
-    }, icone('fa-check'));
+      title: cancelada ? 'Cancelada — clique para abrir' : !aberta ? 'Concluída — clique para abrir' : t.origem === 'proximo_passo' ? 'Concluir o passo (abre o "Concluir passo planejado")' : 'Concluir (Shift+clique conclui direto)',
+      attrs: { 'aria-label': cancelada ? 'Cancelada' : aberta ? 'Concluir' : 'Concluída' }
+    }, icone(cancelada ? 'fa-ban' : 'fa-check'));
     check.addEventListener('click', e => {
       e.stopPropagation();
       if (convite) return;
@@ -1528,6 +1593,7 @@
     });
 
     const meta = h('div', { class: 'tui-tarefa__meta' });
+    if (cancelada) meta.append(chip('Cancelada', { icone: 'fa-ban', classe: 'tui-chip--perigo', titulo: 'Cancelada: não apagada — dá para reabrir pela tarefa' }));
     // O próximo passo combinado na prospecção tem selo próprio: é o compromisso
     // do funil, e concluí-lo abre o "Concluir passo planejado".
     if (t.origem === 'proximo_passo') meta.append(chip('Próximo passo', { icone: 'fa-forward-step', classe: 'tui-chip--passo', titulo: 'Próximo passo combinado na prospecção — concluir abre o "Concluir passo planejado"' }));
@@ -1647,7 +1713,7 @@
 
   window.TarefasUI = {
     // telas
-    abrirEditor, copiarTarefa, concluir, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha,
+    abrirEditor, copiarTarefa, concluir, cancelarTarefa, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha, textoDaAcao,
     carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo,
     limparContexto: () => { contexto = null; },
     // puras

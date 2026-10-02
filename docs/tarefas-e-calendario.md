@@ -161,6 +161,39 @@ espera a resposta sair com sucesso e só então procura as tarefas
 Produtos e Matéria-prima ficaram de fora: essas telas gravam direto na API,
 sem passar pelo servidor local.
 
+**A ação que sumia ao salvar (print do dono, 02/10/2026).** A API remota lê
+as colunas de cada tabela quando SOBE e descarta, sem avisar, o campo que não
+conhece. Sem `sql/tarefas_acoes.sql` no banco, ou sem reiniciar a API depois
+dele, a tarefa salvava "com a ação" e voltava sem ela. Agora o servidor
+confere em `/api/tabelas` se a API tem `acao_chave`, `acao_registro` e
+`acao_rotulo` (`temColunasDaAcao`). Se não tiver:
+- o editor avisa no lugar da escolha: "rode sql/tarefas_acoes.sql e reinicie
+  a API do banco";
+- criar ou editar com ação é recusado (409), em vez de salvar sem ela.
+
+O arquivo `sql/tarefas_acoes.sql` foi refeito igual ao original (pode rodar
+de novo).
+
+**A ação na tela:**
+- no editor, o quadro dourado com a ação e o "Fazer agora";
+- na linha da tarefa (módulo Tarefas, agenda, ficha), a etiqueta ⚡;
+- no **card do calendário** (02/10): o ⚡ no card do mês e da semana/dia; com
+  1 h ou mais, também a linha "⚡ Fechar a competência de comissões ·
+  09/2026"; o texto inteiro na dica (`TarefasUI.textoDaAcao`).
+
+### Cancelar tarefa (02/10/2026)
+
+**Cancelar tarefa** (botão laranja no editor, para quem edita, tarefa
+aberta), com motivo opcional. Não apaga:
+- a tarefa fica "Cancelada", em **Tarefas › Canceladas** (últimos 30 dias),
+  com o 🚫, e pode ser reaberta;
+- deixa de concluir pela ação do módulo;
+- o motivo vai no histórico (da tarefa e da ficha) e no aviso "Tarefa
+  cancelada" de quem tem a tarefa.
+
+Rota `POST /api/tarefas/:id/cancelar`. Excluir continua igual: tira a tarefa
+das listas, guardando o registro.
+
 ## 4. Sino, convites e lembretes
 
 - **Convite**: quem é convidado recebe no sino, com **Aceitar / Recusar** ali mesmo. Se apagar o aviso, o convite continua em **Tarefas › Convites**. Recusar avisa quem convidou.

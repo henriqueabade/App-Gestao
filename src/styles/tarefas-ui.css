@@ -305,6 +305,7 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
     width: 3rem; height: 3rem; border-radius: 999px; display: grid; place-items: center; flex-shrink: 0;
     font-size: 1.2rem; color: #052e16; background: var(--tui-sucesso); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0.15);
 }
+.tui-concluir__icone--cancelar { color: #fff; background: #d97706; box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.18); }
 .tui-concluir__titulo { margin: 0; font-size: 1.1rem; font-weight: 700; color: #fff; }
 .tui-concluir__sub { margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--tui-texto-suave); overflow: hidden; text-overflow: ellipsis; }
 .tui-concluir__corpo { padding: 0.8rem 1.4rem 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; overflow-y: auto; }
@@ -373,6 +374,8 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
 }
 .tui-tarefa__check:hover { color: var(--tui-prioridade-cor); background: color-mix(in srgb, var(--tui-prioridade-cor) 25%, transparent); }
 .tui-tarefa--concluida .tui-tarefa__check { color: #052e16; background: var(--tui-sucesso); border-color: var(--tui-sucesso); }
+/* Cancelada (02/10/2026): guardada, não feita — o 🚫 vermelho no lugar do ✓ verde. */
+.tui-tarefa--cancelada .tui-tarefa__check { color: #fff; background: var(--tui-perigo); border-color: var(--tui-perigo); }
 .tui-tarefa__corpo { min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .tui-tarefa__titulo { font-size: 0.92rem; font-weight: 600; color: var(--tui-texto-forte); overflow-wrap: anywhere; }
 .tui-tarefa__descricao { font-size: 0.78rem; color: var(--tui-texto-suave); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }

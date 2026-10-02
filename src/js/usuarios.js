@@ -588,6 +588,23 @@ function resolverStatusOnline(usuario) {
     return estaOnline(ultimaAtividade);
 }
 
+/**
+ * A situação na tabela (decisão do dono, 02/10/2026):
+ *   online   sessão aberta no programa (entrada depois da saída) — verde;
+ *   ausente  sem sessão, mas o programa está rodando perto do relógio (o
+ *            computador manda sinal a cada minuto — `programa_rodando`) — amarelo;
+ *   offline  programa fechado de verdade — vermelho.
+ */
+const PRESENCA = {
+    online: { classe: 'online', rotulo: 'Online' },
+    ausente: { classe: 'ausente', rotulo: 'Ausente' },
+    offline: { classe: 'offline', rotulo: 'Offline' }
+};
+function resolverPresenca(usuario) {
+    if (resolverStatusOnline(usuario)) return 'online';
+    return usuario && usuario.programa_rodando === true ? 'ausente' : 'offline';
+}
+
 function fecharPopoversUsuarios() {
     if (!usuarioPopoverAtual) return;
     const { popup, trigger, cleanup } = usuarioPopoverAtual;
@@ -948,9 +965,9 @@ function renderUsuarios(lista) {
         const iniciaisSeguro = escapeHtml(iniciais);
         const email = escapeHtml(u.email);
         const perfil = escapeHtml(u.perfil || '');
-        const online = resolverStatusOnline(u);
-        const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
-        const sessaoRotulo = online ? 'Online' : 'Offline';
+        const presenca = PRESENCA[resolverPresenca(u)];
+        const sessaoClasse = `usuario-sessao-badge ${presenca.classe}`;
+        const sessaoRotulo = presenca.rotulo;
         const avatarUrl = obterAvatarUrl(u);
         const avatarAltTexto = nomeOriginal ? `Avatar de ${nomeOriginal}` : 'Avatar do usuário';
         const avatarAlt = escapeAttribute(avatarAltTexto);
@@ -1513,7 +1530,8 @@ async function carregarUsuarios() {
 
     try {
         const t1 = performance.now();
-        const resp = await fetchApi('/api/usuarios/lista');
+        // presenca=1: o sinal do programa de cada um (Ausente = rodando só perto do relógio).
+        const resp = await fetchApi('/api/usuarios/lista?presenca=1');
         const t2 = performance.now();
 
         console.log("⏱ Tempo fetchApi →", (t2 - t1).toFixed(2), "ms");

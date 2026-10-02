@@ -296,7 +296,9 @@ router.get('/', precisa('tarefas.view'), async (req, res) => {
       .filter(deQuem)
       .filter(t => !req.query.cliente_id || mesmoId(t.cliente_id, req.query.cliente_id))
       .filter(t => !req.query.prospeccao_id || mesmoId(t.prospeccao_id, req.query.prospeccao_id))
-      .filter(t => R.ABERTOS.has(t.status) || (req.query.concluidas !== '0' && t.concluida_em && String(t.concluida_em).slice(0, 10) >= limiteConcluidas) || (t.status === 'cancelada' && req.query.canceladas === '1'))
+      // As canceladas (?canceladas=1, Tarefas › Canceladas) na mesma janela das concluídas.
+      .filter(t => R.ABERTOS.has(t.status) || (req.query.concluidas !== '0' && t.concluida_em && String(t.concluida_em).slice(0, 10) >= limiteConcluidas)
+        || (t.status === 'cancelada' && req.query.canceladas === '1' && String(t.atualizado_em || t.criado_em || '').slice(0, 10) >= limiteConcluidas))
       .sort(R.compararTarefas);
     res.json({ tarefas: await paraTela(ctx, tarefas, base.participantes), hoje });
   } catch (err) {
@@ -450,15 +452,49 @@ async function permissoesDoUsuario(api, usuarioId) {
 }
 
 /**
+ * As colunas da ação existem para a API? A API remota lê as colunas de cada
+ * tabela quando SOBE e descarta, sem avisar, o campo que não conhece: sem
+ * sql/tarefas_acoes.sql no banco (ou sem reiniciar a API depois dele), a
+ * tarefa salvava "com a ação" e voltava sem ela (print do dono, 02/10/2026).
+ * Confere em /api/tabelas (o que a API carregou); achadas, ficam achadas.
+ * Sem /api/tabelas (banco DEV, que recusa coluna desconhecida com erro), não
+ * barra.
+ */
+const COLUNAS_DA_ACAO = ['acao_chave', 'acao_registro', 'acao_rotulo'];
+const SEM_COLUNAS_DA_ACAO = 'A ação no sistema não pode ser gravada: a API do banco ainda não tem as colunas dela. Rode sql/tarefas_acoes.sql e reinicie a API do banco.';
+let colunasDaAcao = { ok: null, em: 0 };
+
+async function temColunasDaAcao(api, agora = Date.now()) {
+  if (colunasDaAcao.ok === true) return true;
+  if (colunasDaAcao.ok === false && agora - colunasDaAcao.em < 60 * 1000) return false;
+  let ok = true;
+  try {
+    const r = await api.get('/api/tabelas');
+    const tarefas = (Array.isArray(r?.tabelas) ? r.tabelas : []).find(x => x?.tabela === 'tarefas');
+    if (tarefas) ok = COLUNAS_DA_ACAO.every(c => lista(tarefas.colunas).includes(c));
+  } catch (_) {
+    return true; // sem a lista (DEV): o próprio banco recusa o que não tem
+  }
+  colunasDaAcao = { ok, em: agora };
+  return ok;
+}
+
+async function exigirColunasDaAcao(api) {
+  if (!(await temColunasDaAcao(api))) throw erro(409, SEM_COLUNAS_DA_ACAO);
+}
+
+/**
  * O catálogo das ações, marcando o que o RESPONSÁVEL pode fazer — é ele quem
- * vai fazer (?responsavel=id; sem ele, quem está usando).
+ * vai fazer (?responsavel=id; sem ele, quem está usando). `sql_pendente`: a
+ * API ainda não grava a ação (a tela avisa em vez de perder).
  */
 router.get('/acoes', precisa('tarefas.view'), async (req, res) => {
   try {
     const ctx = req.ctxTarefas;
     const responsavel = Number(req.query.responsavel) || ctx.usuarioId;
     const { pode } = mesmoId(responsavel, ctx.usuarioId) ? { pode: ctx.pode } : await permissoesDoUsuario(ctx.api, responsavel);
-    res.json(acoes.catalogo(pode));
+    const pronto = await temColunasDaAcao(ctx.api);
+    res.json({ ...acoes.catalogo(pode), ...(pronto ? {} : { sql_pendente: true, mensagem: SEM_COLUNAS_DA_ACAO }) });
   } catch (err) {
     responderErro(res, err, 'ações');
   }
@@ -857,6 +893,7 @@ router.post('/', precisa('tarefas.create'), async (req, res) => {
     dados.responsavel_id = R.conferirResponsavel(dados.responsavel_id, { usuarioId: ctx.usuarioId, podeAtribuir: ctx.pode('tarefas.assign') });
     if (dados.status && !R.ABERTOS.has(dados.status)) delete dados.status;
     if (req.body?.acao_chave) {
+      await exigirColunasDaAcao(api);
       Object.assign(dados, acoes.normalizarAcao(req.body));
       await conferirAcao(ctx, dados, { responsavelId: dados.responsavel_id });
     }
@@ -930,6 +967,7 @@ async function editar(req, res, { mover = false } = {}) {
   if ('lista_id' in dados) await conferirLista(api, dados.lista_id, ctx.usuarioId, ctx.gestor);
   if (Object.prototype.hasOwnProperty.call(corpo, 'acao_chave')) {
     if (t.origem === 'proximo_passo' && corpo.acao_chave) throw erro(400, 'O próximo passo da prospecção não cobra ação de outro módulo.');
+    if (corpo.acao_chave) await exigirColunasDaAcao(api);
     Object.assign(dados, acoes.normalizarAcao(corpo));
     await conferirAcao(ctx, dados, { responsavelId: dados.responsavel_id ?? t.responsavel_id, atual: t });
   }
@@ -1134,6 +1172,37 @@ router.post('/:id/reabrir', precisa('tarefas.view'), async (req, res) => {
   }
 });
 
+/**
+ * Cancelar (decisão do dono, 02/10/2026): diferente de excluir — a tarefa
+ * continua nas listas como "Cancelada" (Tarefas › Canceladas), pode ser
+ * reaberta e não conclui mais pela ação do módulo. Para quem pode editar. O
+ * motivo (opcional) vai no histórico da tarefa e da ficha ligada e no aviso de
+ * quem tem a tarefa. Próximo passo da prospecção: o passo sai de lá também.
+ */
+router.post('/:id/cancelar', precisa('tarefas.edit'), async (req, res) => {
+  try {
+    const ctx = req.ctxTarefas;
+    const { api } = ctx;
+    const { t, participantes } = await carregarTarefa(ctx, req.params.id);
+    if (!R.podeMexerNaTarefa(t, { usuarioId: ctx.usuarioId, escopo: ctx.escopo, participantes })) throw erro(403, 'Só quem criou, quem responde e quem participa mexem nesta tarefa.');
+    if (!R.ABERTOS.has(t.status)) throw erro(409, t.status === 'cancelada' ? 'Esta tarefa já está cancelada.' : 'Esta tarefa já foi concluída: para voltar atrás, use "Reabrir".');
+    const motivo = texto(req.body?.motivo).replace(/\s+/g, ' ').slice(0, 600) || null;
+    await api.put(`/api/tarefas/${t.id}`, { status: 'cancelada', atualizado_em: agoraISO() });
+    const eventos = [{ tipo: 'situacao', acao: 'cancelou', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status] || null, valor_novo: 'Cancelada', observacao: motivo }];
+    await S.registrarNaTarefa(api, t.id, eventos, ctx.usuarioId);
+    const nomes = await social.nomesDosUsuarios(api);
+    await S.registrarNaFicha(api, t, S.eventoNaFicha('cancelou', t, { nomes, valor: 'Cancelada', observacao: motivo }), ctx.usuarioId);
+    await refletirNoPasso(ctx, t, { status: 'cancelada' }, participantes);
+    await avisos.avisarDaFicha(api, {
+      origem: 'tarefa', registroId: t.id, registro: t, usuarioId: ctx.usuarioId, nomes,
+      situacao: 'cancelou', nota: motivo ? `Motivo: ${motivo}` : null
+    });
+    res.json({ success: true });
+  } catch (err) {
+    responderErro(res, err, 'cancelar');
+  }
+});
+
 router.delete('/:id', precisa('tarefas.delete'), async (req, res) => {
   try {
     const ctx = req.ctxTarefas;
@@ -1299,3 +1368,6 @@ module.exports = router;
 module.exports.acessoATarefa = acessoATarefa;
 module.exports.montarContexto = montarContexto;
 module.exports.concluirPelaAcao = concluirPelaAcao;
+module.exports.temColunasDaAcao = temColunasDaAcao;
+module.exports.SEM_COLUNAS_DA_ACAO = SEM_COLUNAS_DA_ACAO;
+module.exports.esquecerColunasDaAcao = () => { colunasDaAcao = { ok: null, em: 0 }; };

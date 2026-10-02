@@ -216,6 +216,10 @@ body { background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%
 .cal-evento__titulo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-evento__hora { font-size: 0.64rem; color: rgba(255, 255, 255, 0.75); }
 .cal-evento__sub { font-size: 0.64rem; color: rgba(255, 255, 255, 0.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A ação de outro módulo que a tarefa cobra (02/10/2026): o ⚡ dourado no card. */
+.cal-acao { flex-shrink: 0; display: inline-flex; align-items: center; margin-left: auto; padding-left: 0.2rem; }
+.cal-acao i, .cal-evento__linha .cal-acao i { font-size: 0.62rem; color: var(--color-primary-light, #d4c169); }
+.cal-evento__sub--acao { color: var(--color-primary-light, #d4c169); }
 .cal-evento__alca { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .cal-evento__alca::after { content: ''; position: absolute; left: 50%; bottom: 1px; width: 1.2rem; height: 2px; margin-left: -0.6rem; border-radius: 999px; background: rgba(255, 255, 255, 0.45); opacity: 0; }
 .cal-evento:hover .cal-evento__alca::after { opacity: 1; }

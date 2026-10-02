@@ -247,7 +247,12 @@ function partesDaMensagem(bruta) {
  *   origem, registroId, nome   a ficha ("prospeccao", 7, "ACME")
  *   ator, autor                quem fez (id e nome)
  *   eventos                    o que o histórico gravou desta ação
- *   envolvidos                 ids de quem tem a ficha (criou, responde, participa)
+ *   envolvidos                 ids de quem RESPONDE pela ficha (responsável/dono,
+ *                              quem participa): recebem toda alteração
+ *   criadores                  ids de quem só CRIOU a ficha: recebem só o
+ *                              importante (decisão do dono, 02/10/2026) —
+ *                              troca de responsável, ganho, perdido, conversão,
+ *                              exclusão (`importanteParaQuemCriou`)
  *   autores                    ids de quem escreveu o registro mexido/excluído
  *   troca                      { de, para }: o responsável/dono mudou
  *   situacao                   'criou' | 'excluiu' | 'cancelou' | null
@@ -260,7 +265,7 @@ function partesDaMensagem(bruta) {
  * deixou de responder, quem escreveu o registro mexido, os demais.
  */
 function montarAvisos({
-  origem, registroId = null, nome = '', ator = null, autor = 'Alguém', eventos = [], envolvidos = [],
+  origem, registroId = null, nome = '', ator = null, autor = 'Alguém', eventos = [], envolvidos = [], criadores = [],
   autores = [], troca = null, situacao = null, nota = null, excluir = [], nomeDe = () => null, resumo = null,
   semPassoPara = null
 } = {}) {
@@ -314,7 +319,8 @@ function montarAvisos({
       titulo: `${Nome} ${situacao === 'excluiu' ? 'excluíd' : 'cancelad'}${a}`,
       mensagem: comporMensagem(resumo || `${autor} ${verbo} ${alvo}.`, [], notas)
     };
-    [...lista(autores), ...lista(envolvidos)].forEach(id => dar(id, aviso));
+    // Excluir e cancelar são "o importante": quem criou recebe também.
+    [...lista(autores), ...lista(envolvidos), ...lista(criadores)].forEach(id => dar(id, aviso));
     return saida;
   }
 
@@ -331,11 +337,34 @@ function montarAvisos({
     }));
   }
   const primeira = resumo || `${autor} atualizou ${alvo}.`;
-  lista(envolvidos).forEach(id => dar(id, {
+  // Quem responde recebe toda alteração; quem só criou, só o importante.
+  const para = [...lista(envolvidos), ...(importanteParaQuemCriou(evs, troca) ? lista(criadores) : [])];
+  para.forEach(id => dar(id, {
     tipo: 'registro_alterado', titulo: `${Nome} atualizad${a}`,
     mensagem: comporMensagem(primeira, paraQuem(id, mudancas, mudancasSemPasso), notas)
   }));
   return saida;
+}
+
+/** As situações da tarefa que contam como "o importante" para quem a criou. */
+const SITUACOES_IMPORTANTES = new Set(['concluiu', 'reabriu', 'cancelou']);
+const sem = v => String(v ?? '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+
+/**
+ * O que quem só CRIOU a ficha recebe (decisão do dono, 02/10/2026, item 1/2
+ * "b"): a troca de responsável, ganho, perdido, conversão e exclusão — e, nas
+ * tarefas, concluir, reabrir e cancelar; nos orçamentos, aprovado/rejeitado.
+ * Alteração comum (telefone, endereço, título, prazo) fica só com quem
+ * responde e no histórico. Pura.
+ */
+function importanteParaQuemCriou(eventos = [], troca = null) {
+  if (troca && (troca.para || troca.de)) return true;
+  return lista(eventos).some(e => e && (
+    e.tipo === 'conversao' || e.acao === 'converteu'
+    || (e.campo === 'etapa' && ['ganho', 'perdido'].includes(sem(e.valor_novo)))
+    || (e.campo === 'situacao' && ['aprovado', 'rejeitado'].includes(sem(e.valor_novo)))
+    || (e.tipo === 'situacao' && SITUACOES_IMPORTANTES.has(e.acao))
+  ));
 }
 
 /** Os textos do aviso da planilha, por módulo. */
@@ -405,16 +434,34 @@ function nomeDoRegistro(origem, r = {}) {
  * tarefa, quem participa). Dono guardado por NOME (cliente, orçamento,
  * pedido) vira id pelo nome. Pura.
  */
-function envolvidosDe(origem, r = {}, { nomes = new Map(), participantes = [] } = {}) {
+function envolvidosDe(origem, r = {}, opcoes = {}) {
+  const { responsaveis, criadores } = papeisDe(origem, r, opcoes);
+  return [...responsaveis, ...criadores];
+}
+
+/**
+ * Quem RESPONDE pela ficha (responsável/dono; na tarefa, também quem
+ * participa) e quem só a CRIOU (decisão do dono, 02/10/2026): os primeiros
+ * recebem toda alteração, os outros só o importante. Ficha sem responsável:
+ * quem criou responde por ela. Pura.
+ */
+function papeisDe(origem, r = {}, { nomes = new Map(), participantes = [] } = {}) {
+  let responsaveis;
   switch (origem) {
-    case 'prospeccao': return [r.responsavel_id, r.criado_por];
-    case 'cliente': return [idPeloNome(r.dono_cliente, nomes), r.criado_por];
-    case 'contato': return [r.responsavel_id, r.criado_por];
-    case 'tarefa': return [r.responsavel_id, r.criado_por, ...lista(participantes).filter(p => p.status === 'aceito').map(p => p.usuario_id)];
+    case 'prospeccao':
+    case 'contato': responsaveis = [r.responsavel_id]; break;
+    case 'cliente': responsaveis = [idPeloNome(r.dono_cliente, nomes)]; break;
+    case 'tarefa': responsaveis = [r.responsavel_id, ...lista(participantes).filter(p => p.status === 'aceito').map(p => p.usuario_id)]; break;
     case 'orcamento':
-    case 'pedido': return [idPeloNome(r.dono, nomes), r.criado_por];
-    default: return [];
+    case 'pedido': responsaveis = [idPeloNome(r.dono, nomes)]; break;
+    default: return { responsaveis: [], criadores: [] };
   }
+  responsaveis = [...new Set(responsaveis.map(idValido).filter(Boolean))];
+  const criador = idValido(r.criado_por);
+  if (!criador || responsaveis.includes(criador)) return { responsaveis, criadores: [] };
+  // Sem ninguém respondendo pela ficha (só os participantes não contam), quem criou responde.
+  const semResponsavel = !idValido(origem === 'tarefa' ? r.responsavel_id : responsaveis[0]);
+  return semResponsavel ? { responsaveis: [...responsaveis, criador], criadores: [] } : { responsaveis, criadores: [criador] };
 }
 
 /** Quem responde pela ficha (o responsável ou o dono), em id. Pura. */
@@ -444,10 +491,14 @@ async function avisarDaFicha(api, {
     if (!r || r.error) return [];
     let participantes = [];
     if (origem === 'tarefa') participantes = lista(await api.get('/api/tarefa_participantes', { query: { tarefa_id: r.id ?? registroId } }).catch(() => []));
+    const papeis = papeisDe(origem, r, { nomes: mapa, participantes });
     const avisos = montarAvisos({
       origem, registroId: r.id ?? registroId, nome: nomeDoRegistro(origem, r),
       ator: usuarioId, autor: mapa.get(Number(usuarioId)) || 'Alguém', eventos: evs,
-      envolvidos: [...envolvidosDe(origem, r, { nomes: mapa, participantes }), ...lista(extras)],
+      // Quem responde (e os `extras`, como o dono do cliente de um orçamento)
+      // recebe toda alteração; quem só criou, o importante (02/10/2026).
+      envolvidos: [...papeis.responsaveis, ...lista(extras)],
+      criadores: papeis.criadores,
       // Na criação, quem ficou com a ficha "recebeu" dela; depois, a troca vem nos eventos.
       autores,
       troca: troca !== undefined ? troca
@@ -528,5 +579,5 @@ module.exports = {
   avisarDaVenda, avisarPessoa, SEM_MOTIVO, motivoDaExclusao,
   MARCA_MUDANCA, MARCA_NOTA, ORIGENS, CAMPOS_DE_RESPONSAVEL, CAMPOS_DO_PASSO,
   valorLegivel, oQue, linhaDoEvento, notasDosEventos, idPeloNome, trocaNosEventos, comporMensagem, partesDaMensagem,
-  montarAvisos, avisosDaPlanilha, nomeDoRegistro, envolvidosDe, responsavelDe, gravar, avisarDaFicha
+  montarAvisos, avisosDaPlanilha, nomeDoRegistro, envolvidosDe, papeisDe, importanteParaQuemCriou, responsavelDe, gravar, avisarDaFicha
 };

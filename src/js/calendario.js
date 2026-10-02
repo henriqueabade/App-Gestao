@@ -139,6 +139,8 @@ function itens({ todasAsCamadas = false } = {}) {
       saida.push({
         chave: `t${t.id}`, tipo: 'tarefa', dia, hora: t.data ? t.hora : null, duracao: t.duracao_min || 30,
         titulo: t.titulo, sub: (t.vinculos || []).map(v => v.nome).join(' · '), cor: lista?.cor || T.TIPOS[t.tipo]?.cor || '#d4c169',
+        // A ação que ela cobra (o ⚡ no card; 02/10/2026).
+        acao: T.textoDaAcao ? T.textoDaAcao(t) : '',
         icone: t.origem === 'proximo_passo' ? 'fa-forward-step' : T.TIPOS[t.tipo]?.icone || 'fa-square-check', concluida: t.status === 'concluida', atrasada: T.atrasada(t),
         arrastavel: aberta(t) && Boolean(t.pode?.concluir), prioridade: t.prioridade, pessoa: t.responsavel_id, dados: t
       });
@@ -244,13 +246,14 @@ function pilula(it, { comHora = true } = {}) {
   const el = h('button', {
     type: 'button',
     class: `cal-pilula cal-pilula--${it.tipo}${it.concluida ? ' cal-pilula--feita' : ''}${it.atrasada ? ' cal-pilula--atrasada' : ''}`,
-    title: [it.titulo, it.sub, it.hora ? `às ${it.hora}` : null, it.tipo === 'tarefa' && it.dados.responsavel ? `Responsável: ${it.dados.responsavel}` : null].filter(Boolean).join('\n'),
+    title: [it.titulo, it.sub, it.acao ? `⚡ ${it.acao} (conclui sozinha quando isso for feito no módulo)` : null, it.hora ? `às ${it.hora}` : null, it.tipo === 'tarefa' && it.dados.responsavel ? `Responsável: ${it.dados.responsavel}` : null].filter(Boolean).join('\n'),
     dataset: { chave: it.chave }
   });
   el.style.setProperty('--cal-cor', it.cor);
   el.append(icone(it.concluida && it.tipo === 'tarefa' ? 'fa-circle-check' : it.icone));
   if (comHora && it.hora) el.append(h('span', { class: 'cal-pilula__hora', text: it.hora }));
   el.append(h('span', { class: 'cal-pilula__titulo', text: it.titulo }));
+  if (it.acao) el.append(h('span', { class: 'cal-acao', title: it.acao }, icone('fa-bolt')));
   el.addEventListener('click', e => { e.stopPropagation(); abrirItem(it); });
   if (it.arrastavel) {
     el.draggable = true;
@@ -345,7 +348,7 @@ function dispor(lista) {
 function blocoNaGrade(it, { restritoAColuna = false } = {}) {
   const el = h('div', {
     class: `cal-evento cal-evento--${it.tipo}${it.concluida ? ' cal-evento--feito' : ''}${it.atrasada ? ' cal-evento--atrasado' : ''}${it.arrastavel ? ' cal-evento--arrastavel' : ''}`,
-    attrs: { role: 'button', tabindex: '0', title: [it.titulo, it.sub, `${it.hora} · ${it.duracao} min`].filter(Boolean).join('\n') },
+    attrs: { role: 'button', tabindex: '0', title: [it.titulo, it.sub, it.acao ? `⚡ ${it.acao} (conclui sozinha quando isso for feito no módulo)` : null, `${it.hora} · ${it.duracao} min`].filter(Boolean).join('\n') },
     dataset: { chave: it.chave }
   });
   el.style.setProperty('--cal-cor', it.cor);
@@ -355,7 +358,9 @@ function blocoNaGrade(it, { restritoAColuna = false } = {}) {
   el.style.left = `calc(${(it._col / it._n) * 100}% + 2px)`;
   el.style.width = `calc(${100 / it._n}% - 4px)`;
   const hora = h('span', { class: 'cal-evento__hora', text: `${it.hora}${it.duracao >= 45 ? ` – ${T.horaDeMinutos(ini + it.duracao)}` : ''}` });
-  el.append(h('span', { class: 'cal-evento__linha' }, icone(it.concluida && it.tipo === 'tarefa' ? 'fa-circle-check' : it.icone), h('span', { class: 'cal-evento__titulo', text: it.titulo })), hora);
+  el.append(h('span', { class: 'cal-evento__linha' }, icone(it.concluida && it.tipo === 'tarefa' ? 'fa-circle-check' : it.icone), h('span', { class: 'cal-evento__titulo', text: it.titulo }),
+    it.acao ? h('span', { class: 'cal-acao', title: it.acao }, icone('fa-bolt')) : null), hora);
+  if (it.acao && it.duracao >= 45) el.append(h('span', { class: 'cal-evento__sub cal-evento__sub--acao', text: `⚡ ${it.acao}` }));
   if (it.sub && it.duracao >= 45) el.append(h('span', { class: 'cal-evento__sub', text: it.sub }));
   if (it.arrastavel) el.append(h('span', { class: 'cal-evento__alca', title: 'Arraste para mudar a duração' }));
   el.addEventListener('keydown', e => { if (e.key === 'Enter') abrirItem(it); });

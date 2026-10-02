@@ -792,10 +792,18 @@ body {
     border: 1px solid rgba(162, 255, 166, 0.35);
 }
 
+/* Offline = programa fechado de verdade: vermelho (decisão do dono, 02/10/2026). */
 .usuario-sessao-badge.offline {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 88, 88, 0.16);
+    color: var(--color-red, #ff5858);
+    border: 1px solid rgba(255, 88, 88, 0.38);
+}
+
+/* Ausente = sem sessão, mas o programa rodando perto do relógio: amarelo. */
+.usuario-sessao-badge.ausente {
+    background: rgba(251, 191, 36, 0.16);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.4);
 }
 
 .usuario-sessao-badge:hover {
@@ -812,8 +820,13 @@ body {
 }
 
 .usuario-sessao-badge.offline .status-dot {
-    background: rgba(255, 255, 255, 0.35);
+    background: var(--color-red, #ff5858);
     box-shadow: none;
+}
+
+.usuario-sessao-badge.ausente .status-dot {
+    background: #fbbf24;
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.22);
 }
 
 .usuarios-permissoes-tablist {

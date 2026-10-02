@@ -101,6 +101,27 @@ test('montarComputadores: ativos primeiro, o mais recente em cima; quem cancelou
   assert.deepStrictEqual(montarComputadores(null), []);
 });
 
+test('presença (02/10/2026): o sinal mais novo dos computadores não cancelados; rodando = sinal de até 3 min', () => {
+  const { comSinalDoPrograma, SINAL_VALE_MS } = require('./usuariosController');
+  const agora = Date.parse('2026-10-02T15:00:00Z');
+  const computadores = [
+    { usuario_id: 7, ultimo_uso_em: '2026-10-02T14:59:10Z', cancelado_em: null },
+    { usuario_id: 7, ultimo_uso_em: '2026-10-02T10:00:00Z', cancelado_em: null },
+    { usuario_id: 8, ultimo_uso_em: '2026-10-02T14:50:00Z', cancelado_em: null },
+    { usuario_id: 9, ultimo_uso_em: '2026-10-02T14:59:50Z', cancelado_em: '2026-10-02T14:59:55Z' }
+  ];
+  const r = comSinalDoPrograma([{ id: 7, nome: 'Ana' }, { id: 8 }, { id: 9 }, { id: 10 }], computadores, agora);
+  assert.deepStrictEqual(r.map(u => [u.id, u.programa_rodando]), [[7, true], [8, false], [9, false], [10, false]]);
+  assert.strictEqual(r[0].ultimo_sinal_em, '2026-10-02T14:59:10.000Z');
+  assert.strictEqual(r[0].nome, 'Ana', 'o resto do usuário fica igual');
+  assert.strictEqual(r[2].ultimo_sinal_em, null, 'computador cancelado não conta');
+  assert.strictEqual(SINAL_VALE_MS, 3 * 60 * 1000);
+  assert.deepStrictEqual(comSinalDoPrograma([{ id: 1 }], null, agora)[0].programa_rodando, false, 'sem a tabela: ninguém rodando');
+  const rota = require('node:fs').readFileSync(require('node:path').join(__dirname, 'usuariosController.js'), 'utf8');
+  assert.ok(rota.includes("const { presenca, ...semPresenca } = req.query || {};"), 'presenca não vira filtro da API');
+  assert.ok(rota.includes("res.status(200).json(comSinalDoPrograma(payload, computadores));"));
+});
+
 test('GET /:id/computadores: só os do usuário, na ordem da tela; não Sup Admin = 403; sem a tabela = aviso do SQL', async () => {
   const s = await servidor();
   try {

@@ -13,10 +13,9 @@ Quando a ação traz texto (nota, motivo, observação, justificativa), o texto 
 
 | # | Pendência | Resposta | Situação |
 | --- | --- | --- | --- |
-| 1 | Edição comum também avisa? | "1b — se o usuário for o responsável, tudo; se não for, nada, mesmo que tenha sido ele quem cadastrou" | **Em aberto:** a resposta conflita com a do item 2 (ver abaixo). Continua como estava. |
-| 2 | Quem criou recebe junto com o responsável? | "2c" — quem criou recebe só o importante | **Em aberto**, junto com o 1. |
+| 1 e 2 | Edição comum avisa? Quem criou recebe? | **(b), na resposta de 02/10:** o responsável recebe toda alteração; quem criou recebe só o importante | Feito (ver abaixo). |
 | 3 | Excluir sem motivo | **3c — motivo obrigatório** | Feito. |
-| 4 | Cancelar tarefa sem motivo | 4b — motivo opcional | **Em aberto:** nenhuma tela cancela tarefa à mão (ver abaixo). |
+| 4 | Cancelar tarefa | **(b):** botão "Cancelar tarefa" no editor, para quem edita, motivo opcional; cancelar é diferente de excluir | Feito (ver abaixo). |
 | 5 | Observações internas do usuário | 5a — ficam de fora | Como estava. |
 | 6 | Tarefa do próximo passo | **6b — "Nova tarefa para você", sem chegar junto com outro aviso igual** | Feito. |
 | 7 | Comissão paga | **7b — quem paga escolhe quem avisar; o sistema sugere pelo nome; vale para comissão e produção** | Feito. |
@@ -60,14 +59,37 @@ Quando a ação traz texto (nota, motivo, observação, justificativa), o texto 
 - A janela do canto segue as mesmas escolhas, mesmo com o programa só na bandeja (`categorias-do-sino.json` na pasta do programa).
 - As escolhas continuam sendo **do computador** (como já eram), não da pessoa.
 
-### Os dois que ficaram em aberto
+### 1 e 2 (b) — Quem responde recebe tudo; quem só criou, o importante
 
-- **1 e 2:** "se não for o responsável, nada, mesmo que tenha sido ele quem cadastrou" diz que quem criou não recebe nada; a "2c" diz que quem criou recebe o importante. Até a resposta, continua como estava (responsável e quem criou recebem tudo).
-- **4:** a explicação de 01/10 estava errada — nenhuma tela cancela tarefa à mão. O quadro só tem A fazer, Em andamento, Aguardando e Concluída, e o editor não tem "Cancelada". Só o sistema cancela (passo substituído, próximo passo removido, prospecção encerrada), já com o motivo no histórico da tarefa.
+- **Quem responde pela ficha** recebe o aviso de **toda** alteração feita por outra pessoa: o responsável da prospecção e do contato, o dono do cliente, do orçamento e do pedido, e na tarefa quem responde e quem participa.
+- **Quem só criou** a ficha (sem ser o responsável) recebe **só o importante**:
+  - troca de responsável ou dono;
+  - ganho, perdido e conversão em cliente (prospecção);
+  - orçamento aprovado ou rejeitado;
+  - tarefa concluída, reaberta ou cancelada;
+  - exclusão e cancelamento da ficha.
+
+  Alteração comum (telefone, endereço, título, prazo) fica só com quem responde e no histórico.
+- **Ficha sem responsável:** quem criou responde por ela e recebe tudo.
+- Quem escreveu uma interação, nota ou comentário continua avisado quando outra pessoa o altera ou exclui.
+- **Código:** `avisosEnvolvidos.papeisDe` (quem responde × quem só criou) e `importanteParaQuemCriou`; `montarAvisos({ criadores })`.
+
+### 4 (b) — Cancelar tarefa
+
+- A explicação de 01/10 estava errada: não havia como cancelar uma tarefa à mão. Agora há.
+- **No editor**, para quem pode editar e com a tarefa aberta, fica o botão laranja **Cancelar tarefa**. Ele abre uma caixa com o **motivo opcional**.
+- **Cancelar não apaga:**
+  - a tarefa fica com a situação "Cancelada", com o 🚫 e a etiqueta "Cancelada";
+  - ela aparece em **Tarefas › Canceladas** (últimos 30 dias);
+  - pode ser reaberta pelo editor ("Reabrir");
+  - deixa de concluir sozinha pela ação do módulo.
+- O motivo vai no histórico da tarefa e da ficha ligada, e no aviso "Tarefa cancelada" de quem tem a tarefa (quem cancelou não recebe).
+- Na tarefa do próximo passo, cancelar também tira o passo da prospecção.
+- **Código:** rota `POST /api/tarefas/:id/cancelar`; `TarefasUI.cancelarTarefa`; filtro `canceladas` em `src/js/tarefas.js` (`?canceladas=1` na lista).
 
 ## Regras gerais
 
-- **Quem recebe:** quem tem a ficha.
+- **Quem recebe:** quem tem a ficha. Desde 02/10, quem responde recebe toda alteração e quem só criou recebe só o importante (ver "1 e 2 (b)" acima).
   - Prospecção: o responsável e quem criou.
   - Cliente: o dono (pelo nome) e quem cadastrou.
   - Contato: quem cadastrou.

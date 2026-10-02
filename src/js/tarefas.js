@@ -28,7 +28,9 @@ const INTELIGENTES = [
   { chave: 'atrasadas', rotulo: 'Atrasadas', icone: 'fa-triangle-exclamation', tom: 'perigo' },
   { chave: 'semdata', rotulo: 'Sem data', icone: 'fa-circle-question' },
   { chave: 'todas', rotulo: 'Todas abertas', icone: 'fa-layer-group' },
-  { chave: 'concluidas', rotulo: 'Concluídas', icone: 'fa-circle-check', dica: 'Últimos 30 dias' }
+  { chave: 'concluidas', rotulo: 'Concluídas', icone: 'fa-circle-check', dica: 'Últimos 30 dias' },
+  // Cancelar não apaga (decisão do dono, 02/10/2026): elas ficam aqui e podem ser reabertas.
+  { chave: 'canceladas', rotulo: 'Canceladas', icone: 'fa-ban', dica: 'Últimos 30 dias — cancelar não apaga' }
 ];
 const COLABORACAO = [
   { chave: 'convites', rotulo: 'Convites', icone: 'fa-envelope-open-text', dica: 'Tarefas em conjunto esperando sua resposta' },
@@ -38,7 +40,7 @@ const COLABORACAO = [
 const GRUPOS = [
   ['atrasada', 'Atrasadas', 'fa-triangle-exclamation'], ['hoje', 'Hoje', 'fa-sun'], ['amanha', 'Amanhã', 'fa-cloud-sun'],
   ['semana', 'Próximos 7 dias', 'fa-calendar-week'], ['depois', 'Mais para frente', 'fa-calendar'], ['sem_data', 'Sem data', 'fa-circle-question'],
-  ['concluida', 'Concluídas', 'fa-circle-check']
+  ['concluida', 'Concluídas', 'fa-circle-check'], ['cancelada', 'Canceladas', 'fa-ban']
 ];
 const COLUNAS_QUADRO = [
   ['a_fazer', 'A fazer', 'fa-circle'], ['em_andamento', 'Em andamento', 'fa-circle-half-stroke'],
@@ -61,7 +63,7 @@ async function carregar({ silencioso = false } = {}) {
       estado.tarefas = [];
     } else {
       const [lista, convites] = await Promise.all([
-        T.api(`?usuario=${encodeURIComponent(estado.pessoa)}&dias_concluidas=30`),
+        T.api(`?usuario=${encodeURIComponent(estado.pessoa)}&dias_concluidas=30&canceladas=1`),
         T.api('/convites').catch(() => ({ convites: [] }))
       ]);
       estado.sqlPendente = Boolean(lista.sql_pendente);
@@ -81,6 +83,7 @@ async function carregar({ silencioso = false } = {}) {
 // ------------------------------------------------------------ filtros
 
 function grupoDaTarefa(t, agora = T.agoraEmBrasilia()) {
+  if (t.status === 'cancelada') return 'cancelada';
   if (!aberta(t)) return 'concluida';
   if (!t.data) return 'sem_data';
   if (T.atrasada(t, agora)) return 'atrasada';
@@ -104,6 +107,7 @@ function passaNoFiltro(t, filtro = estado.filtro) {
     case 'semdata': return aberta(t) && !t.data;
     case 'todas': return aberta(t);
     case 'concluidas': return t.status === 'concluida';
+    case 'canceladas': return t.status === 'cancelada';
     case 'conjunto': return aberta(t) && ((t.participantes || []).some(p => p.status === 'aceito') || t.minha_participacao === 'aceito');
     case 'delegadas': return aberta(t) && Number(t.criado_por) === eu() && Number(t.responsavel_id) !== eu();
     default: return aberta(t);
@@ -152,7 +156,7 @@ function desenharLateral() {
   const ativo = f => estado.filtro.tipo === f.tipo && (estado.filtro.chave === f.chave || (f.id !== undefined && Number(estado.filtro.id) === Number(f.id)));
   const conta = filtro => estado.tarefas.filter(t => passaNoFiltro(t, filtro)).length;
   $('tarefasInteligentes').replaceChildren(...INTELIGENTES.map(i => botaoLateral({
-    ...i, contagem: i.chave === 'concluidas' ? null : conta({ tipo: 'inteligente', chave: i.chave }),
+    ...i, contagem: ['concluidas', 'canceladas'].includes(i.chave) ? null : conta({ tipo: 'inteligente', chave: i.chave }),
     tom: i.tom && conta({ tipo: 'inteligente', chave: i.chave }) ? i.tom : null,
     ativo: ativo({ tipo: 'inteligente', chave: i.chave }),
     aoClicar: () => escolher({ tipo: 'inteligente', chave: i.chave })
@@ -279,13 +283,14 @@ function desenharLista(alvo, tarefas) {
   for (const [chave, rotulo, ic] of GRUPOS) {
     const itens = porGrupo.get(chave);
     if (!itens.length) continue;
-    const recolhido = estado.recolhidos.has(chave) && estado.filtro.chave !== 'concluidas';
+    const recolhido = estado.recolhidos.has(chave) && !['concluidas', 'canceladas'].includes(estado.filtro.chave);
     const cabeca = h('button', { type: 'button', class: `tarefas-grupo__cabeca tarefas-grupo__cabeca--${chave}`, attrs: { 'aria-expanded': String(!recolhido) }, on: { click: () => {
       if (estado.recolhidos.has(chave)) estado.recolhidos.delete(chave); else estado.recolhidos.add(chave);
       desenhar();
     } } }, icone('fa-chevron-down', 'tarefas-grupo__seta'), icone(ic), h('span', { text: rotulo }), h('span', { class: 'tarefas-grupo__n', text: String(itens.length) }));
     const corpo = h('div', { class: 'tarefas-grupo__itens', hidden: recolhido });
-    const ordenadas = chave === 'concluida' ? itens.slice().sort((a, b) => String(b.concluida_em).localeCompare(String(a.concluida_em))) : ordenar(itens);
+    const ordenadas = chave === 'concluida' ? itens.slice().sort((a, b) => String(b.concluida_em).localeCompare(String(a.concluida_em)))
+      : chave === 'cancelada' ? itens.slice().sort((a, b) => String(b.atualizado_em || '').localeCompare(String(a.atualizado_em || ''))) : ordenar(itens);
     for (const t of ordenadas) corpo.append(T.linhaDeTarefa(t, { ctx: estado.ctx }));
     alvo.append(h('section', { class: 'tarefas-grupo' }, cabeca, corpo));
   }
@@ -356,7 +361,7 @@ function desenhar() {
   if (estado.sqlPendente) { alvo.append(vazio('As tarefas aparecem aqui assim que o SQL for executado.', 'fa-database')); return; }
   const lista = visiveisNoFiltro();
   $('tarefasContagem').textContent = estado.filtro.chave === 'convites' ? `${estado.convites.length}` : `${lista.length} ${lista.length === 1 ? 'tarefa' : 'tarefas'}`;
-  if (estado.visao === 'quadro' && estado.filtro.chave !== 'convites') {
+  if (estado.visao === 'quadro' && !['convites', 'canceladas'].includes(estado.filtro.chave)) {
     // O quadro mostra também as concluídas recentes do mesmo recorte.
     const base = estado.filtro.chave === 'concluidas' ? lista : estado.tarefas.filter(t => passaNaBusca(t) && (passaNoFiltro(t) || (t.status === 'concluida' && passaNoFiltroSemSituacao(t))));
     desenharQuadro(alvo, base);

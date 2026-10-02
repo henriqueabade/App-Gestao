@@ -68,6 +68,10 @@ function criarUpstream(dados) {
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(payload));
       };
+      // A lista de colunas que a API carregou ao subir (só quando o teste diz qual é).
+      if (tabela === 'tabelas' && dados.__colunasDaApi) {
+        return responder(200, { sucesso: true, tabelas: Object.entries(dados.__colunasDaApi).map(([t, colunas]) => ({ tabela: t, colunas })) });
+      }
       if (!tabelas[tabela]) return responder(404, { error: `Tabela '${tabela}' não encontrada.` });
       const colunas = COLUNAS[tabela] || [];
       if (req.method === 'GET' && id) {
@@ -446,6 +450,42 @@ test('excluir: por marca, só quem criou (sendo o responsável) ou gestor', asyn
   }
 });
 
+test('cancelar (decisão do dono, 02/10/2026): não apaga, motivo opcional no histórico e no aviso, fica em Canceladas e reabre', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // Henrique (Sup Admin) cria para o João.
+    const criada = await chamar(ctx.porta, '/api/tarefas', { usuario: 1, corpo: { titulo: 'Visitar o showroom', responsavel_id: 3 } });
+    const id = criada.json.id;
+    assert.strictEqual((await chamar(ctx.porta, `/api/tarefas/${id}/cancelar`, { usuario: 2, corpo: { motivo: 'x' } })).status, 404, 'quem não tem a tarefa nem a vê (nem cancela)');
+    assert.strictEqual(ctx.tabelas.tarefas.find(x => x.id === id).status, 'a_fazer');
+    const r = await chamar(ctx.porta, `/api/tarefas/${id}/cancelar`, { usuario: 1, corpo: { motivo: '  O cliente   remarcou para o mês que vem ' } });
+    assert.strictEqual(r.status, 200);
+    const t = ctx.tabelas.tarefas.find(x => x.id === id);
+    assert.strictEqual(t.status, 'cancelada');
+    assert.ok(!t.excluida_em, 'cancelar não é excluir');
+    const ev = ctx.tabelas.tarefa_historico.find(h => h.tarefa_id === id && h.acao === 'cancelou');
+    assert.strictEqual(ev.valor_novo, 'Cancelada');
+    assert.strictEqual(ev.observacao, 'O cliente remarcou para o mês que vem');
+    const aviso = avisosDe(ctx, 3, 'registro_cancelado')[0];
+    assert.strictEqual(aviso.titulo, 'Tarefa cancelada');
+    assert.match(aviso.mensagem, /» Motivo: O cliente remarcou para o mês que vem/);
+    assert.strictEqual(avisosDe(ctx, 1, 'registro_cancelado').length, 0, 'quem cancelou não recebe');
+    assert.strictEqual((await chamar(ctx.porta, `/api/tarefas/${id}/cancelar`, { usuario: 1, corpo: {} })).status, 409, 'já cancelada');
+
+    // Fora das abertas; em ?canceladas=1 (Tarefas › Canceladas).
+    assert.ok(!(await chamar(ctx.porta, '/api/tarefas?usuario=todos', { usuario: 1 })).json.tarefas.some(x => x.id === id));
+    assert.ok((await chamar(ctx.porta, '/api/tarefas?usuario=todos&canceladas=1', { usuario: 1 })).json.tarefas.some(x => x.id === id && x.status === 'cancelada'));
+
+    // Sem motivo também cancela; e "Reabrir" traz de volta.
+    const outra = (await chamar(ctx.porta, '/api/tarefas', { usuario: 3, corpo: { titulo: 'Ligar' } })).json.id;
+    assert.strictEqual((await chamar(ctx.porta, `/api/tarefas/${outra}/cancelar`, { usuario: 3, corpo: {} })).status, 200);
+    assert.strictEqual((await chamar(ctx.porta, `/api/tarefas/${outra}/reabrir`, { usuario: 3, corpo: {} })).status, 200);
+    assert.strictEqual(ctx.tabelas.tarefas.find(x => x.id === outra).status, 'a_fazer');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('agenda: tarefas do período, atividades feitas fora de tarefa e marcos do histórico', async () => {
   const dados = baseDados();
   const agora = new Date().toISOString();
@@ -704,6 +744,28 @@ test('sem o SQL: as telas recebem sql_pendente em vez de erro', async () => {
 // Ação de outro módulo (18/09/2026, 2ª rodada): a tarefa cobra "Despachar o
 // pedido" e conclui sozinha quando alguém despacha — seja quem for.
 // ---------------------------------------------------------------------------
+
+test('ação de módulo com a API SEM as colunas da ação (02/10/2026): recusa com o que fazer, em vez de salvar sem a ação', async () => {
+  const dados = baseDados();
+  dados.__colunasDaApi = { tarefas: COLUNAS.tarefas.filter(c => !c.startsWith('acao_')) };
+  const ctx = await montar(dados);
+  try {
+    const catalogo = await chamar(ctx.porta, '/api/tarefas/acoes');
+    assert.strictEqual(catalogo.json.sql_pendente, true);
+    assert.match(catalogo.json.mensagem, /sql\/tarefas_acoes\.sql/);
+    const antes = ctx.tabelas.tarefas.length;
+    const comAcao = await chamar(ctx.porta, '/api/tarefas', { corpo: { titulo: 'Fechar comissões', acao_chave: 'financeiro.fechar_comissoes', acao_registro: '2026-09' } });
+    assert.strictEqual(comAcao.status, 409);
+    assert.match(comAcao.json.error, /Rode sql\/tarefas_acoes\.sql e reinicie a API do banco/);
+    assert.strictEqual(ctx.tabelas.tarefas.length, antes, 'nada gravado pela metade');
+    const semAcao = await chamar(ctx.porta, '/api/tarefas', { corpo: { titulo: 'Sem ação' } });
+    assert.strictEqual(semAcao.status, 201, 'tarefa sem ação continua normal');
+    const editar = await chamar(ctx.porta, `/api/tarefas/${semAcao.json.id}`, { method: 'PUT', corpo: { acao_chave: 'financeiro.fechar_comissoes', acao_registro: '2026-09' } });
+    assert.strictEqual(editar.status, 409);
+  } finally {
+    await ctx.encerrar();
+  }
+});
 
 test('ação de módulo: só vale o que o responsável pode fazer, e a tarefa conclui quando a ação acontece', async () => {
   const ctx = await montar(baseDados());

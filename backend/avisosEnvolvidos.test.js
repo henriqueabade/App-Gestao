@@ -216,9 +216,41 @@ test('avisosDaPlanilha: um aviso por pessoa, com as fichas listadas; quem import
 
 test('envolvidosDe: dono gravado por nome vira id; tarefa soma quem participa (aceito)', () => {
   assert.deepStrictEqual(A.envolvidosDe('cliente', { dono_cliente: 'ana', criado_por: 4 }, { nomes }), [2, 4]);
-  assert.deepStrictEqual(A.envolvidosDe('pedido', { dono: 'Bruno' }, { nomes }), [3, undefined]);
+  assert.deepStrictEqual(A.envolvidosDe('pedido', { dono: 'Bruno' }, { nomes }), [3]);
   assert.deepStrictEqual(
     A.envolvidosDe('tarefa', { responsavel_id: 2, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }, { usuario_id: 4, status: 'pendente' }] }),
-    [2, 1, 3]
+    [2, 3, 1]
   );
+});
+
+test('papeisDe (02/10/2026): quem responde × quem só criou; sem responsável, quem criou responde', () => {
+  assert.deepStrictEqual(A.papeisDe('prospeccao', { responsavel_id: 3, criado_por: 4 }), { responsaveis: [3], criadores: [4] });
+  assert.deepStrictEqual(A.papeisDe('prospeccao', { responsavel_id: 3, criado_por: 3 }), { responsaveis: [3], criadores: [] }, 'criou e responde: recebe tudo');
+  assert.deepStrictEqual(A.papeisDe('prospeccao', { responsavel_id: null, criado_por: 4 }), { responsaveis: [4], criadores: [] }, 'sem responsável');
+  assert.deepStrictEqual(A.papeisDe('cliente', { dono_cliente: 'ana', criado_por: 4 }, { nomes }), { responsaveis: [2], criadores: [4] });
+  assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: 2, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }] }), { responsaveis: [2, 3], criadores: [1] });
+  assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: null, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }] }), { responsaveis: [3, 1], criadores: [] });
+});
+
+test('quem só criou recebe o importante: troca de responsável, ganho, perdido, conversão, exclusão (decisão do dono, 02/10/2026)', () => {
+  const imp = A.importanteParaQuemCriou;
+  assert.strictEqual(imp([{ campo: 'telefone', valor_novo: '9999' }]), false, 'alteração comum');
+  assert.strictEqual(imp([], { de: 3, para: 5 }), true, 'troca de responsável');
+  assert.strictEqual(imp([{ campo: 'etapa', valor_anterior: 'Proposta', valor_novo: 'Ganho' }]), true);
+  assert.strictEqual(imp([{ campo: 'etapa', valor_anterior: 'Proposta', valor_novo: 'Perdido' }]), true);
+  assert.strictEqual(imp([{ campo: 'etapa', valor_anterior: 'Novo', valor_novo: 'Proposta' }]), false, 'mexer no funil sem fechar');
+  assert.strictEqual(imp([{ tipo: 'conversao', acao: 'converteu' }]), true);
+  assert.strictEqual(imp([{ campo: 'situacao', valor_novo: 'Aprovado' }]), true, 'orçamento aprovado');
+  assert.strictEqual(imp([{ tipo: 'situacao', acao: 'concluiu' }]), true, 'tarefa concluída');
+  assert.strictEqual(imp([{ tipo: 'situacao', acao: 'cancelou' }]), true, 'tarefa cancelada');
+
+  const base = { origem: 'prospeccao', registroId: 7, nome: 'ACME', ator: 1, autor: 'Henrique', envolvidos: [3], criadores: [4], nomeDe };
+  const comum = A.montarAvisos({ ...base, eventos: [{ acao: 'alterou', entidade: 'Telefone', campo: 'telefone', valor_anterior: '1', valor_novo: '2' }] });
+  assert.deepStrictEqual(comum.map(a => a.usuario_id), [3], 'só o responsável');
+  const ganho = A.montarAvisos({ ...base, eventos: [{ acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa', valor_anterior: 'Proposta', valor_novo: 'Ganho' }] });
+  assert.deepStrictEqual(ganho.map(a => a.usuario_id), [3, 4], 'o ganho chega a quem criou');
+  const excluida = A.montarAvisos({ ...base, situacao: 'excluiu' });
+  assert.deepStrictEqual(excluida.map(a => a.usuario_id), [3, 4]);
+  const troca = A.montarAvisos({ ...base, troca: { de: 3, para: 5 }, eventos: [{ acao: 'alterou', entidade: 'Responsável', campo: 'responsavel_id', valor_anterior: 'Bruno', valor_novo: 'Ana' }] });
+  assert.deepStrictEqual(troca.map(a => a.usuario_id), [5, 3, 4], 'novo, antigo e quem criou');
 });

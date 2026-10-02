@@ -48,7 +48,11 @@ Data: 01/10/2026. Três pedidos do dono:
 - **Fora disso:** nenhum menu (as telas continuam como estão).
 - **Corretor:** em português (pt-BR).
 - **Conferido no Electron:** o botão direito em "mêses" sugere "meses".
-- **Código:** `backend/menuDeContexto.js`, ligado em toda janela pelo `main.js` (`browser-window-created`, antes do retorno das janelas com sandbox).
+- **A demora (02/10/2026):** em texto que **já estava** no campo (a descrição salva de uma tarefa), o corretor só confere o campo quando ele ganha o foco, e o clique com o botão direito que dá esse foco chegava antes da conferência. O menu abria sem a sugestão e só o 2º ou 3º clique a trazia (medido).
+  - Agora, quando o clique acabou de trocar o campo ativo e não veio palavra marcada, o programa refaz o clique até 3 vezes, a cada 0,12 s.
+  - Resultado medido: a sugestão vem no **primeiro** clique, em 0,13 a 0,25 s ("meses", "relatório"). Palavra certa: o menu normal em ~0,4 s. Campo em que você já estava digitando: na hora, como antes.
+  - Continua o corretor do Windows em pt-BR: medido, ele marca e sugere em 0,1 a 0,3 s.
+- **Código:** `backend/menuDeContexto.js` (`precisaReler`, `ligar`), ligado em toda janela pelo `main.js` (`browser-window-created`, antes do retorno das janelas com sandbox).
 
 ## 3. O programa no Windows
 
@@ -94,6 +98,17 @@ O token da sessão vence em 12 horas. No login, o programa pede à API um **segu
 - fica guardado **cifrado pelo Windows** (safeStorage) em `%APPDATA%\santissimo-decor\avisos-windows.json`. Sem a cifra, fica só na memória.
 
 Outra pessoa que entra no mesmo computador passa a ser a dona dos avisos dele.
+
+### Online, Ausente e Offline em Usuários (02/10/2026)
+
+- **Online (verde):** a pessoa está com a sessão aberta no programa.
+- **Ausente (amarelo):** sem sessão, mas o programa está **rodando** perto do relógio. O computador manda um sinal a cada 1 minuto pelos avisos do Windows (`avisos_dispositivos.ultimo_uso_em`).
+- **Offline (vermelho):** o programa está fechado de verdade (sem sinal há mais de 3 minutos), ou o computador foi cancelado.
+- Precisa da **API publicada**: é ela que grava o sinal a cada 1 minuto (antes, a cada 10).
+- **Código:**
+  - `SINAL_MS` em `avisos/dispositivo.js` (API) e `backend/avisosDoDispositivo.js` (cópia DEV);
+  - `comSinalDoPrograma` em `backend/usuariosController.js` (`GET /api/usuarios/lista?presenca=1`);
+  - `resolverPresenca` em `src/js/usuarios.js`.
 
 ### Os computadores de cada usuário (só o Sup Admin)
 
