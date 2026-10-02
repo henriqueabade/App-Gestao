@@ -113,6 +113,7 @@ html, body {
 .aw-aviso--item_excluido .aw-aviso__icone,
 .aw-aviso--removido_historico .aw-aviso__icone { background: #dc2626; }
 .aw-aviso--responsavel_novo .aw-aviso__icone,
+.aw-aviso--pagamento_feito .aw-aviso__icone,
 .aw-aviso--tarefa_concluida .aw-aviso__icone { background: #16a34a; }
 .aw-aviso--tarefa_lembrete .aw-aviso__icone,
 .aw-aviso--responsavel_saiu .aw-aviso__icone { background: #d97706; }

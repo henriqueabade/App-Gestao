@@ -62,4 +62,31 @@ function arquivoDoSom(pastaAssets, fs = require('fs')) {
   return null;
 }
 
-module.exports = { PADRAO, CHAVES, normalizar, ler, gravar, ARQUIVOS_DE_SOM, arquivoDoSom };
+/**
+ * As categorias do sino (Configurações › Notificações) valem também para a
+ * janela do canto (decisão do dono, 02/10/2026). O menu manda a escolha a
+ * cada mudança; ela fica num arquivo da máquina (como a escolha do sino, que
+ * mora no localStorage dela), para valer com o programa só na bandeja.
+ */
+const Categorias = require('../src/js/utils/categorias-aviso');
+
+function lerCategorias(arquivo, fs = require('fs')) {
+  try {
+    return Categorias.normalizar(JSON.parse(fs.readFileSync(arquivo, 'utf8')));
+  } catch (_) {
+    return Categorias.normalizar({});
+  }
+}
+
+function gravarCategorias(arquivo, preferencias = {}, fs = require('fs')) {
+  const proximo = Categorias.normalizar(preferencias);
+  try {
+    fs.mkdirSync(require('path').dirname(arquivo), { recursive: true });
+    fs.writeFileSync(arquivo, JSON.stringify(proximo, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[windows] categorias do sino não gravadas:', err?.message || err);
+  }
+  return proximo;
+}
+
+module.exports = { PADRAO, CHAVES, normalizar, ler, gravar, ARQUIVOS_DE_SOM, arquivoDoSom, lerCategorias, gravarCategorias };

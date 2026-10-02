@@ -35,10 +35,22 @@
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
 
+  const motivoEl = document.getElementById('excluirProspeccaoMotivo');
+  motivoEl?.focus();
+
   aoConfirmar(document.getElementById('confirmarExcluirProspeccao'), async () => {
     if (!prospeccao?.id) return;
+    // Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso.
+    const motivo = (motivoEl?.value || '').trim();
+    if (!motivo) {
+      showToast('Escreva o motivo da exclusão.', 'error');
+      motivoEl?.focus();
+      return;
+    }
     try {
-      const resp = await fetchApi(`/api/prospeccoes/${prospeccao.id}`, { method: 'DELETE' });
+      const resp = await fetchApi(`/api/prospeccoes/${prospeccao.id}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo })
+      });
       const dados = await resp.json().catch(() => ({}));
 
       if (resp.ok) {

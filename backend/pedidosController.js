@@ -1035,16 +1035,18 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
  */
 router.delete('/:id', exigirPermissao('ped.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
+  // O motivo é obrigatório (decisão do dono, 02/10/2026): sem ele, nada é apagado.
+  const motivo = sino.motivoDaExclusao(req.body);
+  if (!motivo) return res.status(400).json({ error: sino.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
     // Lido antes: depois de excluído não há de onde tirar o número e o dono.
     const antes = await api.get(`/api/pedidos/${id}`).catch(() => null);
     const { removidos, avisos } = await excluirPedidoEmCascata(api, id);
     if (antes && !antes.error) {
-      const motivo = String(req.body?.motivo || '').trim();
       await sino.avisarDaVenda(api, {
         origem: 'pedido', registro: { ...antes, id: Number(id) }, usuarioId: idDoUsuarioDaRequisicao(req),
-        situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+        situacao: 'excluiu', nota: `Motivo: ${motivo}`
       });
     }
     res.json({ success: true, removidos, avisos });

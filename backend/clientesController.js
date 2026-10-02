@@ -733,6 +733,9 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
 
 router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
   const { id } = req.params;
+  // O motivo é obrigatório (decisão do dono, 02/10/2026): sem ele, nada é apagado.
+  const motivo = avisos.motivoDaExclusao(req.body);
+  if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
     const orcRes = await api.get('/api/orcamentos', {
@@ -776,12 +779,11 @@ router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
     } catch (_) {}
     await api.delete(`/api/clientes/${id}`);
 
-    // O dono e quem cadastrou ficam sabendo (com o motivo, se veio).
+    // O dono e quem cadastrou ficam sabendo, com o motivo.
     if (antes && !antes.error) {
-      const motivo = String(req.body?.motivo || '').trim();
       await avisos.avisarDaFicha(api, {
         origem: 'cliente', registroId: id, registro: antes, usuarioId: usuarioDaRequisicao(req),
-        situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+        situacao: 'excluiu', nota: `Motivo: ${motivo}`
       });
     }
 

@@ -47,6 +47,9 @@ const ORIGENS = {
 /** Os campos que dizem de quem é a ficha: trocar um deles é "passar para outra pessoa". */
 const CAMPOS_DE_RESPONSAVEL = new Set(['responsavel_id', 'dono_cliente', 'dono']);
 
+/** O próximo passo da prospecção: quem recebe a tarefa dele já foi avisado por ela. */
+const CAMPOS_DO_PASSO = new Set(['proximo_passo', 'proximo_passo_data']);
+
 /** Observações que o próprio sistema escreve e não explicam nada a quem recebe. */
 const NOTAS_DO_SISTEMA = new Set(['cadastro inicial']);
 
@@ -258,7 +261,8 @@ function partesDaMensagem(bruta) {
  */
 function montarAvisos({
   origem, registroId = null, nome = '', ator = null, autor = 'Alguém', eventos = [], envolvidos = [],
-  autores = [], troca = null, situacao = null, nota = null, excluir = [], nomeDe = () => null, resumo = null
+  autores = [], troca = null, situacao = null, nota = null, excluir = [], nomeDe = () => null, resumo = null,
+  semPassoPara = null
 } = {}) {
   const avisados = new Set([ator, ...lista(excluir)].map(idValido).filter(Boolean));
   const saida = [];
@@ -273,6 +277,13 @@ function montarAvisos({
   // Quem entra ou sai já lê a troca na 1ª linha; os demais a veem na lista.
   const mudancas = evs.map(linhaDoEvento).filter(Boolean);
   const semTroca = evs.filter(e => !ehTroca(e)).map(linhaDoEvento).filter(Boolean);
+  // Quem acabou de receber a tarefa do próximo passo ("Nova tarefa para você",
+  // decisão do dono de 02/10/2026) não lê o passo de novo aqui. Pura.
+  const semPasso = idValido(semPassoPara);
+  const linhasSemPasso = doisLados => doisLados.filter(e => !CAMPOS_DO_PASSO.has(e.campo)).map(linhaDoEvento).filter(Boolean);
+  const mudancasSemPasso = linhasSemPasso(evs);
+  const semTrocaSemPasso = linhasSemPasso(evs.filter(e => !ehTroca(e)));
+  const paraQuem = (id, comPasso, sem) => (semPasso && mesmoId(id, semPasso) ? sem : comPasso);
   const notas = notasDosEventos(lista(eventos), nota);
   const alvo = oQue(origem, nome);
   const Nome = nomeDaOrigem(origem);
@@ -284,7 +295,7 @@ function montarAvisos({
       : `${autor} passou ${alvo} para você.`;
     dar(troca.para, {
       tipo: 'responsavel_novo', titulo: `${Nome} agora é ${a === 'a' ? 'sua' : 'seu'}`,
-      mensagem: comporMensagem(primeira, situacao ? [] : semTroca, notas)
+      mensagem: comporMensagem(primeira, situacao ? [] : paraQuem(troca.para, semTroca, semTrocaSemPasso), notas)
     });
   }
   if (troca?.de && !mesmoId(troca.de, troca.para)) {
@@ -308,20 +319,22 @@ function montarAvisos({
   }
 
   if (!mudancas.length && !notas.length && !resumo) return saida;
+  // Quem recebeu a tarefa do passo e não tem mais nada a ler: a tarefa já avisou.
+  if (semPasso && !mudancasSemPasso.length && !notas.length && !resumo) avisados.add(semPasso);
   if (lista(autores).length) {
     const excluiu = evs.some(e => e.acao === 'excluiu');
-    const aviso = {
+    const primeira = `${autor} ${excluiu ? 'excluiu' : 'alterou'} um registro seu ${oQue(origem, nome, 'em')}.`;
+    lista(autores).forEach(id => dar(id, {
       tipo: excluiu ? 'item_excluido' : 'item_alterado',
       titulo: excluiu ? 'Um registro seu foi excluído' : 'Um registro seu foi alterado',
-      mensagem: comporMensagem(`${autor} ${excluiu ? 'excluiu' : 'alterou'} um registro seu ${oQue(origem, nome, 'em')}.`, mudancas, notas)
-    };
-    lista(autores).forEach(id => dar(id, aviso));
+      mensagem: comporMensagem(primeira, paraQuem(id, mudancas, mudancasSemPasso), notas)
+    }));
   }
-  const aviso = {
+  const primeira = resumo || `${autor} atualizou ${alvo}.`;
+  lista(envolvidos).forEach(id => dar(id, {
     tipo: 'registro_alterado', titulo: `${Nome} atualizad${a}`,
-    mensagem: comporMensagem(resumo || `${autor} atualizou ${alvo}.`, mudancas, notas)
-  };
-  lista(envolvidos).forEach(id => dar(id, aviso));
+    mensagem: comporMensagem(primeira, paraQuem(id, mudancas, mudancasSemPasso), notas)
+  }));
   return saida;
 }
 
@@ -419,7 +432,7 @@ function responsavelDe(origem, r = {}, nomes = new Map()) {
  */
 async function avisarDaFicha(api, {
   origem, registroId, eventos = [], usuarioId = null, registro = null, nomes = null,
-  troca, situacao = null, nota = null, autores = [], extras = [], excluir = [], resumo = null
+  troca, situacao = null, nota = null, autores = [], extras = [], excluir = [], resumo = null, semPassoPara = null
 } = {}) {
   try {
     if (!idValido(usuarioId) || !ORIGENS[origem]) return [];
@@ -439,7 +452,7 @@ async function avisarDaFicha(api, {
       autores,
       troca: troca !== undefined ? troca
         : situacao === 'criou' ? { de: null, para: responsavelDe(origem, r, mapa) } : trocaNosEventos(evs, mapa),
-      situacao, nota, excluir, resumo, nomeDe: id => mapa.get(Number(id)) || null
+      situacao, nota, excluir, resumo, semPassoPara, nomeDe: id => mapa.get(Number(id)) || null
     });
     return gravar(api, avisos);
   } catch (err) {
@@ -499,9 +512,21 @@ async function avisarPessoa(api, { para, usuarioId = null, origem, registroId = 
   }
 }
 
+/**
+ * Excluir prospecção, cliente, orçamento e pedido pede o motivo (decisão do
+ * dono, 02/10/2026): a ficha some com o histórico, e o motivo vai no aviso de
+ * quem a tinha. A rota recusa ANTES de apagar qualquer coisa. Devolve o
+ * motivo (até 600 letras) ou null. Pura.
+ */
+const SEM_MOTIVO = 'Escreva o motivo da exclusão.';
+function motivoDaExclusao(corpo) {
+  const m = texto(corpo?.motivo).replace(/\s+/g, ' ');
+  return m ? m.slice(0, MAX_NOTA) : null;
+}
+
 module.exports = {
-  avisarDaVenda, avisarPessoa,
-  MARCA_MUDANCA, MARCA_NOTA, ORIGENS, CAMPOS_DE_RESPONSAVEL,
+  avisarDaVenda, avisarPessoa, SEM_MOTIVO, motivoDaExclusao,
+  MARCA_MUDANCA, MARCA_NOTA, ORIGENS, CAMPOS_DE_RESPONSAVEL, CAMPOS_DO_PASSO,
   valorLegivel, oQue, linhaDoEvento, notasDosEventos, idPeloNome, trocaNosEventos, comporMensagem, partesDaMensagem,
   montarAvisos, avisosDaPlanilha, nomeDoRegistro, envolvidosDe, responsavelDe, gravar, avisarDaFicha
 };

@@ -24,11 +24,23 @@
 
   document.getElementById('cancelarExcluirCliente').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
+  const motivoEl = document.getElementById('excluirClienteMotivo');
+  motivoEl?.focus();
+
   aoConfirmar(document.getElementById('confirmarExcluirCliente'), async () => {
     const cliente = window.clienteExcluir;
     if(!cliente) return;
+    // Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso.
+    const motivo = (motivoEl?.value || '').trim();
+    if (!motivo) {
+      showToast('Escreva o motivo da exclusão.', 'error');
+      motivoEl?.focus();
+      return;
+    }
     try{
-      const resp = await fetchApi(`/api/clientes/${cliente.id}`, { method: 'DELETE' });
+      const resp = await fetchApi(`/api/clientes/${cliente.id}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo })
+      });
       const data = await resp.json().catch(() => ({}));
       if(resp.ok){
         // Tabela primeiro, aviso depois, e tudo sob o carregando do botão.

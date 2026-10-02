@@ -152,6 +152,7 @@ test('Clientes: Redes sociais logo abaixo do Site nos três modais; salvar manda
 test('Usuários › Computadores: aba escondida, só o Sup Admin vê; Cancelar vermelho com confirmação; lê e cancela pela rota', () => {
   const html = ler('html/modals/usuarios/editar.html');
   assert.match(html, /<div class="ctl-acoes justify-end w-full md:w-auto ml-auto">\s*<button id="cancelarEditarUsuario"/, 'Cancelar e Salvar à direita do rodapé');
+  assert.match(ler('html/modals/usuarios/novo.html'), /<div class="ctl-acoes justify-end w-full md:w-auto ml-auto">\s*<button id="cancelarNovoUsuario"/, 'Novo usuário: Cancelar e Adicionar à direita');
   assert.match(html, /<button id="tab-computadores-usuario" role="tab"[^>]*class="usuario-modal-tab hidden">Computadores<\/button>/);
   assert.match(html, /<section id="panel-computadores-usuario" role="tabpanel"[^>]*hidden">\s*<div id="usuarioComputadores" class="usr-pcs"><\/div>/);
   const js = ler('js/modals/usuario-editar.js');

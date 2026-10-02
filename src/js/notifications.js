@@ -16,8 +16,10 @@
  *   - busca ao abrir o app, a cada minuto e quando a janela volta ao foco.
  *
  * Preferências (Configurações → Notificações, chave `menu.notifications`):
- * desligado, o sino fica quieto; a categoria "Vendas e pedidos" desligada
- * silencia estes avisos (são movimentação comercial).
+ * desligado, o sino fica quieto; cada categoria desmarcada (Tarefas e
+ * lembretes, Vendas e pedidos, Financeiro) esconde só os avisos dela, na
+ * lista e na contagem — src/js/utils/categorias-aviso.js (02/10/2026). Os
+ * avisos do próprio cadastro sempre aparecem.
  *
  * Tarefas (sql/tarefas_calendario.sql): a cada minuto o sino pede ao servidor
  * os lembretes e atrasos devidos (POST /api/tarefas/avisos); convite de
@@ -51,8 +53,6 @@ window.addEventListener('DOMContentLoaded', () => {
       finance: true,
     },
   };
-  // Categoria das preferências em que os avisos do histórico social entram.
-  const CATEGORIA = 'sales';
   // O sino pergunta a cada 10 s (pedido do dono em 18/09/2026: aviso tem de
   // chegar "na hora", no sino e no Windows). Os lembretes e atrasos das
   // tarefas, que o servidor gera a pedido, vão a cada 3 voltas (30 s).
@@ -200,9 +200,12 @@ window.addEventListener('DOMContentLoaded', () => {
   };
 
   let currentPreferences = getPreferences();
-  const ativo = () => !desligado
-    && currentPreferences.enabled !== false
-    && currentPreferences.categories?.[CATEGORIA] !== false;
+  // O interruptor geral liga e desliga o sino; as categorias só escondem os
+  // avisos delas (src/js/utils/categorias-aviso.js — decisão do dono,
+  // 02/10/2026; antes, desmarcar "Vendas e pedidos" calava o sino inteiro).
+  const ativo = () => !desligado && currentPreferences.enabled !== false;
+  const categoriasOcultas = () => (window.CategoriasAviso?.ocultas?.(currentPreferences) || [])
+    .filter((c) => (window.CategoriasAviso?.DO_SINO || []).includes(c));
 
   // ------------------------------------------------ busca
 
@@ -239,7 +242,11 @@ window.addEventListener('DOMContentLoaded', () => {
       console.warn('URL base da API não definida para o sino de avisos.');
       return [];
     }
-    const url = new URL('/api/notificacoes', baseUrl).toString();
+    const endereco = new URL('/api/notificacoes', baseUrl);
+    // As categorias desmarcadas saem da lista e da contagem (no servidor).
+    const ocultas = categoriasOcultas();
+    if (ocultas.length) endereco.searchParams.set('ocultar', ocultas.join(','));
+    const url = endereco.toString();
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
@@ -396,6 +403,7 @@ window.addEventListener('DOMContentLoaded', () => {
     removido_historico: 'fa-comment-slash',
     participante_removido: 'fa-user-xmark',
     conta_alterada: 'fa-user-shield',
+    pagamento_feito: 'fa-money-bill-wave',
   };
   // O texto pequeno, abaixo da mensagem, de cada tipo de aviso que tem um.
   // Tarefa automática: onde desligar (decisão do dono, 24/09/2026).
@@ -824,6 +832,8 @@ window.addEventListener('DOMContentLoaded', () => {
       enabled: preferences?.enabled !== false,
       categories: normalizeCategories(preferences?.categories),
     };
+    // A janela do canto (processo principal) segue as mesmas escolhas.
+    Promise.resolve(window.electronAPI?.avisosWindows?.categorias?.(currentPreferences)).catch(() => {});
     if (ativo()) {
       attachClickListener();
       updateIcon();
@@ -841,8 +851,12 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener(preferenceEvent, (event) => {
     const detail = event?.detail?.preferences;
     const estavaAtivo = ativo();
+    const ocultasAntes = categoriasOcultas().join(',');
     applyPreferences(detail && typeof detail === 'object' ? detail : getPreferences());
-    if (!estavaAtivo && ativo()) refreshNotifications({ respectDaily: false });
+    // Ligou o sino, ou mudou uma categoria: busca de novo com o filtro novo.
+    if ((!estavaAtivo && ativo()) || (ativo() && ocultasAntes !== categoriasOcultas().join(','))) {
+      refreshNotifications({ respectDaily: false });
+    }
   });
 
   // Toda abertura do app busca (é o que acende o sino com o que chegou

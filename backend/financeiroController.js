@@ -51,6 +51,7 @@ const detalhes = require('./financeiro/detalhes');
 const base = require('./financeiro/base');
 const auditoria = require('./financeiro/auditoria');
 const rateios = require('./financeiro/rateios');
+const avisoDoPagamento = require('./financeiro/avisoDoPagamento');
 const repasses = require('./financeiro/repasses');
 // A tarefa "Confirmar o pagamento" de quem fecha a competência.
 const tarefas = require('./tarefasServico');
@@ -356,6 +357,10 @@ function criarRouter() {
   }));
   router.post('/pagamentos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos', ({ api, req, usuarioId, hoje }) =>
     fechamentos.pagar({ api, entrada: req.body, hoje, usuarioId })));
+  // Depois de confirmar: avisar no sino quem recebeu (quem pagou escolhe o
+  // usuário de cada pessoa; decisão do dono, 02/10/2026).
+  router.post('/pagamentos/avisos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos/avisos', ({ api, req, usuarioId, hoje, desde }) =>
+    avisoDoPagamento.avisar({ api, entrada: req.body, usuarioId, hoje, desde })));
 
   // ---------------------------------------------------------- relatórios
   router.get('/relatorios/:chave', exigirPermissao(VER), rota('GET /api/financeiro/relatorios/:chave', ({ api, req, hoje, desde }) =>

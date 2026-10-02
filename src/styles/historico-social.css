@@ -492,6 +492,8 @@ button.hs-objeto:hover { background: rgba(138, 167, 243, 0.22); }
     display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
 }
 .sino-avatar__tipo--responsavel_novo { background: #16a34a; }
+/* Comissão ou produção paga (02/10/2026): verde de dinheiro que entrou. */
+.sino-avatar__tipo--pagamento_feito { background: #16a34a; }
 .sino-avatar__tipo--responsavel_saiu { background: #d97706; }
 .sino-avatar__tipo--registro_alterado, .sino-avatar__tipo--item_alterado { background: var(--color-primary, #b6a03e); }
 .sino-avatar__tipo--registro_excluido, .sino-avatar__tipo--item_excluido,

@@ -22,7 +22,7 @@
     responsavel_novo: 'fa-user-tag', responsavel_saiu: 'fa-user-minus', registro_alterado: 'fa-pen',
     registro_excluido: 'fa-trash-can', registro_cancelado: 'fa-ban', item_alterado: 'fa-pen-to-square',
     item_excluido: 'fa-eraser', removido_historico: 'fa-comment-slash', participante_removido: 'fa-user-xmark',
-    conta_alterada: 'fa-user-shield'
+    conta_alterada: 'fa-user-shield', pagamento_feito: 'fa-money-bill-wave'
   };
 
   const $ = id => document.getElementById(id);

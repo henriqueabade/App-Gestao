@@ -2933,6 +2933,94 @@
     const tipoAtual = () => overlay.querySelector('input[name="finPagamentoTipo"]:checked')?.value || 'comissao';
     const atual = () => (listas[tipoAtual()] || []).find(f => f.competencia === compSel.value) || null;
 
+    // ---- Avisar no sino quem recebeu (decisão do dono, 02/10/2026) ----
+    // Quem recebe é um NOME (beneficiário da comissão, colaborador do
+    // rateio): para cada um, o usuário de mesmo nome vem escolhido; quem paga
+    // troca por outro ou deixa sem aviso. O valor do aviso sai, no servidor,
+    // dos pagamentos gravados (POST /api/financeiro/pagamentos/avisos).
+    let usuarios = null;
+    const rateioDaCompetencia = {};
+    const escolhasDoAviso = new Map(); // nome sem acento → id do usuário ('' = não avisar)
+    const sugestao = nome => (usuarios || []).find(u => semAcento(u.nome) === semAcento(nome)) || null;
+    const escolhaDe = nome => {
+      const chave = semAcento(nome);
+      if (escolhasDoAviso.has(chave)) return escolhasDoAviso.get(chave);
+      const sugerido = sugestao(nome);
+      return sugerido ? String(sugerido.id) : '';
+    };
+
+    /** Quem recebe ESTE pagamento, uma linha por pessoa, com quanto. */
+    function recebedoresDaTela(f, linhas, porPessoa) {
+      if (!f) return [];
+      if (tipoAtual() === 'producao') {
+        return (rateioDaCompetencia[compSel.value] || [])
+          .filter(r => r?.colaborador && Number(r.valor) > 0)
+          .map(r => ({ beneficiario: r.colaborador, valor: Number(r.valor) }));
+      }
+      const pagas = porPessoa ? linhas.filter(l => !l.pago && escolhidos.has(l.chave)) : linhas.filter(l => !l.pago);
+      const porNome = new Map();
+      for (const l of pagas) {
+        const chave = semAcento(l.beneficiario);
+        const pessoa = porNome.get(chave) || { beneficiario: l.beneficiario, valor: 0 };
+        pessoa.valor = Math.round((pessoa.valor + l.valor) * 100) / 100;
+        porNome.set(chave, pessoa);
+      }
+      return [...porNome.values()];
+    }
+
+    function pintarAvisar(f, linhas, porPessoa, falta) {
+      const caixa = el('finPagamentoAvisar');
+      const lista = el('finPagamentoAvisarLista');
+      const vazio = el('finPagamentoAvisarVazio');
+      if (!caixa || !lista) return [];
+      const recebedores = falta > 0 ? recebedoresDaTela(f, linhas, porPessoa) : [];
+      const producaoSemRateio = Boolean(f) && falta > 0 && tipoAtual() === 'producao' && !recebedores.length;
+      caixa.classList.toggle('hidden', !recebedores.length && !producaoSemRateio);
+      vazio.classList.toggle('hidden', !producaoSemRateio);
+      vazio.textContent = producaoSemRateio ? 'Esta competência não tem rateio por colaborador: não há a quem avisar.' : '';
+      lista.replaceChildren();
+      for (const r of recebedores) {
+        const item = criar('li', 'fin-avisar__item');
+        const nome = criar('span', 'fin-benef__nome');
+        if (window.Beneficiarios && tipoAtual() === 'comissao') nome.appendChild(window.Beneficiarios.ponto(r.beneficiario));
+        nome.appendChild(criar('span', null, r.beneficiario));
+        const seletor = criar('select', 'fin-avisar__usuario appearance-none select-arrow ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+        seletor.setAttribute('aria-label', `Quem é avisado do pagamento de ${r.beneficiario}`);
+        seletor.appendChild(new Option('Não avisar', ''));
+        for (const u of usuarios || []) seletor.appendChild(new Option(u.nome, String(u.id)));
+        seletor.value = escolhaDe(r.beneficiario);
+        seletor.addEventListener('change', () => escolhasDoAviso.set(semAcento(r.beneficiario), seletor.value));
+        item.append(nome, criar('span', 'fin-benef__valor', formatarMoeda(r.valor)), seletor);
+        lista.appendChild(item);
+      }
+      return recebedores;
+    }
+
+    async function carregarUsuarios() {
+      try {
+        const r = await fetchApi('/api/usuarios/lista');
+        usuarios = (Array.isArray(r) ? r : [])
+          .filter(u => u && u.id !== undefined && u.nome && semAcento(u.status) !== 'inativo')
+          .map(u => ({ id: u.id, nome: String(u.nome) }))
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      } catch (_) {
+        usuarios = [];
+      }
+      pintar();
+    }
+
+    async function carregarRateio() {
+      const comp = compSel.value;
+      if (tipoAtual() !== 'producao' || !comp || rateioDaCompetencia[comp] || !atual()) return;
+      try {
+        const r = await fetchApi(`/api/financeiro/rateio?competencia=${encodeURIComponent(comp)}`);
+        rateioDaCompetencia[comp] = r?.sql_pendente ? [] : (Array.isArray(r?.resumo) ? r.resumo : []);
+      } catch (_) {
+        rateioDaCompetencia[comp] = [];
+      }
+      pintar();
+    }
+
     /**
      * Quem recebe as comissões da competência: o resumo congelado no
      * fechamento vira uma linha por tipo (CMS/Royalty) de cada pessoa, já
@@ -3021,6 +3109,7 @@
       }
       el('finPagamentoInfo').textContent = info;
       confirmarBtn.classList.toggle('hidden', !(falta > 0));
+      pintarAvisar(f, linhas, porPessoa, falta);
     }
 
     async function carregar() {
@@ -3034,6 +3123,7 @@
         }
       }
       pintar();
+      carregarRateio();
     }
 
     async function confirmarPagamento() {
@@ -3054,6 +3144,10 @@
       if (erro) { mostrarMensagem('finPagamentoMensagem', erro); return; }
       const tipo = tipoAtual();
       const quem = porPessoa ? alvos.map(l => `${TIPOS_COMISSAO[l.tipo]} de ${l.beneficiario}`).join(', ') : 'tudo o que falta';
+      // Quem será avisado no sino (as escolhas da lista "Avisar no sino").
+      const avisar = recebedoresDaTela(f, linhas, porPessoa)
+        .map(r => ({ beneficiario: r.beneficiario, usuario_id: escolhaDe(r.beneficiario) }))
+        .filter(a => a.usuario_id);
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Confirmar o pagamento?',
         message: `${tipo === 'comissao' ? 'Comissões' : 'Produção'} de ${rotuloCompetenciaCurto(compSel.value)} — ${quem}: `
@@ -3067,13 +3161,31 @@
       processando = true;
       let feitos = 0;
       let atrasado = false;
+      const ids = [];
       try {
         for (const corpo of envios) {
           const r = await fetchApi('/api/financeiro/pagamentos', { method: 'POST', body: JSON.stringify(corpo) });
           feitos += 1;
           atrasado = atrasado || Boolean(r?.atrasado);
+          if (r?.pagamento?.id !== undefined) ids.push(r.pagamento.id);
         }
-        window.showToast?.(atrasado ? 'Pagamento confirmado (depois do prazo).' : 'Pagamento confirmado.', 'success');
+        // Os avisos vêm depois e nunca desfazem o pagamento: falhou, só diz.
+        let avisados = 0;
+        let semAviso = '';
+        if (avisar.length && ids.length) {
+          try {
+            const r = await fetchApi('/api/financeiro/pagamentos/avisos', {
+              method: 'POST', body: JSON.stringify({ tipo, competencia: compSel.value, pagamento_ids: ids, avisar })
+            });
+            avisados = Number(r?.avisados) || 0;
+          } catch (e) {
+            semAviso = textoDoErro(e, 'sem permissão');
+          }
+        }
+        const confirmado = atrasado ? 'Pagamento confirmado (depois do prazo).' : 'Pagamento confirmado.';
+        const quantos = avisados ? ` ${avisados === 1 ? '1 pessoa avisada' : `${avisados} pessoas avisadas`} no sino.` : '';
+        window.showToast?.(`${confirmado}${quantos}`, 'success');
+        if (semAviso) window.showToast?.(`Os avisos do pagamento não foram enviados: ${semAviso}`, 'warning');
         avisarAlteracao();
         processando = false;
         fechar();
@@ -3093,9 +3205,10 @@
     }
 
     radios.forEach(r => r.addEventListener('change', () => { escolhidos.clear(); carregar(); }));
-    compSel.addEventListener('change', () => { escolhidos.clear(); pintar(); });
+    compSel.addEventListener('change', () => { escolhidos.clear(); pintar(); carregarRateio(); });
     tudoCampo?.addEventListener('change', pintar);
     acionar(confirmarBtn, confirmarPagamento);
+    carregarUsuarios();
     return carregar();
   }
 

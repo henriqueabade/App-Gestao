@@ -1192,6 +1192,9 @@ router.post('/:id/clone', exigirPermissao(['orc.clone', 'orc.create']), async (r
  */
 router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
+  // O motivo é obrigatório (decisão do dono, 02/10/2026): sem ele, nada é apagado.
+  const motivo = avisos.motivoDaExclusao(req.body);
+  if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
 
@@ -1207,6 +1210,8 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
       acao: 'excluiu',
       entidade: `Orçamento ${antes?.numero || id}`,
       valor_anterior: antes?.numero || null,
+      // O motivo fica também no histórico do cliente e da prospecção.
+      observacao: `Motivo: ${motivo}`,
       detalhe: {
         orcamento_id: Number(id),
         situacao: antes?.situacao ?? null,
@@ -1214,8 +1219,7 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
         data_emissao: antes?.data_emissao ?? null
       }
     }, antes ? {
-      situacao: 'excluiu', registro: { ...antes, id: Number(id) },
-      nota: String(req.body?.motivo || '').trim() ? `Motivo: ${String(req.body.motivo).trim()}` : null
+      situacao: 'excluiu', registro: { ...antes, id: Number(id) }, nota: `Motivo: ${motivo}`
     } : false);
 
     res.json({ success: true, removidos, avisos });

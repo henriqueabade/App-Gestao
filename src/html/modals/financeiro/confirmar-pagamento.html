@@ -66,6 +66,22 @@
             <ul id="finPagamentoBeneficiarios" class="fin-benef__lista" role="group" aria-label="Beneficiários da competência"></ul>
             <div id="finPagamentoLegenda" class="fin-benef__legenda"></div>
           </div>
+
+          <!--
+            Avisar no sino quem recebeu (decisão do dono, 02/10/2026): uma linha
+            por pessoa deste pagamento (comissão: os beneficiários; produção: os
+            colaboradores do rateio), com o usuário sugerido pelo nome. Dá para
+            trocar por outro usuário ou não avisar ninguém. O valor do aviso sai
+            dos pagamentos gravados (POST /api/financeiro/pagamentos/avisos).
+          -->
+          <div id="finPagamentoAvisar" class="hidden md:col-span-2 fin-benef">
+            <div class="fin-benef__topo">
+              <span class="fin-benef__titulo"><i class="fas fa-bell mr-2" aria-hidden="true"></i>Avisar no sino</span>
+              <span class="fin-avisar__dica">o usuário de mesmo nome já vem escolhido</span>
+            </div>
+            <ul id="finPagamentoAvisarLista" class="fin-benef__lista" role="group" aria-label="Quem é avisado do pagamento"></ul>
+            <p id="finPagamentoAvisarVazio" class="fin-avisar__dica hidden"></p>
+          </div>
           <div>
             <label for="finPagamentoData" class="ctl-rotulo text-gray-300">Data do pagamento <span class="fin-obrigatorio">*</span></label>
             <input id="finPagamentoData" type="date"

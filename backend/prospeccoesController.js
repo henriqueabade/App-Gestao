@@ -441,6 +441,23 @@ async function registrarHistorico(api, prospeccaoId, eventos, usuarioId, aviso =
 }
 
 /**
+ * Grava o histórico, espelha o próximo passo na tarefa e SÓ ENTÃO avisa
+ * (decisão do dono, 02/10/2026): a tarefa nova do passo avisa "Nova tarefa
+ * para você" na hora, e o aviso da prospecção não repete o passo para quem a
+ * recebeu — se só o passo mudou, para essa pessoa ele nem sai.
+ */
+async function historicoEPasso(api, prospeccaoId, eventos, usuarioId, passo = {}, aviso = {}) {
+  await registrarHistorico(api, prospeccaoId, eventos, usuarioId, false);
+  const tarefa = await passoNaTarefa(api, prospeccaoId, usuarioId, passo);
+  const lista = (Array.isArray(eventos) ? eventos : [eventos]).filter(Boolean);
+  if (aviso === false || !lista.length) return;
+  await avisos.avisarDaFicha(api, {
+    origem: 'prospeccao', registroId: prospeccaoId, eventos: lista, usuarioId, ...aviso,
+    semPassoPara: tarefa?.nova ? tarefa.responsavelId : null
+  });
+}
+
+/**
  * Compara a ficha antes e depois, devolvendo um evento por campo alterado.
  *
  * `nomes` resolve `responsavel_id` para o nome da pessoa: guardar "3 → 7" no
@@ -1384,8 +1401,7 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       });
     }
 
-    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
-    await passoNaTarefa(api, id, usuarioDaRequisicao(req));
+    await historicoEPasso(api, id, eventos, usuarioDaRequisicao(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -1603,8 +1619,7 @@ router.put('/:id/proximo-passo', exigirPermissao('pros.next.step'), async (req, 
     });
 
     eventos.push(...diferencasDaFicha(alvo, { proximo_passo: novoPasso, proximo_passo_data: novaData }));
-    await registrarHistorico(api, id, eventos, usuarioId);
-    await passoNaTarefa(api, id, usuarioId, {
+    await historicoEPasso(api, id, eventos, usuarioId, {
       concluiuAnterior: tinhaPasso && Boolean(notaAnterior), nota: notaAnterior, interacaoId: eventos.interacaoId ?? null
     });
 
@@ -1711,8 +1726,7 @@ router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async
       eventos.push(...diferencasDaFicha(alvo, { proximo_passo: null, proximo_passo_data: null }));
     }
 
-    await registrarHistorico(api, id, eventos, usuarioId);
-    await passoNaTarefa(api, id, usuarioId, { concluiuAnterior: true, nota, interacaoId: eventos.interacaoId ?? null });
+    await historicoEPasso(api, id, eventos, usuarioId, { concluiuAnterior: true, nota, interacaoId: eventos.interacaoId ?? null });
 
     // `converter` é só um sinal para a interface abrir o fluxo de conversão,
     // que valida os dados fiscais e pede status e dono do cliente. Converter
@@ -2416,6 +2430,9 @@ router.delete(
  */
 router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
+  // O motivo é obrigatório (decisão do dono, 02/10/2026): sem ele, nada é apagado.
+  const motivo = avisos.motivoDaExclusao(req.body);
+  if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
     const p = await buscarProspeccao(api, id);
@@ -2443,11 +2460,10 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
     // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
     await api.delete(`/api/prospeccoes/${id}`);
 
-    // O responsável e quem criou ficam sabendo (com o motivo, se veio).
-    const motivo = texto(req.body?.motivo);
+    // O responsável e quem criou ficam sabendo, com o motivo.
     await avisos.avisarDaFicha(api, {
       origem: 'prospeccao', registroId: id, registro: p, usuarioId: usuarioDaRequisicao(req),
-      situacao: 'excluiu', nota: motivo ? `Motivo: ${motivo}` : null
+      situacao: 'excluiu', nota: `Motivo: ${motivo}`
     });
 
     res.json({ success: true });

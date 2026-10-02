@@ -10,6 +10,14 @@
         Contatos, interações, notas, campanhas e o histórico do funil serão removidos junto.
         Esta ação não pode ser desfeita.
       </p>
+      <!-- Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso de
+           quem tinha a prospecção; o servidor recusa sem ele. -->
+      <div class="mt-4 text-left">
+        <label for="excluirProspeccaoMotivo" class="ctl-rotulo text-gray-300">Motivo da exclusão <span class="text-[var(--color-red)]">*</span></label>
+        <textarea id="excluirProspeccaoMotivo" rows="3" maxlength="600" placeholder="Por que esta prospecção está sendo excluída?"
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        <p class="mt-2 text-xs text-gray-400">Vai no aviso do responsável e de quem criou.</p>
+      </div>
       <div class="ctl-acoes justify-center mt-8">
         <button id="cancelarExcluirProspeccao" class="btn-danger ctl-botao text-white active:scale-95">Não</button>
         <button id="confirmarExcluirProspeccao" data-perm="pros.delete" class="btn-success ctl-botao active:scale-95">Sim</button>

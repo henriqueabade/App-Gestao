@@ -1,8 +1,16 @@
 <div id="excluirClienteOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
-  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+  <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
     <div class="p-6 text-center">
       <h3 class="ctl-modal-titulo mb-4 text-white">Tem certeza?</h3>
       <p class="text-sm text-gray-300">Deseja excluir este cliente? Esta ação não pode ser desfeita.</p>
+      <!-- Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso de
+           quem tinha o cliente; o servidor recusa sem ele. -->
+      <div class="mt-4 text-left">
+        <label for="excluirClienteMotivo" class="ctl-rotulo text-gray-300">Motivo da exclusão <span class="text-[var(--color-red)]">*</span></label>
+        <textarea id="excluirClienteMotivo" rows="3" maxlength="600" placeholder="Por que este cliente está sendo excluído?"
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        <p class="mt-2 text-xs text-gray-400">Vai no aviso do dono e de quem cadastrou.</p>
+      </div>
       <div class="ctl-acoes justify-center mt-8">
         <button id="cancelarExcluirCliente" class="btn-danger ctl-botao text-white active:scale-95">Não</button>
         <button id="confirmarExcluirCliente" data-perm="cli.delete" class="btn-success ctl-botao active:scale-95">Sim</button>

@@ -83,6 +83,7 @@ const apiServer = require('./backend/server');
 // ícone perto do relógio, avisos do sino no canto da tela e o "tum-tum".
 const preferenciasWindows = require('./backend/preferenciasWindows');
 const janelaDeAviso = require('./backend/janelaDeAviso');
+const CategoriasAviso = require('./src/js/utils/categorias-aviso');
 const { criarAvisosNoWindows, criarAssinadorLocal, INTERVALO_MS: INTERVALO_DOS_AVISOS } = require('./backend/avisosNoWindows');
 // Aberto pelo Windows ao ligar a máquina (setLoginItemSettings): sem janela.
 const iniciouEmSegundoPlano = process.argv.includes('--segundo-plano');
@@ -3498,6 +3499,10 @@ let servicoDeAvisos = null;
 let relogioDosAvisos = null;
 let avisoPendente = null;
 let somDoDono;
+// As categorias do sino (Configurações › Notificações): a janela do canto
+// mostra só o que o sino mostraria (preferenciasWindows.lerCategorias).
+let categoriasDoSino = preferenciasWindows.lerCategorias(null);
+let arquivoDasCategorias = null;
 
 /** O som dos avisos posto pelo dono em src/assets (som-aviso.mp3/.wav/.ogg), ou null. */
 function arquivoDoSomDoDono() {
@@ -3648,8 +3653,9 @@ async function voltaDosAvisos() {
   if (!preferencias.avisosNoWindows || !servicoDeAvisos) return;
   try {
     const { novos } = await servicoDeAvisos.ciclo({ emFoco: programaNaFrente() });
-    if (novos.length && preferencias.avisosNoWindows && !programaNaFrente()) {
-      janelaDeAviso.mostrar(novos, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });
+    const visiveis = novos.filter(aviso => CategoriasAviso.aparece(aviso, categoriasDoSino));
+    if (visiveis.length && preferencias.avisosNoWindows && !programaNaFrente()) {
+      janelaDeAviso.mostrar(visiveis, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });
     }
   } catch (err) {
     console.warn('[avisos-windows] volta falhou:', err?.message || err);
@@ -3720,6 +3726,8 @@ app.whenReady().then(async () => {
   arquivoDePreferencias = path.join(app.getPath('userData'), 'preferencias-windows.json');
   preferencias = preferenciasWindows.ler(arquivoDePreferencias);
   if (preferencias.primeiraVez) preferencias = preferenciasWindows.gravar(arquivoDePreferencias, preferencias);
+  arquivoDasCategorias = path.join(app.getPath('userData'), 'categorias-do-sino.json');
+  categoriasDoSino = preferenciasWindows.lerCategorias(arquivoDasCategorias);
   aplicarInicioComWindows();
 
   const envPortValue = process.env.API_PORT;
@@ -5271,6 +5279,11 @@ ipcMain.handle('avisos-windows:abrir', (_event, aviso) => {
   if (clicado?.id !== undefined) janelaDeAviso.retirar({ ids: [clicado.id] });
   abrirPrograma(clicado);
   return true;
+});
+// As categorias do sino mudaram (ou o menu abriu): a janela do canto segue.
+ipcMain.handle('avisos-windows:categorias', (_event, escolha) => {
+  categoriasDoSino = preferenciasWindows.gravarCategorias(arquivoDasCategorias, escolha || {});
+  return categoriasDoSino;
 });
 // O sino marcou avisos como lidos: saem da janela do canto também.
 ipcMain.handle('avisos-windows:lidos', (_event, lidos) => janelaDeAviso.retirar({

@@ -86,7 +86,7 @@ const avisar = (api, ids, aviso) => social.notificar(api, ids.filter(Boolean), a
  * registrarFicha (padrão: sim), mensagem do convite, gatilho: o que criou a
  * tarefa automática ("Orçamento ORC-30 enviado") }.
  */
-async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participantes = [], checklist = [], registrarFicha = true, mensagem = null, gatilho = null } = {}) {
+async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participantes = [], checklist = [], registrarFicha = true, mensagem = null, gatilho = null, prospeccao = null } = {}) {
   const payload = {
     ...dados,
     marcadores: dados.marcadores || [],
@@ -121,12 +121,16 @@ async function criarTarefa(api, dados, { usuarioId, nomes = new Map(), participa
       mensagem: A.mensagemDoAviso({ gatilho, titulo: t.titulo, prazo: prazoLegivel(t) }),
       origem: 'tarefa', registro_id: Number(t.id), autor_id: null
     });
-  } else if (t.origem !== 'proximo_passo' && t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
-    // A tarefa-espelho do próximo passo não avisa: quem responde pela
-    // prospecção já recebe o aviso dela (backend/avisosEnvolvidos.js).
+  } else if (t.responsavel_id && !mesmoId(t.responsavel_id, usuarioId)) {
+    // A tarefa do próximo passo também avisa, na hora (decisão do dono,
+    // 02/10/2026); o aviso da prospecção, então, não repete o passo para
+    // quem recebeu a tarefa (prospeccoesController.historicoEPasso).
+    const doPasso = t.origem === 'proximo_passo';
     await avisar(api, [Number(t.responsavel_id)], {
       tipo: 'tarefa_atribuida', titulo: 'Nova tarefa para você',
-      mensagem: `${autor} atribuiu: ${t.titulo} — ${prazoLegivel(t)}`,
+      mensagem: doPasso
+        ? `${autor} definiu o próximo passo${prospeccao ? ` da prospecção ${prospeccao}` : ''}: ${t.titulo} — ${prazoLegivel(t)}`
+        : `${autor} atribuiu: ${t.titulo} — ${prazoLegivel(t)}`,
       origem: 'tarefa', registro_id: Number(t.id), autor_id: usuarioId ?? null
     });
   }
@@ -198,6 +202,9 @@ async function concluirTarefa(api, t, { usuarioId, resultado = null, nota = null
  * dele é concluída em vez de reaproveitada. `criar: false` (a planilha,
  * decisão do dono de 01/10/2026): a tarefa que já existe acompanha o passo
  * novo, mas nenhuma tarefa nasce.
+ *
+ * Devolve { id, nova, responsavelId } da tarefa aberta do passo (nova = acabou
+ * de nascer e já avisou "Nova tarefa para você"), ou null.
  */
 async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = null, concluiuAnterior = false, nota = null, interacaoId = null, criar = true } = {}) {
   try {
@@ -234,15 +241,15 @@ async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = nul
           await api.put(`/api/tarefas/${atual.id}`, { ...depois, atualizado_em: new Date().toISOString() });
           await registrarNaTarefa(api, atual.id, eventos, usuarioId);
         }
-        return atual.id;
+        return { id: atual.id, nova: false, responsavelId: Number(depois.responsavel_id ?? atual.responsavel_id) || null };
       }
       if (!criar) return null;
       const criada = await criarTarefa(api, {
         titulo: passo, tipo: 'Follow-up', prioridade: 'media', status: 'a_fazer', data,
         responsavel_id: p.responsavel_id || p.criado_por || usuarioId,
         prospeccao_id: Number(prospeccaoId), origem: 'proximo_passo'
-      }, { usuarioId, nomes: await social.nomesDosUsuarios(api), registrarFicha: false });
-      return criada.id;
+      }, { usuarioId, nomes: await social.nomesDosUsuarios(api), registrarFicha: false, prospeccao: texto(p.nome_fantasia) || null });
+      return { id: criada.id, nova: true, responsavelId: Number(criada.responsavel_id) || null };
     }
     for (const t of restantes) await cancelar(api, t, usuarioId, ativa ? 'Próximo passo removido' : 'Prospecção encerrada');
     return null;

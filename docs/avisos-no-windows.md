@@ -74,6 +74,7 @@ Data: 01/10/2026. Três pedidos do dono:
   - **o X** fecha e esvazia: o que não foi aberto continua no sino, não lido. O próximo aviso abre a janela de novo, só com ele.
 - **Com o programa na frente,** quem avisa é o sino (com o som). A janela do canto, se estiver aberta, **sai do caminho** (fica escondida, com a lista guardada) e **volta sozinha** quando o programa sai da frente (outro programa na frente, minimizado ou fechado para a bandeja). Assim ela não cobre os botões dos modais, que ficam no canto de baixo.
 - **O som do dono:** o arquivo `src/assets/som-aviso.mp3` (ou `.wav`, ou `.ogg`; nessa ordem, se houver mais de um). Curto, de preferência até 3 segundos e menos de 500 KB; o programa para em 5 segundos. Sem o arquivo, ou se ele não tocar, vai o "tum-tum". Vale para a janela do canto e para o sino. Entra no instalador junto com o resto (`**/*`); para trocar, troque o arquivo e gere a versão nova.
+- **As categorias do sino valem aqui também** (02/10/2026): o que está desmarcado em Configurações › Notificações (Tarefas e lembretes, Vendas e pedidos, Financeiro) não aparece na janela do canto; o interruptor geral desligado cala a janela. Os avisos do próprio cadastro sempre aparecem. Ver `docs/avisos-de-algo-seu.md` (8b).
 - **O que chegou com o computador desligado** aparece quando ele liga.
 - **Na primeira vez de cada usuário,** o histórico antigo não é despejado na tela.
 - **Configurações › Programa no Windows:** três interruptores, que gravam na hora e valem para o computador:

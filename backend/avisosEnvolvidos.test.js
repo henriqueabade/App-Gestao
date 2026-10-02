@@ -99,6 +99,27 @@ test('exclusão e cancelamento: todos os envolvidos e quem escreveu, com o motiv
   assert.strictEqual(canc[0].mensagem, 'Ana cancelou o pedido 123.');
 });
 
+test('próximo passo (02/10/2026): quem recebeu a tarefa nova não lê o passo de novo; só o passo mudou = sem aviso para ele', () => {
+  const passo = [
+    { acao: 'alterou', entidade: 'Próximo passo', campo: 'proximo_passo', valor_anterior: null, valor_novo: 'Ligar' },
+    { acao: 'alterou', entidade: 'Data do próximo passo', campo: 'proximo_passo_data', valor_anterior: null, valor_novo: '2026-10-05' }
+  ];
+  const so = A.montarAvisos({ origem: 'prospeccao', registroId: 8, nome: 'ACME', ator: 1, autor: 'Henrique', eventos: passo, envolvidos: [3, 4], semPassoPara: 3 });
+  assert.deepStrictEqual(so.map(a => a.usuario_id), [4], 'o Bruno já recebeu "Nova tarefa para você"; a Carla (quem criou) recebe a atualização');
+  assert.match(so[0].mensagem, /Próximo passo/);
+
+  const comEtapa = A.montarAvisos({
+    origem: 'prospeccao', registroId: 8, nome: 'ACME', ator: 1, autor: 'Henrique', envolvidos: [3],
+    eventos: [...passo, { acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa', valor_anterior: 'Contato', valor_novo: 'Proposta' }],
+    semPassoPara: 3
+  });
+  assert.strictEqual(comEtapa.length, 1);
+  assert.ok(/Etapa do funil/.test(comEtapa[0].mensagem) && !/Próximo passo/.test(comEtapa[0].mensagem), comEtapa[0].mensagem);
+
+  const semTarefa = A.montarAvisos({ origem: 'prospeccao', registroId: 8, nome: 'ACME', ator: 1, autor: 'Henrique', eventos: passo, envolvidos: [3] });
+  assert.match(semTarefa[0].mensagem, /Próximo passo/, 'sem tarefa nova (só atualizou a que existia), o passo vem no aviso');
+});
+
 test('criação já com outro responsável: só ele recebe, sem a lista do cadastro', () => {
   const avisos = A.montarAvisos({
     origem: 'prospeccao', registroId: 7, nome: 'ACME', ator: 1, autor: 'Henrique', situacao: 'criou',

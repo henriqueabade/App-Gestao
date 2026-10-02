@@ -537,7 +537,9 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     // o sino, com o programa aberto
     onAbrirAviso: (callback) => subscribeToChannel('avisos-windows:abrir-no-sino', callback),
     avisoPendente: () => ipcRenderer.invoke('avisos-windows:pendente'),
-    lidos: (lidos) => ipcRenderer.invoke('avisos-windows:lidos', lidos || {})
+    lidos: (lidos) => ipcRenderer.invoke('avisos-windows:lidos', lidos || {}),
+    // as categorias do sino (Configurações › Notificações) valem para a janela do canto
+    categorias: (preferencias) => ipcRenderer.invoke('avisos-windows:categorias', preferencias || {})
   }
   }));
 

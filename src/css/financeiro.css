@@ -683,6 +683,17 @@ div:has(> .fin-competencia-campo--modal) { min-width: 0; }
 
 .fin-benef__legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; }
 
+/* Avisar no sino quem recebeu (02/10/2026): o nome, o valor e o usuário avisado. */
+.fin-avisar__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(11rem, 16rem);
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+}
+.fin-avisar__usuario { width: 100%; }
+.fin-avisar__dica { font-size: 0.72rem; color: var(--menu-text-secondary, #9ca3af); }
+
 /* Filtro "quem recebe" dos relatórios de comissão, acima da tabela. */
 /* Mesmo recuo do cabeçalho da folha (1,25rem) e tudo na mesma linha de centro:
    antes o rótulo encostava na borda e a caixa ficava mais baixa que ele. */

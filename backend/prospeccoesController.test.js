@@ -799,10 +799,29 @@ test('conversão desfaz o cliente se a prospecção não puder ser fechada', asy
 // EXCLUSÃO
 // ---------------------------------------------------------------------------
 
+const comMotivo = (motivo = 'Cadastro duplicado') => ({ method: 'DELETE', body: JSON.stringify({ motivo }) });
+
+test('DELETE sem motivo é recusado e não apaga nada (decisão do dono, 02/10/2026)', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    for (const opcoes of [{ method: 'DELETE' }, comMotivo('  ')]) {
+      const resp = await chamar(ctx.porta, '/api/prospeccoes/1', opcoes);
+      assert.strictEqual(resp.status, 400);
+      const corpo = await resp.json();
+      assert.strictEqual(corpo.error, 'Escreva o motivo da exclusão.');
+      assert.strictEqual(corpo.motivo_obrigatorio, true);
+    }
+    assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), true);
+    assert.ok(ctx.tabelas.prospeccao_contatos.some(c => String(c.prospeccao_id) === '1'), 'os filhos também ficam');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('DELETE remove a prospecção e os filhos em cascata', async () => {
   const ctx = await montar(baseDados());
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', comMotivo());
     assert.strictEqual(resp.status, 200);
 
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), false);
@@ -817,8 +836,9 @@ test('DELETE remove a prospecção e os filhos em cascata', async () => {
 test('DELETE recusa prospecção já convertida em cliente', async () => {
   const ctx = await montar(baseDados());
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', { method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', comMotivo());
     assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /já virou cliente/);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 4), true);
   } finally {
     await ctx.encerrar();
@@ -830,8 +850,9 @@ test('DELETE recusa prospecção com orçamento vinculado', async () => {
   dados.orcamentos.push({ id: 500, numero: 'ORC1', prospeccao_id: 1, situacao: 'Aberto' });
   const ctx = await montar(dados);
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', comMotivo());
     assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /orçamentos vinculados/);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), true);
   } finally {
     await ctx.encerrar();
@@ -855,7 +876,7 @@ test('usuário sem permissão recebe 403 e não altera nada', async () => {
     assert.strictEqual(criar.status, 403);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.nome_fantasia === 'Proibida'), false);
 
-    const excluir = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, method: 'DELETE' });
+    const excluir = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, ...comMotivo() });
     assert.strictEqual(excluir.status, 403);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), true);
   } finally {
@@ -2112,7 +2133,7 @@ test('usuário comum não exclui prospecção Ganha', async () => {
   darPermissaoDeExcluir(dados);
   const ctx = await montar(dados);
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', { usuario: 2, method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', { usuario: 2, ...comMotivo() });
     assert.strictEqual(resp.status, 403);
     assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 4), 'a prospecção não podia ter sumido');
   } finally {
@@ -2125,7 +2146,7 @@ test('usuário comum não exclui prospecção Perdida', async () => {
   darPermissaoDeExcluir(dados);
   const ctx = await montar(dados);
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', { usuario: 2, method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', { usuario: 2, ...comMotivo() });
     assert.strictEqual(resp.status, 403);
   } finally {
     await ctx.encerrar();
@@ -2135,7 +2156,7 @@ test('usuário comum não exclui prospecção Perdida', async () => {
 test('Sup Admin exclui a encerrada normalmente', async () => {
   const ctx = await montar(baseDados());
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', { method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', comMotivo());
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 5), false);
   } finally {
@@ -2152,7 +2173,7 @@ test('nem a prospecção em andamento pode ser excluída por usuário comum', as
   const ctx = await montar(dados);
   try {
     // A 1 está Qualificado, em pleno andamento.
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, ...comMotivo() });
     assert.strictEqual(resp.status, 403);
     assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 1));
   } finally {
@@ -2163,7 +2184,7 @@ test('nem a prospecção em andamento pode ser excluída por usuário comum', as
 test('Sup Admin exclui prospecção em qualquer etapa', async () => {
   const ctx = await montar(baseDados());
   try {
-    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { method: 'DELETE' });
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', comMotivo());
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), false);
   } finally {

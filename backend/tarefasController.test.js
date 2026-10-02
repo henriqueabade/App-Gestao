@@ -378,6 +378,39 @@ test('próximo passo da prospecção = tarefa: definir cria, concluir lá fecha 
   }
 });
 
+test('próximo passo definido por outra pessoa (decisão do dono, 02/10/2026): "Nova tarefa para você" na hora, sem o aviso da prospecção repetir o passo', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const doJoao = () => ctx.tabelas.notificacoes.filter(n => Number(n.usuario_id) === 3);
+    await chamar(ctx.porta, '/api/prospeccoes/8/proximo-passo', { usuario: 1, method: 'PUT', corpo: { proximo_passo: 'Enviar catálogo', proximo_passo_data: dia(2) } });
+    let avisos = doJoao();
+    assert.strictEqual(avisos.length, 1, `um aviso só: ${avisos.map(a => a.titulo).join(' | ')}`);
+    assert.strictEqual(avisos[0].titulo, 'Nova tarefa para você');
+    assert.strictEqual(avisos[0].origem, 'tarefa');
+    assert.match(avisos[0].mensagem, /definiu o próximo passo da prospecção ACME: Enviar catálogo/);
+
+    // Concluir com nota e um passo novo: a tarefa nova avisa; o aviso da
+    // prospecção leva a nota (e o que mais mudou), mas não o passo de novo.
+    await chamar(ctx.porta, '/api/prospeccoes/8/concluir-passo', { usuario: 1, corpo: { nota: 'Catálogo enviado', proximo_passo: 'Ligar para saber', proximo_passo_data: dia(6) } });
+    avisos = doJoao().slice(1);
+    const novaTarefa = avisos.find(a => a.titulo === 'Nova tarefa para você');
+    assert.ok(novaTarefa && /Ligar para saber/.test(novaTarefa.mensagem));
+    const daProspeccao = avisos.filter(a => a.origem === 'prospeccao');
+    assert.strictEqual(daProspeccao.length, 1);
+    assert.ok(!/Próximo passo/.test(daProspeccao[0].mensagem), `o passo não vem repetido: ${daProspeccao[0].mensagem}`);
+    assert.match(daProspeccao[0].mensagem, /Catálogo enviado/);
+
+    // O próprio João define o passo dele: ninguém é avisado (ele fez).
+    const antes = ctx.tabelas.notificacoes.length;
+    const tarefas = ctx.tabelas.tarefas.filter(t => t.origem === 'proximo_passo');
+    tarefas.forEach(t => { t.status = 'concluida'; });
+    await chamar(ctx.porta, '/api/prospeccoes/8/proximo-passo', { usuario: 3, method: 'PUT', corpo: { proximo_passo: 'Visitar', proximo_passo_data: dia(8), nota_passo_anterior: 'Liguei' } });
+    assert.strictEqual(ctx.tabelas.notificacoes.slice(antes).filter(n => Number(n.usuario_id) === 3).length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('avisos: atrasada avisa uma vez por dia; convite e prazo mudado pelo gestor também', async () => {
   const ctx = await montar(baseDados());
   try {

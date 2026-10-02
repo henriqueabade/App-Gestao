@@ -47,6 +47,20 @@ test('janela do canto: mais novos primeiro e sem repetir; canto inferior direito
   assert.strictEqual(J.semOsLidos(lista, {}).length, 3);
 });
 
+test('categorias do sino guardadas na máquina para a janela do canto: sem arquivo = tudo ligado; grava normalizado', () => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'cat-sino-'));
+  try {
+    const arquivo = path.join(pasta, 'categorias-do-sino.json');
+    assert.deepStrictEqual(P.lerCategorias(arquivo), { enabled: true, categories: { tasks: true, sales: true, finance: true } });
+    assert.deepStrictEqual(P.gravarCategorias(arquivo, { enabled: true, categories: { tasks: false, system: false, lixo: 1 } }),
+      { enabled: true, categories: { tasks: false, sales: true, finance: true } });
+    assert.deepStrictEqual(P.lerCategorias(arquivo).categories.tasks, false, 'lida de volta depois de reiniciar');
+    assert.deepStrictEqual(P.lerCategorias(null), { enabled: true, categories: { tasks: true, sales: true, finance: true } });
+  } finally {
+    fs.rmSync(pasta, { recursive: true, force: true });
+  }
+});
+
 test('som do dono: som-aviso em src/assets, mp3 antes de wav antes de ogg; vazio ou ausente = tum-tum (null)', () => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'som-aviso-'));
   try {
@@ -160,8 +174,12 @@ test('main.js: fechar vai para a bandeja (avisos ligados); sair de verdade só p
 test('main.js: o login (e a entrada automática) fazem a máquina ser do usuário; a janela do canto só com o programa atrás', () => {
   assert.strictEqual(MAIN.split('avisosAposEntrar(user);').length - 1, 2, 'login-usuario e auto-login');
   assert.match(MAIN, /function programaNaFrente\(\) \{\s+return Boolean\(dashboardWindow && !dashboardWindow\.isDestroyed\(\) && dashboardWindow\.isVisible\(\) && dashboardWindow\.isFocused\(\)\);/);
-  assert.ok(MAIN.includes("if (novos.length && preferencias.avisosNoWindows && !programaNaFrente()) {"));
-  assert.ok(MAIN.includes("janelaDeAviso.mostrar(novos, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });"));
+  // Só o que o sino mostraria (as categorias de Configurações › Notificações, 02/10/2026).
+  assert.ok(MAIN.includes('const visiveis = novos.filter(aviso => CategoriasAviso.aparece(aviso, categoriasDoSino));'));
+  assert.ok(MAIN.includes("if (visiveis.length && preferencias.avisosNoWindows && !programaNaFrente()) {"));
+  assert.ok(MAIN.includes("janelaDeAviso.mostrar(visiveis, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });"));
+  assert.ok(MAIN.includes("categoriasDoSino = preferenciasWindows.lerCategorias(arquivoDasCategorias);"), 'vale com o programa só na bandeja');
+  assert.match(MAIN, /ipcMain\.handle\('avisos-windows:categorias', \(_event, escolha\) => \{\s+categoriasDoSino = preferenciasWindows\.gravarCategorias\(arquivoDasCategorias, escolha \|\| \{\}\);/);
   // O token só dos avisos é guardado cifrado pelo Windows.
   assert.ok(MAIN.includes('safeStorage.isEncryptionAvailable()'));
   // Desligar os avisos esquece o usuário e o token.
@@ -184,10 +202,10 @@ test('main.js: a janela do canto não fecha ao abrir um aviso (só no X); recolh
 
 test('preload e instalador: o canal avisosWindows; desinstalar tira o início com o Windows (menos na atualização)', () => {
   for (const canal of ['avisos-windows:preferencias', 'avisos-windows:gravar-preferencias', 'avisos-windows:pronto', 'avisos-windows:avisos',
-    'avisos-windows:altura', 'avisos-windows:abrir', 'avisos-windows:dispensar', 'avisos-windows:abrir-no-sino', 'avisos-windows:pendente', 'avisos-windows:lidos']) {
+    'avisos-windows:altura', 'avisos-windows:abrir', 'avisos-windows:dispensar', 'avisos-windows:abrir-no-sino', 'avisos-windows:pendente', 'avisos-windows:lidos', 'avisos-windows:categorias']) {
     assert.ok(PRELOAD.includes(`'${canal}'`), `preload: ${canal}`);
   }
-  for (const canal of ['avisos-windows:preferencias', 'avisos-windows:gravar-preferencias', 'avisos-windows:pronto', 'avisos-windows:altura', 'avisos-windows:dispensar', 'avisos-windows:abrir', 'avisos-windows:pendente', 'avisos-windows:lidos']) {
+  for (const canal of ['avisos-windows:preferencias', 'avisos-windows:gravar-preferencias', 'avisos-windows:pronto', 'avisos-windows:altura', 'avisos-windows:dispensar', 'avisos-windows:abrir', 'avisos-windows:pendente', 'avisos-windows:lidos', 'avisos-windows:categorias']) {
     assert.ok(MAIN.includes(`ipcMain.handle('${canal}'`), `main: ${canal}`);
   }
   assert.match(NSIS, /!macro customUnInstall\s+\$\{ifNot\} \$\{isUpdated\}\s+DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "com\.santissimo\.decor"/);

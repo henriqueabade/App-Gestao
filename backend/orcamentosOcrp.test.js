@@ -531,13 +531,20 @@ test('orçamento excluído some da lista mas fica detalhado no histórico', asyn
     { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', valor_final: 8500 }
   ]));
   try {
-    const resp = await chamar(ctx.porta, '/api/orcamentos/1', { method: 'DELETE' });
+    // Sem motivo (decisão do dono, 02/10/2026): recusado antes de apagar.
+    const semMotivo = await chamar(ctx.porta, '/api/orcamentos/1', { method: 'DELETE', body: JSON.stringify({ motivo: '   ' }) });
+    assert.strictEqual(semMotivo.status, 400);
+    assert.strictEqual((await semMotivo.json()).error, 'Escreva o motivo da exclusão.');
+    assert.strictEqual(ctx.tabelas.orcamentos.length, 1, 'nada apagado');
+
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1', { method: 'DELETE', body: JSON.stringify({ motivo: 'Cliente pediu outro modelo' }) });
     assert.strictEqual(resp.status, 200);
     assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
 
     const [evento] = historicoDe(ctx);
     assert.strictEqual(evento.acao, 'excluiu');
     assert.strictEqual(evento.valor_anterior, 'OCRP1');
+    assert.strictEqual(evento.observacao, 'Motivo: Cliente pediu outro modelo', 'o motivo fica no histórico da prospecção');
     // O detalhe é o que permite responder "quanto valia aquele orçamento?"
     // depois que a linha já não existe.
     const detalhe = typeof evento.detalhe === 'string' ? JSON.parse(evento.detalhe) : evento.detalhe;

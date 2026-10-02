@@ -2,6 +2,7 @@
  * Avisos por usuário — o sino do topo (/api/notificacoes).
  *
  *   GET  /           os meus últimos 50 avisos, o total de não lidos e o nome de quem fez
+ *                    (?ocultar=tasks,finance tira as categorias desmarcadas)
  *   POST /lidas      { ids: [...] } marca estes; { todas: true } marca todos os meus
  *   POST /dispensar  { ids: [...] } tira do sino (fica no banco, com excluida_em)
  *
@@ -30,15 +31,25 @@ const LIMITE = 50;
 // O texto principal, o que mudou e as notas de cada aviso (a função mora no
 // núcleo puro, que o processo principal também usa nos avisos do Windows).
 const { partesDaMensagem } = require('./avisosEnvolvidos');
+const { categoriaDoAviso, DO_SINO } = require('../src/js/utils/categorias-aviso');
+
+/** `?ocultar=tasks,finance` → as categorias que a pessoa desmarcou (só as do sino). Pura. */
+function categoriasOcultas(query = {}) {
+  const bruto = Array.isArray(query?.ocultar) ? query.ocultar.join(',') : String(query?.ocultar || '');
+  return new Set(bruto.split(',').map(s => s.trim()).filter(c => DO_SINO.includes(c)));
+}
 
 /**
  * Os avisos de um usuário, do mais novo ao mais antigo, com o nome do autor.
- * Os dispensados ficam de fora. `convitesPendentes`: ids das tarefas com
+ * Os dispensados ficam de fora, e os das categorias desmarcadas em
+ * Configurações › Notificações (`ocultar`) também — inclusive da contagem
+ * (decisão do dono, 02/10/2026). `convitesPendentes`: ids das tarefas com
  * convite meu ainda sem resposta. Pura.
  */
-function montarAvisos(linhas = [], nomes = new Map(), limite = LIMITE, convitesPendentes = new Set()) {
+function montarAvisos(linhas = [], nomes = new Map(), limite = LIMITE, convitesPendentes = new Set(), ocultar = new Set()) {
   const todos = (Array.isArray(linhas) ? linhas : [])
     .filter(n => !n.excluida_em)
+    .filter(n => !ocultar.has(categoriaDoAviso(n)))
     .slice()
     .sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)) || Number(b.id) - Number(a.id));
   return {
@@ -66,7 +77,7 @@ router.get('/', async (req, res) => {
       api.get('/api/tarefa_participantes', { query: { usuario_id: usuarioId, status: 'pendente' } }).catch(() => [])
     ]);
     const pendentes = new Set((Array.isArray(participacoes) ? participacoes : []).filter(p => p.status === 'pendente').map(p => String(p.tarefa_id)));
-    res.json(montarAvisos(linhas, nomes, LIMITE, pendentes));
+    res.json(montarAvisos(linhas, nomes, LIMITE, pendentes, categoriasOcultas(req.query)));
   } catch (err) {
     if (semTabela(err)) return res.json({ itens: [], nao_lidas: 0, sql_pendente: true });
     console.error('[notificacoes] falha ao listar:', err);
@@ -113,4 +124,5 @@ router.post('/dispensar', async (req, res) => {
 
 module.exports = router;
 module.exports.montarAvisos = montarAvisos;
+module.exports.categoriasOcultas = categoriasOcultas;
 module.exports.partesDaMensagem = partesDaMensagem;

@@ -279,7 +279,7 @@
                     <div class="category-header">
                         <div>
                             <span class="category-title">Tarefas e lembretes</span>
-                            <p class="category-description">Alertas sobre tarefas pendentes, compromissos e follow-ups.</p>
+                            <p class="category-description">Lembretes, atrasos, convites e o que mudar nas suas tarefas.</p>
                         </div>
                         <input type="checkbox" id="category-tasks" data-perm="cfg.categories.edit" class="category-input" value="tasks">
                     </div>
@@ -288,7 +288,7 @@
                     <div class="category-header">
                         <div>
                             <span class="category-title">Vendas e pedidos</span>
-                            <p class="category-description">Notificações sobre novos pedidos e movimentações comerciais.</p>
+                            <p class="category-description">Prospecções, clientes, contatos, orçamentos e pedidos, e os comentários do histórico.</p>
                         </div>
                         <input type="checkbox" id="category-sales" data-perm="cfg.categories.edit" class="category-input" value="sales">
                     </div>
@@ -297,13 +297,15 @@
                     <div class="category-header">
                         <div>
                             <span class="category-title">Financeiro</span>
-                            <p class="category-description">Alertas de cobranças, faturamentos e vencimentos próximos.</p>
+                            <p class="category-description">Financeiro, Cobrança e Contabilidade.</p>
                         </div>
                         <input type="checkbox" id="category-finance" data-perm="cfg.categories.edit" class="category-input" value="finance">
                     </div>
                 </label>
             </div>
             <p id="categorySummary" class="settings-status"></p>
+            <!-- Decisão do dono (02/10/2026): cada categoria esconde só os avisos dela, no sino e na janela do canto (src/js/utils/categorias-aviso.js). -->
+            <p class="settings-status">Desmarcar uma categoria esconde só os avisos dela, no sino e na janela do canto da tela. Os avisos sobre o seu próprio cadastro (acesso, senha) sempre aparecem.</p>
         </section>
 
         <!--

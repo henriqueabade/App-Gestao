@@ -45,7 +45,13 @@ function confirmarExclusaoSupAdmin(mensagem, cb) {
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
             <div class="p-6 text-center">
                 <h3 class="ctl-modal-titulo mb-4 text-red-400">Confirmar exclusão</h3>
-                <p class="text-sm text-gray-300 mb-6">${mensagem}</p>
+                <p class="text-sm text-gray-300 mb-4">${mensagem}</p>
+                <div class="text-left mb-6">
+                    <label for="excluirMotivo" class="ctl-rotulo text-gray-300">Motivo da exclusão <span class="text-[var(--color-red)]">*</span></label>
+                    <textarea id="excluirMotivo" rows="3" maxlength="600" placeholder="Por que está sendo excluído?"
+                        class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+                    <p id="excluirMotivoErro" class="mt-2 text-xs text-red-400 hidden">Escreva o motivo da exclusão.</p>
+                </div>
                 <div class="ctl-acoes justify-center">
                     <button id="excluirSim" class="btn-danger ctl-botao text-white">Excluir</button>
                     <button id="excluirNao" class="btn-neutral ctl-botao text-white">Cancelar</button>
@@ -53,7 +59,20 @@ function confirmarExclusaoSupAdmin(mensagem, cb) {
             </div>
         </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('#excluirSim').addEventListener('click', () => { overlay.remove(); cb(true); });
+    // Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso de quem
+    // tinha o orçamento e no histórico do cliente/prospecção.
+    const motivoEl = overlay.querySelector('#excluirMotivo');
+    motivoEl.focus();
+    overlay.querySelector('#excluirSim').addEventListener('click', () => {
+        const motivo = motivoEl.value.trim();
+        if (!motivo) {
+            overlay.querySelector('#excluirMotivoErro').classList.remove('hidden');
+            motivoEl.focus();
+            return;
+        }
+        overlay.remove();
+        cb(true, motivo);
+    });
     overlay.querySelector('#excluirNao').addEventListener('click', () => { overlay.remove(); cb(false); });
 }
 
@@ -344,13 +363,15 @@ async function carregarOrcamentos() {
                 const tr = e.currentTarget.closest('tr');
                 const o = data[Number(tr.dataset.index)] ?? data.find(x => String(x.numero) === tr.cells[0]?.textContent?.trim());
                 if (!o) return;
-                confirmarExclusaoSupAdmin(`Excluir definitivamente o orçamento ${o.numero}? Esta ação não pode ser desfeita.`, async ok => {
+                confirmarExclusaoSupAdmin(`Excluir definitivamente o orçamento ${o.numero}? Esta ação não pode ser desfeita.`, async (ok, motivo) => {
                     if (!ok) return;
                     // Ver a nota gêmea em pedidos.js: depois do diálogo não há
                     // botão para marcar, e a espera ficava muda.
                     await comCarregamento(async () => {
                     try {
-                        const resp = await fetchApi(`/api/orcamentos/${encodeURIComponent(o.id)}`, { method: 'DELETE' });
+                        const resp = await fetchApi(`/api/orcamentos/${encodeURIComponent(o.id)}`, {
+                            method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo })
+                        });
                         const corpo = await resp.json().catch(() => null);
                         if (!resp.ok) {
                             // Ver a nota gêmea em pedidos.js: sem o motivo do
