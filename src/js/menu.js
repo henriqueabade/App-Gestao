@@ -168,20 +168,76 @@ function getCurrentUserFromStorage() {
  * código, ignorando o que estava marcado no perfil do usuário. Agora vale
  * apenas a permissão: se o módulo está ativo no modelo, o usuário entra.
  *
- * Falha em aberto de propósito: enquanto as permissões não carregaram (ou a
- * API está fora), a navegação continua liberada — o backend é quem recusa de
- * fato (403). Travar aqui deixaria o app inutilizável por um problema de rede.
+ * Na dúvida, NÃO abre (02/10/2026). Antes, sem as permissões carregadas (ou
+ * com a API fora), a navegação ficava liberada "para não travar o app": no
+ * Ctrl+R o menu mostrava todos os módulos por um instante e a página guardada
+ * abria antes de a permissão chegar. Agora o `loadPage` espera as permissões
+ * e, sem elas, nenhum módulo é buscado — a carga é tentada de novo sozinha
+ * (src/js/permissoes.js).
  */
 function podeAbrirModulo(page) {
     const permissoes = window.Permissoes;
-    if (!permissoes || typeof permissoes.podeAbrirPagina !== 'function') return true;
+    if (!permissoes || typeof permissoes.podeAbrirPagina !== 'function') return false;
     try {
         return permissoes.podeAbrirPagina(page);
     } catch (error) {
         console.warn('Não foi possível verificar a permissão do módulo', page, error);
-        return true;
+        return false;
     }
 }
+
+/**
+ * O módulo que abre no lugar de um proibido: a página pedida como reserva, o
+ * Dashboard e, na falta deles, o primeiro do menu que a pessoa pode abrir.
+ */
+function primeiraPaginaPermitida(exceto, preferida) {
+    const doMenu = Array.from(document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]'))
+        .map(item => item.dataset.page);
+    return [preferida, 'dashboard', ...doMenu]
+        .find(pagina => pagina && pagina !== exceto && podeAbrirModulo(pagina)) || null;
+}
+
+/**
+ * Nada pode ser aberto: nenhum módulo liberado no perfil, ou as permissões
+ * ainda não chegaram (API fora). Ocupa o lugar do módulo com a explicação —
+ * nenhum HTML de módulo é buscado.
+ */
+function mostrarSemAcesso() {
+    const content = document.getElementById('content');
+    if (!content) return;
+    const indisponivel = Boolean(window.Permissoes?.indisponivel) || !window.Permissoes;
+    const quadro = document.createElement('div');
+    quadro.className = 'sem-acesso';
+    quadro.dataset.semAcesso = indisponivel ? 'indisponivel' : 'sem-modulos';
+    const icone = document.createElement('div');
+    icone.className = 'sem-acesso__icone';
+    const i = document.createElement('i');
+    i.className = indisponivel ? 'fas fa-rotate' : 'fas fa-lock';
+    icone.appendChild(i);
+    const titulo = document.createElement('h2');
+    titulo.className = 'sem-acesso__titulo';
+    titulo.textContent = indisponivel ? 'Carregando as suas permissões' : 'Nenhum módulo liberado';
+    const texto = document.createElement('p');
+    texto.className = 'sem-acesso__texto';
+    texto.textContent = indisponivel
+        ? 'Não foi possível conferir as suas permissões agora. O programa está tentando de novo; os módulos aparecem assim que a resposta chegar.'
+        : 'O seu perfil ainda não tem nenhum módulo liberado. Fale com o administrador para definir as suas permissões.';
+    quadro.append(icone, titulo, texto);
+    content.replaceChildren(quadro);
+    content.dataset.activePage = '';
+}
+
+// As permissões chegaram depois de uma falha: sai do quadro de espera e abre
+// a página inicial.
+window.addEventListener('permissoes:carregadas', (evento) => {
+    if (evento?.detail?.indisponivel) return;
+    const quadro = document.querySelector('#content [data-sem-acesso="indisponivel"]');
+    if (!quadro) return;
+    window.Permissoes?.aplicar?.(document);
+    loadPage(readStoredDefaultPage() === 'last'
+        ? (readStoredLastPage() || MENU_DEFAULT_PAGE_FALLBACK)
+        : readStoredDefaultPage());
+});
 
 const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
 const MENU_LAST_PAGE_KEY = 'menu.lastPage';
@@ -3290,10 +3346,23 @@ async function loadPage(page, options = {}) {
         return;
     }
 
+    // Nenhum módulo é buscado antes de as permissões chegarem: sem elas (ou
+    // sem a permissão do módulo) o HTML dele nem sai do disco.
+    try {
+        await window.Permissoes?.carregar?.();
+    } catch (err) {
+        console.error('[permissoes] falha ao carregar antes de abrir o módulo:', err);
+    }
     if (!podeAbrirModulo(page)) {
-        const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'
-            ? options.fallbackPage : MENU_DEFAULT_PAGE_FALLBACK;
-        return loadPage(fallbackPage, { ...options, fallbackPage: undefined, skipNavigationUpdate: false });
+        const reserva = options?.fallbackPage && options.fallbackPage !== 'usuarios' ? options.fallbackPage : null;
+        // Antes a reserva era sempre o Dashboard, mesmo proibido: a função se
+        // chamava de novo sem fim e a tela ficava parada em "Carregando".
+        const alternativa = primeiraPaginaPermitida(page, reserva);
+        if (!alternativa) {
+            mostrarSemAcesso();
+            return;
+        }
+        return loadPage(alternativa, { ...options, fallbackPage: undefined, skipNavigationUpdate: false });
     }
 
     if (!options.skipNavigationUpdate) setActiveNavigation(page);
@@ -3717,6 +3786,18 @@ async function carregarPreferenciasMenuDoBanco() {
 }
 
 window.addEventListener('load', async () => {
+    // Aceite dos Termos de Uso pedido pelo Sup Admin: a caixa vem ANTES de
+    // qualquer módulo e só sai com a resposta (aceitar ou recusar). Depois, o
+    // programa confere de novo ao voltar para a frente e a cada minuto, para
+    // o pedido alcançar quem já está com a sessão aberta ou em segundo plano
+    // (src/js/utils/termos-aceite.js).
+    try {
+        await window.TermosAceite?.verificarSessao?.();
+    } catch (err) {
+        console.error('[termos] falha ao conferir o aceite na abertura:', err);
+    }
+    window.TermosAceite?.vigiarSessao?.();
+
     await carregarPreferenciasMenuDoBanco();
 
     const defaultPagePreference = readStoredDefaultPage();

@@ -9,6 +9,16 @@ const SenhaForte = require('../src/js/utils/senha-forte');
 
 const router = express.Router();
 
+// NADA de hash de senha nem de token de confirmação/aprovação para a tela.
+// A API remota devolve a linha inteira de `usuarios` (ela ignora o `select`),
+// e só o modo DEV limpava a resposta: em produção /lista, /me e /:id
+// entregavam o hash da senha de todo mundo a qualquer usuário logado.
+router.use((_req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = corpo => json(sanitizarSaida(corpo));
+  next();
+});
+
 /**
  * Cria um client interno já com o JWT que está salvo no tokenStore.
  * Esse client só faz proxy HTTP, sem nenhuma transformação pesada.
@@ -19,6 +29,8 @@ const router = express.Router();
 // observações internas do cadastro não entram no aviso: são do administrador.
 // ---------------------------------------------------------------------------
 const avisos = require('./avisosEnvolvidos');
+// Aceite dos Termos de Uso e da Política de Privacidade (backend/termosDeUso.js).
+const termos = require('./termosDeUso');
 const ROTULO_ACESSO = { ativo: 'Ativo', aguardando_aprovacao: 'Inativo', nao_confirmado: 'Não confirmado' };
 const CAMPOS_DA_CONTA = {
   nome: 'Nome', email: 'E-mail', telefone: 'Telefone', perfil: 'Perfil',
@@ -289,7 +301,9 @@ router.get('/', async (req, res) => {
     // desses campos. Nao ha guarda de permissao aqui de proposito: a lista de
     // usuarios alimenta os seletores de "Dono" em Pedidos e Orcamentos, que
     // qualquer perfil pode usar. O que era grave era o vazamento dos campos.
-    res.json(sanitizarSaida(Array.isArray(usuarios) ? usuarios : []));
+    // Sem o módulo Usuários vai só o que o seletor precisa (como em /lista).
+    const limpos = sanitizarSaida(Array.isArray(usuarios) ? usuarios : []);
+    res.json((await podeVerUsuarios(req)) ? limpos : limpos.map(paraSeletor));
   } catch (err) {
     console.error('Erro ao listar usuários:', err);
     res
@@ -326,6 +340,26 @@ function comSinalDoPrograma(usuarios = [], computadores = [], agora = Date.now()
   });
 }
 
+/** Quem chama tem o módulo Usuários (ou o de Relatórios, que tem o relatório de usuários)? */
+async function podeVerUsuarios(req) {
+  try {
+    const permissoes = await require('./permissionsController').obterPermissoesEfetivas(req);
+    return permissoesRepo.can(permissoes, 'usuarios.view') || permissoesRepo.can(permissoes, 'rel.view');
+  } catch (err) {
+    console.error('[usuarios] falha ao verificar a permissão da lista:', err?.message || err);
+    return false;
+  }
+}
+
+/** O que os seletores de dono/responsável dos outros módulos precisam, e só. Pura. */
+const CAMPOS_DO_SELETOR = [
+  'id', 'nome', 'email', 'perfil', 'status',
+  'foto_usuario', 'avatar', 'avatarUrl', 'avatar_url', 'foto', 'fotoUrl', 'avatarVersion', 'avatar_version'
+];
+function paraSeletor(usuario = {}) {
+  return Object.fromEntries(CAMPOS_DO_SELETOR.filter(c => usuario[c] !== undefined).map(c => [c, usuario[c]]));
+}
+
 /**
  * GET /usuarios/lista
  * Rota usada na TELA DE USUÁRIOS.
@@ -343,6 +377,8 @@ router.get('/lista', async (req, res) => {
     // O popover de atividade mostra QUANDO, ONDE e O QUÊ da última alteração.
     // Sem estas colunas no select ele só conseguia montar meia frase.
     const camposAlteracao = 'ultima_alteracao_em,local_ultima_alteracao,especificacao_ultima_alteracao';
+    // A coluna Termos (Aceito / Pendente) da tela de Usuários.
+    const camposTermos = 'termos_versao,privacidade_versao,termos_aceitos_em,termos_solicitados_em,termos_recusados_em';
 
     // ?presenca=1 (a tela de Usuários): junta o sinal do programa de cada um.
     const { presenca, ...semPresenca } = req.query || {};
@@ -357,6 +393,7 @@ router.get('/lista', async (req, res) => {
     let tentativas = req.query?.select
       ? [req.query.select]
       : [
+        `${camposBase},${camposAtividade},${camposAlteracao},${camposTermos}`,
         `${camposBase},${camposAtividade},${camposAlteracao}`,
         `${camposBase},${camposAtividade}`,
         camposBase
@@ -383,9 +420,24 @@ router.get('/lista', async (req, res) => {
       }
     }
     if (ultimoErro) throw ultimoErro;
-    const payload = Array.isArray(usuarios)
+    const completos = Array.isArray(usuarios)
       ? usuarios.map(user => normalizeAvatar(user))
       : [];
+
+    // A lista serve a dois públicos. Quem tem o módulo Usuários vê tudo
+    // (atividade, presença, termos). Os outros módulos só a usam para os
+    // seletores de dono/responsável: para eles vai só o necessário — datas de
+    // acesso e atividade dos colegas não saem do backend sem permissão.
+    if (!(await podeVerUsuarios(req))) {
+      res.status(200).json(completos.map(paraSeletor));
+      return;
+    }
+
+    const termosProntos = await termos.temEsquema(api);
+    const payload = completos.map(u => ({
+      ...u,
+      ...(termosProntos ? termos.situacaoDe(u) : { termos_situacao: 'indisponivel', termos_solicitado: false })
+    }));
 
     if (presenca) {
       const computadores = await api.get('/api/avisos_dispositivos').catch(() => null);
@@ -454,6 +506,130 @@ router.put('/me/avatar', async (req, res) => {
 });
 
 // ==========================================================================
+// Termos de Uso e Política de Privacidade (02/10/2026)
+//
+// O Sup Admin pede o aceite em Usuários (POST /:id/termos/solicitar); a
+// pessoa vê a caixa ao entrar (GET /me/termos diz se está pendente) e aceita
+// ou recusa. Recusar desativa o acesso, sem excluir. Regras e gravação em
+// backend/termosDeUso.js. Antes de "/:id".
+// ==========================================================================
+
+/** O usuário da sessão, lido de novo do banco (o pedido pode ter acabado de chegar). */
+async function usuarioDaSessao(req, api) {
+  const id = resolverUsuarioAtual(req);
+  if (!id) throw Object.assign(new Error('Sessão não identificada. Entre novamente.'), { status: 401 });
+  const usuario = await api.get(`/api/usuarios/${id}`);
+  if (!usuario || usuario.error) throw Object.assign(new Error('Usuário não encontrado.'), { status: 404 });
+  return usuario;
+}
+
+function responderErroDosTermos(res, err, oQue) {
+  if (!err?.status || err.status >= 500) console.error(`[termos] falha ao ${oQue}:`, err?.message || err);
+  res.status(err?.status || 500).json({
+    error: err?.status && err.status < 500 ? err.message : `Não foi possível ${oQue} agora. Tente de novo.`,
+    ...(err?.code ? { code: err.code } : {})
+  });
+}
+
+/** Os outros Sup Admins ativos (para avisar e para não deixar o último se desativar). */
+async function outrosSupAdminsAtivos(api, usuarioId) {
+  const todos = await api.get('/api/usuarios').catch(() => []);
+  return (Array.isArray(todos) ? todos : []).filter(u => String(u?.id) !== String(usuarioId)
+    && permissoesRepo.isSupAdmin(u) && normalizarStatusUsuario(u.status) === 'ativo');
+}
+
+/** GET /usuarios/me/termos — "tenho aceite pendente?" */
+router.get('/me/termos', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const usuario = await usuarioDaSessao(req, api);
+    const pronto = await termos.temEsquema(api);
+    // A primeira sessão aberta com esta versão do programa guarda o texto dos
+    // documentos: é o que libera o cadastro (anônimo) da tela de login.
+    if (pronto) await termos.registrarVersoesUmaVez(api);
+    const pendente = pronto && termos.precisaAceitar(usuario);
+    termos.marcarAguardando(usuario.id, pendente);
+    res.json({
+      pendente,
+      ...termos.situacaoDe(usuario),
+      documentos: termos.versoesVigentes(),
+      ...(pronto ? {} : { sql_pendente: true })
+    });
+  } catch (err) {
+    responderErroDosTermos(res, err, 'conferir os termos');
+  }
+});
+
+/** POST /usuarios/me/termos/aceitar { documentos: { termos_de_uso, politica_de_privacidade } } */
+router.post('/me/termos/aceitar', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const usuario = await usuarioDaSessao(req, api);
+    termos.conferirVersoes(req.body?.documentos);
+    if (termos.aceitou(usuario)) {
+      termos.marcarAguardando(usuario.id, false);
+      return res.json({ success: true, ...termos.situacaoDe(usuario) });
+    }
+    const campos = await termos.registrar(api, usuario, { decisao: 'aceito', origem: 'solicitacao' });
+    termos.marcarAguardando(usuario.id, false);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    res.json({ success: true, ...termos.situacaoDe({ ...usuario, ...campos }) });
+  } catch (err) {
+    responderErroDosTermos(res, err, 'registrar o aceite');
+  }
+});
+
+/** POST /usuarios/me/termos/recusar — desativa o acesso (não exclui). */
+router.post('/me/termos/recusar', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const usuario = await usuarioDaSessao(req, api);
+    if (termos.aceitou(usuario)) {
+      return res.status(409).json({ error: 'Você já aceitou a versão atual dos termos.' });
+    }
+    const outros = await outrosSupAdminsAtivos(api, usuario.id);
+    if (permissoesRepo.isSupAdmin(usuario) && !outros.length) {
+      return res.status(409).json({
+        error: 'Você é o único Sup Admin ativo. Se recusar, a sua conta é desativada e ninguém poderá reativá-la. Aceite os termos ou peça a outro administrador que assuma antes.',
+        code: 'UNICO_SUP_ADMIN'
+      });
+    }
+    await termos.registrar(api, usuario, { decisao: 'recusado', origem: 'solicitacao' });
+    termos.marcarAguardando(usuario.id, false);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    await avisos.gravar(api, outros.map(admin => ({
+      usuario_id: Number(admin.id),
+      tipo: 'termos_recusados',
+      titulo: 'Termos recusados',
+      mensagem: avisos.comporMensagem(
+        `${usuario.nome || usuario.email || 'Um usuário'} recusou os Termos de Uso e a Política de Privacidade e teve o acesso desativado.`,
+        []
+      ),
+      origem: 'usuario',
+      registro_id: Number(usuario.id),
+      autor_id: Number(usuario.id)
+    }))).catch(() => {});
+    res.json({ success: true, desativado: true });
+  } catch (err) {
+    responderErroDosTermos(res, err, 'registrar a recusa');
+  }
+});
+
+/** POST /usuarios/:id/termos/solicitar — só o Sup Admin, e só com os termos pendentes. */
+router.post('/:id/termos/solicitar', exigirSupAdminUsuarios, async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const alvo = await api.get(`/api/usuarios/${req.params.id}`).catch(() => null);
+    if (!alvo || alvo.error) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const campos = await termos.solicitar(api, alvo, resolverUsuarioAtual(req));
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    res.json({ success: true, id: Number(alvo.id), ...termos.situacaoDe({ ...alvo, ...campos }) });
+  } catch (err) {
+    responderErroDosTermos(res, err, 'pedir o aceite');
+  }
+});
+
+// ==========================================================================
 // Modelos (perfis) de permissão
 //
 // IMPORTANTE: estas rotas precisam ficar ANTES de "/:id", senão o Express
@@ -484,7 +660,7 @@ function permissoesDoBody(body = {}) {
 }
 
 /** GET /usuarios/modelos-permissoes — lista os perfis */
-router.get('/modelos-permissoes', async (_req, res) => {
+router.get('/modelos-permissoes', exigirSupAdminUsuarios, async (_req, res) => {
   try {
     const api = createInternalApiClient();
     const linhas = await api.get('/api/modelos_permissoes', { query: { order: 'nome' } });
@@ -499,7 +675,7 @@ router.get('/modelos-permissoes', async (_req, res) => {
 });
 
 /** GET /usuarios/modelos-permissoes/:id — perfil + permissões */
-router.get('/modelos-permissoes/:id', async (req, res) => {
+router.get('/modelos-permissoes/:id', exigirSupAdminUsuarios, async (req, res) => {
   try {
     const api = createInternalApiClient();
     const modelo = await api.get(`/api/modelos_permissoes/${req.params.id}`);
@@ -515,7 +691,7 @@ router.get('/modelos-permissoes/:id', async (req, res) => {
 });
 
 /** POST /usuarios/modelos-permissoes — cria perfil e grava permissões */
-router.post('/modelos-permissoes', async (req, res) => {
+router.post('/modelos-permissoes', exigirSupAdminUsuarios, async (req, res) => {
   const nome = String(req.body?.nome || '').trim();
   if (!nome) return res.status(400).json({ error: 'Informe o nome do perfil.' });
 
@@ -569,11 +745,11 @@ async function atualizarModelo(req, res) {
     res.status(err.status || 500).json({ error: 'Erro ao atualizar modelo de permissões' });
   }
 }
-router.patch('/modelos-permissoes/:id', atualizarModelo);
-router.put('/modelos-permissoes/:id', atualizarModelo);
+router.patch('/modelos-permissoes/:id', exigirSupAdminUsuarios, atualizarModelo);
+router.put('/modelos-permissoes/:id', exigirSupAdminUsuarios, atualizarModelo);
 
 /** DELETE /usuarios/modelos-permissoes/:id */
-router.delete('/modelos-permissoes/:id', async (req, res) => {
+router.delete('/modelos-permissoes/:id', exigirSupAdminUsuarios, async (req, res) => {
   const { id } = req.params;
   try {
     const api = createInternalApiClient();
@@ -651,7 +827,7 @@ router.post('/:id/computadores/:computadorId/cancelar', exigirSupAdminUsuarios, 
 });
 
 /** PUT /usuarios/:id/permissoes — vincula um perfil ao usuário */
-router.put('/:id/permissoes', async (req, res) => {
+router.put('/:id/permissoes', exigirSupAdminUsuarios, async (req, res) => {
   const { id } = req.params;
   const modeloId = req.body?.modeloPermissoesId ?? req.body?.modelo_permissoes_id ?? null;
   try {
@@ -773,6 +949,27 @@ router.get('/confirmar-email', async (req, res) => {
   }
 });
 
+/**
+ * "Seu acesso foi liberado": o e-mail para quem estava esperando e passou a
+ * Ativo (tomada da lista, Editar usuário ou aprovação). Em produção quem
+ * manda é a API (rota /cadastro/liberado — o programa instalado não tem a
+ * senha do e-mail); no banco DEV sai daqui. Falha só vai para o log.
+ */
+async function avisarDaLiberacao(api, antes, depois = {}) {
+  try {
+    if (!antes?.id || depois.status !== 'ativo') return;
+    if (normalizarStatusUsuario(antes.status) === 'ativo') return;
+    if (require('./dataConfig').isDev) {
+      const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
+      await sendUserActivationNotice({ to: antes.email, nome: antes.nome });
+      return;
+    }
+    await api.post('/cadastro/liberado', { usuarioId: Number(antes.id) });
+  } catch (err) {
+    console.warn('[usuarios] e-mail de acesso liberado não enviado:', err?.message || err);
+  }
+}
+
 /** Ativa o usuário e o avisa por e-mail. */
 async function ativarUsuarioAprovado(api, usuario) {
   const agora = new Date().toISOString();
@@ -785,12 +982,7 @@ async function ativarUsuarioAprovado(api, usuario) {
     data_ativacao: agora,
     aprovacao_token: null
   });
-  try {
-    const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
-    await sendUserActivationNotice({ to: usuario.email, nome: usuario.nome });
-  } catch (mailErr) {
-    console.error('Falha ao avisar o usuário sobre a ativação:', mailErr?.message || mailErr);
-  }
+  await avisarDaLiberacao(api, usuario, { status: 'ativo' });
   try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 }
 
@@ -904,7 +1096,7 @@ router.get('/perfis', async (req, res) => {
  * Dados pessoais do modal de edição. O modal chamava esta rota, que não
  * existia — por isso "não foi possível salvar os dados pessoais".
  */
-router.put('/:id/dados', async (req, res) => {
+router.put('/:id/dados', exigirPermissaoUsuarios('usuarios.edit'), async (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
   try {
@@ -941,9 +1133,12 @@ router.put('/:id/dados', async (req, res) => {
     }
 
     const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
+    const recusa = await recusaPorPerfilSupAdmin(req, api, antes, payload.perfil);
+    if (recusa) return res.status(403).json({ error: recusa, code: 'FORBIDDEN_SUP_ADMIN' });
     await api.put(`/api/usuarios/${id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
     await avisarDaConta(api, req, id, antes, payload);
+    await avisarDaLiberacao(api, antes, payload);
     // devolve o usuário completo para o front atualizar a linha sem recarregar
     const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
     res.json({
@@ -963,7 +1158,7 @@ router.put('/:id/dados', async (req, res) => {
  * PATCH /usuarios/:id/status
  * Ativar/desativar acesso (ícone de tomada na listagem). Também não existia.
  */
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', exigirPermissaoUsuarios('usuarios.status.toggle'), async (req, res) => {
   const { id } = req.params;
   const status = normalizarStatusUsuario(req.body?.status);
   if (!status) return res.status(400).json({ error: `Status inválido: ${req.body?.status ?? ''}` });
@@ -974,9 +1169,12 @@ router.patch('/:id/status', async (req, res) => {
     // registra quando o acesso foi (re)ativado, usado no tooltip da listagem
     if (status === 'ativo') payload.data_ativacao = new Date().toISOString();
     const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
+    const recusa = await recusaPorPerfilSupAdmin(req, api, antes);
+    if (recusa) return res.status(403).json({ error: recusa, code: 'FORBIDDEN_SUP_ADMIN' });
     await api.put(`/api/usuarios/${id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
     await avisarDaConta(api, req, id, antes, { status });
+    await avisarDaLiberacao(api, antes, { status });
     // devolve o usuário completo: o front usa isso para atualizar só aquela
     // linha da tabela, em vez de recarregar/refiltrar a lista inteira.
     const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
@@ -1076,16 +1274,19 @@ router.put('/me/preferencias-menu', async (req, res) => {
 /**
  * GET /usuarios/:id
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', exigirOProprioOuVerUsuarios, async (req, res) => {
   try {
     const api = createInternalApiClient();
     const usuario = await api.get(`/api/usuarios/${req.params.id}`);
     res.json(usuario || {});
   } catch (err) {
     console.error('Erro ao buscar usuário:', err);
+    // O código da recusa da API (acesso não ativo) segue adiante: a entrada
+    // automática lê e mostra "Login bloqueado" em vez de abrir o programa.
+    const codigo = err?.body?.code;
     res
       .status(err.status || 500)
-      .json({ error: 'Erro ao buscar usuário' });
+      .json({ error: 'Erro ao buscar usuário', ...(codigo ? { code: codigo } : {}) });
   }
 });
 
@@ -1103,6 +1304,27 @@ function exigirPermissaoUsuarios(chave) {
       return next(err);
     }
   };
+}
+
+/** GET /:id — cada um lê o próprio cadastro; o dos outros, só com o módulo Usuários. */
+function exigirOProprioOuVerUsuarios(req, res, next) {
+  if (String(resolverUsuarioAtual(req) ?? '') === String(req.params.id)) return next();
+  return exigirPermissaoUsuarios('usuarios.view')(req, res, next);
+}
+
+/**
+ * Só o Sup Admin mexe no cadastro de um Sup Admin ou concede esse perfil.
+ * Sem isto, quem tinha "editar usuários" trocava o próprio perfil para
+ * Sup Admin e passava a poder tudo. Devolve a frase da recusa, ou null.
+ */
+async function recusaPorPerfilSupAdmin(req, api, alvo, novoPerfil) {
+  const toca = permissoesRepo.isSupAdmin(alvo)
+    || (novoPerfil !== undefined && permissoesRepo.isSupAdmin({ perfil: novoPerfil }));
+  if (!toca) return null;
+  const solicitante = await carregarUsuarioSolicitante(req, api);
+  return permissoesRepo.isSupAdmin(solicitante)
+    ? null
+    : 'Só o Sup Admin altera o cadastro de um Sup Admin ou concede esse perfil.';
 }
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -1252,6 +1474,12 @@ async function payloadDeEdicao(body = {}) {
 router.put('/me', async (req, res) => {
   try {
     const payload = await payloadDeEdicao(req.body);
+    // Cada um muda os PRÓPRIOS dados pessoais, nunca o próprio perfil, as
+    // permissões ou o acesso: aceitar esses campos aqui deixava qualquer
+    // usuário se promover a Sup Admin com uma chamada.
+    delete payload.perfil;
+    delete payload.permissoes;
+    delete payload.status;
     const api = createInternalApiClient();
     const tokenFromRequest = req.headers?.authorization || getToken();
     const userId = extractUserIdFromToken(tokenFromRequest);
@@ -1271,13 +1499,23 @@ router.put('/me', async (req, res) => {
 /**
  * PUT /usuarios/:id
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', exigirPermissaoUsuarios('usuarios.edit'), async (req, res) => {
   try {
     const payload = await payloadDeEdicao(req.body);
     const api = createInternalApiClient();
     const antes = await api.get(`/api/usuarios/${req.params.id}`).catch(() => null);
+    const recusa = await recusaPorPerfilSupAdmin(req, api, antes, payload.perfil);
+    if (recusa) return res.status(403).json({ error: recusa, code: 'FORBIDDEN_SUP_ADMIN' });
+    // O status só entra com um dos três valores que o banco aceita.
+    if (payload.status !== undefined) {
+      const st = normalizarStatusUsuario(payload.status);
+      if (!st) return res.status(400).json({ error: `Status inválido: ${payload.status}` });
+      payload.status = st;
+    }
     await api.put(`/api/usuarios/${req.params.id}`, payload);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
     await avisarDaConta(api, req, req.params.id, antes, payload);
+    await avisarDaLiberacao(api, antes, payload);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err);
@@ -1290,7 +1528,7 @@ router.put('/:id', async (req, res) => {
 /**
  * DELETE /usuarios/:id
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', exigirSupAdminUsuarios, async (req, res) => {
   try {
     const api = createInternalApiClient();
     await api.delete(`/api/usuarios/${req.params.id}`);
@@ -1311,4 +1549,5 @@ module.exports.mudancasDaConta = mudancasDaConta;
 module.exports.montarComputadores = montarComputadores;
 module.exports.comSinalDoPrograma = comSinalDoPrograma;
 module.exports.SINAL_VALE_MS = SINAL_VALE_MS;
+module.exports.paraSeletor = paraSeletor;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;

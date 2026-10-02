@@ -262,8 +262,9 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   // Foto de outro usuário (cadastro pelo Sup Admin): mesmo multipart, mirando o id.
   enviarImagemUsuario: (payload) => ipcRenderer.invoke('usuarios:enviar-imagem', payload),
   removerImagemPerfil: () => ipcRenderer.invoke('perfil:remover-imagem'),
-  register: async (name, email, password) => {
-    const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password });
+  // `aceites`: versões dos Termos de Uso e da Política de Privacidade aceitas na tela.
+  register: async (name, email, password, aceites) => {
+    const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password, aceites });
     if (result && result.success) {
       recordIpcAction('registrar-usuario', { name, email }, result);
     }

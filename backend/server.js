@@ -79,6 +79,11 @@ if (isDev) {
   });
 }
 
+// Aceite dos Termos de Uso pendente (o Sup Admin pediu e a pessoa ainda não
+// respondeu à caixa): o /api só atende o que a própria caixa usa. Tirar a
+// caixa da tela não libera o programa (backend/termosDeUso.js).
+app.use('/api', require('./termosDeUso').travaDoAceite(require('./usuarioAtual').usuarioDaRequisicao));
+
 // Tarefas que cobram uma ação de outro módulo concluem sozinhas quando a ação
 // acontece: o vigia olha as escritas que deram certo (backend/tarefasAcoes.js).
 app.use('/api', require('./tarefasAcoes').observar);
@@ -242,7 +247,7 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // A licao das duas vezes e a mesma: prefixo do MODULO, nao da tabela.
 // historico_*, cliente_historico e notificacoes: só pelas rotas próprias, que
 // conferem permissão, autoria e Sup Admin.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|password_|prospeccoes$|prospeccao_|ia_|historico_|cliente_historico$|cliente_interacoes$|notificacoes$|tarefas$|tarefa_)/i;
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios(?:_|$)|termos_|avisos_|password_|prospeccoes$|prospeccao_|ia_|historico_|cliente_historico$|cliente_interacoes$|notificacoes$|tarefas$|tarefa_)/i;
 // Em DEV uma rota genérica só pode alcançar tabelas de negócio conhecidas.
 // Isso exclui também tabelas extras/segredos existentes no PostgreSQL local.
 const TABELAS_PUBLICAS_DEV = new Set([
@@ -316,6 +321,14 @@ app.post('/api/:table', async (req, res) => {
 app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// O link do e-mail de confirmação do cadastro. Em produção quem o atende é a
+// API (o link aponta para ela); com o banco DEV não há API, então o Express
+// embarcado serve as duas páginas (backend/cadastroLocal.js).
+if (isDev) {
+  app.get('/cadastro/confirmar', (req, res) => require('./cadastroLocal').paginaConfirmar(req, res));
+  app.get('/cadastro/nao-reconheco', (req, res) => require('./cadastroLocal').paginaNaoReconheco(req, res));
+}
 
 async function runHealthCheck() {
   const health = await db.healthCheck();

@@ -1,21 +1,94 @@
 // Toast helper
 const notificationContainer = document.getElementById("notification");
-function showToast(message, type = "info") {
+function showToast(message, type = "info", duracaoMs = 3000) {
   const div = document.createElement("div");
   let toastClass = "toast-info";
   if (type === "success") toastClass = "toast-success";
   else if (type === "error") toastClass = "toast-error";
+  else if (type === "warning") toastClass = "toast-warning";
   div.className = `toast ${toastClass}`;
   div.textContent = message;
   notificationContainer.appendChild(div);
   setTimeout(() => {
     div.classList.add("opacity-0");
     setTimeout(() => div.remove(), 500);
-  }, 3000);
+  }, duracaoMs);
 }
 
-function showInactiveUserWarning(mensagem) {
-  showToast(mensagem || 'Login bloqueado pelo administrador, entre em contato.', 'error');
+/**
+ * E-mail e senha certos, mas o acesso não está ativo (não confirmado,
+ * aguardando o administrador, desativado ou recusou os Termos de Uso): o
+ * mesmo recado, em AMARELO, para todo status diferente de ativo (pedido do
+ * dono, 02/10/2026). Fica mais tempo na tela que os outros avisos.
+ */
+const MENSAGEM_LOGIN_BLOQUEADO = 'Login bloqueado. Contate o administrador.';
+function showInactiveUserWarning() {
+  showToast(MENSAGEM_LOGIN_BLOQUEADO, 'warning', 7000);
+}
+
+/** Caixa de aviso com um botão OK (o mesmo desenho dos avisos de conexão). */
+function showAvisoComOk({ icone, titulo, texto, rodape }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'warning-overlay';
+  const modal = document.createElement('div');
+  modal.className = 'warning-modal scale-95';
+  const iconeCaixa = document.createElement('div');
+  iconeCaixa.className = 'warning-icon';
+  const circulo = document.createElement('div');
+  circulo.className = 'warning-icon-circle';
+  const i = document.createElement('i');
+  i.setAttribute('data-feather', icone);
+  circulo.appendChild(i);
+  iconeCaixa.appendChild(circulo);
+  const h2 = document.createElement('h2');
+  h2.className = 'warning-title';
+  h2.textContent = titulo;
+  const p = document.createElement('p');
+  p.className = 'warning-text';
+  p.textContent = texto;
+  const hr = document.createElement('hr');
+  hr.className = 'warning-divider';
+  const pequeno = document.createElement('p');
+  pequeno.className = 'warning-text-small';
+  pequeno.textContent = rodape;
+  const ok = document.createElement('button');
+  ok.type = 'button';
+  ok.className = 'warning-button pulse';
+  ok.textContent = 'OK';
+  modal.append(iconeCaixa, h2, p, hr, pequeno, ok);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  if (typeof feather !== 'undefined') feather.replace();
+  requestAnimationFrame(() => modal.classList.remove('scale-95'));
+  setTimeout(() => ok.classList.remove('pulse'), 1500);
+  return new Promise(resolve => {
+    ok.addEventListener('click', () => { overlay.remove(); resolve(); }, { once: true });
+  });
+}
+
+let termosRecusadosShown = false;
+/** A pessoa recusou os Termos de Uso dentro do programa e foi trazida para cá. */
+function showTermosRecusados() {
+  if (termosRecusadosShown) return;
+  termosRecusadosShown = true;
+  showAvisoComOk({
+    icone: 'user-x',
+    titulo: 'Usuário Desativado',
+    texto: 'Você recusou os Termos de Uso e a Política de Privacidade. Para utilizar o programa é necessário aceitar os termos, por isso o seu usuário foi desativado.',
+    rodape: 'A sua conta não foi excluída. Contate o administrador para reativar o acesso e fazer o aceite.'
+  }).then(() => { termosRecusadosShown = false; });
+}
+
+/** O cadastro foi recebido: falta confirmar o e-mail e o administrador liberar. */
+function showCadastroRecebido(emailEnviado) {
+  return showAvisoComOk({
+    icone: emailEnviado ? 'mail' : 'alert-triangle',
+    titulo: 'Cadastro Recebido',
+    texto: emailEnviado
+      ? 'Enviamos um e-mail para você. Abra a mensagem e clique em "Confirmar cadastro" (o link vale por 48 horas).'
+      : 'O seu cadastro foi gravado, mas o e-mail de confirmação não saiu. Procure o administrador para liberar o seu acesso.',
+    rodape: 'Depois da confirmação, o administrador define as suas permissões e libera o acesso. Você recebe outro e-mail quando puder entrar.'
+  });
 }
 
 let pinErrorShown = false;
@@ -338,6 +411,9 @@ if (intro) {
         showUserRemovedError();
       } else if (effectiveReason === 'pin') {
         showPinError();
+      } else if (effectiveReason === 'inactive-user' || effectiveReason === 'unconfirmed-user') {
+        // A sessão guardada é de alguém que não está mais com o acesso ativo.
+        showInactiveUserWarning();
       } else if (effectiveReason) {
         showToast(result?.message || 'Falha no login automático.', 'error');
       } else {
@@ -389,6 +465,14 @@ if (intro) {
    * os avisos gravados depois nunca eram lidos — a tela voltava calada.
    */
   function mostrarAvisosPendentes() {
+    // Recusou os Termos de Uso: é este o aviso, e não o de "acesso revogado"
+    // que o monitor da sessão pode ter deixado junto (o status mudou na recusa).
+    if (localStorage.getItem('termosRecusados')) {
+      localStorage.removeItem('termosRecusados');
+      localStorage.removeItem('adminDisabled');
+      localStorage.removeItem('pinChanged');
+      showTermosRecusados();
+    }
     if (localStorage.getItem('pinChanged')) {
       localStorage.removeItem('pinChanged');
       showPinError();
@@ -1163,6 +1247,12 @@ if (intro) {
     document.getElementById('registerSenhaRegras')
   );
 
+  // As caixas de aceite dos Termos de Uso e da Política de Privacidade: o
+  // nome abre o documento e a caixa só marca pelo "Li e aceito".
+  const aceitesDoCadastro = window.TermosAceite?.ligarCaixas(
+    document.getElementById('registerAceites')
+  );
+
   // === 5) Toggle visibilidade de senha ===
   document.querySelectorAll('.toggle-password').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1204,22 +1294,30 @@ if (intro) {
       showToast('As senhas não coincidem!', 'error');
       return;
     }
+    // Sem os dois aceites não há cadastro (o backend confere de novo).
+    const aceites = aceitesDoCadastro?.aceitos();
+    if (!aceites) {
+      showToast('Para se cadastrar, leia e aceite os Termos de Uso e a Política de Privacidade.', 'warning', 5000);
+      return;
+    }
     setRegisterButtonLoading(true);
     try {
       const result = await window.electronAPI.register(
         name,
         emailReg,
-        passwordReg
+        passwordReg,
+        aceites
       );
       if (!result.success) {
-        showToast(result.message || 'Erro ao cadastrar usuário', 'error');
+        showToast(result.message || 'Erro ao cadastrar usuário', 'error', 6000);
         return;
       }
 
-      showToast(result.message, 'success');
       registerForm.reset();
+      aceitesDoCadastro?.limpar();
       listaCadastro?.atualizar();
       loginTab.click();
+      await showCadastroRecebido(result.emailEnviado !== false);
     } catch (err) {
       showToast(err.message || 'Erro ao cadastrar usuário', 'error');
     } finally {

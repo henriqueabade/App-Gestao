@@ -146,7 +146,7 @@ router.get('/efetivas', async (req, res) => {
   }
 });
 
-router.get('/modelo/:modeloId', async (req, res) => {
+router.get('/modelo/:modeloId', exigirSupAdmin, async (req, res) => {
   try {
     const api = createApiClient(req);
     const permissoes = await permissoesRepo.loadPermissionsForModelo(api, req.params.modeloId);
@@ -157,7 +157,7 @@ router.get('/modelo/:modeloId', async (req, res) => {
   }
 });
 
-router.put('/modelo/:modeloId', async (req, res) => {
+router.put('/modelo/:modeloId', exigirSupAdmin, async (req, res) => {
   try {
     const api = createApiClient(req);
     await permissoesRepo.savePermissionsForModelo(api, req.params.modeloId, req.body?.permissoes || {});
@@ -169,7 +169,7 @@ router.put('/modelo/:modeloId', async (req, res) => {
   }
 });
 
-router.delete('/modelo/:modeloId', async (req, res) => {
+router.delete('/modelo/:modeloId', exigirSupAdmin, async (req, res) => {
   try {
     const api = createApiClient(req);
     await permissoesRepo.deletePermissionsForModelo(api, req.params.modeloId);

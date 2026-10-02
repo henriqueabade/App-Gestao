@@ -1301,6 +1301,12 @@ function mapApiErrorToReason(err) {
   if (isNetworkError(err)) {
     return 'offline';
   }
+  // A API recusa (403) o token de quem deixou de estar ativo — desativado
+  // pelo administrador ou por ter recusado os Termos de Uso. Não é "token
+  // alterado": é acesso revogado, com o aviso próprio.
+  const codigoDaApi = err?.body?.code;
+  if (codigoDaApi === 'inactive-user') return 'admin-disabled';
+  if (codigoDaApi === 'unconfirmed-user') return 'admin-pending';
   if (isPinError(err) || err?.status === 401 || err?.statusCode === 401 || err?.status === 403 || err?.statusCode === 403) {
     return 'pin';
   }
@@ -3948,8 +3954,21 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
   try {
-    await registrarUsuario(dados.name, dados.email, dados.password);
-    return { success: true, message: 'Usuário cadastrado com sucesso!' };
+    // `aceites`: as versões dos Termos de Uso e da Política de Privacidade que
+    // a pessoa leu e aceitou na tela ({ termos_de_uso, politica_de_privacidade }).
+    const resultado = await registrarUsuario(dados.name, dados.email, dados.password, dados.aceites, {
+      urlBase: getLocalApiBaseUrl()
+    });
+    // O cadastro NÃO libera a entrada: falta confirmar o e-mail e o
+    // administrador ativar. A tela diz isso (e avisa se o e-mail não saiu).
+    const emailEnviado = resultado?.emailEnviado !== false;
+    return {
+      success: true,
+      emailEnviado,
+      message: emailEnviado
+        ? 'Cadastro recebido! Enviamos um e-mail para você confirmar. Depois da confirmação, o administrador libera o seu acesso.'
+        : 'Cadastro recebido, mas o e-mail de confirmação não saiu. Procure o administrador para liberar o seu acesso.'
+    };
   } catch (err) {
     return { success: false, message: err.message || 'Erro ao cadastrar usuário' };
   }
@@ -4998,7 +5017,14 @@ async function verificarAcessoUsuarioAutoLogin(user) {
   try {
     const base = getLocalApiBaseUrl();
     const resp = await fetch(`${base}/api/usuarios/${encodeURIComponent(id)}`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      // A API já recusa o token de quem não está ativo (403 com o código).
+      const recusa = resp.status === 403 ? await resp.json().catch(() => null) : null;
+      if (['inactive-user', 'unconfirmed-user'].includes(recusa?.code)) {
+        return { code: recusa.code, message: 'Login bloqueado. Contate o administrador.' };
+      }
+      return null;
+    }
     const atual = await resp.json();
     const bruto = String(atual?.status ?? '').trim();
     if (!bruto) return null;
@@ -5008,10 +5034,11 @@ async function verificarAcessoUsuarioAutoLogin(user) {
       .replace(/[\s-]+/g, '_')
       .toLowerCase();
     if (chave === 'ativo' || chave === 'ativa' || chave === 'active') return null;
+    // O mesmo recado para todo status diferente de ativo (pedido do dono).
     if (chave === 'nao_confirmado' || chave === 'naoconfirmado') {
-      return { code: 'unconfirmed-user', message: 'Confirme seu e-mail para acessar. Verifique sua caixa de entrada.' };
+      return { code: 'unconfirmed-user', message: 'Login bloqueado. Contate o administrador.' };
     }
-    return { code: 'inactive-user', message: 'Login bloqueado pelo administrador, entre em contato.' };
+    return { code: 'inactive-user', message: 'Login bloqueado. Contate o administrador.' };
   } catch (err) {
     console.warn('[auto-login] nao foi possivel revalidar o acesso:', err?.message || err);
     return null;

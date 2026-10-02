@@ -351,6 +351,22 @@ body {
     pointer-events: none;
 }
 
+/* Pedir o aceite dos Termos de Uso (à esquerda do Editar). Dourado quando dá
+   para pedir; desabilitado, o botão continua mostrando o motivo ao passar o
+   mouse (por isso volta o pointer-events que o --disabled tira). */
+.usuario-acao-botao--termos .usuario-acao-icone { color: var(--color-primary, #b6a03e); }
+.usuario-acao-botao--termos.usuario-acao-botao--disabled { pointer-events: auto; }
+.usuario-acao-botao--termos.usuario-acao-botao--disabled:hover { background: transparent; transform: none; }
+.usuario-acao-botao--termos.usuario-acao-botao--disabled .usuario-acao-icone { color: rgba(255, 255, 255, 0.7); }
+.usuario-acao-botao--termos-aceito .usuario-acao-icone { color: #22c55e !important; }
+.usuario-acao-botao--termos-pedido .usuario-acao-icone { color: #fbbf24 !important; }
+
+/* Coluna Termos sem o SQL rodado: traço neutro, com a explicação na dica. */
+.badge-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
 .usuario-modal-tablist {
     display: flex;
     gap: 2rem;

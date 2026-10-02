@@ -65,6 +65,8 @@ test('fluxo real do handler de login mantém sessão e conexão após registrar 
     getToken: tokenStore.getToken,
     getAuthorizedApiClient: () => require('./apiHttpClient').createApiClient(),
     setCurrentUserSession: user => { context.currentUserSession = user; },
+    // Os avisos do Windows ligam depois do login (01/10/2026): fora deste recorte.
+    avisosAposEntrar() {},
     lerTentativas: () => 0, LOGIN_MAX_TENTATIVAS: 3, limparTentativasLogin() {},
     mapApiErrorToReason: () => null,
     console: { error: (...args) => assert.fail(String(args)) }

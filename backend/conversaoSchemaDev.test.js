@@ -18,6 +18,10 @@ function controller(file, api, stockCalls = []) {
     console: { ...console, warn: (...args) => assert.fail(`Não deveria tentar colunas ausentes: ${args[0]}`) },
     require: name => name === './apiHttpClient' ? { createApiClient: () => api }
       : name === './conversaoAplicar' ? { aplicarConversaoNoEstoque: async (_api, data) => { stockCalls.push(data); return { avisos: [] }; } }
+      // A lista completa (com a atividade) é de quem tem o módulo Usuários;
+      // sem ele vai só o que os seletores precisam (02/10/2026).
+      : name === './permissionsController' && file === 'usuariosController.js'
+        ? { obterPermissoesEfetivas: async () => ({ usuarios: { ativo: true, acoes: { 'usuarios.view': true } } }) }
       : realRequire(name)
   }, { filename });
   return module.exports;

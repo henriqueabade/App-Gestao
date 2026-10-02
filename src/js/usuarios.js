@@ -605,6 +605,124 @@ function resolverPresenca(usuario) {
     return usuario && usuario.programa_rodando === true ? 'ausente' : 'offline';
 }
 
+// ---------------------------------------------------------------------------
+// Termos de Uso e Política de Privacidade (02/10/2026).
+// Coluna "Termos": Aceito (verde) quando a pessoa aceitou a versão vigente
+// dos dois documentos; Pendente (vermelho) no resto — usuário antigo, criado
+// pelo administrador ou versão nova do texto. Quem decide é o backend
+// (`termos_situacao` em /api/usuarios/lista). O botão de Ações pede o aceite:
+// só o Sup Admin, e só com os termos pendentes.
+// ---------------------------------------------------------------------------
+const TERMOS_SEM_SQL = 'Rode sql/usuarios_termos.sql e reinicie a API do banco para usar o aceite dos termos.';
+
+function resolverTermos(usuario) {
+    const situacao = usuario?.termos_situacao;
+    if (situacao === 'aceito') {
+        const versoes = [
+            usuario.termos_versao ? `Termos de Uso ${usuario.termos_versao}` : '',
+            usuario.privacidade_versao ? `Política de Privacidade ${usuario.privacidade_versao}` : ''
+        ].filter(Boolean).join(' e ');
+        return {
+            situacao: 'aceito',
+            rotulo: 'Aceito',
+            classe: 'badge-success',
+            dica: `Aceito em ${formatarDataHoraCompleta(usuario.termos_aceitos_em)}${versoes ? ` (${versoes})` : ''}`
+        };
+    }
+    if (situacao === 'pendente') {
+        const partes = [];
+        if (usuario.termos_solicitado) {
+            partes.push(`Aceite pedido em ${formatarDataHoraCompleta(usuario.termos_solicitados_em)}: aparece para a pessoa ao entrar no programa.`);
+        } else {
+            partes.push('Ainda não aceitou os termos. O Sup Admin pede o aceite pelo botão de termos, em Ações.');
+        }
+        if (usuario.termos_recusados_em) {
+            partes.push(`Recusou em ${formatarDataHoraCompleta(usuario.termos_recusados_em)}.`);
+        }
+        return { situacao: 'pendente', rotulo: 'Pendente', classe: 'badge-danger', dica: partes.join(' ') };
+    }
+    return { situacao: 'indisponivel', rotulo: '—', classe: 'badge-secondary', dica: TERMOS_SEM_SQL };
+}
+
+function ehSupAdminLogado() {
+    return Boolean(window.Permissoes?.supAdmin) || usuarioLogado?.perfil === 'Sup Admin';
+}
+
+/** O botão "pedir o aceite dos termos" da linha (ícone de documento assinado). */
+function criarBotaoDosTermos(usuario) {
+    const termos = resolverTermos(usuario);
+    const nome = typeof usuario.nome === 'string' && usuario.nome ? usuario.nome : 'este usuário';
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'usuario-acao-botao usuario-acao-botao--termos';
+    botao.dataset.acao = 'termos';
+    botao.dataset.usuarioId = String(usuario.id || '');
+    // O carregando automático não entra: o clique abre uma confirmação antes.
+    botao.dataset.semLoading = 'true';
+    const icone = document.createElement('i');
+    icone.classList.add('fas', 'fa-file-signature', 'usuario-acao-icone');
+    botao.appendChild(icone);
+
+    let motivo = '';
+    if (!ehSupAdminLogado()) motivo = 'Só o Sup Admin pede o aceite dos termos';
+    else if (termos.situacao === 'indisponivel') motivo = TERMOS_SEM_SQL;
+    else if (termos.situacao === 'aceito') motivo = 'Termos já aceitos';
+    else if (usuario.termos_solicitado) motivo = `Aceite já pedido em ${formatarDataHoraCompleta(usuario.termos_solicitados_em)}: aguardando a resposta`;
+
+    if (motivo) {
+        botao.classList.add('usuario-acao-botao--disabled');
+        botao.disabled = true;
+        botao.title = motivo;
+        if (termos.situacao === 'aceito') botao.classList.add('usuario-acao-botao--termos-aceito');
+        else if (usuario.termos_solicitado) botao.classList.add('usuario-acao-botao--termos-pedido');
+    } else {
+        botao.title = `Pedir a ${nome} o aceite dos Termos de Uso e da Política de Privacidade`;
+        botao.addEventListener('click', () => pedirAceiteDosTermos(usuario, botao));
+    }
+    botao.setAttribute('aria-label', botao.title);
+    return botao;
+}
+
+async function pedirAceiteDosTermos(usuario, botao) {
+    if (!usuario?.id || botao?.disabled) return;
+    const nome = usuario.nome || usuario.email || 'este usuário';
+    const confirmou = await window.DialogPadrao.confirm({
+        title: 'Pedir o aceite dos termos',
+        subtitle: nome,
+        tom: 'pergunta',
+        secoes: [{
+            titulo: 'O que acontece',
+            icone: 'fa-file-signature',
+            lista: [
+                'Ao entrar no programa — ou ao voltar para ele, se já estiver aberto — a pessoa vê os Termos de Uso e a Política de Privacidade.',
+                'A caixa só fecha quando ela aceita os dois documentos ou recusa.',
+                'Se aceitar, o aceite fica registrado e ela segue usando normalmente.',
+                'Se recusar, o acesso é desativado (a conta não é excluída) e ela volta para a tela de entrada.'
+            ]
+        }],
+        confirmText: 'Pedir o aceite',
+        cancelText: 'Cancelar'
+    });
+    if (!confirmou) return;
+
+    try {
+        const resp = await window.BotaoAcao.comCarregamento(
+            () => fetchApi(`/api/usuarios/${encodeURIComponent(usuario.id)}/termos/solicitar`, { method: 'POST' }),
+            'Pedindo o aceite…'
+        );
+        const dados = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(dados?.error || 'Não foi possível pedir o aceite.');
+        const idx = usuariosCache.findIndex(item => Number(item.id) === Number(usuario.id));
+        if (idx !== -1) usuariosCache[idx] = { ...usuariosCache[idx], ...dados, id: usuariosCache[idx].id };
+        usuariosRecemAlterados.add(Number(usuario.id));
+        refreshUsuariosAposAtualizacao();
+        showToast(`Aceite pedido. ${nome} verá os termos ao entrar no programa.`, 'success');
+    } catch (err) {
+        console.error('Erro ao pedir o aceite dos termos:', err);
+        showToast(err.message || 'Não foi possível pedir o aceite.', 'error');
+    }
+}
+
 function fecharPopoversUsuarios() {
     if (!usuarioPopoverAtual) return;
     const { popup, trigger, cleanup } = usuarioPopoverAtual;
@@ -1073,6 +1191,7 @@ function renderUsuarios(lista) {
         const statusRotulo = obterStatusLabel(u, statusInterno);
         const statusBadgeClasse = obterStatusBadge(u, statusInterno);
         const podeAlternarStatus = statusPodeSerAlternado(statusInterno);
+        const termosDoUsuario = resolverTermos(u);
 
         tr.innerHTML = `
             <td class="px-6 py-4">
@@ -1131,6 +1250,9 @@ function renderUsuarios(lista) {
             </td>
             <td class="px-6 py-4">
                 <span data-status-badge class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
+            </td>
+            <td class="px-6 py-4">
+                <span data-termos-badge class="${termosDoUsuario.classe} px-2 py-1 rounded-full text-xs font-medium" title="${escapeAttribute(termosDoUsuario.dica)}">${escapeHtml(termosDoUsuario.rotulo)}</span>
             </td>`;
 
         if (avatarUrl) {
@@ -1237,6 +1359,8 @@ function renderUsuarios(lista) {
         }
 
         actionsWrapper.appendChild(toggleBtn);
+        // Pedir o aceite dos termos: à esquerda do Editar (pedido do dono).
+        actionsWrapper.appendChild(criarBotaoDosTermos(u));
         actionsWrapper.appendChild(editBtn);
         actionsWrapper.appendChild(deleteBtn);
         actionsTd.appendChild(actionsWrapper);

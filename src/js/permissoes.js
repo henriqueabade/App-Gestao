@@ -2,7 +2,12 @@
  * Aplicação das permissões na interface.
  *
  * Regras definidas para o projeto:
- *   - Módulo sem permissão  -> some do menu e a navegação direta é bloqueada.
+ *   - Módulo sem permissão  -> NÃO APARECE no menu e a navegação direta é
+ *     bloqueada. O menu nasce escondido (menu.css) e cada módulo só aparece
+ *     quando a permissão dele chega: nada de "mostra tudo e depois esconde"
+ *     (era o clarão dos módulos proibidos no Ctrl+R, pego pelo dono em
+ *     02/10/2026). Sem as permissões na mão — carregando, API fora, falha —
+ *     nenhum módulo aparece e nenhum abre.
  *   - Ação sem permissão    -> o botão CONTINUA VISÍVEL, porém desabilitado.
  *   - Coluna sem permissão  -> não é renderizada na tabela.
  *   - O backend também recusa (403) — a interface é conveniência, não segurança.
@@ -20,15 +25,32 @@
     catalogo: null,
     paginas: {},
     carregado: false,
-    // Quando não conseguimos carregar as permissões (API fora, erro de rede),
-    // a interface NÃO restringe nada. Bloquear tudo deixaria o app inutilizável
-    // por um problema de rede. A segurança real continua no backend, que recusa
-    // as requisições sem permissão (403).
+    // Não foi possível carregar as permissões (API fora, erro de rede). Antes
+    // isto liberava o menu inteiro "para não travar o app"; agora nenhum
+    // módulo aparece até a resposta chegar — a carga é tentada de novo
+    // sozinha a cada poucos segundos.
     indisponivel: false,
     supAdmin: false
   };
 
   const MSG_BLOQUEIO = 'Você não tem permissão para esta ação.';
+
+  // Uma falha passageira não pode esvaziar o menu: a carga insiste antes de
+  // desistir e, desistindo, volta a tentar sozinha.
+  const TENTATIVAS_DA_CARGA = 3;
+  const ESPERA_ENTRE_TENTATIVAS_MS = [400, 1200];
+  const NOVA_TENTATIVA_MS = 5000;
+  let cargaEmAndamento = null;
+  let novaTentativa = null;
+
+  const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  /** Avisa o menu (menu.js) de que as permissões chegaram — ou não. */
+  function avisarDaCarga() {
+    try {
+      global.dispatchEvent(new CustomEvent('permissoes:carregadas', { detail: { indisponivel: ESTADO.indisponivel } }));
+    } catch (_) { /* ambiente sem eventos (testes) */ }
+  }
 
   async function baseUrl() {
     try {
@@ -41,31 +63,69 @@
     return '';
   }
 
+  async function buscar() {
+    const url = `${await baseUrl()}/api/permissoes/efetivas`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const dados = await resp.json();
+    // O backend sinaliza com { erro: true } que não conseguiu apurar (não
+    // identificou o usuário, API fora): vale como falha da carga.
+    if (dados?.erro) throw new Error('backend sinalizou falha ao apurar permissões');
+    return dados;
+  }
+
+  function agendarNovaTentativa() {
+    if (novaTentativa) return;
+    novaTentativa = setTimeout(async () => {
+      novaTentativa = null;
+      await carregar(true);
+      if (!ESTADO.indisponivel) aplicar(document);
+    }, NOVA_TENTATIVA_MS);
+  }
+
   async function carregar(force = false) {
-    if (ESTADO.carregado && !force) return ESTADO.permissoes;
-    try {
-      const url = `${await baseUrl()}/api/permissoes/efetivas`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const dados = await resp.json();
+    if (ESTADO.carregado && !ESTADO.indisponivel && !force) return ESTADO.permissoes;
+    // Várias telas pedem ao mesmo tempo na abertura: uma carga só.
+    if (cargaEmAndamento) return cargaEmAndamento;
 
-      // O backend sinaliza erro interno com { erro: true }: nesse caso não
-      // restringe a interface (o backend segue protegendo as rotas).
-      if (dados?.erro) throw new Error('backend sinalizou falha ao apurar permissões');
+    const jaTinha = ESTADO.carregado && !ESTADO.indisponivel;
+    cargaEmAndamento = (async () => {
+      let ultimoErro = null;
+      for (let tentativa = 0; tentativa < TENTATIVAS_DA_CARGA; tentativa += 1) {
+        try {
+          const dados = await buscar();
+          ESTADO.permissoes = dados?.permissoes || {};
+          ESTADO.paginas = dados?.paginas || {};
+          // O backend já informa se é Sup Admin; a checagem local é redundância.
+          ESTADO.supAdmin = Boolean(dados?.supAdmin) || ehSupAdmin(dados?.perfil);
+          ESTADO.indisponivel = false;
+          ESTADO.carregado = true;
+          avisarDaCarga();
+          return ESTADO.permissoes;
+        } catch (err) {
+          ultimoErro = err;
+          if (tentativa < TENTATIVAS_DA_CARGA - 1) {
+            await esperar(ESPERA_ENTRE_TENTATIVAS_MS[tentativa] || 1200);
+          }
+        }
+      }
 
-      ESTADO.permissoes = dados?.permissoes || {};
-      ESTADO.paginas = dados?.paginas || {};
-      // O backend já informa se é Sup Admin; a checagem local é redundância.
-      ESTADO.supAdmin = Boolean(dados?.supAdmin) || ehSupAdmin(dados?.perfil);
-      ESTADO.indisponivel = false;
-      ESTADO.carregado = true;
-    } catch (err) {
-      console.warn('[permissoes] não foi possível carregar as permissões; a interface não será restringida (o backend continua validando).', err);
+      // Quem já tinha as permissões fica com elas (uma recarga que falha não
+      // derruba o menu); quem nunca teve fica sem módulo nenhum até chegar.
+      if (jaTinha) {
+        console.warn('[permissoes] a recarga falhou; valem as permissões já carregadas.', ultimoErro);
+        return ESTADO.permissoes;
+      }
+      console.warn('[permissoes] não foi possível carregar as permissões; nenhum módulo é exibido até a resposta chegar.', ultimoErro);
       ESTADO.permissoes = {};
+      ESTADO.supAdmin = false;
       ESTADO.indisponivel = true;
       ESTADO.carregado = true;
-    }
-    return ESTADO.permissoes;
+      agendarNovaTentativa();
+      avisarDaCarga();
+      return ESTADO.permissoes;
+    })().finally(() => { cargaEmAndamento = null; });
+    return cargaEmAndamento;
   }
 
   /** Sup Admin tem TODAS as permissões, sem exceção. */
@@ -78,14 +138,20 @@
     return p === 'supadmin' || p === 'superadmin';
   }
 
-  /** Libera tudo: Sup Admin, ou permissões indisponíveis (não restringe a UI). */
+  /**
+   * Libera as AÇÕES e as COLUNAS em bloco: Sup Admin, ou permissões ainda
+   * não aplicáveis. Não vale para os módulos (ver `moduloAtivo`): sem as
+   * permissões nenhum módulo abre, então não há tela onde isto pese — e o
+   * backend recusa (403) o que não pode.
+   */
   function liberaTudo() {
     return ESTADO.supAdmin || ESTADO.indisponivel || !ESTADO.carregado;
   }
 
-  /** Módulo visível no menu? */
+  /** Módulo visível no menu (e abrível)? Sem as permissões na mão, nenhum. */
   function moduloAtivo(codigoOuPagina) {
-    if (liberaTudo()) return true;
+    if (!ESTADO.carregado || ESTADO.indisponivel) return false;
+    if (ESTADO.supAdmin) return true;
     const p = ESTADO.permissoes || {};
     // resolve "orcamentos" -> "orc" pelo mapa enviado pelo backend
     const code = ESTADO.paginas?.[codigoOuPagina] || codigoOuPagina;
@@ -219,26 +285,20 @@
   function aplicar(raiz = document) {
     if (!ESTADO.carregado) return;
 
-    // 1) Menu: esconde OU mostra o módulo conforme a permissão ATUAL.
-    // Antes isto era mão única (só escondia). Depois de reativar um módulo,
-    // o item continuava com display:none até reiniciar o app — era por isso
-    // que "nenhum aparecia no menu mesmo estando ativo".
+    // 1) Menu: o módulo SÓ aparece com a marca `data-perm-liberado`, posta
+    // aqui conforme a permissão ATUAL (e tirada quando ela é retirada). Sem a
+    // marca o item fica escondido pela folha do menu — é o estado em que ele
+    // nasce, então nada proibido chega a ser desenhado.
     raiz.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
       const page = item.getAttribute('data-page');
       if (!page) return;
-      if (moduloAtivo(page)) {
-        // só devolvemos o que NÓS escondemos, para não brigar com o menu
-        // (submenu do CRM recolhido, por exemplo)
-        if (item.dataset.permOculto === '1') {
-          delete item.dataset.permOculto;
-          item.classList.remove('hidden');
-          item.style.display = '';
-        }
-      } else {
-        item.dataset.permOculto = '1';
-        item.classList.add('hidden');
-        item.style.display = 'none';
-      }
+      item.toggleAttribute('data-perm-liberado', moduloAtivo(page));
+    });
+    // Grupo do menu (CRM, Laminação) sem nenhum módulo liberado some junto.
+    raiz.querySelectorAll('.submenu').forEach(submenu => {
+      const grupo = submenu.previousElementSibling;
+      if (!grupo || !grupo.classList?.contains('sidebar-item')) return;
+      grupo.toggleAttribute('data-perm-liberado', Boolean(submenu.querySelector('.submenu-item[data-perm-liberado]')));
     });
 
     // 2) e 3) ações e colunas
@@ -336,6 +396,10 @@
       return ESTADO.permissoes;
     },
     get estado() { return ESTADO.permissoes; },
+    // As permissões não chegaram (API fora): o menu fica vazio e o menu.js
+    // mostra o aviso de "tentando de novo" em vez de um módulo.
+    get indisponivel() { return Boolean(ESTADO.indisponivel); },
+    get carregado() { return Boolean(ESTADO.carregado); },
     // Alguns controles não são regidos por permissão de módulo e sim pelo
     // PERFIL — excluir linha do histórico de prospecção, por exemplo. O
     // backend é quem decide (exigirSupAdmin); isto existe só para a interface

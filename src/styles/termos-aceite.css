@@ -1,0 +1,184 @@
+/* ---------------------------------------------------------------------------
+   Aceite dos Termos de Uso e da Política de Privacidade
+   (src/js/utils/termos-aceite.js).
+
+   Vale em dois lugares com folhas diferentes: a tela de login (login.css) e
+   o programa (menu.css). Por isso NÃO depende de classe do Tailwind, de
+   folha de módulo nem do Font Awesome — tudo o que a caixa usa está aqui.
+
+   Visual: o vidro padrão dos modais (branco a 8% sobre desfoque de 24px,
+   cantos de 1.5rem, véu preto a 50% sem desfoque) e as medidas dos
+   controles (botão de 40px, letra de 14px, peso 600).
+   --------------------------------------------------------------------------- */
+
+dialog.termos-dialogo {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #fff;
+    overflow: visible;
+    max-width: none;
+    max-height: none;
+    width: min(46rem, calc(100vw - 2rem));
+    font-family: inherit;
+}
+dialog.termos-dialogo--exigir { width: min(40rem, calc(100vw - 2rem)); }
+dialog.termos-dialogo--confirmar { width: min(30rem, calc(100vw - 2rem)); }
+dialog.termos-dialogo::backdrop { background: rgba(0, 0, 0, 0.5); }
+
+.termos-cartao {
+    display: flex;
+    flex-direction: column;
+    max-height: min(88vh, 54rem);
+    border-radius: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    animation: termosEntrar 160ms ease-out;
+}
+/* Recusa: a moldura vermelha das caixas de erro e exclusão. */
+.termos-cartao--perigo { border-color: rgba(255, 88, 88, 0.45); box-shadow: 0 0 0 1px rgba(255, 88, 88, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.45); }
+@keyframes termosEntrar { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .termos-cartao { animation: none; } }
+
+/* ------------------------------------------------------------ cabeçalho */
+
+.termos-topo {
+    flex-shrink: 0;
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.termos-topo__titulo { margin: 0; font-size: 1.2rem; font-weight: 700; color: #d4c169; line-height: 1.3; }
+.termos-topo__sub { margin: 0.4rem 0 0; font-size: 0.875rem; line-height: 1.55; color: rgba(255, 255, 255, 0.8); }
+.termos-topo__regra {
+    margin: 0.75rem 0 0;
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    background: rgba(251, 191, 36, 0.12);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #fde68a;
+}
+
+/* ------------------------------------------------------------ documento */
+
+.termos-rolagem {
+    flex: 1 1 auto;
+    min-height: 12rem;
+    overflow-y: auto;
+    padding: 1.1rem 1.5rem 1.25rem;
+    outline: none;
+}
+.termos-rolagem:focus-visible { box-shadow: inset 0 0 0 2px rgba(212, 193, 105, 0.5); }
+.termos-doc__secao + .termos-doc__secao { margin-top: 1.15rem; }
+.termos-doc__titulo { margin: 0 0 0.45rem; font-size: 0.95rem; font-weight: 700; color: #d4c169; }
+.termos-doc__texto { margin: 0 0 0.55rem; font-size: 0.875rem; line-height: 1.6; color: rgba(255, 255, 255, 0.9); }
+.termos-doc__lista { margin: 0 0 0.6rem; padding-left: 1.2rem; list-style: disc; font-size: 0.875rem; line-height: 1.6; color: rgba(255, 255, 255, 0.9); }
+.termos-doc__lista li + li { margin-top: 0.3rem; }
+.termos-doc__fim {
+    margin: 1.4rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.2);
+    text-align: center;
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ------------------------------------------------------------ corpo das caixas */
+
+.termos-corpo { flex: 1 1 auto; overflow-y: auto; padding: 1.1rem 1.5rem 1.25rem; }
+.termos-corpo__dica { margin: 0 0 0.75rem; font-size: 0.8125rem; color: rgba(255, 255, 255, 0.7); }
+.termos-erro {
+    margin: 0.85rem 0 0;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(255, 88, 88, 0.45);
+    background: rgba(255, 88, 88, 0.14);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #ffb4b4;
+}
+.termos-erro[hidden] { display: none; }
+
+/* As duas caixas de aceite (no cadastro e na caixa obrigatória). */
+.termos-caixas { display: flex; flex-direction: column; gap: 0.55rem; }
+.termos-caixa { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.875rem; line-height: 1.45; }
+.termos-caixa__marca {
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin: 0.15rem 0 0;
+    accent-color: #b6a03e;
+    cursor: pointer;
+}
+.termos-caixa__texto { color: inherit; }
+.termos-caixa__nome {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 700;
+    color: #d4c169;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.termos-caixa__nome:hover,
+.termos-caixa__nome:focus-visible { color: #f0e3a0; outline: none; }
+.termos-dialogo--exigir .termos-caixa {
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* ------------------------------------------------------------ rodapé */
+
+.termos-rodape {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.5rem 1.1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.termos-rodape__dica { margin: 0; font-size: 0.8125rem; line-height: 1.4; color: #fde68a; }
+.termos-rodape__dica--ok { color: #86efac; }
+.termos-rodape__acoes { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
+.termos-rodape__acoes--separadas { width: 100%; justify-content: space-between; }
+
+.termos-botao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 0.5rem;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: #fff;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+.termos-botao:disabled { opacity: 0.45; cursor: not-allowed; }
+.termos-botao--neutro { background: rgba(255, 255, 255, 0.1); }
+.termos-botao--neutro:not(:disabled):hover { background: rgba(255, 255, 255, 0.18); }
+.termos-botao--sucesso { background: #16a34a; }
+.termos-botao--sucesso:not(:disabled):hover { background: #22c55e; transform: translateY(-1px); }
+.termos-botao--perigo { background: #9f1239; }
+.termos-botao--perigo:not(:disabled):hover { background: #be123c; }
+
+@media (max-width: 520px) {
+    .termos-rodape { flex-direction: column; align-items: stretch; }
+    .termos-rodape__acoes { margin-left: 0; justify-content: flex-end; }
+}

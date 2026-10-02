@@ -1025,6 +1025,42 @@ header.glass-surface {
     will-change: color, background-color;
 }
 
+/* O MENU NASCE ESCONDIDO. Cada módulo (e o grupo dele: CRM, Laminação) só
+   aparece quando o permissoes.js põe a marca `data-perm-liberado`, depois de
+   as permissões chegarem. Antes o menu vinha inteiro e os módulos proibidos
+   eram escondidos em seguida: no Ctrl+R dava para vê-los por um instante
+   (pego pelo dono em 02/10/2026). Sem permissão, o item nunca é desenhado. */
+.sidebar-item[data-page]:not([data-perm-liberado]),
+.submenu-item[data-page]:not([data-perm-liberado]),
+#crmToggle:not([data-perm-liberado]),
+#laminacaoToggle:not([data-perm-liberado]) {
+    display: none !important;
+}
+
+/* O quadro que ocupa o lugar do módulo quando nada pode ser aberto: nenhum
+   módulo liberado, ou as permissões ainda não chegaram (menu.js). */
+.sem-acesso {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 6rem 1.5rem;
+    text-align: center;
+}
+.sem-acesso__icone {
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 1.75rem;
+    color: var(--color-primary);
+    background: var(--color-primary-opacity, rgba(182, 160, 62, 0.16));
+}
+.sem-acesso__titulo { margin: 0; font-size: 1.125rem; font-weight: 600; color: #fff; }
+.sem-acesso__texto { margin: 0; max-width: 32rem; font-size: 0.875rem; line-height: 1.55; color: rgba(255, 255, 255, 0.7); }
+
 #sidebar {
     overflow: hidden;
     transition-property: width, background-color, box-shadow;

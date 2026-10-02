@@ -41,22 +41,73 @@ function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
-async function registrarUsuario(nome, email, senha) {
+/** O aviso amarelo de quem acerta a senha mas não está com o acesso ativo. */
+const MENSAGEM_LOGIN_BLOQUEADO = 'Login bloqueado. Contate o administrador.';
+
+/**
+ * Os aceites do cadastro, no formato que a rota /cadastro confere: um por
+ * documento, com a versão e o texto exato mostrado na tela. A tela só manda
+ * as versões que a pessoa leu e aceitou; têm de ser as vigentes.
+ */
+function aceitesDoCadastro(versoesAceitas) {
+  const termos = require('./termosDeUso');
+  termos.conferirVersoes(versoesAceitas);
+  return termos.vigentes().map(v => ({
+    documento: v.documento, versao: v.versao, titulo: v.titulo, texto: v.texto, aceito: true
+  }));
+}
+
+/**
+ * Cadastro pela tela de login. O usuário nasce 'nao_confirmado', com o aceite
+ * dos Termos de Uso e da Política de Privacidade gravado, recebe o e-mail de
+ * confirmação e depois espera o Sup Admin liberar (cadastro/cadastro.js na
+ * API; a cópia backend/cadastroPublico.js serve ao banco DEV).
+ *
+ * Antes o programa gravava direto em /api/usuarios, que exige token: sem
+ * sessão aberta o cadastro falhava, e nenhum e-mail de confirmação saía.
+ *
+ * @returns {{ emailEnviado: boolean, motivo: string|null }}
+ */
+async function registrarUsuario(nome, email, senha, versoesAceitas, { urlBase = '' } = {}) {
   // A regra da senha forte vale no cadastro da tela de login também
   // (src/js/utils/senha-forte.js); a tela confere antes, aqui se confere de novo.
   const senhaFraca = require('../src/js/utils/senha-forte').mensagem(senha);
   if (senhaFraca) throw new Error(senhaFraca);
-  if (isDev) return require('./localAuth').register(nome, normalizeEmail(email), senha);
-  const api = createApiClient();
-  const payload = {
-    nome,
-    email: normalizeEmail(email),
-    // A coluna guarda só hash bcrypt (é o que o login compara) e a API
-    // genérica não hasheia: antes a senha ia crua e o login nunca conferia.
-    senha: await require('bcrypt').hash(senha, 12)
-  };
-  const created = await api.post('/api/usuarios', payload);
-  return created;
+
+  let aceites;
+  try {
+    aceites = aceitesDoCadastro(versoesAceitas);
+  } catch (_) {
+    throw new Error('Para se cadastrar é preciso ler e aceitar os Termos de Uso e a Política de Privacidade.');
+  }
+  const os = require('os');
+  let computador = null;
+  try { computador = `${os.hostname()} (${os.userInfo().username})`; } catch (_) {}
+  let versaoApp = null;
+  try { versaoApp = require('../package.json').version; } catch (_) {}
+  const corpo = { nome, email: normalizeEmail(email), senha, aceites, computador, versaoApp };
+
+  if (isDev) {
+    const resposta = await require('./cadastroLocal').cadastrar(corpo, { urlBase });
+    if (resposta.status >= 400) throw new Error(resposta.corpo?.error || 'Erro ao cadastrar usuário');
+    return resposta.corpo;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/cadastro`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo)
+  });
+  let data = null;
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok) {
+    // API antiga, ainda sem a rota: o aviso tem de dizer o que fazer.
+    const mensagem = response.status === 404
+      ? 'O cadastro ainda não está disponível no servidor. Avise o administrador.'
+      : data?.error || 'Não foi possível concluir o cadastro agora. Tente de novo em instantes.';
+    throw new Error(mensagem);
+  }
+  return data || {};
 }
 
 /**
@@ -104,6 +155,12 @@ async function loginUsuario(email, senha) {
     } catch (_) {}
 
     if (response && !response.ok) {
+      // Senha certa, acesso não ativo: a API recusa sem emitir token (403).
+      if (response.status === 403 && ['inactive-user', 'unconfirmed-user'].includes(data?.code)) {
+        const error = new Error(MENSAGEM_LOGIN_BLOQUEADO);
+        error.code = data.code;
+        throw error;
+      }
       const error = new Error(data?.message || 'Falha ao autenticar.');
       error.code = response.status === 401 ? 'auth-failed' : 'login-error';
       if (response.status === 401) {
@@ -156,11 +213,8 @@ async function loginUsuario(email, senha) {
     const statusAcesso = normalizarStatusAcesso(user.status ?? user.statusInterno);
     if (statusAcesso && statusAcesso !== 'ativo') {
       clearToken();
-      const error = new Error(
-        statusAcesso === 'nao_confirmado'
-          ? 'Confirme seu e-mail para acessar. Verifique sua caixa de entrada.'
-          : 'Login bloqueado pelo administrador, entre em contato.'
-      );
+      // O mesmo aviso para todo status diferente de ativo (pedido do dono).
+      const error = new Error(MENSAGEM_LOGIN_BLOQUEADO);
       // 'inactive-user' é o código que a tela de login já sabe tratar.
       error.code = statusAcesso === 'nao_confirmado' ? 'unconfirmed-user' : 'inactive-user';
       throw error;

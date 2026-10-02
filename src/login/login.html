@@ -18,6 +18,8 @@
   <link rel="stylesheet" href="../styles/scroll.css" />
   <!-- Lista dos requisitos da senha (cadastro e "Esqueceu a senha?") -->
   <link rel="stylesheet" href="../styles/senha-forte.css" />
+  <!-- Aceite dos Termos de Uso e da Política de Privacidade (cadastro) -->
+  <link rel="stylesheet" href="../styles/termos-aceite.css" />
   <script>
     (function () {
       const params = new URLSearchParams(location.search);
@@ -138,6 +140,9 @@
             </svg>
           </button>
         </div>
+        <!-- As duas caixas de aceite (src/js/utils/termos-aceite.js): clicar no nome abre o
+             documento; a caixa só marca pelo "Li e aceito", depois de rolar até o fim. -->
+        <div id="registerAceites" class="text-sm text-[#b6a03e]" aria-label="Aceite dos Termos de Uso e da Política de Privacidade"></div>
         <button type="submit" class="btn-secondary w-full py-2 px-4 rounded-md text-white font-medium">Cadastrar</button>
       </form>
     </div>
@@ -215,6 +220,9 @@
   <script src="../utils/botaoAcao.js"></script>
   <!-- Regra da senha forte (a mesma que o backend confere antes de gravar) -->
   <script src="../js/utils/senha-forte.js"></script>
+  <!-- Texto dos Termos de Uso e da Política de Privacidade e as caixas de aceite do cadastro -->
+  <script src="../js/utils/termos-documentos.js"></script>
+  <script src="../js/utils/termos-aceite.js"></script>
   <script src="loginRenderer.js"></script>
   <!-- scripts adicionais -->
   <script src="../utils/userActions.js"></script>

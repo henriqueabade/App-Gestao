@@ -404,12 +404,22 @@ window.addEventListener('DOMContentLoaded', () => {
     participante_removido: 'fa-user-xmark',
     conta_alterada: 'fa-user-shield',
     pagamento_feito: 'fa-money-bill-wave',
+    // Cadastro pela tela de login e Termos de Uso (02/10/2026): para os Sup Admins.
+    cadastro_aguardando: 'fa-user-clock',
+    cadastro_nao_reconhecido: 'fa-user-slash',
+    termos_recusados: 'fa-file-signature',
   };
   // O texto pequeno, abaixo da mensagem, de cada tipo de aviso que tem um.
   // Tarefa automática: onde desligar (decisão do dono, 24/09/2026).
   const DICA_DO_TIPO = {
     tarefa_automatica: 'Pode ser desativada em Tarefas ou em Configurações.',
+    cadastro_aguardando: 'Em Usuários: defina o perfil em Editar e ative o acesso pela tomada.',
+    cadastro_nao_reconhecido: 'Confira em Usuários (filtro Não confirmado) e exclua se for o caso.',
+    termos_recusados: 'Para a pessoa voltar, reative o acesso em Usuários: ela verá os termos ao entrar.',
   };
+  // Avisos para o Sup Admin que levam à tela de Usuários (os outros avisos de
+  // cadastro — "seu cadastro foi alterado" — ficam só no sino).
+  const ABRE_USUARIOS = new Set(['cadastro_aguardando', 'cadastro_nao_reconhecido', 'termos_recusados']);
   const ORIGEM = {
     prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade',
     orcamento: 'Orçamento', pedido: 'Pedido', usuario: 'Usuários', financeiro: 'Financeiro', contabil: 'Contabilidade',
@@ -631,6 +641,15 @@ window.addEventListener('DOMContentLoaded', () => {
       naoLidas = Math.max(0, naoLidas - 1);
       updateIcon();
       marcarLidas({ ids: [aviso.id] });
+    }
+    // Cadastro esperando liberação, cadastro não reconhecido e termos recusados: Usuários.
+    if (ABRE_USUARIOS.has(aviso.tipo)) {
+      try {
+        await window.loadPage?.('usuarios');
+      } catch (err) {
+        console.error('[sino] não foi possível abrir o aviso:', err);
+      }
+      return;
     }
     // Excluído não tem o que abrir; o aviso de cadastro (Usuários) fica só no sino.
     if (SEM_FICHA.has(aviso.tipo) || aviso.origem === 'usuario') return;

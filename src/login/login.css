@@ -367,6 +367,15 @@ body.fade-out {
 .toast-info {
   background-color: #2563eb; /* blue */
 }
+/* O recado AMARELO: "Login bloqueado. Contate o administrador." (todo status
+   diferente de ativo) e o lembrete dos aceites do cadastro. Letra escura,
+   para ler bem no amarelo. */
+.toast-warning {
+  background-color: #facc15;
+  color: #3b2506;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(250, 204, 21, 0.35);
+}
 
 /* Warning overlays for PIN or connection errors */
 .warning-overlay {
