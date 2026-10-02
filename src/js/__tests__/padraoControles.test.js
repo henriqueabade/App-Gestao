@@ -164,7 +164,9 @@ const PADRONIZADOS = [
       // 29/09/2026 — etapa 8: relatório mensal e dossiê.
       'relatorio', 'dossie',
       // 29/09/2026 — etapa 9: o pacote para a contabilidade.
-      'pacote'
+      'pacote',
+      // 02/10/2026 — fase H: os boletos do DDA do BB.
+      'dda'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

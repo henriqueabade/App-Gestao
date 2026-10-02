@@ -32,6 +32,8 @@ const URLS = {
   // Extratos v2 (02/10/2026): a v1 (api.hm…/extratos/v1, api-extratos…/extratos/v1) é desligada pelo BB em 20/11/2026.
   bb_extratos: { homologacao: 'https://extratos.mtls.api.hm.bb.com.br/v2', producao: 'https://extratos.mtls.api.bb.com.br/v2' },
   bb_api: { homologacao: 'https://api.hm.bb.com.br', producao: 'https://api.bb.com.br' },
+  // DDA (Swagger 1.0.1, 02/10/2026): o gateway mTLS, como o da Extratos v2 (o externo é api.externo[.hm].bb.com.br/dda/v1).
+  bb_dda: { homologacao: 'https://dda.mtls.api.hm.bb.com.br/v1', producao: 'https://dda.mtls.api.bb.com.br/v1' },
   adn: { homologacao: 'https://adn.producaorestrita.nfse.gov.br/contribuintes', producao: 'https://adn.nfse.gov.br/contribuintes' }
 };
 
@@ -49,6 +51,30 @@ function camposCredenciaisBB({ usarCobranca = true, ajuda, appKeyProducao = 'app
     { chave: 'app_key_producao', rotulo: appKeyProducao, tipo: 'texto', max: 120, quando: { usar_credenciais_da_cobranca: false } }
   ];
 }
+
+/**
+ * Fase H: a API DDA entra na MESMA aplicação do portal que a Extratos v2 —
+ * as credenciais vêm do cartão do Extrato (ou, desmarcado, as próprias).
+ */
+function camposCredenciaisDoExtrato() {
+  return [
+    { chave: 'usar_credenciais_do_extrato', rotulo: 'Usar a mesma aplicação do Extrato pela API (client_id, app key e client_secret do cartão do Extrato)', tipo: 'booleano', padrao: true,
+      ajuda: 'No Portal Developers do BB, a API DDA foi incluída na aplicação da Extratos v2: as credenciais são as mesmas.' },
+    { chave: 'client_id_homologacao', rotulo: 'client_id (homologação)', tipo: 'texto', max: 200, quando: { usar_credenciais_do_extrato: false } },
+    { chave: 'app_key_homologacao', rotulo: 'app key / gw-dev-app-key (homologação)', tipo: 'texto', max: 120, quando: { usar_credenciais_do_extrato: false } },
+    { chave: 'client_id_producao', rotulo: 'client_id (produção)', tipo: 'texto', max: 200, quando: { usar_credenciais_do_extrato: false } },
+    { chave: 'app_key_producao', rotulo: 'app key (produção)', tipo: 'texto', max: 120, quando: { usar_credenciais_do_extrato: false } }
+  ];
+}
+
+/** O BB aceita até 1 ano de vencimentos por consulta: a janela (para trás + para frente) cabe nisso. */
+const DDA_MAX_DIAS = 365;
+/** Os estados do boleto no DDA (codigoEstadoObrigacao) e o campo que liga cada um. */
+const DDA_ESTADOS = [
+  { codigo: 1, campo: 'buscar_a_pagar', rotulo: 'A pagar' },
+  { codigo: 2, campo: 'buscar_agendados', rotulo: 'Agendado' },
+  { codigo: 3, campo: 'buscar_liquidados', rotulo: 'Liquidado' }
+];
 
 const CAMPO_MTLS = {
   chave: 'mtls', rotulo: 'Certificado da empresa na conexão (mTLS)', tipo: 'opcao', padrao: 'auto',
@@ -160,6 +186,55 @@ const INTEGRACOES = {
       'Confirmar com os prestadores/prefeituras que as NFS-e de Contagem e BH aparecem no ADN (padrão nacional).'
     ]
   },
+  bb_dda: {
+    chave: 'bb_dda', etapa: 14, fase: 'H', nome: 'Boletos contra a empresa (DDA do BB)', icone: 'fa-barcode', banco: true,
+    descricao: 'Busca na API DDA do Banco do Brasil os boletos registrados contra o CNPJ da empresa (a pagar, agendados e liquidados), guarda só os dados — o BB não dá o PDF nem a 2ª via — e liga cada um à sua conta a pagar. Estar no DDA não prova que a dívida é devida: boleto sem conta vira aviso, nunca conta sozinho.',
+    usa: ['credenciais_bb', 'certificado_opcional'],
+    // O gateway mTLS pede o certificado da empresa nos dois ambientes (como a Extratos v2).
+    mtlsSempre: true,
+    permissaoExecutar: 'contabilidade.pagar.lancar',
+    automatica: true, intervalo: { padrao: 720, min: 60, max: 1440 },
+    // A tela pergunta "quantas vezes por dia" (1 a 24) e grava o intervalo (1440 ÷ vezes).
+    vezesPorDia: true,
+    segredo: 'bb_dda',
+    // As credenciais vêm do cartão do Extrato (mesma aplicação no portal).
+    credenciaisDe: 'bb_extrato',
+    sqlArquivo: 'sql/contabilidade_fase_h.sql',
+    campos: [
+      ...camposCredenciaisDoExtrato(),
+      { chave: 'escopo', rotulo: 'Escopo (scope) do OAuth', tipo: 'texto', max: 200, padrao: 'dda-info',
+        ajuda: 'Só "dda-info" (consulta). Os escopos dda-recad.* são de outro serviço e não servem.' },
+      {
+        ...CAMPO_MTLS, padrao: 'sim',
+        opcoes: { sim: 'Sempre (o gateway mTLS do DDA exige)', nao: 'Nunca (só para diagnóstico)' },
+        ajuda: 'O DDA usa o gateway mTLS do BB: o certificado A1 da empresa vai na conexão, como no Extrato. A cadeia já está na aplicação do portal.'
+      },
+      { chave: 'dias_para_tras', rotulo: 'Vencimentos de quantos dias para trás', tipo: 'inteiro', min: 0, max: DDA_MAX_DIAS, padrao: 60,
+        ajuda: 'Para trás e para frente, somados, até 365 dias (o BB aceita até 1 ano por consulta).' },
+      { chave: 'dias_para_frente', rotulo: 'Vencimentos de quantos dias para frente', tipo: 'inteiro', min: 0, max: DDA_MAX_DIAS, padrao: 180 },
+      { chave: 'buscar_a_pagar', rotulo: 'Buscar os boletos a pagar', tipo: 'booleano', padrao: true },
+      { chave: 'buscar_agendados', rotulo: 'Buscar os boletos agendados', tipo: 'booleano', padrao: true },
+      { chave: 'buscar_liquidados', rotulo: 'Buscar os boletos liquidados (pagos)', tipo: 'booleano', padrao: true,
+        ajuda: 'O liquidado é o que liga o boleto ao débito do extrato e ao comprovante.' },
+      { chave: 'homologacao_mciteste', rotulo: 'Código de teste da homologação (cabeçalho x-br-com-bb-ipa-mciteste)', tipo: 'digitos', max: 12, avancado: true,
+        ajuda: 'Só se o BB indicar uma massa de teste para o DDA. Vazio: o cabeçalho não vai. Nunca vai em produção.' },
+      { chave: 'url_oauth', rotulo: 'Endereço do token (OAuth)', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'bb_oauth' },
+      { chave: 'url_api', rotulo: 'Endereço da API DDA', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'bb_dda' }
+    ],
+    /** O que vale entre campos: a janela cabe em 1 ano e ao menos um estado é buscado. Pura. */
+    conferir(params) {
+      const erros = [];
+      const soma = (Number(params.dias_para_tras) || 0) + (Number(params.dias_para_frente) || 0);
+      if (soma > DDA_MAX_DIAS) erros.push(`Dias para trás + dias para frente: no máximo ${DDA_MAX_DIAS} somados (o BB aceita até 1 ano por consulta); hoje dá ${soma}`);
+      if (!DDA_ESTADOS.some(e => params[e.campo] !== false)) erros.push('Marque ao menos um estado para buscar (a pagar, agendados ou liquidados)');
+      return erros;
+    },
+    fornecer: [
+      'No Portal Developers BB: a API DDA (escopo dda-info) incluída na aplicação da Extratos v2, em homologação e em produção (a empresa já aderiu ao DDA).',
+      'Aqui: nada novo — usa as credenciais e o certificado do cartão do Extrato. Escolha quantas vezes por dia buscar, a janela dos vencimentos e os estados.',
+      'Pedir ao BB a massa de teste da homologação do DDA (se houver). Sem ela, teste direto em produção: a API só consulta.'
+    ]
+  },
   bb_investimentos: {
     chave: 'bb_investimentos', etapa: 12, nome: 'Aplicações — CDB (BB)', icone: 'fa-piggy-bank', banco: true,
     descricao: 'O CDB da empresa no BB. O catálogo público do BB traz a API de Fundos de Investimento, não uma de CDB: aqui ficam as credenciais e o teste (token + uma consulta de sondagem). Quando o BB disser qual API traz o CDB, o mapeamento dos campos entra por cima disto.',
@@ -246,7 +321,12 @@ function mciTesteDoExtrato(params, agencia, conta) {
   return CONTAS_TESTE_EXTRATO.find(x => x.agencia === ag && x.conta === cc)?.mciteste || null;
 }
 
+/** Os estados do DDA que a busca pede (codigoEstadoObrigacao), pelos campos do cartão. Pura. */
+function estadosDoDda(params) {
+  return DDA_ESTADOS.filter(e => params?.[e.campo] !== false).map(e => e.codigo);
+}
+
 module.exports = {
-  HOMOLOGACAO, PRODUCAO, AMBIENTES, URLS, INTEGRACOES, CHAVES, CONTAS_TESTE_EXTRATO,
-  definicao, campoDoAmbiente, url, padroes, usaMtls, mciTesteDoExtrato
+  HOMOLOGACAO, PRODUCAO, AMBIENTES, URLS, INTEGRACOES, CHAVES, CONTAS_TESTE_EXTRATO, DDA_MAX_DIAS, DDA_ESTADOS,
+  definicao, campoDoAmbiente, url, padroes, usaMtls, mciTesteDoExtrato, estadosDoDda
 };

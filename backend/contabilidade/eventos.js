@@ -45,7 +45,14 @@ const TIPOS = {
   nfe_manifestada: 'NF-e manifestada na SEFAZ',
   entrada_ignorada: 'Documento da SEFAZ/ADN ignorado',
   // Fase A (02/10/2026): o início da Contabilidade e o saldo de abertura.
-  parametros_alterados: 'Configurações gerais'
+  parametros_alterados: 'Configurações gerais',
+  // Fase H (02/10/2026): os boletos contra a empresa (DDA do BB).
+  dda_vinculado: 'Boleto do DDA ligado à conta',
+  dda_desvinculado: 'Boleto do DDA desligado da conta',
+  dda_conta_lancada: 'Conta lançada do boleto do DDA',
+  dda_ignorado: 'Boleto do DDA ignorado',
+  dda_contestado: 'Boleto do DDA contestado',
+  dda_restaurado: 'Boleto do DDA restaurado'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

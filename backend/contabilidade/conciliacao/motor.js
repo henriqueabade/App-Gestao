@@ -101,17 +101,20 @@ function pontuar(mov, liq, { livre = false } = {}) {
   if (numMov.length >= 3 && numMov === numLiq) { pontos += 30; forte = true; motivos.push('mesmo nº de documento'); }
   const nome = Boolean(liq.nome) && nomeNaDescricao(liq.nome, mov.descricao);
   if (nome) { pontos += 20; motivos.push('nome na descrição'); }
+  // Fase H: o DDA do BB diz que o boleto desta conta foi pago.
+  if (liq.dda_liquidado) { pontos += 15; motivos.push('liquidado no DDA'); }
   return { pontos, motivos, exato, forte, cnpj, nome, dias, dentro: !livre || (mov.data >= j.de && mov.data <= j.ate) };
 }
 
 /**
  * O par (já exato e único dos dois lados) pode ser conciliado sem ninguém
  * confirmar? Liquidação: chave forte ou o nome a até 3 dias (16b). Obrigação
- * (vai lançar/pagar a conta): o mesmo CNPJ/CPF ou o nome a até 5 dias. Pura.
+ * (vai lançar/pagar a conta): o mesmo CNPJ/CPF ou o nome a até 5 dias — ou
+ * (fase H) o boleto LIQUIDADO no DDA a até 5 dias do vencimento. Pura.
  */
 function podeSerAutomatico(liq, p) {
   if (!p?.exato) return false;
-  if (liq.obrigacao) return (p.cnpj && p.dias <= JANELA_OBRIGACAO) || (p.nome && p.dias <= DIAS_NOME_OBRIGACAO);
+  if (liq.obrigacao) return (p.cnpj && p.dias <= JANELA_OBRIGACAO) || ((p.nome || liq.dda_liquidado) && p.dias <= DIAS_NOME_OBRIGACAO);
   return p.forte || (p.nome && p.dias <= DIAS_NOME);
 }
 

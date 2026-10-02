@@ -1317,6 +1317,17 @@ body {
 }
 .ctb-integracao__rodape { margin-top: 1rem; }
 
+/* ---------------------------------------------------------- boletos do DDA (fase H): a escolha da parcela */
+
+.ctb-dda-escolhas { display: flex; flex-direction: column; gap: 0.5rem; max-height: 50vh; overflow-y: auto; padding-right: 0.25rem; }
+.ctb-dda-escolha {
+    display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem; cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.75rem; background: rgba(255, 255, 255, 0.03);
+}
+.ctb-dda-escolha:hover { border-color: var(--color-primary); }
+.ctb-dda-escolha input { margin-top: 0.2rem; accent-color: var(--color-primary); }
+.ctb-dda-escolha__texto { display: flex; flex-direction: column; gap: 0.15rem; color: #fff; font-size: 0.875rem; }
+
 /* ---------------------------------------------------------- telas menores */
 
 @media (max-width: 1280px) {

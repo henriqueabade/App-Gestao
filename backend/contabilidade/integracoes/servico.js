@@ -38,6 +38,7 @@ const execucoes = require('./execucoes');
 const entrada = require('./entrada');
 const sefazDist = require('./sefazDistribuicao');
 const bbExtrato = require('./bbExtrato');
+const bbDda = require('./bbDda');
 const nfseAdn = require('./nfseAdn');
 
 const LIMITE_LOTES = 20;
@@ -88,13 +89,30 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
         certResumo = { configurado: false, erro: e.message };
       }
     }
-    const credenciais = def.usa.includes('credenciais_bb') ? await seg.credenciaisBB(api, def, params, ambiente) : null;
+    const credenciais = def.usa.includes('credenciais_bb') ? await credenciaisDaIntegracao(api, def, params, ambiente, linhas) : null;
     const contas = chave === 'bb_extrato' ? ((await b.lerOpcional(api, 'contas_financeiras').catch(() => null)) || []) : [];
+    // Fase H: o DDA precisa da tabela dele (a linha da integração pode nascer pela tela antes do SQL).
+    const tabelaDda = chave === 'bb_dda' ? (await b.lerOpcional(api, 'contabil_dda_boletos', { id: 0 }).catch(() => null)) !== null : null;
     const pendencias = configuracao.pendencias(def, {
-      linha, params, ambiente, certificado: precisaCert ? certResumo : (certResumo || { configurado: true }), fiscal, credenciais, contas
+      linha, params, ambiente, certificado: precisaCert ? certResumo : (certResumo || { configurado: true }), fiscal, credenciais, contas, tabelaDda
     });
     if (exigirPronto && pendencias.length) throw c.erro(`Antes: ${pendencias.join(' ')}`, 409, { pendencias });
     return { def, linha, params, ambiente, fiscal, cert: precisaCert ? cert : null, certResumo, credenciais, contas, pendencias };
+  }
+
+  /**
+   * As credenciais do BB da integração. Fase H: o DDA está na mesma aplicação
+   * do portal que a Extratos v2 — com "usar a mesma aplicação do Extrato",
+   * valem as do cartão do Extrato (que podem, por sua vez, ser as da cobrança).
+   */
+  async function credenciaisDaIntegracao(api, def, params, ambiente, linhas) {
+    if (def.credenciaisDe && params.usar_credenciais_do_extrato !== false) {
+      const defOrigem = catalogo.definicao(def.credenciaisDe);
+      const paramsOrigem = configuracao.parametros(defOrigem, linhas?.get(def.credenciaisDe) || null);
+      const cr = await seg.credenciaisBB(api, defOrigem, paramsOrigem, ambiente);
+      return { ...cr, origem: 'extrato', via: cr.origem };
+    }
+    return seg.credenciaisBB(api, def, params, ambiente);
   }
 
   /** O registro da execução em volta de uma operação (erro fica registrado e segue para quem chamou). */
@@ -133,7 +151,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
         pendencias = ctx.pendencias || [];
         if (ctx.credenciais) {
           credenciais = {
-            origem: ctx.credenciais.origem, client_id: ctx.credenciais.clientId, app_key: ctx.credenciais.appKey,
+            origem: ctx.credenciais.origem, via: ctx.credenciais.via || null, client_id: ctx.credenciais.clientId, app_key: ctx.credenciais.appKey,
             secret_guardado: Boolean(ctx.credenciais.secret), secret_origem: ctx.credenciais.secretOrigem || null, secret_erro: ctx.credenciais.secretErro || null
           };
           // As credenciais próprias de cada ambiente (quando não usa as da cobrança).
@@ -550,6 +568,64 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     };
   }
 
+  // ------------------------------------------------------------ BB — DDA (fase H)
+
+  /** A janela de vencimentos da busca: de hoje − dias para trás a hoje + dias para frente (até 1 ano). */
+  function periodoDoDda(params) {
+    const hoje = hojeBR();
+    const tras = Math.max(0, Number(params.dias_para_tras) || 0);
+    const frente = Math.max(0, Number(params.dias_para_frente) || 0);
+    return { inicio: somarDia(hoje, -tras), fim: somarDia(hoje, frente) };
+  }
+
+  /** A chamada da API DDA com o que o cartão diz (certificado, endereços, credenciais, teste). */
+  function buscarNoDda(ctx, { inicio, fim, estados }) {
+    const { params, ambiente, credenciais, cert } = ctx;
+    return bbDda.buscar({
+      transporte: transporte(usaMtls(ctx.def, params, ambiente) ? cert : null, 'o Banco do Brasil (DDA)'),
+      urlOauth: catalogo.url(ctx.def, 'url_oauth', params, ambiente), urlApi: catalogo.url(ctx.def, 'url_api', params, ambiente),
+      credenciais, escopo: params.escopo, ambiente, mciTeste: params.homologacao_mciteste || null, inicio, fim, estados
+    });
+  }
+
+  const NOMES_ESTADO = { 1: ['a pagar', 'a pagar'], 2: ['agendado', 'agendados'], 3: ['liquidado', 'liquidados'] };
+  const contagemDosEstados = boletos => [1, 2, 3]
+    .map(e => [e, boletos.filter(x => x.estado === e).length])
+    .filter(([, n]) => n)
+    .map(([e, n]) => c.plural(n, ...NOMES_ESTADO[e]));
+
+  async function sincronizarDda(api, ctx, { usuarioId }) {
+    const { params, ambiente, linha } = ctx;
+    const gravar = podeGravar(ambiente);
+    const { inicio, fim } = periodoDoDda(params);
+    const busca = await buscarNoDda(ctx, { inicio, fim, estados: catalogo.estadosDoDda(params) });
+    const dda = require('../dda/dda');
+    let gravado = null;
+    let ligados = null;
+    if (gravar) {
+      gravado = await dda.gravarBusca(api, busca, { ambiente, capturadoEm: new Date(agora()).toISOString(), inicio, fim });
+      ligados = await dda.vincularSozinho(api, { usuarioId, hoje: hojeBR() });
+    }
+    await configuracao.atualizarEstado(api, linha, { ultima_execucao_em: c.agora(), ultimo_sucesso_em: c.agora(), ultimo_erro: null });
+    const estados = contagemDosEstados(busca.boletos);
+    const partes = [`${c.plural(busca.boletos.length, 'boleto', 'boletos')} no DDA com vencimento de ${c.impressa(inicio)} a ${c.impressa(fim)}${estados.length ? ` (${estados.join(', ')})` : ''}`];
+    if (gravado) {
+      if (gravado.novos) partes.push(c.plural(gravado.novos, 'novo', 'novos'));
+      if (gravado.mudaram) partes.push(`${c.plural(gravado.mudaram, 'mudou', 'mudaram')} de estado`);
+      if (ligados?.ligados) partes.push(`${c.plural(ligados.ligados, 'ligado sozinho à conta', 'ligados sozinhos às contas')}${ligados.linhas_completadas ? ` (${c.plural(ligados.linhas_completadas, 'linha digitável completada', 'linhas digitáveis completadas')})` : ''}`);
+      if (gravado.sumiram) partes.push(`${c.plural(gravado.sumiram, 'sumiu', 'sumiram')} do DDA`);
+    } else {
+      partes.push('homologação num banco de produção: nada foi gravado');
+    }
+    if (busca.invalidos) partes.push(`${c.plural(busca.invalidos, 'boleto ilegível', 'boletos ilegíveis')} (sem código de barras, vencimento ou valor)`);
+    return {
+      situacao: 'rodou', resumo: partes.join(' · '),
+      resultado: { inicio, fim, lidos: busca.boletos.length, consultas: busca.consultas, novos: gravado?.novos ?? null, mudaram: gravado?.mudaram ?? null, ligados: ligados?.ligados ?? null, sumiram: gravado?.sumiram ?? null, gravou: gravar },
+      // O liquidado (ou o que ligou a uma conta) pode ser o débito que espera no extrato.
+      meses_conciliar: gravar ? [...new Set([...(gravado?.meses || []), ...(ligados?.meses || [])])].sort() : []
+    };
+  }
+
   // ------------------------------------------------------------ operações públicas
 
   /** A busca de verdade (botão ou agenda). `opcoes.competencia` só para o extrato. */
@@ -570,6 +646,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
           const r = await sincronizarExtrato(api, ctx, { usuarioId, competencia });
           return await conciliarSozinho(api, r, { usuarioId, contaId: r.conta_conciliar ?? null });
         }
+        if (chave === 'bb_dda') return await conciliarSozinho(api, await sincronizarDda(api, ctx, { usuarioId }), { usuarioId });
         throw c.erro(`${ctx.def.nome}: ainda não há busca (só o teste de conexão).`, 409);
       } catch (e) {
         await configuracao.atualizarEstado(api, ctx.linha, { ultima_execucao_em: c.agora(), ultimo_erro: String(e.message).slice(0, 2000) });
@@ -634,6 +711,19 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
           'Nada foi gravado.'
         ];
         return { ok: true, tempoMs: agora() - inicio, resumo: partes.filter(Boolean).join(' ') };
+      }
+      if (chave === 'bb_dda') {
+        // Os boletos a pagar dos próximos 30 dias (uma consulta só): prova token, certificado, app key e escopo.
+        const hoje = hojeBR();
+        const ate = somarDia(hoje, 30);
+        const busca = await buscarNoDda(ctx, { inicio: hoje, fim: ate, estados: [1] });
+        const comCertificado = usaMtls(ctx.def, params, ambiente);
+        const pagador = busca.pagador ? ` Pagador no BB: ${b.documentoFormatado(busca.pagador)}${fiscal?.cnpj && b.digitos(fiscal.cnpj) !== busca.pagador ? ' (NÃO é o CNPJ da Configuração fiscal: confira a aplicação do portal)' : ''}.` : '';
+        return {
+          ok: true, tempoMs: agora() - inicio,
+          resumo: `Token e DDA ok (escopos: ${busca.escopos.join(' ') || '—'}${comCertificado ? '; com o certificado da empresa' : ''}). `
+            + `${c.plural(busca.boletos.length, 'boleto a pagar', 'boletos a pagar')} com vencimento de ${c.impressa(hoje)} a ${c.impressa(ate)}.${pagador} Nada foi gravado.`
+        };
       }
       if (chave === 'bb_investimentos') {
         const rede_ = transporte(usaMtls(ctx.def, params, ambiente) ? cert : null, 'o Banco do Brasil');

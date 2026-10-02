@@ -82,9 +82,11 @@ function criar({ env = process.env, cofre = null, banco = null } = {}) {
   /**
    * As credenciais do BB da integração no ambiente: da cobrança (mesma
    * aplicação) ou as próprias. `{ clientId, appKey, secret, origem, secretOrigem }`.
+   * A que pega as de outro cartão (`credenciaisDe`, fase H: o DDA usa as do
+   * Extrato) resolve isso no serviço; aqui ela só tem as próprias.
    */
   async function credenciaisBB(api, def, params, ambiente) {
-    if (params.usar_credenciais_da_cobranca !== false) {
+    if (!def.credenciaisDe && params.usar_credenciais_da_cobranca !== false) {
       const cfg = await configuracaoCobranca.carregar(api).catch(() => null);
       const cr = configuracaoCobranca.credenciais(cfg, ambienteDaCobranca(ambiente));
       const s = await lerSecretDaCobranca(api, ambiente);

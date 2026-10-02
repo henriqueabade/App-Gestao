@@ -1,0 +1,92 @@
+<!--
+  Boletos do DDA (fase H, 02/10/2026): os boletos registrados contra o CNPJ da
+  empresa que a API DDA do Banco do Brasil devolve (a pagar, agendados,
+  liquidados) — só os dados; o BB não dá o PDF nem a 2ª via. Da linha: ligar a
+  uma conta a pagar (a sugestão ou outra), lançar a conta já preenchida,
+  contestar (a empresa não deve), ignorar, restaurar, desligar, abrir a conta e
+  salvar o "Espelho DDA" (documento interno, em PDF). Estar no DDA não prova
+  que a dívida é devida: nada vira conta sozinho.
+  Dados: GET /api/contabilidade/dda (e as ações em /dda/:id/…); a busca é a
+  integração bb_dda (POST /integracoes/bb_dda/sincronizar).
+  Script: src/js/modals/contabilidade-modais.js (montarDda).
+-->
+<div id="ctbDdaOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbDdaTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbDdaTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-barcode mr-2" aria-hidden="true"></i>Boletos do DDA</h2>
+        <p id="ctbDdaSubtitulo" class="text-xs text-gray-300 truncate">Boletos registrados contra a empresa no Banco do Brasil</p>
+      </div>
+      <span id="ctbDdaContagem" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbDdaAviso" class="hidden text-sm" role="alert"></div>
+        <p id="ctbDdaInfo" class="text-xs text-gray-400">Estar no DDA não prova que a dívida é devida: o boleto sem conta pede uma decisão (lançar a conta, ligar a uma conta ou contestar) e nunca vira conta sozinho.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div>
+            <label for="ctbDdaVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbDdaVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="sem_conta">Sem conta</option>
+              <option value="ligados">Ligados a uma conta</option>
+              <option value="decididos">Contestados e ignorados</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbDdaVencimento" class="ctl-rotulo text-gray-300">Vencimento</label>
+            <select id="ctbDdaVencimento" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="todos">Todos</option>
+              <option value="mes">Do mês da tela</option>
+              <option value="vencidos">Já vencidos</option>
+              <option value="proximos">Próximos 30 dias</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbDdaEstado" class="ctl-rotulo text-gray-300">No banco</label>
+            <select id="ctbDdaEstado" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+              <option value="1">A pagar</option>
+              <option value="2">Agendado</option>
+              <option value="3">Liquidado</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbDdaBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbDdaBusca" type="search" placeholder="Beneficiário, CNPJ, seu número ou valor"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Vencimento</th>
+                <th class="px-4 py-3 text-left text-xs">Beneficiário</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">No banco</th>
+                <th class="px-4 py-3 text-left text-xs">Situação</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbDdaLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbDdaMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbDdaConfig" type="button" data-perm="contabilidade.config.view" class="btn-neutral ctl-botao text-white">Configurações</button>
+      <button id="ctbDdaConferir" type="button" data-perm="contabilidade.pagar.lancar" class="btn-secondary ctl-botao text-white">Ligar sozinho</button>
+      <button id="ctbDdaBuscar" type="button" data-perm="contabilidade.pagar.lancar" class="btn-primary ctl-botao text-white min-w-[180px]">Buscar no DDA</button>
+    </footer>
+  </div>
+</div>

@@ -416,7 +416,7 @@ async function criar(api, { entrada = {}, usuarioId = null, hoje, origem = 'manu
   // Sem categoria: a regra do fornecedor ou do CFOP da NF-e (etapa 6), se houver.
   if (!t.categoria) t.categoria = await regras.categoriaSugerida(api, { contato_id: t.contato_id, cfops: documento?.cfops || [] }).catch(() => null);
   const titulo = await b.inserir(api, 'titulos_pagar', {
-    ...t, status: 'aberto', origem: ['manual', 'nfe', 'nfse', 'outro'].includes(origem) ? origem : 'manual',
+    ...t, status: 'aberto', origem: ['manual', 'nfe', 'nfse', 'outro', 'dda'].includes(origem) ? origem : 'manual',
     criado_por: usuarioId, criado_em: c.agora()
   });
   try {

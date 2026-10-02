@@ -47,7 +47,7 @@
   const TOM_PARCELA = { a_vencer: 'badge-info', vence_hoje: 'badge-warning', vencida: 'badge-danger', paga: 'badge-success', cancelada: 'badge-neutral' };
   const TOM_TITULO = { aberto: 'badge-info', parcial: 'badge-warning', vencido: 'badge-danger', pago: 'badge-success', cancelado: 'badge-neutral' };
   const TOM_ORIGEM = { oficial: 'badge-success', interno: 'badge-info', fornecido: 'badge-neutral' };
-  const ORIGENS_TITULO = { manual: 'Lançada à mão', nfe: 'NF-e de entrada', nfse: 'NFS-e', outro: 'Recibo ou guia' };
+  const ORIGENS_TITULO = { manual: 'Lançada à mão', nfe: 'NF-e de entrada', nfse: 'NFS-e', outro: 'Recibo ou guia', dda: 'Boleto do DDA' };
   // O estado da conciliação (etapa 5) de cada lançamento do extrato.
   const ROTULO_CONCILIACAO = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
   const TOM_CONCILIACAO = { pendente: 'badge-warning', conciliado: 'badge-success', ignorado: 'badge-neutral' };
@@ -1014,6 +1014,8 @@
   function montarContaPagarForm() {
     const id = contexto.titulo_id || null;
     const documentoInicial = contexto.documento_id || null;
+    // Fase H: aberto pelo "Lançar conta" de um boleto do DDA — vem preenchido e, ao salvar, liga o boleto.
+    const ddaId = !id && contexto.dda_id ? contexto.dda_id : null;
     const fornecedorSel = el('ctbContaFormFornecedor');
     const documentoSel = el('ctbContaFormDocumento');
     const valorCampo = el('ctbContaFormValor');
@@ -1122,6 +1124,28 @@
           primeiroCampo.value = d.data_emissao || hojeLocal();
           await carregarDocumentos(d.id);
           dividir();
+        } else if (ddaId) {
+          const r = await fetchApi(`/api/contabilidade/dda/${encodeURIComponent(ddaId)}`);
+          const s = r.conta_sugerida;
+          const bol = r.boleto;
+          el('ctbContaFormTitulo').lastChild.textContent = 'Conta do boleto do DDA';
+          pintarEtiqueta(el('ctbContaFormSituacao'), 'Boleto do DDA', 'badge-info');
+          el('ctbContaFormDescricao').value = s.descricao || '';
+          el('ctbContaFormNumero').value = s.numero_documento || '';
+          emissaoCampo.value = s.data_emissao || '';
+          if (window.Competencia) window.Competencia.definir(compCampo, s.competencia); else compCampo.value = s.competencia;
+          valorCampo.value = numeroBr(s.valor_total);
+          if (s.contato_id) fornecedorSel.value = String(s.contato_id);
+          el('ctbContaFormObservacao').value = `Boleto do DDA de ${bol.beneficiario_nome || 'beneficiário'} (${bol.beneficiario_documento || 'sem CPF/CNPJ'}), vence em ${formatarData(bol.vencimento)}.`;
+          primeiroCampo.value = bol.vencimento;
+          parcelas = (s.parcelas || []).map(p => ({ vencimento: p.vencimento, valor: p.valor, linha_digitavel: p.linha_digitavel || '' }));
+          await carregarDocumentos(s.documento_recebido_id);
+          // O beneficiário que não está em Contatos: a faixa pede o fornecedor (o resto vem do boleto).
+          if (!s.contato_id) {
+            const aviso = el('ctbContaFormTravada');
+            aviso.textContent = `O beneficiário (${bol.beneficiario_nome || '—'}) não está em Contatos: escolha ou cadastre o fornecedor. Ao salvar, o boleto fica ligado a esta conta.`;
+            aviso.classList.remove('hidden');
+          }
         } else {
           await carregarDocumentos(null);
         }
@@ -1150,8 +1174,9 @@
       processando = true;
       try {
         if (id) await enviar(`/api/contabilidade/titulos/${encodeURIComponent(id)}`, 'PUT', corpo);
+        else if (ddaId) await enviar(`/api/contabilidade/dda/${encodeURIComponent(ddaId)}/lancar`, 'POST', corpo);
         else await enviar('/api/contabilidade/titulos', 'POST', corpo);
-        window.showToast?.(id ? 'Conta alterada.' : 'Conta lançada.', 'success');
+        window.showToast?.(id ? 'Conta alterada.' : (ddaId ? 'Conta lançada e ligada ao boleto do DDA.' : 'Conta lançada.'), 'success');
         processando = false;
         avisarAlteracao();
         fechar();
@@ -2509,7 +2534,7 @@
           title: aceitarSugestoes ? 'Aceitar as sugestões únicas?' : 'Conciliar automaticamente?',
           message: aceitarSugestoes
             ? 'Grava o que tem chave exata e as sugestões de mesmo valor que só servem para um lançamento (e vice-versa). A soma de vários fica para você conferir.'
-            : 'Grava só o que tem chave exata (o CNPJ/CPF da contrapartida ou o número do documento batem) ou o nome na descrição do banco a até 3 dias. A nota sem conta e a conta em aberto que casarem são pagas com o dia e o valor do banco. O resto continua como sugestão.',
+            : 'Grava só o que tem chave exata (o CNPJ/CPF da contrapartida ou o número do documento batem) ou o nome na descrição do banco a até 3 dias. A nota sem conta, o boleto liquidado no DDA e a conta em aberto que casarem são pagos com o dia e o valor do banco. O resto continua como sugestão.',
           confirmText: 'Conciliar'
         })
         : Promise.resolve(window.confirm('Conciliar em lote?')));
@@ -2520,7 +2545,8 @@
         processando = false;
         const contas = [
           r.contas_pagas ? plural(r.contas_pagas, 'conta paga', 'contas pagas') : null,
-          r.contas_lancadas ? plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
+          r.contas_lancadas ? plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null,
+          r.boletos_lancados ? plural(r.boletos_lancados, 'boleto do DDA lançado e pago', 'boletos do DDA lançados e pagos') : null
         ].filter(Boolean).join(', ');
         window.showToast?.(r.total ? `${plural(r.total, 'lançamento conciliado', 'lançamentos conciliados')}${contas ? ` (${contas})` : ''}.` : 'Nada para conciliar em lote: confira as sugestões uma a uma.', r.total ? 'success' : 'info');
         if (r.falhas?.length) mostrarMensagem('ctbConcMensagem', `Não deu para conciliar: ${r.falhas.join(' · ')}`, 'aviso');
@@ -2601,7 +2627,7 @@
         // Fase A: a nota sem conta / a conta em aberto é paga pela própria conciliação.
         const paga = [...marcadas].some(k => candidata(k)?.obrigacao);
         p.textContent = `Marcado: ${formatarMoeda(soma)} de ${formatarMoeda(alvo)}${dif ? ` · diferença de ${formatarMoeda(dif)}` : ' · bate'}`
-          + (paga ? ' · ao conciliar, a conta é paga (a nota vira conta) com o dia e o valor do banco' : '');
+          + (paga ? ' · ao conciliar, a conta é paga (a nota ou o boleto do DDA vira conta) com o dia e o valor do banco' : '');
         p.dataset.ok = dif ? '0' : '1';
       }
       el('ctbConcMovJustificativaBloco').classList.toggle('hidden', !marcadas.size || !dif);
@@ -4180,17 +4206,25 @@
       pintarEtiqueta(el('ctbConfigPerfil'), dados?.pode_editar ? 'Sup Admin: pode mudar' : 'Só leitura', dados?.pode_editar ? 'badge-success' : 'badge-neutral');
     }
 
-    /** O bloco das credenciais do BB: as da cobrança (só mostra) ou as próprias (guardar o secret de cada ambiente). */
+    /**
+     * O bloco das credenciais do BB: as da cobrança ou as do cartão do Extrato
+     * (fase H: o DDA está na mesma aplicação do portal) — só mostra —, ou as
+     * próprias (guardar o secret de cada ambiente).
+     */
     function blocoDeCredenciais(i, podeEditar, controles) {
       const bloco = criar('div', 'ctb-integracao__credenciais');
       const cr = i.credenciais || {};
-      const usaCobranca = () => valorDoControle(controles.get('usar_credenciais_da_cobranca'), 'booleano') !== false;
+      const campoDeOutra = i.credenciais_de ? 'usar_credenciais_do_extrato' : 'usar_credenciais_da_cobranca';
+      const usaOutra = () => valorDoControle(controles.get(campoDeOutra), 'booleano') !== false;
+      const onde = origem => (origem === 'banco' ? 'no banco' : (origem === 'env' ? 'no .env' : 'neste computador'));
       const desenharBloco = () => {
         bloco.replaceChildren(criar('h4', 'ctb-integracao__subtitulo', 'Credenciais do BB'));
-        if (usaCobranca()) {
-          bloco.append(criar('p', 'text-sm text-gray-300', cr.origem === 'cobranca'
-            ? `Da Configuração de cobrança (${i.ambiente === 'producao' ? 'produção' : 'homologação'}): client_id ${cr.client_id ? 'ok' : 'FALTA'}, app key ${cr.app_key ? 'ok' : 'FALTA'}, client_secret ${cr.secret_guardado ? `guardado (${cr.secret_origem === 'banco' ? 'no banco' : (cr.secret_origem === 'env' ? 'no .env' : 'neste computador')})` : 'FALTA'}.`
-            : 'Salve para passar a usar as credenciais da Configuração de cobrança.'));
+        if (usaOutra()) {
+          const deQuem = i.credenciais_de ? 'Do cartão do Extrato pela API' : 'Da Configuração de cobrança';
+          const origemCerta = i.credenciais_de ? cr.origem === 'extrato' : cr.origem === 'cobranca';
+          bloco.append(criar('p', 'text-sm text-gray-300', origemCerta
+            ? `${deQuem} (${i.ambiente === 'producao' ? 'produção' : 'homologação'}): client_id ${cr.client_id ? 'ok' : 'FALTA'}, app key ${cr.app_key ? 'ok' : 'FALTA'}, client_secret ${cr.secret_guardado ? `guardado (${onde(cr.secret_origem)})` : 'FALTA'}.`
+            : `Salve para passar a usar as credenciais ${i.credenciais_de ? 'do cartão do Extrato' : 'da Configuração de cobrança'}.`));
           return;
         }
         if (!cr.ambientes) bloco.append(criar('p', 'text-sm text-gray-400', 'Salve com esta caixa desmarcada para usar credenciais próprias; depois guarde o client_secret de cada ambiente aqui.'));
@@ -4242,7 +4276,7 @@
       const simbolo = criar('span', 'ctb-integracao__icone');
       simbolo.appendChild(icone(i.icone));
       const titulo = criar('div', 'ctb-integracao__titulo');
-      titulo.append(criar('h3', null, i.nome), criar('span', 'ctb-integracao__etapa', `Etapa ${i.etapa}`));
+      titulo.append(criar('h3', null, i.nome), criar('span', 'ctb-integracao__etapa', i.fase ? `Fase ${i.fase}` : `Etapa ${i.etapa}`));
       const etiquetas = criar('div', 'ctb-integracao__etiquetas');
       if (i.fora_de_uso) {
         etiquetas.append(tag('Fora de uso', 'badge-neutral'));
@@ -4327,8 +4361,17 @@
       let intervalo = null;
       if (i.tem_automatica) {
         automatica = caixaDeMarcar('Buscar sozinha (a agenda do app)', i.automatica);
-        intervalo = campoDeTexto(i.intervalo_min, { tipo: 'number', min: i.intervalo_limites.min, max: i.intervalo_limites.max });
-        form.append(automatica.rotulo, blocoDeCampo(`A cada quantos minutos (${i.intervalo_limites.min} a ${i.intervalo_limites.max})`, intervalo));
+        if (i.vezes_por_dia) {
+          // Fase H (pedido do dono): o DDA pergunta "quantas vezes por dia"; grava o intervalo (1440 ÷ vezes).
+          const maxVezes = Math.floor(1440 / i.intervalo_limites.min);
+          const minVezes = Math.max(1, Math.ceil(1440 / i.intervalo_limites.max));
+          intervalo = campoDeTexto(Math.round(1440 / (Number(i.intervalo_min) || 720)), { tipo: 'number', min: minVezes, max: maxVezes });
+          intervalo.dataset.vezesPorDia = '1';
+          form.append(automatica.rotulo, blocoDeCampo(`Quantas vezes por dia (${minVezes} a ${maxVezes})`, intervalo, 'A agenda do app busca em faixas iguais do dia, com o app aberto e alguém logado.'));
+        } else {
+          intervalo = campoDeTexto(i.intervalo_min, { tipo: 'number', min: i.intervalo_limites.min, max: i.intervalo_limites.max });
+          form.append(automatica.rotulo, blocoDeCampo(`A cada quantos minutos (${i.intervalo_limites.min} a ${i.intervalo_limites.max})`, intervalo));
+        }
       }
       const basicos = criar('div', 'ctb-integracao__campos');
       const avancados = criar('div', 'ctb-integracao__campos ctb-integracao__avancado');
@@ -4373,6 +4416,7 @@
         credenciais = blocoDeCredenciais(i, podeEditar, controles);
         form.append(credenciais);
         controles.get('usar_credenciais_da_cobranca')?.addEventListener('change', aplicarQuando);
+        controles.get('usar_credenciais_do_extrato')?.addEventListener('change', aplicarQuando);
       }
       if (avancados.children.length) {
         const textoAvancado = i.banco ? 'Mostrar o avançado (endereços, conta de teste…)' : 'Mostrar o avançado (endereços, NSU inicial…)';
@@ -4415,7 +4459,11 @@
           const parametros = {};
           for (const [nome, controle] of controles) parametros[nome] = valorDoControle(controle, controle.dataset.tipo);
           const corpo = { ativa: ativa.caixa.checked, ambiente: ambiente.value, parametros };
-          if (automatica) { corpo.automatica = automatica.caixa.checked; corpo.intervalo_min = Number(intervalo.value) || null; }
+          if (automatica) {
+            corpo.automatica = automatica.caixa.checked;
+            const n = Number(intervalo.value) || null;
+            corpo.intervalo_min = intervalo.dataset.vezesPorDia && n ? Math.round(1440 / n) : n;
+          }
           if (corpo.ambiente === 'producao' && i.ambiente_no_banco !== 'producao') {
             const palavra = await pedirTexto({ titulo: `Ligar a produção — ${i.nome}`, mensagem: 'Em produção a integração busca os documentos reais da empresa (e a SEFAZ registra as manifestações). Digite PRODUCAO para confirmar.', placeholder: 'PRODUCAO', confirmar: 'Ligar produção', minimo: 8, erro: 'Digite PRODUCAO para confirmar.' });
             if (!palavra) return;
@@ -4457,6 +4505,8 @@
           }
         }, { perm: i.permissao_executar, titulo: 'A busca de verdade (a mesma da agenda)' }));
       }
+      // Fase H: dos cartões do DDA, a lista dos boletos.
+      if (i.chave === 'bb_dda' && i.sql_pronto) rodape.append(botaoPequeno('Ver os boletos', 'btn-neutral', () => abrirOutro('dda', {}), { titulo: 'Os boletos contra a empresa que o DDA trouxe' }));
       art.append(resultado, rodape);
       return art;
     }
@@ -4718,6 +4768,268 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ boletos do DDA (fase H)
+
+  const TOM_ESTADO_DDA = { 1: 'badge-warning', 2: 'badge-info', 3: 'badge-success' };
+  const TOM_SITUACAO_DDA = { novo: 'badge-danger', vinculado: 'badge-success', ignorado: 'badge-neutral', contestado: 'badge-neutral' };
+
+  /** A data + n dias ('YYYY-MM-DD'), sem fuso. */
+  function somarDiasIso(iso, n) {
+    const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+    return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+  }
+
+  /** Escolher a parcela de conta a pagar para o boleto (as candidatas que o backend mandou). null = desistiu. */
+  function escolherParcela(boleto, candidatos) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-2xl glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Ligar o boleto a uma conta a pagar'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', `${boleto.beneficiario_nome || 'Beneficiário'} · ${formatarMoeda(boleto.valor)} · vence em ${formatarData(boleto.vencimento)}. A linha digitável da parcela é completada pelo boleto, se estiver vazia.`));
+      const lista = criar('div', 'ctb-dda-escolhas modal-scroll');
+      if (!candidatos.length) lista.appendChild(criar('p', 'text-sm text-gray-400', 'Nenhuma conta a pagar combina (mesmo beneficiário ou mesmo valor). Use "Lançar conta".'));
+      candidatos.forEach((x, i) => {
+        const rotulo = criar('label', 'ctb-dda-escolha');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'ctbDdaParcela';
+        radio.value = String(x.parcela_id);
+        if (i === 0) radio.checked = true;
+        const texto = criar('span', 'ctb-dda-escolha__texto');
+        texto.append(
+          criar('strong', null, `${x.rotulo}${x.fornecedor ? ` — ${x.fornecedor}` : ''}`),
+          criar('span', 'ctb-sub', [`vence em ${formatarData(x.vencimento)}`, formatarMoeda(x.valor), x.situacao_rotulo, ...(x.motivos || [])].filter(Boolean).join(' · '))
+        );
+        rotulo.append(radio, texto);
+        lista.appendChild(rotulo);
+      });
+      caixa.appendChild(lista);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-danger ctl-botao text-white', 'Cancelar');
+      const ok = criar('button', 'btn-success ctl-botao', 'Ligar');
+      voltar.type = 'button';
+      ok.type = 'button';
+      ok.disabled = !candidatos.length;
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => sair(lista.querySelector('input[name="ctbDdaParcela"]:checked')?.value || null));
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      (lista.querySelector('input') || voltar).focus();
+    });
+  }
+
+  /** Os boletos contra a empresa (DDA do BB): ligar, lançar, contestar, ignorar, espelho. */
+  function montarDda() {
+    const corpo = el('ctbDdaLista');
+    const visaoSel = el('ctbDdaVisao');
+    const vencSel = el('ctbDdaVencimento');
+    const estadoSel = el('ctbDdaEstado');
+    const busca = el('ctbDdaBusca');
+    const hoje = hojeLocal();
+    const competencia = /^\d{4}-\d{2}$/.test(String(contexto.competencia || '')) ? contexto.competencia : hoje.slice(0, 7);
+    if (contexto.visao && [...visaoSel.options].some(o => o.value === contexto.visao)) visaoSel.value = contexto.visao;
+    let dados = null;
+
+    const acao = (id, caminho, sucesso, corpoEnvio = {}) => async () => {
+      mostrarMensagem('ctbDdaMensagem', '');
+      try {
+        const r = await enviar(`/api/contabilidade/dda/${encodeURIComponent(id)}/${caminho}`, 'POST', corpoEnvio);
+        window.showToast?.(typeof sucesso === 'function' ? sucesso(r) : sucesso, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbDdaMensagem', textoDoErro(e, 'Isto pede a permissão "Lançar contas a pagar".'));
+      }
+    };
+    const comMotivo = (id, caminho, { titulo, mensagem, confirmar, sucesso }) => async () => {
+      const motivo = await pedirTexto({ titulo, mensagem, confirmar });
+      if (!motivo) return;
+      await acao(id, caminho, sucesso, { motivo })();
+    };
+    const ligar = (id, parcelaId) => acao(id, 'vincular', r => (r.linha_completada ? 'Boleto ligado à conta (a linha digitável da parcela foi completada).' : 'Boleto ligado à conta.'), { parcela_id: parcelaId });
+
+    async function escolherELigar(l) {
+      mostrarMensagem('ctbDdaMensagem', '');
+      try {
+        const det = await fetchApi(`/api/contabilidade/dda/${encodeURIComponent(l.id)}`);
+        const parcelaId = await escolherParcela(l, det.candidatos || []);
+        if (parcelaId) await ligar(l.id, parcelaId)();
+      } catch (e) {
+        mostrarMensagem('ctbDdaMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    async function salvarEspelho(l) {
+      try {
+        if (!window.electronAPI?.salvarHtmlComoPdf) throw new Error('O PDF só é gerado dentro do aplicativo.');
+        const r = await fetchApi(`/api/contabilidade/dda/${encodeURIComponent(l.id)}/espelho`);
+        const s = await window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o Espelho DDA em PDF' });
+        if (s?.canceled) return;
+        if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar o PDF.');
+        window.showToast?.('Espelho DDA salvo em PDF (documento interno, não é 2ª via do boleto).', 'success');
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'), 'error');
+      }
+    }
+
+    function acoesDaLinha(l) {
+      const botoes = [];
+      const sugerida = l.sugestoes?.find(s => s.tipo === 'parcela');
+      if (l.pode.ligar && sugerida) {
+        botoes.push(botaoPequeno('Ligar à sugerida', 'btn-success', ligar(l.id, sugerida.parcela_id),
+          { perm: 'contabilidade.pagar.lancar', titulo: `${sugerida.rotulo} · ${(sugerida.motivos || []).join(', ')}` }));
+      }
+      if (l.pode.ligar) botoes.push(botaoPequeno('Ligar…', 'btn-secondary', () => escolherELigar(l), { perm: 'contabilidade.pagar.lancar', titulo: 'Escolher a conta a pagar deste boleto' }));
+      if (l.pode.lancar) {
+        botoes.push(botaoPequeno('Lançar conta', 'btn-primary', () => abrirOutro('conta-pagar-form', { dda_id: l.id }),
+          { perm: 'contabilidade.pagar.lancar', titulo: 'O formulário vem preenchido com o boleto (e a nota sugerida): confira e salve' }));
+      }
+      if (l.pode.contestar) {
+        botoes.push(botaoPequeno('Contestar', 'btn-warning', comMotivo(l.id, 'contestar', {
+          titulo: 'Contestar este boleto?', mensagem: 'A empresa não deve este boleto (não comprou, valor errado, já pago de outro jeito…). Ele sai do aviso. Diga o motivo — fale também com o beneficiário.',
+          confirmar: 'Contestar', sucesso: 'Boleto contestado.'
+        }), { perm: 'contabilidade.pagar.lancar' }));
+      }
+      if (l.pode.ignorar) {
+        botoes.push(botaoPequeno('Ignorar', 'btn-neutral', comMotivo(l.id, 'ignorar', {
+          titulo: 'Ignorar este boleto?', mensagem: 'Ele sai do aviso (repetido, de outra empresa do grupo…). Diga o motivo.', confirmar: 'Ignorar', sucesso: 'Boleto ignorado.'
+        }), { perm: 'contabilidade.pagar.lancar' }));
+      }
+      if (l.pode.restaurar) botoes.push(botaoPequeno('Restaurar', 'btn-neutral', acao(l.id, 'restaurar', 'O boleto voltou a ficar sem conta.'), { perm: 'contabilidade.pagar.lancar' }));
+      if (l.vinculo) botoes.push(botaoPequeno('Abrir conta', 'btn-secondary', () => abrirOutro('conta-pagar', { titulo_id: l.vinculo.titulo_id })));
+      if (l.pode.desligar) {
+        botoes.push(botaoPequeno('Desligar', 'btn-neutral', comMotivo(l.id, 'desvincular', {
+          titulo: 'Desligar o boleto desta conta?', mensagem: 'O boleto volta a ficar sem conta (a linha digitável da parcela fica). Diga por quê.', confirmar: 'Desligar', sucesso: 'Boleto desligado da conta.'
+        }), { perm: 'contabilidade.pagar.lancar' }));
+      }
+      botoes.push(botaoPequeno('Espelho', 'btn-neutral', () => salvarEspelho(l), { titulo: 'O Espelho DDA em PDF: documento interno com os dados do BB (não é 2ª via do boleto)' }));
+      return botoes;
+    }
+
+    /** O filtro de vencimento, estado e busca (a visão vem do backend). */
+    function visivel(l) {
+      const v = vencSel.value;
+      if (v === 'mes' && !String(l.vencimento).startsWith(competencia)) return false;
+      if (v === 'vencidos' && !(l.vencimento < hoje)) return false;
+      if (v === 'proximos' && !(l.vencimento >= hoje && l.vencimento <= somarDiasIso(hoje, 30))) return false;
+      if (estadoSel.value && String(l.estado_bb) !== estadoSel.value) return false;
+      const termo = normalizar(busca.value).trim();
+      return !termo || normalizar(`${l.beneficiario_nome || ''} ${l.beneficiario_documento || ''} ${l.beneficiario_final_nome || ''} ${l.seu_numero || ''} ${formatarMoeda(l.valor)} ${l.vinculo?.descricao || ''}`).includes(termo);
+    }
+
+    function desenhar() {
+      const linhas = (dados?.linhas || []).filter(visivel);
+      if (!linhas.length) {
+        linhaVazia(corpo, 6, dados?.sql_pendente
+          ? 'Os boletos do DDA ainda não estão ativados (falta o SQL da fase H).'
+          : 'Nada por aqui. A busca do DDA traz os boletos assim que for ligada em Configurações.');
+        return;
+      }
+      corpo.replaceChildren(...linhas.map(l => {
+        const tr = criar('tr');
+        const estado = [tag(l.estado_rotulo, TOM_ESTADO_DDA[l.estado_bb] || 'badge-neutral')];
+        if (l.ambiente && l.ambiente !== 'producao') estado.push(tag('Homologação', 'badge-neutral', 'Boleto de teste do BB'));
+        const historico = (l.estados || []).length > 1 ? (l.estados || []).map(e => e.rotulo).join(' → ') : null;
+        const situacao = [tag(l.situacao_rotulo, TOM_SITUACAO_DDA[l.situacao] || 'badge-neutral')];
+        const sugerida = l.sugestoes?.[0];
+        if (l.situacao === 'novo' && sugerida) situacao.push(tag('Sugestão', 'badge-info', (sugerida.motivos || []).join(', ')));
+        const sub = [
+          l.vinculo ? `${l.vinculo.descricao} · parcela ${l.vinculo.parcela}${l.vinculo.pagamento ? ` · paga em ${formatarData(l.vinculo.pagamento.data)}` : ` · ${String(l.vinculo.situacao_rotulo || '').toLowerCase()}`}${l.vinculo.criterio_rotulo ? ` · ${l.vinculo.criterio_rotulo}` : ''}` : null,
+          l.situacao === 'novo' && sugerida ? `${sugerida.tipo === 'documento' ? 'Nota sem conta' : 'Conta'}: ${sugerida.rotulo}${sugerida.fornecedor ? ` (${sugerida.fornecedor})` : ''}` : null,
+          l.situacao === 'novo' && !sugerida && [2, 3].includes(Number(l.estado_bb)) ? `${Number(l.estado_bb) === 3 ? 'Pago' : 'Agendado'} no banco: ao conciliar o débito do extrato, a conta do boleto é lançada e paga` : null,
+          l.motivo ? `motivo: ${l.motivo}` : null
+        ].filter(Boolean).join(' · ');
+        const tdSituacao = celula(situacao, 'px-4 py-3', sub || null);
+        for (const aviso of l.avisos || []) {
+          const a = criar('span', 'ctb-sub', aviso);
+          a.style.color = 'var(--color-primary-light)';
+          tdSituacao.appendChild(a);
+        }
+        const beneficiario = [l.beneficiario_documento, l.beneficiario_final_nome ? `final: ${l.beneficiario_final_nome} (${l.beneficiario_final_documento})` : null, l.seu_numero ? `seu número ${l.seu_numero}` : null].filter(Boolean).join(' · ');
+        tr.append(
+          celula(formatarData(l.vencimento), 'px-4 py-3 ctb-nowrap', l.data_registro ? `registro ${formatarData(l.data_registro)}` : null),
+          celula(l.beneficiario_nome || '—', 'px-4 py-3', beneficiario || null),
+          celula(formatarMoeda(l.valor), 'px-4 py-3 text-right ctb-num'),
+          celula(estado, 'px-4 py-3', [historico, l.sumiu_em ? `não aparece mais no DDA (${formatarInstante(l.sumiu_em)})` : null].filter(Boolean).join(' · ') || null),
+          tdSituacao,
+          celula(criarAcoesDda(acoesDaLinha(l)), 'px-4 py-3 text-right')
+        );
+        return tr;
+      }));
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    function criarAcoesDda(botoes) {
+      const d = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+      d.append(...botoes);
+      return d;
+    }
+
+    async function carregar() {
+      mostrarMensagem('ctbDdaAviso', '');
+      try {
+        dados = await fetchApi(`/api/contabilidade/dda?visao=${encodeURIComponent(visaoSel.value)}`);
+        const c = dados.contagem || {};
+        pintarEtiqueta(el('ctbDdaContagem'), dados.sql_pendente ? 'Falta o SQL' : `${c.sem_conta || 0} sem conta`, c.sem_conta ? 'badge-warning' : 'badge-success');
+        if (dados.sql_pendente) mostrarMensagem('ctbDdaAviso', `Os boletos do DDA ainda não estão ativados: rode ${dados.sql_arquivo || 'sql/contabilidade_fase_h.sql'} no banco e reinicie a API.`, 'aviso');
+        const b = dados.busca;
+        el('ctbDdaSubtitulo').textContent = b
+          ? `Busca ${b.ativa ? 'ligada' : 'desligada'}${b.ambiente === 'producao' ? '' : ' (homologação)'} · última ${b.ultimo_sucesso_em ? formatarInstante(b.ultimo_sucesso_em) : 'ainda não rodou'}`
+          : 'Boletos registrados contra a empresa no Banco do Brasil';
+        if (b?.ultimo_erro) mostrarMensagem('ctbDdaAviso', `A última busca deu erro: ${b.ultimo_erro}`, 'aviso');
+      } catch (e) {
+        dados = null;
+        mostrarMensagem('ctbDdaAviso', textoDoErro(e, 'Ver os boletos do DDA pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    acionar(el('ctbDdaBuscar'), async () => {
+      mostrarMensagem('ctbDdaMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/integracoes/bb_dda/sincronizar', 'POST', {});
+        window.showToast?.(r.resumo || 'Busca feita.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        const faltas = Array.isArray(e?.corpo?.pendencias) ? `Antes de buscar: ${e.corpo.pendencias.join(' ')} (Configurações).` : null;
+        mostrarMensagem('ctbDdaMensagem', faltas || textoDoErro(e, 'Buscar no DDA pede a permissão "Lançar contas a pagar".'));
+      }
+    });
+    acionar(el('ctbDdaConferir'), async () => {
+      mostrarMensagem('ctbDdaMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/dda/conferir', 'POST', {});
+        window.showToast?.(r.ligados ? `${plural(r.ligados, 'boleto ligado', 'boletos ligados')} à conta.` : 'Nada novo para ligar sozinho: confira as sugestões.', r.ligados ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbDdaMensagem', `Não deu para ligar: ${r.falhas.join(' · ')}`, 'aviso');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbDdaMensagem', textoDoErro(e, 'Ligar pede a permissão "Lançar contas a pagar".'));
+      }
+    });
+    el('ctbDdaConfig').addEventListener('click', () => abrirOutro('configuracao', {}));
+    visaoSel.addEventListener('change', carregar);
+    vencSel.addEventListener('change', desenhar);
+    estadoSel.addEventListener('change', desenhar);
+    busca.addEventListener('input', desenhar);
+    ouvirAlteracoes(carregar);
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
@@ -4727,6 +5039,7 @@
     documento: { rotulo: 'Documentos e arquivos', badge: 'badge-info', tipos: ['documento_registrado', 'documento_excluido', 'arquivo_anexado', 'arquivo_excluido', 'fornecedor_cadastrado', 'nfe_manifestada', 'entrada_ignorada'] },
     integracao: { rotulo: 'Integrações', badge: 'badge-neutral', tipos: ['integracao_configurada', 'parametros_alterados'] },
     pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
+    dda: { rotulo: 'Boletos do DDA', badge: 'badge-info', tipos: ['dda_vinculado', 'dda_desvinculado', 'dda_conta_lancada', 'dda_ignorado', 'dda_contestado', 'dda_restaurado'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -4887,7 +5200,8 @@
     ctbAtividade: montarAtividade,
     ctbMensagens: montarMensagens,
     ctbConfiguracao: montarConfiguracao,
-    ctbEntradaDfe: montarEntradaDfe
+    ctbEntradaDfe: montarEntradaDfe,
+    ctbDda: montarDda
   };
 
   let montagem;

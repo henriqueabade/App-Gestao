@@ -221,7 +221,9 @@ const CTB_ACOES = {
     'enviar': { rotulo: 'Registrar o envio à contabilidade', abrir: m => ctbAbrirModal('pacote', m, { enviar: true }) },
     // Etapas 10 a 13: as integrações (SEFAZ, BB, ADN) e a caixa de entrada das notas que elas acham.
     'configuracao': { rotulo: 'Configurações da contabilidade', abrir: m => ctbAbrirModal('configuracao', m, {}) },
-    'entrada-dfe': { rotulo: 'NF-e e NFS-e encontradas', abrir: m => ctbAbrirModal('entrada-dfe', m, {}) }
+    'entrada-dfe': { rotulo: 'NF-e e NFS-e encontradas', abrir: m => ctbAbrirModal('entrada-dfe', m, {}) },
+    // Fase H: os boletos contra a empresa (DDA do BB). A pendência traz a visão (sem conta / ligados).
+    'dda': { rotulo: 'Boletos do DDA', abrir: (m, extra) => ctbAbrirModal('dda', m, { visao: extra?.visao || null }) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -255,7 +257,9 @@ const CTB_MODAIS = {
     'mensagens': { html: 'modals/contabilidade/mensagens.html', overlay: 'ctbMensagens' },
     // Etapas 10 a 13: as integrações e a caixa de entrada (NF-e da SEFAZ, NFS-e do ADN).
     'configuracao': { html: 'modals/contabilidade/configuracao.html', overlay: 'ctbConfiguracao' },
-    'entrada-dfe': { html: 'modals/contabilidade/entrada-dfe.html', overlay: 'ctbEntradaDfe' }
+    'entrada-dfe': { html: 'modals/contabilidade/entrada-dfe.html', overlay: 'ctbEntradaDfe' },
+    // Fase H: os boletos do DDA do BB.
+    'dda': { html: 'modals/contabilidade/dda.html', overlay: 'ctbDda' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

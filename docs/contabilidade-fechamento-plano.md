@@ -1631,3 +1631,83 @@ Roteiro: `docs/contabilidade-integracoes-roteiro.md`, Parte J. SQL:
   no balancete (nota de venda D 00028.xxx / C 00528; compra D 00340 / C
   00223.xxx; pagamento D 00223.xxx / C 00008; adiantamento 00270; Simples D
   00780 / C 00608).
+
+## AE. Fase H entregue (02/10/2026) — os boletos contra a empresa (DDA do BB)
+
+Ordem do dono ("guarde as perguntas que não respondi como pendências… siga!"):
+a B2 virou a pendência 48 e a H seguiu. Roteiro: Parte K. SQL:
+`sql/contabilidade_fase_h.sql` (depois do da Fase B; reiniciar a API).
+
+- **Banco:** `contabil_dda_boletos`.
+  - Só dados: beneficiário e final, seu número, código de barras, linha
+    digitável calculada, registro, vencimento, valor, `estado_bb` 1/2/3 e o
+    histórico em `estados`, `json_original`, `capturado_em`, `visto_em`,
+    `sumiu_em`.
+  - O que o app decidiu: `situacao` (novo, vinculado, ignorado, contestado),
+    `titulo_id`, `parcela_id`, `vinculo_criterio`, `motivo`, quem e quando.
+  - Chave interna SHA-256 (UNIQUE); uma parcela por boleto (índice parcial).
+  - Mais a linha `bb_dda` em `contabil_integracoes`.
+  - **Armadilha achada no DEV de verdade:** `vinculo_criterio` precisa de 30
+    ("cnpj_valor_vencimento" tem 21). O teste de rotas agora confere o tamanho
+    das colunas (LIMITES).
+- **Cliente** `integracoes/bbDda.js` (Swagger 1.0.1):
+  - GET `/boletos` por estado, com `numeroProximoRegistro`,
+    `indicadorContinuidade` e datas dd/mm/aaaa;
+  - janelas de até 360 dias;
+  - `gw-dev-app-key`; o cabeçalho de teste só na homologação e só se
+    informado;
+  - o mesmo boleto em dois estados fica com o mais adiantado.
+- **Cartão `bb_dda`** (`catalogo.js`):
+  - `fase: 'H'`, `vezesPorDia` (a tela grava 1440 ÷ vezes);
+  - `credenciaisDe: 'bb_extrato'` (o serviço resolve as do cartão do Extrato;
+    o próprio cartão do Extrato pode usar as da cobrança);
+  - `mtlsSempre`;
+  - `conferir()`: soma dos dias ≤ 365 e ao menos um estado;
+  - `sqlArquivo` aponta o SQL da H nas pendências;
+  - permissão para buscar: `contabilidade.pagar.lancar`.
+- **Serviço:**
+  - `sincronizarDda`: grava, liga sozinho e manda os meses tocados para a
+    conciliação automática;
+  - teste de conexão: os "a pagar" dos próximos 30 dias, conferindo o CNPJ do
+    pagador.
+- **Casamento** (`dda/dda.js`, `casar`, puro):
+  - automático = mesma linha digitável, ou CNPJ (beneficiário ou final) +
+    mesmo valor + vencimento ≤ 3 dias, com o par único dos dois lados;
+  - sugestão = outra filial, nome, valor diferente com CNPJ e vencimento
+    ≤ 5 dias, ou nota sem conta do mesmo CNPJ (valor igual ou parte dela);
+  - ligar completa a linha digitável da parcela vazia.
+- **Conciliação:**
+  - obrigação nova `dda` (agendado/liquidado sem conta): conciliar lança a
+    conta do boleto (`origem 'dda'`), liga e paga com forma Boleto; desfazer
+    cancela e solta o boleto (critério `dda_pago`);
+  - a parcela ligada a boleto liquidado leva `dda_liquidado`: o motor aceita o
+    automático com o par exato e único a até 5 dias;
+  - o lote conta `boletos_lancados`.
+- **Painel** (fonte Contas a pagar):
+  - `dda_sem_conta`: aviso;
+  - `dda_pago_em_aberto`: aviso;
+  - `pagar_sem_boleto`: documental, só com o DDA ligado; vale o boleto ligado
+    ou o arquivo "Boleto".
+- **Rotas** `/dda`: listar, conferir, detalhe com a conta preenchida, espelho,
+  vincular, desvincular, lançar, ignorar, contestar e restaurar.
+- **Telas:**
+  - modal `dda`;
+  - cartão (vezes por dia, credenciais do Extrato, "Ver os boletos");
+  - o formulário de conta a pagar com `dda_id` (preenchido; salva em
+    `/dda/:id/lancar`);
+  - eventos `dda_*` na atividade;
+  - origem "Boleto do DDA".
+- **Espelho DDA** (`dda/espelho.js`): A4, uma folha, gerado na hora. O pacote
+  da Fase I o usa.
+- **Testes:**
+  - `dda/dda.test.js`: 10, puros;
+  - `contabilidadeDda.test.js`: 2, de ponta a ponta com o BB de mentira;
+  - núcleo das integrações atualizado (5 cartões);
+  - tela: modal novo no padrão;
+  - as 25 baterias da Contabilidade passam; tela 1.285 de 1.286 (o logout
+    antigo).
+  - Também rodou em modo DEV contra o Postgres descartável
+    (`dev_e2e_dda.js`): jsonb de verdade, datas, eventos, painel.
+- **Para depois:**
+  - soma de vários boletos num débito (Fase D, pendência 54);
+  - o espelho e o boleto do fornecedor na pasta de cada pagamento (Fase I).

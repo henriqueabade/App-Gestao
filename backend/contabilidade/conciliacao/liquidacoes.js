@@ -26,6 +26,14 @@
  * Elas não viram vínculo: conciliar com uma delas PAGA a parcela (ou lança a
  * conta do documento e a paga) com o dia e o valor do banco, e o vínculo é
  * com esse pagamento (conciliacao.js).
+ *
+ * Fase H (02/10/2026, o DDA do BB): mais uma obrigação —
+ *
+ *   dda                   boleto do DDA agendado ou liquidado, sem conta  saída
+ *
+ * e a parcela em aberto ligada a um boleto que o DDA diz LIQUIDADO leva essa
+ * prova (`dda_liquidado`; o motor aceita o automático com ela). O boleto "a
+ * pagar" não entra: estar no DDA não prova que a dívida é devida.
  */
 const c = require('../../financeiro/comum');
 const b = require('../base');
@@ -36,7 +44,8 @@ const TIPOS = {
   financeiro_pagamento: { rotulo: 'Comissão/produção', sinal: -1 },
   reembolso: { rotulo: 'Reembolso', sinal: -1 },
   parcela: { rotulo: 'Conta a pagar em aberto', sinal: -1, obrigacao: true },
-  documento: { rotulo: 'Nota sem conta a pagar', sinal: -1, obrigacao: true }
+  documento: { rotulo: 'Nota sem conta a pagar', sinal: -1, obrigacao: true },
+  dda: { rotulo: 'Boleto do DDA sem conta', sinal: -1, obrigacao: true }
 };
 /** Até quantos dias antes ou depois do vencimento (ou da emissão) a obrigação pode ter sido paga. */
 const JANELA_OBRIGACAO = 30;
@@ -119,16 +128,40 @@ function deReembolso(r, { pedidos = new Map(), clientes = new Map() } = {}) {
   });
 }
 
-/** A parcela em aberto (obrigação). `titulo` e `contato` crus; `de` = quantas parcelas a conta tem. */
-function deParcela(p, { titulo, contato = null, de = 1 }) {
+/**
+ * A parcela em aberto (obrigação). `titulo` e `contato` crus; `de` = quantas
+ * parcelas a conta tem; `boleto` = o boleto do DDA ligado a ela (fase H): o
+ * liquidado é a prova do pagamento, e o CNPJ do beneficiário vale quando a
+ * conta não tem fornecedor.
+ */
+function deParcela(p, { titulo, contato = null, de = 1, boleto = null }) {
+  const liquidado = Boolean(boleto) && Number(boleto.estado_bb) === 3;
   return {
     ...base('parcela', p.id, {
       data: p.vencimento, valor: p.valor, forma: null,
       rotulo: `${titulo.descricao}${de > 1 ? ` · parcela ${p.numero}/${de}` : ''}`,
-      detalhe: `vence em ${c.impressa(c.dia(p.vencimento))}`, nome: contato?.nome || null, documento: docDe(contato),
+      detalhe: `vence em ${c.impressa(c.dia(p.vencimento))}${liquidado ? ' · liquidado no DDA' : ''}`, nome: contato?.nome || boleto?.beneficiario_nome || null,
+      documento: docDe(contato) || b.digitos(boleto?.beneficiario_documento) || null,
       referencia: titulo.numero_documento || null, categoria: titulo.categoria || null, contatoId: titulo.contato_id ?? null
     }),
-    titulo_id: Number(titulo.id)
+    titulo_id: Number(titulo.id), dda_liquidado: liquidado
+  };
+}
+
+/**
+ * O boleto do DDA sem conta, agendado ou liquidado (obrigação, fase H):
+ * conciliar com ele lança a conta do boleto e a paga com o banco. Pura.
+ */
+function deBoletoDda(bol) {
+  const liquidado = Number(bol.estado_bb) === 3;
+  return {
+    ...base('dda', bol.id, {
+      data: bol.vencimento, valor: bol.valor, forma: 'Boleto',
+      rotulo: `Boleto de ${bol.beneficiario_nome || 'beneficiário'}`,
+      detalhe: `vence em ${c.impressa(c.dia(bol.vencimento))} · ${liquidado ? 'liquidado' : 'agendado'} no DDA`,
+      nome: bol.beneficiario_nome || null, documento: b.digitos(bol.beneficiario_documento) || null, referencia: bol.seu_numero || null
+    }),
+    dda_boleto_id: Number(bol.id), dda_liquidado: liquidado
   };
 }
 
@@ -190,12 +223,14 @@ async function porId(api, tabela, ids) {
 async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes = false } = {}) {
   const extras = new Set(incluir);
   const quer = (tipo, id, ...datas) => extras.has(chaveDe(tipo, id)) || datas.some(d => naJanela(c.dia(d), de, ate));
-  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos] = await Promise.all([
+  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos] = await Promise.all([
     lerSePuder(api, 'recebimentos'), lerSePuder(api, 'reembolsos'),
     lerSePuder(api, 'financeiro_pagamentos'), lerSePuder(api, 'financeiro_fechamentos'),
     b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'titulos_pagar').then(x => x || []),
     b.lerOpcional(api, 'titulo_pagar_parcelas').then(x => x || []),
-    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'documentos_recebidos').then(x => x || []) : Promise.resolve([])
+    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'documentos_recebidos').then(x => x || []) : Promise.resolve([]),
+    // Fase H: os boletos do DDA (sem o SQL dela, nenhum).
+    obrigacoes || [...extras].some(k => k.startsWith('dda:')) ? b.lerOpcional(api, 'contabil_dda_boletos').then(x => x || []).catch(() => []) : Promise.resolve([])
   ]);
   const recs = recebimentos.filter(r => r && quer('recebimento', r.id, r.data_recebimento, r.data_credito));
   const reems = reembolsos.filter(r => r && r.data_pagamento && quer('reembolso', r.id, r.data_pagamento));
@@ -218,6 +253,9 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     contasPorDocumento.set(k, [...(contasPorDocumento.get(k) || []), t]);
   }
   const docs = docsLidos.filter(d => documentoSemConta(d, contasPorDocumento) && querObrigacao('documento', d.id, d.data_emissao));
+  // Fase H: o boleto ligado a cada parcela e os agendados/liquidados ainda sem conta.
+  const boletoDaParcela = new Map(boletosLidos.filter(x => x && x.situacao === 'vinculado' && x.parcela_id).map(x => [String(x.parcela_id), x]));
+  const boletos = boletosLidos.filter(x => x && x.situacao === 'novo' && [2, 3].includes(Number(x.estado_bb)) && querObrigacao('dda', x.id, x.vencimento));
 
   const pedidos = await porId(api, 'pedidos', [...recs, ...reems].map(r => r.pedido_id));
   const clientes = await porId(api, 'clientes', [...pedidos.values()].map(p => p.cliente_id));
@@ -237,9 +275,10 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     ...reems.map(r => deReembolso(r, { pedidos, clientes })),
     ...abertas.map(p => {
       const t = titulos.get(String(p.titulo_id));
-      return deParcela(p, { titulo: t, contato: contatoDe(t.contato_id), de: quantas(t.id) });
+      return deParcela(p, { titulo: t, contato: contatoDe(t.contato_id), de: quantas(t.id), boleto: boletoDaParcela.get(String(p.id)) || null });
     }),
-    ...docs.map(d => deDocumento(d, { contato: contatoDe(d.contato_id) }))
+    ...docs.map(d => deDocumento(d, { contato: contatoDe(d.contato_id) })),
+    ...boletos.map(deBoletoDda)
   ].filter(l => l.data).sort((x, y) => x.data.localeCompare(y.data) || x.chave.localeCompare(y.chave));
 }
 
@@ -263,6 +302,6 @@ function restantes(liquidacoes, vinculos) {
 
 module.exports = {
   TIPOS, FORA_DO_BANCO, DATA_INCERTA, JANELA_OBRIGACAO, chaveDe,
-  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, valorAPagar, documentoSemConta,
+  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, deBoletoDda, valorAPagar, documentoSemConta,
   carregar, restantes
 };

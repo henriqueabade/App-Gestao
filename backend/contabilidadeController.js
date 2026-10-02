@@ -84,6 +84,18 @@
  *   GET/PUT /integracoes[/:chave], credenciais, testar, sincronizar, execuções, certificado público
  *   GET /entrada e as ações da caixa de entrada (manifestar, baixar XML, registrar, ignorar, restaurar)
  *
+ * Fase H (02/10/2026 — os boletos contra a empresa, DDA do BB; a busca é a integração bb_dda):
+ *
+ *   GET  /dda?visao=                  os boletos (sem conta / ligados / decididos / todos), as sugestões e a contagem
+ *   GET  /dda/:id                     o boleto, as parcelas para ligar à mão e a conta já preenchida
+ *   GET  /dda/:id/espelho             { nome, html } — o "Espelho DDA" (documento interno; a tela imprime em PDF)
+ *   POST /dda/conferir                liga sozinho o que casa (linha digitável; CNPJ + valor + vencimento)  (contabilidade.pagar.lancar)
+ *   POST /dda/:id/vincular            { parcela_id }                   (contabilidade.pagar.lancar)
+ *   POST /dda/:id/desvincular         { motivo }                       (contabilidade.pagar.lancar)
+ *   POST /dda/:id/lancar              a conta (o corpo de POST /titulos) — lança e liga   (contabilidade.pagar.lancar)
+ *   POST /dda/:id/ignorar|contestar   { motivo }                       (contabilidade.pagar.lancar)
+ *   POST /dda/:id/restaurar                                            (contabilidade.pagar.lancar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -112,6 +124,8 @@ const relatorioPlanilha = require('./contabilidade/relatorio/planilha');
 const dossie = require('./contabilidade/relatorio/dossie');
 const pacote = require('./contabilidade/pacote/pacote');
 const citaveis = require('./contabilidade/citaveis');
+const dda = require('./contabilidade/dda/dda');
+const ddaEspelho = require('./contabilidade/dda/espelho');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -438,6 +452,38 @@ router.post('/pacote', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pa
 
 router.post('/pacote/:id/enviado', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote/:id/enviado', ({ api, req, usuarioId }) =>
   pacote.marcarEnviado(api, req.params.id, { entrada: req.body || {}, usuarioId })));
+
+// ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
+
+router.get('/dda', exigirPermissao(VER), rota('GET /api/contabilidade/dda', ({ api, req, hoje }) =>
+  dda.listar(api, { visao: req.query?.visao || 'sem_conta', hoje })));
+
+router.post('/dda/conferir', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/conferir', ({ api, hoje, usuarioId }) =>
+  dda.vincularSozinho(api, { usuarioId, hoje })));
+
+router.get('/dda/:id', exigirPermissao(VER), rota('GET /api/contabilidade/dda/:id', ({ api, req, hoje }) =>
+  dda.detalhe(api, req.params.id, { hoje })));
+
+router.get('/dda/:id/espelho', exigirPermissao(VER), rota('GET /api/contabilidade/dda/:id/espelho', ({ api, req }) =>
+  ddaEspelho.gerar(api, req.params.id)));
+
+router.post('/dda/:id/vincular', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/vincular', ({ api, req, usuarioId }) =>
+  dda.vincular(api, req.params.id, { parcelaId: req.body?.parcela_id, usuarioId })));
+
+router.post('/dda/:id/desvincular', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/desvincular', ({ api, req, usuarioId }) =>
+  dda.desvincular(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/dda/:id/lancar', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/lancar', ({ api, req, hoje, usuarioId }) =>
+  dda.lancar(api, req.params.id, { entrada: req.body || {}, usuarioId, hoje })));
+
+router.post('/dda/:id/ignorar', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/ignorar', ({ api, req, usuarioId }) =>
+  dda.decidir(api, req.params.id, { situacao: 'ignorado', motivo: req.body?.motivo, usuarioId })));
+
+router.post('/dda/:id/contestar', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/contestar', ({ api, req, usuarioId }) =>
+  dda.decidir(api, req.params.id, { situacao: 'contestado', motivo: req.body?.motivo, usuarioId })));
+
+router.post('/dda/:id/restaurar', exigirPermissao(LANCAR), rota('POST /api/contabilidade/dda/:id/restaurar', ({ api, req, usuarioId }) =>
+  dda.restaurar(api, req.params.id, { usuarioId })));
 
 // Etapas 10 a 13: integrações automáticas (SEFAZ, BB, ADN) e a caixa de entrada —
 // /integracoes/* e /entrada/* (backend/contabilidade/integracoes/rotas.js).

@@ -255,7 +255,7 @@ function lerJson(resposta) {
  * Um GET na API com o token e a app key; erro com a mensagem do BB.
  * `nomeAppKey` (padrão: o do ambiente) e `cabecalhos` extras são da v2.
  */
-async function chamarApi({ transporte, url, token, appKey, ambiente, query = {}, nomeAppKey = null, cabecalhos = {} }) {
+async function chamarApi({ transporte, url, token, appKey, ambiente, query = {}, nomeAppKey = null, cabecalhos = {}, nomeApi = 'Extratos', dicaTeste = ' e se a conta é uma das contas de teste do BB' }) {
   if (!appKey) throw erro('Falta a app key do BB.', 409);
   const nome = nomeAppKey || nomeDaAppKey(ambiente);
   const params = new URLSearchParams();
@@ -270,7 +270,7 @@ async function chamarApi({ transporte, url, token, appKey, ambiente, query = {},
   if (resposta.status < 200 || resposta.status >= 300) {
     const detalhe = mensagemDoBB(corpo);
     const dica = resposta.status === 403
-      ? ` Confira se a cadeia do certificado foi enviada na aplicação do portal NESTE ambiente, se a API Extratos está nela${ambiente === 'producao' ? ' e se o envio para produção foi concluído' : ' e se a conta é uma das contas de teste do BB'}.`
+      ? ` Confira se a cadeia do certificado foi enviada na aplicação do portal NESTE ambiente, se a API ${nomeApi} está nela${ambiente === 'producao' ? ' e se o envio para produção foi concluído' : dicaTeste}.`
       : '';
     throw erro(`O BB respondeu ${resposta.status}${detalhe ? `: ${detalhe}` : ''}.${dica}`, resposta.status >= 500 ? 502 : 422, { http: resposta.status, bb: corpo });
   }

@@ -18,9 +18,10 @@ const entrada = require('./entrada');
 const agenda = require('./agenda');
 const execucoes = require('./execucoes');
 
-test('catálogo: as quatro integrações, as etapas, o que cada uma usa e os endereços por ambiente', () => {
-  assert.deepEqual(catalogo.CHAVES, ['sefaz_nfe', 'bb_extrato', 'nfse_adn', 'bb_investimentos']);
-  assert.deepEqual(catalogo.CHAVES.map(k => catalogo.INTEGRACOES[k].etapa), [10, 11, 13, 12]);
+test('catálogo: as cinco integrações, as etapas, o que cada uma usa e os endereços por ambiente', () => {
+  // Fase H (02/10/2026): o DDA do BB entra antes do CDB (que está fora de uso).
+  assert.deepEqual(catalogo.CHAVES, ['sefaz_nfe', 'bb_extrato', 'nfse_adn', 'bb_dda', 'bb_investimentos']);
+  assert.deepEqual(catalogo.CHAVES.map(k => catalogo.INTEGRACOES[k].etapa), [10, 11, 13, 14, 12]);
   const sefaz = catalogo.definicao('sefaz_nfe');
   assert.equal(catalogo.url(sefaz, 'url_distribuicao', {}, 'producao'), 'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx');
   assert.equal(catalogo.url(sefaz, 'url_evento', {}, 'homologacao'), 'https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx');
@@ -170,7 +171,7 @@ test('agenda: só a ligada e automática, uma vez por faixa do intervalo, e a tr
     sincronizar: async (_api, chave, opcoes) => { chamadas.push([chave, opcoes.chaveExecucao]); return { situacao: 'rodou' }; }
   });
   const r1 = await a.verificar();
-  assert.deepEqual(r1.integracoes, { sefaz_nfe: 'rodou', bb_extrato: 'desligada', nfse_adn: 'desligada', bb_investimentos: 'desligada' });
+  assert.deepEqual(r1.integracoes, { sefaz_nfe: 'rodou', bb_extrato: 'desligada', nfse_adn: 'desligada', bb_dda: 'desligada', bb_investimentos: 'desligada' });
   assert.deepEqual(chamadas, [['sefaz_nfe', `sefaz_nfe:auto:60:${execucoes.faixaDe(agora, 60)}`]]);
   assert.equal((await a.verificar()).integracoes.sefaz_nfe, 'ja_tentada', 'a mesma faixa não roda duas vezes');
   agora += 61 * 60 * 1000;

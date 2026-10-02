@@ -30,10 +30,11 @@ const motor = require('./motor');
 const ESTADOS = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
 const CRITERIOS = {
   automatico: 'Automático', sugestao: 'Sugestão aceita', composicao: 'Soma aceita', manual: 'Escolhido à mão', conta_criada: 'Conta lançada do extrato',
-  parcela_paga: 'Conta paga pelo extrato', documento_pago: 'Nota lançada e paga pelo extrato'
+  parcela_paga: 'Conta paga pelo extrato', documento_pago: 'Nota lançada e paga pelo extrato', dda_pago: 'Boleto do DDA lançado e pago pelo extrato'
 };
-/** O vínculo que nasceu pagando uma obrigação: desfazer estorna o pagamento (e cancela a conta da nota). */
-const CRITERIOS_QUE_PAGAM = ['parcela_paga', 'documento_pago'];
+/** O vínculo que nasceu pagando uma obrigação: desfazer estorna o pagamento (e cancela a conta da nota ou do boleto). */
+const CRITERIOS_QUE_PAGAM = ['parcela_paga', 'documento_pago', 'dda_pago'];
+const CRITERIO_DA_OBRIGACAO = { parcela: 'parcela_paga', documento: 'documento_pago', dda: 'dda_pago' };
 const VISOES = { pendentes: 'A conciliar', sugestoes: 'Com sugestão', conciliados: 'Conciliados', ignorados: 'Ignorados', todos: 'Todos' };
 
 const ativo = v => v && !v.desfeito_em;
@@ -286,13 +287,47 @@ async function pagarObrigacao(api, m, liq, { usuarioId = null, hoje, observacao 
     criouConta = true;
     parcelaId = (await b.ler(api, 'titulo_pagar_parcelas', { titulo_id: Number(criada.id) }))[0]?.id ?? null;
   }
+  // Fase H: o boleto do DDA sem conta vira a conta do boleto (fornecedor pelo CNPJ, linha digitável, seu número) e fica ligado a ela.
+  let boleto = null;
+  if (liq.tipo === 'dda') {
+    const dda = require('../dda/dda');
+    boleto = dda.normalizar(await dda.lerBoleto(api, liq.dda_boleto_id));
+    if (boleto.situacao !== 'novo') throw c.erro('O boleto do DDA já foi ligado a uma conta ou decidido: atualize a lista.', 409);
+    const sugerida = dda.contaSugerida(boleto, { contatos: await titulos.lerContatos(api) });
+    const criada = await titulos.criar(api, {
+      entrada: {
+        ...sugerida, competencia: m.competencia || c.competenciaDe(dia),
+        observacao: `Lançada pela conciliação com o extrato de ${c.impressa(dia)} (boleto liquidado no DDA do BB).`
+      },
+      usuarioId, hoje, origem: 'dda'
+    });
+    tituloId = criada.id;
+    criouConta = true;
+    const p = (await b.ler(api, 'titulo_pagar_parcelas', { titulo_id: Number(criada.id) }))[0] || null;
+    parcelaId = p?.id ?? null;
+    try {
+      const t = (await b.ler(api, 'titulos_pagar', { id: Number(criada.id) }))[0];
+      await dda.ligar(api, boleto, { p, t }, { criterio: 'conciliacao', usuarioId });
+    } catch (e) {
+      await titulos.cancelar(api, tituloId, { motivo: 'Falhou ao ligar o boleto do DDA pela conciliação', usuarioId, avisar: false }).catch(() => null);
+      throw e;
+    }
+  }
   try {
-    const pago = await titulos.pagar(api, parcelaId, { entrada: { data_pagamento: dia, valor_pago: valor, forma: motor.formaDaDescricao(m.descricao), observacao: nota }, usuarioId, hoje });
+    const pago = await titulos.pagar(api, parcelaId, { entrada: { data_pagamento: dia, valor_pago: valor, forma: liq.tipo === 'dda' ? 'Boleto' : motor.formaDaDescricao(m.descricao), observacao: nota }, usuarioId, hoje });
     return { pagamento_id: pago.pagamento.id, titulo_id: tituloId, criou_conta: criouConta };
   } catch (e) {
     if (criouConta) await titulos.cancelar(api, tituloId, { motivo: 'Falhou ao pagar a nota pela conciliação', usuarioId, avisar: false }).catch(() => null);
+    if (boleto) await soltarBoleto(api, boleto.id).catch(() => null);
     throw e;
   }
+}
+
+/** O boleto do DDA volta a ficar sem conta (a conta lançada pela conciliação foi desfeita). */
+async function soltarBoleto(api, boletoId) {
+  await b.atualizar(api, 'contabil_dda_boletos', boletoId, {
+    situacao: 'novo', titulo_id: null, parcela_id: null, vinculo_criterio: null, vinculado_em: null, vinculado_por: null, atualizado_em: c.agora()
+  });
 }
 
 /** Desfaz o que `pagarObrigacao` gravou (estorna; cancela a conta lançada). Não lança erro: devolve o aviso. */
@@ -313,12 +348,13 @@ async function desfazerPagamento(api, { pagamentoId, tituloId = null, criouConta
  */
 async function conciliarObrigacao(api, m, liq, { justificativa = null, criterio, usuarioId = null, hoje = null }) {
   const pago = await pagarObrigacao(api, m, liq, { usuarioId, hoje: hoje || c.dia(m.data), observacao: justificativa });
-  const crit = liq.tipo === 'parcela' ? 'parcela_paga' : 'documento_pago';
+  const crit = CRITERIO_DA_OBRIGACAO[liq.tipo] || 'documento_pago';
   const item = { tipo: 'titulo_pagamento', id: pago.pagamento_id, restante: abs(m.valor) };
   try {
     await gravar(api, m, [item], { criterio: crit, detalhe: `${CRITERIOS[criterio] || CRITERIOS.manual} · ${liq.rotulo}`, justificativa, usuarioId });
   } catch (e) {
     await desfazerPagamento(api, { pagamentoId: pago.pagamento_id, tituloId: pago.titulo_id, criouConta: pago.criou_conta, motivo: 'Falhou ao conciliar com o extrato', usuarioId });
+    if (liq.tipo === 'dda') await soltarBoleto(api, liq.dda_boleto_id).catch(() => null);
     throw e;
   }
   await eventos.registrar(api, {
@@ -396,13 +432,20 @@ async function desfazer(api, movimentoId, { motivo, usuarioId = null }) {
     const p = (await b.ler(api, 'titulo_pagar_pagamentos', { id: Number(v.alvo_id) }))[0] || null;
     if (!p || p.estornado_em) continue;
     const aviso = await desfazerPagamento(api, {
-      pagamentoId: p.id, tituloId: p.titulo_id, criouConta: v.criterio === 'documento_pago', motivo: `Conciliação desfeita: ${texto}`, usuarioId
+      pagamentoId: p.id, tituloId: p.titulo_id, criouConta: ['documento_pago', 'dda_pago'].includes(v.criterio), motivo: `Conciliação desfeita: ${texto}`, usuarioId
     });
-    if (aviso) avisos.push(aviso); else estornados.push(v.criterio);
+    if (aviso) { avisos.push(aviso); continue; }
+    estornados.push(v.criterio);
+    // Fase H: a conta do boleto foi cancelada — o boleto do DDA volta a ficar sem conta.
+    if (v.criterio === 'dda_pago') {
+      const boletos = (await b.lerOpcional(api, 'contabil_dda_boletos', { titulo_id: Number(p.titulo_id) }).catch(() => null)) || [];
+      for (const bol of boletos) await soltarBoleto(api, bol.id).catch(() => null);
+    }
   }
   const partes = [
     estornados.includes('parcela_paga') ? 'o pagamento da conta foi estornado (ela volta a ficar em aberto)' : null,
     estornados.includes('documento_pago') ? 'a conta lançada da nota foi cancelada (a nota volta a ficar sem conta)' : null,
+    estornados.includes('dda_pago') ? 'a conta lançada do boleto foi cancelada (o boleto do DDA volta a ficar sem conta)' : null,
     criouConta ? 'a conta lançada do extrato continua; estorne-a em Contas a pagar se foi engano' : null
   ].filter(Boolean);
   await eventos.registrar(api, {
@@ -464,7 +507,7 @@ async function automatica(api, { contaId, competencia, aceitarSugestoes = false,
   const porChave = new Map(liqs.map(l => [l.chave, l]));
   const decisoes = motor.sugerir(movs.map(paraMotor), liqs);
   const usados = new Set();
-  const feitos = { automatico: 0, sugestao: 0, contas_pagas: 0, contas_lancadas: 0 };
+  const feitos = { automatico: 0, sugestao: 0, contas_pagas: 0, contas_lancadas: 0, boletos_lancados: 0 };
   const falhas = [];
   for (const m of movs) {
     const d = decisoes.get(m.id);
@@ -476,7 +519,7 @@ async function automatica(api, { contaId, competencia, aceitarSugestoes = false,
     try {
       if (itens[0].obrigacao) {
         const r = await conciliarObrigacao(api, m, itens[0], { criterio: 'automatico', usuarioId, hoje });
-        feitos[r.conta_criada ? 'contas_lancadas' : 'contas_pagas'] += 1;
+        feitos[!r.conta_criada ? 'contas_pagas' : (itens[0].tipo === 'dda' ? 'boletos_lancados' : 'contas_lancadas')] += 1;
       } else {
         await gravar(api, m, itens, { criterio: d.tipo, detalhe: d.motivos.join('; '), usuarioId });
       }
@@ -489,10 +532,7 @@ async function automatica(api, { contaId, competencia, aceitarSugestoes = false,
   }
   const total = feitos.automatico + feitos.sugestao;
   if (total) {
-    const obrig = [
-      feitos.contas_pagas ? c.plural(feitos.contas_pagas, 'conta paga', 'contas pagas') : null,
-      feitos.contas_lancadas ? c.plural(feitos.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
-    ].filter(Boolean).join(', ');
+    const obrig = frasesDasObrigacoes(feitos);
     await eventos.registrar(api, {
       tipo: 'conciliacao_automatica', competencia, usuarioId,
       descricao: `${conta.nome}, ${c.rotuloCompetencia(competencia)}: ${c.plural(total, 'lançamento conciliado', 'lançamentos conciliados')} ${sozinha ? 'sozinho' + (total > 1 ? 's' : '') : 'em lote'}`
@@ -511,7 +551,7 @@ async function automatica(api, { contaId, competencia, aceitarSugestoes = false,
  * erro vira `falhas`.
  */
 async function automaticaDosMeses(api, { competencias = [], contaId = null, usuarioId = null, hoje }) {
-  const total = { conciliados: 0, contas_pagas: 0, contas_lancadas: 0, falhas: [] };
+  const total = { conciliados: 0, contas_pagas: 0, contas_lancadas: 0, boletos_lancados: 0, falhas: [] };
   const meses = [...new Set(c.lista(competencias).filter(x => c.competenciaValida(x)).map(String))].sort();
   if (!meses.length) return total;
   try {
@@ -527,6 +567,7 @@ async function automaticaDosMeses(api, { competencias = [], contaId = null, usua
         total.conciliados += r.total;
         total.contas_pagas += r.contas_pagas;
         total.contas_lancadas += r.contas_lancadas;
+        total.boletos_lancados += r.boletos_lancados || 0;
         total.falhas.push(...r.falhas);
       }
     }
@@ -536,13 +577,19 @@ async function automaticaDosMeses(api, { competencias = [], contaId = null, usua
   return total;
 }
 
+/** "1 conta paga, 1 nota lançada e paga, 1 boleto do DDA lançado e pago" (o que as obrigações viraram). Pura. */
+function frasesDasObrigacoes(r) {
+  return [
+    r.contas_pagas ? c.plural(r.contas_pagas, 'conta paga', 'contas pagas') : null,
+    r.contas_lancadas ? c.plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null,
+    r.boletos_lancados ? c.plural(r.boletos_lancados, 'boleto do DDA lançado e pago', 'boletos do DDA lançados e pagos') : null
+  ].filter(Boolean).join(', ');
+}
+
 /** A frase para o resumo de quem chamou ("3 conciliados sozinhos (1 conta paga)"), ou null. Pura. */
 function resumoDaAutomatica(r) {
   if (!r?.conciliados) return null;
-  const extra = [
-    r.contas_pagas ? c.plural(r.contas_pagas, 'conta paga', 'contas pagas') : null,
-    r.contas_lancadas ? c.plural(r.contas_lancadas, 'nota lançada e paga', 'notas lançadas e pagas') : null
-  ].filter(Boolean).join(', ');
+  const extra = frasesDasObrigacoes(r);
   return `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`;
 }
 
@@ -606,7 +653,7 @@ async function criarConta(api, movimentoId, { entrada = {}, usuarioId = null, ho
 }
 
 module.exports = {
-  ESTADOS, CRITERIOS, CRITERIOS_QUE_PAGAM, VISOES,
+  ESTADOS, CRITERIOS, CRITERIOS_QUE_PAGAM, CRITERIO_DA_OBRIGACAO, VISOES,
   paraMotor, comRestante, liqPublica, vinculosInvalidos, coberto, semLancamento, totaisDe, naVisao, janelaDoMes, resumoDaAutomatica, mesesParaConciliar,
   lerVinculos, painel, candidatos, conciliar, desfazer, ignorar, reativar, automatica, automaticaDosMeses, criarConta
 };

@@ -526,6 +526,121 @@ a API, permissões, travas) → B → C → D → E.
 10. Painel de setembro: uma conta de energia/Simples paga **com o comprovante
     anexado** não aparece mais como "pagamento sem nota".
 
+## Parte K — Fase H (02/10/2026): os boletos contra a empresa (DDA do BB)
+
+**O que mudou**
+- **Cartão novo nas Configurações: "Boletos contra a empresa (DDA do BB)"
+  (Fase H).** Ele usa a mesma aplicação do Portal Developers que o Extrato
+  pela API: client_id, app key, client_secret e certificado vêm do cartão do
+  Extrato. O cartão tem:
+  - a caixa "Usar a mesma aplicação do Extrato" (desmarcada, pede credenciais
+    próprias);
+  - "Buscar sozinha" e **quantas vezes por dia** (padrão 2);
+  - vencimentos de **quantos dias para trás** (60) e **para frente** (180),
+    somados até 365 (o BB aceita até 1 ano por consulta);
+  - os **estados** buscados: a pagar, agendados e liquidados;
+  - no avançado, o código de teste da homologação (só se o BB indicar uma
+    massa de teste).
+- **A busca guarda só os dados.** O BB não dá o PDF nem a 2ª via. De cada
+  boleto ficam:
+  - beneficiário e beneficiário final, "seu número";
+  - código de barras e a linha digitável **calculada** dele;
+  - registro, vencimento, valor e o estado no BB, com o histórico
+    (a pagar → liquidado);
+  - o JSON original;
+  - um **ID interno** do app, que nunca é apresentado como identificador do BB.
+
+  O boleto que some do DDA (baixado ou trocado pelo beneficiário) fica marcado.
+- **Liga sozinho à conta a pagar** só quando o par é único:
+  - **mesma linha digitável**; ou
+  - **mesmo CNPJ do beneficiário + mesmo valor + vencimento a até 3 dias**.
+
+  Ao ligar, completa a linha digitável da parcela que estava sem. O resto vira
+  sugestão, inclusive a **nota registrada sem conta** do mesmo CNPJ.
+- **Boleto "a pagar" sem conta nunca vira conta sozinho.** Estar no DDA não
+  prova que a dívida é devida. No painel ele é **aviso**: "N boletos do DDA sem
+  conta a pagar".
+- **Boleto pago (liquidado) ou agendado sem conta** entra na **conciliação**,
+  como a nota sem conta da Fase A. O débito do extrato que casa com ele
+  **lança a conta do boleto e a paga** (fornecedor pelo CNPJ, linha digitável,
+  seu número). Isso é automático com o mesmo valor, o par único e a até 5 dias
+  do vencimento. Desfazer a conciliação cancela a conta e solta o boleto.
+- **A parcela ligada a um boleto liquidado** concilia sozinha com o débito do
+  mesmo valor, a até 5 dias. O DDA confirma o pagamento.
+- **Tela nova "Boletos do DDA (BB)"** (Ações da Contabilidade, ou "Ver os
+  boletos" no cartão):
+  - Filtros: mostrar (sem conta, ligados, contestados e ignorados, todos),
+    vencimento, estado no banco e busca.
+  - Em cada linha:
+    - **Ligar à sugerida** e **Ligar…** (escolher a conta);
+    - **Lançar conta**: abre o formulário já preenchido, com a nota sugerida;
+      ao salvar, o boleto fica ligado;
+    - **Contestar** e **Ignorar**, os dois com motivo, e **Restaurar**;
+    - **Desligar** (com motivo) e **Abrir conta**;
+    - **Espelho**: o PDF "Espelho DDA".
+  - No rodapé: **Ligar sozinho** e **Buscar no DDA**.
+- **Espelho DDA**: uma página A4 só com os dados do BB, as barras desenhadas do
+  código e a linha digitável marcada como calculada. O rodapé é o que o BB
+  orientou: "…Não constitui segunda via ou representação gráfica oficial do
+  boleto." Na Fase I ele vai no pacote, na pasta de cada pagamento.
+- **Painel (fonte Contas a pagar):**
+  - boleto do mês sem conta: **aviso**;
+  - boleto liquidado com a conta em aberto: **aviso**;
+  - **pagamento por boleto sem o boleto**: **documental** (segura o pacote).
+    Só aparece com o DDA ligado. Resolve com o boleto do DDA ligado à conta ou
+    com o PDF do boleto do fornecedor anexado (tipo "Boleto"). Ver a
+    pendência 51.
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_h.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_b.sql`, e **reiniciar a API**. No fim ele mostra a
+   tabela nova (0 boletos) e a linha `bb_dda` desligada, em homologação, a cada
+   720 min.
+2. Configurações › **Boletos contra a empresa (DDA do BB)**:
+   - deixar marcado "Usar a mesma aplicação do Extrato";
+   - **Testar conexão**.
+
+   Sem massa de teste na homologação, mude para **Produção** (digite PRODUCAO):
+   a API só consulta.
+3. Marcar **Ligada** e **Buscar sozinha** (2 vezes por dia) e **Salvar**.
+   Depois, **Buscar agora**.
+4. Ações › **Boletos do DDA (BB)**: para cada boleto sem conta, decidir entre
+   ligar, lançar ou contestar.
+
+**Checklist visual**
+1. Sem o SQL, o cartão do DDA mostra "Falta rodar
+   sql/contabilidade_fase_h.sql…". A tela dos boletos mostra o aviso amarelo
+   com o arquivo.
+2. Com o SQL, o cartão mostra "Fase H", "Quantas vezes por dia" = 2, 60 e 180
+   dias e os 3 estados marcados. Em "Credenciais do BB": "Do cartão do Extrato
+   pela API (…): client_id ok, app key ok, client_secret guardado".
+3. **Testar conexão**: "Token e DDA ok (escopos: dda-info; com o certificado da
+   empresa). N boletos a pagar com vencimento de … a …. Pagador no BB:
+   11.444.777/0001-61. Nada foi gravado." Se o pagador não for o CNPJ da
+   empresa, o teste avisa.
+4. **Buscar agora**: "N boletos no DDA com vencimento de … a … (x a pagar, y
+   liquidados) · N novos · K ligados sozinhos às contas…".
+5. Tela dos boletos, em "Sem conta":
+   - etiquetas "A pagar" (amarela) e "Liquidado" (verde);
+   - "Sugestão" com a conta ou a nota;
+   - o liquidado sem sugestão diz "Pago no banco: ao conciliar o débito do
+     extrato, a conta do boleto é lançada e paga".
+6. **Ligar…**: a caixa com as contas candidatas, a melhor primeiro, com os
+   motivos ("mesmo CNPJ do beneficiário · mesmo valor · mesmo vencimento").
+7. **Lançar conta**: o formulário "Conta do boleto do DDA" vem preenchido
+   (fornecedor, descrição, nº do documento, valor, a parcela com a linha
+   digitável, a nota sugerida). Se o beneficiário não está em Contatos, a
+   faixa pede o fornecedor. Salvar: "Conta lançada e ligada ao boleto do DDA".
+8. **Contestar** pede o motivo e o boleto vai para "Contestados e ignorados".
+   **Restaurar** volta.
+9. **Espelho**: salva o PDF, uma folha, com "DOCUMENTO INTERNO — NÃO É BOLETO"
+   e o rodapé do BB.
+10. Conciliação: o débito "PAGAMENTO DE BOLETO …" de um boleto liquidado sem
+    conta aparece como "Boleto do DDA sem conta". O lote diz "1 boleto do DDA
+    lançado e pago".
+11. Painel de setembro, com o DDA ligado: "1 pagamento por boleto sem o
+    boleto" (documental), se houver pagamento por boleto sem ele.
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -583,3 +698,18 @@ a API, permissões, travas) → B → C → D → E.
 49. Layout de importação do Mastermaq (a AEA não respondeu).
 50. Conferir com a AEA a lista das 38 contas em uso (principalmente energia e
     aluguel no custo, 3.01.02.04).
+
+**DDA (Fase H)**
+51. **Pagamento por boleto sem o boleto = documental** (segura o pacote),
+    seguindo a sua regra de mandar o boleto junto do comprovante. Só cobra com
+    o DDA ligado; resolve com o boleto do DDA ligado à conta ou com o PDF do
+    boleto anexado. Ok, ou prefere **aviso**?
+52. **Boleto liquidado no DDA sem conta**: o débito do extrato de mesmo valor, a
+    até 5 dias do vencimento, **lança a conta do boleto e a paga sozinho**
+    (como a nota sem conta da Fase A). A conta nasce sem nota, então o painel
+    continua pedindo a nota (crítico). Ok?
+53. Pedir ao BB a **massa de teste da homologação do DDA**. Sem ela, o teste é
+    em produção (só consulta).
+54. **Vários boletos pagos num débito só** (pagamento em lote): a soma das
+    contas em aberto confirmadas pelo DDA/comprovante fica para a **Fase D**
+    (comprovantes), que confirma cada um.

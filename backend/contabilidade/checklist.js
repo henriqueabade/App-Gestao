@@ -333,9 +333,18 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
  *                                                 (tarifa do banco: o extrato basta)
  *   - pagamento sem comprovante ................. crítico (C3), junta todos
  *   - parcela vencida sem pagamento registrado .. aviso (junta todas)
+ * Fase H (DDA do BB, `pagar.dda` = os boletos; null sem o SQL dela):
+ *   - boleto do DDA do mês sem conta ............ aviso (lançar, ligar ou
+ *                                                 contestar: estar no DDA não
+ *                                                 prova que a dívida é devida)
+ *   - boleto liquidado, conta em aberto ......... aviso
+ *   - pagamento por boleto sem o boleto ......... documental, só com o DDA
+ *                                                 ligado (no pacote o boleto vai
+ *                                                 junto do comprovante; vale o do
+ *                                                 DDA ou o PDF anexado)
  * `pagar` null = falta o SQL da etapa. Pura.
  */
-function fonteContasPagar({ pagar, competencia, hoje }) {
+function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
   if (!pagar) return { indisponivel: SEM_SQL_PAGAR, resumo: [], numeros: null, pendencias: [] };
   const mapa = pagar.arquivosMapa || new Map();
   const docsVivos = new Set(c.lista(pagar.documentos).filter(d => d && !d.excluido_em).map(d => String(d.id)));
@@ -382,6 +391,8 @@ function fonteContasPagar({ pagar, competencia, hoje }) {
       data: maisAntiga, acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'contas-pagar', visao: 'vencidas' }
     }));
   }
+  const doDda = pendenciasDoDda({ pagar, competencia, pagamentos, ddaAtivo });
+  pend.push(...doDda.pendencias);
   const totais = titulos.totaisDaCompetencia(lista, { competencia, hoje });
   const pagoNoMes = { quantidade: pagamentos.length, total: c.centavos(pagamentos.reduce((s, x) => s + x.p.pagamento.valor_pago, 0)) };
   return {
@@ -391,8 +402,56 @@ function fonteContasPagar({ pagar, competencia, hoje }) {
       { rotulo: 'Vencidas em aberto', valor: `${vencidas.length} · ${c.reais(vencidas.reduce((s, p) => s + p.valor, 0))}` },
       { rotulo: 'Sem comprovante', valor: String(semComprovante.length) }
     ],
-    numeros: { pago_no_mes: pagoNoMes, vence_no_mes: totais.vence_no_mes, vencidas: vencidas.length, sem_comprovante: semComprovante.length, sem_documento: pend.filter(x => x.chave.startsWith('pagar_sem_doc_')).length },
+    numeros: {
+      pago_no_mes: pagoNoMes, vence_no_mes: totais.vence_no_mes, vencidas: vencidas.length, sem_comprovante: semComprovante.length, sem_documento: pend.filter(x => x.chave.startsWith('pagar_sem_doc_')).length,
+      ...doDda.numeros
+    },
     pendencias: pend
+  };
+}
+
+/** As pendências do DDA dentro da fonte das contas a pagar (fase H). Pura. */
+function pendenciasDoDda({ pagar, competencia, pagamentos, ddaAtivo }) {
+  const boletos = Array.isArray(pagar?.dda) ? pagar.dda.filter(Boolean) : null;
+  if (!boletos) return { pendencias: [], numeros: {} };
+  const pend = [];
+  const doMes = boletos.filter(x => String(c.dia(x.vencimento) || '').startsWith(competencia));
+  const semConta = doMes.filter(x => x.situacao === 'novo');
+  if (semConta.length) {
+    pend.push(pendencia({
+      nivel: 'aviso', chave: 'dda_sem_conta', fonte: 'contas_pagar',
+      titulo: `${c.plural(semConta.length, 'boleto do DDA', 'boletos do DDA')} sem conta a pagar`,
+      descricao: `Total: ${c.reais(semConta.reduce((s, x) => s + (Number(x.valor) || 0), 0))} · lance a conta, ligue a uma conta ou conteste (estar no DDA não prova que a dívida é devida)`,
+      data: semConta.map(x => c.dia(x.vencimento)).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'dda', visao: 'sem_conta' }
+    }));
+  }
+  const parcelas = new Map(c.lista(pagar.titulos).flatMap(t => t.parcelas.map(p => [String(p.id), p])));
+  const pagoEmAberto = doMes.filter(x => x.situacao === 'vinculado' && Number(x.estado_bb) === 3 && parcelas.get(String(x.parcela_id)) && !parcelas.get(String(x.parcela_id)).pagamento);
+  if (pagoEmAberto.length) {
+    pend.push(pendencia({
+      nivel: 'aviso', chave: 'dda_pago_em_aberto', fonte: 'contas_pagar',
+      titulo: `${c.plural(pagoEmAberto.length, 'boleto liquidado no DDA', 'boletos liquidados no DDA')} com a conta em aberto`,
+      descricao: 'O banco diz que foi pago: concilie o débito do extrato (a conta é paga junto) ou registre o pagamento',
+      data: pagoEmAberto.map(x => c.dia(x.vencimento)).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'dda', visao: 'ligados' }
+    }));
+  }
+  // O boleto vai junto do comprovante no pacote (regra do dono): o do DDA ligado à parcela ou o PDF anexado.
+  const mapa = pagar.arquivosMapa || new Map();
+  const comBoleto = new Set(boletos.filter(x => x.situacao === 'vinculado' && x.parcela_id).map(x => String(x.parcela_id)));
+  const temArquivoDeBoleto = ({ t, p }) => [`titulo:${t.id}`, `pagamento:${p.pagamento.id}`].some(k => (mapa.get(k) || []).some(a => a.categoria === 'boleto'));
+  const porBoleto = c.lista(pagamentos).filter(({ p }) => p.pagamento.forma === 'Boleto' || b.digitos(p.linha_digitavel));
+  const semBoleto = ddaAtivo ? porBoleto.filter(x => !comBoleto.has(String(x.p.id)) && !temArquivoDeBoleto(x)) : [];
+  if (semBoleto.length) {
+    pend.push(pendencia({
+      nivel: 'documental', chave: 'pagar_sem_boleto', fonte: 'contas_pagar',
+      titulo: `${c.plural(semBoleto.length, 'pagamento por boleto', 'pagamentos por boleto')} sem o boleto`,
+      descricao: `Total: ${c.reais(semBoleto.reduce((s, x) => s + x.p.pagamento.valor_pago, 0))} · ligue o boleto do DDA à conta (ou anexe o PDF do boleto do fornecedor): no pacote o boleto vai junto do comprovante`,
+      data: semBoleto.map(x => x.p.pagamento.data).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'dda', visao: 'sem_conta' }
+    }));
+  }
+  return {
+    pendencias: pend,
+    numeros: { dda_sem_conta: semConta.length, dda_pago_em_aberto: pagoEmAberto.length, sem_boleto: semBoleto.length }
   };
 }
 
@@ -575,8 +634,8 @@ function estadoDaFonte(fonte, pendencias, { encerrada }) {
  * lista de fechamentos fechados de todas as competências (null = sem o SQL).
  */
 /** O nome de cada integração para as pendências (o catálogo completo mora em integracoes/catalogo.js). */
-const NOME_INTEGRACAO = { sefaz_nfe: 'NF-e de entrada (SEFAZ)', bb_extrato: 'Extrato pela API do BB', nfse_adn: 'NFS-e tomadas (ADN)', bb_investimentos: 'Aplicações (BB)' };
-const FONTE_INTEGRACAO = { sefaz_nfe: 'documentos_recebidos', nfse_adn: 'documentos_recebidos', bb_extrato: 'extrato', bb_investimentos: 'extrato' };
+const NOME_INTEGRACAO = { sefaz_nfe: 'NF-e de entrada (SEFAZ)', bb_extrato: 'Extrato pela API do BB', nfse_adn: 'NFS-e tomadas (ADN)', bb_investimentos: 'Aplicações (BB)', bb_dda: 'Boletos do DDA (BB)' };
+const FONTE_INTEGRACAO = { sefaz_nfe: 'documentos_recebidos', nfse_adn: 'documentos_recebidos', bb_extrato: 'extrato', bb_investimentos: 'extrato', bb_dda: 'contas_pagar' };
 
 /**
  * Etapas 10 a 13: o que as buscas automáticas acharam e ainda não entrou.
@@ -640,7 +699,7 @@ function montar({
     fechamentos: fonteFechamentos({ fechamentos: lista, competencia: comp, hoje: diaDeHoje, encerrada }),
     devolucoes: fonteDevolucoes({ reembolsosPendencias, hoje: diaDeHoje }),
     documentos_recebidos: fonteDocumentosRecebidos({ pagar, competencia: comp, hoje: diaDeHoje }),
-    contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje }),
+    contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje, ddaAtivo: c.lista(integracoes).some(i => i && i.chave === 'bb_dda' && (i.ativa === true || i.ativa === 'true')) }),
     extrato: fonteExtrato({ extrato, competencia: comp, hoje: diaDeHoje, encerrada, inicio }),
     conciliacao: fonteConciliacao({ conciliacao, competencia: comp })
   };
@@ -767,13 +826,15 @@ function montar({
  */
 async function lerContasPagar(api, hoje) {
   try {
-    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano] = await Promise.all([
+    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda] = await Promise.all([
       titulos.lerBase(api), b.ler(api, 'documentos_recebidos'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
-      documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null)
+      documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null),
+      // Fase H: os boletos do DDA (null sem o SQL dela).
+      b.lerOpcional(api, 'contabil_dda_boletos').catch(() => null)
     ]);
     return {
       titulos: titulos.montarTodos(base, hoje), documentos: docs, contatos: base.contatos,
-      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano
+      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;

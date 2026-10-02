@@ -252,6 +252,11 @@ const MODAIS_ETAPA10 = {
   'entrada-dfe': { overlay: 'ctbEntradaDfe', principal: ['ctbEntradaBuscarSefaz', 'btn-primary', 'contabilidade.documento.registrar'] }
 };
 
+// Fase H (02/10/2026): os boletos do DDA do BB (buscar é o principal; pede "Lançar contas a pagar").
+const MODAIS_FASE_H = {
+  'dda': { overlay: 'ctbDda', principal: ['ctbDdaBuscar', 'btn-primary', 'contabilidade.pagar.lancar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -261,7 +266,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -364,6 +369,32 @@ test('etapas 10 a 13 (30/09/2026): Configurações com as integrações e a caix
   for (const tipo of ['integracao_configurada', 'nfe_manifestada', 'entrada_ignorada']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
 });
 
+test('fase H (02/10/2026): os boletos do DDA — a tela abre, cada ação vai à sua rota, o cartão pergunta "quantas vezes por dia" e o formulário lança e liga', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  assert.match(TELA, /'dda': \{[^}]*abrir:/);
+  assert.ok(HTML.includes('data-ctb-acao="dda"'));
+  for (const rota of [
+    "fetchApi(`/api/contabilidade/dda?visao=", "/api/contabilidade/dda/${encodeURIComponent(id)}/${caminho}`, 'POST'", "fetchApi(`/api/contabilidade/dda/${encodeURIComponent(l.id)}`)",
+    "/api/contabilidade/dda/${encodeURIComponent(l.id)}/espelho`", "enviar('/api/contabilidade/dda/conferir', 'POST', {})", "enviar('/api/contabilidade/integracoes/bb_dda/sincronizar', 'POST', {})",
+    "/api/contabilidade/dda/${encodeURIComponent(ddaId)}/lancar`, 'POST'"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  for (const caminho of ["'vincular'", "'contestar'", "'ignorar'", "'restaurar'", "'desvincular'"]) assert.ok(MODAIS.includes(caminho), `ação ${caminho}`);
+  // O espelho é PDF salvo pelo Electron e diz que é documento interno.
+  assert.ok(MODAIS.includes("window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o Espelho DDA em PDF' })"));
+  // O cartão: vezes por dia viram o intervalo; as credenciais podem vir do cartão do Extrato; "Ver os boletos".
+  assert.ok(MODAIS.includes('Math.round(1440 / n)') && MODAIS.includes('Quantas vezes por dia'));
+  assert.ok(MODAIS.includes("'usar_credenciais_do_extrato'") && MODAIS.includes("botaoPequeno('Ver os boletos'"));
+  // O "Lançar conta" abre o formulário de conta a pagar com o boleto.
+  assert.ok(MODAIS.includes("abrirOutro('conta-pagar-form', { dda_id: l.id })"));
+  // A atividade conhece os eventos do DDA; a origem da conta lançada do boleto tem nome.
+  for (const tipo of ['dda_vinculado', 'dda_desvinculado', 'dda_conta_lancada', 'dda_ignorado', 'dda_contestado', 'dda_restaurado']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
+  assert.ok(MODAIS.includes("dda: 'Boleto do DDA'"));
+  const html = ler('html', 'modals', 'contabilidade', 'dda.html');
+  assert.match(html, /id="ctbDdaConferir" type="button" data-perm="contabilidade\.pagar\.lancar" class="btn-secondary ctl-botao text-white"/);
+  assert.match(html, /id="ctbDdaConfig" type="button" data-perm="contabilidade\.config\.view" class="btn-neutral ctl-botao text-white"/);
+  assert.ok(html.includes('Estar no DDA não prova que a dívida é devida'));
+});
+
 test('ações da tela: contas a pagar, registrar documento, documentos recebidos e da competência são reais; as pendências da Contabilidade abrem o modal do filtro', () => {
   for (const acao of ['contas-pagar', 'registrar-documento', 'documentos-recebidos', 'evidencias']) {
     assert.ok(HTML.includes(`data-ctb-acao="${acao}"`), `botão ${acao}`);
@@ -373,7 +404,8 @@ test('ações da tela: contas a pagar, registrar documento, documentos recebidos
   // As pendências do backend usam só ações que a tela conhece.
   const CHECKLIST = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'checklist.js'), 'utf8');
   const acoes = new Set([...CHECKLIST.matchAll(/destino: 'contabilidade', filtro: \{ acao: '([^']+)'/g)].map(m => m[1]));
-  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'configuracao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'documento-recebido', 'documentos-recebidos', 'entrada-dfe', 'fechamentos', 'importar-extrato', 'pacote', 'registrar-documento']);
+  // Fase H: 'dda' (os avisos dos boletos do DDA e o pagamento por boleto sem o boleto).
+  assert.deepEqual([...acoes].sort(), ['classificacao', 'conciliacao', 'configuracao', 'conta-pagar', 'contas-financeiras', 'contas-pagar', 'dda', 'documento-recebido', 'documentos-recebidos', 'entrada-dfe', 'fechamentos', 'importar-extrato', 'pacote', 'registrar-documento']);
   for (const acao of acoes) assert.ok(TELA.includes(`'${acao}': {`), acao);
   assert.ok(CHECKLIST.includes("acao: 'documento-recebido', documento_id: d.id") && TELA.includes("'documento-recebido': {"));
   // Etapa 4: o extrato é real (o "Sincronizar extrato do BB" virou "Buscar no BB" dentro dele).

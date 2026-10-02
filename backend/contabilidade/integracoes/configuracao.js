@@ -148,6 +148,8 @@ function validar(def, entrada = {}, atual = null) {
         }
       }
       for (const chave of Object.keys(entrada.parametros)) if (!conhecidos.has(chave)) erros.push(`"${chave}" não é um parâmetro de ${def.nome}`);
+      // O que vale entre campos (fase H: a janela do DDA cabe em 1 ano), com os padrões por baixo.
+      if (typeof def.conferir === 'function') erros.push(...def.conferir({ ...catalogo.padroes(def), ...novos }));
       valores.parametros = novos;
     }
   }
@@ -182,10 +184,10 @@ async function atualizarEstado(api, linha, campos) {
  * serviço já leu: certificado (resumo), fiscal (cnpj/uf), credenciais BB
  * ({ clientId, appKey, secret }), contas do banco. Pura.
  */
-function pendencias(def, { linha, params, ambiente, certificado = null, fiscal = null, credenciais = null, contas = [] } = {}) {
+function pendencias(def, { linha, params, ambiente, certificado = null, fiscal = null, credenciais = null, contas = [], tabelaDda = null } = {}) {
   const faltas = [];
   const nomeAmb = ambiente === PRODUCAO ? 'produção' : 'homologação';
-  if (!linha) return ['Falta rodar sql/contabilidade_integracoes.sql e reiniciar a API.'];
+  if (!linha) return [`Falta rodar ${def.sqlArquivo || 'sql/contabilidade_integracoes.sql'} e reiniciar a API.`];
   // Parada de propósito: nada a fazer, nada a cobrar.
   if (def.foraDeUso) return [];
   if (def.usa.includes('certificado')) {
@@ -200,7 +202,9 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
     }
   }
   if (def.usa.includes('credenciais_bb')) {
-    const origem = params.usar_credenciais_da_cobranca !== false ? ' (Configuração de cobrança)' : '';
+    const origem = credenciais?.origem === 'extrato'
+      ? ' (cartão do Extrato pela API)'
+      : (!def.credenciaisDe && params.usar_credenciais_da_cobranca !== false ? ' (Configuração de cobrança)' : '');
     if (!credenciais?.clientId) faltas.push(`Sem client_id de ${nomeAmb}${origem}.`);
     if (!credenciais?.appKey) faltas.push(`Sem app key de ${nomeAmb}${origem}.`);
     if (!credenciais?.secret) faltas.push(`Sem client_secret de ${nomeAmb} guardado${origem}.`);
@@ -226,6 +230,11 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
     if (!String(params.escopo || '').trim()) faltas.push('Falta o escopo que o BB indicar para a API do CDB.');
     if (!String(params.caminho_consulta || '').trim()) faltas.push('Falta o caminho da consulta da posição (o BB indica).');
   }
+  if (def.chave === 'bb_dda') {
+    if (tabelaDda === false) faltas.push(`Falta rodar ${def.sqlArquivo} e reiniciar a API (a tabela dos boletos do DDA).`);
+    if (!String(params.escopo || '').trim()) faltas.push('Informe o escopo do OAuth (dda-info).');
+    faltas.push(...(def.conferir?.(params) || []).map(x => `${x}.`));
+  }
   return faltas;
 }
 
@@ -233,8 +242,9 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
 function linhaPublica(def, linha, { ambiente, travada } = {}) {
   const params = parametros(def, linha);
   return {
-    chave: def.chave, etapa: def.etapa, nome: def.nome, icone: def.icone, descricao: def.descricao, banco: def.banco, fora_de_uso: def.foraDeUso || null,
-    tem_automatica: def.automatica, intervalo_limites: def.intervalo, fornecer: def.fornecer,
+    chave: def.chave, etapa: def.etapa, fase: def.fase || null, nome: def.nome, icone: def.icone, descricao: def.descricao, banco: def.banco, fora_de_uso: def.foraDeUso || null,
+    tem_automatica: def.automatica, intervalo_limites: def.intervalo, vezes_por_dia: Boolean(def.vezesPorDia), fornecer: def.fornecer,
+    credenciais_de: def.credenciaisDe || null,
     permissao_executar: def.permissaoExecutar, tem_segredo: Boolean(def.segredo),
     campos: def.campos, sql_pronto: Boolean(linha),
     ativa: Boolean(linha?.ativa), ambiente_no_banco: linha?.ambiente || HOMOLOGACAO, ambiente, travada_em_homologacao: Boolean(travada),
