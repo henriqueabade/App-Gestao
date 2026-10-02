@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data:; media-src 'self'; font-src 'self' data: https://cdnjs.cloudflare.com; connect-src 'none'; frame-ancestors 'none';"
+    >
+    <title>Avisos — Santíssimo Decor</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../styles/controles.css">
+    <link rel="stylesheet" href="../styles/aviso-windows.css">
+</head>
+<body>
+    <!--
+      Os avisos do sino no canto da tela, com o programa atrás (01/10/2026).
+      Preenchido por ../js/aviso-windows.js (tudo por textContent).
+      PERSISTENTE: só fecha no X (decisão do dono). Clicar num aviso abre o
+      programa e o aviso sai da lista; sem nenhum, "Tudo visto por aqui".
+      A cara do programa: o fundo vinho do menu com o vidro dos modais, os
+      botões do padrão (ctl-botao + btn-*).
+    -->
+    <main id="avisoWindows" class="aw ctl-padrao" role="alertdialog" aria-labelledby="awTitulo" aria-live="polite">
+        <header class="aw-topo">
+            <img class="aw-logo" src="../assets/Logo Redonda.png" alt="">
+            <div class="aw-topo__textos">
+                <strong id="awTitulo" class="aw-topo__titulo">Santíssimo Decor</strong>
+                <span id="awContagem" class="aw-topo__contagem"></span>
+            </div>
+            <button id="awFechar" type="button" class="aw-fechar btn-danger" title="Fechar esta janela (os avisos continuam no sino)" aria-label="Fechar">
+                <i class="fas fa-xmark" aria-hidden="true"></i>
+            </button>
+        </header>
+        <ul id="awLista" class="aw-lista" aria-label="Avisos novos"></ul>
+        <div id="awVazio" class="aw-vazio" hidden>
+            <span class="aw-vazio__icone"><i class="fas fa-check" aria-hidden="true"></i></span>
+            <strong class="aw-vazio__titulo">Tudo visto por aqui</strong>
+            <span class="aw-vazio__texto">Os próximos avisos aparecem nesta janela.</span>
+        </div>
+        <footer class="aw-rodape">
+            <span id="awMais" class="aw-rodape__mais"></span>
+            <button id="awAbrir" type="button" class="ctl-botao btn-primary aw-abrir">
+                <i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Abrir o programa
+            </button>
+        </footer>
+    </main>
+    <script src="../js/utils/som-aviso.js"></script>
+    <script src="../js/aviso-windows.js"></script>
+</body>
+</html>

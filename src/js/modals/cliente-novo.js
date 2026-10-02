@@ -13,6 +13,9 @@
   // signal spinner loaded immediately
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoCliente' }));
 
+  // Redes sociais, uma por linha (01/10/2026), logo abaixo do Site.
+  const redesSociais = window.RedesSociais?.montar(document.getElementById('empresaRedesLista'));
+
   const cnpjInput = document.getElementById('empresaCnpj');
   if (cnpjInput) {
     cnpjInput.addEventListener('input', () => {
@@ -237,10 +240,12 @@
       contatos: contatos.map(c => ({ ...c })),
       abaAtiva: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null,
       dono: document.getElementById('empresaDono')?.value || '',
-      enderecos: lerEnderecoGeo()
+      enderecos: lerEnderecoGeo(),
+      redes: redesSociais ? redesSociais.ler() : []
     }),
     restaurar: async (dados) => {
       if (!dados) return;
+      if (Array.isArray(dados.redes) && dados.redes.length) redesSociais?.definir(dados.redes);
 
       if (Array.isArray(dados.contatos) && dados.contatos.length) {
         contatos.length = 0;
@@ -339,6 +344,16 @@
       return null;
     }
 
+    // Redes: linha com endereço precisa da rede; linha sem endereço não conta.
+    const semRede = redesSociais ? redesSociais.linhaSemRede() : -1;
+    if(semRede !== -1){
+      const tabEl = document.getElementById('tab-dados-empresa');
+      if(tabEl) activateTab(tabEl);
+      redesSociais.focarRede(semRede);
+      showToast('Escolha a rede social da linha preenchida', 'error');
+      return null;
+    }
+
     return {
       ...fiscal,
       razao_social: getVal('empresaRazaoSocial'),
@@ -346,6 +361,7 @@
       cnpj: getVal('empresaCnpj'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite') || 'Não Informado',
+      redes_sociais: redesSociais ? redesSociais.ler() : undefined,
       status_cliente: getVal('empresaStatus'),
       dono_cliente: getVal('empresaDono'),
       origem_captacao: getVal('empresaOrigemCaptacao'),

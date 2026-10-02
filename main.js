@@ -79,6 +79,13 @@ const {
 } = require('./backend/produtos');
 const tabelaFixa = require('./backend/tabelaFixa');
 const apiServer = require('./backend/server');
+// O programa no Windows (01/10/2026): iniciar com o Windows em segundo plano,
+// ícone perto do relógio, avisos do sino no canto da tela e o "tum-tum".
+const preferenciasWindows = require('./backend/preferenciasWindows');
+const janelaDeAviso = require('./backend/janelaDeAviso');
+const { criarAvisosNoWindows, criarAssinadorLocal, INTERVALO_MS: INTERVALO_DOS_AVISOS } = require('./backend/avisosNoWindows');
+// Aberto pelo Windows ao ligar a máquina (setLoginItemSettings): sem janela.
+const iniciouEmSegundoPlano = process.argv.includes('--segundo-plano');
 
 function showStartupBanner() {
   const banner = `\n==============================\n Aplicativo iniciado com sucesso! \n==============================\n`;
@@ -95,18 +102,18 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
+  // Abrir o programa de novo (atalho, menu Iniciar) com ele já rodando — às
+  // vezes só na bandeja, sem janela nenhuma: mostra a janela certa.
   app.on('second-instance', () => {
-    const [win] = BrowserWindow.getAllWindows();
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
+    abrirPrograma();
   });
 }
 
 // Garante que qualquer janela criada permaneça em tela cheia
 app.on('browser-window-created', (_event, win) => {
   require('./backend/privateFileGuard').protectSession(win.webContents.session);
+  // Botão direito: sugestões do corretor e copiar/colar (em toda janela).
+  require('./backend/menuDeContexto').ligar(win);
   const webPreferences =
     typeof win.webContents.getWebPreferences === 'function'
       ? win.webContents.getWebPreferences()
@@ -126,7 +133,8 @@ app.on('browser-window-created', (_event, win) => {
     const key = input.key.toLowerCase();
     if (input.control && key === 'w') {
       event.preventDefault();
-      app.quit();
+      // Com os avisos do Windows ligados, fecha para a bandeja (não encerra).
+      fecharOuSair('ctrl-w');
     }
     if (input.control && key === 'r') {
       event.preventDefault();
@@ -3452,11 +3460,247 @@ function createDashboardWindow(show = true) {
       });
   });
 
+  // A janela dos avisos do canto (persistente, só fecha no X): com o programa
+  // na frente quem avisa é o sino, e ela sai do caminho; volta quando o
+  // programa sai da frente (backend/janelaDeAviso.js).
+  dashboardWindow.on('focus', () => janelaDeAviso.recolher());
+  for (const saiuDaFrente of ['blur', 'hide', 'minimize']) {
+    dashboardWindow.on(saiuDaFrente, () => janelaDeAviso.voltar());
+  }
+
   // Carrega a nova tela de menu
   dashboardWindow.loadFile(path.join(__dirname, 'src/html/menu.html'));
   dashboardWindow.on('closed', () => {
     dashboardWindow = null;
+    janelaDeAviso.voltar();
   });
+}
+
+// ---------------------------------------------------------------------------
+// O programa no Windows (01/10/2026, pedido do dono)
+//
+//   - inicia com o Windows, em segundo plano (sem janela), e fica com o ícone
+//     perto do relógio; fechar a janela também o deixa lá;
+//   - desde o login, a máquina fica "do último usuário que entrou": os avisos
+//     do sino dele aparecem no canto da tela (backend/janelaDeAviso.js) quando
+//     o programa NÃO está na frente — mesmo depois de sair ou de a sessão
+//     vencer (backend/avisosNoWindows.js, com o token só dos avisos);
+//   - com o programa na frente, só o sino (e o "tum-tum");
+//   - tudo ligado de fábrica; Configurações › Programa no Windows desliga
+//     (backend/preferenciasWindows.js).
+// ---------------------------------------------------------------------------
+let preferencias = { ...preferenciasWindows.PADRAO };
+let arquivoDePreferencias = null;
+let bandeja = null;
+let avisouDaBandeja = false;
+let saindoDeVerdade = false;
+let servicoDeAvisos = null;
+let relogioDosAvisos = null;
+let avisoPendente = null;
+let somDoDono;
+
+/** O som dos avisos posto pelo dono em src/assets (som-aviso.mp3/.wav/.ogg), ou null. */
+function arquivoDoSomDoDono() {
+  if (somDoDono === undefined) somDoDono = preferenciasWindows.arquivoDoSom(path.join(__dirname, 'src', 'assets'));
+  return somDoDono;
+}
+
+/** Fechar a janela deixa o programa na bandeja (avisos ligados e sem ordem de sair). */
+function ficarNaBandeja() {
+  return Boolean(preferencias.avisosNoWindows) && !saindoDeVerdade;
+}
+
+/** O programa está na frente: a janela do menu visível e com o foco. */
+function programaNaFrente() {
+  return Boolean(dashboardWindow && !dashboardWindow.isDestroyed() && dashboardWindow.isVisible() && dashboardWindow.isFocused());
+}
+
+/**
+ * Mostra o programa: o menu (e o aviso, se veio de um) ou, sem sessão, a
+ * tela de login. `aviso`: o aviso clicado na janela do canto.
+ */
+function abrirPrograma(aviso = null) {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    if (dashboardWindow.isMinimized()) dashboardWindow.restore();
+    dashboardWindow.show();
+    dashboardWindow.focus();
+    if (aviso) dashboardWindow.webContents.send('avisos-windows:abrir-no-sino', aviso);
+    return;
+  }
+  // Sem o menu aberto: o aviso fica guardado e o sino o abre depois do login.
+  avisoPendente = aviso || avisoPendente;
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    revealLoginWindow();
+    return;
+  }
+  // A tela de login nasce escondida e se mostra quando carregar (show-login).
+  createLoginWindow(false, true);
+}
+
+/** Sair de vez (menu da bandeja): grava a saída e encerra. */
+function sairDeVerdade() {
+  saindoDeVerdade = true;
+  pararAvisosNoWindows();
+  if (bandeja) {
+    try { bandeja.destroy(); } catch (_) { /* segue */ }
+    bandeja = null;
+  }
+  flushAndQuit('bandeja-sair');
+}
+
+/**
+ * Fechar o programa pelo X, Ctrl+W, Alt+F4: com os avisos do Windows
+ * ligados, fecha as janelas e fica na bandeja; desligados, encerra como antes.
+ */
+function fecharOuSair(motivo) {
+  if (!ficarNaBandeja()) {
+    flushAndQuit(motivo);
+    return;
+  }
+  // O menu grava a saída no próprio `close` (ver createDashboardWindow).
+  for (const janela of [dashboardWindow, loginWindow]) {
+    if (janela && !janela.isDestroyed()) {
+      try { janela.close(); } catch (err) { console.error('Falha ao fechar a janela:', err); }
+    }
+  }
+  avisarQueFicouNaBandeja();
+}
+
+function avisarQueFicouNaBandeja() {
+  if (avisouDaBandeja || !bandeja || process.platform !== 'win32') return;
+  avisouDaBandeja = true;
+  try {
+    bandeja.displayBalloon({
+      iconType: 'info',
+      title: 'O Santíssimo Decor continua aqui',
+      content: 'Fica perto do relógio para mostrar os seus avisos. Para sair de vez: botão direito no ícone › Sair do programa.'
+    });
+  } catch (_) { /* balão é cortesia */ }
+}
+
+function atualizarMenuDaBandeja() {
+  if (!bandeja) return;
+  const { Menu } = require('electron');
+  bandeja.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir o Santíssimo Decor', click: () => abrirPrograma() },
+    { type: 'separator' },
+    { label: 'Avisos no canto da tela', type: 'checkbox', checked: Boolean(preferencias.avisosNoWindows), click: item => mudarPreferencias({ avisosNoWindows: item.checked }) },
+    { label: 'Som dos avisos', type: 'checkbox', checked: Boolean(preferencias.som), click: item => mudarPreferencias({ som: item.checked }) },
+    { label: 'Iniciar com o Windows', type: 'checkbox', checked: Boolean(preferencias.iniciarComWindows), enabled: app.isPackaged, click: item => mudarPreferencias({ iniciarComWindows: item.checked }) },
+    { type: 'separator' },
+    { label: 'Sair do programa', click: () => sairDeVerdade() }
+  ]));
+}
+
+function criarBandeja() {
+  if (bandeja) return;
+  try {
+    const { Tray, nativeImage } = require('electron');
+    bandeja = new Tray(nativeImage.createFromPath(path.join(__dirname, 'src', 'assets', 'Logo.ico')));
+    bandeja.setToolTip('Santíssimo Decor');
+    bandeja.on('click', () => abrirPrograma());
+    bandeja.on('double-click', () => abrirPrograma());
+    atualizarMenuDaBandeja();
+  } catch (err) {
+    console.error('[windows] não foi possível criar o ícone da bandeja:', err?.message || err);
+  }
+}
+
+/** Liga/desliga o início com o Windows (só no programa instalado). */
+function aplicarInicioComWindows() {
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  try {
+    app.setLoginItemSettings({ openAtLogin: Boolean(preferencias.iniciarComWindows), path: process.execPath, args: ['--segundo-plano'] });
+  } catch (err) {
+    console.error('[windows] não foi possível ajustar o início com o Windows:', err?.message || err);
+  }
+}
+
+function criarServicoDeAvisos() {
+  if (servicoDeAvisos) return servicoDeAvisos;
+  const { safeStorage } = require('electron');
+  const cofre = safeStorage.isEncryptionAvailable()
+    ? { cifrar: t => safeStorage.encryptString(t).toString('base64'), decifrar: b => safeStorage.decryptString(Buffer.from(b, 'base64')) }
+    : null;
+  const apiBase = ((process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) || (process.env.API_URL && process.env.API_URL.trim()) || 'https://api.santissimodecor.com.br')
+    .replace(/\/+$/, '').replace(/\/api$/, '');
+  let local = null;
+  if (useLocalDatabase) {
+    // DEV: a cópia do módulo da API, contra o banco local (o token vale só nesta execução).
+    local = {
+      modulo: require('./backend/avisosDoDispositivo').criarAvisosDoDispositivo({ pool: require('./backend/localDatabase'), ...criarAssinadorLocal() }),
+      verificarSessao: token => require('./backend/localAuth').verifyToken(token)
+    };
+  }
+  servicoDeAvisos = criarAvisosNoWindows({
+    arquivo: path.join(app.getPath('userData'), 'avisos-windows.json'),
+    cofre, apiBase, emDev: useLocalDatabase, local,
+    sessao: () => {
+      const info = require('./backend/tokenStore').getTokenInfo();
+      return { token: getToken(), valido: Boolean(info.valido), usuarioId: info.usuarioId ?? null };
+    },
+    enderecoLocal: () => (currentApiPort ? getLocalApiBaseUrl() : null)
+  });
+  return servicoDeAvisos;
+}
+
+async function voltaDosAvisos() {
+  if (!preferencias.avisosNoWindows || !servicoDeAvisos) return;
+  try {
+    const { novos } = await servicoDeAvisos.ciclo({ emFoco: programaNaFrente() });
+    if (novos.length && preferencias.avisosNoWindows && !programaNaFrente()) {
+      janelaDeAviso.mostrar(novos, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });
+    }
+  } catch (err) {
+    console.warn('[avisos-windows] volta falhou:', err?.message || err);
+  }
+}
+
+function iniciarAvisosNoWindows() {
+  if (!preferencias.avisosNoWindows || relogioDosAvisos) return;
+  criarServicoDeAvisos();
+  // A máquina ainda sem dono, mas com sessão válida (atualizou o programa já
+  // logado): o dono é quem está na sessão.
+  if (!servicoDeAvisos.usuario()) {
+    const info = require('./backend/tokenStore').getTokenInfo();
+    if (info.valido && info.usuarioId) servicoDeAvisos.lembrarUsuario({ id: info.usuarioId }, getToken()).catch(() => {});
+  }
+  relogioDosAvisos = setInterval(voltaDosAvisos, INTERVALO_DOS_AVISOS);
+  setTimeout(voltaDosAvisos, 5000);
+}
+
+function pararAvisosNoWindows() {
+  if (relogioDosAvisos) clearInterval(relogioDosAvisos);
+  relogioDosAvisos = null;
+  janelaDeAviso.fechar();
+}
+
+/** Depois de entrar: a máquina passa a ser deste usuário (para os avisos). */
+function avisosAposEntrar(usuario) {
+  if (!preferencias.avisosNoWindows || !usuario?.id) return;
+  criarServicoDeAvisos().lembrarUsuario(usuario, getToken()).catch(err => {
+    console.warn('[avisos-windows] não foi possível lembrar o usuário:', err?.message || err);
+  });
+  iniciarAvisosNoWindows();
+}
+
+/** Grava e aplica as preferências (Configurações ou o menu da bandeja). */
+function mudarPreferencias(mudancas = {}) {
+  const antes = preferencias;
+  preferencias = preferenciasWindows.gravar(arquivoDePreferencias, mudancas);
+  if (antes.iniciarComWindows !== preferencias.iniciarComWindows) aplicarInicioComWindows();
+  if (preferencias.avisosNoWindows && !antes.avisosNoWindows) {
+    iniciarAvisosNoWindows();
+    if (currentUserSession?.id) avisosAposEntrar(currentUserSession);
+  } else if (!preferencias.avisosNoWindows && antes.avisosNoWindows) {
+    pararAvisosNoWindows();
+    servicoDeAvisos?.esquecer();
+  }
+  atualizarMenuDaBandeja();
+  for (const janela of BrowserWindow.getAllWindows()) {
+    if (!janela.isDestroyed()) janela.webContents.send('avisos-windows:preferencias', preferencias);
+  }
+  return preferencias;
 }
 
 app.whenReady().then(async () => {
@@ -3469,6 +3713,14 @@ app.whenReady().then(async () => {
   }
   stateFile = path.join(app.getPath('userData'), 'session-state.json');
   displayFile = path.join(app.getPath('userData'), 'display.json');
+  // Corretor ortográfico em português (o botão direito mostra as sugestões).
+  require('./backend/menuDeContexto').configurarCorretor(require('electron').session.defaultSession);
+  // Preferências do programa no Windows: na primeira vez depois de instalar,
+  // grava o padrão (tudo ligado) — é o que liga o início com o Windows.
+  arquivoDePreferencias = path.join(app.getPath('userData'), 'preferencias-windows.json');
+  preferencias = preferenciasWindows.ler(arquivoDePreferencias);
+  if (preferencias.primeiraVez) preferencias = preferenciasWindows.gravar(arquivoDePreferencias, preferencias);
+  aplicarInicioComWindows();
 
   const envPortValue = process.env.API_PORT;
   if (!envPortValue) {
@@ -3510,7 +3762,11 @@ app.whenReady().then(async () => {
   // Cria a janela de login sem exibí-la imediatamente.
   // Ela será mostrada somente após o carregamento completo do conteúdo
   // pelo renderer (via IPC 'show-login'), evitando flashes iniciais.
-  createLoginWindow(false, true);
+  // Aberto pelo Windows ao ligar a máquina, com os avisos ligados: nenhuma
+  // janela — só o ícone perto do relógio e os avisos no canto da tela.
+  if (!(iniciouEmSegundoPlano && preferencias.avisosNoWindows)) createLoginWindow(false, true);
+  criarBandeja();
+  iniciarAvisosNoWindows();
   screen.on('display-added', handleDisplaysChanged);
   screen.on('display-removed', handleDisplaysChanged);
   screen.on('display-metrics-changed', handleDisplaysChanged);
@@ -3530,10 +3786,17 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  // Com os avisos do Windows ligados, o programa fica na bandeja.
+  if (ficarNaBandeja()) {
+    avisarQueFicouNaBandeja();
+    return;
+  }
   if (process.platform !== 'darwin') flushAndQuit('window-all-closed');
 });
 
 app.on('before-quit', (event) => {
+  // Quem chega aqui quer sair de vez (bandeja › Sair, atualização, Windows desligando).
+  saindoDeVerdade = true;
   if (quittingApp) return;
   if (currentUserSession) {
     event.preventDefault();
@@ -3875,6 +4138,8 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     }
     limparTentativasLogin(dados?.email);
     setCurrentUserSession(user);
+    // A máquina passa a ser deste usuário para os avisos do Windows.
+    avisosAposEntrar(user);
 
     // Registra a ENTRADA. Isto só existia no caminho de auto-login: num login
     // normal `ultima_entrada` ficava congelada numa data antiga enquanto
@@ -4793,6 +5058,8 @@ ipcMain.handle('auto-login', async (_event, payload) => {
     }
     if (user && user.id) {
       setCurrentUserSession(user);
+      // A máquina passa a ser deste usuário para os avisos do Windows.
+      avisosAposEntrar(user);
       try {
         await registrarUltimaEntrada(user.id);
       } catch (err) {
@@ -4982,7 +5249,38 @@ ipcMain.handle('show-login', async () => {
 // - 2024-05-17: monitor de conectividade movido para o processo principal com keep-alive, backoff com jitter e integração ao fluxo de logout.
 
 ipcMain.handle('close-window', () => {
-  flushAndQuit('close-window');
+  // O X do programa: com os avisos do Windows ligados, vai para a bandeja.
+  fecharOuSair('close-window');
+});
+
+// ---------------------------------------------------------------------------
+// O programa no Windows: preferências, a janela dos avisos e o sino.
+// ---------------------------------------------------------------------------
+ipcMain.handle('avisos-windows:preferencias', () => ({ ...preferencias, instalado: app.isPackaged, somArquivo: arquivoDoSomDoDono() }));
+ipcMain.handle('avisos-windows:gravar-preferencias', (_event, mudancas) => ({
+  ...mudarPreferencias(preferenciasWindows.normalizar(mudancas, preferencias)), instalado: app.isPackaged, somArquivo: arquivoDoSomDoDono()
+}));
+ipcMain.handle('avisos-windows:pronto', () => janelaDeAviso.pronto());
+ipcMain.handle('avisos-windows:altura', (_event, altura) => janelaDeAviso.ajustarAltura(altura));
+// O X da janela do canto: o único jeito de fechá-la (decisão do dono, 01/10/2026).
+ipcMain.handle('avisos-windows:dispensar', () => janelaDeAviso.fechar());
+// Clicar num aviso (ou em "Abrir o programa"): abre o programa e a janela
+// continua; o aviso aberto sai da lista dela.
+ipcMain.handle('avisos-windows:abrir', (_event, aviso) => {
+  const clicado = aviso && typeof aviso === 'object' ? aviso : null;
+  if (clicado?.id !== undefined) janelaDeAviso.retirar({ ids: [clicado.id] });
+  abrirPrograma(clicado);
+  return true;
+});
+// O sino marcou avisos como lidos: saem da janela do canto também.
+ipcMain.handle('avisos-windows:lidos', (_event, lidos) => janelaDeAviso.retirar({
+  ids: Array.isArray(lidos?.ids) ? lidos.ids : [], todas: lidos?.todas === true
+}));
+// O sino pergunta, ao abrir, se há um aviso da janela do canto esperando o login.
+ipcMain.handle('avisos-windows:pendente', () => {
+  const aviso = avisoPendente;
+  avisoPendente = null;
+  return aviso;
 });
 ipcMain.handle('minimize-window', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

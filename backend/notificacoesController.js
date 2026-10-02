@@ -27,35 +27,9 @@ const { semTabela, nomesDosUsuarios } = require('./historicoSocial');
 const router = express.Router();
 const LIMITE = 50;
 
-/**
- * A mensagem gravada em linhas (backend/avisosEnvolvidos.js) → o que o sino
- * mostra: o texto principal, o que mudou ("• …") e as notas ("» …", uma nota
- * de várias linhas; "»" sozinho separa uma nota da outra). Mensagem antiga,
- * de uma linha só, volta igual e sem listas. Pura.
- */
-function partesDaMensagem(bruta) {
-  const principal = [];
-  const mudancas = [];
-  const notas = [];
-  let nota = null;
-  const fecharNota = () => {
-    if (nota !== null && nota.join('\n').trim()) notas.push(nota.join('\n').trim());
-    nota = null;
-  };
-  for (const linha of String(bruta || '').split('\n')) {
-    if (linha.startsWith('» ') || linha === '»') {
-      if (linha === '»') { fecharNota(); continue; }
-      if (nota === null) nota = [];
-      nota.push(linha.slice(2));
-      continue;
-    }
-    fecharNota();
-    if (linha.startsWith('• ')) mudancas.push(linha.slice(2).trim());
-    else if (linha.trim()) principal.push(linha.trim());
-  }
-  fecharNota();
-  return { mensagem: principal.join(' '), mudancas, notas };
-}
+// O texto principal, o que mudou e as notas de cada aviso (a função mora no
+// núcleo puro, que o processo principal também usa nos avisos do Windows).
+const { partesDaMensagem } = require('./avisosEnvolvidos');
 
 /**
  * Os avisos de um usuário, do mais novo ao mais antigo, com o nome do autor.

@@ -1879,6 +1879,68 @@ const MenuStartupPreferences = (() => {
         secao.hidden = false;
     }
 
+    // ---------------------------------------------------------------- programa no Windows
+
+    const PROGRAMA_NO_WINDOWS = [
+        { id: 'windowsIniciar', chave: 'iniciarComWindows', ligado: 'O programa abre sozinho quando o computador liga.', desligado: 'O programa não abre mais sozinho com o Windows.' },
+        { id: 'windowsAvisos', chave: 'avisosNoWindows', ligado: 'Os avisos aparecem no canto da tela quando o programa não está na frente.', desligado: 'Os avisos ficam só no sino; fechar o programa encerra de vez.' },
+        { id: 'windowsSom', chave: 'som', ligado: 'O "tum-tum" toca quando chega aviso.', desligado: 'Os avisos chegam sem som.' }
+    ];
+
+    /**
+     * Configurações › Programa no Windows (01/10/2026): iniciar com o Windows,
+     * avisos no canto da tela e som — tudo ligado de fábrica, por computador
+     * (o processo principal guarda: backend/preferenciasWindows.js). Cada
+     * interruptor grava na hora. Fora do Electron, o quadro fica escondido.
+     */
+    async function initProgramaNoWindowsSection() {
+        const api = window.electronAPI?.avisosWindows;
+        const secao = moduleElement?.querySelector('#programaNoWindowsSettings');
+        const status = moduleElement?.querySelector('#programaNoWindowsStatus');
+        if (!api?.lerPreferencias || !secao) return;
+        let preferencias = null;
+        try {
+            preferencias = await api.lerPreferencias();
+        } catch (erro) {
+            console.warn('Não foi possível ler as preferências do programa no Windows.', erro);
+            return;
+        }
+        const pintar = (p) => {
+            PROGRAMA_NO_WINDOWS.forEach(({ id, chave }) => {
+                const interruptor = moduleElement.querySelector(`#${id}`);
+                if (!interruptor) return;
+                interruptor.checked = p?.[chave] !== false;
+                // Fora do programa instalado não há o que ligar no Windows.
+                if (chave === 'iniciarComWindows') {
+                    interruptor.disabled = p?.instalado === false;
+                    interruptor.title = p?.instalado === false ? 'Só no programa instalado.' : '';
+                }
+            });
+        };
+        pintar(preferencias);
+        PROGRAMA_NO_WINDOWS.forEach(({ id, chave, ligado, desligado }) => {
+            const interruptor = moduleElement.querySelector(`#${id}`);
+            if (!interruptor) return;
+            interruptor.addEventListener('change', async () => {
+                const valor = interruptor.checked;
+                interruptor.disabled = true;
+                try {
+                    const novas = await api.gravarPreferencias({ [chave]: valor });
+                    pintar(novas);
+                    if (status) status.textContent = valor ? ligado : desligado;
+                } catch (erro) {
+                    interruptor.checked = !valor;
+                    if (status) status.textContent = 'Não foi possível salvar agora.';
+                } finally {
+                    interruptor.disabled = chave === 'iniciarComWindows' && preferencias?.instalado === false;
+                }
+            });
+        });
+        // Mudou pelo menu da bandeja: a tela acompanha.
+        api.onPreferencias?.(pintar);
+        secao.hidden = false;
+    }
+
     function init() {
         currentState = NotificationPreferences.load();
         currentTheme = MenuThemePreferences.getCurrent();
@@ -1890,6 +1952,7 @@ const MenuStartupPreferences = (() => {
         applyStateToUI();
         handlePendingPersonalDataFocus();
         initTarefasAutomaticasSection();
+        initProgramaNoWindowsSection();
 
         // As permissões chegam de forma assíncrona; quando terminarem, refaz o
         // filtro do seletor (senão a tela abre listando módulo bloqueado).

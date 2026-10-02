@@ -195,9 +195,11 @@ async function concluirTarefa(api, t, { usuarioId, resultado = null, nota = null
  * Espelha o próximo passo da prospecção numa tarefa. Chamar DEPOIS de gravar
  * a prospecção. `concluiuAnterior`: o passo que estava aberto foi cumprido
  * (concluir passo, ou trocar o passo contando o que aconteceu) — a tarefa
- * dele é concluída em vez de reaproveitada.
+ * dele é concluída em vez de reaproveitada. `criar: false` (a planilha,
+ * decisão do dono de 01/10/2026): a tarefa que já existe acompanha o passo
+ * novo, mas nenhuma tarefa nasce.
  */
-async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = null, concluiuAnterior = false, nota = null, interacaoId = null } = {}) {
+async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = null, concluiuAnterior = false, nota = null, interacaoId = null, criar = true } = {}) {
   try {
     const p = await api.get(`/api/prospeccoes/${prospeccaoId}`).catch(() => null);
     if (!p || p.error) return null;
@@ -234,6 +236,7 @@ async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = nul
         }
         return atual.id;
       }
+      if (!criar) return null;
       const criada = await criarTarefa(api, {
         titulo: passo, tipo: 'Follow-up', prioridade: 'media', status: 'a_fazer', data,
         responsavel_id: p.responsavel_id || p.criado_por || usuarioId,

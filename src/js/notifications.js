@@ -318,6 +318,8 @@ window.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.warn('Não foi possível marcar os avisos como lidos.', err);
     }
+    // Lidos aqui saem também da janela do canto da tela (se estiver aberta).
+    Promise.resolve(window.electronAPI?.avisosWindows?.lidos?.(corpo)).catch(() => {});
   }
 
   // ------------------------------------------------ ícone
@@ -744,6 +746,28 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // O programa no Windows (01/10/2026): com o Electron, a notificação do
+  // Windows é a janela do canto da tela, que o processo principal mostra
+  // quando o programa NÃO está na frente (backend/janelaDeAviso.js). Aqui,
+  // com o programa na frente, o aviso novo toca o "tum-tum" (som ligado em
+  // Configurações › Programa no Windows).
+  const avisosWindows = window.electronAPI?.avisosWindows || null;
+  let somLigado = true;
+  let somArquivo = null; // o som do dono em src/assets (som-aviso.mp3…), se houver
+  if (avisosWindows) {
+    Promise.resolve(avisosWindows.lerPreferencias?.()).then((p) => { somLigado = p?.som !== false; somArquivo = p?.somArquivo || null; }).catch(() => {});
+    avisosWindows.onPreferencias?.((p) => { somLigado = p?.som !== false; });
+    // O aviso clicado na janela do canto abre aqui, no sino.
+    avisosWindows.onAbrirAviso?.((aviso) => { if (aviso?.id !== undefined) abrirAviso({ ...aviso }); });
+    // Clicado com o programa fechado: espera o menu carregar e abre.
+    if (document.body) {
+      window.setTimeout?.(() => {
+        Promise.resolve(avisosWindows.avisoPendente?.()).then((aviso) => { if (aviso?.id !== undefined) abrirAviso({ ...aviso }); }).catch(() => {});
+      }, 2500);
+    }
+  }
+  const programaNaFrente = () => (typeof document.hasFocus === 'function' ? document.hasFocus() : true);
+
   // Notificação do Windows para o que chegou de novo. Na primeira leitura só
   // anota o que já existia (abrir o app não pode disparar dez notificações).
   const vistos = new Set();
@@ -752,6 +776,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const novos = lista.filter((n) => !n.lida && n.id !== undefined && !vistos.has(n.id));
     lista.forEach((n) => vistos.add(n.id));
     if (primeiraLeitura) { primeiraLeitura = false; return; }
+    if (avisosWindows) {
+      if (novos.length && somLigado && programaNaFrente()) window.SomAviso?.tocar?.({ arquivo: somArquivo });
+      return;
+    }
     if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
     for (const aviso of novos.filter((n) => vaiParaOWindows(n.tipo)).slice(0, 4)) {
       try {

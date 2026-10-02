@@ -99,3 +99,21 @@
     flex-shrink: 0;
     white-space: nowrap;
 }
+
+/* Redes sociais, uma por linha (src/js/utils/redes-sociais.js, 01/10/2026 —
+   Clientes; Prospecções tem as suas em prospeccoes.css): a rede, o endereço,
+   o − e o + no fim. O botão escondido some mesmo com o display do ctl-botao. */
+.redes-sociais {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.redes-sociais__linha {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.redes-sociais__rede { flex: 0 0 12rem; min-width: 0; }
+.redes-sociais__valor { flex: 1 1 auto; min-width: 0; }
+.redes-sociais__linha > button { flex-shrink: 0; }
+.redes-sociais__linha > button.hidden { display: none; }

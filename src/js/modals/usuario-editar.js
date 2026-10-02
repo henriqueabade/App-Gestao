@@ -256,6 +256,108 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // Computadores (01/10/2026): os que recebem os avisos do Windows deste
+  // usuário. Só o Sup Admin vê e cancela (o servidor confere de novo).
+  // Cancelado, o computador para na hora; se a pessoa entrar de novo nele,
+  // volta a receber (como um login novo).
+  // ------------------------------------------------------------------
+  const abaComputadores = document.getElementById('tab-computadores-usuario');
+  if (abaComputadores && window.Permissoes?.supAdmin) {
+    abaComputadores.classList.remove('hidden');
+    const alvo = document.getElementById('usuarioComputadores');
+    const el = (tag, classe, texto) => {
+      const e = document.createElement(tag);
+      if (classe) e.className = classe;
+      if (texto !== undefined && texto !== null) e.textContent = texto;
+      return e;
+    };
+    const icone = (nome) => {
+      const i = el('i', `fas ${nome}`);
+      i.setAttribute('aria-hidden', 'true');
+      return i;
+    };
+    const dataHora = (v) => {
+      const d = v ? new Date(v) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    };
+
+    const pintar = (dados) => {
+      const intro = el('p', 'usr-pcs__intro');
+      intro.append(icone('fa-circle-info'), document.createTextNode('Os computadores que mostram os avisos deste usuário no canto da tela, mesmo com o programa fechado. Cancelar corta na hora; se a pessoa entrar de novo no programa naquele computador, ele volta a receber.'));
+      if (dados.sql_pendente) {
+        alvo.replaceChildren(intro, el('p', 'usr-pcs__vazio', dados.mensagem || 'Rode sql/avisos_dispositivos.sql e reinicie a API.'));
+        return;
+      }
+      const computadores = Array.isArray(dados.computadores) ? dados.computadores : [];
+      if (!computadores.length) {
+        alvo.replaceChildren(intro, el('p', 'usr-pcs__vazio', 'Nenhum computador recebe os avisos deste usuário.'));
+        return;
+      }
+      const lista = el('ul', 'usr-pcs__lista');
+      computadores.forEach((c) => {
+        const item = el('li', `usr-pcs__item${c.cancelado ? ' usr-pcs__item--cancelado' : ''}`);
+        const caixa = el('span', 'usr-pcs__icone');
+        caixa.appendChild(icone('fa-desktop'));
+        const textos = el('div', 'usr-pcs__textos');
+        textos.append(
+          el('span', 'usr-pcs__nome', c.computador),
+          el('span', 'usr-pcs__detalhe', `${c.usuario_windows ? `Usuário do Windows: ${c.usuario_windows} · ` : ''}Ligado em ${dataHora(c.criado_em)} · Último uso ${dataHora(c.ultimo_uso_em)}`),
+          el('span', 'usr-pcs__situacao', c.cancelado ? `Cancelado em ${dataHora(c.cancelado_em)}${c.cancelado_por ? ` por ${c.cancelado_por}` : ''}` : 'Recebendo os avisos')
+        );
+        item.append(caixa, textos);
+        if (!c.cancelado) {
+          const cancelar = el('button', 'btn-danger ctl-botao text-white');
+          cancelar.type = 'button';
+          cancelar.append(icone('fa-ban'), document.createTextNode(' Cancelar'));
+          cancelar.addEventListener('click', async () => {
+            const ok = await window.DialogPadrao?.confirm({
+              title: 'Cancelar os avisos deste computador?', tom: 'erro', icone: 'fa-desktop',
+              message: `"${c.computador}" deixa de mostrar os avisos de ${usuarioBase.nome || 'este usuário'} na hora.`,
+              nota: 'Se a pessoa entrar de novo no programa nele, volta a receber.',
+              confirmText: 'Cancelar os avisos', cancelText: 'Voltar', confirmVariant: 'danger'
+            });
+            if (!ok) return;
+            cancelar.disabled = true;
+            try {
+              const base = await window.apiConfig.getApiBaseUrl();
+              const r = await fetch(`${base}/api/usuarios/${usuarioBase.id}/computadores/${c.id}/cancelar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+              const json = await r.json().catch(() => ({}));
+              if (!r.ok) throw new Error(json.error || `Erro ${r.status}`);
+              window.showToast?.('Avisos do computador cancelados.', 'success');
+              await carregar();
+            } catch (err) {
+              cancelar.disabled = false;
+              window.showToast?.(err.message, 'error');
+            }
+          });
+          item.appendChild(cancelar);
+        }
+        lista.appendChild(item);
+      });
+      alvo.replaceChildren(intro, lista);
+    };
+
+    async function carregar() {
+      try {
+        const base = await window.apiConfig.getApiBaseUrl();
+        const r = await fetch(`${base}/api/usuarios/${usuarioBase.id}/computadores`);
+        const json = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(json.error || `Erro ${r.status}`);
+        pintar(json);
+      } catch (err) {
+        alvo.replaceChildren(el('p', 'usr-pcs__vazio', `Não foi possível carregar: ${err.message}`));
+      }
+    }
+
+    let carregou = false;
+    abaComputadores.addEventListener('click', () => {
+      if (carregou) return;
+      carregou = true;
+      carregar();
+    });
+  }
+
   const inputs = {
     nome: document.getElementById('usuarioNome'),
     email: document.getElementById('usuarioEmail'),

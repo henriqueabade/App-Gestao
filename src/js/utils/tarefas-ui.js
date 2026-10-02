@@ -799,6 +799,51 @@
   }
 
   /**
+   * Copiar tarefa (01/10/2026, pedido do dono): o que a tarefa nova leva da
+   * original — tudo o que se escolhe no editor, o checklist (sem marcar), quem
+   * participa (convidado de novo) e a ação no sistema; o título ganha " - cópia".
+   * O responsável só fica o mesmo para quem pode atribuir (os outros criam
+   * para si). `t` é a tarefa da API ou o que está no editor. Pura.
+   */
+  function presetDaCopia(t = {}, { euId = null, podeAtribuir = false } = {}) {
+    const base = String(t.titulo || '').trim() || 'Tarefa';
+    const sufixo = ' - cópia';
+    const titulo = base.length + sufixo.length > 200 ? `${base.slice(0, 200 - sufixo.length).trimEnd()}${sufixo}` : `${base}${sufixo}`;
+    const responsavel = podeAtribuir && t.responsavel_id ? Number(t.responsavel_id) : (euId === null ? null : Number(euId));
+    const participantes = [...new Set((t.todos_participantes || [])
+      .filter(p => ['pendente', 'aceito'].includes(p.status)).map(p => Number(p.usuario_id)))]
+      .filter(id => id !== responsavel && id !== Number(euId));
+    // A ação vem da API ({ rotulo: da ação, registroRotulo }) ou do editor ({ rotulo: do registro, rotuloAcao }).
+    const acao = t.acao?.chave
+      ? ('rotuloAcao' in t.acao ? { ...t.acao } : { ...t.acao, rotulo: t.acao.registroRotulo, rotuloAcao: t.acao.rotulo })
+      : null;
+    return {
+      titulo, descricao: t.descricao || '', tipo: t.tipo || 'Tarefa', prioridade: t.prioridade || 'media',
+      data: t.data ?? null, hora: t.hora ?? null, duracao_min: t.duracao_min ?? null, lembrete_min: t.lembrete_min ?? null,
+      local: t.local || '', responsavel_id: responsavel, lista_id: t.lista_id ?? null,
+      marcadores: [...(t.marcadores || [])].map(Number), recorrencia: t.recorrencia || null,
+      vinculos: (t.vinculos || []).map(v => ({ ...v })),
+      checklist: (t.itens_checklist || []).map(i => String(i.texto || '').trim()).filter(Boolean),
+      participantes, acao, origemTexto: `Cópia de “${base}”`
+    };
+  }
+
+  /** Abre a cópia da tarefa no editor, como tarefa nova (só grava ao "Criar tarefa"). */
+  async function copiarTarefa(id) {
+    let ctx;
+    let original;
+    try {
+      ctx = await carregarContexto();
+      original = await api(`/${id}`);
+    } catch (err) {
+      avisar(err.message, 'error');
+      return false;
+    }
+    if (!ctx.pode?.criar) { avisar('Você não tem permissão para criar tarefas.', 'error'); return false; }
+    return abrirEditor({ preset: presetDaCopia(original, { euId: ctx.eu?.id, podeAtribuir: ctx.pode?.atribuir }) });
+  }
+
+  /**
    * O editor: tarefa nova (preset: { titulo, data, hora, tipo, cliente/prospecção... })
    * ou existente ({ id }). `aba`: 'detalhes' | 'conversa'. Devolve uma promessa
    * que resolve quando o diálogo fecha (true se algo foi gravado).
@@ -840,7 +885,9 @@
       marcadores: [...(original?.marcadores ?? preset.marcadores ?? [])],
       recorrencia: original?.recorrencia ?? preset.recorrencia ?? null,
       vinculos: original?.vinculos ?? preset.vinculos ?? [],
-      acao: original?.acao ? { ...original.acao, rotulo: original.acao.registroRotulo, rotuloAcao: original.acao.rotulo } : null
+      acao: original?.acao
+        ? { ...original.acao, rotulo: original.acao.registroRotulo, rotuloAcao: original.acao.rotulo }
+        : (preset.acao ? { ...preset.acao } : null)
     };
     const checklistNovo = [...(preset.checklist || [])];
     let participantesNovos = [...(preset.participantes || [])];
@@ -1155,6 +1202,22 @@
           if (!ok) return;
           try { await api(`/${original.id}`, { method: 'DELETE' }); avisar('Tarefa excluída.', 'success'); gravou = true; mudou({ id: original.id }); d.fechar(); } catch (err) { avisar(err.message, 'error'); }
         } } }, icone('fa-trash-can'), ' Excluir'));
+      }
+      // Copiar: abre uma tarefa nova igual ao que está na tela, com " - cópia" no título.
+      if (original && ctx.pode?.criar) {
+        esquerda.append(h('button', { type: 'button', class: 'btn-neutral tui-botao', title: 'Abre uma tarefa nova igual a esta, para ajustar e criar', on: { click: async () => {
+          if (alterado && !somenteLeitura) {
+            const ok = await window.DialogPadrao?.confirm({ title: 'Copiar com o que está na tela?', tom: 'aviso', icone: 'fa-copy', message: 'A cópia leva o que está na tela agora.', nota: 'Nesta tarefa, as alterações que não foram salvas ficam de fora.', confirmText: 'Copiar', cancelText: 'Continuar editando' });
+            if (!ok) return;
+          }
+          const fonte = {
+            ...original, ...estado,
+            itens_checklist: itensAtuais,
+            todos_participantes: [...participantesAtuais, ...participantesNovos.map(uid => ({ usuario_id: uid, status: 'pendente' }))]
+          };
+          d.fechar();
+          abrirEditor({ preset: presetDaCopia(fonte, { euId: eu.id, podeAtribuir: ctx.pode?.atribuir }) });
+        } } }, icone('fa-copy'), ' Copiar'));
       }
       if (original && ['concluida', 'cancelada'].includes(original.status) && pode.concluir) {
         esquerda.append(h('button', { type: 'button', class: 'btn-warning tui-botao', on: { click: async () => {
@@ -1501,15 +1564,22 @@
         h('button', { type: 'button', class: 'tui-mini-botao tui-mini-botao--sim', on: { click: e => { e.stopPropagation(); responderConvite(t.id, 'aceitar'); } } }, icone('fa-check'), ' Aceitar'),
         h('button', { type: 'button', class: 'tui-mini-botao tui-mini-botao--nao', on: { click: e => { e.stopPropagation(); responderConvite(t.id, 'recusar'); } } }, icone('fa-xmark'), ' Recusar'));
     } else {
+      const acoes = h('div', { class: 'tui-tarefa__acoes' });
       if (aberta && t.pode?.concluir && !compacta) {
         const hojeDia = agora.dia;
-        const acoes = h('div', { class: 'tui-tarefa__acoes' },
-          [['Hoje', 0], ['Amanhã', 1], ['+1 sem', 7]].filter(([, n]) => somarDias(hojeDia, n) !== t.data).map(([rotulo, n]) => h('button', {
-            type: 'button', class: 'tui-mini-botao', text: rotulo, title: `Passar para ${rotulo.toLowerCase()}`,
-            on: { click: e => { e.stopPropagation(); mover(t, { data: somarDias(hojeDia, n) }); } }
-          })));
-        lado.append(acoes);
+        acoes.append(...[['Hoje', 0], ['Amanhã', 1], ['+1 sem', 7]].filter(([, n]) => somarDias(hojeDia, n) !== t.data).map(([rotulo, n]) => h('button', {
+          type: 'button', class: 'tui-mini-botao', text: rotulo, title: `Passar para ${rotulo.toLowerCase()}`,
+          on: { click: e => { e.stopPropagation(); mover(t, { data: somarDias(hojeDia, n) }); } }
+        })));
       }
+      // Copiar (01/10/2026): abre a cópia no editor, com " - cópia" no título.
+      if (ctx?.pode?.criar && !compacta) {
+        acoes.append(h('button', {
+          type: 'button', class: 'tui-mini-botao', title: 'Copiar tarefa', attrs: { 'aria-label': 'Copiar tarefa' },
+          on: { click: e => { e.stopPropagation(); copiarTarefa(t.id); } }
+        }, icone('fa-copy')));
+      }
+      if (acoes.childNodes.length) lado.append(acoes);
       for (const p of (t.participantes || []).slice(0, 3)) lado.append(avatar(p.usuario_id, p.nome, { tamanho: 'p', titulo: `${p.nome}${p.status === 'pendente' ? ' (convite pendente)' : ' (em conjunto)'}` }));
       if (t.responsavel_id && ctx?.eu && Number(t.responsavel_id) !== Number(ctx.eu.id)) lado.append(avatar(t.responsavel_id, t.responsavel, { tamanho: 'm', titulo: `Responsável: ${t.responsavel}` }));
     }
@@ -1577,11 +1647,11 @@
 
   window.TarefasUI = {
     // telas
-    abrirEditor, concluir, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha,
+    abrirEditor, copiarTarefa, concluir, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha,
     carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo,
     limparContexto: () => { contexto = null; },
     // puras
-    interpretarTexto, feriadosDoAno, pascoa, gerarIcs, descreverRepeticao, rotuloDoPrazo, atrasada,
+    presetDaCopia, interpretarTexto, feriadosDoAno, pascoa, gerarIcs, descreverRepeticao, rotuloDoPrazo, atrasada,
     agoraEmBrasilia, hoje, somarDias, somarMeses, diaDaSemana, diasEntre, inicioDaSemana,
     dataCurta, dataBr, dataLonga, mesAno, minutosDaHora, horaDeMinutos, iniciais, semAcento,
     TIPOS, PRIORIDADES, STATUS, RESULTADOS, VINCULO, DIAS_CURTOS, DIAS_LONGOS, MESES, CORES_LISTA

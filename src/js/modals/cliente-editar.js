@@ -32,6 +32,8 @@
   // tudo vai junto no salvamento do cliente.
   let transportadoras = [];
   const transportadorasExcluidas = [];
+  // Redes sociais, uma por linha (01/10/2026), logo abaixo do Site.
+  const redesSociais = window.RedesSociais?.montar(document.getElementById('empresaRedesLista'));
   if(cliente){
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
@@ -158,6 +160,7 @@
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    redesSociais?.definir(cli.redes_sociais);
     // Dados fiscais (tipo de pessoa, CPF, indicador de IE, e-mail da NF-e).
     window.ClienteFiscal?.preencher(document, cli);
     window.ClienteFiscal?.ligar(document);
@@ -560,6 +563,16 @@
       return null;
     }
 
+    // Redes: linha com endereço precisa da rede; linha sem endereço não conta.
+    const semRede = redesSociais ? redesSociais.linhaSemRede() : -1;
+    if(semRede !== -1){
+      const tabEl = document.getElementById('tab-dados-empresa');
+      if(tabEl) activateTab(tabEl);
+      redesSociais.focarRede(semRede);
+      showToast('Escolha a rede social da linha preenchida', 'error');
+      return null;
+    }
+
     const endereco = prefix => ({
       rua: getVal(prefix+'Rua'),
       numero: getVal(prefix+'Numero'),
@@ -584,6 +597,7 @@
       cnpj: getVal('empresaCnpj'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite'),
+      redes_sociais: redesSociais ? redesSociais.ler() : undefined,
       status_cliente: getVal('empresaStatus'),
       dono_cliente: getVal('empresaDono'),
       origem_captacao: getVal('empresaOrigemCaptacao'),
@@ -673,10 +687,12 @@
       contatosExcluidos: contatosExcluidos.slice(),
       abaAtiva: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null,
       dono: document.getElementById('empresaDono')?.value || '',
-      enderecos: lerEnderecoGeo()
+      enderecos: lerEnderecoGeo(),
+      redes: redesSociais ? redesSociais.ler() : []
     }),
     restaurar: async (dados) => {
       if (!dados) return;
+      if (Array.isArray(dados.redes) && dados.redes.length) redesSociais?.definir(dados.redes);
 
       const guardados = Array.isArray(dados.contatos) ? dados.contatos : [];
       if (guardados.length) {

@@ -947,8 +947,7 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
         pendencias: conf.pendencias,
         avisar: false
       });
-      // O próximo passo vira a tarefa espelhada, como no formulário.
-      if (conf.payload.proximo_passo) await passoNaTarefa(api, resultado.id, usuarioId);
+      // O próximo passo da planilha NÃO vira tarefa (decisão do dono, 01/10/2026).
     } catch (err) {
       resultado.situacao = 'nao_registrado';
       resultado.bloqueios = [...resultado.bloqueios, err.status === 409 ? err.message : `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
@@ -987,7 +986,7 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
           tipo: interacao.tipo, data: interacao.data, resumo: interacao.resumo, detalhe: interacao.detalhe,
           duracao_min: interacao.duracao_min, contato_id: contatoId,
           ...(item.proximoPasso || {})
-        }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`, aviso: false });
+        }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`, aviso: false, criarTarefaDoPasso: false });
         if (item.existente) item.gravada = true;
       } catch (err) {
         const motivo = err?.status && err.status < 500 ? err.message : (err?.body?.detalhe || err?.message || 'falha na API');
@@ -1742,7 +1741,7 @@ router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async
  * para a linha do histórico (a planilha diz de qual arquivo e linha veio).
  * Devolve o id da interação.
  */
-async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tiposAceitos = null, observacao = null, aviso = {} } = {}) {
+async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tiposAceitos = null, observacao = null, aviso = {}, criarTarefaDoPasso = true } = {}) {
   const tipoInformado = texto(corpo.tipo);
   const resumo = texto(corpo.resumo);
   const aceitos = tiposAceitos || await listas.tiposDeInteracaoAceitos(api);
@@ -1784,7 +1783,8 @@ async function registrarInteracao(api, id, corpo = {}, usuarioId = null, { tipos
       proximo_passo: texto(corpo.proximo_passo),
       proximo_passo_data: corpo.proximo_passo_data || null
     });
-    await passoNaTarefa(api, id, usuarioId);
+    // Pela planilha, a tarefa que já existe acompanha o passo novo, mas nenhuma nasce.
+    await passoNaTarefa(api, id, usuarioId, { criar: criarTarefaDoPasso });
   }
 
   await registrarHistorico(api, id, {
@@ -2174,7 +2174,7 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
 
   let clienteCriadoId = null;
   try {
-    const cliente = await api.post('/api/clientes', {
+    const dadosDoCliente = {
       razao_social: p.razao_social,
       nome_fantasia: p.nome_fantasia,
       cnpj: p.cnpj,
@@ -2187,6 +2187,16 @@ async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = nu
       ...espalhar('reg'),
       ...espalhar('cob'),
       ...espalhar('ent')
+    };
+    // As redes sociais vão junto (decisão do dono, 01/10/2026). Sem a coluna
+    // em clientes (sql/clientes_redes_sociais.sql não rodou no DEV), o
+    // cliente nasce sem elas em vez de a conversão falhar.
+    const redes = listas.normalizarRedes(p.redes_sociais);
+    if (redes.length) dadosDoCliente.redes_sociais = JSON.stringify(redes);
+    const cliente = await api.post('/api/clientes', dadosDoCliente).catch(err => {
+      if (!dadosDoCliente.redes_sociais || !social.semTabela(err)) throw err;
+      delete dadosDoCliente.redes_sociais;
+      return api.post('/api/clientes', dadosDoCliente);
     });
 
     clienteCriadoId = cliente?.id ?? cliente?.[0]?.id;

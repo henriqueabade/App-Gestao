@@ -551,6 +551,70 @@ router.delete('/modelos-permissoes/:id', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Computadores com os avisos do Windows (01/10/2026, decisão do dono): o Sup
+// Admin vê de cada usuário os computadores que recebem os avisos no canto da
+// tela e cancela — o token daquele computador deixa de valer na hora
+// (Santissimo-db-API/avisos/dispositivo.js; tabela sql/avisos_dispositivos.sql).
+// ---------------------------------------------------------------------------
+function exigirSupAdminUsuarios(req, res, next) {
+  try {
+    return require('./permissionsController').exigirSupAdmin(req, res, next);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+const SEM_LISTA_DE_COMPUTADORES = 'Rode sql/avisos_dispositivos.sql e reinicie a API para ver os computadores.';
+const semTabelaDeComputadores = err => require('./historicoSocial').semTabela(err);
+
+/** Os computadores de um usuário para a tela: os ativos primeiro, depois os cancelados; o mais recente no topo. Pura. */
+function montarComputadores(linhas = [], nomes = new Map()) {
+  const quando = c => String(c.ultimo_uso_em || c.criado_em || '');
+  return (Array.isArray(linhas) ? linhas : [])
+    .map(c => ({
+      id: c.id, computador: c.computador || 'Computador sem nome', usuario_windows: c.usuario_windows || null,
+      criado_em: c.criado_em || null, ultimo_uso_em: c.ultimo_uso_em || null,
+      cancelado: Boolean(c.cancelado_em), cancelado_em: c.cancelado_em || null,
+      cancelado_por: c.cancelado_por ? nomes.get(Number(c.cancelado_por)) || `#${c.cancelado_por}` : null
+    }))
+    .sort((a, b) => Number(a.cancelado) - Number(b.cancelado) || quando(b).localeCompare(quando(a)) || Number(b.id) - Number(a.id));
+}
+
+router.get('/:id/computadores', exigirSupAdminUsuarios, async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const [linhas, nomes] = await Promise.all([
+      api.get('/api/avisos_dispositivos', { query: { usuario_id: Number(req.params.id) } }),
+      require('./historicoSocial').nomesDosUsuarios(api)
+    ]);
+    const doUsuario = (Array.isArray(linhas) ? linhas : []).filter(c => String(c.usuario_id) === String(req.params.id));
+    res.json({ computadores: montarComputadores(doUsuario, nomes) });
+  } catch (err) {
+    if (semTabelaDeComputadores(err)) return res.json({ computadores: [], sql_pendente: true, mensagem: SEM_LISTA_DE_COMPUTADORES });
+    console.error('Erro ao listar os computadores do usuário:', err);
+    res.status(err.status || 500).json({ error: 'Não foi possível listar os computadores.' });
+  }
+});
+
+router.post('/:id/computadores/:computadorId/cancelar', exigirSupAdminUsuarios, async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const c = await api.get(`/api/avisos_dispositivos/${Number(req.params.computadorId)}`).catch(err => {
+      if (semTabelaDeComputadores(err)) throw err;
+      return null;
+    });
+    if (!c || c.error || String(c.usuario_id) !== String(req.params.id)) return res.status(404).json({ error: 'Computador não encontrado para este usuário.' });
+    if (c.cancelado_em) return res.json({ success: true, ja_cancelado: true });
+    await api.put(`/api/avisos_dispositivos/${c.id}`, { cancelado_em: new Date().toISOString(), cancelado_por: resolverUsuarioAtual(req) ?? null });
+    res.json({ success: true });
+  } catch (err) {
+    if (semTabelaDeComputadores(err)) return res.status(409).json({ error: SEM_LISTA_DE_COMPUTADORES, sql_pendente: true });
+    console.error('Erro ao cancelar o computador:', err);
+    res.status(err.status || 500).json({ error: 'Não foi possível cancelar agora.' });
+  }
+});
+
 /** PUT /usuarios/:id/permissoes — vincula um perfil ao usuário */
 router.put('/:id/permissoes', async (req, res) => {
   const { id } = req.params;
@@ -1209,4 +1273,5 @@ router.extrairUsuarioId = extrairUsuarioId;
 module.exports = router;
 module.exports.normalizeAvatar = normalizeAvatar;
 module.exports.mudancasDaConta = mudancasDaConta;
+module.exports.montarComputadores = montarComputadores;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;

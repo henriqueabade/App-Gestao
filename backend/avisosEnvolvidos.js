@@ -209,6 +209,36 @@ function comporMensagem(primeira, mudancas = [], notas = []) {
 }
 
 /**
+ * A mensagem gravada em linhas → o que o sino mostra: o texto principal, o
+ * que mudou ("• …") e as notas ("» …", uma nota de várias linhas; "»" sozinho
+ * separa uma nota da outra). Mensagem antiga, de uma linha só, volta igual e
+ * sem listas. Pura (o sino e os avisos do Windows usam).
+ */
+function partesDaMensagem(bruta) {
+  const principal = [];
+  const mudancas = [];
+  const notas = [];
+  let nota = null;
+  const fecharNota = () => {
+    if (nota !== null && nota.join('\n').trim()) notas.push(nota.join('\n').trim());
+    nota = null;
+  };
+  for (const linha of String(bruta || '').split('\n')) {
+    if (linha.startsWith(MARCA_NOTA) || linha === MARCA_NOTA.trim()) {
+      if (linha === MARCA_NOTA.trim()) { fecharNota(); continue; }
+      if (nota === null) nota = [];
+      nota.push(linha.slice(MARCA_NOTA.length));
+      continue;
+    }
+    fecharNota();
+    if (linha.startsWith(MARCA_MUDANCA)) mudancas.push(linha.slice(MARCA_MUDANCA.length).trim());
+    else if (linha.trim()) principal.push(linha.trim());
+  }
+  fecharNota();
+  return { mensagem: principal.join(' '), mudancas, notas };
+}
+
+/**
  * Os avisos de UMA ação numa ficha, prontos para gravar. Pura.
  *
  *   origem, registroId, nome   a ficha ("prospeccao", 7, "ACME")
@@ -472,6 +502,6 @@ async function avisarPessoa(api, { para, usuarioId = null, origem, registroId = 
 module.exports = {
   avisarDaVenda, avisarPessoa,
   MARCA_MUDANCA, MARCA_NOTA, ORIGENS, CAMPOS_DE_RESPONSAVEL,
-  valorLegivel, oQue, linhaDoEvento, notasDosEventos, idPeloNome, trocaNosEventos, comporMensagem,
+  valorLegivel, oQue, linhaDoEvento, notasDosEventos, idPeloNome, trocaNosEventos, comporMensagem, partesDaMensagem,
   montarAvisos, avisosDaPlanilha, nomeDoRegistro, envolvidosDe, responsavelDe, gravar, avisarDaFicha
 };

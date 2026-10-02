@@ -518,7 +518,27 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       });
     };
   },
-  onPublishError: (callback) => subscribeToChannel('publish-error', callback)
+  onPublishError: (callback) => subscribeToChannel('publish-error', callback),
+  /**
+   * O programa no Windows (01/10/2026): preferências (iniciar com o Windows,
+   * avisos no canto da tela, som), a janela dos avisos (backend/janelaDeAviso.js)
+   * e o aviso que ela manda abrir no sino.
+   */
+  avisosWindows: {
+    lerPreferencias: () => ipcRenderer.invoke('avisos-windows:preferencias'),
+    gravarPreferencias: (mudancas) => ipcRenderer.invoke('avisos-windows:gravar-preferencias', mudancas),
+    onPreferencias: (callback) => subscribeToChannel('avisos-windows:preferencias', callback),
+    // janela do canto
+    pronto: () => ipcRenderer.invoke('avisos-windows:pronto'),
+    onAvisos: (callback) => subscribeToChannel('avisos-windows:avisos', callback),
+    ajustarAltura: (altura) => ipcRenderer.invoke('avisos-windows:altura', altura),
+    abrir: (aviso) => ipcRenderer.invoke('avisos-windows:abrir', aviso || null),
+    dispensar: () => ipcRenderer.invoke('avisos-windows:dispensar'),
+    // o sino, com o programa aberto
+    onAbrirAviso: (callback) => subscribeToChannel('avisos-windows:abrir-no-sino', callback),
+    avisoPendente: () => ipcRenderer.invoke('avisos-windows:pendente'),
+    lidos: (lidos) => ipcRenderer.invoke('avisos-windows:lidos', lidos || {})
+  }
   }));
 
 

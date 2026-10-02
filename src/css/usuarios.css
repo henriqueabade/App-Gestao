@@ -957,3 +957,29 @@ body {
 div#usuariosPermissoesOverlay {
     margin-top: 7vh;
 }
+
+/* Usuários › editar › Computadores (01/10/2026): os computadores que recebem
+   os avisos do Windows deste usuário; o Sup Admin cancela. */
+.usr-pcs { display: flex; flex-direction: column; gap: 1rem; max-width: 52rem; }
+.usr-pcs__intro {
+    margin: 0; padding: 0.8rem 1rem; border-radius: 0.8rem; font-size: 0.85rem; line-height: 1.55;
+    color: rgba(255, 255, 255, 0.82); background: rgba(138, 167, 243, 0.08); border: 1px solid rgba(138, 167, 243, 0.25);
+}
+.usr-pcs__intro i { color: #8aa7f3; margin-right: 0.35rem; }
+.usr-pcs__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.usr-pcs__item {
+    display: flex; align-items: center; gap: 1rem; padding: 0.85rem 1rem; border-radius: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.04);
+}
+.usr-pcs__item--cancelado { opacity: 0.6; }
+.usr-pcs__icone {
+    flex-shrink: 0; width: 2.4rem; height: 2.4rem; border-radius: 0.7rem; display: grid; place-items: center;
+    color: #d4c169; background: rgba(182, 160, 62, 0.15);
+}
+.usr-pcs__item--cancelado .usr-pcs__icone { color: rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.06); }
+.usr-pcs__textos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.usr-pcs__nome { font-size: 0.9rem; font-weight: 600; color: #fff; }
+.usr-pcs__detalhe { font-size: 0.78rem; color: rgba(255, 255, 255, 0.62); }
+.usr-pcs__situacao { font-size: 0.75rem; font-weight: 600; color: #4ade80; }
+.usr-pcs__item--cancelado .usr-pcs__situacao { color: #f87171; }
+.usr-pcs__vazio { margin: 0; padding: 1rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.6); }

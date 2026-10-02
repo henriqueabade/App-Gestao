@@ -7,6 +7,8 @@ const csv = require('./importacaoCsv');
 const social = require('./historicoSocial');
 // Aviso no sino para o dono e quem cadastrou quando outra pessoa mexe no cliente.
 const avisos = require('./avisosEnvolvidos');
+// As redes sociais (a mesma lista e a mesma leitura de Prospecções).
+const listas = require('./prospeccaoListas');
 const { quandoAconteceu } = require('./tarefasRegras');
 
 const router = express.Router();
@@ -86,7 +88,9 @@ function mapClienteCompleto(row = {}) {
     status_cliente: row.status_cliente,
     dono_cliente: row.dono_cliente,
     origem_captacao: row.origem_captacao,
-    anotacoes: row.anotacoes
+    anotacoes: row.anotacoes,
+    // Uma por linha, como em Prospecções (sql/clientes_redes_sociais.sql, 01/10/2026).
+    redes_sociais: listas.normalizarRedes(row.redes_sociais)
   };
 }
 
@@ -110,9 +114,20 @@ function camposFiscaisDoCliente(cli = {}) {
   return saida;
 }
 
+/**
+ * As redes sociais vão como texto JSON (um array JS viraria array do
+ * Postgres); sem nenhuma, null. Ausente fica ausente (não apaga).
+ */
+function redesDoCliente(cli = {}) {
+  if (cli.redes_sociais === undefined) return {};
+  const redes = listas.normalizarRedes(cli.redes_sociais);
+  return { redes_sociais: redes.length ? JSON.stringify(redes) : null };
+}
+
 function buildPayload(cli = {}) {
   return {
     ...camposFiscaisDoCliente(cli),
+    ...redesDoCliente(cli),
     razao_social: cli.razao_social,
     nome_fantasia: cli.nome_fantasia,
     cnpj: cli.cnpj,
@@ -567,6 +582,9 @@ router.get('/:id/resumo', exigirPermissao('cli.details.view'), async (req, res) 
  */
 async function criarCliente(api, cli, usuarioId, { observacao = 'Cadastro inicial', pendencias = [], avisar = true } = {}) {
   const payload = buildPayload(cli);
+  // Sem redes, a coluna nem vai: o banco DEV sem o SQL novo recusaria a
+  // coluna desconhecida (a API remota a ignoraria).
+  if (payload.redes_sociais === null) delete payload.redes_sociais;
   const created = await api.post('/api/clientes', payload);
   const clienteId = created?.id || created?.[0]?.id || created?.data?.id;
   const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
@@ -638,6 +656,8 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
       api.get('/api/transportadoras', { query: { id_cliente: id } }).catch(() => [])
     ]);
     const payload = buildPayload(cli);
+    // Sem redes e com a ficha ainda sem a coluna (SQL não rodou no DEV): não manda.
+    if (payload.redes_sociais === null && !(antes && 'redes_sociais' in antes)) delete payload.redes_sociais;
     await api.put(`/api/clientes/${id}`, payload);
 
     const contatosNovos = Array.isArray(cli.contatosNovos) ? cli.contatosNovos : [];

@@ -63,6 +63,18 @@ test('eventosDosFilhos: contato novo, alterado (campo a campo) e excluído; tran
   assert.strictEqual(eventos[4].valor_anterior, 'Correios');
 });
 
+test('redes sociais do cliente (01/10/2026): o histórico conta a troca em texto, do jsonb ou do texto JSON', () => {
+  const antes = { redes_sociais: [{ rede: 'Instagram', valor: '@loja' }] };
+  const eventos = h.diferencasDoCliente(antes, { redes_sociais: JSON.stringify([{ rede: 'Instagram', valor: '@loja' }, { rede: 'LinkedIn', valor: 'linkedin.com/company/loja' }]) });
+  assert.deepStrictEqual(eventos.map(e => [e.entidade, e.valor_anterior, e.valor_novo]), [
+    ['Redes sociais', 'Instagram: @loja', 'Instagram: @loja | LinkedIn: linkedin.com/company/loja']
+  ]);
+  assert.deepStrictEqual(h.diferencasDoCliente(antes, { redes_sociais: JSON.stringify(antes.redes_sociais) }), [], 'a mesma lista não é mudança');
+  assert.deepStrictEqual(h.diferencasDoCliente(antes, { redes_sociais: null })[0].valor_novo, null, 'tirar todas');
+  assert.ok(h.retratoDoCliente({ nome_fantasia: 'Loja', redes_sociais: JSON.stringify([{ rede: 'Facebook', valor: 'fb.com/loja' }]) })
+    .some(c => c.rotulo === 'Redes sociais' && c.valor === 'Facebook: fb.com/loja'));
+});
+
 test('gravar o histórico nunca derruba quem chamou', async () => {
   const api = {
     post: async () => { throw Object.assign(new Error("Tabela 'cliente_historico' não encontrada."), { status: 404 }); },

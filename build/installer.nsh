@@ -25,3 +25,14 @@
     ${EndIf}
   ${EndIf}
 !macroend
+
+; 6) Desinstalar tira o "iniciar com o Windows" (01/10/2026). O programa grava
+;    a entrada sozinho na primeira vez que abre (app.setLoginItemSettings, com
+;    o nome do appId); sem isto, ela ficaria apontando para um programa que
+;    não existe mais. Na atualização (o desinstalador da versão velha roda
+;    junto) ela fica: a versão nova a regrava ao abrir de qualquer jeito.
+!macro customUnInstall
+  ${ifNot} ${isUpdated}
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.santissimo.decor"
+  ${endIf}
+!macroend

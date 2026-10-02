@@ -168,6 +168,45 @@
             <p id="notificationStatus" class="settings-status"></p>
         </section>
 
+        <!--
+          O programa no Windows (01/10/2026, pedido do dono): tudo ligado de
+          fábrica; vale para este computador. Preenchido por configuracoes.js
+          (window.electronAPI.avisosWindows); fora do programa instalado, o
+          "Iniciar com o Windows" fica apagado.
+        -->
+        <section id="programaNoWindowsSettings" class="settings-card glass-surface rounded-xl" hidden>
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Programa no Windows</h2>
+                    <p class="settings-card-description">O programa abre junto com o Windows, fica perto do relógio e mostra os seus avisos no canto da tela quando você está em outro programa. Vale para este computador.</p>
+                </div>
+            </div>
+            <ul class="cfg-automaticas" aria-label="Programa no Windows">
+                <li class="cfg-automatica">
+                    <div class="cfg-automatica__textos">
+                        <span class="category-title">Iniciar com o Windows</span>
+                        <p class="category-description">Abre sozinho, em segundo plano, quando o computador liga.</p>
+                    </div>
+                    <input type="checkbox" id="windowsIniciar" class="toggle" role="switch" aria-label="Iniciar com o Windows">
+                </li>
+                <li class="cfg-automatica">
+                    <div class="cfg-automatica__textos">
+                        <span class="category-title">Avisos no canto da tela</span>
+                        <p class="category-description">Quando chega aviso e o programa não está na frente, ele aparece no canto inferior direito e fica até você abrir ou fechar — mesmo depois de sair do programa (vale para o último usuário que entrou neste computador).</p>
+                    </div>
+                    <input type="checkbox" id="windowsAvisos" class="toggle" role="switch" aria-label="Avisos no canto da tela">
+                </li>
+                <li class="cfg-automatica">
+                    <div class="cfg-automatica__textos">
+                        <span class="category-title">Som dos avisos</span>
+                        <p class="category-description">O "tum-tum" quando chega aviso: no sino, com o programa na frente, e na janela do canto.</p>
+                    </div>
+                    <input type="checkbox" id="windowsSom" class="toggle" role="switch" aria-label="Som dos avisos">
+                </li>
+            </ul>
+            <p id="programaNoWindowsStatus" class="settings-status" role="status"></p>
+        </section>
+
         <section class="settings-card glass-surface rounded-xl">
             <div class="settings-card-header">
                 <div>

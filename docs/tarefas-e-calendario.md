@@ -168,6 +168,7 @@ sem passar pelo servidor local.
 - **Atrasada**: aviso no sino **uma vez por dia** enquanto estiver atrasada.
 - O sino pergunta a cada **10 segundos**; tudo o que chega vai também para a **notificação do Windows**, menos curtida (fica só no sino).
 - Os lembretes e atrasos nascem no servidor quando o sino pede (`POST /api/tarefas/avisos`, a cada 30 s) e não se repetem (`notificacoes.chave` única por usuário).
+- Desde 01/10/2026 o computador também pede, com o programa em segundo plano, e a "notificação do Windows" é a janela no canto da tela (só com o programa atrás); a tarefa tem **Copiar** (editor e lista). Ver `docs/avisos-no-windows.md`.
 - Menção (`@`) no histórico gera o aviso `mencao` ("mencionou você"); tarefa concluída pelo módulo, `acao_concluida`.
 - Aviso dispensado fica marcado (`excluida_em`), não é apagado.
 

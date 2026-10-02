@@ -100,3 +100,44 @@ test('prazo legível e atraso', () => {
   assert.ok(!T.atrasada({ data: '2026-09-18', status: 'a_fazer' }, AGORA));
   assert.strictEqual(T.descreverRepeticao({ freq: 'semanal', intervalo: 1, dias_semana: [1, 3] }), 'Toda semana (seg, qua)');
 });
+
+test('copiar tarefa (01/10/2026): leva tudo do editor, o checklist sem marcar, quem participa e a ação; título " - cópia"', () => {
+  const original = {
+    id: 9, titulo: 'Fechar comissão atual e dos meses passados', descricao: 'Conferir os repasses', tipo: 'Tarefa', prioridade: 'urgente',
+    status: 'concluida', data: '2026-10-05', hora: '09:00', duracao_min: 30, lembrete_min: 0, local: '', responsavel_id: 4,
+    lista_id: 7, marcadores: ['5'], recorrencia: { freq: 'mensal', intervalo: 1 },
+    vinculos: [{ tipo: 'cliente', id: 7, nome: 'Loja Boa' }],
+    itens_checklist: [{ id: 1, texto: 'Repasses', feito: true }, { id: 2, texto: '  ', feito: false }, { id: 3, texto: 'Produção', feito: false }],
+    todos_participantes: [{ usuario_id: 2, status: 'aceito' }, { usuario_id: 3, status: 'recusado' }, { usuario_id: 1, status: 'pendente' }],
+    acao: { chave: 'financeiro.fechar_comissoes', registro: '2026-09', rotulo: 'Fechar a competência de comissões', registroRotulo: 'Competência 09/2026' }
+  };
+  const p = daqui(T.presetDaCopia(original, { euId: 1, podeAtribuir: true }));
+  assert.strictEqual(p.titulo, 'Fechar comissão atual e dos meses passados - cópia');
+  assert.deepStrictEqual([p.prioridade, p.data, p.hora, p.duracao_min, p.lembrete_min, p.lista_id], ['urgente', '2026-10-05', '09:00', 30, 0, 7]);
+  assert.strictEqual(p.responsavel_id, 4, 'quem pode atribuir mantém o responsável');
+  assert.deepStrictEqual(p.marcadores, [5]);
+  assert.deepStrictEqual(p.checklist, ['Repasses', 'Produção'], 'itens sem marcar; vazio sai');
+  assert.deepStrictEqual(p.participantes, [2], 'quem recusou não vai; eu mesmo não me convido');
+  assert.deepStrictEqual(p.acao, { chave: 'financeiro.fechar_comissoes', registro: '2026-09', rotulo: 'Competência 09/2026', registroRotulo: 'Competência 09/2026', rotuloAcao: 'Fechar a competência de comissões' });
+  assert.strictEqual(p.origemTexto, 'Cópia de “Fechar comissão atual e dos meses passados”');
+  assert.ok(!('status' in p) && !('id' in p), 'a cópia nasce nova, a fazer');
+
+  // Sem poder atribuir: a cópia é minha. Título longo cabe em 200 com o sufixo.
+  const minha = T.presetDaCopia({ ...original, titulo: 'x'.repeat(200) }, { euId: 1, podeAtribuir: false });
+  assert.strictEqual(minha.responsavel_id, 1);
+  assert.strictEqual(minha.titulo.length, 200);
+  assert.ok(minha.titulo.endsWith(' - cópia'));
+  // Vindo do editor, a ação já está no formato dele e passa igual.
+  const doEditor = T.presetDaCopia({ titulo: 'A', acao: { chave: 'k', registro: '1', rotulo: 'PED-1', rotuloAcao: 'Despachar' } }, { euId: 1 });
+  assert.deepStrictEqual(daqui(doEditor.acao), { chave: 'k', registro: '1', rotulo: 'PED-1', rotuloAcao: 'Despachar' });
+  assert.strictEqual(T.presetDaCopia({ titulo: 'Sem ação' }, { euId: 1 }).acao, null);
+});
+
+test('copiar tarefa: o botão no editor e na linha da lista, só para quem pode criar', () => {
+  assert.ok(codigo.includes("if (original && ctx.pode?.criar) {"), 'editor: tarefa existente e permissão de criar');
+  assert.ok(codigo.includes("icone('fa-copy'), ' Copiar'"));
+  assert.ok(codigo.includes("abrirEditor({ preset: presetDaCopia(fonte, { euId: eu.id, podeAtribuir: ctx.pode?.atribuir }) });"));
+  assert.ok(codigo.includes("if (ctx?.pode?.criar && !compacta) {"), 'linha da lista');
+  assert.ok(codigo.includes("on: { click: e => { e.stopPropagation(); copiarTarefa(t.id); } }"));
+  assert.ok(codigo.includes(": (preset.acao ? { ...preset.acao } : null)"), 'o editor novo aceita a ação da cópia');
+});

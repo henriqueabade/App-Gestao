@@ -12,6 +12,7 @@
       <div class="usuario-modal-tablist overflow-x-auto scrollbar-hide">
         <button id="tab-dados-usuario" role="tab" aria-selected="true" aria-controls="panel-dados-usuario" tabindex="0" class="usuario-modal-tab usuario-modal-tab--active">Dados Pessoais</button>
         <button id="tab-tarefas-usuario" role="tab" aria-selected="false" aria-controls="panel-tarefas-usuario" tabindex="-1" class="usuario-modal-tab hidden">Tarefas e calendário</button>
+        <button id="tab-computadores-usuario" role="tab" aria-selected="false" aria-controls="panel-computadores-usuario" tabindex="-1" class="usuario-modal-tab hidden">Computadores</button>
       </div>
     </nav>
 
@@ -72,11 +73,20 @@
       <section id="panel-tarefas-usuario" role="tabpanel" aria-labelledby="tab-tarefas-usuario" class="px-8 py-6 hidden">
         <div id="usuarioVisibilidadeTarefas" class="tui-escopo"></div>
       </section>
+
+      <!-- Só o Sup Admin: os computadores que recebem os avisos do Windows
+           deste usuário, com o Cancelar (src/js/modals/usuario-editar.js →
+           /api/usuarios/:id/computadores; 01/10/2026). -->
+      <section id="panel-computadores-usuario" role="tabpanel" aria-labelledby="tab-computadores-usuario" class="px-8 py-6 hidden">
+        <div id="usuarioComputadores" class="usr-pcs"></div>
+      </section>
     </div>
 
     <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
       <div id="usuarioEditarMensagem" class="hidden text-sm"></div>
-      <div class="ctl-acoes justify-end w-full md:w-auto">
+      <!-- ml-auto: sem a mensagem, os botões ficavam à esquerda (o
+           justify-between com um filho só); pedido do dono, 01/10/2026. -->
+      <div class="ctl-acoes justify-end w-full md:w-auto ml-auto">
         <button id="cancelarEditarUsuario" class="btn-danger ctl-botao text-white">Cancelar</button>
         <button id="salvarEditarUsuario" class="btn-primary ctl-botao text-white">
           <span>Salvar alterações</span>

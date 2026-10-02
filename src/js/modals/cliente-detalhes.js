@@ -395,6 +395,8 @@ async function carregarContatos(idCliente) {
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    // Redes sociais (01/10/2026), só para ler: sem o − e o +.
+    window.RedesSociais?.montar(document.getElementById('empresaRedesLista'), { somenteLeitura: true })?.definir(cli.redes_sociais);
     window.ClienteFiscal?.preencher(document, cli);
     const avatar = document.getElementById('empresaAvatar');
     if(avatar){

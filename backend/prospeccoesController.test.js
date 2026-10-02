@@ -39,7 +39,7 @@ const COLUNAS = {
   prospeccao_campanhas: ['id', 'prospeccao_id', 'nome', 'canal', 'status', 'data_envio', 'resposta', 'observacao', 'usuario_id'],
   prospeccao_anexos: ['id', 'prospeccao_id', 'nota_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'usuario_id', 'criado_em'],
   orcamentos: ['id', 'numero', 'cliente_id', 'prospeccao_id', 'situacao'],
-  clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'status_cliente'],
+  clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'status_cliente', 'redes_sociais'],
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
   modelos_permissoes: ['id', 'nome'],
@@ -730,6 +730,26 @@ test('POST /:id/converter cria cliente, copia contatos e arquiva a prospecção'
 
     // E a timeline continua lá.
     assert.strictEqual(ctx.tabelas.prospeccao_interacoes.filter(i => String(i.prospeccao_id) === '1').length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('conversão leva as redes sociais para o cliente (decisão do dono, 01/10/2026); sem redes, a coluna nem vai', async () => {
+  const dados = baseDados();
+  dados.prospeccoes.find(p => p.id === 1).redes_sociais = [{ rede: 'Instagram', valor: '@antiga' }, { rede: 'LinkedIn', valor: 'linkedin.com/company/antiga' }];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/converter', { method: 'POST', body: JSON.stringify({ dono_cliente: 'João Silva' }) });
+    assert.strictEqual(resp.status, 201);
+    const { clienteId } = await resp.json();
+    const cliente = ctx.tabelas.clientes.find(c => c.id === clienteId);
+    assert.deepStrictEqual(JSON.parse(cliente.redes_sociais), [{ rede: 'Instagram', valor: '@antiga' }, { rede: 'LinkedIn', valor: 'linkedin.com/company/antiga' }]);
+
+    const outra = await chamar(ctx.porta, '/api/prospeccoes/2/converter', { method: 'POST', body: JSON.stringify({ dono_cliente: 'João Silva' }) });
+    const outroId = (await outra.json()).clienteId;
+    const semRedes = ctx.tabelas.clientes.find(c => c.id === outroId);
+    assert.ok(!('redes_sociais' in semRedes), 'sem redes, a coluna não vai (o banco DEV sem o SQL recusaria)');
   } finally {
     await ctx.encerrar();
   }

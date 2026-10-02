@@ -280,6 +280,8 @@ const COLUNAS_CLIENTE = [
   { chave: 'email_nfe', titulo: 'E-mail para NF-e' },
   { chave: 'consumidor_final', titulo: 'Consumidor final (Sim ou Não)' },
   { chave: 'site', titulo: 'Site' },
+  // Como em Prospecções (01/10/2026): "Rede: endereço | Rede: endereço".
+  { chave: 'redes_sociais', titulo: 'Redes sociais (Rede: endereço | Rede: endereço)', alternativas: ['Redes sociais', 'Rede social'] },
   { chave: 'status_cliente', titulo: 'Status (Ativo ou Inativo)' },
   { chave: 'dono_cliente', titulo: 'Dono' },
   { chave: 'origem_captacao', titulo: 'Origem da captação' },
@@ -346,7 +348,8 @@ const PROBABILIDADE_DA_ETAPA = { 'Novo': 10, 'Contactado': 25, 'Qualificado': 50
 const EXEMPLO_CLIENTE = {
   tipo_pessoa: 'PJ', razao_social: 'Casa Exemplo Decorações LTDA', nome_fantasia: MARCA_EXEMPLO,
   cnpj: '11.222.333/0001-81', inscricao_estadual: '0628725380094', indicador_ie: '1', email_nfe: 'nfe@exemplo.com.br',
-  consumidor_final: 'Não', site: 'www.exemplo.com.br', status_cliente: 'Ativo', dono_cliente: 'Nome do dono (usuário do sistema)',
+  consumidor_final: 'Não', site: 'www.exemplo.com.br', redes_sociais: 'Instagram: @casaexemplo | Facebook: facebook.com/casaexemplo',
+  status_cliente: 'Ativo', dono_cliente: 'Nome do dono (usuário do sistema)',
   origem_captacao: 'Indicação', reg_cep: '30820-272', reg_rua: 'Av. Exemplo', reg_numero: '100', reg_complemento: 'Sala 1',
   reg_bairro: 'Centro', reg_cidade: 'Belo Horizonte', reg_estado: 'MG', reg_pais: 'Brasil', reg_codigo_municipio: '3106200',
   cob_igual: 'Sim', ent_igual: 'Sim', contato_nome: 'Maria da Silva', contato_cargo: 'Compradora',
@@ -508,7 +511,8 @@ function clienteParaLinha(c = {}, contato = null) {
     tipo_pessoa: pf ? 'PF' : 'PJ', razao_social: c.razao_social, nome_fantasia: c.nome_fantasia,
     cnpj: pf ? '' : formatarCnpj(c.cnpj) || texto(c.cnpj), cpf: pf ? formatarCpf(c.cpf) || texto(c.cpf) : '',
     inscricao_estadual: c.inscricao_estadual, indicador_ie: c.indicador_ie ?? '', email_nfe: c.email_nfe,
-    consumidor_final: c.consumidor_final ? 'Sim' : 'Não', site: c.site, status_cliente: c.status_cliente,
+    consumidor_final: c.consumidor_final ? 'Sim' : 'Não', site: c.site, redes_sociais: listas.redesEmTexto(c.redes_sociais),
+    status_cliente: c.status_cliente,
     dono_cliente: c.dono_cliente, origem_captacao: c.origem_captacao, anotacoes: c.anotacoes,
     cob_igual: 'Não', ent_igual: 'Não',
     contato_nome: contato?.nome, contato_cargo: contato?.cargo, contato_email: contato?.email,
@@ -658,6 +662,10 @@ function conferirCliente(r = {}, contexto = {}) {
     pendencias.push('Sem contato.');
   }
 
+  // Redes sociais: a mesma leitura de Prospecções (rede pelo domínio; fora da lista vira "Outra").
+  const { redes, pendencias: pendenciasDasRedes } = listas.lerRedesDoCsv(r.redes_sociais);
+  pendencias.push(...pendenciasDasRedes);
+
   const payload = {
     tipo_pessoa: pf ? 'PF' : 'PJ',
     razao_social: texto(r.razao_social),
@@ -669,6 +677,7 @@ function conferirCliente(r = {}, contexto = {}) {
     email_nfe: emailNfe || null,
     consumidor_final: consumidor === true,
     site: texto(r.site) || null,
+    redes_sociais: redes,
     status_cliente: status,
     dono_cliente: dono || null,
     origem_captacao: texto(r.origem_captacao) || null,

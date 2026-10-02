@@ -165,7 +165,7 @@ const COLUNAS = {
   modelos_permissoes: ['id', 'nome'],
   clientes: [
     'id', 'tipo_pessoa', 'razao_social', 'nome_fantasia', 'cnpj', 'cpf', 'inscricao_estadual', 'indicador_ie', 'email_nfe',
-    'consumidor_final', 'site', 'status_cliente', 'dono_cliente', 'origem_captacao', 'anotacoes', 'criado_por',
+    'consumidor_final', 'site', 'redes_sociais', 'status_cliente', 'dono_cliente', 'origem_captacao', 'anotacoes', 'criado_por',
     'reg_pais', 'reg_logradouro', 'reg_numero', 'reg_complemento', 'reg_bairro', 'reg_cidade', 'reg_uf', 'reg_cep', 'reg_codigo_municipio',
     'cob_pais', 'cob_logradouro', 'cob_numero', 'cob_complemento', 'cob_bairro', 'cob_cidade', 'cob_uf', 'cob_cep',
     'ent_pais', 'ent_logradouro', 'ent_numero', 'ent_complemento', 'ent_bairro', 'ent_cidade', 'ent_uf', 'ent_cep', 'ent_codigo_municipio'
@@ -178,6 +178,9 @@ const COLUNAS = {
     'end_bairro', 'end_cidade', 'end_uf', 'end_pais', 'end_cep', 'status', 'anotacoes', 'criado_por', 'criado_em', 'atualizado_em'
   ],
   prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id'],
+  // A tarefa-espelho do próximo passo (só nos testes que põem a tabela).
+  tarefas: ['id', 'titulo', 'tipo', 'prioridade', 'status', 'data', 'hora', 'origem', 'prospeccao_id', 'responsavel_id', 'criado_por', 'excluida_em', 'atualizado_em'],
+  tarefa_historico: ['id', 'tarefa_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   prospeccao_origens: ['id', 'nome', 'criado_por', 'criado_em'],
   prospeccao_tipos_interacao: ['id', 'nome', 'criado_por', 'criado_em'],
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
@@ -379,6 +382,41 @@ test('importar clientes: nada interrompe; cada linha volta com a situação e o 
   }
 });
 
+test('clientes com redes sociais (01/10/2026): coluna no modelo, a importação grava uma por linha, a exportação devolve o texto', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const modelo = await chamar(ctx.porta, '/api/clientes/csv/modelo', { usuario: 1 });
+    assert.ok(modelo.json.conteudo.includes('Redes sociais (Rede: endereço | Rede: endereço)'));
+    const conteudo = planilha(csv.COLUNAS_CLIENTE, [{
+      tipo_pessoa: 'PJ', razao_social: 'Casa Verde LTDA', nome_fantasia: 'Casa Verde', cnpj: '11.222.333/0001-81', status_cliente: 'Ativo', dono_cliente: 'Ana',
+      redes_sociais: 'Instagram: @casaverde | https://www.linkedin.com/company/casaverde | Orkut: casaverde',
+      reg_rua: 'Rua A', reg_numero: '1', reg_bairro: 'Centro', reg_cidade: 'BH', reg_estado: 'MG', reg_pais: 'Brasil', reg_cep: '30000-000',
+      cob_igual: 'Sim', ent_igual: 'Sim', contato_nome: 'Maria', contato_email: 'maria@x.com'
+    }]);
+    const r = await chamar(ctx.porta, '/api/clientes/csv/importar', { usuario: 1, corpo: { conteudo, nome_arquivo: 'redes.csv' } });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    const verde = ctx.tabelas.clientes.find(c => c.nome_fantasia === 'Casa Verde');
+    assert.deepStrictEqual(JSON.parse(verde.redes_sociais), [
+      { rede: 'Instagram', valor: '@casaverde' }, { rede: 'LinkedIn', valor: 'https://www.linkedin.com/company/casaverde' }, { rede: 'Outra', valor: 'Orkut: casaverde' }
+    ]);
+    assert.ok(r.json.linhas[0].pendencias.some(p => /Rede "Orkut" não está na lista/.test(p)), 'rede fora da lista vira pendência');
+    const historico = ctx.tabelas.cliente_historico.find(h => h.cliente_id === verde.id && h.tipo === 'criacao');
+    const detalhe = typeof historico.detalhe === 'string' ? JSON.parse(historico.detalhe) : historico.detalhe;
+    assert.ok(detalhe.campos.some(c => c.rotulo === 'Redes sociais' && /^Instagram: @casaverde \| LinkedIn:/.test(c.valor)), 'o retrato do cadastro mostra as redes');
+
+    const exportado = await chamar(ctx.porta, '/api/clientes/csv/exportar', { usuario: 1, corpo: { ids: [verde.id] } });
+    const { linhas } = csv.lerCsv(exportado.json.conteudo);
+    const linha = csv.registroDaLinha(linhas[1].valores, csv.mapearCabecalho(linhas[0].valores, csv.COLUNAS_CLIENTE).indice);
+    assert.strictEqual(linha.redes_sociais, 'Instagram: @casaverde | LinkedIn: https://www.linkedin.com/company/casaverde | Outra: Orkut: casaverde');
+    // Sem redes, a coluna nem vai (o banco DEV sem o SQL recusaria).
+    const semRedes = planilha(csv.COLUNAS_CLIENTE, [{ razao_social: 'Sem Redes LTDA', nome_fantasia: 'Sem Redes', cnpj: '19.131.243/0001-97', dono_cliente: 'Ana' }]);
+    await chamar(ctx.porta, '/api/clientes/csv/importar', { usuario: 1, corpo: { conteudo: semRedes } });
+    assert.ok(!('redes_sociais' in ctx.tabelas.clientes.find(c => c.nome_fantasia === 'Sem Redes')));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('importar: planilha sem as colunas do modelo nem começa', async () => {
   const ctx = await montar(baseDados());
   try {
@@ -472,6 +510,28 @@ test('interação da planilha: recusa data futura, tipo fora da lista e o que o 
   const semHora = csv.conferirInteracao({ interacao_tipo: 'Reunião', interacao_data: '2026-09-01', interacao_resumo: 'x', interacao_duracao: 'meia hora' }, { tipos, agora });
   assert.deepStrictEqual([semHora.bloqueios, semHora.interacao.data, semHora.avisos.length, semHora.pendencias.length], [[], '2026-09-01T00:00:00-03:00', 1, 1]);
   assert.strictEqual(csv.conferirInteracao({ nome_fantasia: 'Só a empresa' }, { tipos, agora }).interacao, null);
+});
+
+test('planilha com próximo passo NÃO cria tarefa (decisão do dono, 01/10/2026); a tarefa que já existe acompanha o passo novo', async () => {
+  const dados = dadosComListas();
+  dados.tarefas = [{ id: 50, titulo: 'Ligar de novo', tipo: 'Follow-up', prioridade: 'media', status: 'a_fazer', data: '2026-10-01', origem: 'proximo_passo', prospeccao_id: 1, responsavel_id: 2 }];
+  dados.tarefa_historico = [];
+  const ctx = await montar(dados);
+  try {
+    const I = { interacao_tipo: 'Ligação', interacao_data: '25/09/2026 11:00', interacao_resumo: 'Retorno' };
+    const conteudo = planilha(csv.COLUNAS_PROSPECCAO, [
+      { nome_fantasia: 'Nova com passo', proximo_passo: 'Mandar catálogo', proximo_passo_data: '10/10/2026' },
+      { nome_fantasia: 'Ativa SA', cnpj: '04.252.011/0001-10', ...I, proximo_passo: 'Fechar proposta', proximo_passo_data: '12/10/2026' }
+    ]);
+    const r = await chamar(ctx.porta, '/api/prospeccoes/csv/importar', { usuario: 1, corpo: { conteudo, nome_arquivo: 'passos.csv' } });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Nova com passo');
+    assert.deepStrictEqual([nova.proximo_passo, nova.proximo_passo_data], ['Mandar catálogo', '2026-10-10'], 'o passo fica na prospecção');
+    assert.strictEqual(ctx.tabelas.tarefas.length, 1, 'nenhuma tarefa nasceu');
+    assert.deepStrictEqual([ctx.tabelas.tarefas[0].titulo, String(ctx.tabelas.tarefas[0].data).slice(0, 10)], ['Fechar proposta', '2026-10-12'], 'a que existia acompanha');
+  } finally {
+    await ctx.encerrar();
+  }
 });
 
 function dadosComListas() {

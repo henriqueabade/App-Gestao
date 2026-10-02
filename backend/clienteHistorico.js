@@ -25,6 +25,7 @@ const CAMPOS_CLIENTE = {
   email_nfe: 'E-mail para NF-e',
   consumidor_final: 'Consumidor final',
   site: 'Site',
+  redes_sociais: 'Redes sociais',
   status_cliente: 'Status',
   dono_cliente: 'Dono',
   origem_captacao: 'Origem da captação',
@@ -49,6 +50,12 @@ function legivel(valor) {
   return s === '' ? null : s;
 }
 
+/** O mesmo, por campo: as redes sociais (jsonb ou texto JSON) viram "Instagram: @x | LinkedIn: y". */
+function legivelDoCampo(campo, valor) {
+  if (campo === 'redes_sociais') return require('./prospeccaoListas').redesEmTexto(valor) || null;
+  return legivel(valor);
+}
+
 /**
  * Um evento por campo que mudou. Só olha o que veio em `depois` (campo
  * ausente não é "apagado"). Pura.
@@ -57,8 +64,8 @@ function diferencasDoCliente(antes = {}, depois = {}) {
   const eventos = [];
   for (const [campo, rotulo] of Object.entries(CAMPOS_CLIENTE)) {
     if (!(campo in depois) || depois[campo] === undefined) continue;
-    const a = legivel(campo === 'consumidor_final' && antes[campo] !== undefined ? Boolean(antes[campo]) : antes[campo]);
-    const d = legivel(depois[campo]);
+    const a = legivelDoCampo(campo, campo === 'consumidor_final' && antes[campo] !== undefined ? Boolean(antes[campo]) : antes[campo]);
+    const d = legivelDoCampo(campo, depois[campo]);
     if (a === d) continue;
     eventos.push({
       tipo: 'campo', acao: 'alterou', entidade: rotulo, campo,
@@ -71,7 +78,7 @@ function diferencasDoCliente(antes = {}, depois = {}) {
 /** Os campos preenchidos do cadastro, rotulados (o "retrato" da criação). Pura. */
 function retratoDoCliente(payload = {}) {
   return Object.entries(CAMPOS_CLIENTE)
-    .map(([campo, rotulo]) => ({ rotulo, valor: legivel(payload[campo]) }))
+    .map(([campo, rotulo]) => ({ rotulo, valor: legivelDoCampo(campo, payload[campo]) }))
     .filter(c => c.valor !== null);
 }
 
