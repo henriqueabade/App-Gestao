@@ -96,6 +96,11 @@
             <div class="flex items-end">
               <label class="flex items-center gap-2 text-sm text-gray-300"><input id="ctbContasFinAtiva" type="checkbox" checked class="w-4 h-4" /> Conta ativa</label>
             </div>
+            <!-- Fase B: a conta do plano da AEA (o lado do banco nas partidas; BB conta corrente = 00008). -->
+            <div id="ctbContasFinPlanoBloco" class="hidden md:col-span-2">
+              <label for="ctbContasFinPlano" class="ctl-rotulo text-gray-300">Conta no plano da AEA</label>
+              <select id="ctbContasFinPlano" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            </div>
             <p class="md:col-span-3 text-xs text-gray-400">O saldo de abertura é o do fim do dia antes do início da Contabilidade (ex.: o de 31/08/2026 abre setembro). O livro-caixa começa por ele e é conferido com o saldo que o banco informa no extrato.</p>
             <div class="md:col-span-3">
               <label for="ctbContasFinObservacao" class="ctl-rotulo text-gray-300">Observação</label>

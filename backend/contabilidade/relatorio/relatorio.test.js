@@ -79,6 +79,15 @@ test('partidas: duas linhas por lançamento (banco × conta do plano), somando z
   assert.deepEqual(p.map(x => [x.lado, x.conta, x.valor]), [['banco', '[BB — conta corrente]', -2500], ['plano', 'Serviços de Terceiros', 2500], ['banco', '[BB — conta corrente]', 3700], ['plano', 'Sem classificação', -3700]]);
   assert.equal(p[1].descricao, 'Imobiliária Centro');
   assert.equal(p[0].numero, '123');
+  // Fase B: com o plano da AEA, o banco é a conta dele (00008) e o outro lado vem com o código reduzido.
+  const aea = r.livroDaConta({
+    conta: { id: 1, nome: 'BB — conta corrente' }, contaPlano: '00008 · Banco do Brasil',
+    linhas: [lin(3, '2026-09-08', -2800, { conta_plano: '00476 · Serv de Terc. PJ' })]
+  });
+  assert.deepEqual(r.partidasDe([aea]).map(x => [x.lado, x.conta, x.valor]), [['banco', '00008 · Banco do Brasil [BB — conta corrente]', -2800], ['plano', '00476 · Serv de Terc. PJ', 2800]]);
+  assert.equal(aea.conta_plano, '00008 · Banco do Brasil');
+  const res = r.resultadoComRotulos({ resultado: 0, por_conta: [{ conta_id: 9, conta: 'Serv de Terc. PJ', conta_codigo: '00476', tipo: 'despesa', resultado: -2800 }] });
+  assert.equal(res.por_conta[0].conta, '00476 · Serv de Terc. PJ');
 });
 
 test('nota da situação: fechada com versão, fechada antes das versões, prévia', () => {

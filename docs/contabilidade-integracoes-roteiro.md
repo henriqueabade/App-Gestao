@@ -430,6 +430,102 @@ a API, permissões, travas) → B → C → D → E.
 9. Mensagens da Contabilidade: escrever uma mensagem → quem vê a
    Contabilidade recebe "Nova mensagem" no sino.
 
+## Parte J — Fase B (02/10/2026): o plano de contas da AEA
+
+**O que mudou**
+- O **Plano de contas** passa a ser o plano **inteiro da AEA** (Mastermaq,
+  2.718 contas), com o código reduzido (00528), a classificação
+  (4.01.01.01.002) e a natureza (D/C). **Em uso** ficam 38 (as do balancete de
+  04/2022 + as suas respostas). Só as contas **em uso e analíticas** aparecem
+  nas listas de escolha: classificação, regras, lote e categoria das contas a
+  pagar.
+- A tela do Plano de contas: **Mostrar** (Em uso / Plano inteiro da AEA /
+  Desativadas), **Buscar** por código ou nome, a árvore na ordem da
+  classificação (contas-título em negrito). Ações:
+  - **Usar / Tirar de uso** — não tira de uso a conta que tem regra ativa
+    (desative a regra antes);
+  - **O comprovante basta / Pedir nota** — resposta 1 a (abaixo);
+  - **Desdobrar** — só nas que se desdobram: 00223 Fornecedores, 00028
+    Clientes, 00020 Aplicações. Cria a subconta com final de 3 dígitos
+    (00223.001, 00223.002 … até .999); para a AEA vale o código da genérica;
+  - **Editar** — só os desdobramentos (nome) e as contas criadas à mão. A conta
+    da AEA não muda nome, código nem tipo.
+- **Aplicações (resposta 5):** tudo na 00020, já desdobrada em **00020.001
+  Rende Fácil** e **00020.002 CDB**; o rendimento não vira receita (como no
+  balancete). Regras novas: "RENDE FACIL" → 00020.001, "CDB" → 00020.002,
+  "IOF" (débito) → 00761.
+- **As 10 contas que vieram com o app viram as da AEA** e ficam desativadas
+  com "Substituída por …" (as regras, as classificações à mão e a categoria
+  das contas a pagar acompanham):
+
+  | Antiga | Agora |
+  |---|---|
+  | Receita de vendas | 00528 · Industrialização de Mercadorias |
+  | Devoluções e reembolsos | 00537 · Devolução de Vendas |
+  | Aquisição de Bens | 00340 · Compra de Mercadorias |
+  | Impostos e Taxas | 00780 · Simples Nacional |
+  | Transferência entre contas | 00020.001 · Rende Fácil |
+  | Comissões sobre vendas | 00445 · Comissões sobre Vendas |
+  | Despesas bancárias | 00491 · Despesas Bancárias |
+  | Produção (colaboradores) e Serviços de Terceiros | 00476 · Serv de Terc. PJ |
+  | Aporte de Capital | 00754 · Emprestimos a Socios |
+
+- A **categoria da conta a pagar** guarda o código ("00383 · Energia
+  Eletrica"): o plano da AEA repete nomes ("Banco do Brasil" é a 00008 e a
+  00020; "Energia" está no custo e na despesa).
+- **Resposta 1 a — "o comprovante basta":** marcadas Simples (00780), impostos
+  e taxas (00502 a 00508), energia (00383 e 00457), água (00439), telefone
+  (00478/00479), internet (00462), despesas bancárias e de cobrança
+  (00491/00492) e IOF (00761). Nessas, a conta paga **com o comprovante do
+  banco anexado** não pede nota/recibo no painel.
+- **Contas do banco:** campo novo **"Conta no plano da AEA"** (BB — conta
+  corrente = **00008**, já ligada pelo SQL). O relatório e as partidas mostram
+  o lado do banco como "00008 · Banco do Brasil [BB — conta corrente]".
+- O livro, o resultado e a planilha mostram o **código** junto do nome.
+- A **classificação continua pelo caixa** (o que entrou e saiu do banco), agora
+  nas contas da AEA. Os lançamentos por competência como no balancete (nota →
+  fornecedor/cliente desdobrado) são a **B2** — esperam o seu ok (pendência 48).
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_b.sql` (DEV e produção), **depois** do
+   `sql/contabilidade_fase_a.sql`, e **reiniciar a API** (DEV: fechar e abrir o
+   app). No fim ele mostra a conferência: AEA 2.718 contas / 38 em uso / 17
+   "o comprovante basta"; desdobrado 2; padrão 10 desativadas; BB → 00008.
+2. Abrir **Contabilidade › Plano de contas** e conferir a lista "Em uso". Se
+   faltar alguma conta que a Santíssimo usa: Mostrar › Plano inteiro, buscar
+   pelo código ou nome e clicar **Usar**.
+3. Desdobrar os fornecedores e clientes que quiser já separados (00223 /
+   00028 › **Desdobrar** › nome).
+4. Se você tinha criado contas à mão no plano antigo, elas continuam ativas:
+   veja se cada uma tem a equivalente na AEA; se tiver, troque nas regras e
+   desative a sua.
+
+**Checklist visual**
+1. Plano de contas sem o SQL: a faixa amarela "O plano da AEA ainda não está no
+   banco: rode sql/contabilidade_fase_b.sql e reinicie a API" e as categorias
+   antigas.
+2. Com o SQL: subtítulo "Plano da AEA (Mastermaq) · só as em uso entram nas
+   listas", o rótulo "**40 contas em uso**" (38 + os 2 desdobramentos), 00008 ·
+   Banco do Brasil "Em uso" e "O comprovante basta"; 00020 com "2
+   desdobramentos" e, logo abaixo, **00020.001 · Rende Fácil** e **00020.002 ·
+   CDB** (etiqueta "Desdobramento", com Editar).
+3. Mostrar › **Plano inteiro**: "Mostrando 300 de 2.7xx contas: busque…"; a
+   árvore recuada (1 ATIVO › 1.01 CIRCULANTE › …), contas-título em negrito
+   com "Conta-título" e sem botões; as outras com **Usar**.
+4. Buscar `00440`, clicar **Usar** → vira "Em uso" e passa a aparecer nas
+   listas da Classificação e das Regras; **Tirar de uso** → sai.
+5. Buscar `00223`, **Desdobrar** → pede o nome → aparece **00223.001 · (nome)**
+   embaixo da 00223.
+6. Mostrar › **Desativadas**: as 10 antigas com "Substituída por 00528 · …".
+7. Contas do banco › BB — conta corrente › Editar: **"Conta no plano da AEA" =
+   00008 · Banco do Brasil**; na lista, "Plano: 00008 · Banco do Brasil".
+8. Classificação de setembro: a lista de contas agrupada por tipo, cada uma
+   com o código ("00476 · Serv de Terc. PJ"); um lançamento cuja conta saiu de
+   uso mostra "(fora de uso)" em vez do campo em branco.
+9. Contas a pagar › Nova conta › **Categoria**: as contas em uso com o código.
+10. Painel de setembro: uma conta de energia/Simples paga **com o comprovante
+    anexado** não aparece mais como "pagamento sem nota".
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -475,3 +571,15 @@ a API, permissões, travas) → B → C → D → E.
 47. Confirmar, na primeira busca em produção, que as NFS-e de **Contagem** e
     de **Belo Horizonte** aparecem (o formato da resposta do ADN também se
     confirma aí).
+
+**Plano da AEA (Fase B)**
+48. **B2 — lançamentos por competência como no balancete:** a venda faturada
+    vira D 00028.xxx (cliente desdobrado) / C 00528 no mês da nota; a compra,
+    D 00340 / C 00223.xxx (fornecedor desdobrado); o pagamento, D 00223.xxx /
+    C 00008; o recebimento, D 00008 / C 00028.xxx; o sinal antes da nota,
+    00270 Adiantamento Clientes; o Simples apurado, D 00780 / C 00608. Isso
+    muda o resultado do mês (passa a ser pela nota, não pelo caixa).
+    Aguardando o seu ok.
+49. Layout de importação do Mastermaq (a AEA não respondeu).
+50. Conferir com a AEA a lista das 38 contas em uso (principalmente energia e
+    aluguel no custo, 3.01.02.04).

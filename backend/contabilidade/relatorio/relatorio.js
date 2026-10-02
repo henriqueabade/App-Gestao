@@ -88,7 +88,7 @@ function vencimentoDe(vinculos, vencPorChave = new Map()) {
  * dia. Com os dois, `conferencia` diz se o livro bate com o banco. Sem
  * nenhum, a coluna é só o acumulado do mês (`saldo_conhecido: false`). Pura.
  */
-function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null, abertura = null }) {
+function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null, abertura = null, contaPlano = null }) {
   const ordenadas = c.lista(linhas).slice()
     .sort((x, y) => String(x.data).localeCompare(String(y.data)) || Number(x.id) - Number(y.id));
   const doBanco = Boolean(saldoBanco && saldoBanco.data && Number.isFinite(Number(saldoBanco.valor)));
@@ -123,7 +123,7 @@ function livroDaConta({ conta, linhas = [], saldoBanco = null, completo = null, 
   const saidas = soma(comSaldo.filter(l => l.valor < 0), l => l.valor);
   const resultado = c.centavos(entradas + saidas);
   return {
-    conta_id: conta?.id ?? null, conta: conta?.nome || 'Conta', tipo: conta?.tipo || null,
+    conta_id: conta?.id ?? null, conta: conta?.nome || 'Conta', tipo: conta?.tipo || null, conta_plano: contaPlano || null,
     saldo_conhecido: conhecido, saldo_inicial: saldoInicial, saldo_banco: doBanco ? { valor: c.centavos(saldoBanco.valor), data: saldoBanco.data } : null,
     saldo_origem: digitado ? 'digitado' : (doBanco ? 'banco' : null), abertura: digitado ? { valor: c.centavos(abertura.valor), data: abertura.data || null } : null, conferencia,
     saldo_final: saldoInicial === null ? null : c.centavos(saldoInicial + resultado),
@@ -142,7 +142,9 @@ function partidasDe(livros) {
   const linhas = [];
   for (const livro of c.lista(livros)) {
     for (const l of livro.linhas) {
-      linhas.push({ movimento_id: l.id, lado: 'banco', data: l.data, numero: l.numero || null, conta: `[${livro.conta}]`, descricao: l.descricao || null, valor: l.valor, observacao: null, vencimento: l.vencimento || null });
+      // Fase B: o lado do banco com a conta do plano dele (BB = 00008 · Banco do Brasil).
+      const banco = livro.conta_plano ? `${livro.conta_plano} [${livro.conta}]` : `[${livro.conta}]`;
+      linhas.push({ movimento_id: l.id, lado: 'banco', data: l.data, numero: l.numero || null, conta: banco, descricao: l.descricao || null, valor: l.valor, observacao: null, vencimento: l.vencimento || null });
       linhas.push({ movimento_id: l.id, lado: 'plano', data: l.data, numero: null, conta: l.conta_plano || 'Sem classificação', descricao: l.observacao || l.descricao || null, valor: c.centavos(-l.valor), observacao: l.observacao || null, vencimento: l.vencimento || null });
     }
   }
@@ -155,7 +157,8 @@ function resultadoComRotulos(resultado) {
   return {
     ...resultado,
     por_conta: c.lista(resultado.por_conta).map(g => ({
-      ...g, tipo_rotulo: planoMod.TIPOS[g.tipo] || (g.conta_id ? null : 'Sem classificação'), do_resultado: planoMod.DO_RESULTADO.has(g.tipo)
+      ...g, conta: g.conta_codigo && !String(g.conta).startsWith(`${g.conta_codigo} `) ? `${g.conta_codigo} · ${g.conta}` : g.conta,
+      tipo_rotulo: planoMod.TIPOS[g.tipo] || (g.conta_id ? null : 'Sem classificação'), do_resultado: planoMod.DO_RESULTADO.has(g.tipo)
     }))
   };
 }
@@ -313,7 +316,9 @@ async function montar(api, { competencia, hoje, desde = null }) {
     const estado = estadoDe(m);
     return {
       id: m.id, data: c.dia(m.data), numero: m.documento || null, descricao: m.descricao || null, valor: c.centavos(m.valor),
-      conta_plano: cls?.conta || null, conta_tipo: cls?.conta_tipo || null, criterio: cls?.criterio || null,
+      // Fase B: com o código reduzido da AEA na frente ("00528 · Industrialização de Mercadorias").
+      conta_plano: cls?.conta ? (cls.conta_codigo ? `${cls.conta_codigo} · ${cls.conta}` : cls.conta) : null, conta_codigo: cls?.conta_codigo || null,
+      conta_tipo: cls?.conta_tipo || null, criterio: cls?.criterio || null,
       estado, estado_rotulo: ESTADOS[estado],
       observacao: observacaoDe({
         vinculos, liqsPorChave, estado, observacaoConciliacao: m.conciliacao_observacao || null,
@@ -334,13 +339,21 @@ async function montar(api, { competencia, hoje, desde = null }) {
     const daConta = digitado.data === vespera ? [] : ((await b.lerOpcional(api, 'movimentos_bancarios', { conta_id: Number(conta.id) })) || []);
     aberturas.set(String(conta.id), { valor: extratoMod.saldoNoFimDoDia(digitado, daConta, vespera), data: digitado.data });
   }
+  // Fase B: a conta do plano de cada conta do banco (BB = 00008 · Banco do Brasil), para as partidas.
+  const planoLido = (await b.lerOpcional(api, 'plano_contas').catch(() => null)) || [];
+  const planoPorId = new Map(planoLido.map(p => [String(p.id), p]));
+  const contaPlanoDe = conta => {
+    const p = conta.plano_conta_id !== null && conta.plano_conta_id !== undefined ? planoPorId.get(String(conta.plano_conta_id)) : null;
+    return p ? planoMod.rotulo(p) : null;
+  };
   const livro = contasDoMes.map(conta => {
     const imps = importacoes.filter(i => String(i.conta_id) === String(conta.id));
     const daFoto = fotoExtrato.get(String(conta.id)) || null;
     const saldoBanco = daFoto ? daFoto.saldo_banco || null : extratoMod.saldoDoBanco(imps, comp);
     const completo = daFoto ? daFoto.completo ?? null : (conta.tipo === 'corrente' ? extratoMod.cobertura(imps, comp, { hoje }).completa : null);
     return livroDaConta({
-      conta, linhas: itens.filter(i => String(i.movimento.conta_id) === String(conta.id)).map(linhaDoLivro), saldoBanco, completo, abertura: aberturas.get(String(conta.id)) || null
+      conta, linhas: itens.filter(i => String(i.movimento.conta_id) === String(conta.id)).map(linhaDoLivro), saldoBanco, completo, abertura: aberturas.get(String(conta.id)) || null,
+      contaPlano: contaPlanoDe(conta)
     });
   });
   for (const l of livro) if (l.completo === false) avisos.push(`O extrato de ${l.conta} não cobre o mês inteiro: importe o que falta.`);

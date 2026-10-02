@@ -48,7 +48,9 @@ function contaPublica(conta) {
     agencia: conta.agencia || null, agencia_dv: conta.agencia_dv || null, conta: conta.conta || null,
     saldo_inicial: conta.saldo_inicial === null || conta.saldo_inicial === undefined ? null : c.centavos(conta.saldo_inicial),
     saldo_inicial_data: c.dia(conta.saldo_inicial_data), ativa: conta.ativa !== false && conta.ativa !== 'false',
-    observacao: conta.observacao || null, rotulo: rotuloDaConta(conta)
+    observacao: conta.observacao || null, rotulo: rotuloDaConta(conta),
+    // Fase B: a conta do plano da AEA (BB conta corrente = 00008).
+    plano_conta_id: conta.plano_conta_id ?? null
   };
 }
 
@@ -65,11 +67,16 @@ function validarConta(entrada = {}) {
   const dataSaldo = String(entrada.saldo_inicial_data || '').slice(0, 10);
   if (saldo !== null && !c.dataValida(dataSaldo)) throw c.erro('Informe o dia do saldo de abertura (o saldo no fim dele).');
   if (dataSaldo && !c.dataValida(dataSaldo)) throw c.erro('Dia do saldo de abertura inválido.');
+  // Fase B: a conta do plano só vai quando a tela manda (sem o SQL da fase B a coluna não existe).
+  const planoConta = entrada.plano_conta_id === undefined ? undefined
+    : (entrada.plano_conta_id === null || entrada.plano_conta_id === '' ? null : String(entrada.plano_conta_id));
+  if (planoConta && !/^\d+$/.test(planoConta)) throw c.erro('Conta do plano inválida.');
   return {
     nome, tipo, banco_codigo: banco ? banco.padStart(3, '0') : null, agencia: agencia || null,
     agencia_dv: String(entrada.agencia_dv || '').replace(/[^0-9xX]/g, '').slice(0, 1).toUpperCase() || null, conta: conta || null,
     saldo_inicial: saldo, saldo_inicial_data: dataSaldo || null,
-    ativa: !(entrada.ativa === false || entrada.ativa === 'false'), observacao: String(entrada.observacao ?? '').trim().slice(0, 500) || null
+    ativa: !(entrada.ativa === false || entrada.ativa === 'false'), observacao: String(entrada.observacao ?? '').trim().slice(0, 500) || null,
+    ...(planoConta === undefined ? {} : { plano_conta_id: planoConta === null ? null : Number(planoConta) })
   };
 }
 

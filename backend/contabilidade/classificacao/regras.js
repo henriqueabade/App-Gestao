@@ -20,6 +20,7 @@
 const c = require('../../financeiro/comum');
 const b = require('../base');
 const eventos = require('../eventos');
+const planoMod = require('./plano');
 
 const CONDICOES = {
   descricao: 'Descrição do banco contém',
@@ -159,7 +160,7 @@ function regraPublica(r, { plano = new Map(), contatos = new Map() } = {}) {
   return {
     id: r.id, condicao_tipo: r.condicao_tipo, condicao_rotulo: CONDICOES[r.condicao_tipo] || r.condicao_tipo, valor: r.valor,
     valor_rotulo: rotuloDoValor(r, { contatos }), sentido: r.sentido || 'ambos', sentido_rotulo: SENTIDOS[r.sentido] || SENTIDOS.ambos,
-    conta_id: r.conta_id, conta: conta?.nome || null, conta_ativa: conta ? ativa(conta) : false,
+    conta_id: r.conta_id, conta: conta ? planoMod.rotulo(conta) : null, conta_ativa: conta ? planoMod.selecionavel(conta) : false,
     prioridade: Number(r.prioridade) || 0, ativa: ativa(r), origem: r.origem || 'manual', observacao: r.observacao || null
   };
 }
@@ -177,6 +178,7 @@ async function salvar(api, { id = null, entrada = {}, usuarioId = null }) {
   const conta = (await b.ler(api, 'plano_contas', { id: dados.conta_id }))[0] || null;
   if (!conta) throw c.erro('Conta do plano não encontrada.', 404);
   if (!ativa(conta)) throw c.erro(`A conta "${conta.nome}" está desativada: escolha outra.`, 409);
+  if (!planoMod.selecionavel(conta)) throw c.erro(`A conta "${planoMod.rotulo(conta)}" não está em uso: marque-a em uso no Plano de contas antes.`, 409);
   let regraId = id;
   if (id) {
     const atual = (await lerRegras(api)).find(r => String(r.id) === String(id));
@@ -187,22 +189,23 @@ async function salvar(api, { id = null, entrada = {}, usuarioId = null }) {
   }
   await eventos.registrar(api, {
     tipo: 'regra_salva', usuarioId,
-    descricao: `Regra ${id ? 'alterada' : 'criada'}: ${CONDICOES[dados.condicao_tipo]} ${rotuloDoValor(dados)} → ${conta.nome}${dados.ativa ? '' : ' (desativada)'}`,
+    descricao: `Regra ${id ? 'alterada' : 'criada'}: ${CONDICOES[dados.condicao_tipo]} ${rotuloDoValor(dados)} → ${planoMod.rotulo(conta)}${dados.ativa ? '' : ' (desativada)'}`,
     dados: { regra_id: regraId }
   });
   return { id: regraId };
 }
 
 /**
- * A conta sugerida para uma conta a pagar nova (fornecedor e CFOP da NF-e),
- * pelo nome; sem o SQL da etapa 6 ou sem regra, null.
+ * A categoria sugerida para uma conta a pagar nova (fornecedor e CFOP da
+ * NF-e) — com o código no plano da AEA ("00340 · Compra de Mercadorias");
+ * sem o SQL da etapa 6 ou sem regra, null.
  */
 async function categoriaSugerida(api, { contato_id = null, cfops = [] } = {}) {
   const [regras, plano] = await Promise.all([b.lerOpcional(api, 'classificacao_regras'), b.lerOpcional(api, 'plano_contas')]);
   if (!regras || !plano) return null;
   const r = escolher(regras, { contato_id, cfops }, { condicoes: ['fornecedor', 'cfop'] });
   const conta = r ? plano.find(p => String(p.id) === String(r.conta_id) && ativa(p)) : null;
-  return conta?.nome || null;
+  return conta ? planoMod.rotuloDeCategoria(conta) : null;
 }
 
 module.exports = {

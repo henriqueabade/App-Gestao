@@ -39,13 +39,17 @@ const COLUNAS = {
   extrato_importacoes: ['id', 'conta_id', 'status', 'periodo_inicio', 'periodo_fim'],
   movimentos_bancarios: ['id', 'conta_id', 'data', 'competencia', 'valor', 'tipo', 'descricao', 'documento', 'contrapartida_documento', 'estado_conciliacao'],
   conciliacao_vinculos: ['id', 'movimento_id', 'alvo_tipo', 'alvo_id', 'valor', 'criterio', 'desfeito_em'],
-  plano_contas: ['id', 'codigo', 'nome', 'tipo', 'ativa', 'observacao', 'origem', 'criado_por', 'criado_em', 'atualizado_em'],
+  plano_contas: ['id', 'codigo', 'nome', 'tipo', 'ativa', 'observacao', 'origem', 'criado_por', 'criado_em', 'atualizado_em',
+    // Fase B (sql/contabilidade_fase_b.sql).
+    'codigo_reduzido', 'natureza', 'analitica', 'nivel', 'conta_pai_id', 'em_uso', 'comprovante_basta', 'desdobra', 'contato_id', 'cliente_id', 'conta_financeira_id'],
   classificacao_regras: ['id', 'condicao_tipo', 'valor', 'sentido', 'conta_id', 'prioridade', 'ativa', 'origem', 'observacao', 'criado_por', 'criado_em', 'atualizado_em'],
   classificacoes: ['id', 'movimento_id', 'conta_id', 'observacao', 'criado_por', 'criado_em', 'substituida_em', 'substituida_por']
 };
 
 const UNICOS = {
-  plano_contas: (novo, linhas) => linhas.some(r => String(r.nome).toLowerCase() === String(novo.nome).toLowerCase()),
+  // Como no banco depois da fase B: o nome é único só entre as contas criadas à mão (e as que vieram com o app).
+  plano_contas: (novo, linhas) => ['manual', 'padrao'].includes(novo.origem || 'manual')
+    && linhas.some(r => ['manual', 'padrao'].includes(r.origem || 'manual') && String(r.nome).toLowerCase() === String(novo.nome).toLowerCase()),
   classificacoes: (novo, linhas) => linhas.some(r => !r.substituida_em && String(r.movimento_id) === String(novo.movimento_id))
 };
 
@@ -254,7 +258,7 @@ test('plano: uso de cada conta; nome repetido recusado; renomear leva a categori
   try {
     const lista = await ctx.chamar('GET', '/plano-contas');
     assert.equal(lista.status, 200);
-    assert.deepEqual(lista.corpo.contas.find(p => p.id === 2).uso, { titulos: 1, regras: 0, classificacoes: 0 });
+    assert.deepEqual(lista.corpo.contas.find(p => p.id === 2).uso, { titulos: 1, regras: 0, classificacoes: 0, desdobramentos: 0 });
     assert.equal((await ctx.chamar('POST', '/plano-contas', { nome: 'Energia elétrica', tipo: 'despesa' })).status, 200);
     const repetida = await ctx.chamar('POST', '/plano-contas', { nome: '  despesas  BANCARIAS ' });
     assert.equal(repetida.status, 409);
@@ -334,9 +338,104 @@ test('permissões: ver e testar pedem só "ver"; classificar pede "classificar";
     const pedidas = async (metodo, caminho) => (await ctx.chamar(metodo, caminho, {})).corpo.pedidas;
     assert.deepEqual(await pedidas('POST', '/classificacao/classificar'), ['contabilidade.classificar']);
     assert.deepEqual(await pedidas('POST', '/classificacao/movimentos/3/automatico'), ['contabilidade.classificar']);
-    for (const [m, c] of [['POST', '/plano-contas'], ['PUT', '/plano-contas/1'], ['POST', '/regras'], ['PUT', '/regras/1']]) {
+    for (const [m, c] of [['POST', '/plano-contas'], ['PUT', '/plano-contas/1'], ['PUT', '/plano-contas/1/marcas'], ['POST', '/plano-contas/1/desdobrar'], ['POST', '/regras'], ['PUT', '/regras/1']]) {
       assert.deepEqual(await pedidas(m, c), ['contabilidade.plano.gerir'], `${m} ${c}`);
     }
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+/** Um pedaço do plano da AEA como o SQL da fase B grava. */
+const aea = (id, reduzido, codigo, nome, tipo, extra = {}) => ({
+  id, codigo_reduzido: reduzido, codigo, nome, tipo, natureza: 'D', analitica: true, nivel: codigo.split('.').length, ativa: true,
+  origem: 'aea', em_uso: true, comprovante_basta: false, desdobra: false, conta_pai_id: null, contato_id: null, cliente_id: null, conta_financeira_id: null, ...extra
+});
+
+function cenarioFaseB() {
+  const base = cenario();
+  return cenario({
+    // O aluguel virou "00372 · Aluguel" (custo de fabricação) e a conta de luz é da CEMIG (o comprovante basta).
+    titulos_pagar: [
+      { ...base.titulos_pagar[0], categoria: '00372 · Aluguel' },
+      { id: 2, contato_id: null, descricao: 'Conta de luz — agosto', categoria: '00383 · Energia Eletrica', competencia: '2026-08', valor_total: 410.55, status: 'aberto' }
+    ],
+    plano_contas: [
+      aea(1, '00528', '4.01.01.01.002', 'Industrialização de Mercadorias', 'receita', { natureza: 'C' }),
+      aea(2, '00438', '3.02.01.03', 'DESPESAS ADMINISTRATIVAS', 'despesa', { analitica: false, em_uso: false }),
+      aea(3, '00491', '3.02.02.01.001', 'Despesas Bancárias', 'despesa', { comprovante_basta: true }),
+      aea(4, '00445', '3.02.01.03.007', 'Comissões sobre Vendas', 'despesa'),
+      aea(5, '00340', '3.01.01.01.001', 'Compra de Mercadorias', 'custo'),
+      aea(6, '00440', '3.02.01.03.002', 'Aluguel', 'despesa', { em_uso: false }),
+      aea(7, '00372', '3.01.02.04.002', 'Aluguel', 'custo'),
+      aea(8, '00383', '3.01.02.04.013', 'Energia Eletrica', 'custo', { comprovante_basta: true }),
+      aea(9, '00223', '2.01.02.01.001', 'Fornecedores Nacionais', 'passivo', { natureza: 'C', desdobra: true }),
+      aea(10, '00008', '1.01.01.02.002', 'Banco do Brasil', 'ativo'),
+      { id: 20, nome: 'Receita de vendas', tipo: 'receita', ativa: false, origem: 'padrao', codigo: null, codigo_reduzido: null, em_uso: false, observacao: 'Substituída por 00528 · Industrialização de Mercadorias (plano da AEA, fase B).' }
+    ],
+    contas_financeiras: [{ ...base.contas_financeiras[0], plano_conta_id: 10 }]
+  });
+}
+
+test('fase B — plano da AEA: códigos, só as em uso se escolhem, marcar em uso / o comprovante basta, desdobrar com final .001', async () => {
+  const ctx = await montar(cenarioFaseB());
+  try {
+    const lista = await ctx.chamar('GET', '/plano-contas');
+    assert.equal(lista.status, 200, JSON.stringify(lista.corpo));
+    assert.equal(lista.corpo.fase_b, true);
+    const conta = id => lista.corpo.contas.find(p => p.id === id);
+    assert.deepEqual([conta(7).rotulo, conta(7).classificacao, conta(7).selecionavel, conta(7).uso.titulos], ['00372 · Aluguel', '3.01.02.04.002', true, 1]);
+    assert.deepEqual([conta(6).selecionavel, conta(2).selecionavel, conta(20).ativa], [false, false, false]);
+    assert.equal(lista.corpo.contas[0].codigo, '00008', 'na ordem da classificação (1.01… primeiro)');
+
+    // Classificação: a categoria pelo código; a lista de escolha só com as em uso.
+    const mes = await ctx.chamar('GET', '/classificacao?competencia=2026-08');
+    const aluguel = mes.corpo.linhas.find(l => l.id === 1).classificacao;
+    assert.deepEqual([aluguel.conta, aluguel.conta_codigo, aluguel.criterio], ['Aluguel', '00372', 'titulo']);
+    assert.deepEqual(mes.corpo.plano.map(p => p.codigo).sort(), ['00008', '00223', '00340', '00372', '00383', '00445', '00491', '00528']);
+    const foraDeUso = await ctx.chamar('POST', '/classificacao/classificar', { ids: [4], conta_id: 6 });
+    assert.deepEqual([foraDeUso.status, /não está em uso/.test(foraDeUso.corpo.error)], [409, true]);
+    const cats = await ctx.chamar('GET', '/categorias');
+    assert.ok(cats.corpo.categorias.includes('00383 · Energia Eletrica') && !cats.corpo.categorias.includes('00440 · Aluguel'), JSON.stringify(cats.corpo.categorias));
+
+    // Marcas: a sintética não entra em uso; a 00440 entra; conta com regra não sai de uso; o comprovante basta.
+    assert.equal((await ctx.chamar('PUT', '/plano-contas/2/marcas', { em_uso: true })).status, 422);
+    const usa = await ctx.chamar('PUT', '/plano-contas/6/marcas', { em_uso: true });
+    assert.deepEqual([usa.status, usa.corpo.alterado], [200, ['em uso']]);
+    assert.equal(ctx.tabelas.plano_contas.find(p => p.id === 6).em_uso, true);
+    const comRegra = await ctx.chamar('PUT', '/plano-contas/3/marcas', { em_uso: false });
+    assert.deepEqual([comRegra.status, /regra ativa usa esta conta/.test(comRegra.corpo.error)], [409, true]);
+    assert.equal((await ctx.chamar('PUT', '/plano-contas/7/marcas', { comprovante_basta: true })).corpo.alterado[0], 'o comprovante basta como documento');
+    // A conta da AEA não se edita pelo formulário (nome, código, tipo).
+    const editar = await ctx.chamar('PUT', '/plano-contas/7', { nome: 'Aluguel do galpão', tipo: 'custo' });
+    assert.deepEqual([editar.status, /plano da AEA/.test(editar.corpo.error)], [409, true]);
+
+    // Desdobrar fornecedores: 00223.001, 00223.002; nome repetido recusado; só conta analítica da AEA.
+    const um = await ctx.chamar('POST', '/plano-contas/9/desdobrar', { nome: 'Vidros Norte', contato_id: 6 });
+    assert.equal(um.status, 200, JSON.stringify(um.corpo));
+    assert.deepEqual([um.corpo.codigo, um.corpo.classificacao, um.corpo.rotulo, um.corpo.tipo, um.corpo.contato_id], ['00223.001', '2.01.02.01.001.001', '00223.001 · Vidros Norte', 'passivo', 6]);
+    assert.equal((await ctx.chamar('POST', '/plano-contas/9/desdobrar', { nome: 'Imobiliária Centro', contato_id: 5 })).corpo.codigo, '00223.002');
+    assert.equal((await ctx.chamar('POST', '/plano-contas/9/desdobrar', { nome: 'vidros  norte' })).status, 409);
+    assert.equal((await ctx.chamar('POST', '/plano-contas/9/desdobrar', { nome: 'X' })).status, 400);
+    assert.equal((await ctx.chamar('POST', '/plano-contas/2/desdobrar', { nome: 'Algo' })).status, 422);
+    assert.equal((await ctx.chamar('POST', '/plano-contas/20/desdobrar', { nome: 'Algo' })).status, 422);
+    const depois = await ctx.chamar('GET', '/plano-contas');
+    const ordem = depois.corpo.contas.map(p => p.codigo);
+    assert.deepEqual(ordem.slice(ordem.indexOf('00223'), ordem.indexOf('00223') + 3), ['00223', '00223.001', '00223.002'], 'o desdobramento logo abaixo da conta');
+    assert.equal(depois.corpo.contas.find(p => p.id === 9).uso.desdobramentos, 2);
+    assert.ok(ctx.tabelas.contabil_eventos.some(e => /00223 · Fornecedores Nacionais desdobrada: 00223\.001 · Vidros Norte/.test(e.descricao)));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fase B — sem o SQL da fase B, marcar e desdobrar dizem qual arquivo rodar; o resto continua', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const r = await ctx.chamar('PUT', '/plano-contas/1/marcas', { em_uso: true });
+    assert.deepEqual([r.status, r.corpo.sql_arquivo], [409, 'sql/contabilidade_fase_b.sql']);
+    assert.equal((await ctx.chamar('POST', '/plano-contas/1/desdobrar', { nome: 'Algo' })).corpo.sql_arquivo, 'sql/contabilidade_fase_b.sql');
+    assert.equal((await ctx.chamar('GET', '/plano-contas')).corpo.fase_b, false);
   } finally {
     await ctx.encerrar();
   }

@@ -124,3 +124,60 @@ test('total por conta e visões: entradas × saídas; "Sem classificação" no f
   assert.deepEqual(C.totaisDe(linhas), { total: 6, classificados: 4, sem: 2, sem_valor: 130, manuais: 1, automaticos: 3 });
   assert.deepEqual(['sem', 'manuais', 'automaticos', 'todos'].map(v => linhas.filter(l => C.naVisao(l, v)).length), [2, 1, 3, 6]);
 });
+
+// ------------------------------------------------------------- fase B (02/10/2026): o plano da AEA
+
+/** Um pedaço do plano da AEA como o SQL da fase B grava (com as colunas novas). */
+const aea = (id, reduzido, codigo, nome, tipo, extra = {}) => ({
+  id, codigo_reduzido: reduzido, codigo, nome, tipo, natureza: 'D', analitica: true, nivel: codigo.split('.').length, ativa: true,
+  origem: 'aea', em_uso: false, comprovante_basta: false, desdobra: false, conta_pai_id: null, ...extra
+});
+const PLANO_AEA = [
+  aea(10, '00410', '3.02', 'Despesas Operacionais', 'despesa', { analitica: false }),
+  aea(11, '00438', '3.02.01.03', 'DESPESAS ADMINISTRATIVAS', 'despesa', { analitica: false, em_uso: true }),
+  aea(12, '00440', '3.02.01.03.002', 'Aluguel', 'despesa'),
+  aea(13, '00372', '3.01.02.04.002', 'Aluguel', 'custo', { em_uso: true }),
+  aea(14, '00383', '3.01.02.04.013', 'Energia Eletrica', 'custo', { em_uso: true, comprovante_basta: true }),
+  aea(15, '00457', '3.02.01.03.019', 'Energia Elétrica', 'despesa', { em_uso: true }),
+  aea(16, '00020', '1.01.01.04.002', 'Banco do Brasil', 'ativo', { em_uso: true, desdobra: true }),
+  { ...aea(17, '00020.002', '1.01.01.04.002.002', 'CDB', 'ativo', { em_uso: true, conta_pai_id: 16 }), origem: 'desdobrado' },
+  { ...aea(18, '00020.001', '1.01.01.04.002.001', 'Rende Fácil', 'ativo', { em_uso: true, conta_pai_id: 16 }), origem: 'desdobrado' },
+  aea(19, '00008', '1.01.01.02.002', 'Banco do Brasil', 'ativo', { em_uso: true }),
+  aea(20, '00528', '4.01.01.01.002', 'Industrialização de Mercadorias', 'receita', { em_uso: true, natureza: 'C' }),
+  { id: 30, nome: 'Conta própria', tipo: 'despesa', ativa: true, origem: 'manual' }
+];
+
+test('fase B — plano da AEA: código reduzido no rótulo, só a analítica em uso se escolhe, a árvore na ordem da classificação', () => {
+  const pub = P.contaPublica(PLANO_AEA.find(p => p.id === 14));
+  assert.deepEqual([pub.codigo, pub.classificacao, pub.rotulo, pub.selecionavel, pub.comprovante_basta, pub.em_uso, pub.origem_rotulo],
+    ['00383', '3.01.02.04.013', '00383 · Energia Eletrica', true, true, true, 'Plano da AEA']);
+  assert.deepEqual(PLANO_AEA.filter(P.selecionavel).map(p => p.id), [13, 14, 15, 16, 17, 18, 19, 20, 30], 'nem a sintética (mesmo marcada) nem a fora de uso');
+  assert.deepEqual(P.ordenar(PLANO_AEA).map(p => p.codigo_reduzido || p.nome),
+    ['00008', '00020', '00020.001', '00020.002', '00372', '00383', '00410', '00438', '00440', '00457', '00528', 'Conta própria']);
+  assert.equal(P.DO_RESULTADO.has('ativo') || P.DO_RESULTADO.has('passivo'), false, 'ativo e passivo não são resultado');
+  assert.equal(P.rotuloDeCategoria(PLANO_AEA.find(p => p.id === 30)), 'Conta própria', 'a conta à mão guarda só o nome');
+});
+
+test('fase B — a categoria da conta a pagar acha a conta pelo código; pelo nome só quando ele é único entre as em uso', () => {
+  const achar = t => P.contaDaCategoria(t, PLANO_AEA)?.id ?? null;
+  assert.deepEqual([achar('00383 · Energia Eletrica'), achar('00440 · Aluguel'), achar('00020.001 · Rende Fácil'), achar('99999 · Nada')], [14, 12, 18, null],
+    'pelo código vale mesmo fora de uso (a categoria já gravada não se perde)');
+  assert.equal(achar('Aluguel'), 13, 'nome repetido no plano, mas só o 00372 está em uso');
+  assert.equal(achar('Energia elétrica'), null, '00383 e 00457 estão em uso com o mesmo nome (sem acento): ambíguo');
+  assert.equal(achar('Banco do Brasil'), null);
+  assert.equal(achar('Conta própria'), 30);
+  // A classificação usa o código da categoria e devolve o código reduzido.
+  const ctxB = C.contexto({ plano: PLANO_AEA, regras: [] });
+  const liq = { chave: 'titulo_pagamento:1', tipo: 'titulo_pagamento', valor: -300, categoria: '00383 · Energia Eletrica', rotulo: 'Conta de luz' };
+  const cls = C.efetiva({ id: 1, valor: -300, descricao: 'PAGTO CEMIG', estado_conciliacao: 'conciliado' }, { vinculos: [{ alvo_tipo: 'titulo_pagamento', alvo_id: 1 }], liqsPorChave: new Map([[liq.chave, liq]]), ctx: ctxB });
+  assert.deepEqual([cls.conta_id, cls.conta_codigo, cls.criterio], [14, '00383', 'titulo']);
+});
+
+test('fase B — desdobramento: o próximo final de três dígitos (.001, .012, .123) e o limite de 999', () => {
+  const pai = PLANO_AEA.find(p => p.id === 16);
+  assert.equal(P.proximoFinal(pai, PLANO_AEA), '003');
+  assert.equal(P.proximoFinal({ codigo_reduzido: '00223' }, []), '001');
+  assert.equal(P.proximoFinal({ codigo_reduzido: '00223' }, [{ codigo_reduzido: '00223.011' }, { codigo_reduzido: '00223.004' }]), '012');
+  assert.equal(P.proximoFinal({ codigo_reduzido: '00223' }, [{ codigo_reduzido: '00223.122' }]), '123');
+  assert.throws(() => P.proximoFinal({ codigo_reduzido: '00223' }, [{ codigo_reduzido: '00223.999' }]), /999 desdobramentos/);
+});

@@ -2111,8 +2111,21 @@
     const observacao = el('ctbContasFinObservacao');
     const corpo = el('ctbContasFinLista');
     const salvarBtn = el('ctbContasFinSalvar');
+    // Fase B: a conta do plano da AEA (bancos e aplicações — 1.01.01).
+    const planoSel = el('ctbContasFinPlano');
+    let planoContas = null;
     let dados = null;
     let editando = null;
+
+    async function carregarPlano() {
+      try {
+        const r = await fetchApi('/api/contabilidade/plano-contas');
+        planoContas = r?.fase_b ? (r.contas || []).filter(p => p.selecionavel && String(p.classificacao || '').startsWith('1.01.01')) : null;
+      } catch (_) { planoContas = null; }
+      el('ctbContasFinPlanoBloco').classList.toggle('hidden', !planoContas);
+      if (planoContas) planoSel.replaceChildren(opcao('', '— sem conta do plano —'), ...planoContas.map(p => opcao(String(p.id), p.rotulo)));
+    }
+    const rotuloDoPlano = id => (planoContas || []).find(p => String(p.id) === String(id))?.rotulo || null;
 
     function pintarBanco() {
       const caixa = tipo.value === 'caixa';
@@ -2132,6 +2145,7 @@
       saldoData.value = c.saldo_inicial_data || '';
       ativa.checked = c.ativa !== false;
       observacao.value = c.observacao || '';
+      if (planoContas) planoSel.value = c.plano_conta_id ? String(c.plano_conta_id) : '';
       pintarBanco();
     }
 
@@ -2166,9 +2180,11 @@
         const acoes = criar('div', 'ctb-celula-acoes');
         acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(c), { perm: 'contabilidade.contas.gerir' }));
         const tr = criar('tr');
+        const subBanco = [c.saldo_inicial !== null ? `Saldo de abertura ${formatarMoeda(c.saldo_inicial)} no fim de ${formatarData(c.saldo_inicial_data)}` : null,
+          rotuloDoPlano(c.plano_conta_id) ? `Plano: ${rotuloDoPlano(c.plano_conta_id)}` : null].filter(Boolean).join(' · ');
         tr.append(
           celula(c.nome, 'px-4 py-3', c.observacao),
-          celula(c.tipo === 'caixa' ? '—' : c.rotulo, 'px-4 py-3', c.saldo_inicial !== null ? `Saldo de abertura ${formatarMoeda(c.saldo_inicial)} no fim de ${formatarData(c.saldo_inicial_data)}` : null),
+          celula(c.tipo === 'caixa' ? '—' : c.rotulo, 'px-4 py-3', subBanco || null),
           celula(c.tipo_rotulo, 'px-4 py-3'),
           celula(c.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3'),
           celula(acoes, 'px-4 py-3')
@@ -2196,7 +2212,9 @@
       const corpoConta = {
         nome: nome.value.trim(), tipo: tipo.value,
         banco_codigo: caixa ? null : banco.value, agencia: caixa ? null : agencia.value, agencia_dv: caixa ? null : agenciaDv.value, conta: caixa ? null : conta.value,
-        saldo_inicial: lerMoeda(saldo.value), saldo_inicial_data: saldoData.value || null, ativa: ativa.checked, observacao: observacao.value
+        saldo_inicial: lerMoeda(saldo.value), saldo_inicial_data: saldoData.value || null, ativa: ativa.checked, observacao: observacao.value,
+        // Só com o plano da AEA no banco (sem o SQL da fase B a coluna não existe).
+        ...(planoContas ? { plano_conta_id: planoSel.value || null } : {})
       };
       const erro = corpoConta.nome.length < 2 ? 'Dê um nome à conta (ex.: BB — conta corrente).'
         : (!caixa && (!soDigitos(banco.value) || !soDigitos(agencia.value) || !soDigitos(conta.value))) ? 'Informe banco, agência e conta.'
@@ -2232,8 +2250,8 @@
       nome.focus();
     });
     acionar(salvarBtn, salvar);
-    limpar();
-    return carregar();
+    // O plano primeiro (a lista mostra a conta do plano de cada conta do banco).
+    return carregarPlano().then(() => { limpar(); return carregar(); });
   }
 
   // ------------------------------------------------------------ conciliação (etapa 5)
@@ -2793,13 +2811,21 @@
   const ROTULO_ESTADO_CONC = { pendente: 'a conciliar', conciliado: 'conciliado', ignorado: 'ignorado' };
 
   /** As contas do plano num select, agrupadas pelo tipo (Receita, Custo, Despesa…). */
-  function opcoesDoPlano(select, plano, { vazio = null, selecionada = null } = {}) {
+  function opcoesDoPlano(select, plano, { vazio = null, selecionada = null, rotuloFora = null } = {}) {
     const grupos = new Map();
     for (const p of plano || []) {
       if (!grupos.has(p.tipo_rotulo)) grupos.set(p.tipo_rotulo, []);
       grupos.get(p.tipo_rotulo).push(p);
     }
     const filhos = vazio !== null ? [opcao('', vazio)] : [];
+    // Fase B: a conta do lançamento saiu de uso (ou foi desativada) depois de
+    // classificado. Ela continua aparecendo, marcada, em vez do campo em branco.
+    const temSelecionada = selecionada !== null && selecionada !== undefined && selecionada !== '';
+    if (temSelecionada && !(plano || []).some(p => String(p.id) === String(selecionada))) {
+      const fora = opcao(String(selecionada), `${rotuloFora || 'Conta'} (fora de uso)`);
+      fora.disabled = true;
+      filhos.push(fora);
+    }
     for (const [rotulo, contas] of grupos) {
       const g = document.createElement('optgroup');
       g.label = rotulo;
@@ -2887,7 +2913,7 @@
       }
       const select = criar('select', 'w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white ctb-conta-linha');
       select.setAttribute('aria-label', `Conta do plano do lançamento de ${formatarData(l.data)}`);
-      opcoesDoPlano(select, dados.plano, { vazio: '— sem classificação —', selecionada: cls.conta_id ?? '' });
+      opcoesDoPlano(select, dados.plano, { vazio: '— sem classificação —', selecionada: cls.conta_id ?? '', rotuloFora: cls.conta });
       select.addEventListener('change', () => {
         if (!select.value) { select.value = String(cls.conta_id ?? ''); return; }
         classificar([l.id], select.value, '');
@@ -3043,6 +3069,8 @@
       tipo.value = 'despesa';
       ativa.checked = true;
       observacao.value = '';
+      codigo.disabled = false;
+      tipo.disabled = false;
       el('ctbPlanoFormTitulo').textContent = 'Nova conta';
       el('ctbPlanoNova').classList.add('hidden');
     }
@@ -3054,31 +3082,121 @@
       tipo.value = p.tipo;
       ativa.checked = p.ativa;
       observacao.value = p.observacao || '';
-      el('ctbPlanoFormTitulo').textContent = `Editar: ${p.nome}`;
+      // O desdobramento fica com o código e o tipo da conta de cima (só o nome, a observação e o "ativa" mudam).
+      codigo.disabled = p.origem === 'desdobrado';
+      tipo.disabled = p.origem === 'desdobrado';
+      el('ctbPlanoFormTitulo').textContent = `Editar: ${p.codigo ? `${p.codigo} · ` : ''}${p.nome}`;
       el('ctbPlanoNova').classList.remove('hidden');
       mostrarMensagem('ctbPlanoMensagem', '');
       nome.focus();
     }
 
+    // Fase B (02/10/2026): o plano da AEA tem 2.718 contas — a lista mostra no máximo LIMITE, e a busca afina.
+    const LIMITE = 300;
+    const filtroSel = el('ctbPlanoFiltro');
+    const busca = el('ctbPlanoBusca');
+
+    const daAea = p => p.origem === 'aea';
+    const naVisao = p => {
+      if (filtroSel.value === 'desativadas') return !p.ativa;
+      if (!p.ativa) return false;
+      if (filtroSel.value === 'todas') return true;
+      return daAea(p) ? p.em_uso && p.analitica : true;
+    };
+
+    async function marcar(p, campos, sucesso) {
+      mostrarMensagem('ctbPlanoMensagem', '');
+      try {
+        await enviar(`/api/contabilidade/plano-contas/${encodeURIComponent(p.id)}/marcas`, 'PUT', campos);
+        window.showToast?.(sucesso, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) { mostrarMensagem('ctbPlanoMensagem', textoDoErro(e, 'Mexer no plano pede "plano de contas e regras".')); }
+    }
+
+    async function desdobrar(p) {
+      const nome = await pedirTexto({
+        titulo: `Desdobrar ${p.rotulo}`,
+        mensagem: 'A subconta ganha o próximo final (.001, .002…), o mesmo tipo e já entra em uso. Para a contabilidade vale o código da conta de cima.',
+        placeholder: 'Nome (o fornecedor, o cliente, a aplicação)', confirmar: 'Desdobrar', minimo: 2, erro: 'Dê um nome ao desdobramento.'
+      });
+      if (!nome) return;
+      try {
+        const r = await enviar(`/api/contabilidade/plano-contas/${encodeURIComponent(p.id)}/desdobrar`, 'POST', { nome });
+        window.showToast?.(`Criada ${r.rotulo}.`, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) { mostrarMensagem('ctbPlanoMensagem', textoDoErro(e, 'Mexer no plano pede "plano de contas e regras".')); }
+    }
+
+    function acoesDa(p) {
+      const acoes = criar('div', 'ctb-celula-acoes');
+      const gerir = { perm: 'contabilidade.plano.gerir' };
+      if (daAea(p) && p.ativa && p.analitica) {
+        acoes.appendChild(p.em_uso
+          ? botaoPequeno('Tirar de uso', 'btn-neutral', () => marcar(p, { em_uso: false }, `${p.rotulo} saiu de uso.`), gerir)
+          : botaoPequeno('Usar', 'btn-secondary', () => marcar(p, { em_uso: true }, `${p.rotulo} em uso.`), gerir));
+      }
+      if ((daAea(p) && p.analitica) || p.origem === 'desdobrado') {
+        acoes.appendChild(p.comprovante_basta
+          ? botaoPequeno('Pedir nota', 'btn-neutral', () => marcar(p, { comprovante_basta: false }, `${p.rotulo}: volta a pedir nota ou recibo.`),
+            { ...gerir, titulo: 'O pagamento volta a pedir a nota, o recibo ou a guia' })
+          : botaoPequeno('O comprovante basta', 'btn-neutral', () => marcar(p, { comprovante_basta: true }, `${p.rotulo}: o comprovante do banco basta como documento.`),
+            { ...gerir, titulo: 'Imposto, conta de consumo, tarifa: o comprovante do banco prova o pagamento' }));
+      }
+      // Só as que se desdobram (fornecedores 00223, clientes 00028, aplicações 00020 — resposta do dono).
+      if (daAea(p) && p.ativa && p.analitica && p.desdobra) {
+        acoes.appendChild(botaoPequeno('Desdobrar', 'btn-neutral', () => desdobrar(p), { ...gerir, titulo: 'Uma subconta com final .001, .002… (fornecedor, cliente, aplicação)' }));
+      }
+      if (!daAea(p)) acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(p), gerir));
+      return acoes;
+    }
+
+    function situacaoDa(p) {
+      const tags = [];
+      if (!p.ativa) tags.push(tag('Desativada', 'badge-neutral'));
+      else if (daAea(p)) tags.push(!p.analitica ? tag('Conta-título', 'badge-neutral') : (p.em_uso ? tag('Em uso', 'badge-success') : tag('Só no plano', 'badge-neutral')));
+      else if (p.origem === 'desdobrado') tags.push(tag('Desdobramento', 'badge-info'));
+      else tags.push(tag('Ativa', 'badge-success'));
+      if (p.comprovante_basta) tags.push(tag('O comprovante basta', 'badge-info', 'Resposta 1 a: o comprovante do banco vale como documento'));
+      return tags;
+    }
+
     function pintar() {
       const contas = dados?.contas || [];
-      el('ctbPlanoRotulo').textContent = plural(contas.filter(p => p.ativa).length, 'conta ativa', 'contas ativas');
+      const faseB = Boolean(dados?.fase_b);
+      el('ctbPlanoRotulo').textContent = plural(contas.filter(p => p.selecionavel).length, 'conta em uso', 'contas em uso');
+      el('ctbPlanoSubtitulo').textContent = faseB ? 'Plano da AEA (Mastermaq) · só as em uso entram nas listas' : 'Categorias do app';
+      const aviso = el('ctbPlanoAviso');
+      aviso.classList.toggle('hidden', faseB);
+      if (!faseB) mostrarMensagem('ctbPlanoAviso', `O plano da AEA ainda não está no banco: rode ${dados?.sql_fase_b || 'sql/contabilidade_fase_b.sql'} e reinicie a API.`, 'aviso');
       if (!tipo.options.length) tipo.replaceChildren(...Object.entries(dados?.tipos || {}).map(([k, v]) => opcao(k, v)));
-      if (!contas.length) { linhaVazia(corpo, 5, 'Nenhuma conta ainda.'); return; }
+      const termo = normalizar(busca.value.trim());
+      const lista = contas.filter(naVisao).filter(p => !termo || normalizar([p.codigo, p.classificacao, p.nome].join(' ')).includes(termo));
+      el('ctbPlanoContagem').textContent = lista.length > LIMITE
+        ? `Mostrando ${LIMITE} de ${lista.length} contas: busque pelo código ou pelo nome para achar a que quer.`
+        : plural(lista.length, 'conta', 'contas');
+      if (!lista.length) { linhaVazia(corpo, 5, termo ? 'Nenhuma conta com esta busca.' : 'Nenhuma conta aqui.'); return; }
       corpo.replaceChildren();
-      for (const p of contas) {
+      for (const p of lista.slice(0, LIMITE)) {
         const uso = p.uso || {};
         const partes = [uso.titulos ? plural(uso.titulos, 'conta a pagar', 'contas a pagar') : null, uso.regras ? plural(uso.regras, 'regra', 'regras') : null,
-          uso.classificacoes ? plural(uso.classificacoes, 'lançamento à mão', 'lançamentos à mão') : null].filter(Boolean);
-        const acoes = criar('div', 'ctb-celula-acoes');
-        acoes.appendChild(botaoPequeno('Editar', 'btn-neutral', () => editar(p), { perm: 'contabilidade.plano.gerir' }));
+          uso.classificacoes ? plural(uso.classificacoes, 'lançamento à mão', 'lançamentos à mão') : null,
+          uso.desdobramentos ? plural(uso.desdobramentos, 'desdobramento', 'desdobramentos') : null].filter(Boolean);
+        const sub = [p.classificacao && p.classificacao !== p.codigo ? p.classificacao : null, p.natureza ? `natureza ${p.natureza}` : null,
+          daAea(p) ? null : p.origem_rotulo, p.observacao].filter(Boolean).join(' · ');
+        const nome = celula(p.codigo ? `${p.codigo} · ${p.nome}` : p.nome, 'px-4 py-3', sub || null);
+        // A árvore: no plano inteiro, o recuo pelo nível (as contas-título em negrito); nas em uso, só o desdobramento recua.
+        if (filtroSel.value === 'todas' && p.nivel && p.nivel > 1) nome.style.paddingLeft = `${16 + Math.min(p.nivel - 1, 5) * 14}px`;
+        else if (p.origem === 'desdobrado') nome.style.paddingLeft = '34px';
+        if (daAea(p) && !p.analitica) nome.style.fontWeight = '600';
         const tr = criar('tr');
         tr.append(
-          celula(p.codigo ? `${p.codigo} · ${p.nome}` : p.nome, 'px-4 py-3', p.observacao),
+          nome,
           celula(p.tipo_rotulo, 'px-4 py-3', p.do_resultado ? null : 'fora do resultado'),
           celula(partes.join(' · ') || '—', 'px-4 py-3'),
-          celula(p.ativa ? tag('Ativa', 'badge-success') : tag('Desativada', 'badge-neutral'), 'px-4 py-3', p.origem === 'padrao' ? 'veio com o app' : null),
-          celula(acoes, 'px-4 py-3')
+          celula(situacaoDa(p), 'px-4 py-3'),
+          celula(acoesDa(p), 'px-4 py-3')
         );
         corpo.appendChild(tr);
       }
@@ -3119,6 +3237,8 @@
     }
 
     el('ctbPlanoNova').addEventListener('click', limpar);
+    filtroSel.addEventListener('change', pintar);
+    busca.addEventListener('input', pintar);
     acionar(salvarBtn, salvar);
     return carregar().then(() => { if (!editando) limpar(); });
   }

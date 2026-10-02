@@ -1464,3 +1464,170 @@ leitura e o cartão do BB escondendo os campos pelo `quando`.
 **A confirmar com a primeira resposta real:** o formato do ADN e o do BB
 (os campos vieram da documentação; o "Testar conexão" mostra a resposta).
 **Em aberto:** pendências 34–47 do roteiro das integrações.
+
+## AB. Fase A entregue (02/10/2026) — níveis do dono, nota × extrato, início e saldo
+
+Detalhe e checklist em `docs/contabilidade-integracoes-roteiro.md`, Parte I.
+Em resumo: C2/C3/C4/C5/C7 críticos (tarifa do banco dispensada), OFX
+obrigatório (20b), recusada na SEFAZ continua pendente (22b), mensagem nova
+avisa quem vê o módulo (28b), obrigações na conciliação (parcela em aberto e
+nota sem conta, pagas pela própria conciliação), 16b, conciliação sozinha
+depois de importar/buscar/registrar, 5.4 (a nota liga na conta que já existe),
+início da Contabilidade (`contabil_parametros`, `sql/contabilidade_fase_a.sql`)
+e saldo de abertura digitado conferido com o banco. Respostas depois da
+entrega: **1 a** (o comprovante do BB vale como documento de imposto e conta de
+consumo — marca por conta do plano, na fase B), **2** aviso (saldo que não bate
+continua aviso), **3** sim (o lote automático basta com "Conciliar").
+
+## AC. Decisões de 02/10/2026 (noite) — DDA, pacote por pagamento, guardar × refazer, plano da AEA
+
+Nada disto está feito: é o combinado para as próximas fases (o dono dá a
+ordem de cada uma). A busca da SEFAZ em produção deu certo.
+
+**DDA do BB (existe: Swagger 1.0.1).** Só `GET /boletos`: `numeroProximoRegistro`
+(começa em 1), `dataVencimentoInicial`/`Final` (dd/mm/aaaa, até 1 ano),
+`codigoEstadoObrigacao` (1 a pagar, 2 agendado, 3 liquidado — uma consulta por
+estado); até 150 por página, `indicadorContinuidade` S/N; scope `dda-info`;
+`gw-dev-app-key`; gateways externo e mTLS (desenv, hm, prod). Dá: beneficiário
+e beneficiário final (nome, CPF/CNPJ), "seu número" (até 15, pode vir vazio),
+código de barras de 44 (não é a linha digitável), data de registro,
+vencimento, valor de vencimento. NÃO dá: identificador único, nosso número,
+linha digitável, emissão, valor atualizado, juros/multa/desconto, PDF.
+- Integração nova no mesmo molde (catálogo, configuração, cofre, mTLS, agenda,
+  execuções), cliente `bbDda.js` como o `bbExtrato.js`, credenciais da
+  aplicação do Extrato v2. **Tudo configurável no cartão do DDA** (pedido do
+  dono): quantas vezes por dia (padrão 2), dias para trás (padrão 60) e para
+  frente (padrão 180) — a soma limitada a 1 ano —, os estados buscados.
+- Tabela só de dados (sem arquivo): chave INTERNA = SHA-256 de pagador +
+  beneficiário + código de barras + vencimento + valor + seu número (marcada
+  como "ID interno", nunca como do BB); o JSON original de cada boleto; o
+  estado no BB e o histórico (a pagar → agendado → liquidado); captura e
+  ambiente; o vínculo (conta, parcela, nota, pagamento). Estados internos:
+  novo, sugestão, vinculado, conciliado, ignorado (motivo), contestado
+  (motivo).
+- Cadeia: duplicatas da NF-e (CNPJ, valor, vencimento; "seu número" ≈ nº da
+  duplicata) ↔ boleto; boleto ↔ parcela pela linha digitável calculada do
+  código (`boletoCalculo.linhaDigitavel`) = `titulo_pagar_parcelas.linha_digitavel`
+  (e o DDA preenche a que falta); boleto liquidado ↔ débito do extrato ↔
+  comprovante. Boleto "a pagar" sem conta NÃO vira conta sozinho (aviso:
+  lançar conta já preenchida, ligar a uma conta ou contestar); liquidado e
+  no extrato entra na conciliação como obrigação. Vários boletos num débito:
+  a soma passa a aceitar contas em aberto quando o DDA/comprovante confirma
+  cada um.
+- Espelho DDA gerado na hora do ZIP (barras ITF-25 do código oficial —
+  `boletoDocumento.itf25Svg` —, linha digitável marcada "calculada",
+  beneficiário, seu número, vencimento, valor, estado, captura) com o rodapé:
+  "Documento interno gerado pelo App-Gestão a partir de dados obtidos
+  diretamente da API DDA do Banco do Brasil. Não constitui segunda via ou
+  representação gráfica oficial do boleto." O PDF do boleto que o fornecedor
+  manda pode ser anexado (resposta 3 a) e vai junto do espelho.
+
+**Pacote por pagamento (regra do dono: o boleto sempre junto do comprovante,
+do pagamento, da nota e do extrato).** Uma pasta por pagamento do mês
+(nome curto, limite de 260 do Windows) com: dossiê do pagamento (gerado:
+nota, parcela, boleto, linha do extrato, comprovante), espelho DDA (gerado),
+comprovante e o boleto do fornecedor se houver. A nota vai no mês fiscal; nos
+meses das parcelas seguintes o dossiê aponta para ela (número, chave, mês em
+que foi enviada) — resposta 2 a.
+
+**Guardar × refazer (resposta 1 do dono).** Guardar sempre os DADOS (leves);
+refazer o arquivo na hora do ZIP quando isso não perde valor de prova; o que
+não dá para refazer fica guardado só até o pacote do mês ser gerado e depois
+é apagado do servidor (fica o SHA-256 e os dados).
+- **Comprovantes do BB:** conferido no ZIP de setembro — 35 PDFs de ~5 KB,
+  feitos pelo próprio site do BB com jsPDF 1.5.2, **sem assinatura digital**;
+  o que prova é o código de AUTENTICAÇÃO (todos têm; 17 dizem SISBB), o
+  DOCUMENTO (33) e, nos de boleto, o CÓDIGO DE BARRAS (6). Então: ao anexar o
+  ZIP (ou os PDFs) o app lê, liga cada um ao débito do extrato e ao pagamento,
+  guarda só os dados (texto e posição de cada linha + SHA-256 + nome do
+  arquivo), refaz o comprovante e compara o texto com o original; batendo 100%,
+  o arquivo é descartado na hora; não batendo, fica até o pacote. No ZIP vai a
+  reprodução fiel, com uma linha discreta no pé: "Reproduzido pelo App-Gestão
+  a partir do comprovante original do BB (arquivo …, SHA-256 …)" — o código de
+  autenticação continua conferível no banco; o app nunca apresenta a
+  reprodução como arquivo emitido pelo BB.
+- **OFX e resposta da API:** refeitos dos lançamentos guardados (o OFX não tem
+  assinatura); conferidos contra o original antes de descartar.
+- **XML de NF-e e NFS-e:** são assinados (não dá para refazer) e a lei manda a
+  empresa (emitente e destinatário) guardar o XML pelo prazo da legislação
+  tributária (5 anos) — ficam guardados (~10–30 KB cada). Confirmado pelo dono
+  ("1- ok", 02/10/2026).
+- **Boleto do fornecedor, recibos, guias e outros PDFs anexados:** ficam só até
+  o pacote; depois, só os dados e o SHA-256. Pacote de outra versão (mês
+  reaberto) aponta "enviado na versão N (SHA-256 …)" ou pede para anexar de
+  novo (o app reconhece pelo SHA-256).
+- Gerados na hora (nada guardado): espelho DDA, dossiês, DANFE das NF-e de
+  saída e de entrada (`danfe.montarDanfeHtml` sobre o XML), boletos emitidos no
+  mês (cobrança), extrato do mês em PDF (marcado como gerado), relatório,
+  planilha, pendências.
+
+**Plano de contas da AEA** (`Desktop/plano de contas.pdf`, Mastermaq, plano
+geral do escritório): 2.718 contas, 2.538 analíticas, código reduzido de 5
+dígitos + classificação (`1.01.01.02.002`) + natureza D/C. Importar o plano
+INTEIRO em `plano_contas`, marcando "em uso" só o que serve. Respostas:
+- Energia e aluguel → custo de fabricação (3.01.02.04: Energia Elétrica
+  00383, Aluguel 00372); água, telefone, internet → despesa administrativa
+  (3.02.01.03: Água e Esgoto 00439, Telefone 00478/00479, Internet 00462).
+- Produção paga a MEI (o Bruno) → Serviços de Terceiros PJ nas despesas
+  administrativas (3.02.01.03.038, 00476).
+- Fornecedores e clientes nas genéricas (00223 Fornecedores Nacionais, 00028
+  Clientes Nacionais), DESDOBRADAS no app: uma subconta por fornecedor/cliente
+  com final próprio de três dígitos (`.001`, `.012`, `.123`); para a AEA vale o
+  código da genérica.
+- Simples Nacional → 00780 (3.02.03.01.008, despesa tributária).
+- Rende Fácil, CDB (e a posição das aplicações) → 00020 Aplicações Banco do
+  Brasil, desdobrada por aplicação (`.001` Rende Fácil, `.002` CDB …). O
+  rendimento não vira receita: fica tudo na 00020, como no balancete de
+  04/2022 (confirmado pelo dono).
+- Sem centro de custo.
+- Pendente: o Mastermaq importa arquivo de lançamentos? Qual layout?
+
+**Nova ordem das fases:** B (plano da AEA, regras com contas reais,
+desdobramentos, marca "o comprovante basta" do 1 a) → H (DDA) → D
+(comprovantes do ZIP: anexar, ler, organizar, guardar só dados) → I (pacote
+por pagamento, tudo gerado na hora) → C (aplicações) → F (Artdeco) → G
+(cartão) → E (pessoas/comissões). Setembro fecha depois da D e da I.
+
+## AD. Fase B entregue (02/10/2026) — o plano de contas da AEA
+
+Roteiro: `docs/contabilidade-integracoes-roteiro.md`, Parte J. SQL:
+`sql/contabilidade_fase_b.sql` (depois do da Fase A; reiniciar a API).
+
+- **Banco:** `plano_contas` ganhou `codigo_reduzido`, `natureza`, `analitica`,
+  `nivel`, `conta_pai_id`, `em_uso`, `comprovante_basta`, `desdobra` e o vínculo
+  do desdobramento (`contato_id`, `cliente_id`, `conta_financeira_id`);
+  `contas_financeiras.plano_conta_id`. O nome só é único entre as contas à mão
+  e as que vieram com o app (índice parcial); o código reduzido é único. Origens:
+  `aea`, `desdobrado`, `padrao`, `manual`. `codigo` = a classificação.
+- **Tipos novos** `ativo` e `passivo` (fora do resultado, como transferência e
+  patrimônio). Derivação no SQL: 1 → ativo, 2.04 → patrimônio, 2 → passivo,
+  3.01 → custo, 3 → despesa, 4 → receita (natureza C) ou dedução (D).
+- **Selecionável** = ativa e, se da AEA, em uso e analítica
+  (`plano.selecionavel`). A classificação, as regras e o lote recusam a conta
+  fora de uso (409, "marque-a em uso no Plano de contas antes").
+- **Categoria das contas a pagar** = "código · nome" (`rotuloDeCategoria`); o
+  achado da conta (`contaDaCategoria`) é pelo código e, sem código, pelo nome
+  quando ele é único entre as selecionáveis (as categorias antigas continuam
+  valendo).
+- **Desdobramento** (`plano.desdobrar`): só conta da AEA analítica marcada
+  `desdobra`; código `pai.codigo + .NNN` e reduzido `pai.reduzido + .NNN`
+  (`proximoFinal`, até 999); herda tipo, natureza e "o comprovante basta";
+  nasce em uso. `desdobramentoDe` (achar ou criar pelo vínculo) fica pronto
+  para a B2.
+- **Resposta 1 a:** no checklist, a conta paga cuja categoria cai numa conta
+  `comprovante_basta` e tem o comprovante anexado não gera "pagamento sem
+  nota/recibo".
+- **Relatório:** o lado do banco nas partidas é a conta do plano ligada à conta
+  financeira ("00008 · Banco do Brasil [BB — conta corrente]"); livro,
+  resultado e foto do fechamento levam `conta_codigo` (fora do hash da foto).
+- **Telas:** Plano de contas (filtro, busca, árvore, Usar / Tirar de uso, O
+  comprovante basta / Pedir nota, Desdobrar, Editar), Contas do banco ("Conta
+  no plano da AEA"), Classificação ("(fora de uso)" quando a conta saiu de
+  uso).
+- **Testes:** classificação (pura) 9, rotas da classificação 9 (cenário da
+  fase B e "sem o SQL"), checklist 20, relatório 10; as 23 baterias da
+  Contabilidade passam; tela 1.284 de 1.285 (a do logout já falhava no HEAD).
+- **Fica para a B2 (aguarda o ok do dono):** lançamentos por competência como
+  no balancete (nota de venda D 00028.xxx / C 00528; compra D 00340 / C
+  00223.xxx; pagamento D 00223.xxx / C 00008; adiantamento 00270; Simples D
+  00780 / C 00608).

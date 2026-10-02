@@ -34,6 +34,7 @@ const motor = require('./conciliacao/motor');
 const classificacaoMod = require('./classificacao/classificacao');
 const versoes = require('./versoes');
 const parametros = require('./parametros');
+const planoMod = require('./classificacao/plano');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -343,12 +344,19 @@ function fonteContasPagar({ pagar, competencia, hoje }) {
   const pend = [];
   const temDocumento = t => (t.documento_recebido_id !== null && t.documento_recebido_id !== undefined && docsVivos.has(String(t.documento_recebido_id)))
     || (mapa.get(`titulo:${t.id}`) || []).some(a => arquivos.CATEGORIAS_DE_DOCUMENTO.has(a.categoria));
+  // Resposta 1 a do dono (fase B): imposto, conta de consumo e tarifa se provam com o comprovante do
+  // banco — a conta do plano marcada "o comprovante basta".
+  const indicePlano = Array.isArray(pagar.plano) ? planoMod.indexar(pagar.plano) : null;
+  const comprovanteBasta = t => Boolean(indicePlano) && planoMod.contaDaCategoria(t.categoria, pagar.plano, indicePlano)?.comprovante_basta === true;
+  const temComprovante = p => (mapa.get(`pagamento:${p.pagamento.id}`) || []).some(a => a.categoria === 'comprovante');
   for (const { t, p } of pagamentos) {
-    if (temDocumento(t) || ehTarifaDoBanco(t)) continue;
+    const basta = comprovanteBasta(t);
+    if (temDocumento(t) || ehTarifaDoBanco(t) || (basta && temComprovante(p))) continue;
     pend.push(pendencia({
       nivel: NIVEL.pagamento_sem_documento, chave: `pagar_sem_doc_${p.pagamento.id}`, fonte: 'contas_pagar',
       titulo: `Pagamento sem nota ou recibo — ${t.fornecedor || t.descricao}`,
-      descricao: `${c.reais(p.pagamento.valor_pago)} em ${c.impressa(p.pagamento.data)} · ${t.descricao} · anexe a nota, o recibo ou a guia na conta`,
+      descricao: `${c.reais(p.pagamento.valor_pago)} em ${c.impressa(p.pagamento.data)} · ${t.descricao} · `
+        + (basta ? 'anexe o comprovante do banco (nesta conta do plano ele basta como documento)' : 'anexe a nota, o recibo ou a guia na conta'),
       data: p.pagamento.data, acao: 'Abrir', destino: 'contabilidade', filtro: { acao: 'conta-pagar', titulo_id: t.id }
     }));
   }
@@ -759,13 +767,13 @@ function montar({
  */
 async function lerContasPagar(api, hoje) {
   try {
-    const [base, docs, arquivosLista, vinculos, pagamentosFechamento] = await Promise.all([
+    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano] = await Promise.all([
       titulos.lerBase(api), b.ler(api, 'documentos_recebidos'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
-      documentos.lerPagamentosDeFechamento(api)
+      documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null)
     ]);
     return {
       titulos: titulos.montarTodos(base, hoje), documentos: docs, contatos: base.contatos,
-      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento
+      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;

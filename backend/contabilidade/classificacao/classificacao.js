@@ -36,11 +36,16 @@ const sentidoDe = valor => (Number(valor) < 0 ? 'debito' : 'credito');
 
 // ------------------------------------------------------------------ puras
 
-/** Mapas para classificar: o plano por id e por nome, e as regras ativas. Pura. */
+/**
+ * Mapas para classificar: o plano por id, a conta de uma categoria de conta a
+ * pagar (pelo código "00383 · …" ou, na antiga, pelo nome único entre as em
+ * uso — fase B) e as regras ativas. Pura.
+ */
 function contexto({ plano = [], regras = [] }) {
+  const indice = planoMod.indexar(plano);
   return {
     planoPorId: new Map(c.lista(plano).map(p => [String(p.id), p])),
-    planoPorNome: new Map(c.lista(plano).filter(planoMod.ativa).map(p => [planoMod.chaveNome(p.nome), p])),
+    categoria: texto => planoMod.contaDaCategoria(texto, plano, indice),
     regras: c.lista(regras).filter(r => r && r.ativa !== false && r.ativa !== 'false')
   };
 }
@@ -55,7 +60,7 @@ function contaDaLiquidacao(liq, ctx) {
   if (!liq) return null;
   const sentido = sentidoDe(liq.valor);
   if (liq.tipo === 'titulo_pagamento') {
-    const pelaCategoria = liq.categoria ? ctx.planoPorNome.get(planoMod.chaveNome(liq.categoria)) : null;
+    const pelaCategoria = liq.categoria ? ctx.categoria(liq.categoria) : null;
     if (pelaCategoria) return { conta: pelaCategoria, criterio: 'titulo', regra_id: null, detalhe: `categoria "${liq.categoria}" de ${liq.rotulo}` };
     return daRegra(regrasMod.escolher(ctx.regras, { contato_id: liq.contato_id, sentido }, { condicoes: ['fornecedor'] }), ctx);
   }
@@ -71,7 +76,7 @@ function contaDaLiquidacao(liq, ctx) {
  */
 function efetiva(mov, { manual = null, vinculos = [], liqsPorChave = new Map(), ctx }) {
   const saida = (x, criterio) => ({
-    conta_id: x.conta.id, conta: x.conta.nome, conta_tipo: x.conta.tipo, criterio, criterio_rotulo: CRITERIOS[criterio],
+    conta_id: x.conta.id, conta: x.conta.nome, conta_codigo: planoMod.codigoDeExibicao(x.conta), conta_tipo: x.conta.tipo, criterio, criterio_rotulo: CRITERIOS[criterio],
     detalhe: x.detalhe || null, regra_id: x.regra_id ?? null
   });
   if (manual) {
@@ -88,7 +93,7 @@ function efetiva(mov, { manual = null, vinculos = [], liqsPorChave = new Map(), 
   const pelaRegra = daRegra(r, ctx);
   if (pelaRegra) return saida(pelaRegra, 'regra');
   return {
-    conta_id: null, conta: null, conta_tipo: null, criterio: 'sem', criterio_rotulo: CRITERIOS.sem, regra_id: null,
+    conta_id: null, conta: null, conta_codigo: null, conta_tipo: null, criterio: 'sem', criterio_rotulo: CRITERIOS.sem, regra_id: null,
     detalhe: partesDivergentes ? 'as partes da conciliação caem em contas diferentes: escolha uma' : null
   };
 }
@@ -99,8 +104,8 @@ function porConta(linhas) {
   for (const l of c.lista(linhas)) {
     const k = l.classificacao?.conta_id ? String(l.classificacao.conta_id) : 'sem';
     const g = grupos.get(k) || {
-      conta_id: l.classificacao?.conta_id ?? null, conta: l.classificacao?.conta || 'Sem classificação', tipo: l.classificacao?.conta_tipo || null,
-      entradas: 0, saidas: 0, resultado: 0, quantidade: 0
+      conta_id: l.classificacao?.conta_id ?? null, conta: l.classificacao?.conta || 'Sem classificação', conta_codigo: l.classificacao?.conta_codigo || null,
+      tipo: l.classificacao?.conta_tipo || null, entradas: 0, saidas: 0, resultado: 0, quantidade: 0
     };
     const v = Number(l.valor) || 0;
     if (v > 0) g.entradas = c.centavos(g.entradas + v); else g.saidas = c.centavos(g.saidas + v);
@@ -169,7 +174,7 @@ function aplicarCongelado(itens, congelado) {
     const f = congelado.get(String(movimento.id));
     if (!f) return { movimento, classificacao, atual: null };
     const congelada = {
-      conta_id: f.conta_id ?? null, conta: f.conta ?? null, conta_tipo: f.conta_tipo ?? null, criterio: f.conta_id ? 'fechamento' : 'sem',
+      conta_id: f.conta_id ?? null, conta: f.conta ?? null, conta_codigo: f.conta_codigo ?? null, conta_tipo: f.conta_tipo ?? null, criterio: f.conta_id ? 'fechamento' : 'sem',
       criterio_rotulo: f.conta_id ? CRITERIOS.fechamento : CRITERIOS.sem, detalhe: f.criterio ? `no fechamento: ${CRITERIOS[f.criterio] || f.criterio}` : null, regra_id: null
     };
     const mudou = String(classificacao.conta_id ?? '') !== String(congelada.conta_id ?? '');
@@ -212,7 +217,7 @@ async function painel(api, { competencia, contaId = null, hoje, visao = 'todos' 
   return {
     competencia: comp, rotulo: c.rotuloCompetencia(comp), conta_id: contaId ? Number(contaId) : null,
     contas_financeiras: contas.map(x => ({ id: x.id, nome: x.nome, ativa: x.ativa })),
-    plano: planoMod.ordenar(lido.plano.filter(planoMod.ativa)).map(p => planoMod.contaPublica(p)),
+    plano: planoMod.ordenar(lido.plano.filter(planoMod.selecionavel)).map(p => planoMod.contaPublica(p)),
     visao: v, visoes: VISOES, fechada, versao: versao ? Number(versao.versao) : null,
     linhas: linhas.filter(l => naVisao(l, v)),
     totais: totaisDe(linhas),
@@ -243,6 +248,7 @@ async function classificar(api, { ids = [], conta_id, observacao = '', usuarioId
   const conta = (await b.ler(api, 'plano_contas', { id: Number(conta_id) }))[0] || null;
   if (!conta) throw c.erro('Conta do plano não encontrada.', 404);
   if (!planoMod.ativa(conta)) throw c.erro(`A conta "${conta.nome}" está desativada.`, 409);
+  if (!planoMod.selecionavel(conta)) throw c.erro(`A conta "${planoMod.rotulo(conta)}" não está em uso: marque-a em uso no Plano de contas antes.`, 409);
   const todos = await b.ler(api, 'movimentos_bancarios');
   const movs = lista.map(id => todos.find(m => String(m.id) === id) || null);
   if (movs.some(m => !m)) throw c.erro('Um dos lançamentos não existe mais: atualize a lista.', 404);
@@ -262,8 +268,8 @@ async function classificar(api, { ids = [], conta_id, observacao = '', usuarioId
     await eventos.registrar(api, {
       tipo: 'lancamento_classificado', competencia: comp, usuarioId,
       descricao: doMesComp.length === 1
-        ? `Lançamento de ${c.impressa(c.dia(doMesComp[0].data))} (${c.reais(doMesComp[0].valor)}) classificado em "${conta.nome}"${obs ? `: ${obs}` : ''}`
-        : `${c.plural(doMesComp.length, 'lançamento classificado', 'lançamentos classificados')} em "${conta.nome}"${obs ? `: ${obs}` : ''}`,
+        ? `Lançamento de ${c.impressa(c.dia(doMesComp[0].data))} (${c.reais(doMesComp[0].valor)}) classificado em "${planoMod.rotulo(conta)}"${obs ? `: ${obs}` : ''}`
+        : `${c.plural(doMesComp.length, 'lançamento classificado', 'lançamentos classificados')} em "${planoMod.rotulo(conta)}"${obs ? `: ${obs}` : ''}`,
       dados: { conta_id: conta.id, movimentos: doMesComp.map(m => m.id) }
     });
   }
@@ -303,9 +309,12 @@ async function listarRegras(api) {
     regras: regras.sort((x, y) => Number(y.ativa !== false) - Number(x.ativa !== false) || ordem.indexOf(x.condicao_tipo) - ordem.indexOf(y.condicao_tipo)
       || (Number(y.prioridade) || 0) - (Number(x.prioridade) || 0) || String(x.valor).localeCompare(String(y.valor)))
       .map(r => regrasMod.regraPublica(r, { plano: planoPorId, contatos })),
-    sugeridas: regrasMod.sugeridas(manuaisComDescricao, regras).map(s => ({ ...s, conta: planoPorId.get(String(s.conta_id))?.nome || null })),
+    sugeridas: regrasMod.sugeridas(manuaisComDescricao, regras).map(s => {
+      const conta = planoPorId.get(String(s.conta_id));
+      return { ...s, conta: conta ? planoMod.rotulo(conta) : null };
+    }),
     condicoes: regrasMod.CONDICOES, origens: regrasMod.ORIGENS, sentidos: regrasMod.SENTIDOS,
-    plano: planoMod.ordenar(plano.filter(planoMod.ativa)).map(p => planoMod.contaPublica(p))
+    plano: planoMod.ordenar(plano.filter(planoMod.selecionavel)).map(p => planoMod.contaPublica(p))
   };
 }
 
@@ -333,7 +342,7 @@ async function testarRegra(api, { entrada = {}, competencia, hoje }) {
     if (vale) pegos.push({ data: c.dia(m.data), descricao: m.descricao || null, valor: c.centavos(m.valor), agora: classificacao.conta, criterio: classificacao.criterio });
   }
   return {
-    competencia: comp, rotulo: c.rotuloCompetencia(comp), conta: conta?.nome || null, quantidade: pegos.length,
+    competencia: comp, rotulo: c.rotuloCompetencia(comp), conta: conta ? planoMod.rotulo(conta) : null, quantidade: pegos.length,
     mudariam: pegos.filter(x => x.criterio !== 'manual' && x.agora !== conta?.nome).length,
     a_mao: pegos.filter(x => x.criterio === 'manual').length,
     exemplos: pegos.slice(0, 8)

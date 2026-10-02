@@ -388,6 +388,14 @@ router.post('/plano-contas', exigirPermissao(PLANO_GERIR), rota('POST /api/conta
 router.put('/plano-contas/:id', exigirPermissao(PLANO_GERIR), rota('PUT /api/contabilidade/plano-contas/:id', ({ api, req, usuarioId }) =>
   plano.salvar(api, { id: req.params.id, entrada: req.body || {}, usuarioId })));
 
+// Fase B: "em uso", "o comprovante basta" e a observação de uma conta (inclusive as da AEA).
+router.put('/plano-contas/:id/marcas', exigirPermissao(PLANO_GERIR), rota('PUT /api/contabilidade/plano-contas/:id/marcas', ({ api, req, usuarioId }) =>
+  plano.marcar(api, req.params.id, { entrada: req.body || {}, usuarioId })));
+
+// Fase B: desdobrar uma conta da AEA (subconta com final .001, .002…).
+router.post('/plano-contas/:id/desdobrar', exigirPermissao(PLANO_GERIR), rota('POST /api/contabilidade/plano-contas/:id/desdobrar', ({ api, req, usuarioId }) =>
+  plano.desdobrar(api, req.params.id, { entrada: req.body || {}, usuarioId })));
+
 router.get('/regras', exigirPermissao(VER), rota('GET /api/contabilidade/regras', ({ api }) => classificacao.listarRegras(api)));
 
 // Testar não grava: basta ver a Contabilidade.

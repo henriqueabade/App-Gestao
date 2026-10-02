@@ -310,9 +310,15 @@ function categoriasDe(titulos) {
  */
 async function categoriasDisponiveis(api) {
   const [linhas, plano] = await Promise.all([b.lerOpcional(api, 'titulos_pagar').then(x => x || []), b.lerOpcional(api, 'plano_contas')]);
-  const doPlano = (plano || []).filter(p => p.ativa !== false && p.ativa !== 'false').map(p => p.nome).sort((x, y) => x.localeCompare(y, 'pt-BR'));
-  const usadas = categoriasDe(linhas).filter(n => !doPlano.some(p => p.toLowerCase() === n.toLowerCase()));
-  return { categorias: plano ? [...doPlano, ...usadas] : categoriasDe(linhas), formas: FORMAS, plano: Boolean(plano) };
+  if (!plano) return { categorias: categoriasDe(linhas), formas: FORMAS, plano: false };
+  // Fase B: as contas em uso, com o código ("00383 · Energia Eletrica"), em ordem alfabética (o código primeiro).
+  const planoMod = require('./classificacao/plano');
+  const doPlano = plano.filter(planoMod.selecionavel).map(planoMod.rotuloDeCategoria).sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  const indice = planoMod.indexar(plano);
+  const usadas = [...new Set(linhas.map(t => String(t.categoria || '').trim()).filter(Boolean))]
+    .filter(n => !doPlano.some(p => p.toLowerCase() === n.toLowerCase()) && !planoMod.contaDaCategoria(n, plano, indice))
+    .sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  return { categorias: [...doPlano, ...usadas], formas: FORMAS, plano: true };
 }
 
 async function listar(api, { visao, competencia, hoje }) {

@@ -1,25 +1,48 @@
 <!--
-  Plano de contas (etapa 6). Modal médio. As categorias da contabilidade — o
-  "Tipo" do relatório mensal (GET /api/contabilidade/plano-contas) — com o uso
-  de cada uma (contas a pagar, regras, lançamentos à mão) e o cadastro/edição
-  (POST e PUT, contabilidade.plano.gerir). Não se apaga: desativa. Renomear
-  leva a categoria das contas a pagar junto.
+  Plano de contas (etapa 6; fase B, 02/10/2026: o plano da AEA). Modal grande.
+  O plano inteiro da AEA (Mastermaq: código reduzido, classificação, natureza),
+  com filtro (em uso / plano inteiro / desativadas) e busca por código ou nome;
+  a árvore na ordem da classificação. Ações: usar / tirar de uso, "o
+  comprovante basta" (resposta 1 a do dono), desdobrar (subconta com final
+  .001, .002…) e editar as contas criadas à mão e os desdobramentos. A conta da
+  AEA não muda nome, código nem tipo.
+  Dados: GET /api/contabilidade/plano-contas; PUT /plano-contas/:id/marcas;
+  POST /plano-contas/:id/desdobrar; POST e PUT /plano-contas (contabilidade.plano.gerir).
   Script: src/js/modals/contabilidade-modais.js (montarPlanoContas).
 -->
 <div id="ctbPlanoContasOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
-  <div role="dialog" aria-modal="true" aria-labelledby="ctbPlanoTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbPlanoTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
-      <h2 id="ctbPlanoTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-sitemap mr-2" aria-hidden="true"></i>Plano de contas</h2>
+      <div class="text-center min-w-0">
+        <h2 id="ctbPlanoTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-sitemap mr-2" aria-hidden="true"></i>Plano de contas</h2>
+        <p id="ctbPlanoSubtitulo" class="text-xs text-gray-300 truncate">—</p>
+      </div>
       <span id="ctbPlanoRotulo" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
-        <p class="text-xs text-gray-400">Começa com as quatro categorias do relatório da contabilidade e as que o app usa para classificar sozinho. Transferência e patrimônio não entram no resultado do mês.</p>
+        <div id="ctbPlanoAviso" class="hidden text-sm" role="status"></div>
 
-        <div class="ctb-tabela ctb-tabela--curta glass-surface rounded-xl border border-white/10">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          <div>
+            <label for="ctbPlanoFiltro" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbPlanoFiltro" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="uso">Em uso (as da Santíssimo)</option>
+              <option value="todas">Plano inteiro da AEA</option>
+              <option value="desativadas">Desativadas</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label for="ctbPlanoBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbPlanoBusca" type="search" placeholder="Código (00528, 3.02.01) ou nome da conta"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
           <table class="w-full text-sm">
             <thead>
               <tr>
@@ -33,12 +56,14 @@
             <tbody id="ctbPlanoLista"></tbody>
           </table>
         </div>
+        <p id="ctbPlanoContagem" class="text-xs text-gray-400"></p>
 
         <div class="ctb-secao-modal" data-perm-hide="contabilidade.plano.gerir">
           <div class="ctb-secao-modal__cabeca">
             <h3 id="ctbPlanoFormTitulo" class="ctl-secao text-[var(--color-primary)]">Nova conta</h3>
             <button id="ctbPlanoNova" type="button" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white">Cadastrar outra</button>
           </div>
+          <p id="ctbPlanoFormAjuda" class="text-xs text-gray-400">Prefira as contas da AEA (marque "Usar"). Crie à mão só o que não existe no plano dela.</p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="md:col-span-2">
               <label for="ctbPlanoNome" class="ctl-rotulo text-gray-300">Nome <span class="ctb-obrigatorio">*</span></label>

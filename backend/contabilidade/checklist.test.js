@@ -322,6 +322,26 @@ test('contas a pagar: pagamento do mês sem nota/recibo é crítico (C2, um por 
   ], [true, true, false, false], 'com fornecedor ou imposto, continua exigindo o documento');
 });
 
+test('fase B (resposta 1 a): na conta do plano marcada "o comprovante basta", o comprovante do banco vale como documento', () => {
+  const plano = [
+    { id: 1, codigo_reduzido: '00780', codigo: '3.02.03.01.008', nome: 'Simples Nacional', tipo: 'despesa', ativa: true, origem: 'aea', em_uso: true, analitica: true, comprovante_basta: true },
+    { id: 2, codigo_reduzido: '00476', codigo: '3.02.01.03.038', nome: 'Serv de Terc. PJ', tipo: 'despesa', ativa: true, origem: 'aea', em_uso: true, analitica: true, comprovante_basta: false }
+  ];
+  // O frete (sem nota) vira o DAS (Simples Nacional): sem comprovante, o C2 pede o comprovante; com ele, some.
+  const das = pagarDeAgosto({ plano });
+  Object.assign(das.titulos.find(t => String(t.id) === '2'), { categoria: '00780 · Simples Nacional', descricao: 'DAS de julho' });
+  const semComp = ck.fonteContasPagar({ pagar: das, competencia: COMP, hoje: HOJE }).pendencias;
+  assert.deepEqual(semComp.map(p => p.chave), ['pagar_sem_doc_101', 'pagar_sem_comprovante', 'pagar_vencidas']);
+  assert.match(semComp[0].descricao, /anexe o comprovante do banco \(nesta conta do plano ele basta como documento\)$/);
+  das.arquivosMapa.set('pagamento:101', [{ id: 8, categoria: 'comprovante' }]);
+  assert.deepEqual(ck.fonteContasPagar({ pagar: das, competencia: COMP, hoje: HOJE }).pendencias.map(p => p.chave), ['pagar_vencidas']);
+  // Serviço de terceiro (não marcado): o comprovante não basta, continua pedindo a nota.
+  const servico = pagarDeAgosto({ plano });
+  Object.assign(servico.titulos.find(t => String(t.id) === '2'), { categoria: '00476 · Serv de Terc. PJ' });
+  servico.arquivosMapa.set('pagamento:101', [{ id: 8, categoria: 'comprovante' }]);
+  assert.deepEqual(ck.fonteContasPagar({ pagar: servico, competencia: COMP, hoje: HOJE }).pendencias.map(p => p.chave), ['pagar_sem_doc_101', 'pagar_vencidas']);
+});
+
 test('montar com as etapas 2 e 3: as fontes novas entram na conta, no progresso e nos bloqueios do pacote', () => {
   const p = ck.montar({
     competencia: COMP, hoje: HOJE, notas: [], aguardando: { pedidos: [] },

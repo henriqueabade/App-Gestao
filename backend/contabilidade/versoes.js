@@ -48,7 +48,8 @@ function lancamentoDaFoto(m, cls = null) {
   return {
     id: m.id, data: c.dia(m.data), valor: c.centavos(m.valor), descricao: m.descricao ? String(m.descricao).slice(0, 160) : null,
     conta_financeira_id: m.conta_id ?? null, estado_conciliacao: m.estado_conciliacao || 'pendente',
-    conta_id: cls?.conta_id ?? null, conta: cls?.conta ?? null, conta_tipo: cls?.conta_tipo ?? null, criterio: cls?.criterio ?? null
+    conta_id: cls?.conta_id ?? null, conta: cls?.conta ?? null, ...(cls?.conta_codigo ? { conta_codigo: cls.conta_codigo } : {}),
+    conta_tipo: cls?.conta_tipo ?? null, criterio: cls?.criterio ?? null
   };
 }
 
@@ -75,7 +76,10 @@ function resultadoDe(porConta) {
     resultado: soma(g => DO_RESULTADO.has(g.tipo)),
     fora_do_resultado: soma(g => g.conta_id && !DO_RESULTADO.has(g.tipo)),
     sem_classificacao: soma(g => !g.conta_id),
-    por_conta: grupos.map(g => ({ conta_id: g.conta_id ?? null, conta: g.conta, tipo: g.tipo || null, entradas: g.entradas, saidas: g.saidas, resultado: g.resultado, quantidade: g.quantidade }))
+    por_conta: grupos.map(g => ({
+      conta_id: g.conta_id ?? null, conta: g.conta, ...(g.conta_codigo ? { conta_codigo: g.conta_codigo } : {}), tipo: g.tipo || null,
+      entradas: g.entradas, saidas: g.saidas, resultado: g.resultado, quantidade: g.quantidade
+    }))
   };
 }
 
