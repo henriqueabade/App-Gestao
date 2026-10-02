@@ -29,6 +29,7 @@
 html, body {
     margin: 0;
     padding: 0;
+    height: 100%;
     background: transparent;
     font-family: Inter, 'Segoe UI', system-ui, sans-serif;
     color: var(--aw-texto);
@@ -40,8 +41,12 @@ html, body {
 
 /* ------------------------------------------------------------ cartão */
 
+/* O cartão nunca passa da janela (02/10/2026): com mais avisos do que cabem,
+   o topo e o rodapé ficam e só o meio (.aw-corpo) rola. Antes a janela
+   ficava curta e cortava o "Abrir o programa" (print do dono). */
 .aw {
     margin: 1px;
+    max-height: calc(100vh - 2px);
     display: flex;
     flex-direction: column;
     border-radius: 1rem;
@@ -59,12 +64,26 @@ html, body {
 .aw::before {
     content: '';
     height: 3px;
+    flex-shrink: 0;
     background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light), var(--color-primary));
+}
+
+/* O meio que rola, com a barra do programa (fina e dourada, scroll.css 3d).
+   O espaço da barra fica reservado (scrollbar-gutter) para o texto não
+   mudar de linha quando ela aparece. A rolagem não passa para a janela. */
+.aw-corpo {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
 }
 
 /* ------------------------------------------------------------ topo */
 
 .aw-topo {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 0.7rem;
@@ -89,7 +108,8 @@ html, body {
 
 /* ------------------------------------------------------------ avisos */
 
-.aw-lista { list-style: none; margin: 0; padding: 0.55rem; display: flex; flex-direction: column; gap: 0.4rem; }
+/* À direita sobra a faixa da barra de rolagem (6px): o respiro fica igual dos dois lados. */
+.aw-lista { list-style: none; margin: 0; padding: 0.55rem 0.2rem 0.55rem 0.55rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .aw-lista:empty { display: none; }
 .aw-aviso {
     display: flex; gap: 0.7rem; align-items: flex-start;
@@ -121,15 +141,16 @@ html, body {
 .aw-aviso--conta_alterada .aw-aviso__icone { background: #2563eb; }
 .aw-aviso__corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .aw-aviso__titulo { font-size: 0.875rem; font-weight: 600; color: var(--aw-texto-forte); }
+/* Texto inteiro, sem "…": com a rolagem, nada precisa ser cortado. */
 .aw-aviso__texto {
     margin: 0; font-size: 0.8125rem; line-height: 1.4; color: var(--aw-texto-fraco);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    overflow-wrap: anywhere;
 }
 .aw-aviso__nota {
     margin: 0.1rem 0 0; padding: 0.3rem 0.55rem; border-left: 3px solid var(--color-primary);
     border-radius: 0 0.45rem 0.45rem 0; background: rgba(255, 255, 255, 0.06);
     font-size: 0.8125rem; line-height: 1.35; font-style: italic; color: rgba(255, 255, 255, 0.85);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    overflow-wrap: anywhere;
 }
 
 /* Tudo visto: a janela fica (só o X fecha) e diz que está em dia. */
@@ -147,6 +168,7 @@ html, body {
 /* ------------------------------------------------------------ rodapé */
 
 .aw-rodape {
+    flex-shrink: 0;
     display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
     padding: 0.65rem 0.85rem 0.8rem 0.95rem; border-top: 1px solid rgba(255, 255, 255, 0.1);
 }

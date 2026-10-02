@@ -22,7 +22,9 @@ const path = require('path');
 
 const LARGURA = 400;
 const MARGEM = 16;
-const ALTURA_MINIMA = 120;
+const ALTURA_MINIMA = 160;
+// Até uns 4 avisos à vista; com mais, só o meio da janela rola (02/10/2026).
+const ALTURA_MAXIMA = 520;
 const MAX_NA_FILA = 20;
 
 let janela = null;
@@ -45,9 +47,15 @@ function semOsLidos(atual = [], { ids = [], todas = false } = {}) {
   return atual.filter(a => !fora.has(Number(a.id)));
 }
 
-/** Onde a janela fica: canto inferior direito da área útil (acima da barra de tarefas). Pura. */
+/**
+ * Onde a janela fica: canto inferior direito da área útil (acima da barra de
+ * tarefas). A altura é a que a página pediu, entre ALTURA_MINIMA e
+ * ALTURA_MAXIMA (e nunca maior que a tela); o que não couber rola dentro dela.
+ * Pura.
+ */
 function posicao(area, altura) {
-  const h = Math.max(ALTURA_MINIMA, Math.min(Number(altura) || ALTURA_MINIMA, area.height - 2 * MARGEM));
+  const teto = Math.min(ALTURA_MAXIMA, area.height - 2 * MARGEM);
+  const h = Math.max(Math.min(ALTURA_MINIMA, teto), Math.min(Number(altura) || ALTURA_MINIMA, teto));
   return { x: area.x + area.width - LARGURA - MARGEM, y: area.y + area.height - h - MARGEM, width: LARGURA, height: h };
 }
 
@@ -138,6 +146,6 @@ function fechar() {
 }
 
 module.exports = {
-  LARGURA, MARGEM, MAX_NA_FILA, juntar, semOsLidos, posicao, mostrar, pronto, ajustarAltura,
+  LARGURA, MARGEM, ALTURA_MINIMA, ALTURA_MAXIMA, MAX_NA_FILA, juntar, semOsLidos, posicao, mostrar, pronto, ajustarAltura,
   retirar, recolher, voltar, fechar, estaAberta: viva, estaRecolhida: () => recolhida
 };

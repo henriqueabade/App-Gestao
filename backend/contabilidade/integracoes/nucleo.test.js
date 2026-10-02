@@ -26,9 +26,30 @@ test('catálogo: as quatro integrações, as etapas, o que cada uma usa e os end
   assert.equal(catalogo.url(sefaz, 'url_evento', {}, 'homologacao'), 'https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx');
   assert.equal(catalogo.url(sefaz, 'url_distribuicao', { url_distribuicao_producao: 'https://outro.gov.br/x/' }, 'producao'), 'https://outro.gov.br/x', 'o digitado vence o padrão');
   assert.equal(catalogo.url(catalogo.definicao('nfse_adn'), 'url', {}, 'producao'), 'https://adn.nfse.gov.br/contribuintes');
-  assert.equal(catalogo.url(catalogo.definicao('bb_extrato'), 'url_api', {}, 'producao'), 'https://api-extratos.bb.com.br/extratos/v1');
+  // Extratos v2 (02/10/2026): os dois ambientes com mTLS; a v1 sai em 20/11/2026.
+  const extrato = catalogo.definicao('bb_extrato');
+  assert.equal(catalogo.url(extrato, 'url_api', {}, 'producao'), 'https://extratos.mtls.api.bb.com.br/v2');
+  assert.equal(catalogo.url(extrato, 'url_api', {}, 'homologacao'), 'https://extratos.mtls.api.hm.bb.com.br/v2');
   assert.throws(() => catalogo.definicao('pix'), /desconhecida/);
   assert.equal(catalogo.definicao('bb_investimentos').automatica, false, 'o CDB só testa, até o BB dizer qual API');
+});
+
+test('Extratos v2: aplicação própria por padrão, certificado nos dois ambientes e o código da conta de teste', () => {
+  const extrato = catalogo.definicao('bb_extrato');
+  const cdb = catalogo.definicao('bb_investimentos');
+  const padroes = catalogo.padroes(extrato);
+  assert.deepEqual([padroes.usar_credenciais_da_cobranca, padroes.mtls, padroes.homologacao_agencia, padroes.homologacao_conta], [false, 'sim', '1505', '1348']);
+  assert.equal(catalogo.padroes(cdb).usar_credenciais_da_cobranca, true, 'o CDB continua com a aplicação da cobrança por padrão');
+  // mTLS: a v2 leva o certificado também na homologação (um "auto" gravado antes vale como sim); só "nao" desliga.
+  assert.deepEqual(['sim', 'auto', undefined, 'nao'].map(m => catalogo.usaMtls(extrato, { mtls: m }, 'homologacao')), [true, true, true, false]);
+  assert.deepEqual(['auto', 'sim'].map(m => catalogo.usaMtls(cdb, { mtls: m }, 'homologacao')), [false, true], 'as outras seguem "automático = só produção"');
+  assert.equal(catalogo.usaMtls(cdb, { mtls: 'auto' }, 'producao'), true);
+  // O código de teste: o da documentação para a conta, o digitado vence, conta de fora não tem.
+  assert.equal(catalogo.mciTesteDoExtrato({}, '1505', '1348'), '178961031');
+  assert.equal(catalogo.mciTesteDoExtrato({}, '0551', '005087'), '26968930', 'zeros à esquerda não atrapalham');
+  assert.equal(catalogo.mciTesteDoExtrato({}, '452', '123873'), '704950857');
+  assert.equal(catalogo.mciTesteDoExtrato({ homologacao_mciteste: '123' }, '1505', '1348'), '123');
+  assert.equal(catalogo.mciTesteDoExtrato({}, '1614', '16773'), null, 'a conta real não é de teste');
 });
 
 test('configuração: parâmetros conferidos por tipo; intervalo nos limites; parâmetro desconhecido recusado', () => {
@@ -73,12 +94,23 @@ test('o que falta: certificado, CNPJ e UF; credenciais do BB; conta, escopo e a 
   const params = configuracao.parametros(bb, { parametros: {} });
   const faltasBB = configuracao.pendencias(bb, { linha: { parametros: {} }, params, ambiente: 'producao', certificado: { configurado: false }, credenciais: { clientId: null, appKey: 'x', secret: null } });
   assert.deepEqual(faltasBB, [
-    'Sem client_id de produção (Configuração de cobrança).', 'Sem client_secret de produção guardado (Configuração de cobrança).',
+    'Sem client_id de produção.', 'Sem client_secret de produção guardado.',
     'A conexão pede o certificado da empresa (mTLS) e ele não foi encontrado.', 'Escolha a conta do Extrato bancário que recebe os lançamentos.',
     'Informe agência e conta corrente (sem o dígito).'
   ]);
-  const hom = configuracao.pendencias(bb, { linha: { parametros: {} }, params: { ...params, conta_id: 1 }, ambiente: 'homologacao', certificado: { configurado: false }, credenciais: { clientId: 'a', appKey: 'b', secret: 'c' }, contas: [{ id: 1 }] });
-  assert.deepEqual(hom, ['Informe a conta de teste da homologação do BB (ou agência e conta).'], 'na homologação sem mTLS o certificado não faz falta');
+  const daCobranca = configuracao.pendencias(bb, { linha: { parametros: {} }, params: { ...params, usar_credenciais_da_cobranca: true }, ambiente: 'producao', certificado: { configurado: true }, credenciais: { clientId: null, appKey: 'x', secret: 'y' } });
+  assert.equal(daCobranca[0], 'Sem client_id de produção (Configuração de cobrança).');
+  const pronto = { linha: { parametros: {} }, ambiente: 'homologacao', certificado: { configurado: true }, credenciais: { clientId: 'a', appKey: 'b', secret: 'c' }, contas: [{ id: 1 }] };
+  assert.deepEqual(configuracao.pendencias(bb, { ...pronto, params: { ...params, conta_id: 1 } }), [], 'a conta de teste padrão (1505 / 1348) já vem com o código');
+  const semCert = configuracao.pendencias(bb, { ...pronto, params: { ...params, conta_id: 1 }, certificado: { configurado: false } });
+  assert.deepEqual(semCert, ['A conexão pede o certificado da empresa (mTLS) e ele não foi encontrado.'], 'a v2 pede o certificado também na homologação');
+  const contaReal = configuracao.pendencias(bb, { ...pronto, params: { ...params, conta_id: 1, homologacao_agencia: null, homologacao_conta: null, agencia: '1614', conta: '16773' } });
+  assert.equal(contaReal.length, 1);
+  assert.match(contaReal[0], /1614 \/ 16773 não é uma das contas de teste do BB/);
+  const semConta = configuracao.pendencias(bb, { ...pronto, params: { ...params, conta_id: 1, homologacao_agencia: null, homologacao_conta: null } });
+  assert.deepEqual(semConta, ['Informe a conta de teste da homologação do BB (ou agência e conta).']);
+  const v1 = configuracao.pendencias(bb, { ...pronto, params: { ...params, conta_id: 1, url_api_homologacao: 'https://api.hm.bb.com.br/extratos/v1' } });
+  assert.match(v1[0], /versão 1, que o BB desliga em 20\/11\/2026/);
 });
 
 test('caixa de entrada: gravar nunca piora — XML não some, cancelada não volta, registrada não volta a nova', () => {

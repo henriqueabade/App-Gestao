@@ -202,12 +202,14 @@ function lerOfx(entrada) {
  * A identidade de cada lançamento na conta: data + valor + FITID (ou, sem
  * FITID, documento + descrição). Linhas idênticas no mesmo arquivo ganham um
  * número de ordem — reimportar o mesmo arquivo dá as mesmas identidades.
- * Pura.
+ * `hash_por_documento` (API do BB) ignora o identificador: o do BB só nasce
+ * no dia seguinte, e a mesma linha não pode ter duas identidades. Pura.
  */
 function comHash(contaId, lancamentos) {
   const vistos = new Map();
   return lancamentos.map(l => {
-    const base = [contaId, l.data, Number(l.valor).toFixed(2), l.identificador ? `F:${l.identificador}` : `D:${l.documento || ''}|${(l.descricao || '').toUpperCase()}`].join('|');
+    const porId = l.identificador && !l.hash_por_documento;
+    const base = [contaId, l.data, Number(l.valor).toFixed(2), porId ? `F:${l.identificador}` : `D:${l.documento || ''}|${(l.descricao || '').toUpperCase()}`].join('|');
     const n = (vistos.get(base) || 0) + 1;
     vistos.set(base, n);
     return { ...l, hash: crypto.createHash('sha256').update(n > 1 ? `${base}#${n}` : base).digest('hex') };

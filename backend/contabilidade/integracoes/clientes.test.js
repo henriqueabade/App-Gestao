@@ -160,11 +160,45 @@ test('BB: datas no formato do BB, sinal, contrapartida e as linhas de saldo fora
   assert.equal(bbExtrato.lerPagina({ numeroPaginaAtual: 2, numeroPaginaProximo: 0, listaLancamento: [] }).proximaPagina, 0);
 });
 
-test('BB: o token (Basic + escopo), as páginas com a app key certa e o erro do banco em português', async () => {
+test('BB v2: os nomes novos dos campos, o CNPJ alfanumérico e o que fica fora do extrato (futuro, saldos, limites, bloqueado)', () => {
+  // Formato da OpenAPI 2.0.1 (02/10/2026): indicadorTipoLancamento 1/2/3/SA…, sinal em indicadorSinalLancamento.
+  const v2 = (extra) => ({ indicadorTipoLancamento: '1', dataMovimento: 0, codigoAgenciaOrigem: 638, numeroLote: 99015, ...extra });
+  const pagina = bbExtrato.lerPagina({
+    numeroPaginaAtual: 1, numeroPaginaProximo: 0, quantidadeTotalPagina: 1,
+    listaLancamento: [
+      v2({ dataLancamento: 1092026, valorLancamento: 0, codigoHistorico: 0, textoDescricaoSubHistorico: 'Saldo Anterior', numeroDocumento: 0, indicadorSinalLancamento: 'C' }),
+      v2({ dataLancamento: 19092026, valorLancamento: 1079, indicadorSinalLancamento: 'C', numeroDocumento: 550638000086722, codigoHistorico: 821, codigoSubHistorico: 25001,
+        textoDescricaoSubHistorico: 'Pix - Recebido', textoInformacaoComplementar: '19092026 14:22 Loja ABC', numeroCadastroPessoaFisicaCadastroNacPessoasJuridicasContrapartida: '12.ABC.345/01DE-35',
+        indicadorTipoPessoaContrapartida: 'J', numeroISPB: 60746948, textoIdentificadorUnicoTransacao: 'BB0017984000000040242025', codigoConfederacaoNacionalBancos: null }),
+      v2({ dataLancamento: 20092026, valorLancamento: 60.97, indicadorSinalLancamento: 'D', numeroDocumento: 91803, textoDescricaoSubHistorico: 'Pix - Agendamento' }),
+      v2({ indicadorTipoLancamento: '2', dataLancamento: 2102026, valorLancamento: 400, indicadorSinalLancamento: 'D', numeroDocumento: 92202, textoDescricaoSubHistorico: 'Pix - Agendamento' }),
+      v2({ indicadorTipoLancamento: '3', dataLancamento: 1102026, valorLancamento: 50, indicadorSinalLancamento: 'C', numeroDocumento: 5, textoDescricaoSubHistorico: 'Depósito' }),
+      v2({ indicadorTipoLancamento: 'RA', dataLancamento: 1102026, valorLancamento: 1660.78, indicadorSinalLancamento: 'C', textoDescricaoSubHistorico: 'Invest Resgate Autom' }),
+      v2({ indicadorTipoLancamento: 'LC', dataLancamento: 1102026, valorLancamento: 5000, indicadorSinalLancamento: 'C', textoDescricaoSubHistorico: 'Limite Contratado' }),
+      v2({ dataLancamento: 21092026, valorLancamento: 12, indicadorSinalLancamento: '*', numeroDocumento: 7, textoDescricaoSubHistorico: 'Bloqueio judicial' }),
+      v2({ dataLancamento: 30092026, valorLancamento: 1018.03, codigoHistorico: 999, textoDescricaoSubHistorico: 'S A L D O', numeroDocumento: 0, indicadorSinalLancamento: 'C' })
+    ]
+  });
+  assert.equal(pagina.lancamentos.length, 2, 'só os contabilizados');
+  assert.deepEqual(pagina.saldo, { valor: 1018.03, data: '2026-09-30' });
+  const [pix, agendado] = pagina.lancamentos;
+  assert.deepEqual(
+    [pix.data, pix.valor, pix.documento, pix.descricao, pix.contrapartida_documento, pix.contrapartida_tipo, pix.codigo_historico, pix.codigo_sub_historico, pix.sistema_pagamento, pix.identificador, pix.hash_por_documento],
+    ['2026-09-19', 1079, '550638000086722', 'Pix - Recebido — 19092026 14:22 Loja ABC', '12ABC34501DE35', 'J', '821', '25001', '60746948', 'BB0017984000000040242025', true]
+  );
+  assert.deepEqual([agendado.valor, agendado.descricao], [-60.97, 'Pix - Agendamento']);
+  assert.deepEqual(pagina.fora.map(x => [x.tipo, x.valor]), [['futuro', -400], ['em processamento', 50], ['resgate automático', 1660.78], ['limite contratado', 5000], ['bloqueado', 12]]);
+  assert.equal(bbExtrato.documentoContrapartida('ABC', 'J'), null, 'alfanumérico só com 14 posições');
+  assert.equal(bbExtrato.documentoContrapartida('00000000000000', 'J'), null);
+  assert.deepEqual(bbExtrato.janelas('2026-08-01', '2026-09-14'), [{ inicio: '2026-08-01', fim: '2026-08-31' }, { inicio: '2026-09-01', fim: '2026-09-14' }]);
+  assert.deepEqual(bbExtrato.janelas('2026-09-01', '2026-09-30'), [{ inicio: '2026-09-01', fim: '2026-09-30' }], 'um mês cabe numa consulta');
+});
+
+test('BB v2: o token (Basic + escopo), a app key gw-dev-app-key, o código de teste só na homologação, 120 por página e o erro do banco em português', async () => {
   const pedidos = [];
   const paginas = {
-    1: { numeroPaginaAtual: 1, numeroPaginaProximo: 2, listaLancamento: [{ dataLancamento: 2092026, valorLancamento: 10, indicadorTipoLancamento: 'C', textoDescricaoHistorico: 'Crédito 1' }] },
-    2: { numeroPaginaAtual: 2, numeroPaginaProximo: 0, listaLancamento: [{ dataLancamento: 3092026, valorLancamento: 5, indicadorTipoLancamento: 'D', textoDescricaoHistorico: 'Débito 1' }] }
+    1: { numeroPaginaAtual: 1, numeroPaginaProximo: 2, listaLancamento: [{ indicadorTipoLancamento: '1', dataLancamento: 2092026, valorLancamento: 10, indicadorSinalLancamento: 'C', textoDescricaoSubHistorico: 'Crédito 1' }] },
+    2: { numeroPaginaAtual: 2, numeroPaginaProximo: 0, listaLancamento: [{ indicadorTipoLancamento: '1', dataLancamento: 3092026, valorLancamento: 5, indicadorSinalLancamento: 'D', textoDescricaoSubHistorico: 'Débito 1' }] }
   };
   const transporte = async (url, { metodo, cabecalhos, corpo }) => {
     pedidos.push({ url, metodo, cabecalhos, corpo });
@@ -173,23 +207,41 @@ test('BB: o token (Basic + escopo), as páginas com a app key certa e o erro do 
     return { status: 200, corpo: Buffer.from(JSON.stringify(paginas[pagina])) };
   };
   const r = await bbExtrato.buscarPeriodo({
-    transporte, urlOauth: 'https://oauth.hm.bb.com.br/oauth/token', urlApi: 'https://api.hm.bb.com.br/extratos/v1',
+    transporte, urlOauth: 'https://oauth.hm.bb.com.br/oauth/token', urlApi: 'https://extratos.mtls.api.hm.bb.com.br/v2',
     credenciais: { clientId: 'cid', secret: 'sec', appKey: 'app' }, escopo: 'extrato-info', ambiente: 'homologacao',
-    agencia: '01614', conta: '0016773', inicio: '2026-09-01', fim: '2026-09-14'
+    agencia: '01505', conta: '0001348', mciTeste: '178961031', inicio: '2026-09-01', fim: '2026-09-14'
   });
   assert.deepEqual(r.extrato.lancamentos.map(l => [l.data, l.valor]), [['2026-09-02', 10], ['2026-09-03', -5]]);
-  assert.deepEqual(r.escopos, ['extrato-info']);
+  assert.deepEqual([r.escopos, r.semLancamentos], [['extrato-info'], false]);
   const token = pedidos[0];
   assert.equal(token.cabecalhos.Authorization, `Basic ${Buffer.from('cid:sec').toString('base64')}`);
   assert.equal(token.corpo, 'grant_type=client_credentials&scope=extrato-info');
   const consulta = new URL(pedidos[1].url);
-  assert.equal(consulta.pathname, '/extratos/v1/conta-corrente/agencia/1614/conta/16773');
-  assert.deepEqual(Object.fromEntries(consulta.searchParams), { 'gw-dev-app-key': 'app', numeroPaginaSolicitacao: '1', quantidadeRegistroPaginaSolicitacao: '200', dataInicioSolicitacao: '1092026', dataFimSolicitacao: '14092026' });
-  assert.equal(pedidos[1].cabecalhos['gw-dev-app-key'], 'app');
-  assert.equal(pedidos[1].cabecalhos.Authorization, 'Bearer tk');
+  assert.equal(`${consulta.host}${consulta.pathname}`, 'extratos.mtls.api.hm.bb.com.br/v2/conta-corrente/agencia/1505/conta/1348');
+  assert.deepEqual(Object.fromEntries(consulta.searchParams), { 'gw-dev-app-key': 'app', numeroPaginaSolicitacao: '1', quantidadeRegistroPaginaSolicitacao: '120', dataInicioSolicitacao: '1092026', dataFimSolicitacao: '14092026' });
+  assert.deepEqual([pedidos[1].cabecalhos['x-br-com-bb-ipa-mciteste'], pedidos[1].cabecalhos['Content-Type'], pedidos[1].cabecalhos.Authorization], ['178961031', 'application/json', 'Bearer tk']);
   assert.equal(pedidos.length, 3, 'token + 2 páginas');
-  assert.equal(bbExtrato.nomeDaAppKey('producao'), 'gw-app-key');
+
+  // Produção: a mesma gw-dev-app-key (a chave de produção), sem o cabeçalho de teste; mais de 31 dias vira duas consultas; 404 = sem lançamentos.
+  pedidos.length = 0;
+  const vazio = async (url, opcoes) => { pedidos.push({ url, ...opcoes }); return url.includes('/oauth/') ? { status: 200, corpo: Buffer.from(JSON.stringify({ access_token: 'tp' })) } : { status: 404, corpo: Buffer.from('') }; };
+  const p = await bbExtrato.buscarPeriodo({
+    transporte: vazio, urlOauth: 'https://oauth.bb.com.br/oauth/token', urlApi: 'https://extratos.mtls.api.bb.com.br/v2',
+    credenciais: { clientId: 'c', secret: 's', appKey: 'prod' }, escopo: 'extrato-info', ambiente: 'producao', agencia: '1614', conta: '16773', inicio: '2026-08-01', fim: '2026-09-14'
+  });
+  assert.deepEqual([p.semLancamentos, p.consultas, p.extrato.lancamentos.length], [true, 2, 0]);
+  const [ago, set] = pedidos.slice(1).map(x => new URL(x.url));
+  assert.deepEqual([ago.searchParams.get('dataInicioSolicitacao'), ago.searchParams.get('dataFimSolicitacao'), set.searchParams.get('dataInicioSolicitacao'), set.searchParams.get('dataFimSolicitacao')], ['1082026', '31082026', '1092026', '14092026']);
+  assert.equal(ago.searchParams.get('gw-dev-app-key'), 'prod');
+  assert.ok(pedidos.slice(1).every(x => !('x-br-com-bb-ipa-mciteste' in x.cabecalhos)), 'o código de teste nunca vai em produção');
+  assert.equal(bbExtrato.nomeDaAppKey('producao'), 'gw-app-key', 'as APIs antigas (CDB) seguem com gw-app-key em produção');
+
+  await assert.rejects(() => bbExtrato.buscarPeriodo({ transporte, urlOauth: 'https://o/oauth/token', urlApi: 'https://a', credenciais: { clientId: 'a', secret: 'b', appKey: 'c' }, escopo: 'x', ambiente: 'homologacao', agencia: '1614', conta: '16773', inicio: '2026-09-01', fim: '2026-09-02' }),
+    /precisa do código da conta de teste/);
   const recusa = async url => (url.includes('/oauth/') ? { status: 401, corpo: Buffer.from(JSON.stringify({ error_description: 'invalid_client' })) } : { status: 500, corpo: Buffer.from('') });
   await assert.rejects(() => bbExtrato.buscarPeriodo({ transporte: recusa, urlOauth: 'https://o/oauth/token', urlApi: 'https://a', credenciais: { clientId: 'a', secret: 'b', appKey: 'c' }, escopo: 'x', ambiente: 'producao', agencia: '1', conta: '2', inicio: '2026-09-01', fim: '2026-09-02' }),
     /recusou as credenciais ou o escopo \(401\): invalid_client/);
+  const proibido = async url => (url.includes('/oauth/') ? { status: 200, corpo: Buffer.from(JSON.stringify({ access_token: 't' })) } : { status: 403, corpo: Buffer.from(JSON.stringify({ code: '6646500.1', message: 'Recebemos sua solicitação, mas não é possível prosseguir.' })) });
+  await assert.rejects(() => bbExtrato.buscarPeriodo({ transporte: proibido, urlOauth: 'https://o/oauth/token', urlApi: 'https://a', credenciais: { clientId: 'a', secret: 'b', appKey: 'c' }, escopo: 'x', ambiente: 'producao', agencia: '1', conta: '2', inicio: '2026-09-01', fim: '2026-09-02' }),
+    /403: Recebemos sua solicitação.*cadeia do certificado foi enviada.*envio para produção/);
 });

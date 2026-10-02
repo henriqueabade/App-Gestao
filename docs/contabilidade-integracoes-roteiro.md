@@ -7,7 +7,7 @@ ligar, preencher e testar** — este roteiro diz tudo, na ordem.
 | Etapa | Integração | Onde fala | O que precisa de novo |
 |---|---|---|---|
 | 10 | **NF-e de entrada** (notas emitidas contra o CNPJ) | SEFAZ — Distribuição de DF-e e manifestação (Ambiente Nacional) | nada: usa o certificado A1 e a Configuração fiscal que já existem |
-| 11 | **Extrato da conta** | BB — API de Extratos | incluir a API na aplicação do Portal Developers (a mesma da cobrança) |
+| 11 | **Extrato da conta** | BB — API de Extratos **v2** | aplicação própria no Portal Developers, com o certificado nos dois ambientes (feito em 02/10/2026) |
 | 13 | **NFS-e tomadas** (serviços que a empresa contrata) | ADN — Ambiente de Dados Nacional da NFS-e | nada, em princípio: usa o certificado A1 |
 | 12 | **Aplicações — CDB** | BB — API ainda a definir | o BB dizer qual API consulta o CDB da empresa |
 
@@ -136,48 +136,73 @@ espera sozinho.
 **Operação não realizada** (com justificativa). É uma declaração à SEFAZ,
 registrada lá; as duas últimas tiram a nota das pendências (fica "Ignorada").
 
-## Parte C — Extrato pela API do BB (etapa 11)
+## Parte C — Extrato pela API do BB (etapa 11) — **versão 2**
 
-**Você faz no Portal Developers do BB** (developers.bb.com.br, com o login
-da empresa — o mesmo da aplicação da cobrança):
+**A v1 sai do ar em 20/11/2026** (aviso do BB na documentação, lido em
+02/10/2026): ela não aceita o CNPJ alfanumérico. A v2 muda três coisas que
+importam aqui:
 
-1. Abra a **aplicação da cobrança** › adicionar API › **API de Extratos**
-   (conta corrente). Anote o **escopo** que o portal mostrar para ela (o app
-   usa `extrato-info`; se for outro, troque no cartão).
-2. Na documentação da API de Extratos, pegue a **conta de teste da
-   homologação** (agência e conta). A da cobrança (452 / 123873) **pode não
-   valer** para o extrato.
-3. Para **produção**: peça a liberação da API em produção para a aplicação
-   (o portal mostra o caminho; o BB pode pedir a autorização do titular da
-   conta ou do gerente — siga o que ele indicar).
-4. Se o BB exigir **certificado na conexão** (mTLS, comum nas APIs de conta
-   em produção): no nosso cartão, **Baixar certificado público (.cer)** (no
-   alto das Configurações) e cadastre esse arquivo na aplicação do portal.
+- exige uma **aplicação nova** no portal (não entra na aplicação dos
+  boletos);
+- pede o **certificado da empresa na conexão (mTLS) também nos testes**;
+- nos testes, só aceita as **contas de teste do BB** (1505 / 1348,
+  551 / 5087 ou 452 / 123873), cada uma com um código que vai num cabeçalho
+  próprio (o app põe sozinho).
+
+Outros detalhes que o app já trata: até 31 dias por consulta (períodos
+maiores viram várias), 120 lançamentos por página, a app key sempre como
+`gw-dev-app-key` (com a chave do ambiente), saldos/limites/lançamentos
+futuros fora do extrato, e o identificador único do BB (que só nasce no dia
+seguinte) não duplica a linha.
+
+**No Portal Developers do BB (feito pelo dono em 02/10/2026):**
+
+1. **Criar Nova Aplicação** só com **Extratos (v2)**.
+2. **Credenciais** › ambiente de teste › **Gerar credenciais** › baixar e
+   guardar (o portal não mostra de novo).
+3. **Certificados** › **Enviar certificado** › "Importar certificados
+   individualmente": raiz (Autoridade Certificadora Raiz Brasileira v5),
+   intermediários (AC Secretaria da Receita Federal do Brasil v4 e AC
+   SAFEWEB RFB v5) e empresa, cada um exportado do Windows em
+   **"X.509 codificado na base 64 (*.cer)"** (aba Caminho de Certificação ›
+   Exibir Certificado › Detalhes › Copiar para Arquivo). Esperar o ✓ verde.
+4. **Enviar para produção** (CNPJ › contatos › termo de adesão › Assinar).
+5. **Credenciais** › ambiente de produção › **Gerar credenciais**.
+6. **Certificados** › o mesmo envio do passo 3 em **produção**.
+
+> **Nunca gere credenciais de novo na aplicação dos boletos**: o BB
+> desativa as antigas na hora e os boletos param. Quando o certificado A1
+> for renovado (vence em 14/11/2026), envie a cadeia nova nos dois
+> ambientes **antes** de remover a antiga.
 
 **No app:**
 
 1. Contabilidade › Extrato bancário › **Contas do banco**: tenha a conta do
    BB cadastrada ("Usar a conta dos boletos" traz a da cobrança).
 2. Configurações › cartão **Extrato da conta (API do BB)**:
-   - **Usar a mesma aplicação da cobrança**: deixe marcado (client_id, app
-     key e client_secret vêm da Configuração de cobrança; nada a colar). Se
-     preferir uma aplicação separada, desmarque, **Salvar**, preencha
-     client_id e app key de cada ambiente e **Guarde** o client_secret de
-     cada um no bloco "Credenciais do BB".
+   - **Usar a mesma aplicação da cobrança**: **desmarcado** (é o padrão da
+     v2) › preencha **client_id** e **app key** de homologação e de
+     produção (os da aplicação nova) e **Guarde** o client_secret de cada
+     ambiente no bloco "Credenciais do BB".
    - **Conta do Extrato bancário** que recebe os lançamentos.
-   - **Agência e conta sem o dígito** (se digitar "1614-4", o app guarda
-     "1614").
-   - **Avançado › Agência/Conta de teste** (a do passo 2 do portal).
-   - Certificado na conexão (mTLS): **Automático** (só em produção).
-   - **Salvar**.
-3. **Testar conexão** (homologação). → "Token e extrato ok … Ontem: N
-   lançamentos. Nada foi gravado."
-   - 401 no token: client_id/secret/app key errados ou a API não está na
-     aplicação.
-   - 403: escopo ou autorização da conta.
-   - Erro de certificado: o .cer não foi cadastrado no portal.
+   - **Agência e conta sem o dígito** (1614 e 16773; se digitar "1614-4", o
+     app guarda "1614").
+   - Certificado na conexão (mTLS): **Sempre** (a v2 exige).
+   - **Avançado › Agência/Conta de teste**: já vem 1505 / 1348; o código
+     do cabeçalho fica vazio (o app usa o da documentação).
+   - **Ligada** › **Salvar**.
+3. **Testar conexão** (homologação). → "Token e extrato ok (…; com o
+   certificado da empresa). Conta de teste do BB 1505 / 1348, dos últimos 30
+   dias: N lançamentos … Nada foi gravado." Se a conta de teste não tiver
+   movimento no período, aparece "o BB respondeu que não há lançamentos no
+   período" — também prova que token e certificado funcionaram.
+   - 401 no token: client_id/secret errados ou a API não está na aplicação.
+   - 403: a cadeia do certificado não foi enviada NESTE ambiente, a API não
+     está na aplicação ou (na homologação) a conta não é de teste.
+   - Erro de certificado/conexão recusada: o certificado não foi aceito.
 4. **Produção:** ambiente **Produção** › Salvar › PRODUCAO › **Testar
-   conexão** de novo.
+   conexão** de novo. → A conta real 1614 / 16773, dos últimos 30 dias, sem
+   gravar nada.
 5. Contabilidade › **Extrato bancário** › escolha o mês › **Buscar no BB**. →
    Os lançamentos do mês entram como uma importação "API" (sem repetir o que
    o OFX já trouxe; buscar de novo diz "já importados"). A resposta do banco
@@ -272,7 +297,8 @@ tem, quanto rendeu no mês, IR) numa próxima rodada.
    Desligada, Homologação/Produção, Pronta/N pendências**, "O que falta",
    "O que você fornece" e o formulário à direita.
 4. No cartão do BB: com **"Usar a mesma aplicação da cobrança"** marcado,
-   os campos de client_id/app key **somem**; desmarcado, aparecem.
+   os campos de client_id/app key **somem**; desmarcado, aparecem. No
+   cartão do **Extrato** ela já vem **desmarcada** (a v2 é outra aplicação).
 5. **Mostrar o avançado** abre endereços, NSU inicial / conta de teste.
 6. Trocar para **Produção** e **Salvar** pede a palavra **PRODUCAO**
    (Voltar desiste; nada muda).

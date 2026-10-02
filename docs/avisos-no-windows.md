@@ -66,7 +66,8 @@ Data: 01/10/2026. Três pedidos do dono:
   - Para sair de vez: botão direito no ícone › Sair do programa.
 - **Quando chega um aviso e o programa não está na frente,** aparece a janela no canto inferior direito. Ela:
   - tem a cara do programa: o fundo vinho do menu com o vidro dos modais, a faixa e os detalhes em dourado, o logo, o X vermelho e o "Abrir o programa" dourado (botão do padrão, 40 px, letra de 14 px);
-  - mostra até 3 avisos (os mais novos em cima), com o título, a mensagem e o começo da nota, e "e mais N no sino";
+  - mostra todos os avisos da fila (até 20, os mais novos em cima), com o título, a mensagem e a nota inteiros;
+  - cresce até 520 px de altura (uns 4 avisos); com mais, **só o meio rola**, com a barra fina e dourada do programa (`src/styles/scroll.css`, 3d), e o topo e o "Abrir o programa" ficam sempre à vista (02/10/2026, print do dono: antes a janela saía curta e cortava o rodapé — a primeira medida era feita com a janela ainda escondida, numa largura provisória, e o texto quebrava em menos linhas; agora a página mede de novo sempre que o conteúdo ou a janela mudam de tamanho);
   - fica sempre por cima, sem roubar o foco de quem está digitando em outro programa;
   - toca o som (o do dono ou o "tum-tum").
 - **A janela é persistente — só o X dela fecha.** Não some sozinha, não fecha ao perder o foco:

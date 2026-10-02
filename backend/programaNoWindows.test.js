@@ -38,7 +38,12 @@ test('janela do canto: mais novos primeiro e sem repetir; canto inferior direito
   assert.strictEqual(J.juntar([], Array.from({ length: 30 }, (_, i) => ({ id: i }))).length, J.MAX_NA_FILA);
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   assert.deepStrictEqual(J.posicao(area, 260), { x: 1920 - J.LARGURA - J.MARGEM, y: 1040 - 260 - J.MARGEM, width: J.LARGURA, height: 260 });
-  assert.strictEqual(J.posicao(area, 5000).height, 1040 - 2 * J.MARGEM, 'nunca maior que a tela');
+  // Até a altura máxima; o que passar rola dentro da janela (02/10/2026).
+  assert.strictEqual(J.ALTURA_MAXIMA, 520);
+  assert.strictEqual(J.posicao(area, 5000).height, J.ALTURA_MAXIMA, 'mais que isso, a lista rola');
+  assert.strictEqual(J.posicao(area, 40).height, J.ALTURA_MINIMA, 'nunca menor que o topo e o rodapé');
+  assert.strictEqual(J.posicao({ x: 0, y: 0, width: 1280, height: 400 }, 5000).height, 400 - 2 * J.MARGEM, 'nunca maior que a tela');
+  assert.strictEqual(J.posicao({ x: 0, y: 0, width: 1280, height: 150 }, 5000).height, 150 - 2 * J.MARGEM, 'tela minúscula: cabe nela');
   assert.strictEqual(J.posicao({ x: 1920, y: 0, width: 1280, height: 984 }, 200).x, 1920 + 1280 - J.LARGURA - J.MARGEM, 'segunda tela à direita');
   // Os lidos (abertos na janela ou no sino) saem da lista.
   const lista = [{ id: 9 }, { id: 5 }, { id: 3 }];

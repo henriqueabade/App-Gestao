@@ -172,12 +172,15 @@ function redeDeMentira(chamadas) {
       return json(404, { StatusProcessamento: 'NENHUM_DOCUMENTO_LOCALIZADO' });
     }
     if (url.includes('/oauth/token')) return json(200, { access_token: 'tk', token_type: 'Bearer', expires_in: 600, scope: 'extrato-info' });
-    if (url.includes('/extratos/v1/')) {
+    if (url.includes('/v2/conta-corrente/')) {
+      // Extratos v2: o identificador único só existe a partir de D-1 (a 2ª busca o traz numa linha que a 1ª trouxe sem).
+      const jaTemId = chamadas.filter(x => x.url.includes('/v2/conta-corrente/')).length > 1;
       return json(200, { numeroPaginaAtual: 1, numeroPaginaProximo: 0, listaLancamento: [
-        { dataLancamento: 1082026, valorLancamento: 5000, codigoHistorico: 0, textoDescricaoHistorico: 'Saldo Anterior', indicadorSinalLancamento: 'C' },
-        { dataLancamento: 5082026, valorLancamento: 2500, indicadorTipoLancamento: 'D', numeroDocumento: 123, textoDescricaoHistorico: 'Pagamento de boleto', numeroCpfCnpjContrapartida: 12345678000199, indicadorTipoPessoaContrapartida: 'J', codigoHistorico: 109, textoIdentificadorUnicoTransacao: 'T1' },
-        { dataLancamento: 20082026, valorLancamento: 1500, indicadorTipoLancamento: 'C', numeroDocumento: 7, textoDescricaoHistorico: 'Pix recebido', codigoIdentificadorSistemaPagamento: 'PIX', textoIdentificadorUnicoTransacao: 'T2' },
-        { dataLancamento: 31082026, valorLancamento: 4000, codigoHistorico: 999, textoDescricaoHistorico: 'S A L D O', indicadorSinalLancamento: 'C' }
+        { indicadorTipoLancamento: '1', dataLancamento: 1082026, valorLancamento: 5000, codigoHistorico: 0, textoDescricaoSubHistorico: 'Saldo Anterior', numeroDocumento: 0, indicadorSinalLancamento: 'C' },
+        { indicadorTipoLancamento: '1', dataLancamento: 5082026, valorLancamento: 2500, indicadorSinalLancamento: 'D', numeroDocumento: 123, textoDescricaoSubHistorico: 'Pagamento de boleto', numeroCadastroPessoaFisicaCadastroNacPessoasJuridicasContrapartida: '12345678000199', indicadorTipoPessoaContrapartida: 'J', codigoHistorico: 109, textoIdentificadorUnicoTransacao: 'T1' },
+        { indicadorTipoLancamento: '1', dataLancamento: 20082026, valorLancamento: 1500, indicadorSinalLancamento: 'C', numeroDocumento: 7, textoDescricaoSubHistorico: 'Pix recebido', numeroISPB: 0, textoIdentificadorUnicoTransacao: jaTemId ? 'T2' : '' },
+        { indicadorTipoLancamento: 'RA', dataLancamento: 31082026, valorLancamento: 300, indicadorSinalLancamento: 'C', textoDescricaoSubHistorico: 'Invest Resgate Autom' },
+        { indicadorTipoLancamento: '1', dataLancamento: 31082026, valorLancamento: 4000, codigoHistorico: 999, textoDescricaoSubHistorico: 'S A L D O', numeroDocumento: 0, indicadorSinalLancamento: 'C' }
       ] });
     }
     return json(500, { erro: `rota de mentira sem resposta: ${url}` });
@@ -368,7 +371,7 @@ test('ADN: a NFS-e tomada entra nos documentos com o XML oficial e o ISS retido;
   }
 });
 
-test('BB: credenciais próprias no cofre, conta de teste na homologação, sem certificado; o extrato do mês entra pela API e buscar de novo não repete', async () => {
+test('BB (Extratos v2): credenciais próprias no cofre, conta de teste com o código dela e o certificado na homologação; o extrato do mês entra pela API e buscar de novo não repete', async () => {
   const ctx = await montar(cenario());
   try {
     const salvar = await ctx.chamar('PUT', '/integracoes/bb_extrato', {
@@ -391,19 +394,26 @@ test('BB: credenciais próprias no cofre, conta de teste na homologação, sem c
     assert.deepEqual([r.corpo.periodo, r.corpo.novos, r.corpo.gravou], [{ inicio: '2026-08-01', fim: '2026-08-31' }, 2, true]);
     const token = ctx.chamadas.find(x => x.url.includes('/oauth/token'));
     assert.equal(token.cabecalhos.Authorization, `Basic ${Buffer.from('cid:sec').toString('base64')}`);
-    const consulta = new URL(ctx.chamadas.find(x => x.url.includes('/extratos/v1/')).url);
-    assert.equal(consulta.pathname, '/extratos/v1/conta-corrente/agencia/452/conta/123873', 'na homologação, a conta de teste');
+    const chamadaBB = ctx.chamadas.find(x => x.url.includes('/v2/conta-corrente/'));
+    const consulta = new URL(chamadaBB.url);
+    assert.equal(`${consulta.host}${consulta.pathname}`, 'extratos.mtls.api.hm.bb.com.br/v2/conta-corrente/agencia/452/conta/123873', 'na homologação, a conta de teste');
     assert.deepEqual([consulta.searchParams.get('dataInicioSolicitacao'), consulta.searchParams.get('dataFimSolicitacao'), consulta.searchParams.get('gw-dev-app-key')], ['1082026', '31082026', 'app']);
-    assert.ok(ctx.chamadas.filter(x => x.destino === 'o Banco do Brasil').every(x => !x.comCertificado), 'sem mTLS na homologação (automático)');
+    assert.equal(chamadaBB.cabecalhos['x-br-com-bb-ipa-mciteste'], '704950857', 'o código da conta de teste 452 / 123873');
+    assert.ok(ctx.chamadas.filter(x => x.destino === 'o Banco do Brasil').every(x => x.comCertificado), 'a v2 leva o certificado também na homologação');
     const [boleto, pix] = ctx.tabelas.movimentos_bancarios;
-    assert.deepEqual([boleto.data, boleto.valor, boleto.documento, boleto.contrapartida_documento, boleto.contrapartida_tipo, boleto.codigo_historico, boleto.tipo_banco], ['2026-08-05', -2500, '123', '12345678000199', 'J', '109', 'API']);
-    assert.deepEqual([pix.valor, pix.sistema_pagamento, pix.competencia], [1500, 'PIX', '2026-08']);
+    assert.deepEqual([boleto.data, boleto.valor, boleto.documento, boleto.contrapartida_documento, boleto.contrapartida_tipo, boleto.codigo_historico, boleto.tipo_banco, boleto.identificador], ['2026-08-05', -2500, '123', '12345678000199', 'J', '109', 'API', 'T1']);
+    assert.deepEqual([pix.valor, pix.sistema_pagamento, pix.competencia, pix.identificador], [1500, '0', '2026-08', null]);
     const imp = ctx.tabelas.extrato_importacoes[0];
     assert.deepEqual([imp.origem, imp.periodo_inicio, imp.periodo_fim, imp.saldo_final, imp.novos], ['api', '2026-08-01', '2026-08-31', 4000, 2]);
     assert.ok(ctx.tabelas.contabil_arquivos.some(x => x.categoria === 'extrato' && x.tipo_mime === 'application/json' && x.origem === 'oficial'), 'a resposta do mês fica como evidência');
 
+    // A 2ª busca traz o Pix já com o identificador do BB (nasce em D-1): continua sendo a mesma linha.
     const deNovo = await ctx.chamar('POST', '/integracoes/bb_extrato/sincronizar', { competencia: '2026-08' });
     assert.deepEqual([deNovo.corpo.novos, deNovo.corpo.repetidos, ctx.tabelas.movimentos_bancarios.length], [0, 2, 2]);
+
+    const teste = await ctx.chamar('POST', '/integracoes/bb_extrato/testar', {});
+    assert.equal(teste.status, 200, JSON.stringify(teste.corpo));
+    assert.match(teste.corpo.resumo, /com o certificado da empresa.*conta de teste do BB 452 \/ 123873.*2 lançamentos.*Invest Resgate Autom.*Nada foi gravado/s);
   } finally {
     await ctx.encerrar();
   }

@@ -28,7 +28,9 @@ function documentoFalso(ids) {
       replaceChildren(...fs) { el.children = [...fs]; },
       setAttribute(k, v) { el.atributos[k] = v; },
       addEventListener(evento, fn) { el.ouvintes[evento] = fn; },
-      getBoundingClientRect: () => ({ height: 240 })
+      getBoundingClientRect: () => ({ height: 240 }),
+      scrollHeight: 0,
+      clientHeight: 0
     };
     return el;
   };
@@ -65,8 +67,31 @@ test('janela do canto: CSP fechada, sem script embutido; a cara do programa (vin
   assert.match(AVISO_CSS, /\.btn-danger \{ background: var\(--color-red\);/);
 });
 
-test('janela do canto PERSISTENTE: até 3 avisos, "e mais N"; clicar abre e tira o aviso; vazia mostra "Tudo visto"; som do dono', () => {
-  const { porId, document } = documentoFalso(['avisoWindows', 'awContagem', 'awLista', 'awVazio', 'awMais', 'awFechar', 'awAbrir']);
+test('janela do canto não corta (02/10/2026): o cartão cabe na janela, só o meio rola, com a barra do programa', () => {
+  // A barra fina e dourada vem da folha do programa, não de uma barra nova.
+  assert.ok(AVISO_HTML.indexOf('href="../styles/scroll.css"') < AVISO_HTML.indexOf('href="../styles/aviso-windows.css"'));
+  assert.ok(!/::-webkit-scrollbar/.test(AVISO_CSS), 'nada de barra própria');
+  // O meio que rola envolve a lista e o "Tudo visto"; topo e rodapé ficam fora.
+  const corpo = AVISO_HTML.slice(AVISO_HTML.indexOf('<div id="awCorpo" class="aw-corpo">'), AVISO_HTML.indexOf('<footer class="aw-rodape">'));
+  assert.ok(corpo.includes('id="awLista"') && corpo.includes('id="awVazio"'));
+  assert.ok(AVISO_HTML.indexOf('<header class="aw-topo">') < AVISO_HTML.indexOf('id="awCorpo"'));
+  assert.ok(AVISO_CSS.includes('max-height: calc(100vh - 2px);'), 'o cartão nunca passa da janela');
+  const regraCorpo = AVISO_CSS.slice(AVISO_CSS.indexOf('.aw-corpo {'), AVISO_CSS.indexOf('}', AVISO_CSS.indexOf('.aw-corpo {')));
+  for (const trecho of ['min-height: 0;', 'overflow-y: auto;', 'overflow-x: hidden;', 'scrollbar-gutter: stable;']) assert.ok(regraCorpo.includes(trecho), trecho);
+  for (const fixo of ['.aw-topo {', '.aw-rodape {']) {
+    const regra = AVISO_CSS.slice(AVISO_CSS.indexOf(fixo), AVISO_CSS.indexOf('}', AVISO_CSS.indexOf(fixo)));
+    assert.ok(regra.includes('flex-shrink: 0;'), `${fixo} não encolhe`);
+  }
+  // Texto inteiro: nada de "…" nas linhas dos avisos.
+  assert.ok(!/line-clamp/.test(AVISO_CSS));
+  // A medida se refaz quando o conteúdo ou a janela mudam de tamanho.
+  assert.ok(AVISO_JS.includes("const vigia = new ResizeObserver(() => ajustar());"));
+  assert.ok(AVISO_JS.includes("window.addEventListener?.('resize', () => ajustar());"));
+  assert.ok(AVISO_JS.includes('document.fonts?.ready?.then(() => ajustar())'));
+});
+
+test('janela do canto PERSISTENTE: todos os avisos (o meio rola); clicar abre e tira o aviso; vazia mostra "Tudo visto"; som do dono', () => {
+  const { porId, document } = documentoFalso(['avisoWindows', 'awContagem', 'awCorpo', 'awLista', 'awVazio', 'awMais', 'awFechar', 'awAbrir']);
   const chamadas = [];
   const sons = [];
   const janela = {
@@ -80,20 +105,28 @@ test('janela do canto PERSISTENTE: até 3 avisos, "e mais N"; clicar abre e tira
   const avisos = [5, 4, 3, 2, 1].map(id => ({ id, tipo: 'registro_excluido', titulo: `Aviso ${id}`, mensagem: 'Ana excluiu a tarefa.', notas: ['Motivo: o cliente desistiu'] }));
   janela.__avisoWindows.receber({ avisos, som: true, somArquivo: 'som-aviso.mp3' });
   assert.strictEqual(porId.awContagem.textContent, '5 avisos novos');
-  assert.strictEqual(porId.awLista.children.length, 3);
+  assert.strictEqual(porId.awLista.children.length, 5, 'todos à vista: o meio da janela rola');
   assert.strictEqual(porId.awVazio.hidden, true);
-  assert.strictEqual(porId.awMais.textContent, 'e mais 2 no sino');
+  assert.strictEqual(porId.awMais.textContent, '', 'nada de "e mais N no sino"');
   const primeiro = porId.awLista.children[0];
   const corpo = primeiro.children[1];
   assert.deepStrictEqual(corpo.children.map(c => c.textContent), ['Aviso 5', 'Ana excluiu a tarefa.', 'Motivo: o cliente desistiu']);
   assert.strictEqual(JSON.stringify(sons), '[{"arquivo":"som-aviso.mp3"}]', 'toca o som do dono (o SomAviso cai no tum-tum sem ele)');
   assert.deepStrictEqual(chamadas.find(c => c[0] === 'altura'), ['altura', 242]);
 
+  // A altura pedida conta também o que está escondido na rolagem do meio:
+  // com a janela curta, ela pede o que precisa (o main.js limita).
+  porId.awCorpo.scrollHeight = 500;
+  porId.awCorpo.clientHeight = 200;
+  assert.strictEqual(janela.__avisoWindows.alturaNatural(), 240 + 300 + 2);
+  porId.awCorpo.scrollHeight = 0;
+  porId.awCorpo.clientHeight = 0;
+
   // Clicar no aviso: abre no programa e ele sai daqui; a janela fica.
   primeiro.ouvintes.click();
   assert.strictEqual(porId.awContagem.textContent, '4 avisos novos');
   assert.strictEqual(porId.awLista.children[0].children[1].children[0].textContent, 'Aviso 4');
-  assert.strictEqual(porId.awMais.textContent, 'e mais 1 no sino');
+  assert.strictEqual(porId.awLista.children.length, 4);
   // "Abrir o programa": abre e a lista fica como está.
   porId.awAbrir.ouvintes.click();
   assert.strictEqual(janela.__avisoWindows.lista().length, 4);

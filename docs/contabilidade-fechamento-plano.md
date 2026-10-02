@@ -1395,7 +1395,7 @@ e configurar as APIs, e um roteiro completo do que fazer e fornecer —
 | Chave | Etapa | Faz | Automática |
 |---|---|---|---|
 | `sefaz_nfe` | 10 | NF-e emitidas contra o CNPJ: Distribuição de DF-e (NT 2014.002, `distNSU`/`consChNFe`, docZip gzip+base64) e manifestação no Ambiente Nacional (cOrgao 91; ciência 210210, confirmação 210200, desconhecimento 210220, não realizada 210240) | a cada 60 min (1 h de espera após 137 / NSU no máximo; 656 respeitado) |
-| `bb_extrato` | 11 | API de Extratos do BB (OAuth client_credentials, `gw-dev-app-key`/`gw-app-key`, datas DDMMAAAA, páginas de 200, mTLS opcional); grava no Extrato bancário como importação `origem = 'api'` | 1 vez por dia, relendo `dias_para_tras` |
+| `bb_extrato` | 11 | API de Extratos do BB — **v2 desde 02/10/2026** (aplicação própria, OAuth client_credentials, `gw-dev-app-key` nos dois ambientes, mTLS também na homologação, conta de teste com o cabeçalho `x-br-com-bb-ipa-mciteste`, datas DDMMAAAA até 31 dias por consulta, páginas de 120; a v1 sai em 20/11/2026); grava no Extrato bancário como importação `origem = 'api'` | 1 vez por dia, relendo `dias_para_tras` |
 | `nfse_adn` | 13 | ADN da NFS-e: `GET {base}/DFe/{NSU}?lote=true` com mTLS, só as NFS-e em que a empresa é tomadora | a cada 3 h |
 | `bb_investimentos` | 12 | CDB: só credenciais + teste de sondagem (escopo e caminho configuráveis; a amostra vai para o mapeamento) | não |
 

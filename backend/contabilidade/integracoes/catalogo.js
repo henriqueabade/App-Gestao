@@ -28,26 +28,43 @@ const URLS = {
     producao: 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
   },
   bb_oauth: { homologacao: 'https://oauth.hm.bb.com.br/oauth/token', producao: 'https://oauth.bb.com.br/oauth/token' },
-  bb_extratos: { homologacao: 'https://api.hm.bb.com.br/extratos/v1', producao: 'https://api-extratos.bb.com.br/extratos/v1' },
+  // Extratos v2 (02/10/2026): a v1 (api.hm…/extratos/v1, api-extratos…/extratos/v1) é desligada pelo BB em 20/11/2026.
+  bb_extratos: { homologacao: 'https://extratos.mtls.api.hm.bb.com.br/v2', producao: 'https://extratos.mtls.api.bb.com.br/v2' },
   bb_api: { homologacao: 'https://api.hm.bb.com.br', producao: 'https://api.bb.com.br' },
   adn: { homologacao: 'https://adn.producaorestrita.nfse.gov.br/contribuintes', producao: 'https://adn.nfse.gov.br/contribuintes' }
 };
 
-/** Os campos das credenciais do BB (quando não reaproveita as da cobrança). */
-const CAMPOS_CREDENCIAIS_BB = [
-  { chave: 'usar_credenciais_da_cobranca', rotulo: 'Usar a mesma aplicação da cobrança (client_id, app key e client_secret da Configuração de cobrança)', tipo: 'booleano', padrao: true,
-    ajuda: 'No Portal Developers do BB, uma aplicação pode ter várias APIs: basta incluir esta API na aplicação que já emite os boletos.' },
-  { chave: 'client_id_homologacao', rotulo: 'client_id (homologação)', tipo: 'texto', max: 200, quando: { usar_credenciais_da_cobranca: false } },
-  { chave: 'app_key_homologacao', rotulo: 'app key / gw-dev-app-key (homologação)', tipo: 'texto', max: 120, quando: { usar_credenciais_da_cobranca: false } },
-  { chave: 'client_id_producao', rotulo: 'client_id (produção)', tipo: 'texto', max: 200, quando: { usar_credenciais_da_cobranca: false } },
-  { chave: 'app_key_producao', rotulo: 'app key / gw-app-key (produção)', tipo: 'texto', max: 120, quando: { usar_credenciais_da_cobranca: false } }
-];
+/**
+ * Os campos das credenciais do BB (quando não reaproveita as da cobrança).
+ * `usarCobranca` é o padrão da caixa; `ajuda` explica o porquê dele.
+ */
+function camposCredenciaisBB({ usarCobranca = true, ajuda, appKeyProducao = 'app key / gw-app-key (produção)' } = {}) {
+  return [
+    { chave: 'usar_credenciais_da_cobranca', rotulo: 'Usar a mesma aplicação da cobrança (client_id, app key e client_secret da Configuração de cobrança)', tipo: 'booleano', padrao: usarCobranca,
+      ajuda: ajuda || 'No Portal Developers do BB, uma aplicação pode ter várias APIs: basta incluir esta API na aplicação que já emite os boletos.' },
+    { chave: 'client_id_homologacao', rotulo: 'client_id (homologação)', tipo: 'texto', max: 200, quando: { usar_credenciais_da_cobranca: false } },
+    { chave: 'app_key_homologacao', rotulo: 'app key / gw-dev-app-key (homologação)', tipo: 'texto', max: 120, quando: { usar_credenciais_da_cobranca: false } },
+    { chave: 'client_id_producao', rotulo: 'client_id (produção)', tipo: 'texto', max: 200, quando: { usar_credenciais_da_cobranca: false } },
+    { chave: 'app_key_producao', rotulo: appKeyProducao, tipo: 'texto', max: 120, quando: { usar_credenciais_da_cobranca: false } }
+  ];
+}
 
 const CAMPO_MTLS = {
   chave: 'mtls', rotulo: 'Certificado da empresa na conexão (mTLS)', tipo: 'opcao', padrao: 'auto',
   opcoes: { auto: 'Automático (só em produção)', sim: 'Sempre', nao: 'Nunca' },
   ajuda: 'O BB pede o certificado A1 da empresa na conexão das APIs de conta. O certificado público (.cer) precisa estar cadastrado na aplicação do portal.'
 };
+
+/**
+ * As contas de teste da homologação da Extratos v2 (documentação do BB,
+ * "Especificações e testes", 02/10/2026): cada uma tem o seu código, que vai
+ * no cabeçalho `x-br-com-bb-ipa-mciteste` — só na homologação.
+ */
+const CONTAS_TESTE_EXTRATO = [
+  { agencia: '1505', conta: '1348', mciteste: '178961031' },
+  { agencia: '551', conta: '5087', mciteste: '26968930' },
+  { agencia: '452', conta: '123873', mciteste: '704950857' }
+];
 
 const INTEGRACOES = {
   sefaz_nfe: {
@@ -74,28 +91,40 @@ const INTEGRACOES = {
   },
   bb_extrato: {
     chave: 'bb_extrato', etapa: 11, nome: 'Extrato da conta (API do BB)', icone: 'fa-university', banco: true,
-    descricao: 'Busca os lançamentos da conta corrente pela API de Extratos do Banco do Brasil e grava no Extrato bancário (o mesmo lugar do OFX, sem repetir o que já entrou).',
+    descricao: 'Busca os lançamentos da conta corrente pela API de Extratos v2 do Banco do Brasil e grava no Extrato bancário (o mesmo lugar do OFX, sem repetir o que já entrou).',
     usa: ['credenciais_bb', 'certificado_opcional'],
+    // A v2 pede o certificado da empresa na conexão também na homologação.
+    mtlsSempre: true,
     permissaoExecutar: 'contabilidade.extrato.importar',
     automatica: true, intervalo: { padrao: 1440, min: 60, max: 1440 },
     segredo: 'bb_extrato',
     campos: [
-      ...CAMPOS_CREDENCIAIS_BB,
+      ...camposCredenciaisBB({
+        usarCobranca: false, appKeyProducao: 'app key (produção)',
+        ajuda: 'A Extratos v2 exige uma aplicação própria no Portal Developers (não entra na aplicação dos boletos): desmarque e preencha as credenciais dela.'
+      }),
       { chave: 'conta_id', rotulo: 'Conta do Extrato bancário que recebe os lançamentos', tipo: 'conta', obrigatorio: true },
       { chave: 'agencia', rotulo: 'Agência (sem o dígito)', tipo: 'digitos', semDv: true, max: 5, obrigatorio: true },
       { chave: 'conta', rotulo: 'Conta corrente (sem o dígito)', tipo: 'digitos', semDv: true, max: 12, obrigatorio: true },
       { chave: 'escopo', rotulo: 'Escopo (scope) do OAuth', tipo: 'texto', max: 200, padrao: 'extrato-info' },
-      CAMPO_MTLS,
+      {
+        ...CAMPO_MTLS, padrao: 'sim',
+        // Um "auto" gravado antes da v2 vale como "sim" (usaMtls).
+        opcoes: { sim: 'Sempre (a Extratos v2 exige)', nao: 'Nunca (só para diagnóstico)' },
+        ajuda: 'A Extratos v2 pede o certificado A1 da empresa na conexão, na homologação e na produção. A cadeia do certificado precisa estar enviada na aplicação do portal, nos dois ambientes.'
+      },
       { chave: 'dias_para_tras', rotulo: 'Dias a reler para trás (lançamentos que o banco lança com atraso)', tipo: 'inteiro', min: 0, max: 30, padrao: 5 },
-      { chave: 'homologacao_agencia', rotulo: 'Agência de teste (homologação do BB)', tipo: 'digitos', semDv: true, max: 5, avancado: true,
-        ajuda: 'Na homologação o BB só aceita a conta de teste da documentação da API.' },
-      { chave: 'homologacao_conta', rotulo: 'Conta de teste (homologação do BB)', tipo: 'digitos', semDv: true, max: 12, avancado: true },
+      { chave: 'homologacao_agencia', rotulo: 'Agência de teste (homologação do BB)', tipo: 'digitos', semDv: true, max: 5, avancado: true, padrao: '1505',
+        ajuda: 'Na homologação o BB só aceita as contas de teste da documentação: 1505 / 1348, 551 / 5087 ou 452 / 123873.' },
+      { chave: 'homologacao_conta', rotulo: 'Conta de teste (homologação do BB)', tipo: 'digitos', semDv: true, max: 12, avancado: true, padrao: '1348' },
+      { chave: 'homologacao_mciteste', rotulo: 'Código da conta de teste (cabeçalho x-br-com-bb-ipa-mciteste)', tipo: 'digitos', max: 12, avancado: true,
+        ajuda: 'Vazio: o app usa o código da documentação para a conta de teste escolhida. Só vai na homologação.' },
       { chave: 'url_oauth', rotulo: 'Endereço do token (OAuth)', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'bb_oauth' },
-      { chave: 'url_api', rotulo: 'Endereço da API de Extratos', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'bb_extratos' }
+      { chave: 'url_api', rotulo: 'Endereço da API de Extratos (v2)', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'bb_extratos' }
     ],
     fornecer: [
-      'No Portal Developers BB: incluir a "API de Extratos" na aplicação (a mesma da cobrança) e pedir a liberação em produção.',
-      'Se o BB exigir certificado na conexão: cadastrar na aplicação o certificado público (.cer) que esta tela baixa.',
+      'No Portal Developers BB: uma aplicação própria com a API Extratos (v2), credenciais de teste e de produção, a cadeia do certificado enviada nos dois ambientes e o termo de adesão assinado (envio para produção).',
+      'Aqui: as credenciais dessa aplicação (client_id e app key de cada ambiente; o client_secret no bloco "Credenciais do BB").',
       'Agência e conta da empresa sem o dígito (as mesmas do cadastro da conta no Extrato bancário) e qual conta do Extrato recebe os lançamentos.'
     ]
   },
@@ -125,7 +154,7 @@ const INTEGRACOES = {
     automatica: false, intervalo: { padrao: 1440, min: 60, max: 1440 },
     segredo: 'bb_investimentos',
     campos: [
-      ...CAMPOS_CREDENCIAIS_BB,
+      ...camposCredenciaisBB(),
       { chave: 'escopo', rotulo: 'Escopo (scope) do OAuth — o que o BB indicar', tipo: 'texto', max: 200, obrigatorio: true },
       { chave: 'caminho_consulta', rotulo: 'Caminho da consulta (ex.: /investimentos/v1/…/agencia/{agencia}/conta/{conta})', tipo: 'texto', max: 300,
         ajuda: '{agencia} e {conta} são trocados pelos números abaixo. A resposta aparece no teste, para o mapeamento.' },
@@ -174,4 +203,34 @@ function padroes(def) {
   return saida;
 }
 
-module.exports = { HOMOLOGACAO, PRODUCAO, AMBIENTES, URLS, INTEGRACOES, CHAVES, definicao, campoDoAmbiente, url, padroes };
+/**
+ * Vai o certificado da empresa na conexão? "nao" desliga sempre; nas APIs
+ * que o exigem nos dois ambientes (`mtlsSempre`) qualquer outro valor liga;
+ * nas outras, "auto" liga só em produção. Pura.
+ */
+function usaMtls(def, params, ambiente) {
+  const mtls = params?.mtls;
+  if (mtls === 'nao') return false;
+  if (def?.mtlsSempre || mtls === 'sim') return true;
+  return ambiente === PRODUCAO;
+}
+
+const semZeros = v => String(v ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+
+/**
+ * O código de teste (x-br-com-bb-ipa-mciteste) da conta de homologação: o
+ * digitado ou, vazio, o da documentação para aquela agência/conta; null
+ * quando a conta não é uma das de teste. Pura.
+ */
+function mciTesteDoExtrato(params, agencia, conta) {
+  const digitado = semZeros(params?.homologacao_mciteste);
+  if (digitado) return digitado;
+  const ag = semZeros(agencia);
+  const cc = semZeros(conta);
+  return CONTAS_TESTE_EXTRATO.find(x => x.agencia === ag && x.conta === cc)?.mciteste || null;
+}
+
+module.exports = {
+  HOMOLOGACAO, PRODUCAO, AMBIENTES, URLS, INTEGRACOES, CHAVES, CONTAS_TESTE_EXTRATO,
+  definicao, campoDoAmbiente, url, padroes, usaMtls, mciTesteDoExtrato
+};

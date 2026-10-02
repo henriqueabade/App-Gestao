@@ -64,7 +64,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
   const ca = () => (env.NFE_CA_PATH ? (() => { try { return fs.readFileSync(env.NFE_CA_PATH); } catch (_) { return null; } })() : null);
   const transporte = (cert, destino) => transporteFabrica(cert, { ca: ca(), destino });
   const podeGravar = ambiente => ambiente === catalogo.PRODUCAO || String(env.BANCO || '').toUpperCase() === 'DEV';
-  const usaMtls = (params, ambiente) => params.mtls === 'sim' || (params.mtls !== 'nao' && ambiente === catalogo.PRODUCAO);
+  const usaMtls = (def, params, ambiente) => catalogo.usaMtls(def, params, ambiente);
   const hojeBR = () => c.dia(b.instanteBR(new Date(agora())));
 
   /** Tudo o que uma operação precisa, e o que falta (com `exigirPronto`, falta = 409). */
@@ -76,7 +76,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const params = configuracao.parametros(def, linha);
     const ambiente = configuracao.ambienteEfetivo(def, linha, env);
     const fiscal = await configuracaoFiscal.carregar(api).catch(() => null);
-    const precisaCert = def.usa.includes('certificado') || (def.usa.includes('credenciais_bb') && usaMtls(params, ambiente));
+    const precisaCert = def.usa.includes('certificado') || (def.usa.includes('credenciais_bb') && usaMtls(def, params, ambiente));
     let cert = null;
     let certResumo = null;
     if (precisaCert || def.usa.includes('certificado_opcional')) {
@@ -417,10 +417,15 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
 
   // ------------------------------------------------------------ BB — extrato
 
-  /** Agência e conta que valem no ambiente (na homologação, a de teste quando há). */
+  /**
+   * Agência e conta que valem no ambiente. Na homologação, a conta de teste
+   * e o código dela (cabeçalho x-br-com-bb-ipa-mciteste, só lá).
+   */
   function contaDoAmbiente(params, ambiente) {
-    if (ambiente === catalogo.PRODUCAO) return { agencia: params.agencia, conta: params.conta };
-    return { agencia: params.homologacao_agencia || params.agencia, conta: params.homologacao_conta || params.conta };
+    if (ambiente === catalogo.PRODUCAO) return { agencia: params.agencia, conta: params.conta, mciTeste: null };
+    const agencia = params.homologacao_agencia || params.agencia;
+    const conta = params.homologacao_conta || params.conta;
+    return { agencia, conta, mciTeste: catalogo.mciTesteDoExtrato(params, agencia, conta) };
   }
 
   /** O período da busca: a competência pedida, ou da última busca pela API (menos a folga) até ontem, sem entrar em mês fechado. */
@@ -454,11 +459,11 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       await configuracao.atualizarEstado(api, linha, { ultima_execucao_em: c.agora(), ultimo_sucesso_em: c.agora(), ultimo_erro: null });
       return { situacao: 'nada', resumo: 'Nada a buscar: o período já está em dia (ou cai em competência fechada).' };
     }
-    const { agencia, conta: numeroConta } = contaDoAmbiente(params, ambiente);
+    const { agencia, conta: numeroConta, mciTeste } = contaDoAmbiente(params, ambiente);
     const busca = await bbExtrato.buscarPeriodo({
-      transporte: transporte(usaMtls(params, ambiente) ? cert : null, 'o Banco do Brasil'),
+      transporte: transporte(usaMtls(ctx.def, params, ambiente) ? cert : null, 'o Banco do Brasil'),
       urlOauth: catalogo.url(ctx.def, 'url_oauth', params, ambiente), urlApi: catalogo.url(ctx.def, 'url_api', params, ambiente),
-      credenciais, escopo: params.escopo, ambiente, agencia, conta: numeroConta, inicio, fim
+      credenciais, escopo: params.escopo, ambiente, agencia, conta: numeroConta, mciTeste, inicio, fim
     });
     const p = await extratoMod.analisar(api, { conta, extrato: busca.extrato, confere: true, origem: 'api' });
     let gravado = null;
@@ -543,20 +548,28 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
         };
       }
       if (chave === 'bb_extrato') {
+        // Os últimos 30 dias até ontem (uma consulta só: o BB aceita até 31 dias).
         const ontem = somarDia(hojeBR(), -1);
-        const { agencia, conta } = contaDoAmbiente(params, ambiente);
+        const desde = somarDia(ontem, -29);
+        const { agencia, conta, mciTeste } = contaDoAmbiente(params, ambiente);
+        const comCertificado = usaMtls(ctx.def, params, ambiente);
         const busca = await bbExtrato.buscarPeriodo({
-          transporte: transporte(usaMtls(params, ambiente) ? cert : null, 'o Banco do Brasil'),
+          transporte: transporte(comCertificado ? cert : null, 'o Banco do Brasil'),
           urlOauth: catalogo.url(ctx.def, 'url_oauth', params, ambiente), urlApi: catalogo.url(ctx.def, 'url_api', params, ambiente),
-          credenciais, escopo: params.escopo, ambiente, agencia, conta, inicio: ontem, fim: ontem
+          credenciais, escopo: params.escopo, ambiente, agencia, conta, mciTeste, inicio: desde, fim: ontem
         });
-        return {
-          ok: true, tempoMs: agora() - inicio,
-          resumo: `Token e extrato ok (escopos: ${busca.escopos.join(' ') || '—'}). Ontem (${c.impressa(ontem)}): ${c.plural(busca.extrato.lancamentos.length, 'lançamento', 'lançamentos')}${busca.extrato.saldo ? `, saldo ${c.reais(busca.extrato.saldo.valor)}` : ''}. Nada foi gravado.`
-        };
+        const ex = busca.extrato;
+        const qualConta = ambiente === catalogo.PRODUCAO ? `conta ${agencia} / ${conta}` : `conta de teste do BB ${agencia} / ${conta}`;
+        const partes = [
+          `Token e extrato ok (escopos: ${busca.escopos.join(' ') || '—'}${comCertificado ? '; com o certificado da empresa' : ''}).`,
+          `${qualConta}, de ${c.impressa(desde)} a ${c.impressa(ontem)}: ${busca.semLancamentos ? 'o BB respondeu que não há lançamentos no período' : c.plural(ex.lancamentos.length, 'lançamento', 'lançamentos')}${ex.saldo ? `, saldo ${c.reais(ex.saldo.valor)}` : ''}.`,
+          ex.fora.length ? `Fora do extrato (saldos, limites, futuros): ${ex.fora.slice(0, 4).map(x => `${x.descricao || x.tipo} ${c.reais(x.valor)}`).join('; ')}${ex.fora.length > 4 ? '…' : ''}.` : '',
+          'Nada foi gravado.'
+        ];
+        return { ok: true, tempoMs: agora() - inicio, resumo: partes.filter(Boolean).join(' ') };
       }
       if (chave === 'bb_investimentos') {
-        const rede_ = transporte(usaMtls(params, ambiente) ? cert : null, 'o Banco do Brasil');
+        const rede_ = transporte(usaMtls(ctx.def, params, ambiente) ? cert : null, 'o Banco do Brasil');
         const token = await bbExtrato.pedirToken({ transporte: rede_, urlOauth: catalogo.url(ctx.def, 'url_oauth', params, ambiente), clientId: credenciais.clientId, clientSecret: credenciais.secret, escopo: params.escopo });
         const caminho = String(params.caminho_consulta || '').replace('{agencia}', b.digitos(params.agencia)).replace('{conta}', b.digitos(params.conta));
         const r = await bbExtrato.chamarApi({ transporte: rede_, url: `${catalogo.url(ctx.def, 'url_api', params, ambiente)}${caminho.startsWith('/') ? '' : '/'}${caminho}`, token, appKey: credenciais.appKey, ambiente });

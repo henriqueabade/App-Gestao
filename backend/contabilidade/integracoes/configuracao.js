@@ -194,17 +194,23 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
     if (!credenciais?.clientId) faltas.push(`Sem client_id de ${nomeAmb}${origem}.`);
     if (!credenciais?.appKey) faltas.push(`Sem app key de ${nomeAmb}${origem}.`);
     if (!credenciais?.secret) faltas.push(`Sem client_secret de ${nomeAmb} guardado${origem}.`);
-    const mtls = params.mtls === 'sim' || (params.mtls !== 'nao' && ambiente === PRODUCAO);
-    if (mtls && !certificado?.configurado) faltas.push('A conexão pede o certificado da empresa (mTLS) e ele não foi encontrado.');
+    if (catalogo.usaMtls(def, params, ambiente) && !certificado?.configurado) faltas.push('A conexão pede o certificado da empresa (mTLS) e ele não foi encontrado.');
   }
   if (def.chave === 'bb_extrato') {
     if (!params.conta_id) faltas.push('Escolha a conta do Extrato bancário que recebe os lançamentos.');
     else if (contas.length && !contas.some(x => String(x.id) === String(params.conta_id))) faltas.push('A conta escolhida não existe mais no Extrato bancário.');
     if (ambiente === PRODUCAO && (!params.agencia || !params.conta)) faltas.push('Informe agência e conta corrente (sem o dígito).');
-    if (ambiente !== PRODUCAO && (!(params.homologacao_agencia || params.agencia) || !(params.homologacao_conta || params.conta))) {
-      faltas.push('Informe a conta de teste da homologação do BB (ou agência e conta).');
+    if (ambiente !== PRODUCAO) {
+      const agencia = params.homologacao_agencia || params.agencia;
+      const conta = params.homologacao_conta || params.conta;
+      if (!agencia || !conta) faltas.push('Informe a conta de teste da homologação do BB (ou agência e conta).');
+      else if (!catalogo.mciTesteDoExtrato(params, agencia, conta)) {
+        faltas.push(`A conta ${agencia} / ${conta} não é uma das contas de teste do BB: use 1505 / 1348, 551 / 5087 ou 452 / 123873 (Avançado), ou informe o código dela (x-br-com-bb-ipa-mciteste).`);
+      }
     }
     if (!String(params.escopo || '').trim()) faltas.push('Informe o escopo do OAuth (extrato-info).');
+    const urlApi = catalogo.url(def, 'url_api', params, ambiente) || '';
+    if (/\/extratos\/v1\b/i.test(urlApi)) faltas.push('O endereço da API de Extratos é o da versão 1, que o BB desliga em 20/11/2026: apague o endereço digitado (Avançado) para usar o da v2.');
   }
   if (def.chave === 'bb_investimentos') {
     if (!String(params.escopo || '').trim()) faltas.push('Falta o escopo que o BB indicar para a API do CDB.');

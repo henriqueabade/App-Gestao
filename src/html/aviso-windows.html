@@ -10,6 +10,8 @@
     <title>Avisos — Santíssimo Decor</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../styles/controles.css">
+    <!-- A barra de rolagem do programa (fina, dourada, sem trilho): scroll.css 3d. -->
+    <link rel="stylesheet" href="../styles/scroll.css">
     <link rel="stylesheet" href="../styles/aviso-windows.css">
 </head>
 <body>
@@ -32,11 +34,14 @@
                 <i class="fas fa-xmark" aria-hidden="true"></i>
             </button>
         </header>
-        <ul id="awLista" class="aw-lista" aria-label="Avisos novos"></ul>
-        <div id="awVazio" class="aw-vazio" hidden>
-            <span class="aw-vazio__icone"><i class="fas fa-check" aria-hidden="true"></i></span>
-            <strong class="aw-vazio__titulo">Tudo visto por aqui</strong>
-            <span class="aw-vazio__texto">Os próximos avisos aparecem nesta janela.</span>
+        <!-- Só o meio rola (02/10/2026): o topo e o "Abrir o programa" ficam sempre à vista. -->
+        <div id="awCorpo" class="aw-corpo">
+            <ul id="awLista" class="aw-lista" aria-label="Avisos novos"></ul>
+            <div id="awVazio" class="aw-vazio" hidden>
+                <span class="aw-vazio__icone"><i class="fas fa-check" aria-hidden="true"></i></span>
+                <strong class="aw-vazio__titulo">Tudo visto por aqui</strong>
+                <span class="aw-vazio__texto">Os próximos avisos aparecem nesta janela.</span>
+            </div>
         </div>
         <footer class="aw-rodape">
             <span id="awMais" class="aw-rodape__mais"></span>
