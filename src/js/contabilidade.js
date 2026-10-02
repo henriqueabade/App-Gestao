@@ -178,6 +178,7 @@ const CTB_ACOES = {
     // filtra e leva a tela até a lista.
     'filtrar': { rotulo: 'Filtrar pendências', abrir: (m, extra) => (extra?.cartao ? ctbIrParaPendencias(m, extra.filtro) : ctbFiltrar(m, { nivel: extra?.filtro || 'todas' })) },
     'filtrar-fonte': { rotulo: 'Filtrar por fonte', abrir: (m, extra) => ctbFiltrar(m, { fonte: extra?.fonte || null }) },
+    'ir-fonte': { rotulo: 'Ver as pendências da fonte', abrir: (m, extra) => ctbIrParaFonte(m, extra?.fonte || null) },
     'atividade-todas': { rotulo: 'Toda a atividade', abrir: m => ctbAbrirModal('atividade', m, {}) },
     'mensagens': { rotulo: 'Mensagens e comentários', abrir: (m, extra) => ctbAbrirModal('mensagens', m, { foco: extra?.foco || null }) },
     // Etapas 2 e 3: documentos, evidências e contas a pagar. `extra` é o
@@ -470,7 +471,8 @@ function ctbRenderizarFontes(moduleEl, fontes, filtroFonte) {
         cartao.dataset.estado = estado;
         cartao.dataset.fonte = f.chave;
         if (estado !== 'indisponivel') {
-            cartao.dataset.ctbAcao = 'filtrar-fonte';
+            // Como os cartões do alto: filtra e leva até o cartão das pendências (02/10/2026).
+            cartao.dataset.ctbAcao = 'ir-fonte';
             cartao.dataset.ctbFonte = f.chave;
             cartao.setAttribute('role', 'button');
             cartao.tabIndex = 0;
@@ -656,6 +658,19 @@ function ctbFiltrar(moduleEl, { nivel, fonte } = {}) {
 function ctbIrParaPendencias(moduleEl, nivel) {
     const atual = moduleEl.ctbFiltro || { nivel: 'todas', fonte: null };
     moduleEl.ctbFiltro = { ...atual, nivel: nivel || 'todas' };
+    ctbRenderizarPendencias(moduleEl);
+    const lista = moduleEl.querySelector('[data-ctb-lista="pendencias"]');
+    if (lista) lista.scrollTop = 0;
+    ctbRolarAte(moduleEl.querySelector('#ctbPendenciasPainel'));
+}
+
+/**
+ * Um cartão do "Checklist por fonte": a lista mostra só as pendências da
+ * fonte (todos os níveis) e a tela rola até o cartão das pendências, como
+ * nos cartões do alto. Clicar de novo mantém o filtro (o chip da fonte tira).
+ */
+function ctbIrParaFonte(moduleEl, fonte) {
+    moduleEl.ctbFiltro = { nivel: 'todas', fonte: fonte || null };
     ctbRenderizarPendencias(moduleEl);
     const lista = moduleEl.querySelector('[data-ctb-lista="pendencias"]');
     if (lista) lista.scrollTop = 0;

@@ -61,6 +61,12 @@ test('configuração: parâmetros conferidos por tipo; intervalo nos limites; pa
   assert.deepEqual(ok.erros, []);
   assert.deepEqual(ok.valores.parametros, { escopo: 'extrato-info', usar_credenciais_da_cobranca: false, client_id_producao: 'abc', conta_id: 7, agencia: '1614', conta: '16773', mtls: 'sim', dias_para_tras: 3, url_api_producao: 'https://api-extratos.bb.com.br/extratos/v1' });
   assert.deepEqual([ok.valores.ativa, ok.valores.automatica, ok.valores.intervalo_min], [true, true, 1440]);
+  // O mês em que a Contabilidade começa (SEFAZ e ADN): AAAA-MM ou MM/AAAA; vazio volta a setembro/2026.
+  const sefaz = catalogo.definicao('sefaz_nfe');
+  const inicio = campo => configuracao.validar(sefaz, { parametros: { primeira_competencia: campo } });
+  assert.deepEqual(['2026-09', '10/2026', '', null].map(v => inicio(v).valores.parametros.primeira_competencia), ['2026-09', '2026-10', '2026-09', '2026-09']);
+  assert.deepEqual(['2026-13', 'setembro', '1999-01'].map(v => inicio(v).erros.length), [1, 1, 1]);
+  assert.equal(catalogo.padroes(catalogo.definicao('nfse_adn')).primeira_competencia, '2026-09');
   const ruim = configuracao.validar(def, { intervalo_min: 5, ambiente: 'teste', parametros: { url_api_producao: 'http://inseguro', mtls: 'talvez', dias_para_tras: 99, inventado: 1 } });
   assert.equal(ruim.erros.length, 6);
   assert.ok(ruim.erros.some(e => /https:\/\//.test(e)) && ruim.erros.some(e => /"inventado"/.test(e)) && ruim.erros.some(e => /Intervalo: de 60 a 1440/.test(e)));
@@ -130,7 +136,15 @@ test('caixa de entrada: gravar nunca piora — XML não some, cancelada não vol
   assert.equal(evento.campos.situacao_nota, 'cancelada');
   assert.equal(entrada.mesclar(null, { tipo: 'nfse', chave: 'N', xml: '<NFSe/>' }).campos.status, 'completa', 'a NFS-e já chega completa');
   const publica = entrada.linhaPublica({ id: 1, origem: 'sefaz_nfe', tipo: 'nfe', chave: 'A', status: 'nova', resumo: true, situacao_nota: 'autorizada', manifestacao: 'ciencia' });
-  assert.deepEqual(publica.pode, { manifestar: true, baixar_xml: true, registrar: false, ignorar: true, restaurar: false });
+  assert.deepEqual(publica.pode, { manifestar: true, baixar_xml: true, registrar: false, ignorar: true, historico: false, restaurar: false });
+  // A janela do início (02/10/2026): o mês anterior pede a decisão; antes dele não entra.
+  assert.deepEqual(['2026-07-31', '2026-08-01', '2026-08-31T22:00:00-03:00', '2026-09-01', '2026-12-10', null].map(d => entrada.faseDaNota(d, '2026-09')), ['antes', 'anterior', 'anterior', 'dentro', 'dentro', null]);
+  assert.equal(entrada.faseDaNota('2026-08-10', null), null, 'sem início, o fluxo normal');
+  assert.equal(entrada.faseDaNota('2025-12-20', '2026-01'), 'anterior', 'virada do ano');
+  const deAgosto = entrada.linhaPublica({ id: 2, origem: 'sefaz_nfe', tipo: 'nfe', chave: 'B', status: 'completa', xml: '<x/>', data_emissao: '2026-08-20' }, { primeira: '2026-09' });
+  assert.deepEqual([deAgosto.decidir, deAgosto.pode.historico, deAgosto.pode.registrar], [true, true, true]);
+  const historico = entrada.linhaPublica({ id: 3, origem: 'nfse_adn', tipo: 'nfse', chave: 'H', status: 'ignorada', ignorado_motivo: 'Histórico: de agosto/2026, antes do início da Contabilidade (setembro/2026).' });
+  assert.deepEqual([historico.status_rotulo, historico.historico, historico.decidir, historico.pode.restaurar], ['Histórico', true, false, true]);
   const doMes = entrada.pendenciasDoMes([
     { id: 1, tipo: 'nfe', status: 'nova', data_emissao: '2026-08-10', valor: 10 }, { id: 2, tipo: 'nfse', status: 'registrada', data_emissao: '2026-08-11' },
     { id: 3, tipo: 'nfe', status: 'registrada', situacao_nota: 'cancelada', documento_recebido_id: 9, data_emissao: '2026-07-01' }

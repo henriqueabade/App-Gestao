@@ -113,8 +113,18 @@ pagar junto (padrão **não**).
    Erro de certificado aparece aqui (vencido, senha, CNPJ errado).
 3. **Produção:** ambiente **Produção** › **Salvar** › digite **PRODUCAO** na
    caixa de confirmação. → A etiqueta muda para "Produção".
-4. **Buscar agora**. → A primeira busca traz o que a SEFAZ ainda guarda
-   (**cerca de 90 dias**): cada NF-e emitida contra o CNPJ.
+4. **Buscar agora**. → A SEFAZ manda o que ainda guarda (**cerca de 90
+   dias**), mas só entra na caixa o que importa para começar (decisão do dono
+   em 02/10/2026). O campo **"A Contabilidade começa em"** (setembro/2026)
+   define:
+   - Nota **de antes do mês anterior** (julho e antes): **não entra**. O
+     resumo diz "N notas de antes de agosto/2026 ficaram de fora".
+   - Nota **do mês anterior** (agosto): entra na caixa, ganha a ciência, mas
+     **não é registrada sozinha**. Aparece com a etiqueta **"Decidir"** e os
+     botões **Registrar** ou **Guardar como histórico**. "Histórico" é da
+     empresa, mas não entra na Contabilidade. Sai das pendências e volta por
+     **Restaurar**.
+   - Nota **do início em diante** (setembro): o fluxo de sempre, abaixo.
    - Veio só o **resumo**: a ciência é dada sozinha e o XML completo chega
      na próxima busca (ou pelo botão **Baixar XML** na caixa de entrada).
    - Veio **completa**: é registrada sozinha em "Documentos recebidos"
@@ -225,11 +235,17 @@ duplicar).
 2. **Produção** › Salvar › PRODUCAO › **Testar conexão** › **Buscar agora**.
    → Cada NFS-e em que a empresa é **tomadora** entra (a que a empresa
    prestou fica de fora) e é registrada em "Documentos recebidos" (origem
-   "ADN (automático)", com o XML, ISS retido quando houver).
+   "ADN (automático)", com o XML, ISS retido quando houver). Vale a mesma
+   janela da SEFAZ ("A Contabilidade começa em"): as de antes do mês
+   anterior não entram; as do mês anterior esperam **Registrar** ou
+   **Guardar como histórico**.
 3. **Buscar sozinha** (a cada 3 horas) › Salvar.
-4. **Mande-me um print** do resultado do primeiro "Testar conexão" e da
-   primeira busca em produção: o formato da resposta do ADN foi montado pela
-   documentação e se confirma com a primeira resposta real.
+4. ~~Mande-me um print~~ **Feito em 02/10/2026:** o teste em homologação
+   respondeu "NENHUM_DOCUMENTO_LOCALIZADO (E2220)" e o de produção
+   "DOCUMENTOS_LOCALIZADOS: 50 documentos no lote", com os campos
+   StatusProcessamento, LoteDFe, Alertas, Erros, TipoAmbiente,
+   VersaoAplicativo e DataHoraProcessamento. O formato confere com o que o
+   app lê.
 
 Se o ADN responder **401/403**: o certificado não está sendo aceito para o
 CNPJ — confira no Emissor Nacional (nfse.gov.br) se a empresa está
@@ -238,7 +254,13 @@ habilitada com esse certificado e me mande a mensagem.
 **Confirme** (pendência 47): as NFS-e dos prestadores de **Contagem** e de
 **Belo Horizonte** aparecem no ADN (a primeira busca em produção mostra).
 
-## Parte E — Aplicações / CDB (etapa 12)
+## Parte E — Aplicações / CDB (etapa 12) — **fora de uso desde 02/10/2026**
+
+**Decisão do dono (02/10/2026):** o Rende Fácil e o CDB entram pelos **PDFs
+mensais do BB**, conferidos ao centavo com o extrato. Isso será a fase das
+aplicações. O cartão continua nas Configurações com a etiqueta **"Fora de
+uso"**: não liga, não testa e não cobra pendência. O texto abaixo fica só
+para o caso de o BB lançar uma API de CDB.
 
 O catálogo público do BB tem a API de **Fundos de Investimento**, não uma de
 CDB. Por isso esta integração ficou só com **credenciais + teste de
@@ -312,6 +334,16 @@ tem, quanto rendeu no mês, IR) numa próxima rodada.
    ("Antes de buscar no BB: … (Contabilidade › Configurações)").
 10. SEFAZ em homologação: **Testar conexão** responde (137/138 ou o erro do
     certificado).
+11. (02/10/2026) Cada cartão tem a **setinha** à direita das etiquetas:
+    contrai (fica só o título e as etiquetas) e expande. O programa lembra
+    como você deixou; da primeira vez, só fica aberto o cartão com pendência
+    ou erro. O do CDB mostra **"Fora de uso"** e o motivo.
+12. (02/10/2026) SEFAZ e ADN têm o campo **"A Contabilidade começa em"**
+    (setembro de 2026). Na caixa de entrada, a nota de agosto aparece com
+    **"Decidir"** e o botão **Guardar como histórico**.
+13. (02/10/2026) Na tela da Contabilidade, clicar num cartão do **Checklist
+    por fonte** leva até o cartão de **Pendências**, já filtrado por aquela
+    fonte (o chip com a fonte tem o "×" para tirar o filtro).
 
 **Em produção (depois do "ok" no DEV), na ordem:** Parte A (SQL, reiniciar
 a API, permissões, travas) → B → C → D → E.

@@ -9,9 +9,10 @@
  * claro: ver integracoes/segredos.js.
  *
  * Tipos de campo: booleano, texto, digitos, inteiro, opcao, conta (uma das
- * contas do banco da etapa 4), url. `avancado` fica escondido por padrão;
- * `quando` mostra o campo só com outro campo num valor (ex.: credenciais
- * próprias só quando não reaproveita as da cobrança).
+ * contas do banco da etapa 4), url, competencia (AAAA-MM). `avancado` fica
+ * escondido por padrão; `quando` mostra o campo só com outro campo num valor
+ * (ex.: credenciais próprias só quando não reaproveita as da cobrança).
+ * `foraDeUso` (texto) deixa o cartão parado: sem pendências e sem ligar.
  */
 const HOMOLOGACAO = 'homologacao';
 const PRODUCAO = 'producao';
@@ -56,6 +57,17 @@ const CAMPO_MTLS = {
 };
 
 /**
+ * O mês em que a Contabilidade começa (decisão do dono em 02/10/2026:
+ * setembro/2026). Nas buscas da SEFAZ e do ADN, as notas do mês anterior a
+ * ele ficam na caixa de entrada para decidir (registrar ou guardar como
+ * histórico) e as mais antigas não entram.
+ */
+const CAMPO_PRIMEIRA_COMPETENCIA = {
+  chave: 'primeira_competencia', rotulo: 'A Contabilidade começa em', tipo: 'competencia', padrao: '2026-09',
+  ajuda: 'As notas do mês anterior a este ficam na caixa de entrada para você decidir (registrar ou guardar como histórico); as mais antigas não entram.'
+};
+
+/**
  * As contas de teste da homologação da Extratos v2 (documentação do BB,
  * "Especificações e testes", 02/10/2026): cada uma tem o seu código, que vai
  * no cabeçalho `x-br-com-bb-ipa-mciteste` — só na homologação.
@@ -79,8 +91,9 @@ const INTEGRACOES = {
       { chave: 'registrar_automaticamente', rotulo: 'Registrar sozinha em "Documentos recebidos" a NF-e que chega completa', tipo: 'booleano', padrao: true },
       { chave: 'gerar_conta', rotulo: 'Lançar a conta a pagar junto (pelas duplicatas da nota)', tipo: 'booleano', padrao: false,
         ajuda: 'Desligado, a nota entra sem conta e o checklist avisa ("documento sem conta a pagar").' },
+      CAMPO_PRIMEIRA_COMPETENCIA,
       { chave: 'nsu_inicial', rotulo: 'Recomeçar do NSU', tipo: 'digitos', max: 15, avancado: true,
-        ajuda: 'Vazio: continua de onde parou. 0: pede de novo o que a SEFAZ ainda guarda (cerca de 90 dias).' },
+        ajuda: 'Vazio: continua de onde parou. 0: pede de novo o que a SEFAZ ainda guarda (cerca de 90 dias); as notas de antes do mês anterior ao início não entram.' },
       { chave: 'url_distribuicao', rotulo: 'Endereço da Distribuição de DF-e', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'sefaz_distribuicao' },
       { chave: 'url_evento', rotulo: 'Endereço da Recepção de Evento (Ambiente Nacional)', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'sefaz_evento' }
     ],
@@ -137,7 +150,8 @@ const INTEGRACOES = {
     campos: [
       { chave: 'registrar_automaticamente', rotulo: 'Registrar sozinha em "Documentos recebidos" a NFS-e que chega', tipo: 'booleano', padrao: true },
       { chave: 'gerar_conta', rotulo: 'Lançar a conta a pagar junto (vencimento na emissão)', tipo: 'booleano', padrao: false },
-      { chave: 'nsu_inicial', rotulo: 'Recomeçar do NSU', tipo: 'digitos', max: 15, avancado: true, ajuda: 'Vazio: continua de onde parou. 0: do começo.' },
+      CAMPO_PRIMEIRA_COMPETENCIA,
+      { chave: 'nsu_inicial', rotulo: 'Recomeçar do NSU', tipo: 'digitos', max: 15, avancado: true, ajuda: 'Vazio: continua de onde parou. 0: do começo (as notas de antes do mês anterior ao início não entram).' },
       { chave: 'lote', rotulo: 'Pedir em lotes (até 50 por consulta)', tipo: 'booleano', padrao: true, avancado: true },
       { chave: 'url', rotulo: 'Endereço da API dos contribuintes', tipo: 'url', avancado: true, porAmbiente: true, padraoUrl: 'adn' }
     ],
@@ -149,6 +163,8 @@ const INTEGRACOES = {
   bb_investimentos: {
     chave: 'bb_investimentos', etapa: 12, nome: 'Aplicações — CDB (BB)', icone: 'fa-piggy-bank', banco: true,
     descricao: 'O CDB da empresa no BB. O catálogo público do BB traz a API de Fundos de Investimento, não uma de CDB: aqui ficam as credenciais e o teste (token + uma consulta de sondagem). Quando o BB disser qual API traz o CDB, o mapeamento dos campos entra por cima disto.',
+    // Decisão do dono (02/10/2026): Rende Fácil e CDB entram pelos PDFs mensais do BB.
+    foraDeUso: 'Fora de uso: o Rende Fácil e o CDB vão entrar pelos PDFs mensais do BB (fase das aplicações), conferidos ao centavo com o extrato. Este cartão só volta se o BB lançar uma API de CDB.',
     usa: ['credenciais_bb', 'certificado_opcional'],
     permissaoExecutar: 'contabilidade.config.view',
     automatica: false, intervalo: { padrao: 1440, min: 60, max: 1440 },

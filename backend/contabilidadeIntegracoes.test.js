@@ -197,7 +197,12 @@ const MODULOS = [
   './contabilidade/integracoes/entrada', './contabilidade/integracoes/execucoes', './contabilidade/integracoes/segredos'
 ];
 
-function cenario(extra = {}) {
+/**
+ * As notas de mentira são de agosto/2026: os cenários antigos começam a
+ * Contabilidade em agosto (tudo "dentro"); `inicio` troca isso para testar
+ * a janela (setembro: agosto espera a decisão; outubro: agosto fica de fora).
+ */
+function cenario(extra = {}, { inicio = '2026-08' } = {}) {
   const linha = (id, chave, parametros, intervalo) => ({ id, chave, ativa: false, ambiente: 'homologacao', automatica: false, intervalo_min: intervalo, parametros: JSON.stringify(parametros) });
   return {
     pedidos: [], notas_fiscais: [], notas_devolucao: [], configuracao_fiscal: [{ id: 1, cnpj: EMPRESA, uf: 'MG', razao_social: 'Santissimo' }], configuracao_cobranca: [],
@@ -208,9 +213,9 @@ function cenario(extra = {}) {
     contas_financeiras: [{ id: 1, nome: 'BB — conta corrente', tipo: 'corrente', banco_codigo: '001', agencia: '1614', agencia_dv: '4', conta: '167738', ativa: true }],
     extrato_importacoes: [], movimentos_bancarios: [],
     contabil_integracoes: [
-      linha(1, 'sefaz_nfe', { manifestar_ciencia: true, registrar_automaticamente: true, gerar_conta: false }, 60),
+      linha(1, 'sefaz_nfe', { manifestar_ciencia: true, registrar_automaticamente: true, gerar_conta: false, primeira_competencia: inicio }, 60),
       linha(2, 'bb_extrato', { usar_credenciais_da_cobranca: true, escopo: 'extrato-info', mtls: 'auto', dias_para_tras: 5 }, 1440),
-      linha(3, 'nfse_adn', { registrar_automaticamente: true, gerar_conta: false, lote: true }, 180),
+      linha(3, 'nfse_adn', { registrar_automaticamente: true, gerar_conta: false, lote: true, primeira_competencia: inicio }, 180),
       linha(4, 'bb_investimentos', { usar_credenciais_da_cobranca: true, mtls: 'auto' }, 1440)
     ],
     contabil_integracao_execucoes: [], contabil_dfe_recebidos: [],
@@ -371,6 +376,61 @@ test('ADN: a NFS-e tomada entra nos documentos com o XML oficial e o ISS retido;
   }
 });
 
+test('A Contabilidade começa em setembro: as notas de agosto esperam a decisão (registrar ou guardar como histórico); as de antes não entram', async () => {
+  const ctx = await montar(cenario({}, { inicio: '2026-09' }));
+  try {
+    await ctx.chamar('PUT', '/integracoes/sefaz_nfe', { ativa: true });
+    const r = await ctx.chamar('POST', '/integracoes/sefaz_nfe/sincronizar', {});
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.match(r.corpo.resumo, /1 ciência dada · 1 cancelamento · 2 notas de agosto\/2026 esperam a sua decisão na caixa de entrada/);
+    assert.ok(!/registrada nos documentos/.test(r.corpo.resumo), 'nada de agosto é registrado sozinho');
+    assert.equal(ctx.tabelas.documentos_recebidos.length, 0);
+    // A ciência continua (é ela que libera o XML para quem quiser registrar).
+    assert.equal(naEntrada(ctx, CHAVE_A).manifestacao, 'ciencia');
+
+    const lista = await ctx.chamar('GET', '/entrada?visao=pendentes');
+    const b = lista.corpo.linhas.find(l => l.chave === CHAVE_B);
+    assert.deepEqual([b.decidir, b.pode.historico, b.pode.registrar], [true, true, true]);
+    assert.match(b.decidir_texto, /^De agosto\/2026, antes do início da Contabilidade \(setembro\/2026\): registre ou guarde como histórico\.$/);
+
+    // Guardar como histórico: sai das pendências, com o rótulo "Histórico"; Restaurar traz de volta.
+    const hist = await ctx.chamar('POST', `/entrada/${b.id}/historico`, {});
+    assert.equal(hist.status, 200, JSON.stringify(hist.corpo));
+    assert.deepEqual([naEntrada(ctx, CHAVE_B).status, naEntrada(ctx, CHAVE_B).ignorado_motivo], ['ignorada', 'Histórico: de agosto/2026, antes do início da Contabilidade (setembro/2026).']);
+    const ignoradas = await ctx.chamar('GET', '/entrada?visao=ignoradas');
+    assert.deepEqual(ignoradas.corpo.linhas.map(l => [l.chave, l.status_rotulo, l.historico]), [[CHAVE_B, 'Histórico', true]]);
+    assert.ok(ctx.tabelas.contabil_eventos.some(e => /guardada como histórico/.test(e.descricao)));
+    assert.equal((await ctx.chamar('POST', `/entrada/${b.id}/historico`, {})).status, 409, 'de novo, não');
+    assert.equal((await ctx.chamar('POST', `/entrada/${b.id}/restaurar`, {})).corpo.status, 'completa');
+
+    // Registrar à mão continua valendo para a nota de agosto.
+    const reg = await ctx.chamar('POST', `/entrada/${b.id}/registrar`, {});
+    assert.equal(reg.status, 200, JSON.stringify(reg.corpo));
+    assert.equal(ctx.tabelas.documentos_recebidos[0].competencia, '2026-08');
+
+    // "Baixar XML" da nota de agosto traz o XML, mas não registra sozinho.
+    const a = naEntrada(ctx, CHAVE_A);
+    const baixou = await ctx.chamar('POST', `/entrada/${a.id}/baixar-xml`, {});
+    assert.deepEqual([baixou.status, baixou.corpo.registrado, naEntrada(ctx, CHAVE_A).status], [200, null, 'completa']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('A Contabilidade começa em outubro: a NFS-e de agosto (antes de setembro) nem entra na caixa', async () => {
+  const ctx = await montar(cenario({}, { inicio: '2026-10' }));
+  try {
+    await ctx.chamar('PUT', '/integracoes/nfse_adn', { ativa: true });
+    const r = await ctx.chamar('POST', '/integracoes/nfse_adn/sincronizar', {});
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.match(r.corpo.resumo, /2 documentos do ADN · 1 nota de antes de setembro\/2026 ficou de fora/);
+    assert.equal(ctx.tabelas.contabil_dfe_recebidos.length, 0);
+    assert.equal(ctx.tabelas.contabil_integracoes.find(x => x.chave === 'nfse_adn').ultimo_nsu, '2', 'o NSU anda mesmo assim');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('BB (Extratos v2): credenciais próprias no cofre, conta de teste com o código dela e o certificado na homologação; o extrato do mês entra pela API e buscar de novo não repete', async () => {
   const ctx = await montar(cenario());
   try {
@@ -439,7 +499,7 @@ test('SEFAZ com o mês fechado (30/09/2026): a nota fica na caixa com o motivo e
   }
 });
 
-test('estado, certificado público, CDB incompleto, produção só com a palavra e permissões', async () => {
+test('estado, certificado público, CDB fora de uso, produção só com a palavra e permissões', async () => {
   const ctx = await montar(cenario(), { permitir: ['contabilidade.view', 'contabilidade.config.view'] });
   try {
     const cer = await ctx.chamar('GET', '/integracoes/certificado/publico');
@@ -447,9 +507,15 @@ test('estado, certificado público, CDB incompleto, produção só com a palavra
     assert.match(Buffer.from(cer.corpo.base64, 'base64').toString('utf8'), /^-----BEGIN CERTIFICATE-----/);
     assert.equal(cer.corpo.cnpj, EMPRESA);
     assert.ok(!Buffer.from(cer.corpo.base64, 'base64').toString('utf8').includes('PRIVATE KEY'), 'sem a chave privada');
+    // O CDB ficou fora de uso (02/10/2026: as aplicações entram pelos PDFs): sem pendências, não testa, não liga.
+    const estado = await ctx.chamar('GET', '/integracoes');
+    const cartaoCdb = estado.corpo.integracoes.find(i => i.chave === 'bb_investimentos');
+    assert.deepEqual([cartaoCdb.pendencias, Boolean(cartaoCdb.fora_de_uso)], [[], true]);
     const cdb = await ctx.chamar('POST', '/integracoes/bb_investimentos/testar', {});
     assert.equal(cdb.status, 409);
-    assert.match(cdb.corpo.error, /escopo que o BB indicar.*caminho da consulta/);
+    assert.match(cdb.corpo.error, /^Fora de uso: o Rende Fácil e o CDB vão entrar pelos PDFs/);
+    const ligarCdb = await ctx.chamar('PUT', '/integracoes/bb_investimentos', { ativa: true });
+    assert.deepEqual([ligarCdb.status, ligarCdb.corpo.error], [400, 'Aplicações — CDB (BB): está fora de uso e não se liga']);
     const semPalavra = await ctx.chamar('PUT', '/integracoes/sefaz_nfe', { ambiente: 'producao' });
     assert.deepEqual([semPalavra.status, semPalavra.corpo.error], [400, 'Para ligar a produção, confirme digitando PRODUCAO.']);
     const comPalavra = await ctx.chamar('PUT', '/integracoes/sefaz_nfe', { ambiente: 'producao', confirmacao: 'PRODUCAO' });

@@ -1209,6 +1209,37 @@ body {
 .ctb-integracao__etiquetas { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
 .ctb-integracao__descricao { margin: 0.75rem 0 0; font-size: 0.875rem; color: var(--ctb-texto-2); }
 
+/* Expandir/contrair (02/10/2026): contraído, o cartão fica só com o topo. */
+.ctb-integracao__alternar {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    border: 1px solid var(--ctb-borda);
+    background: transparent;
+    color: var(--ctb-texto-2);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.ctb-integracao__alternar:hover { background: rgba(255, 255, 255, 0.06); color: var(--ctb-texto-1); }
+.ctb-integracao__alternar:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.ctb-integracao__alternar i { font-size: 0.8rem; transition: transform 0.2s ease; }
+.ctb-integracao.is-contraido .ctb-integracao__alternar i { transform: rotate(-90deg); }
+.ctb-integracao.is-contraido > :not(.ctb-integracao__topo) { display: none !important; }
+
+/* Fora de uso: o motivo, no lugar do formulário. */
+.ctb-integracao__fora-de-uso {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px dashed var(--ctb-borda);
+    font-size: 0.875rem;
+    color: var(--ctb-texto-2);
+}
+
 .ctb-integracao__grade {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

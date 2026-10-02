@@ -427,6 +427,31 @@ test('tela (29/09/2026): pendências sem "Ver todas" e com rolagem; os cartões 
   assert.ok(SINO.includes("contabilidade: 'Contabilidade'") && SINO.includes("contato: 'Contato'"));
 });
 
+test('correções de 02/10/2026: o checklist por fonte leva às pendências; cartões das Configurações contraem; CDB fora de uso; "Guardar como histórico" e o mês de início', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  const CSS = ler('css', 'contabilidade.css');
+  // Os cartões do checklist por fonte: filtram pela fonte (todos os níveis) e rolam até o cartão das pendências.
+  assert.ok(TELA.includes("cartao.dataset.ctbAcao = 'ir-fonte';"));
+  assert.ok(TELA.includes("'ir-fonte': { rotulo: 'Ver as pendências da fonte', abrir: (m, extra) => ctbIrParaFonte(m, extra?.fonte || null) }"));
+  const irFonte = TELA.slice(TELA.indexOf('function ctbIrParaFonte'), TELA.indexOf('function ctbRolarAte'));
+  assert.ok(irFonte.includes("moduleEl.ctbFiltro = { nivel: 'todas', fonte: fonte || null };") && irFonte.includes("ctbRolarAte(moduleEl.querySelector('#ctbPendenciasPainel'))"));
+  assert.ok(HTML.includes('data-ctb-acao="filtrar-fonte" data-ctb-fonte=""'), 'o chip da fonte continua tirando o filtro');
+  // Expandir/contrair: botão no topo de cada cartão, lembrado neste computador, contraído = só o topo.
+  assert.ok(MODAIS.includes("const alternarCartao = criar('button', 'ctb-integracao__alternar');") && MODAIS.includes("topo.append(simbolo, titulo, etiquetas, alternarCartao);"));
+  assert.ok(MODAIS.includes("const CHAVE_CONTRAIDOS = 'ctb.configuracao.contraidos';") && /try \{ window\.localStorage\.setItem/.test(MODAIS));
+  assert.match(CSS, /\.ctb-integracao\.is-contraido > :not\(\.ctb-integracao__topo\) \{ display: none !important; \}/);
+  const contraido = vm.runInNewContext(`${MODAIS.slice(MODAIS.indexOf('function cartaoContraido'), MODAIS.indexOf('/**', MODAIS.indexOf('function cartaoContraido')))}; cartaoContraido`);
+  assert.deepEqual([
+    contraido({ chave: 'a', pronta: true }, {}), contraido({ chave: 'a', pronta: false }, {}), contraido({ chave: 'a', pronta: true, estado: { ultimo_erro: 'x' } }, {}),
+    contraido({ chave: 'a', pronta: false, fora_de_uso: 'f' }, {}), contraido({ chave: 'a', pronta: true }, { a: false })
+  ], [true, false, false, true, false], 'sem nada guardado, abre só o que tem pendência ou erro; o guardado vence');
+  // Fora de uso: só a etiqueta e o motivo; o mês de início é um campo de mês.
+  assert.ok(MODAIS.includes("etiquetas.append(tag('Fora de uso', 'badge-neutral'));") && MODAIS.includes("criar('p', 'ctb-integracao__fora-de-uso', i.fora_de_uso)"));
+  assert.ok(MODAIS.includes("else if (campo.tipo === 'competencia') controle = campoDeTexto(valor ?? campo.padrao ?? '', { tipo: 'month' });"));
+  // Caixa de entrada: a nota do mês anterior ao início pede a decisão.
+  assert.ok(MODAIS.includes("acao(l.id, 'historico', 'Guardada como histórico: saiu das pendências.')") && MODAIS.includes("tag('Decidir', 'badge-warning', l.decidir_texto || '')"));
+});
+
 test('funções puras (29/09/2026): as pendências da tela viram objetos que o "\'" cita', () => {
   const f = puras();
   const pend = [

@@ -6,7 +6,13 @@
  *                 não entrou nos documentos;
  *   completa .... o XML completo chegou (NF-e depois da ciência);
  *   registrada .. virou documento em "Documentos recebidos";
- *   ignorada .... alguém disse, com motivo, que não é despesa da empresa.
+ *   ignorada .... alguém disse, com motivo, que não é despesa da empresa — ou
+ *                 guardou como "Histórico" a nota do mês anterior ao início
+ *                 da Contabilidade (é da empresa, mas não entra).
+ *
+ * A nota do mês anterior ao início não é registrada sozinha: espera a
+ * decisão (registrar ou guardar como histórico). As de antes dele nem
+ * chegam aqui (faseDaNota, decisão do dono em 02/10/2026).
  *
  * Gravar nunca piora o que já há: XML não some, registrada/ignorada não
  * voltam a nova, cancelada não volta a autorizada. Os eventos da nota
@@ -30,8 +36,26 @@ const VISOES = {
   todas: () => true
 };
 const FINAIS = new Set(['registrada', 'ignorada']);
+/** O motivo de quem guardou como histórico começa assim (é uma "ignorada" que é nossa). */
+const PREFIXO_HISTORICO = 'Histórico';
 
 const vazio = v => v === null || v === undefined || v === '';
+
+/**
+ * Onde a nota cai em relação ao mês em que a Contabilidade começa
+ * (`primeira`, AAAA-MM): 'antes' (antes do mês anterior: não entra),
+ * 'anterior' (o mês anterior: fica para decidir — registrar ou guardar como
+ * histórico), 'dentro' (do início em diante: o fluxo normal). Sem data ou
+ * sem início, null (o fluxo normal). Pura.
+ */
+function faseDaNota(dataEmissao, primeira) {
+  const mes = String(c.dia(dataEmissao) || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(mes) || !/^\d{4}-\d{2}$/.test(String(primeira || ''))) return null;
+  const anterior = c.somarMeses(primeira, -1);
+  if (mes < anterior) return 'antes';
+  if (mes === anterior) return 'anterior';
+  return 'dentro';
+}
 
 /** Todas as linhas (null = falta o SQL). */
 function lerTodas(api) {
@@ -102,20 +126,30 @@ async function aplicarEvento(api, indice, { origem, tipo, evento }) {
 /** O índice origem|chave → linha. */
 const indexar = linhas => new Map(c.lista(linhas).filter(Boolean).map(l => [chaveDe(l.origem, l.chave), l]));
 
-/** Uma linha para a tela: o que ela é e o que dá para fazer. Pura. */
-function linhaPublica(l) {
+/** Foi guardada como histórico (uma "ignorada" que é da empresa, de antes do início)? Pura. */
+const ehHistorico = l => l?.status === 'ignorada' && String(l.ignorado_motivo || '').startsWith(PREFIXO_HISTORICO);
+
+/**
+ * Uma linha para a tela: o que ela é e o que dá para fazer. `primeira` é o
+ * mês em que a Contabilidade começa (para a nota do mês anterior pedir a
+ * decisão). Pura.
+ */
+function linhaPublica(l, { primeira = null } = {}) {
   const eventos = c.lista(c.jsonDe(l.eventos, []));
   const cancelada = l.situacao_nota === 'cancelada';
   const aberta = l.status === 'nova' || l.status === 'completa';
   const nfe = l.tipo === 'nfe';
   const manifestou = ['ciencia', 'confirmacao'].includes(l.manifestacao);
+  const decidir = aberta && !cancelada && faseDaNota(l.data_emissao, primeira) === 'anterior';
   return {
+    decidir, decidir_texto: decidir ? `De ${c.rotuloCompetencia(c.somarMeses(primeira, -1))}, antes do início da Contabilidade (${c.rotuloCompetencia(primeira)}): registre ou guarde como histórico.` : null,
+    historico: ehHistorico(l),
     id: l.id, origem: l.origem, origem_rotulo: ORIGENS[l.origem] || l.origem, tipo: l.tipo, tipo_rotulo: nfe ? 'NF-e' : 'NFS-e',
     chave: l.chave, nsu: l.nsu || null, numero: l.numero || null, serie: l.serie || null, municipio: l.municipio || null,
     emitente_documento: b.documentoFormatado(l.emitente_documento), emitente_nome: l.emitente_nome || null,
     data_emissao: c.dia(l.data_emissao), valor: l.valor === null || l.valor === undefined ? null : c.centavos(l.valor),
     situacao_nota: l.situacao_nota || 'autorizada', cancelada,
-    status: l.status, status_rotulo: STATUS[l.status] || l.status, so_resumo: l.resumo !== false && !l.xml,
+    status: l.status, status_rotulo: ehHistorico(l) ? 'Histórico' : (STATUS[l.status] || l.status), so_resumo: l.resumo !== false && !l.xml,
     manifestacao: l.manifestacao || null, manifestacao_em: b.instanteBR(l.manifestacao_em), manifestacao_erro: l.manifestacao_erro || null,
     eventos: eventos.map(e => ({ descricao: e.descricao, dhEvento: e.dhEvento })),
     documento_recebido_id: l.documento_recebido_id ?? null, erro: l.erro || null,
@@ -125,13 +159,17 @@ function linhaPublica(l) {
       baixar_xml: nfe && aberta && !l.xml && manifestou && !cancelada,
       registrar: aberta && !cancelada && (nfe ? Boolean(l.xml) : true),
       ignorar: aberta,
+      historico: decidir,
       restaurar: l.status === 'ignorada'
     }
   };
 }
 
-/** A lista da tela: por origem e visão, a mais nova primeiro. */
-async function listar(api, { origem = null, visao = 'pendentes', competencia = null } = {}) {
+/**
+ * A lista da tela: por origem e visão, a mais nova primeiro. `primeiras`
+ * = { origem: AAAA-MM } (o início de cada busca).
+ */
+async function listar(api, { origem = null, visao = 'pendentes', competencia = null, primeiras = {} } = {}) {
   const linhas = await lerTodas(api);
   if (linhas === null) return { sql_pendente: true, linhas: [], contagem: {} };
   const filtro = VISOES[visao] || VISOES.pendentes;
@@ -140,7 +178,7 @@ async function listar(api, { origem = null, visao = 'pendentes', competencia = n
     .sort((x, y) => String(y.data_emissao || '').localeCompare(String(x.data_emissao || '')) || Number(y.id) - Number(x.id));
   const contagem = {};
   for (const [v, f] of Object.entries(VISOES)) contagem[v] = linhas.filter(l => l && (!origem || l.origem === origem) && f(l)).length;
-  return { sql_pendente: false, linhas: escolhidas.slice(0, 500).map(linhaPublica), contagem };
+  return { sql_pendente: false, linhas: escolhidas.slice(0, 500).map(l => linhaPublica(l, { primeira: primeiras?.[l.origem] || null })), contagem };
 }
 
 async function lerLinha(api, id) {
@@ -217,6 +255,20 @@ async function ignorar(api, id, { motivo, usuarioId = null }) {
   return { id: l.id, status: 'ignorada' };
 }
 
+/**
+ * A nota do mês anterior ao início: é da empresa, mas não entra na
+ * Contabilidade — fica guardada como histórico (sai das pendências, volta
+ * por "Restaurar").
+ */
+async function guardarComoHistorico(api, id, { usuarioId = null, primeira = null } = {}) {
+  const l = await lerLinha(api, id);
+  if (FINAIS.has(l.status)) throw c.erro(l.status === 'registrada' ? 'Já registrado: exclua pela ficha do documento.' : 'Já está fora das pendências.', 409);
+  if (faseDaNota(l.data_emissao, primeira) !== 'anterior') throw c.erro('Guardar como histórico é só para as notas do mês anterior ao início da Contabilidade.', 409);
+  const motivo = `${PREFIXO_HISTORICO}: de ${c.rotuloCompetencia(c.somarMeses(primeira, -1))}, antes do início da Contabilidade (${c.rotuloCompetencia(primeira)}).`;
+  await b.atualizar(api, TABELA, l.id, { status: 'ignorada', ignorado_motivo: motivo, ignorado_por: usuarioId, ignorado_em: c.agora(), atualizado_em: c.agora() });
+  return { id: l.id, status: 'ignorada', historico: true, linha: l };
+}
+
 async function restaurar(api, id) {
   const l = await lerLinha(api, id);
   if (l.status !== 'ignorada') throw c.erro('Só se restaura o que foi ignorado.', 409);
@@ -240,6 +292,6 @@ function pendenciasDoMes(linhas, competencia) {
 }
 
 module.exports = {
-  TABELA, ORIGENS, STATUS, VISOES, lerTodas, chaveDe, mesclar, gravar, aplicarEvento, indexar, linhaPublica, listar, lerLinha,
-  entradaDaNfse, registrar, ignorar, restaurar, pendenciasDoMes
+  TABELA, ORIGENS, STATUS, VISOES, PREFIXO_HISTORICO, lerTodas, chaveDe, mesclar, gravar, aplicarEvento, indexar, faseDaNota, ehHistorico,
+  linhaPublica, listar, lerLinha, entradaDaNfse, registrar, ignorar, guardarComoHistorico, restaurar, pendenciasDoMes
 };

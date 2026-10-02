@@ -17,6 +17,7 @@
  *   POST   /entrada/:id/baixar-xml                a NF-e completa pela chave             contabilidade.documento.registrar
  *   POST   /entrada/:id/registrar                 { gerar_titulo }                       documento.registrar (+ pagar.lancar)
  *   POST   /entrada/:id/ignorar                   { motivo }                             contabilidade.documento.registrar
+ *   POST   /entrada/:id/historico                 a nota do mês anterior ao início        contabilidade.documento.registrar
  *   POST   /entrada/:id/restaurar                                                        contabilidade.documento.registrar
  *
  * Mudar a configuração e guardar segredo é do Sup Admin (como no fiscal e na
@@ -143,6 +144,9 @@ function criarRouter({ servico = null } = {}) {
 
   router.post('/entrada/:id/ignorar', exigirPermissao(REGISTRAR), rota('POST /entrada/:id/ignorar', ({ req, api, usuarioId }) =>
     s.ignorarDaEntrada(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+  router.post('/entrada/:id/historico', exigirPermissao(REGISTRAR), rota('POST /entrada/:id/historico', ({ req, api, usuarioId }) =>
+    s.historicoDaEntrada(api, req.params.id, { usuarioId })));
 
   router.post('/entrada/:id/restaurar', exigirPermissao(REGISTRAR), rota('POST /entrada/:id/restaurar', ({ req, api }) =>
     s.restaurarDaEntrada(api, req.params.id)));

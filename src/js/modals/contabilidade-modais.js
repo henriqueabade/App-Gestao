@@ -3985,6 +3985,24 @@
     return v === '' ? null : v;
   }
 
+  /*
+   * Cartões contraídos das Configurações (pedido do dono em 02/10/2026):
+   * contraído, o cartão mostra só o título e as etiquetas. Fica lembrado
+   * neste computador; sem nada guardado, abre só o que tem pendência ou erro.
+   */
+  const CHAVE_CONTRAIDOS = 'ctb.configuracao.contraidos';
+  function lerContraidos() {
+    try { return JSON.parse(window.localStorage.getItem(CHAVE_CONTRAIDOS) || '{}') || {}; } catch (_) { return {}; }
+  }
+  function gravarContraidos(mapa) {
+    try { window.localStorage.setItem(CHAVE_CONTRAIDOS, JSON.stringify(mapa)); } catch (_) { /* sem armazenamento: vale só nesta tela */ }
+  }
+  /** Contraído? O que a pessoa deixou ou, sem nada, fechado quando não há o que fazer nele. Pura. */
+  function cartaoContraido(i, mapa) {
+    if (Object.prototype.hasOwnProperty.call(mapa || {}, i.chave)) return Boolean(mapa[i.chave]);
+    return Boolean(i.fora_de_uso) || (i.pronta && !i.estado?.ultimo_erro);
+  }
+
   /**
    * Configurações: o certificado da empresa e um cartão por integração
    * (o que falta, o que se fornece, ligar, ambiente, busca automática,
@@ -3995,6 +4013,7 @@
     let dados = null;
     const avancadosAbertos = new Set();
     const resultados = new Map();
+    const contraidos = lerContraidos();
 
     function pintarCertificado() {
       const cert = dados?.certificado || {};
@@ -4071,14 +4090,41 @@
       const titulo = criar('div', 'ctb-integracao__titulo');
       titulo.append(criar('h3', null, i.nome), criar('span', 'ctb-integracao__etapa', `Etapa ${i.etapa}`));
       const etiquetas = criar('div', 'ctb-integracao__etiquetas');
-      etiquetas.append(
-        tag(i.ativa ? 'Ligada' : 'Desligada', i.ativa ? 'badge-success' : 'badge-neutral'),
-        tag(i.ambiente === 'producao' ? 'Produção' : 'Homologação', i.ambiente === 'producao' ? 'badge-warning' : 'badge-info'),
-        i.pronta ? tag('Pronta', 'badge-success') : tag(plural(i.pendencias.length, 'pendência', 'pendências'), 'badge-danger')
-      );
-      if (i.travada_em_homologacao) etiquetas.append(tag('Máquina presa em homologação', 'badge-neutral', 'O .env desta máquina prende as integrações em homologação'));
-      topo.append(simbolo, titulo, etiquetas);
+      if (i.fora_de_uso) {
+        etiquetas.append(tag('Fora de uso', 'badge-neutral'));
+      } else {
+        etiquetas.append(
+          tag(i.ativa ? 'Ligada' : 'Desligada', i.ativa ? 'badge-success' : 'badge-neutral'),
+          tag(i.ambiente === 'producao' ? 'Produção' : 'Homologação', i.ambiente === 'producao' ? 'badge-warning' : 'badge-info'),
+          i.pronta ? tag('Pronta', 'badge-success') : tag(plural(i.pendencias.length, 'pendência', 'pendências'), 'badge-danger')
+        );
+        if (i.travada_em_homologacao) etiquetas.append(tag('Máquina presa em homologação', 'badge-neutral', 'O .env desta máquina prende as integrações em homologação'));
+      }
+      // Expandir/contrair: contraído, fica só o topo (título e etiquetas).
+      const alternarCartao = criar('button', 'ctb-integracao__alternar');
+      alternarCartao.type = 'button';
+      alternarCartao.appendChild(icone('fa-chevron-down'));
+      const aplicarContraido = contraido => {
+        art.classList.toggle('is-contraido', contraido);
+        alternarCartao.setAttribute('aria-expanded', String(!contraido));
+        alternarCartao.title = contraido ? 'Expandir' : 'Contrair';
+        alternarCartao.setAttribute('aria-label', `${contraido ? 'Expandir' : 'Contrair'} o cartão ${i.nome}`);
+      };
+      aplicarContraido(cartaoContraido(i, contraidos));
+      alternarCartao.addEventListener('click', () => {
+        const contraido = !art.classList.contains('is-contraido');
+        contraidos[i.chave] = contraido;
+        gravarContraidos(contraidos);
+        aplicarContraido(contraido);
+      });
+      topo.append(simbolo, titulo, etiquetas, alternarCartao);
       art.append(topo, criar('p', 'ctb-integracao__descricao', i.descricao));
+      // Fora de uso: o motivo e mais nada (não liga, não testa, não cobra pendência).
+      if (i.fora_de_uso) {
+        art.dataset.estado = 'desligada';
+        art.append(criar('p', 'ctb-integracao__fora-de-uso', i.fora_de_uso));
+        return art;
+      }
 
       const grade = criar('div', 'ctb-integracao__grade');
       // ---- a situação: o que falta, o que se fornece, o estado e as execuções
@@ -4148,6 +4194,7 @@
           } else {
             if (campo.tipo === 'opcao') controle = campoDeEscolha(Object.entries(campo.opcoes), valor ?? campo.padrao ?? '');
             else if (campo.tipo === 'conta') controle = campoDeEscolha([['', 'Escolha a conta'], ...(dados?.contas || []).map(x => [String(x.id), `${x.nome}${x.ativa ? '' : ' (desativada)'}`])], valor ?? '');
+            else if (campo.tipo === 'competencia') controle = campoDeTexto(valor ?? campo.padrao ?? '', { tipo: 'month' });
             else controle = campoDeTexto(valor ?? '', { tipo: campo.tipo === 'inteiro' ? 'number' : 'text', placeholder: campo.tipo === 'url' ? 'Vazio = o endereço padrão' : '', min: campo.min ?? null, max: campo.tipo === 'inteiro' ? campo.max : null });
             bloco = blocoDeCampo(`${campo.rotulo}${sufixo}`, controle, campo.ajuda || null);
           }
@@ -4380,6 +4427,9 @@
         { perm: 'contabilidade.documento.registrar', titulo: 'Ciência da operação: libera o XML completo' }));
       if (l.pode.baixar_xml) botoes.push(botaoPequeno('Baixar XML', 'btn-secondary', acao(l.id, 'baixar-xml', 'XML completo recebido.'), { perm: 'contabilidade.documento.registrar' }));
       if (l.pode.registrar) botoes.push(botaoPequeno('Registrar', 'btn-success', acao(l.id, 'registrar', r => (r.ligado ? 'Já estava registrado: foi ligado.' : 'Registrado em Documentos recebidos.')), { perm: 'contabilidade.documento.registrar' }));
+      // A nota do mês anterior ao início: ou registra, ou guarda como histórico (é da empresa, mas não entra).
+      if (l.pode.historico) botoes.push(botaoPequeno('Guardar como histórico', 'btn-neutral', acao(l.id, 'historico', 'Guardada como histórico: saiu das pendências.'),
+        { perm: 'contabilidade.documento.registrar', titulo: 'É da empresa, mas é de antes do início da Contabilidade: não entra nos documentos' }));
       if (l.pode.manifestar) {
         botoes.push(botaoPequeno('Manifestar…', 'btn-neutral', async () => {
           const escolha = await pedirManifestacao(l);
@@ -4410,15 +4460,18 @@
       corpo.replaceChildren(...linhas.map(l => {
         const tr = criar('tr');
         const doc = `${l.tipo_rotulo} ${l.numero || ''}${l.serie ? `/${l.serie}` : ''}`.trim();
-        const situacao = [tag(l.status_rotulo, TOM_ENTRADA[l.status] || 'badge-neutral')];
+        const situacao = [tag(l.status_rotulo, l.historico ? 'badge-info' : (TOM_ENTRADA[l.status] || 'badge-neutral'))];
+        if (l.decidir) situacao.push(tag('Decidir', 'badge-warning', l.decidir_texto || ''));
         if (l.cancelada) situacao.push(tag('Cancelada pelo emitente', 'badge-danger'));
         const deuCiencia = ['ciencia', 'confirmacao'].includes(l.manifestacao);
         const sub = [
+          l.decidir_texto || null,
           l.so_resumo && l.tipo === 'nfe' ? (deuCiencia ? 'só o resumo: o XML vem na próxima busca (ou em "Baixar XML")' : 'só o resumo (falta a ciência)') : null,
           l.manifestacao ? `manifestada: ${({ ciencia: 'ciência', confirmacao: 'confirmação', desconhecimento: 'desconhecimento', nao_realizada: 'operação não realizada' })[l.manifestacao] || l.manifestacao}` : null,
           l.manifestacao_erro ? `manifestação falhou: ${l.manifestacao_erro}` : null,
           l.erro ? `registro falhou: ${l.erro}` : null,
-          l.ignorado_motivo ? `motivo: ${l.ignorado_motivo}` : null
+          l.ignorado_motivo && !l.historico ? `motivo: ${l.ignorado_motivo}` : null,
+          l.historico ? l.ignorado_motivo.replace(/^Histórico:\s*/, '') : null
         ].filter(Boolean).join(' · ');
         tr.append(
           celula(formatarData(l.data_emissao)),

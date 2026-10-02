@@ -95,6 +95,13 @@ function validarCampo(campo, bruto) {
       if (!texto) return { valor: null };
       if (!/^https:\/\/[^\s]+$/i.test(texto) || texto.length > 300) return { erro: `${campo.rotulo}: um endereço https:// completo` };
       return { valor: texto.replace(/\/+$/, '') };
+    case 'competencia': {
+      // AAAA-MM (o campo de mês da tela) ou MM/AAAA; vazio volta ao padrão.
+      if (!texto) return { valor: campo.padrao ?? null };
+      const m = /^(\d{4})-(\d{2})$/.exec(texto) || (/^(\d{2})\/(\d{4})$/.exec(texto) ? [null, texto.slice(3), texto.slice(0, 2)] : null);
+      if (!m || Number(m[2]) < 1 || Number(m[2]) > 12 || Number(m[1]) < 2000 || Number(m[1]) > 2099) return { erro: `${campo.rotulo}: um mês, como 2026-09` };
+      return { valor: `${m[1]}-${m[2]}` };
+    }
     default:
       return { erro: `${campo.rotulo}: tipo desconhecido` };
   }
@@ -109,6 +116,7 @@ function validar(def, entrada = {}, atual = null) {
   const erros = [];
   const valores = {};
   if (entrada.ativa !== undefined) valores.ativa = entrada.ativa === true || entrada.ativa === 'true';
+  if (valores.ativa && def.foraDeUso) erros.push(`${def.nome}: está fora de uso e não se liga`);
   if (entrada.ambiente !== undefined) {
     if (!catalogo.AMBIENTES.includes(entrada.ambiente)) erros.push('Ambiente: homologação ou produção');
     else valores.ambiente = entrada.ambiente;
@@ -178,6 +186,8 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
   const faltas = [];
   const nomeAmb = ambiente === PRODUCAO ? 'produção' : 'homologação';
   if (!linha) return ['Falta rodar sql/contabilidade_integracoes.sql e reiniciar a API.'];
+  // Parada de propósito: nada a fazer, nada a cobrar.
+  if (def.foraDeUso) return [];
   if (def.usa.includes('certificado')) {
     if (!certificado?.configurado) faltas.push(`Certificado digital A1 da empresa não encontrado${certificado?.erro ? ` (${certificado.erro})` : ''}: cadastre em Financeiro › Configuração fiscal.`);
     else if (certificado.vencido) faltas.push('O certificado digital está vencido: renove e cadastre o novo na Configuração fiscal.');
@@ -223,7 +233,7 @@ function pendencias(def, { linha, params, ambiente, certificado = null, fiscal =
 function linhaPublica(def, linha, { ambiente, travada } = {}) {
   const params = parametros(def, linha);
   return {
-    chave: def.chave, etapa: def.etapa, nome: def.nome, icone: def.icone, descricao: def.descricao, banco: def.banco,
+    chave: def.chave, etapa: def.etapa, nome: def.nome, icone: def.icone, descricao: def.descricao, banco: def.banco, fora_de_uso: def.foraDeUso || null,
     tem_automatica: def.automatica, intervalo_limites: def.intervalo, fornecer: def.fornecer,
     permissao_executar: def.permissaoExecutar, tem_segredo: Boolean(def.segredo),
     campos: def.campos, sql_pronto: Boolean(linha),

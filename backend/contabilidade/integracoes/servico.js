@@ -183,11 +183,20 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
 
   // ------------------------------------------------------------ SEFAZ — NF-e de entrada
 
-  /** Um documento da distribuição → a caixa de entrada. Devolve o que aconteceu. */
-  async function guardarDocumentoSefaz(api, indice, doc, cnpjEmpresa) {
+  /** A nota é de antes do mês anterior ao início e ainda não está na caixa? Então não entra. */
+  const antigaDeFora = (indice, origem, chave, dataEmissao, primeira) =>
+    entrada.faseDaNota(dataEmissao, primeira) === 'antes' && !indice.has(entrada.chaveDe(origem, chave));
+
+  /**
+   * Um documento da distribuição → a caixa de entrada. Devolve o que
+   * aconteceu. `primeira` (AAAA-MM): a nota de antes do mês anterior a ela
+   * não entra ('antiga').
+   */
+  async function guardarDocumentoSefaz(api, indice, doc, cnpjEmpresa, primeira = null) {
     const lido = sefazDist.lerDocumento(doc);
     if (lido.tipo === 'resumo_nfe') {
       if (lido.emitente_documento === cnpjEmpresa) return 'propria';
+      if (antigaDeFora(indice, 'sefaz_nfe', lido.chave, lido.data_emissao, primeira)) return 'antiga';
       const r = await entrada.gravar(api, indice, {
         origem: 'sefaz_nfe', tipo: 'nfe', chave: lido.chave, nsu: doc.nsu, emitente_documento: lido.emitente_documento, emitente_nome: lido.emitente_nome,
         data_emissao: lido.data_emissao, valor: lido.valor, situacao_nota: lido.situacao_nota
@@ -198,6 +207,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       let nota = null;
       try { nota = documentos.lerNfeEntrada(lido.xml); } catch (_) { nota = null; }
       if (nota?.emitente_documento === cnpjEmpresa) return 'propria';
+      if (antigaDeFora(indice, 'sefaz_nfe', lido.chave, nota?.data_emissao, primeira)) return 'antiga';
       await entrada.gravar(api, indice, {
         origem: 'sefaz_nfe', tipo: 'nfe', chave: lido.chave, nsu: doc.nsu, xml: lido.xml,
         numero: nota ? String(nota.numero ?? '') : null, serie: nota ? String(nota.serie ?? '') : null,
@@ -263,7 +273,8 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const linhasEntrada = await entrada.lerTodas(api);
     if (linhasEntrada === null) throw c.erro(b.SQL_FALTANDO_INTEGRACOES, 409, { sql_pendente: true, sql_arquivo: b.SQL_ARQUIVO_INTEGRACOES });
     const indice = entrada.indexar(linhasEntrada);
-    const cont = { lotes: 0, documentos: 0, novas: 0, completas: 0, eventos: 0, canceladas: 0, canceladas_registradas: 0, proprias: 0, manifestadas: 0, registradas: 0, erros: [], nao_registradas: [] };
+    const primeira = params.primeira_competencia || null;
+    const cont = { lotes: 0, documentos: 0, novas: 0, completas: 0, eventos: 0, canceladas: 0, canceladas_registradas: 0, proprias: 0, antigas: 0, manifestadas: 0, registradas: 0, decidir: 0, erros: [], nao_registradas: [] };
     let aguardarAte = null;
     for (let i = 0; i < LIMITE_LOTES; i++) {
       const ret = await sefazDist.consultar({ url, transporte: rede_, xmlDados: sefazDist.xmlDistribuicao({ ambiente, uf: fiscal.uf, cnpj, ultNSU: ult }) });
@@ -280,10 +291,11 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       for (const doc of ret.documentos) {
         cont.documentos++;
         if (!gravar) continue;
-        const o = await guardarDocumentoSefaz(api, indice, doc, cnpj);
+        const o = await guardarDocumentoSefaz(api, indice, doc, cnpj, primeira);
         if (o === 'nova') cont.novas++;
         else if (o === 'completa') cont.completas++;
         else if (o === 'propria') cont.proprias++;
+        else if (o === 'antiga') cont.antigas++;
         else if (o === 'cancelada') cont.canceladas++;
         else if (o === 'cancelada_registrada') { cont.canceladas++; cont.canceladas_registradas++; }
         else if (o === 'evento') cont.eventos++;
@@ -308,10 +320,11 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       if (params.registrar_automaticamente !== false) {
         // A nota que não entra (mês fechado, dado faltando) fica na caixa com o
         // motivo: é problema do documento, não da integração (não vira "último erro").
-        const r = await registrarPendentes(api, 'sefaz_nfe', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj });
+        const r = await registrarPendentes(api, 'sefaz_nfe', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj, primeira });
         cont.registradas += r.registradas;
         cont.nao_registradas.push(...r.erros);
       }
+      cont.decidir = contarDecidir(indice, 'sefaz_nfe', primeira);
     }
     const estado_ = {
       ultima_execucao_em: c.agora(), ultimo_sucesso_em: c.agora(), ultimo_erro: cont.erros.length ? cont.erros.slice(0, 3).join(' | ').slice(0, 2000) : null,
@@ -326,16 +339,38 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     if (cont.manifestadas) partes.push(c.plural(cont.manifestadas, 'ciência dada', 'ciências dadas'));
     if (cont.registradas) partes.push(c.plural(cont.registradas, 'registrada nos documentos', 'registradas nos documentos'));
     if (cont.canceladas) partes.push(c.plural(cont.canceladas, 'cancelamento', 'cancelamentos'));
+    partes.push(...partesDaJanela(cont, primeira));
     if (!gravar) partes.push('homologação num banco de produção: nada foi gravado');
     if (cont.nao_registradas.length) partes.push(`${c.plural(cont.nao_registradas.length, 'não registrada', 'não registradas')} (o motivo está na caixa de entrada)`);
     if (cont.erros.length) partes.push(c.plural(cont.erros.length, 'erro', 'erros'));
     return { situacao: 'rodou', resumo: partes.join(' · '), resultado: { ...cont, ultimo_nsu: ult, max_nsu: max, gravou: gravar }, ...cont, aguardar_ate: aguardarAte ? b.instanteBR(new Date(aguardarAte)) : null };
   }
 
-  /** Registra o que está completo na caixa de entrada (NF-e com XML, NFS-e) — até 50 por vez. */
-  async function registrarPendentes(api, origem, { usuarioId, gerarTitulo, cnpj }) {
+  /** Quantas notas do mês anterior ao início ainda esperam a decisão na caixa de entrada. */
+  const contarDecidir = (indice, origem, primeira) => [...indice.values()]
+    .filter(l => l && l.origem === origem && (l.status === 'nova' || l.status === 'completa') && l.situacao_nota !== 'cancelada'
+      && entrada.faseDaNota(l.data_emissao, primeira) === 'anterior').length;
+
+  /** O que o resumo diz das notas de antes do início (as que não entraram e as que esperam a decisão). */
+  function partesDaJanela(cont, primeira) {
+    if (!primeira) return [];
+    const anterior = c.rotuloCompetencia(c.somarMeses(primeira, -1));
+    const partes = [];
+    if (cont.antigas) partes.push(`${c.plural(cont.antigas, 'nota', 'notas')} de antes de ${anterior} ${cont.antigas === 1 ? 'ficou' : 'ficaram'} de fora`);
+    if (cont.decidir) partes.push(`${c.plural(cont.decidir, 'nota', 'notas')} de ${anterior} ${cont.decidir === 1 ? 'espera' : 'esperam'} a sua decisão na caixa de entrada (registrar ou guardar como histórico)`);
+    return partes;
+  }
+
+  /**
+   * Registra o que está completo na caixa de entrada (NF-e com XML, NFS-e) —
+   * até 50 por vez. A nota do mês anterior ao início (`primeira`) não: ela
+   * espera a decisão (registrar ou guardar como histórico).
+   */
+  async function registrarPendentes(api, origem, { usuarioId, gerarTitulo, cnpj, primeira = null }) {
     const linhas = (await entrada.lerTodas(api)) || [];
-    const prontas = linhas.filter(l => l.origem === origem && l.status === 'completa' && !l.erro && l.situacao_nota !== 'cancelada' && (l.tipo !== 'nfe' || l.xml)).slice(0, LIMITE_REGISTROS);
+    const abertas = linhas.filter(l => l.origem === origem && (l.status === 'nova' || l.status === 'completa') && l.situacao_nota !== 'cancelada');
+    const foraDoInicio = l => ['anterior', 'antes'].includes(entrada.faseDaNota(l.data_emissao, primeira));
+    const prontas = abertas.filter(l => l.status === 'completa' && !l.erro && (l.tipo !== 'nfe' || l.xml) && !foraDoInicio(l)).slice(0, LIMITE_REGISTROS);
     const saida = { registradas: 0, erros: [] };
     for (const l of prontas) {
       try {
@@ -361,7 +396,8 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     const linhasEntrada = await entrada.lerTodas(api);
     if (linhasEntrada === null) throw c.erro(b.SQL_FALTANDO_INTEGRACOES, 409, { sql_pendente: true, sql_arquivo: b.SQL_ARQUIVO_INTEGRACOES });
     const indice = entrada.indexar(linhasEntrada);
-    const cont = { lotes: 0, documentos: 0, tomadas: 0, outras: 0, eventos: 0, canceladas: 0, registradas: 0, erros: [], nao_registradas: [] };
+    const primeira = params.primeira_competencia || null;
+    const cont = { lotes: 0, documentos: 0, tomadas: 0, outras: 0, eventos: 0, canceladas: 0, antigas: 0, registradas: 0, decidir: 0, erros: [], nao_registradas: [] };
     // Em lote, pede "a partir do último" e descarta o que já veio (o ADN pode incluir o próprio NSU);
     // um por vez, pede o seguinte.
     const emLote = params.lote !== false;
@@ -379,6 +415,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
         const lido = nfseAdn.lerDocumento(d.xml, { cnpjEmpresa: cnpj });
         if (lido.tipo === 'nfse') {
           if (lido.papel !== 'tomador') { cont.outras++; continue; }
+          if (antigaDeFora(indice, 'nfse_adn', lido.chave || d.chave, lido.data_emissao, primeira)) { cont.antigas++; continue; }
           await entrada.gravar(api, indice, {
             origem: 'nfse_adn', tipo: 'nfse', chave: lido.chave || d.chave, nsu: d.nsu, xml: d.xml, numero: lido.numero, municipio: lido.municipio,
             emitente_documento: lido.emitente_documento, emitente_nome: lido.emitente_nome, data_emissao: lido.data_emissao,
@@ -396,10 +433,11 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
       if (gravar) await configuracao.atualizarEstado(api, linha, { ultimo_nsu: ult });
     }
     if (gravar && params.registrar_automaticamente !== false) {
-      const r = await registrarPendentes(api, 'nfse_adn', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj });
+      const r = await registrarPendentes(api, 'nfse_adn', { usuarioId, gerarTitulo: params.gerar_conta === true, cnpj, primeira });
       cont.registradas += r.registradas;
       cont.nao_registradas.push(...r.erros);
     }
+    if (gravar) cont.decidir = contarDecidir(indice, 'nfse_adn', primeira);
     await configuracao.atualizarEstado(api, linha, {
       ultima_execucao_em: c.agora(), ultimo_sucesso_em: c.agora(), ultimo_erro: cont.erros.length ? cont.erros.slice(0, 3).join(' | ').slice(0, 2000) : null,
       ...(gravar ? { ultimo_nsu: ult } : {})
@@ -409,6 +447,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     if (cont.tomadas) partes.push(c.plural(cont.tomadas, 'NFS-e tomada', 'NFS-e tomadas'));
     if (cont.registradas) partes.push(c.plural(cont.registradas, 'registrada nos documentos', 'registradas nos documentos'));
     if (cont.canceladas) partes.push(c.plural(cont.canceladas, 'cancelamento', 'cancelamentos'));
+    partes.push(...partesDaJanela(cont, primeira));
     if (!gravar) partes.push('homologação num banco de produção: nada foi gravado');
     if (cont.nao_registradas.length) partes.push(`${c.plural(cont.nao_registradas.length, 'não registrada', 'não registradas')} (o motivo está na caixa de entrada)`);
     if (cont.erros.length) partes.push(c.plural(cont.erros.length, 'erro', 'erros'));
@@ -492,6 +531,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
 
   /** A busca de verdade (botão ou agenda). `opcoes.competencia` só para o extrato. */
   async function sincronizar(api, chave, { usuarioId = null, tipo = 'manual', chaveExecucao = null, competencia = null } = {}) {
+    if (catalogo.definicao(chave).foraDeUso) throw c.erro(catalogo.definicao(chave).foraDeUso, 409);
     const ctx = await contexto(api, chave);
     if (!ctx.linha.ativa && tipo === 'automatica') return { situacao: 'desligada', resumo: 'Integração desligada.' };
     // A busca manual também só roda ligada (na SEFAZ ela dá ciência); o teste de conexão roda sempre.
@@ -515,6 +555,7 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
 
   /** O teste de conexão: fala com o serviço e não grava nada (só o registro e, na SEFAZ, a espera de 1 hora). */
   async function testar(api, chave, { usuarioId = null } = {}) {
+    if (catalogo.definicao(chave).foraDeUso) throw c.erro(catalogo.definicao(chave).foraDeUso, 409);
     const ctx = await contexto(api, chave);
     const { params, ambiente, cert, credenciais, linha, fiscal } = ctx;
     return registrada(api, { integracao: chave, tipo: 'teste', usuarioId }, async () => {
@@ -621,7 +662,9 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     }
     if (!completa) throw c.erro('A SEFAZ ainda não liberou o XML completo desta nota (só o resumo): dê ciência e tente mais tarde.', 422);
     let registrado = null;
-    if (ctx.params.registrar_automaticamente !== false && podeGravar(ctx.ambiente)) {
+    // A nota do mês anterior ao início espera a decisão (registrar ou guardar como histórico).
+    const esperaDecisao = ['anterior', 'antes'].includes(entrada.faseDaNota(l.data_emissao, ctx.params.primeira_competencia || null));
+    if (ctx.params.registrar_automaticamente !== false && podeGravar(ctx.ambiente) && !esperaDecisao) {
       registrado = await entrada.registrar(api, l.id, { usuarioId, hoje: hojeBR(), podeLancar: ctx.params.gerar_conta === true, gerarTitulo: ctx.params.gerar_conta === true, cnpjEmpresa: b.digitos(ctx.fiscal.cnpj) }).catch(e => ({ erro: e.message }));
     }
     return { id: l.id, completa: true, registrado };
@@ -643,6 +686,32 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
     return r;
   }
 
+  /** O mês em que cada busca começa (AAAA-MM), para a caixa de entrada pedir a decisão das notas do mês anterior. */
+  async function primeirasDasBuscas(api) {
+    const linhas = await configuracao.carregar(api).catch(() => null);
+    const saida = {};
+    for (const chave of ['sefaz_nfe', 'nfse_adn']) {
+      saida[chave] = configuracao.parametros(catalogo.definicao(chave), linhas?.get(chave) || null).primeira_competencia || null;
+    }
+    return saida;
+  }
+
+  async function listarEntrada(api, filtro = {}) {
+    return entrada.listar(api, { ...filtro, primeiras: await primeirasDasBuscas(api) });
+  }
+
+  /** Guardar como histórico a nota do mês anterior ao início (botão da caixa de entrada). */
+  async function historicoDaEntrada(api, id, { usuarioId = null } = {}) {
+    const l = await entrada.lerLinha(api, id);
+    const primeira = (await primeirasDasBuscas(api))[l.origem] || null;
+    const r = await entrada.guardarComoHistorico(api, id, { usuarioId, primeira });
+    await eventos.registrar(api, {
+      tipo: 'entrada_ignorada', usuarioId, competencia: String(c.dia(l.data_emissao) || '').slice(0, 7) || null,
+      descricao: `${l.tipo === 'nfse' ? 'NFS-e' : 'NF-e'} ${l.numero || ''} de ${l.emitente_nome || 'emitente'} guardada como histórico (antes do início da Contabilidade)`
+    });
+    return { id: r.id, status: r.status, historico: true };
+  }
+
   /** O XML guardado na caixa de entrada (para abrir/salvar). */
   async function xmlDaEntrada(api, id) {
     const l = await entrada.lerLinha(api, id);
@@ -651,9 +720,9 @@ function criar({ env = process.env, cofre = null, banco = null, transporteFabric
   }
 
   return {
-    seg, contexto, estado, salvar, testar, sincronizar, manifestar, baixarXml, registrarDaEntrada, ignorarDaEntrada, xmlDaEntrada,
+    seg, contexto, estado, salvar, testar, sincronizar, manifestar, baixarXml, registrarDaEntrada, ignorarDaEntrada, historicoDaEntrada, xmlDaEntrada,
     restaurarDaEntrada: (api, id) => entrada.restaurar(api, id),
-    listarEntrada: (api, filtro) => entrada.listar(api, filtro),
+    listarEntrada, primeirasDasBuscas,
     certificadoPublico: api => seg.certificadoPublico(api),
     podeGravar, periodoDoExtrato
   };
