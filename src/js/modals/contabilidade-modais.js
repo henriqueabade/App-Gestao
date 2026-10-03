@@ -4569,6 +4569,13 @@
       const salvar = el('ctbConfigSalvarGeral');
       campo.value = p.valores?.inicio_competencia || '';
       campo.disabled = !dados?.pode_editar || Boolean(p.sql_pendente);
+      // Fase G: o cartão de crédito (em uso e o limite da compra sem nota).
+      const ativo = el('ctbConfigCartaoAtivo');
+      const limite = el('ctbConfigCartaoLimite');
+      ativo.value = p.valores?.cartao_ativo === 'nao' ? 'nao' : 'sim';
+      limite.value = formatarMoeda(Number(p.valores?.cartao_limite_sem_nota ?? 50)).replace(/^R\$\s*/, '');
+      ativo.disabled = campo.disabled;
+      limite.disabled = campo.disabled;
       salvar.classList.toggle('hidden', !dados?.pode_editar || Boolean(p.sql_pendente));
       el('ctbConfigInicioNota').textContent = p.sql_pendente
         ? `Ainda não ativado: rode ${p.sql_arquivo || 'sql/contabilidade_fase_a.sql'} no banco e reinicie a API (até lá, nenhum mês fica de fora).`
@@ -4603,8 +4610,10 @@
     acionar(el('ctbConfigSalvarGeral'), async () => {
       mostrarMensagem('ctbConfigMensagem', '');
       try {
-        await enviar('/api/contabilidade/parametros', 'PUT', { inicio_competencia: el('ctbConfigInicio').value });
-        window.showToast?.('Início da Contabilidade salvo.', 'success');
+        await enviar('/api/contabilidade/parametros', 'PUT', {
+          inicio_competencia: el('ctbConfigInicio').value, cartao_ativo: el('ctbConfigCartaoAtivo').value, cartao_limite_sem_nota: el('ctbConfigCartaoLimite').value
+        });
+        window.showToast?.('Configurações gerais salvas.', 'success');
         avisarAlteracao();
         await recarregar();
       } catch (e) { mostrarMensagem('ctbConfigMensagem', textoDoErro(e, 'Mudar as configurações gerais é do Sup Admin.')); }
@@ -5676,6 +5685,292 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ cartão de crédito (fase G)
+
+  const TOM_SITUACAO_CARTAO = {
+    com_nota: 'badge-success', com_recibo: 'badge-success', sem_nota: 'badge-neutral', abaixo_do_limite: 'badge-neutral',
+    anterior: 'badge-warning', pendente: 'badge-danger', nao_se_aplica: 'badge-neutral'
+  };
+
+  /** A nota da compra entre as sugestões (as possibilidades delimitadas). null = desistiu. */
+  function escolherNota(compra, sugestoes) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-2xl glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Qual é a nota desta compra?'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', `${compra.descricao} · ${formatarData(compra.data)} · ${formatarMoeda(compra.valor_compra)}${compra.parcela ? ` (a compra inteira: parcela ${compra.parcela})` : ''}. As notas de mesmo valor emitidas perto do dia da compra.`));
+      const lista = criar('div', 'ctb-dda-escolhas modal-scroll');
+      sugestoes.forEach((s, i) => {
+        const rotulo = criar('label', 'ctb-dda-escolha');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'ctbCartaoNota';
+        radio.value = String(s.id);
+        if (i === 0) radio.checked = true;
+        const texto = criar('span', 'ctb-dda-escolha__texto');
+        texto.append(
+          criar('strong', null, `${s.rotulo} · ${s.emitente || 'emitente'} · ${formatarMoeda(s.valor_total)}`),
+          criar('span', 'ctb-sub', [formatarData(s.data_emissao), ...(s.motivos || []), s.com_conta ? 'tem conta a pagar lançada (cancele-a depois)' : null].filter(Boolean).join(' · '))
+        );
+        rotulo.append(radio, texto);
+        lista.appendChild(rotulo);
+      });
+      caixa.appendChild(lista);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-danger ctl-botao text-white', 'Cancelar');
+      const ok = criar('button', 'btn-success ctl-botao', 'Ligar a nota');
+      voltar.type = 'button';
+      ok.type = 'button';
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => sair(lista.querySelector('input[name="ctbCartaoNota"]:checked')?.value || null));
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      ok.focus();
+    });
+  }
+
+  /** A fatura do cartão do mês: as contas, o pagamento e a nota de cada compra. */
+  function montarCartao() {
+    const compCampo = el('ctbCartaoCompetencia');
+    const visaoSel = el('ctbCartaoVisao');
+    const seletor = el('ctbCartaoArquivo');
+    const seletorRecibo = el('ctbCartaoRecibo');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+    let reciboPara = null;
+
+    const total = (rotulo, valor, nota = '', tom = null) => {
+      const d = criar('div', 'ctb-total');
+      if (tom) d.dataset.tom = tom;
+      d.append(criar('span', 'ctb-total__rotulo', rotulo), criar('strong', 'ctb-total__valor', valor), criar('span', 'ctb-total__nota', nota));
+      return d;
+    };
+
+    const decidir = (caminho, corpoEnvio, sucesso) => async () => {
+      mostrarMensagem('ctbCartaoMensagem', '');
+      try {
+        const r = await enviar(caminho, 'POST', corpoEnvio);
+        window.showToast?.(sucesso, 'success');
+        if (r?.aviso) mostrarMensagem('ctbCartaoMensagem', r.aviso, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r?.aviso) });
+      } catch (e) {
+        mostrarMensagem('ctbCartaoMensagem', textoDoErro(e, 'Isto pede a permissão "Registrar documento recebido".'));
+      }
+    };
+    const ligarNota = (x, documentoId) => decidir(`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/nota`, { documento_id: Number(documentoId) },
+      x.parcela ? 'Nota ligada (vale para todas as parcelas da compra).' : 'Nota ligada à compra.');
+
+    function acoesDaCompra(x) {
+      const botoes = [];
+      if (x.tipo !== 'compra') return botoes;
+      const sugerida = x.sugestoes?.[0];
+      if (['pendente', 'anterior'].includes(x.situacao)) {
+        if (x.sugestoes?.length === 1 && !sugerida.com_conta) {
+          botoes.push(botaoPequeno('Ligar à sugerida', 'btn-success', ligarNota(x, sugerida.id), { perm: 'contabilidade.documento.registrar', titulo: `${sugerida.rotulo} · ${(sugerida.motivos || []).join(', ')}` }));
+        } else if (x.sugestoes?.length) {
+          botoes.push(botaoPequeno('Escolher a nota…', 'btn-success', async () => {
+            const id = await escolherNota(x, x.sugestoes);
+            if (id) await ligarNota(x, id)();
+          }, { perm: 'contabilidade.documento.registrar', titulo: `${plural(x.sugestoes.length, 'nota possível', 'notas possíveis')}: escolha a certa` }));
+        }
+        botoes.push(botaoPequeno('Recibo', 'btn-neutral', () => { reciboPara = x; seletorRecibo.value = ''; seletorRecibo.click(); },
+          { perm: 'contabilidade.documento.registrar', titulo: 'Anexar o recibo ou a nota em PDF/foto (sem a nota registrada)' }));
+        botoes.push(botaoPequeno('Sem nota', 'btn-neutral', async () => {
+          const motivo = await pedirTexto({ titulo: 'Esta compra fica sem nota?', confirmar: 'Fica sem nota', mensagem: `${x.descricao} · ${formatarMoeda(x.valor_compra)} · ${formatarData(x.data)}. Diga por quê (cupom perdido, compra pessoal estornada…). Vale para todas as parcelas da compra.` });
+          if (motivo) await decidir(`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/sem-nota`, { motivo }, 'Compra marcada sem nota.')();
+        }, { perm: 'contabilidade.documento.registrar' }));
+      }
+      if (x.nota) botoes.push(botaoPequeno('Nota', 'btn-secondary', () => abrirOutro('documento-recebido', { documento_id: x.nota.id }), { titulo: 'Abrir a nota registrada' }));
+      if (['com_nota', 'sem_nota'].includes(x.situacao)) {
+        botoes.push(botaoPequeno('Desfazer', 'btn-neutral', decidir(`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/desfazer`, {}, 'A compra voltou a ficar sem decisão.'),
+          { perm: 'contabilidade.documento.registrar', titulo: 'Solta a nota (ou o "sem nota") de todas as parcelas da compra' }));
+      }
+      return botoes;
+    }
+
+    function visivel(x) {
+      if (visaoSel.value === 'pendentes') return x.tipo === 'compra' && ['pendente', 'anterior'].includes(x.situacao);
+      if (visaoSel.value === 'com_nota') return ['com_nota', 'com_recibo'].includes(x.situacao);
+      return true;
+    }
+
+    function cartaoDaFatura(f) {
+      const sec = criar('div', 'ctb-secao-modal');
+      const cabeca = criar('div', 'ctb-secao-modal__cabeca');
+      cabeca.append(
+        criar('h3', 'ctl-secao text-[var(--color-primary)]', `Fatura de venc. ${formatarData(f.vencimento)}${f.cartao_final ? ` · cartão final ${f.cartao_final}` : ''}`),
+        (() => { const d = criar('div', 'ctb-celula-acoes'); d.appendChild(tag(f.confere ? 'As contas fecham' : 'Não fecha', f.confere ? 'badge-success' : 'badge-danger')); return d; })()
+      );
+      sec.appendChild(cabeca);
+      sec.appendChild(criar('p', 'text-xs text-gray-400', [f.titular, f.nome_arquivo, f.saldo_anterior !== null ? `saldo da fatura anterior ${formatarMoeda(f.saldo_anterior)}` : null].filter(Boolean).join(' · ')));
+      const k = f.contagem;
+      const pg = f.pagamento;
+      const totais = criar('div', 'ctb-totais');
+      totais.append(
+        total('Fatura', formatarMoeda(f.valor_total), f.valor_minimo !== null ? `Mínimo ${formatarMoeda(f.valor_minimo)}` : ''),
+        total('Pago no extrato', formatarMoeda(pg.pago), pg.restante > 0.009 ? `Falta ${formatarMoeda(pg.restante)}` : pg.movimentos.map(m => formatarData(m.data)).join(', '), pg.restante > 0.009 ? 'bordo' : null),
+        total('Compras', String(k.compras), `${k.com_nota} com nota · ${k.abaixo_do_limite} abaixo do limite${k.sem_nota ? ` · ${k.sem_nota} sem nota` : ''}`),
+        total('Faltam notas', String(k.pendentes), k.anteriores ? `+ ${plural(k.anteriores, 'de antes do início', 'de antes do início')}` : 'Acima do limite', k.pendentes ? 'bordo' : null)
+      );
+      sec.appendChild(totais);
+      if (!f.confere) {
+        const conf = criar('ul', 'ctb-lista-modal text-gray-300');
+        conf.append(...f.conferencias.filter(x => !x.ok).map(x => itemDaLista(`${x.rotulo} — esperado ${formatarMoeda(x.esperado)}, na fatura ${formatarMoeda(x.obtido)}`, 'fa-times', 'var(--color-red)')));
+        sec.appendChild(conf);
+      }
+      const linhas = f.compras.filter(visivel);
+      const caixa = criar('div', 'ctb-tabela glass-surface rounded-xl border border-white/10');
+      const tabela = criar('table', 'w-full text-sm');
+      const thead = criar('thead');
+      const trh = criar('tr');
+      for (const [t, cls] of [['Data', ''], ['Lançamento', ''], ['Valor', 'text-right ctb-num'], ['Nota', ''], ['', 'text-right']]) trh.appendChild(criar('th', `px-4 py-3 text-left text-xs ${cls}`, t));
+      thead.appendChild(trh);
+      const corpo = criar('tbody');
+      if (!linhas.length) linhaVazia(corpo, 5, 'Nada com este filtro.');
+      for (const x of linhas) {
+        const tr = criar('tr');
+        const sit = [tag(x.situacao === 'nao_se_aplica' ? x.tipo_rotulo : x.situacao_rotulo, TOM_SITUACAO_CARTAO[x.situacao] || 'badge-neutral')];
+        if (x.sugestoes?.length) sit.push(tag(x.sugestoes.length > 1 ? `${x.sugestoes.length} notas possíveis` : 'Nota sugerida', 'badge-info'));
+        const sub = [
+          x.nota ? `${x.nota.rotulo} · ${x.nota.emitente || ''} · ${formatarMoeda(x.nota.valor_total)}${x.criterio_rotulo ? ` · ${x.criterio_rotulo}` : ''}` : null,
+          x.com_recibo ? 'recibo anexado' : null, x.motivo ? `motivo: ${x.motivo}` : null
+        ].filter(Boolean).join(' · ');
+        const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+        acoes.append(...acoesDaCompra(x));
+        tr.append(
+          celula(formatarData(x.data), 'px-4 py-3 ctb-nowrap', x.secao || null),
+          celula(x.descricao || '—', 'px-4 py-3', [x.cidade, x.parcela ? `parcela ${x.parcela}` : null].filter(Boolean).join(' · ') || null),
+          celula(formatarMoeda(x.valor), 'px-4 py-3 text-right ctb-num', x.parcela ? `compra ${formatarMoeda(x.valor_compra)}` : null),
+          celula(sit, 'px-4 py-3', sub || null),
+          celula(acoes, 'px-4 py-3 text-right')
+        );
+        corpo.appendChild(tr);
+      }
+      tabela.append(thead, corpo);
+      caixa.appendChild(tabela);
+      sec.appendChild(caixa);
+      return sec;
+    }
+
+    function desenhar() {
+      const faturas = dados?.faturas || [];
+      const alvo = el('ctbCartaoFaturas');
+      if (!faturas.length) {
+        alvo.replaceChildren(criar('p', 'text-sm text-gray-400', dados?.sql_pendente
+          ? 'O cartão de crédito ainda não está ativado (falta o SQL da fase G).'
+          : 'Nenhuma fatura com vencimento neste mês. Importe o XLSX da fatura do site do BB.'));
+      } else {
+        alvo.replaceChildren(...faturas.map(cartaoDaFatura));
+      }
+      const faltam = faturas.reduce((s, f) => s + f.contagem.pendentes, 0);
+      if (dados?.sql_pendente) pintarEtiqueta(el('ctbCartaoSituacao'), 'Falta o SQL', 'badge-warning');
+      else if (!faturas.length) pintarEtiqueta(el('ctbCartaoSituacao'), 'Fatura a importar', 'badge-warning');
+      else if (faltam) pintarEtiqueta(el('ctbCartaoSituacao'), plural(faltam, 'compra sem nota', 'compras sem nota'), 'badge-danger');
+      else pintarEtiqueta(el('ctbCartaoSituacao'), 'Tudo com nota', 'badge-success');
+      const limite = dados?.config?.limite;
+      el('ctbCartaoSubtitulo').textContent = `${rotuloCompetencia(compCampo.value)}${limite !== undefined ? ` · compra sem nota até ${formatarMoeda(limite)}` : ' · a fatura e a nota de cada compra'}`;
+      try { window.Permissoes?.aplicarAcoesEColunas?.(alvo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar({ manterMensagem = false } = {}) {
+      const minha = ++leitura;
+      mostrarMensagem('ctbCartaoAviso', '');
+      if (!manterMensagem) mostrarMensagem('ctbCartaoMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/cartao?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        if (minha !== leitura) return;
+        dados = r;
+        if (r.sql_pendente) mostrarMensagem('ctbCartaoAviso', `O cartão de crédito ainda não está ativado: rode ${r.sql_arquivo || 'sql/contabilidade_fase_g.sql'} no banco e reinicie a API.`, 'aviso');
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbCartaoAviso', textoDoErro(e, 'Ver o cartão pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    acionar(el('ctbCartaoImportar'), () => { seletor.value = ''; seletor.click(); });
+    seletor.addEventListener('change', async () => {
+      const escolhidos = [...(seletor.files || [])];
+      if (!escolhidos.length) return;
+      mostrarMensagem('ctbCartaoMensagem', '');
+      try {
+        if (escolhidos.some(a => a.size > 5 * 1024 * 1024)) throw new Error('Um dos arquivos passa de 5 MB (a fatura do BB tem poucos KB).');
+        const arquivosLidos = [];
+        for (const a of escolhidos) arquivosLidos.push({ nome: a.name, base64: await lerArquivo(a) });
+        const r = await enviar('/api/contabilidade/cartao/importar', 'POST', { arquivos: arquivosLidos });
+        window.showToast?.(r.resumo || 'Fatura importada.', r.nao_conferem ? 'warning' : 'success');
+        if (r.falhas?.length) mostrarMensagem('ctbCartaoMensagem', `Ficaram de fora: ${r.falhas.join(' · ')}`, 'aviso');
+        // A fatura de outro mês: a tela vai para o mês dela.
+        const mes = r.importadas?.[0]?.competencia;
+        if (mes && mes !== compCampo.value) montarCompetencias(compCampo, mes);
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbCartaoMensagem', textoDoErro(e, 'Importar a fatura pede a permissão "Importar extrato".'));
+      } finally {
+        seletor.value = '';
+      }
+    });
+    seletorRecibo.addEventListener('change', async () => {
+      const a = seletorRecibo.files?.[0];
+      const x = reciboPara;
+      if (!a || !x) return;
+      mostrarMensagem('ctbCartaoMensagem', '');
+      try {
+        if (a.size > 15 * 1024 * 1024) throw new Error('O arquivo passa de 15 MB.');
+        await enviar('/api/contabilidade/arquivos', 'POST', {
+          nome: a.name, tipo: a.type || null, base64: await lerArquivo(a), categoria: 'recibo', competencia: compCampo.value,
+          descricao: `Recibo da compra no cartão: ${x.descricao} (${formatarData(x.data)})`, vinculos: [{ alvo_tipo: 'cartao_compra', alvo_id: x.id }]
+        });
+        window.showToast?.('Recibo anexado à compra.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbCartaoMensagem', textoDoErro(e, 'Anexar pede a permissão "Registrar documento recebido".'));
+      } finally {
+        seletorRecibo.value = '';
+        reciboPara = null;
+      }
+    });
+    acionar(el('ctbCartaoConferir'), async () => {
+      mostrarMensagem('ctbCartaoMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/cartao/conferir', 'POST', { competencia: compCampo.value });
+        const partes = [
+          r.ligadas ? plural(r.ligadas, 'nota ligada', 'notas ligadas') : null, r.herdadas ? plural(r.herdadas, 'parcela com a nota da anterior', 'parcelas com a nota da anterior') : null,
+          r.pagamentos ? plural(r.pagamentos, 'pagamento conciliado', 'pagamentos conciliados') : null
+        ].filter(Boolean);
+        window.showToast?.(partes.length ? partes.join(' · ') : 'Nada novo para ligar.', partes.length ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbCartaoMensagem', `Não deu para ligar: ${r.falhas.join(' · ')}`, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbCartaoMensagem', textoDoErro(e, 'Conferir pede a permissão "Conciliar".'));
+      }
+    });
+    el('ctbCartaoConciliacao').addEventListener('click', () => abrirOutro('conciliacao', {}));
+    compCampo.addEventListener('change', () => carregar());
+    visaoSel.addEventListener('change', () => desenhar());
+    ouvirAlteracoes(() => carregar());
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
@@ -5689,6 +5984,7 @@
     comprovantes: { rotulo: 'Comprovantes do BB', badge: 'badge-info', tipos: ['comprovantes_importados', 'comprovante_ligado', 'comprovante_desligado', 'comprovante_ignorado', 'comprovante_restaurado', 'comprovantes_descartados'] },
     aplicacoes: { rotulo: 'Aplicações (Rende Fácil, CDB)', badge: 'badge-info', tipos: ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas'] },
     terceiros: { rotulo: 'Pago em nome de terceiros', badge: 'badge-warning', tipos: ['terceiro_lancado', 'terceiro_recebido', 'terceiro_cancelado'] },
+    cartao: { rotulo: 'Cartão de crédito', badge: 'badge-info', tipos: ['cartao_fatura_importada', 'cartao_nota_ligada', 'cartao_sem_nota', 'cartao_desfeito', 'cartao_conciliado'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -5853,7 +6149,8 @@
     ctbDda: montarDda,
     ctbComprovantes: montarComprovantes,
     ctbAplicacoes: montarAplicacoes,
-    ctbTerceiros: montarTerceiros
+    ctbTerceiros: montarTerceiros,
+    ctbCartao: montarCartao
   };
 
   let montagem;

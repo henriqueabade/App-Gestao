@@ -66,10 +66,15 @@ const TABELAS_FASE_C = ['contabil_aplicacoes', 'contabil_aplicacao_lancamentos']
 const SQL_ARQUIVO_FASE_F = 'sql/contabilidade_fase_f.sql';
 const SQL_FALTANDO_FASE_F = `Falta rodar ${SQL_ARQUIVO_FASE_F} no banco e reiniciar a API.`;
 const TABELAS_FASE_F = ['contabil_terceiros_itens'];
-const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO, ...TABELAS_FECHAMENTO, ...TABELAS_PACOTE, ...TABELAS_INTEGRACOES, ...TABELAS_FASE_A, ...TABELAS_FASE_H, ...TABELAS_FASE_D, ...TABELAS_FASE_C, ...TABELAS_FASE_F];
+/** Fase G (02/10/2026): o cartão de crédito do BB pela fatura em XLSX. */
+const SQL_ARQUIVO_FASE_G = 'sql/contabilidade_fase_g.sql';
+const SQL_FALTANDO_FASE_G = `Falta rodar ${SQL_ARQUIVO_FASE_G} no banco e reiniciar a API.`;
+const TABELAS_FASE_G = ['contabil_cartao_faturas', 'contabil_cartao_compras'];
+const TABELAS = [...TABELAS_BASE, ...TABELAS_PAGAR, ...TABELAS_EXTRATO, ...TABELAS_CONCILIACAO, ...TABELAS_CLASSIFICACAO, ...TABELAS_FECHAMENTO, ...TABELAS_PACOTE, ...TABELAS_INTEGRACOES, ...TABELAS_FASE_A, ...TABELAS_FASE_H, ...TABELAS_FASE_D, ...TABELAS_FASE_C, ...TABELAS_FASE_F, ...TABELAS_FASE_G];
 
 /** O SQL que cria cada tabela do módulo (a mensagem de "falta o SQL" aponta o certo). */
 function sqlDaTabela(tabela) {
+  if (TABELAS_FASE_G.includes(tabela)) return { arquivo: SQL_ARQUIVO_FASE_G, mensagem: SQL_FALTANDO_FASE_G };
   if (TABELAS_FASE_F.includes(tabela)) return { arquivo: SQL_ARQUIVO_FASE_F, mensagem: SQL_FALTANDO_FASE_F };
   if (TABELAS_FASE_C.includes(tabela)) return { arquivo: SQL_ARQUIVO_FASE_C, mensagem: SQL_FALTANDO_FASE_C };
   if (TABELAS_FASE_D.includes(tabela)) return { arquivo: SQL_ARQUIVO_FASE_D, mensagem: SQL_FALTANDO_FASE_D };
@@ -235,9 +240,9 @@ module.exports = {
   SQL_ARQUIVO_CONCILIACAO, SQL_FALTANDO_CONCILIACAO, SQL_ARQUIVO_CLASSIFICACAO, SQL_FALTANDO_CLASSIFICACAO,
   SQL_ARQUIVO_FECHAMENTO, SQL_FALTANDO_FECHAMENTO, SQL_ARQUIVO_PACOTE, SQL_FALTANDO_PACOTE, SQL_ARQUIVO_INTEGRACOES, SQL_FALTANDO_INTEGRACOES,
   SQL_ARQUIVO_FASE_A, SQL_FALTANDO_FASE_A, SQL_ARQUIVO_FASE_H, SQL_FALTANDO_FASE_H, SQL_ARQUIVO_FASE_D, SQL_FALTANDO_FASE_D, SQL_ARQUIVO_FASE_C, SQL_FALTANDO_FASE_C,
-  SQL_ARQUIVO_FASE_F, SQL_FALTANDO_FASE_F,
+  SQL_ARQUIVO_FASE_F, SQL_FALTANDO_FASE_F, SQL_ARQUIVO_FASE_G, SQL_FALTANDO_FASE_G,
   TABELAS, TABELAS_BASE, TABELAS_PAGAR, TABELAS_EXTRATO, TABELAS_CONCILIACAO, TABELAS_CLASSIFICACAO, TABELAS_FECHAMENTO, TABELAS_PACOTE, TABELAS_INTEGRACOES, TABELAS_FASE_A, TABELAS_FASE_H, TABELAS_FASE_D,
-  TABELAS_FASE_C, TABELAS_FASE_F,
+  TABELAS_FASE_C, TABELAS_FASE_F, TABELAS_FASE_G,
   sqlDaTabela, NIVEIS, nivelValido,
   tabelaAusente, ler, lerOpcional, inserir, atualizar, excluir, nomesDeUsuarios, instanteBR, ultimoDia,
   garantirAberta, valorDe, digitos, documentoFormatado

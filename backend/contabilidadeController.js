@@ -123,6 +123,16 @@
  *   POST /terceiros/conferir                 { competencia } — itens dos comprovantes e devoluções do mês  (contabilidade.conciliar)
  *   POST /terceiros/:id/cancelar             { motivo } — solta o débito                                    (contabilidade.conciliar)
  *
+ * Fase G (02/10/2026 — o cartão de crédito do BB pela fatura em XLSX):
+ *
+ *   GET  /cartao?competencia=                a fatura do mês (vencimento), as compras e a nota de cada uma, as sugestões
+ *   POST /cartao/importar                    { arquivos: [{ nome, base64 }] } — o XLSX do site do BB  (contabilidade.extrato.importar)
+ *   POST /cartao/conferir                    { competencia } — casa as notas e concilia o pagamento    (contabilidade.conciliar)
+ *   POST /cartao/compras/:id/nota            { documento_id } — a nota escolhida (todas as parcelas)  (contabilidade.documento.registrar)
+ *   POST /cartao/compras/:id/sem-nota        { motivo }                                               (contabilidade.documento.registrar)
+ *   POST /cartao/compras/:id/desfazer        solta a nota ou o "sem nota"                             (contabilidade.documento.registrar)
+ *   (o recibo de uma compra entra por POST /arquivos com o vínculo { alvo_tipo: 'cartao_compra' })
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -156,6 +166,7 @@ const ddaEspelho = require('./contabilidade/dda/espelho');
 const comprovantes = require('./contabilidade/comprovantes/comprovantes');
 const aplicacoes = require('./contabilidade/aplicacoes/aplicacoes');
 const terceiros = require('./contabilidade/terceiros/terceiros');
+const cartao = require('./contabilidade/cartao/cartao');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -557,6 +568,26 @@ router.post('/terceiros/conferir', exigirPermissao(CONCILIAR), rota('POST /api/c
 
 router.post('/terceiros/:id/cancelar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/terceiros/:id/cancelar', ({ api, req, usuarioId }) =>
   terceiros.cancelar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+// ------------------------------------------------------------ cartão de crédito (fase G: a fatura em XLSX)
+
+router.get('/cartao', exigirPermissao(VER), rota('GET /api/contabilidade/cartao', ({ api, req }) =>
+  cartao.listar(api, { competencia: req.query?.competencia })));
+
+router.post('/cartao/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/cartao/importar', ({ api, req, usuarioId }) =>
+  cartao.importar(api, { arquivos: req.body?.arquivos || [], usuarioId })));
+
+router.post('/cartao/conferir', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/cartao/conferir', ({ api, req, usuarioId }) =>
+  cartao.conferir(api, { competencias: /^\d{4}-\d{2}$/.test(String(req.body?.competencia || '')) ? [String(req.body.competencia)] : null, usuarioId })));
+
+router.post('/cartao/compras/:id/nota', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/cartao/compras/:id/nota', ({ api, req, usuarioId }) =>
+  cartao.ligarNota(api, req.params.id, { documentoId: req.body?.documento_id, usuarioId })));
+
+router.post('/cartao/compras/:id/sem-nota', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/cartao/compras/:id/sem-nota', ({ api, req, usuarioId }) =>
+  cartao.semNota(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/cartao/compras/:id/desfazer', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/cartao/compras/:id/desfazer', ({ api, req, usuarioId }) =>
+  cartao.desfazer(api, req.params.id, { usuarioId })));
 
 // ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
 

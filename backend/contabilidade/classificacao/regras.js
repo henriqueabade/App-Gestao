@@ -32,7 +32,9 @@ const CONDICOES = {
 const ORIGENS = {
   recebimento: 'Recebimento de pedido', reembolso: 'Reembolso de devolução', comissao: 'Pagamento de comissões', producao: 'Pagamento de produção',
   // Fase F: o que a empresa pagou em nome de outra (a receber) e a devolução dela.
-  terceiro: 'Pago em nome de terceiro / devolução (a receber)'
+  terceiro: 'Pago em nome de terceiro / devolução (a receber)',
+  // Fase G: o pagamento da fatura do cartão de crédito (a regra do SQL leva à 00744).
+  cartao: 'Pagamento da fatura do cartão de crédito'
 };
 const SENTIDOS = { ambos: 'Entrada e saída', credito: 'Só entrada', debito: 'Só saída' };
 const GENERICAS = new Set([

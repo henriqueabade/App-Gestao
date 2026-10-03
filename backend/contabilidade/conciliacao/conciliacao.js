@@ -34,7 +34,9 @@ const CRITERIOS = {
   // Fase C: a linha do Rende Fácil/CDB conferida com o PDF mensal do BB (aplicacoes/aplicacoes.js).
   aplicacao: 'Conferido com o PDF da aplicação',
   // Fase F: pago em nome de outra empresa (a receber) ou a devolução dela (terceiros/terceiros.js).
-  terceiro: 'De terceiro (a receber)'
+  terceiro: 'De terceiro (a receber)',
+  // Fase G: o pagamento da fatura do cartão, pela fatura importada (XLSX).
+  cartao: 'Pela fatura do cartão importada'
 };
 /** O vínculo que nasceu pagando uma obrigação: desfazer estorna o pagamento (e cancela a conta da nota ou do boleto). */
 const CRITERIOS_QUE_PAGAM = ['parcela_paga', 'documento_pago', 'dda_pago'];
@@ -576,6 +578,16 @@ async function automaticaDosMeses(api, { competencias = [], contaId = null, usua
   } catch (e) {
     if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
   }
+  // Fase G (antes do automático: a nota da compra no cartão não pode virar obrigação paga por outro débito):
+  // as notas que chegaram casam com as compras e o pagamento da fatura liga ao débito.
+  try {
+    const cartao = await require('../cartao/cartao').conferir(api, { competencias: meses, usuarioId });
+    if (cartao.pagamentos) total.faturas_ligadas = cartao.pagamentos;
+    if (cartao.ligadas) total.notas_do_cartao = cartao.ligadas;
+    total.falhas.push(...cartao.falhas);
+  } catch (e) {
+    if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
+  }
   try {
     await lerVinculos(api);
     const { contas } = await extrato.listarContas(api);
@@ -622,9 +634,13 @@ function resumoDaAutomatica(r) {
   const comprovantes = r?.comprovantes_ligados ? c.plural(r.comprovantes_ligados, 'comprovante do BB ligado ao extrato', 'comprovantes do BB ligados ao extrato') : null;
   const aplicacoes = r?.aplicacoes_ligadas ? c.plural(r.aplicacoes_ligadas, 'linha de aplicação conferida com o PDF', 'linhas de aplicação conferidas com o PDF') : null;
   const terceiros = r?.terceiros_ligados ? c.plural(r.terceiros_ligados, 'lançamento de terceiro (a receber) ligado', 'lançamentos de terceiros (a receber) ligados') : null;
-  if (!r?.conciliados) return [comprovantes, aplicacoes, terceiros].filter(Boolean).join(' · ') || null;
+  const cartao = [
+    r?.faturas_ligadas ? c.plural(r.faturas_ligadas, 'pagamento de fatura do cartão conciliado', 'pagamentos de fatura do cartão conciliados') : null,
+    r?.notas_do_cartao ? c.plural(r.notas_do_cartao, 'nota ligada a compra do cartão', 'notas ligadas a compras do cartão') : null
+  ].filter(Boolean).join(' · ') || null;
+  if (!r?.conciliados) return [comprovantes, aplicacoes, cartao, terceiros].filter(Boolean).join(' · ') || null;
   const extra = frasesDasObrigacoes(r);
-  return [comprovantes, aplicacoes, terceiros, `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`].filter(Boolean).join(' · ');
+  return [comprovantes, aplicacoes, cartao, terceiros, `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`].filter(Boolean).join(' · ');
 }
 
 /** Os meses que um conjunto de datas toca, com o seguinte (a nota de um mês é paga no outro). Pura. */

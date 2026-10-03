@@ -48,7 +48,9 @@ const ALVOS = {
   titulo: 'Conta a pagar',
   pagamento: 'Pagamento de conta',
   financeiro_pagamento: 'Pagamento de fechamento',
-  reembolso: 'Reembolso'
+  reembolso: 'Reembolso',
+  // Fase G: o recibo (ou a nota em PDF) de uma compra no cartão.
+  cartao_compra: 'Compra no cartão'
 };
 
 function sha256(buffer) {

@@ -1978,3 +1978,75 @@ que ela manda abate. Roteiro: Parte O. SQL: `sql/contabilidade_fase_f.sql`
     (`dev_e2e_terceiros.js`): 4 itens, 4 débitos conciliados, o Pix da
     Artdeco ligado a 1, 3 a receber; banco apagado.
 - **Pendências:** 68 a 71.
+
+## AJ. Fase G entregue (02/10/2026) — o cartão de crédito do BB pela fatura em XLSX
+
+Regras do dono (02/10): a fatura vem sempre em XLSX (modelo
+`Desktop/FaturaCartão BB.xlsx`); "fatura do cartão a importar" fica pendente
+para fechar a competência; ao importar, casar as notas pelo valor entendendo o
+parcelado (nota cheia = parcela × nº de parcelas); dúvida = o usuário escolhe
+entre possibilidades delimitadas; a compra abaixo do limite (R$ 50,
+configurável) não precisa de nota. Roteiro: Parte P. SQL:
+`sql/contabilidade_fase_g.sql` (depois do da Fase F; reiniciar a API).
+
+- **Banco:**
+  - `contabil_cartao_faturas`: cartão só com os 4 últimos dígitos, vencimento,
+    competência (= mês do vencimento), totais, `linhas` e `conferencias`
+    (jsonb), `confere`, `substituida_em`; índices únicos no SHA-256 e em
+    (final, vencimento) valendo;
+  - `contabil_cartao_compras`: tipo (compra, credito, pagamento, encargo),
+    seção, data (a da compra), descrição, cidade, valor, parcela, valor da
+    compra inteira, `documento_id`, `criterio` (automatico, escolhido,
+    parcela), `decisao` (sem_nota) e o motivo;
+  - parâmetros `cartao_ativo` (sim) e `cartao_limite_sem_nota` (50.00) e a
+    regra de classificação origem `cartao` → 00744.
+- **Leitura** (`cartao/leitura.js`, pura menos `lerXlsx`): o cabeçalho pelos
+  rótulos; as seções; "0--RAZÃO Cartão N. 9999"; a descrição em
+  estabelecimento (23) + cidade (14), ou "LOJA PARC 06/10 CIDADE"; o ano pelo
+  vencimento e, na parcela k, a compra uns k meses antes; as conferências; o
+  número do cartão trocado por "**** **** **** 9999" nas linhas guardadas.
+  Real de setembro: as 4 conferências ok.
+- **Módulo** `cartao/cartao.js`:
+  - puras: `situacaoDaCompra`, `candidatos` (valor exato ou a parcelada
+    inteira ± n centavos; emissão de −5 a +10 dias; nota viva, não de
+    fechamento nem "sem pagamento"; a de outra compra não; a com conta só à
+    mão), `casarNotas` (automático só com uma nota e ela só desta compra),
+    `herdarParcelas`, `pagamentoDaFatura`, `pendencias`, `documentosNoCartao`;
+  - `importar` (substitui a do mesmo vencimento, solta o pagamento dela e
+    leva as decisões pela linha), `conferir` = `casarSozinho` +
+    `conciliarSozinho` (o débito do valor total de −10 a +6 dias do
+    vencimento, único), `ligarNota`, `semNota`, `desfazer` (todas as parcelas
+    da compra), `listar`.
+- **Conciliação:** liquidação `fatura_cartao` (−1, `deFatura`, subtipo
+  `cartao`); critério `cartao`; em `automaticaDosMeses` antes do automático
+  (a nota da compra não pode virar obrigação paga por outro débito). A nota
+  ligada a uma compra sai das obrigações (`documento`) e de "documento sem
+  conta a pagar" (`linhaDoDocumento({ noCartao })`).
+- **Classificação:** origem `cartao` (`liq.subtipo`), `ORIGENS.cartao`.
+- **Painel** (fonte contas a pagar): `cartao_fatura_<mês>` (aviso/crítico),
+  `cartao_nao_confere_<id>` e `cartao_sem_nota_<id>` (críticos),
+  `cartao_anteriores_<id>` e `cartao_nao_paga_<id>` (avisos); filtro
+  `{ acao: 'cartao' }`.
+- **Pacote:** `fatura_cartao` em `TIPOS_DE_PAGAMENTO`, `pag.cartao` (a fatura
+  e as compras com a situação), as notas das compras como os documentos, a
+  falta "N compras sem nota"; o dossiê com a seção da fatura.
+- **Relatório:** `cartaoDoMes` e a seção "Cartão de crédito".
+- **Arquivos:** vínculo novo `cartao_compra` (o recibo da compra).
+- **Rotas:** GET `/cartao`; POST `/cartao/importar` (extrato.importar, corpo
+  grande), `/cartao/conferir` (conciliar), `/cartao/compras/:id/nota`,
+  `/sem-nota`, `/desfazer` (documento.registrar); PUT `/parametros` com os
+  dois campos do cartão.
+- **Tela:** modal `cartao` (bloco por fatura: 4 números, conferências que
+  falham, tabela com a situação, sugestões, Escolher a nota…, Recibo, Sem
+  nota, Desfazer, Nota), botão nas Ações, grupo na atividade, campos no
+  cartão Geral das Configurações.
+- **Testes:**
+  - `cartao/cartao.test.js`: 5 (leitura e XLSX, casamento, pendências,
+    liquidação/classificação/pacote, descrição);
+  - `contabilidadeCartao.test.js`: 3, de ponta a ponta;
+  - faturas de mentira em `cartao/faturasDeTeste.js`;
+  - tela: modal no padrão e a fase G;
+  - DEV contra o Postgres descartável com o OFX e a fatura reais
+    (`dev_e2e_cartao.js`): fecha, o pagamento de 14/09 ligou e foi para a
+    00744, relatório e painel ok; banco apagado.
+- **Pendências:** 72 a 76.

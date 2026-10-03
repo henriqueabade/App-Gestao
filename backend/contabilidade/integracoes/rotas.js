@@ -10,7 +10,7 @@
  *   POST   /integracoes/:chave/sincronizar        { competencia? } — a busca de verdade  a permissão da integração
  *   GET    /integracoes/:chave/execucoes          o registro das buscas                  contabilidade.config.view
  *   GET    /integracoes/certificado/publico       o .cer para o portal do BB             Sup Admin
- *   PUT    /parametros                            { inicio_competencia } (cartão Geral)  Sup Admin
+ *   PUT    /parametros                            { inicio_competencia, cartao_ativo, cartao_limite_sem_nota } (cartão Geral)  Sup Admin
  *     (o GET /integracoes já traz `parametros`: o início da Contabilidade — fase A)
  *
  *   GET    /entrada?origem=&visao=&competencia=   a caixa de entrada (NF-e / NFS-e)      contabilidade.view

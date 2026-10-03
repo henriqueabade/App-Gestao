@@ -44,6 +44,22 @@
             </div>
             <p id="ctbConfigInicioNota" class="md:col-span-2 text-xs text-gray-400"></p>
           </div>
+          <!-- Fase G (02/10/2026): o cartão de crédito — a fatura do mês é cobrada; a compra pequena não pede nota. -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mt-4">
+            <div>
+              <label for="ctbConfigCartaoAtivo" class="ctl-rotulo text-gray-300">Cartão de crédito em uso</label>
+              <select id="ctbConfigCartaoAtivo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="sim">Sim: cobrar a fatura de cada mês</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbConfigCartaoLimite" class="ctl-rotulo text-gray-300">Compra no cartão sem nota até (R$)</label>
+              <input id="ctbConfigCartaoLimite" type="text" inputmode="decimal" maxlength="12" placeholder="50,00"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <p class="text-xs text-gray-400">A compra do cartão abaixo deste valor (a compra inteira, nas parceladas) não precisa de nota. As outras pedem a nota ligada, o recibo anexado ou o motivo.</p>
+          </div>
           <div class="ctl-acoes justify-end mt-4">
             <button id="ctbConfigSalvarGeral" type="button" class="btn-primary ctl-botao text-white">Salvar</button>
           </div>

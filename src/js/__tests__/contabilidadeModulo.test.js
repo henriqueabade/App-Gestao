@@ -272,6 +272,11 @@ const MODAIS_FASE_F = {
   'terceiros': { overlay: 'ctbTerceiros', principal: ['ctbTercLancar', 'btn-primary', 'contabilidade.conciliar'] }
 };
 
+// Fase G (02/10/2026): o cartão de crédito (importar a fatura em XLSX é o principal; pede "Importar extrato").
+const MODAIS_FASE_G = {
+  'cartao': { overlay: 'ctbCartao', principal: ['ctbCartaoImportar', 'btn-primary', 'contabilidade.extrato.importar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -281,7 +286,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_FASE_F, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_FASE_F, ...MODAIS_FASE_G, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -447,6 +452,31 @@ test('fase F (02/10/2026): pago em nome de terceiros — a tela abre, lança à 
   for (const v of Object.keys(mod.VISOES)) assert.ok(html.includes(`<option value="${v}">`), `visão ${v}`);
   assert.ok(fs.readFileSync(ARQ, 'utf8').includes("filtro: { acao: 'terceiros' }") && TELA.includes("'terceiros': {"));
   for (const tipo of ['terceiro_lancado', 'terceiro_recebido', 'terceiro_cancelado']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
+});
+
+test('fase G (02/10/2026): o cartão de crédito — a tela abre, importa o XLSX, liga a nota (as sugestões), sem nota, recibo, desfaz; o limite nas Configurações; a pendência abre a tela', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  assert.match(TELA, /'cartao': \{[^}]*abrir:/);
+  assert.ok(HTML.includes('data-ctb-acao="cartao"'));
+  for (const rota of [
+    "fetchApi(`/api/contabilidade/cartao?competencia=", "enviar('/api/contabilidade/cartao/importar', 'POST', { arquivos: arquivosLidos })",
+    "enviar('/api/contabilidade/cartao/conferir', 'POST', { competencia: compCampo.value })", "`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/nota`",
+    "`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/sem-nota`", "`/api/contabilidade/cartao/compras/${encodeURIComponent(x.id)}/desfazer`",
+    "vinculos: [{ alvo_tipo: 'cartao_compra', alvo_id: x.id }]"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  const html = ler('html', 'modals', 'contabilidade', 'cartao.html');
+  assert.match(html, /id="ctbCartaoConferir" type="button" data-perm="contabilidade\.conciliar" class="btn-secondary ctl-botao text-white"/);
+  assert.match(html, /id="ctbCartaoArquivo" type="file" accept="\.xlsx" multiple/);
+  // As situações do backend têm cor na tela; o recibo é um vínculo que o backend conhece; a pendência abre esta tela.
+  const ARQ = path.join(RAIZ, '..', 'backend', 'contabilidade', 'cartao', 'cartao.js');
+  for (const s of Object.keys(require(ARQ).SITUACOES)) assert.ok(new RegExp(`TOM_SITUACAO_CARTAO = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
+  assert.ok(require(path.join(RAIZ, '..', 'backend', 'contabilidade', 'arquivos.js')).ALVOS.cartao_compra);
+  assert.ok(fs.readFileSync(ARQ, 'utf8').includes("const filtro = { acao: 'cartao' };") && TELA.includes("'cartao': {"));
+  for (const tipo of ['cartao_fatura_importada', 'cartao_nota_ligada', 'cartao_sem_nota', 'cartao_desfeito', 'cartao_conciliado']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
+  // O limite da compra sem nota e o cartão em uso: nas Configurações › Geral (Sup Admin).
+  const cfg = ler('html', 'modals', 'contabilidade', 'configuracao.html');
+  assert.ok(cfg.includes('id="ctbConfigCartaoAtivo"') && cfg.includes('id="ctbConfigCartaoLimite"'));
+  assert.ok(MODAIS.includes("cartao_ativo: el('ctbConfigCartaoAtivo').value, cartao_limite_sem_nota: el('ctbConfigCartaoLimite').value"));
 });
 
 test('fase I (02/10/2026): o pacote por pagamento — a seção das pastas no modal, as situações da nota iguais às do backend e a impressora do Electron registrada para o backend', () => {

@@ -2,8 +2,8 @@
  * Fase I (02/10/2026) — o pacote por pagamento. Regra do dono: "o boleto
  * sempre junto do comprovante, do pagamento, da nota e do extrato".
  *
- * Cada pagamento do mês (conta a pagar, comissão/produção, reembolso) vira
- * uma pasta em 06-Pagamentos com:
+ * Cada pagamento do mês (conta a pagar, comissão/produção, reembolso, pago em
+ * nome de terceiro, fatura do cartão) vira uma pasta em 06-Pagamentos com:
  *   - o dossiê do pagamento, gerado na hora (dossiePagamento.js): a conta, a
  *     parcela, a nota, o boleto, o lançamento do extrato e o comprovante;
  *   - o comprovante do banco (refeito dos dados, fase D, ou o anexado);
@@ -27,7 +27,8 @@ const liquidacoes = require('../conciliacao/liquidacoes');
 
 const PASTA_AVULSOS = 'Comprovantes sem pagamento';
 // Fase F: o pago em nome de terceiro (a receber) também ganha pasta (o comprovante e o débito vão juntos).
-const TIPOS_DE_PAGAMENTO = new Set(['titulo_pagamento', 'financeiro_pagamento', 'reembolso', 'terceiro_pago']);
+// Fase G: a fatura do cartão paga também (as notas das compras dela vão juntas).
+const TIPOS_DE_PAGAMENTO = new Set(['titulo_pagamento', 'financeiro_pagamento', 'reembolso', 'terceiro_pago', 'fatura_cartao']);
 const CRITERIOS = {
   automatico: 'automático', sugestao: 'sugestão aceita', composicao: 'soma aceita', manual: 'escolhido à mão', conta_criada: 'conta lançada do extrato',
   parcela_paga: 'conta paga pela conciliação', dda_pago: 'boleto do DDA lançado e pago'
@@ -103,7 +104,7 @@ function planoDosPagamentos({
   competencia, liquidacoesLista = [], pagamentosDeConta = new Map(), documentosPorId = new Map(), documentosDoFechamento = new Map(),
   reembolsos = new Map(), devolucoesDoPedido = new Map(), arquivosPorAlvo = new Map(), arquivosDeDocumento = new Set(),
   vinculosPorChave = new Map(), movimentosPorId = new Map(), contasBanco = new Map(), comprovantesDoMovimento = new Map(),
-  boletoDaParcela = new Map(), boletosPorId = new Map(), pacotes = []
+  boletoDaParcela = new Map(), boletosPorId = new Map(), pacotes = [], cartaoDaFatura = new Map()
 }) {
   const doMes = c.lista(liquidacoesLista)
     .filter(l => l && TIPOS_DE_PAGAMENTO.has(l.tipo) && !l.obrigacao && !l.estornado && String(l.data || '').startsWith(competencia))
@@ -114,7 +115,7 @@ function planoDosPagamentos({
     const pag = {
       chave: l.chave, tipo: l.tipo, tipo_rotulo: l.tipo_rotulo, id: l.id, data: l.data, valor: c.centavos(l.valor_abs), forma: l.forma,
       rotulo: l.rotulo, nome: l.nome || null, documento: l.documento || null, no_banco: l.no_banco !== false,
-      conta: null, parcela: null, pagamento: null, fechamento: null, reembolso: null, terceiro: null,
+      conta: null, parcela: null, pagamento: null, fechamento: null, reembolso: null, terceiro: null, cartao: null,
       documentos: [], movimentos: [], comprovantes: [], dda: null, arquivos: [], faltas: []
     };
     pag.pasta = nomeDaPasta(i + 1, pag);
@@ -146,6 +147,16 @@ function planoDosPagamentos({
     } else if (l.tipo === 'terceiro_pago') {
       // Fase F: pago em nome de outra empresa (a receber dela): o documento é dela, não da empresa.
       pag.terceiro = { nome: l.nome || null, documento: b.documentoFormatado(l.documento) || null, rotulo: l.rotulo };
+    } else if (l.tipo === 'fatura_cartao') {
+      // Fase G: a fatura do cartão — as compras dela e a nota de cada uma (que vai no mês fiscal dela).
+      const fc = cartaoDaFatura.get(String(l.id)) || { fatura: null, compras: [] };
+      pag.cartao = fc;
+      const vistas = new Set();
+      for (const x of c.lista(fc.compras)) {
+        const d = x.documento_id ? documentosPorId.get(String(x.documento_id)) : null;
+        if (d && !vistas.has(String(d.id))) { vistas.add(String(d.id)); docs.push(d); }
+        alvos.push(`cartao_compra:${x.id}`);
+      }
     } else {
       const r = reembolsos.get(String(l.id)) || null;
       pag.reembolso = { pedido_id: r?.pedido_id ?? null, rotulo: l.rotulo };
@@ -192,7 +203,10 @@ function planoDosPagamentos({
     if (pag.no_banco && !temComprovante) pag.faltas.push('Sem o comprovante do banco');
     const porBoleto = pag.forma === 'Boleto' || Boolean(b.digitos(pag.parcela?.linha_digitavel));
     if (porBoleto && !pag.dda && !pag.arquivos.some(a => a.categoria === 'boleto')) pag.faltas.push('Pago por boleto, sem o boleto');
-    if (!['reembolso', 'terceiro_pago'].includes(pag.tipo) && !pag.documentos.length && !pag.arquivos.some(a => arquivos.CATEGORIAS_DE_DOCUMENTO.has(a.categoria))) {
+    if (pag.tipo === 'fatura_cartao') {
+      const faltam = c.lista(pag.cartao?.compras).filter(x => x.situacao === 'pendente');
+      if (faltam.length) pag.faltas.push(`${c.plural(faltam.length, 'compra sem nota', 'compras sem nota')} (de ${c.plural(c.lista(pag.cartao?.compras).filter(x => x.tipo === 'compra').length, 'compra', 'compras')})`);
+    } else if (!['reembolso', 'terceiro_pago'].includes(pag.tipo) && !pag.documentos.length && !pag.arquivos.some(a => arquivos.CATEGORIAS_DE_DOCUMENTO.has(a.categoria))) {
       pag.faltas.push('Sem nota, recibo ou guia ligados');
     }
     return pag;
@@ -271,6 +285,17 @@ async function carregar(api, { competencia, hoje }) {
     const k = String(n.pedido_id);
     devolucoesDoPedido.set(k, [...(devolucoesDoPedido.get(k) || []), n]);
   }
+  // Fase G: as faturas do cartão pagas no mês, com as compras e a situação da nota de cada uma.
+  const cartaoDaFatura = new Map();
+  if (c.lista(liqs).some(l => l && l.tipo === 'fatura_cartao')) {
+    const cartaoMod = require('../cartao/cartao');
+    const dados = await cartaoMod.lerTudo(api, { comSugestoes: false }).catch(() => null);
+    for (const f of dados?.faturas || []) {
+      const compras = dados.compras.filter(x => x.fatura_id === f.id).sort((x, y) => x.ordem - y.ordem)
+        .map(x => ({ ...x, situacao: cartaoMod.situacaoDaCompra(x, { limite: dados.config.limite, inicio: dados.inicio, comRecibo: dados.comRecibo.has(String(x.id)) }) }));
+      cartaoDaFatura.set(String(f.id), { fatura: f, compras, limite: dados.config.limite });
+    }
+  }
   return planoDosPagamentos({
     competencia: comp, liquidacoesLista: liqs, pagamentosDeConta,
     documentosPorId: new Map(docsVivos.map(d => [String(d.id), d])), documentosDoFechamento,
@@ -281,7 +306,7 @@ async function carregar(api, { competencia, hoje }) {
     comprovantesDoMovimento,
     boletoDaParcela: new Map(boletos.filter(x => x.situacao === 'vinculado' && x.parcela_id).map(x => [String(x.parcela_id), x])),
     boletosPorId: new Map(boletos.map(x => [String(x.id), x])),
-    pacotes: c.lista(pacotes)
+    pacotes: c.lista(pacotes), cartaoDaFatura
   });
 }
 

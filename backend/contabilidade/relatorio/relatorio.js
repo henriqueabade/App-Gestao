@@ -242,6 +242,22 @@ async function terceirosDoMes(api, competencia) {
   return [...grupos.values()].filter(g => g.pago_no_mes || g.saldo).sort((x, y) => y.saldo - x.saldo);
 }
 
+/** Fase G: a fatura do cartão com vencimento no mês — o total, o pago no extrato e as notas das compras. */
+async function cartaoDoMes(api, competencia) {
+  const mod = require('../cartao/cartao');
+  const dados = await mod.lerTudo(api, { comSugestoes: false }).catch(() => null);
+  if (!dados) return [];
+  return dados.faturas.filter(f => !f.substituida_em && f.competencia === competencia).map(f => {
+    const compras = dados.compras.filter(x => x.fatura_id === f.id && x.tipo === 'compra');
+    const sit = compras.map(x => mod.situacaoDaCompra(x, { limite: dados.config.limite, inicio: dados.inicio, comRecibo: dados.comRecibo.has(String(x.id)) }));
+    const conta = (...s) => sit.filter(x => s.includes(x)).length;
+    return {
+      cartao_final: f.cartao_final, vencimento: f.vencimento, valor_total: f.valor_total, pago: mod.pagamentoDaFatura(f, dados.vinculos).pago, confere: f.confere,
+      compras: compras.length, com_nota: conta('com_nota', 'com_recibo'), abaixo_do_limite: conta('abaixo_do_limite'), sem_nota: conta('sem_nota'), anteriores: conta('anterior'), pendentes: conta('pendente')
+    };
+  });
+}
+
 const ultimoDiaDe = competencia => b.ultimoDia(competencia);
 
 async function nomeDaEmpresa(api) {
@@ -450,6 +466,7 @@ async function montar(api, { competencia, hoje, desde = null }) {
     aplicacoes: await aplicacoesDoMes(api, comp),
     // Fase F: o que a empresa pagou em nome de outra e ainda não voltou (a receber dela).
     terceiros: await terceirosDoMes(api, comp),
+    cartao: await cartaoDoMes(api, comp),
     avisos
   };
   return { ...rel, arquivo: nomeDoArquivo(rel) };

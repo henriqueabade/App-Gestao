@@ -953,6 +953,98 @@ manda abate)
    a ficar a conciliar.
 8. Relatório de setembro: a seção "Pago em nome de terceiros".
 
+## Parte P — Fase G (02/10/2026): o cartão de crédito do BB pela fatura em XLSX
+
+**O que mudou** (as suas regras: a fatura vem sempre em XLSX; "fatura do
+cartão a importar" segura o fechamento; a nota casa com a compra pelo valor,
+entendendo o parcelado; na dúvida você escolhe; a compra pequena não precisa
+de nota)
+- **Tela nova "Cartão de crédito"** (Ações). O botão **Importar fatura
+  (XLSX)** recebe o arquivo que o site do BB dá (aba "Extrato").
+- **O app guarda só os dados**: o cabeçalho, as linhas e as conferências. O
+  cartão fica só com os **4 últimos dígitos**; o número inteiro não é
+  guardado.
+- **Confere as contas da fatura**:
+  - saldo anterior + pagamentos e créditos + compras e encargos = valor
+    total;
+  - cada SubTotal = a soma das linhas dele;
+  - a linha "Total" = o valor total do cabeçalho;
+  - lançamento em dólar avisa.
+- **Lê cada lançamento**: compra, crédito (estorno), pagamento da fatura e
+  encargo do banco (IOF, juros, anuidade). Na parcelada ("PARC 06/10"), a
+  data é a da compra e a compra inteira é parcela × nº de parcelas. O ano de
+  cada data sai do vencimento.
+- **O pagamento da fatura liga sozinho no extrato**: o débito do valor total,
+  até 10 dias antes ou 6 depois do vencimento, se for um só. A conciliação
+  mostra "Pela fatura do cartão importada" e a classificação vai para a
+  **00744 Cartão de Crédito** (regra nova do SQL). Pagamento parcial: à mão,
+  na Conciliação, escolhendo "Fatura do cartão".
+- **A nota de cada compra**:
+  - **sozinha**, quando há uma única nota de mesmo valor (na parcelada, o
+    valor da compra inteira, com o arredondamento das parcelas) emitida de
+    5 dias antes a 10 depois da compra, e ela não serve para outra compra;
+  - **na dúvida** (duas notas de 150,00, por exemplo), a tela mostra
+    "**Escolher a nota…**" com as possíveis, a de nome parecido primeiro;
+  - a **parcela seguinte** (a 04/10 da mesma compra, na fatura do mês
+    seguinte) herda a nota (ou o "sem nota") da anterior;
+  - **Recibo**: anexa o PDF ou a foto do recibo à compra;
+  - **Sem nota**: com o motivo (vale para todas as parcelas);
+  - **Desfazer** solta a nota ou o "sem nota".
+
+  A nota ligada à compra **sai de "documento sem conta a pagar"**: foi paga
+  pela fatura. Ela também deixa de ser procurada como conta no extrato.
+- **Limite da compra sem nota** (Configurações › Geral, Sup Admin): R$ 50,00.
+  Vale a compra inteira (a parcelada de 12 × 50,00 pede nota). No mesmo lugar,
+  "Cartão de crédito em uso" (Sim/Não).
+- **Painel (fonte Contas a pagar)**:
+  - **sem a fatura do mês** (vencimento no mês): aviso no mês em curso,
+    **crítico** depois que o mês acaba;
+  - **a fatura não fecha**: crítico;
+  - **compra acima do limite sem nota**: crítico ("1 tem nota sugerida:
+    escolha");
+  - **compra de antes do início** sem nota (as parcelas antigas, as compras
+    de agosto na fatura de setembro): aviso;
+  - **fatura sem o pagamento conciliado**, depois do mês: aviso.
+- **Pacote**: o pagamento da fatura ganha pasta. O dossiê traz a fatura e a
+  tabela das compras, com a nota (ou o motivo) de cada uma; as notas vão no
+  mês fiscal delas.
+- **Relatório**: seção "Cartão de crédito" (total, pago no extrato, compras,
+  com nota, abaixo do limite, faltam).
+- **Com o seu OFX e a sua fatura de setembro**, num banco de teste:
+  - a fatura **fecha** (as 4 conferências);
+  - 32 lançamentos: 1 pagamento e 31 compras, 4 delas parceladas;
+  - o **pagamento de 14/09 (2.744,82) ligou sozinho** e foi para a 00744;
+  - 24 compras abaixo de R$ 50,00;
+  - as outras 7 são de antes de setembro (aviso).
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_g.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_f.sql`, e **reiniciar a API**. Ele termina mostrando
+   "faturas 0 | compras 0 | regra_cartao 1".
+2. Ações › **Cartão de crédito** › competência **setembro/2026** ›
+   **Importar fatura (XLSX)** e escolher a fatura de venc. 12/09.
+3. Quando a fatura de **12/10** sair, importar também (as compras de
+   setembro estão nela; elas pedem nota).
+
+**Checklist visual**
+1. Sem o SQL: o aviso amarelo "O cartão de crédito ainda não está ativado:
+   rode sql/contabilidade_fase_g.sql…".
+2. Importar a fatura de setembro: "1 fatura lida · 1 importada · 1 pagamento
+   conciliado no extrato".
+3. O bloco "Fatura de venc. 12/09/2026 · cartão final …", com "As contas
+   fecham" e os 4 números: Fatura 2.744,82, Pago no extrato 2.744,82 (14/09),
+   Compras 31 e Faltam notas 0.
+4. A tabela: as compras pequenas "Abaixo do limite"; as de agosto e as
+   parcelas antigas "Compra de antes do início", com Recibo e Sem nota; o
+   pagamento "Pagamento da fatura".
+5. Conciliação de setembro: o débito de 14/09 "Pela fatura do cartão
+   importada".
+6. Configurações › Geral: "Cartão de crédito em uso" e "Compra no cartão sem
+   nota até (R$) 50,00".
+7. Painel de setembro: o aviso das compras de antes do início. Painel de
+   outubro: "Fatura do cartão de outubro/2026 a importar".
+8. Relatório de setembro: a seção "Cartão de crédito".
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -1093,3 +1185,22 @@ manda abate)
     soma exata de todos os em aberto. O resto é à mão, na Conciliação. Ok?
 71. O saldo a receber é **aviso** (não segura o fechamento). Ok, ou prefere
     que vire documental depois de algum prazo (ex.: 60 dias)?
+
+**Cartão de crédito (Fase G)**
+72. A competência da fatura é o **mês do vencimento** (quando ela é paga no
+    extrato). As compras de setembro vêm na fatura de 12/10 e são cobradas no
+    fechamento de outubro. Ok?
+73. A compra (ou parcela) **de antes do início** do app (as de agosto na
+    fatura de setembro, as parcelas de compras antigas) sem nota é **aviso**,
+    não segura setembro. Ok?
+74. A compra **acima do limite sem nota** é **crítica** (como o pagamento sem
+    nota). Resolve com a nota, o recibo anexado ou "Sem nota" com o motivo.
+    Ok?
+75. Quando a nota de uma compra no cartão foi registrada **com a conta a
+    pagar junto** (o cartão da SEFAZ com "Lançar a conta a pagar junto"), ela
+    só aparece como opção para escolher à mão, e a tela avisa para cancelar a
+    conta (foi paga no cartão). Quer que o app **cancele a conta sozinho** ao
+    ligar a nota à compra?
+76. A **conta do resultado** de cada compra no cartão (material, consumo,
+    combustível…) ainda não é classificada: o pagamento da fatura vai inteiro
+    para a 00744. Desdobrar por compra entra junto com a B2 (pendência 48).

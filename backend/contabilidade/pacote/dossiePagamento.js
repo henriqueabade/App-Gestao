@@ -81,11 +81,38 @@ function secaoOrigem(pag) {
       ['Como fica', 'Não é despesa da empresa: o valor fica a receber do terceiro até ele devolver (a devolução liga pela conciliação).']
     ]));
   }
+  if (pag.cartao) return secaoCartao(pag);
   if (pag.reembolso) {
     const notas = c.lista(pag.devolucoes).map(n => `${esc(n.rotulo)} · ${esc(data(n.data_emissao))} · ${esc(reais(n.valor_total))}${n.chave_acesso ? `<br><span class="mono">${esc(n.chave_acesso)}</span>` : ''}`);
     return secao('O reembolso', kv([['Reembolso', esc(pag.reembolso.rotulo)], ['NF-e de devolução do cliente', notas.length ? `${notas.join('<br>')}<br><small>Vai na pasta 04-Devolucoes do pacote do mês dela.</small>` : null]]));
   }
   return secao('A origem', '', 'Pagamento sem conta a pagar ligada.');
+}
+
+/** Fase G: a fatura do cartão — o resumo e as compras, com a nota (ou por que não tem) de cada uma. */
+const SITUACAO_DA_COMPRA = {
+  com_nota: 'nota ligada', com_recibo: 'recibo anexado (nesta pasta)', sem_nota: 'sem nota', abaixo_do_limite: 'abaixo do limite: não precisa de nota',
+  anterior: 'compra de antes do início do app', pendente: 'FALTA A NOTA', nao_se_aplica: '—'
+};
+function secaoCartao(pag) {
+  const f = pag.cartao.fatura || {};
+  const compras = c.lista(pag.cartao.compras);
+  const docs = new Map(pag.documentos.map(d => [String(d.id), d]));
+  const linhas = compras.map(x => {
+    const d = x.documento_id ? docs.get(String(x.documento_id)) : null;
+    const nota = d ? `${esc(d.rotulo)} · ${esc(d.emitente || '')}` : esc(SITUACAO_DA_COMPRA[x.situacao] || x.situacao);
+    const motivo = x.situacao === 'sem_nota' && x.motivo ? `<br><small>${esc(x.motivo)}</small>` : '';
+    return `<tr><td>${esc(data(x.data))}</td><td>${esc(x.descricao || '')}${x.parcela_total ? ` <small>(parcela ${x.parcela_numero}/${x.parcela_total} de ${esc(reais(x.valor_compra))})</small>` : ''}</td>`
+      + `<td class="num">${esc(reais(x.valor))}</td><td>${nota}${motivo}</td></tr>`;
+  });
+  return secao('A fatura do cartão', kv([
+    ['Cartão', esc(f.cartao_final ? `final ${f.cartao_final}` : '—')], ['Titular', f.titular ? esc(f.titular) : null], ['Vencimento', esc(data(f.vencimento))],
+    ['Valor total da fatura', esc(reais(f.valor_total))], ['Saldo da fatura anterior', f.saldo_anterior !== null && f.saldo_anterior !== undefined ? esc(reais(f.saldo_anterior)) : null],
+    ['As contas da fatura', f.confere ? 'Fecham (saldo anterior + pagamentos + compras = total)' : '<strong>Não fecham: confira a fatura</strong>'],
+    ['Compra sem nota até', esc(reais(pag.cartao.limite ?? 50))]
+  ]) + (linhas.length
+    ? `<table class="lista"><thead><tr><th>Data</th><th>Lançamento</th><th class="num">Valor</th><th>Nota</th></tr></thead><tbody>${linhas.join('')}</tbody></table>`
+    : '<p class="vazio">A fatura não foi importada no app.</p>'));
 }
 
 function secaoNotas(pag) {

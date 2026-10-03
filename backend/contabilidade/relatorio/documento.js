@@ -125,6 +125,16 @@ function secaoTerceiros(rel) {
   return `<section><h2>Pago em nome de terceiros (a receber)</h2><p>Boletos e contas de outra empresa pagos pela conta da empresa: não são despesa; ficam a receber até a devolução (que a conciliação liga).</p><table><thead><tr>${th('Terceiro')}${th('CPF/CNPJ')}${th('Pago no mês', 'num')}${th('Saldo a receber', 'num')}</tr></thead><tbody>${linhas}</tbody></table></section>`;
 }
 
+/** Fase G: a fatura do cartão com vencimento no mês — o total, o pago e as notas das compras. */
+function secaoCartao(rel) {
+  const lista = c.lista(rel.cartao);
+  if (!lista.length) return '';
+  const linhas = lista.map(f => `<tr>${td(esc(f.cartao_final ? `final ${f.cartao_final}` : '—'))}${td(data(f.vencimento), 'nowrap')}${td(dinheiro(f.valor_total), 'num')}${td(dinheiro(f.pago), 'num')}`
+    + `${td(String(f.compras))}${td(String(f.com_nota))}${td(String(f.abaixo_do_limite))}${td(String(f.sem_nota + f.anteriores))}${td(String(f.pendentes))}${td(f.confere ? 'fecha' : 'NÃO FECHA')}</tr>`).join('');
+  return `<section><h2>Cartão de crédito</h2><p>A fatura com vencimento no mês (importada do XLSX do BB). A compra abaixo do limite não precisa de nota; as outras pedem a nota (casada pelo valor, entendendo o parcelado), o recibo ou o motivo.</p>`
+    + `<table><thead><tr>${th('Cartão')}${th('Vencimento')}${th('Total', 'num')}${th('Pago (extrato)', 'num')}${th('Compras')}${th('Com nota')}${th('Abaixo do limite')}${th('Sem nota (decidido ou antes do início)')}${th('Faltam')}${th('Contas')}</tr></thead><tbody>${linhas}</tbody></table></section>`;
+}
+
 function secaoConciliacao(rel) {
   if (!rel.conciliacao) return '';
   const blocos = rel.conciliacao.map(x => {
@@ -166,7 +176,7 @@ function html(rel) {
     + (st.previa ? '<div class="marca">PRÉVIA</div>' : '')
     + `<header class="topo"><div><h1>${esc(`Relatório mensal — ${rel.rotulo}`)}</h1><p>${esc(empresa)}</p></div>${selo}</header>`
     + `<p class="nota">${esc(st.nota)}</p>${avisos}`
-    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoAplicacoes(rel) + secaoTerceiros(rel) + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
+    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoAplicacoes(rel) + secaoTerceiros(rel) + secaoCartao(rel) + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
     + `<p class="rodape">Documento interno gerado pelo App-Gestão em ${esc(instanteImpresso(rel.gerado_em))}. Os documentos oficiais (XML, OFX, comprovantes) vão no pacote da competência.</p>`
     + '</body></html>';
 }

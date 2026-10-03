@@ -216,9 +216,10 @@ function rotuloDoPagamentoDeFechamento(p, fechamento) {
 
 /**
  * Uma linha da lista. `titulos` são as contas (cruas) ligadas; `arquivosMapa`
- * é o de arquivos.porAlvo. Pura.
+ * é o de arquivos.porAlvo; `noCartao` (fase G) os ids das notas de compras no
+ * cartão (pagas pela fatura: não pedem conta a pagar). Pura.
  */
-function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new Map(), arquivosMapa = new Map(), pagamentosFechamento = new Map() } = {}) {
+function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new Map(), arquivosMapa = new Map(), pagamentosFechamento = new Map(), noCartao = new Set() } = {}) {
   const contato = d.contato_id !== null && d.contato_id !== undefined ? contatos.get(String(d.contato_id)) || null : null;
   const doArquivo = arquivosMapa.get(`documento_recebido:${d.id}`) || [];
   const conta = (titulosPorDocumento.get(String(d.id)) || []).find(t => t.status !== 'cancelado') || null;
@@ -239,7 +240,8 @@ function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new M
     arquivos: doArquivo.length, tem_xml: temXml,
     falta_xml: d.tipo === 'nfe' && !temXml,
     falta_arquivo: d.tipo !== 'nfe' && !doArquivo.length,
-    sem_conta: !conta && !d.financeiro_pagamento_id && !(d.sem_pagamento === true || d.sem_pagamento === 'true'),
+    sem_conta: !conta && !d.financeiro_pagamento_id && !(d.sem_pagamento === true || d.sem_pagamento === 'true') && !noCartao.has(String(d.id)),
+    no_cartao: noCartao.has(String(d.id)),
     observacao: d.observacao || null,
     criado_em: b.instanteBR(d.criado_em)
   };
@@ -371,10 +373,13 @@ async function lerPagamentosDeFechamento(api) {
 }
 
 async function lerTudo(api) {
-  const [docs, contas, arquivosLista, vinculos, contatos, pagamentosFechamento] = await Promise.all([
+  const [docs, contas, arquivosLista, vinculos, contatos, pagamentosFechamento, comprasCartao] = await Promise.all([
     b.ler(api, 'documentos_recebidos'), b.ler(api, 'titulos_pagar'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
-    lerContatos(api), lerPagamentosDeFechamento(api)
+    lerContatos(api), lerPagamentosDeFechamento(api),
+    // Fase G: as notas das compras no cartão (sem o SQL dela, nenhuma).
+    b.lerOpcional(api, 'contabil_cartao_compras').then(x => x || []).catch(() => [])
   ]);
+  const noCartao = new Set(comprasCartao.filter(x => x && x.documento_id !== null && x.documento_id !== undefined).map(x => String(x.documento_id)));
   const titulosPorDocumento = new Map();
   for (const t of contas) {
     if (t.documento_recebido_id === null || t.documento_recebido_id === undefined) continue;
@@ -382,7 +387,7 @@ async function lerTudo(api) {
     if (!titulosPorDocumento.has(k)) titulosPorDocumento.set(k, []);
     titulosPorDocumento.get(k).push(t);
   }
-  return { docs, contatos, titulosPorDocumento, arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento };
+  return { docs, contatos, titulosPorDocumento, arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, noCartao };
 }
 
 async function listar(api, { competencia = null, tipo = null } = {}) {

@@ -229,7 +229,9 @@ const CTB_ACOES = {
     // Fase C: o Rende Fácil e o CDB pelos PDFs mensais do BB (conferidos ao centavo com o extrato).
     'aplicacoes': { rotulo: 'Aplicações do BB', abrir: m => ctbAbrirModal('aplicacoes', m, {}) },
     // Fase F: o que a empresa pagou em nome de outra empresa (a Artdeco) — a receber dela.
-    'terceiros': { rotulo: 'Pago em nome de terceiros', abrir: m => ctbAbrirModal('terceiros', m, {}) }
+    'terceiros': { rotulo: 'Pago em nome de terceiros', abrir: m => ctbAbrirModal('terceiros', m, {}) },
+    // Fase G: o cartão de crédito do BB pela fatura em XLSX (as compras e a nota de cada uma).
+    'cartao': { rotulo: 'Cartão de crédito', abrir: m => ctbAbrirModal('cartao', m, {}) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -271,7 +273,9 @@ const CTB_MODAIS = {
     // Fase C: as aplicações do BB.
     'aplicacoes': { html: 'modals/contabilidade/aplicacoes.html', overlay: 'ctbAplicacoes' },
     // Fase F: pago em nome de terceiros.
-    'terceiros': { html: 'modals/contabilidade/terceiros.html', overlay: 'ctbTerceiros' }
+    'terceiros': { html: 'modals/contabilidade/terceiros.html', overlay: 'ctbTerceiros' },
+    // Fase G: o cartão de crédito.
+    'cartao': { html: 'modals/contabilidade/cartao.html', overlay: 'ctbCartao' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

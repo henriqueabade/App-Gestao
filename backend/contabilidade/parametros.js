@@ -6,6 +6,10 @@
  *                        setembro/2026). Os meses de antes não são cobrados
  *                        nem fechados; as notas deles esperam a decisão na
  *                        caixa de entrada (histórico ou registro).
+ *   cartao_ativo         (fase G) "sim": a fatura do cartão de cada mês é
+ *                        cobrada no painel.
+ *   cartao_limite_sem_nota (fase G) a compra no cartão abaixo deste valor
+ *                        não precisa de nota (o dono: R$ 50).
  *
  * Sem o SQL, nenhum corte (como era antes) e a tela diz qual arquivo rodar.
  * Mudar é do Sup Admin (como as integrações).
@@ -16,8 +20,19 @@ const eventos = require('./eventos');
 
 const TABELA = 'contabil_parametros';
 const CAMPOS = {
-  inicio_competencia: { rotulo: 'Início da Contabilidade', padrao: '2026-09' }
+  inicio_competencia: { rotulo: 'Início da Contabilidade', padrao: '2026-09' },
+  // Fase G: o cartão de crédito (a fatura do mês é cobrada) e a compra que não precisa de nota.
+  cartao_ativo: { rotulo: 'Cartão de crédito em uso', padrao: 'sim' },
+  cartao_limite_sem_nota: { rotulo: 'Compra no cartão sem nota até', padrao: '50.00' }
 };
+
+/** "50", "50,00", "R$ 1.250,90" → "50.00" (0 a 100.000). Pura. */
+function limiteDe(valor) {
+  const t = String(valor ?? '').replace(/R\$/g, '').replace(/\s+/g, '').trim();
+  const n = t.includes(',') ? Number(t.replace(/\./g, '').replace(',', '.')) : Number(t);
+  if (!t || !Number.isFinite(n) || n < 0 || n > 100000) throw c.erro('Informe o limite da compra sem nota em reais (de 0 a 100.000).');
+  return c.centavos(n).toFixed(2);
+}
 
 /** AAAA-MM ou MM/AAAA → AAAA-MM; vazio → null. Pura. */
 function competenciaDe(valor) {
@@ -55,6 +70,10 @@ async function salvar(api, entrada = {}, { usuarioId = null } = {}) {
   if (entrada.inicio_competencia !== undefined) {
     novos.inicio_competencia = competenciaDe(entrada.inicio_competencia) || CAMPOS.inicio_competencia.padrao;
   }
+  if (entrada.cartao_ativo !== undefined) {
+    novos.cartao_ativo = [true, 'true', 'sim', 'Sim', 1, '1'].includes(entrada.cartao_ativo) ? 'sim' : 'nao';
+  }
+  if (entrada.cartao_limite_sem_nota !== undefined) novos.cartao_limite_sem_nota = limiteDe(entrada.cartao_limite_sem_nota);
   const linhas = await b.ler(api, TABELA);
   const mudou = [];
   for (const [chave, valor] of Object.entries(novos)) {
@@ -62,7 +81,8 @@ async function salvar(api, entrada = {}, { usuarioId = null } = {}) {
     const linha = linhas.find(l => l.chave === chave);
     if (linha) await b.atualizar(api, TABELA, linha.id, { valor, atualizado_em: c.agora(), atualizado_por: usuarioId });
     else await b.inserir(api, TABELA, { chave, valor, atualizado_em: c.agora(), atualizado_por: usuarioId });
-    mudou.push(`${CAMPOS[chave].rotulo}: ${chave === 'inicio_competencia' ? c.rotuloCompetencia(valor) : valor}`);
+    const impresso = chave === 'inicio_competencia' ? c.rotuloCompetencia(valor) : chave === 'cartao_limite_sem_nota' ? c.reais(Number(valor)) : chave === 'cartao_ativo' ? (valor === 'sim' ? 'sim' : 'não') : valor;
+    mudou.push(`${CAMPOS[chave].rotulo}: ${impresso}`);
   }
   if (mudou.length) await eventos.registrar(api, { tipo: 'parametros_alterados', usuarioId, descricao: `Configurações gerais: ${mudou.join(', ')}` });
   return ler(api);
@@ -71,4 +91,4 @@ async function salvar(api, entrada = {}, { usuarioId = null } = {}) {
 /** A competência é de antes do início? (sem início, nunca) Pura. */
 const antesDoInicio = (competencia, inicioComp) => Boolean(inicioComp && competencia && String(competencia) < String(inicioComp));
 
-module.exports = { TABELA, CAMPOS, competenciaDe, ler, inicio, salvar, antesDoInicio };
+module.exports = { TABELA, CAMPOS, competenciaDe, limiteDe, ler, inicio, salvar, antesDoInicio };

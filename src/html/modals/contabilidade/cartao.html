@@ -1,0 +1,65 @@
+<!--
+  Cartão de crédito (fase G, 02/10/2026): a fatura do cartão do BB pelo XLSX
+  do site do banco (o dono: "a fatura vem sempre em XLSX"). O app guarda só os
+  dados (o cartão pelos 4 últimos dígitos), confere as contas da fatura, liga
+  o pagamento ao débito do extrato e casa as notas com as compras pelo valor,
+  entendendo o parcelado (a nota sai cheia). Na dúvida, o usuário escolhe
+  entre as sugestões; a compra abaixo do limite (R$ 50, nas Configurações) não
+  precisa de nota; as outras pedem a nota, o recibo anexado ou o motivo.
+  Dados: GET /api/contabilidade/cartao?competencia= (importar, conferir e a
+  decisão de cada compra em /cartao/…). Script:
+  src/js/modals/contabilidade-modais.js (montarCartao).
+-->
+<div id="ctbCartaoOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbCartaoTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbCartaoTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-credit-card mr-2" aria-hidden="true"></i>Cartão de crédito</h2>
+        <p id="ctbCartaoSubtitulo" class="text-xs text-gray-300 truncate">A fatura do mês e a nota de cada compra</p>
+      </div>
+      <span id="ctbCartaoSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbCartaoAviso" class="hidden text-sm" role="alert"></div>
+        <p class="text-xs text-gray-400">Importe o XLSX da fatura que o site do BB dá (a do vencimento no mês). O app confere as contas da fatura, liga o pagamento ao débito do extrato e casa as notas com as compras pelo valor (na parcelada, a nota é da compra inteira). Na dúvida, escolha entre as sugestões. A compra abaixo do limite das Configurações não precisa de nota; as outras pedem a nota, o recibo ou o motivo.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="ctbCartaoCompetenciaMes" class="ctl-rotulo text-gray-300">Competência (mês do vencimento)</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbCartaoCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbCartaoCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbCartaoCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbCartaoCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbCartaoVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbCartaoVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="todas">Todos os lançamentos</option>
+              <option value="pendentes">Só as compras que faltam nota</option>
+              <option value="com_nota">Só as compras com nota</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="ctbCartaoFaturas" class="space-y-6"></div>
+
+        <div id="ctbCartaoMensagem" class="hidden text-sm" role="alert"></div>
+        <input id="ctbCartaoArquivo" type="file" accept=".xlsx" multiple class="hidden" aria-label="XLSX da fatura do cartão" />
+        <input id="ctbCartaoRecibo" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" aria-label="Recibo da compra" />
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbCartaoConciliacao" type="button" class="btn-neutral ctl-botao text-white">Conciliação</button>
+      <button id="ctbCartaoConferir" type="button" data-perm="contabilidade.conciliar" class="btn-secondary ctl-botao text-white">Conferir de novo</button>
+      <button id="ctbCartaoImportar" type="button" data-perm="contabilidade.extrato.importar" class="btn-primary ctl-botao text-white min-w-[160px]">Importar fatura (XLSX)</button>
+    </footer>
+  </div>
+</div>

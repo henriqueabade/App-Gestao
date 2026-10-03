@@ -172,7 +172,9 @@ const PADRONIZADOS = [
       // 02/10/2026 — fase C: as aplicações do BB (Rende Fácil, CDB).
       'aplicacoes',
       // 02/10/2026 — fase F: pago em nome de terceiros.
-      'terceiros'
+      'terceiros',
+      // 02/10/2026 — fase G: o cartão de crédito.
+      'cartao'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

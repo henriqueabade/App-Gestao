@@ -67,7 +67,13 @@ const TIPOS = {
   // Fase F (02/10/2026): pago em nome de outra empresa (a Artdeco) — a receber dela.
   terceiro_lancado: 'Pago em nome de terceiro (a receber)',
   terceiro_recebido: 'Devolução de terceiro recebida',
-  terceiro_cancelado: 'Item de terceiro cancelado'
+  terceiro_cancelado: 'Item de terceiro cancelado',
+  // Fase G (02/10/2026): o cartão de crédito pela fatura em XLSX.
+  cartao_fatura_importada: 'Fatura do cartão importada',
+  cartao_nota_ligada: 'Nota ligada a compra do cartão',
+  cartao_sem_nota: 'Compra do cartão sem nota',
+  cartao_desfeito: 'Decisão da compra do cartão desfeita',
+  cartao_conciliado: 'Pagamento da fatura do cartão conciliado'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

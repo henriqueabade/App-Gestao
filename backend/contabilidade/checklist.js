@@ -38,6 +38,7 @@ const planoMod = require('./classificacao/plano');
 const comprovantesMod = require('./comprovantes/comprovantes');
 const aplicacoesMod = require('./aplicacoes/aplicacoes');
 const terceirosMod = require('./terceiros/terceiros');
+const cartaoMod = require('./cartao/cartao');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -267,7 +268,9 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
   const vivos = c.lista(pagar.documentos).filter(d => d && !d.excluido_em);
   const contexto = {
     contatos: pagar.contatos || new Map(), titulosPorDocumento: contasPorDocumento(pagar.titulos),
-    arquivosMapa: pagar.arquivosMapa || new Map(), pagamentosFechamento: pagar.pagamentosFechamento || new Map()
+    arquivosMapa: pagar.arquivosMapa || new Map(), pagamentosFechamento: pagar.pagamentosFechamento || new Map(),
+    // Fase G: a nota de compra no cartão foi paga pela fatura (não pede conta a pagar).
+    noCartao: cartaoMod.documentosNoCartao(pagar.cartao?.compras)
   };
   const doMes = vivos.filter(d => d.competencia === competencia).map(d => documentos.linhaDoDocumento(d, contexto));
   const pend = [];
@@ -347,7 +350,7 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
  *                                                 DDA ou o PDF anexado)
  * `pagar` null = falta o SQL da etapa. Pura.
  */
-function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
+function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false, encerrada = false, inicio = null }) {
   if (!pagar) return { indisponivel: SEM_SQL_PAGAR, resumo: [], numeros: null, pendencias: [] };
   const mapa = pagar.arquivosMapa || new Map();
   const docsVivos = new Set(c.lista(pagar.documentos).filter(d => d && !d.excluido_em).map(d => String(d.id)));
@@ -411,6 +414,10 @@ function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
   pend.push(...doDda.pendencias);
   // Fase F: o que a empresa pagou em nome de outra (a Artdeco) e ainda não voltou — avisos.
   for (const p of terceirosMod.pendencias({ competencia, dados: pagar.terceiros || null })) {
+    pend.push(pendencia({ ...p, fonte: 'contas_pagar', destino: 'contabilidade' }));
+  }
+  // Fase G: a fatura do cartão do mês, a que não fecha e as compras sem nota.
+  for (const p of cartaoMod.pendencias({ competencia, dados: pagar.cartao || null, config: pagar.cartao?.config, inicio, encerrada })) {
     pend.push(pendencia({ ...p, fonte: 'contas_pagar', destino: 'contabilidade' }));
   }
   const totais = titulos.totaisDaCompetencia(lista, { competencia, hoje });
@@ -723,7 +730,9 @@ function montar({
     fechamentos: fonteFechamentos({ fechamentos: lista, competencia: comp, hoje: diaDeHoje, encerrada }),
     devolucoes: fonteDevolucoes({ reembolsosPendencias, hoje: diaDeHoje }),
     documentos_recebidos: fonteDocumentosRecebidos({ pagar, competencia: comp, hoje: diaDeHoje }),
-    contas_pagar: fonteContasPagar({ pagar, competencia: comp, hoje: diaDeHoje, ddaAtivo: c.lista(integracoes).some(i => i && i.chave === 'bb_dda' && (i.ativa === true || i.ativa === 'true')) }),
+    contas_pagar: fonteContasPagar({
+      pagar, competencia: comp, hoje: diaDeHoje, encerrada, inicio, ddaAtivo: c.lista(integracoes).some(i => i && i.chave === 'bb_dda' && (i.ativa === true || i.ativa === 'true'))
+    }),
     extrato: fonteExtrato({ extrato, competencia: comp, hoje: diaDeHoje, encerrada, inicio }),
     conciliacao: fonteConciliacao({ conciliacao, competencia: comp })
   };
@@ -864,7 +873,9 @@ async function lerContasPagar(api, hoje) {
       arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda,
       comprovantes: comprovantes || [], comprovados: comprovantesMod.pagamentosComComprovante({ comprovantes: comprovantes || [], vinculos: vinculosConc || [] }),
       // Fase F: os itens de terceiros (null sem o SQL dela).
-      terceiros: await terceirosMod.lerTudo(api).catch(() => null)
+      terceiros: await terceirosMod.lerTudo(api).catch(() => null),
+      // Fase G: as faturas do cartão e as compras (null sem o SQL dela).
+      cartao: await cartaoMod.lerTudo(api).catch(() => null)
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;
