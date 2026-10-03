@@ -227,7 +227,9 @@ const CTB_ACOES = {
     // Fase D: os comprovantes do BB (o ZIP ou os PDFs) — lidos, refeitos dos dados e ligados ao extrato.
     'comprovantes': { rotulo: 'Comprovantes do BB', abrir: (m, extra) => ctbAbrirModal('comprovantes', m, { visao: extra?.visao || null }) },
     // Fase C: o Rende Fácil e o CDB pelos PDFs mensais do BB (conferidos ao centavo com o extrato).
-    'aplicacoes': { rotulo: 'Aplicações do BB', abrir: m => ctbAbrirModal('aplicacoes', m, {}) }
+    'aplicacoes': { rotulo: 'Aplicações do BB', abrir: m => ctbAbrirModal('aplicacoes', m, {}) },
+    // Fase F: o que a empresa pagou em nome de outra empresa (a Artdeco) — a receber dela.
+    'terceiros': { rotulo: 'Pago em nome de terceiros', abrir: m => ctbAbrirModal('terceiros', m, {}) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -267,7 +269,9 @@ const CTB_MODAIS = {
     // Fase D: os comprovantes do BB.
     'comprovantes': { html: 'modals/contabilidade/comprovantes.html', overlay: 'ctbComprovantes' },
     // Fase C: as aplicações do BB.
-    'aplicacoes': { html: 'modals/contabilidade/aplicacoes.html', overlay: 'ctbAplicacoes' }
+    'aplicacoes': { html: 'modals/contabilidade/aplicacoes.html', overlay: 'ctbAplicacoes' },
+    // Fase F: pago em nome de terceiros.
+    'terceiros': { html: 'modals/contabilidade/terceiros.html', overlay: 'ctbTerceiros' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

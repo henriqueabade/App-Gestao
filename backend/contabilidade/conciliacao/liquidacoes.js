@@ -48,7 +48,10 @@ const TIPOS = {
   dda: { rotulo: 'Boleto do DDA sem conta', sinal: -1, obrigacao: true },
   // Fase C: o que o extrato tem de mostrar para o Rende Fácil e o CDB (o PDF mensal do BB).
   aplicacao: { rotulo: 'Aplicação financeira', sinal: -1 },
-  resgate: { rotulo: 'Resgate de aplicação', sinal: 1 }
+  resgate: { rotulo: 'Resgate de aplicação', sinal: 1 },
+  // Fase F: o que a empresa pagou em nome de outra (a Artdeco) e o que ela devolveu.
+  terceiro_pago: { rotulo: 'Pago em nome de terceiro', sinal: -1 },
+  terceiro_devolvido: { rotulo: 'Devolução de terceiro', sinal: 1 }
 };
 const PRODUTOS_APLICACAO = { rende_facil: 'BB Rende Fácil', cdb: 'BB CDB DI' };
 /** Até quantos dias antes ou depois do vencimento (ou da emissão) a obrigação pode ter sido paga. */
@@ -165,6 +168,15 @@ function deAplicacao(l, { aplicacao = null } = {}) {
   });
 }
 
+/** Fase F: um item de terceiro (contabil_terceiros_itens) — o lado pago (débito) ou o devolvido (crédito). Pura. */
+function deTerceiro(item, tipo) {
+  return base(tipo, item.id, {
+    data: item.data, valor: item.valor, forma: 'Reembolso de terceiro', rotulo: item.descricao || `Pago em nome de ${item.terceiro_nome}`,
+    detalhe: tipo === 'terceiro_pago' ? `a receber de ${item.terceiro_nome}` : `${item.terceiro_nome} devolve`,
+    nome: item.terceiro_nome || null, documento: b.digitos(item.terceiro_documento) || null, subtipo: 'terceiro'
+  });
+}
+
 function deBoletoDda(bol) {
   const liquidado = Number(bol.estado_bb) === 3;
   return {
@@ -236,7 +248,7 @@ async function porId(api, tabela, ids) {
 async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes = false } = {}) {
   const extras = new Set(incluir);
   const quer = (tipo, id, ...datas) => extras.has(chaveDe(tipo, id)) || datas.some(d => naJanela(c.dia(d), de, ate));
-  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos, aplicacoesLidas, aplicLancsLidos] = await Promise.all([
+  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos, aplicacoesLidas, aplicLancsLidos, terceirosLidos] = await Promise.all([
     lerSePuder(api, 'recebimentos'), lerSePuder(api, 'reembolsos'),
     lerSePuder(api, 'financeiro_pagamentos'), lerSePuder(api, 'financeiro_fechamentos'),
     b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'titulos_pagar').then(x => x || []),
@@ -246,8 +258,14 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     obrigacoes || [...extras].some(k => k.startsWith('dda:')) ? b.lerOpcional(api, 'contabil_dda_boletos').then(x => x || []).catch(() => []) : Promise.resolve([]),
     // Fase C: as aplicações (sem o SQL dela, nenhuma).
     b.lerOpcional(api, 'contabil_aplicacoes').then(x => x || []).catch(() => []),
-    b.lerOpcional(api, 'contabil_aplicacao_lancamentos').then(x => x || []).catch(() => [])
+    b.lerOpcional(api, 'contabil_aplicacao_lancamentos').then(x => x || []).catch(() => []),
+    // Fase F: os itens de terceiros (sem o SQL dela, nenhum).
+    b.lerOpcional(api, 'contabil_terceiros_itens').then(x => x || []).catch(() => [])
   ]);
+  const terceiros = terceirosLidos.filter(i => i && i.situacao !== 'cancelado');
+  // O lado pago pela data; a devolução pode vir semanas depois: entra todo item até o fim da janela.
+  const terceirosPagos = terceiros.filter(i => quer('terceiro_pago', i.id, i.data));
+  const terceirosDevolvidos = terceiros.filter(i => quer('terceiro_devolvido', i.id, i.data) || (ate && c.dia(i.data) && c.dia(i.data) <= ate));
   const aplicacoesValendo = new Map(aplicacoesLidas.filter(a => a && !a.substituida_em).map(a => [String(a.id), a]));
   const aplicLancs = aplicLancsLidos.filter(l => l && aplicacoesValendo.has(String(l.aplicacao_id))
     && quer(l.sentido === 'aplicacao' ? 'aplicacao' : 'resgate', l.id, l.data));
@@ -298,7 +316,9 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     }),
     ...docs.map(d => deDocumento(d, { contato: contatoDe(d.contato_id) })),
     ...boletos.map(deBoletoDda),
-    ...aplicLancs.map(l => deAplicacao(l, { aplicacao: aplicacoesValendo.get(String(l.aplicacao_id)) }))
+    ...aplicLancs.map(l => deAplicacao(l, { aplicacao: aplicacoesValendo.get(String(l.aplicacao_id)) })),
+    ...terceirosPagos.map(i => deTerceiro(i, 'terceiro_pago')),
+    ...terceirosDevolvidos.map(i => deTerceiro(i, 'terceiro_devolvido'))
   ].filter(l => l.data).sort((x, y) => x.data.localeCompare(y.data) || x.chave.localeCompare(y.chave));
 }
 
@@ -322,6 +342,6 @@ function restantes(liquidacoes, vinculos) {
 
 module.exports = {
   TIPOS, FORA_DO_BANCO, DATA_INCERTA, JANELA_OBRIGACAO, chaveDe,
-  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, deBoletoDda, deAplicacao, valorAPagar, documentoSemConta,
+  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, deBoletoDda, deAplicacao, deTerceiro, valorAPagar, documentoSemConta,
   carregar, restantes
 };

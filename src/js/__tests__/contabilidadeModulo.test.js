@@ -267,6 +267,11 @@ const MODAIS_FASE_C = {
   'aplicacoes': { overlay: 'ctbAplicacoes', principal: ['ctbAplicImportar', 'btn-primary', 'contabilidade.extrato.importar'] }
 };
 
+// Fase F (02/10/2026): pago em nome de terceiros (lançar à mão é o principal; pede "Conciliar").
+const MODAIS_FASE_F = {
+  'terceiros': { overlay: 'ctbTerceiros', principal: ['ctbTercLancar', 'btn-primary', 'contabilidade.conciliar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -276,7 +281,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_FASE_F, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -422,6 +427,26 @@ test('fase C (02/10/2026): as aplicações do BB — a tela abre, importa os PDF
   for (const s of situacoes) assert.ok(new RegExp(`TOM_SITUACAO_APLICACAO = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
   assert.ok(APL.includes("const filtro = { acao: 'aplicacoes' };") && TELA.includes("'aplicacoes': {"));
   for (const tipo of ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
+});
+
+test('fase F (02/10/2026): pago em nome de terceiros — a tela abre, lança à mão, confere de novo, cancela; a pendência do painel abre a tela', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  assert.match(TELA, /'terceiros': \{[^}]*abrir:/);
+  assert.ok(HTML.includes('data-ctb-acao="terceiros"'));
+  for (const rota of [
+    "fetchApi(`/api/contabilidade/terceiros?competencia=", "fetchApi(`/api/contabilidade/terceiros/debitos?competencia=", "enviar('/api/contabilidade/terceiros', 'POST', {",
+    "enviar('/api/contabilidade/terceiros/conferir', 'POST', { competencia: compCampo.value })", "enviar(`/api/contabilidade/terceiros/${encodeURIComponent(item.id)}/cancelar`, 'POST', { motivo })"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  const html = ler('html', 'modals', 'contabilidade', 'terceiros.html');
+  assert.match(html, /id="ctbTercConferir" type="button" data-perm="contabilidade\.conciliar" class="btn-secondary ctl-botao text-white"/);
+  for (const id of ['ctbTercDebito', 'ctbTercNome', 'ctbTercDocumento', 'ctbTercDescricao', 'ctbTercVisao']) assert.ok(html.includes(`id="${id}"`), id);
+  // As situações e as visões do backend têm cor e opção na tela; a pendência dos terceiros abre esta tela.
+  const ARQ = path.join(RAIZ, '..', 'backend', 'contabilidade', 'terceiros', 'terceiros.js');
+  const mod = require(ARQ);
+  for (const s of Object.keys(mod.SITUACOES)) assert.ok(new RegExp(`TOM_SITUACAO_TERCEIRO = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
+  for (const v of Object.keys(mod.VISOES)) assert.ok(html.includes(`<option value="${v}">`), `visão ${v}`);
+  assert.ok(fs.readFileSync(ARQ, 'utf8').includes("filtro: { acao: 'terceiros' }") && TELA.includes("'terceiros': {"));
+  for (const tipo of ['terceiro_lancado', 'terceiro_recebido', 'terceiro_cancelado']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
 });
 
 test('fase I (02/10/2026): o pacote por pagamento — a seção das pastas no modal, as situações da nota iguais às do backend e a impressora do Electron registrada para o backend', () => {

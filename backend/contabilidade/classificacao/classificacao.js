@@ -64,7 +64,8 @@ function contaDaLiquidacao(liq, ctx) {
     if (pelaCategoria) return { conta: pelaCategoria, criterio: 'titulo', regra_id: null, detalhe: `categoria "${liq.categoria}" de ${liq.rotulo}` };
     return daRegra(regrasMod.escolher(ctx.regras, { contato_id: liq.contato_id, sentido }, { condicoes: ['fornecedor'] }), ctx);
   }
-  const origem = liq.tipo === 'financeiro_pagamento' ? liq.subtipo : liq.tipo;
+  // Comissão/produção pelo tipo do fechamento; fase F: o pago/devolvido de terceiro pela origem "terceiro".
+  const origem = liq.tipo === 'financeiro_pagamento' || liq.subtipo === 'terceiro' ? liq.subtipo : liq.tipo;
   const r = regrasMod.escolher(ctx.regras, { origem, sentido }, { condicoes: ['origem'] });
   const x = daRegra(r, ctx, 'origem');
   return x ? { ...x, detalhe: regrasMod.ORIGENS[origem] || x.detalhe } : null;

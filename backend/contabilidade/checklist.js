@@ -37,6 +37,7 @@ const parametros = require('./parametros');
 const planoMod = require('./classificacao/plano');
 const comprovantesMod = require('./comprovantes/comprovantes');
 const aplicacoesMod = require('./aplicacoes/aplicacoes');
+const terceirosMod = require('./terceiros/terceiros');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -408,6 +409,10 @@ function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
   }
   const doDda = pendenciasDoDda({ pagar, competencia, pagamentos, ddaAtivo });
   pend.push(...doDda.pendencias);
+  // Fase F: o que a empresa pagou em nome de outra (a Artdeco) e ainda não voltou — avisos.
+  for (const p of terceirosMod.pendencias({ competencia, dados: pagar.terceiros || null })) {
+    pend.push(pendencia({ ...p, fonte: 'contas_pagar', destino: 'contabilidade' }));
+  }
   const totais = titulos.totaisDaCompetencia(lista, { competencia, hoje });
   const pagoNoMes = { quantidade: pagamentos.length, total: c.centavos(pagamentos.reduce((s, x) => s + x.p.pagamento.valor_pago, 0)) };
   return {
@@ -857,7 +862,9 @@ async function lerContasPagar(api, hoje) {
     return {
       titulos: titulos.montarTodos(base, hoje), documentos: docs, contatos: base.contatos,
       arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda,
-      comprovantes: comprovantes || [], comprovados: comprovantesMod.pagamentosComComprovante({ comprovantes: comprovantes || [], vinculos: vinculosConc || [] })
+      comprovantes: comprovantes || [], comprovados: comprovantesMod.pagamentosComComprovante({ comprovantes: comprovantes || [], vinculos: vinculosConc || [] }),
+      // Fase F: os itens de terceiros (null sem o SQL dela).
+      terceiros: await terceirosMod.lerTudo(api).catch(() => null)
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;

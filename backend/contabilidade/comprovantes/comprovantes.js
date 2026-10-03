@@ -364,7 +364,9 @@ async function ligar(api, id, { movimentoId, usuarioId = null }) {
     throw e;
   }
   const aviso = cent(m.valor) !== cent(cp.valor) ? `O lançamento é de ${c.reais(Math.abs(Number(m.valor)))} e o comprovante de ${c.reais(cp.valor)}.` : null;
-  return { id: cp.id, situacao: 'ligado', movimento_id: Number(m.id), competencia: String(m.competencia || c.dia(m.data).slice(0, 7)), completou: r.completou, aviso };
+  // Fase F: o pagador é outra empresa — vira o item a receber dela (e o débito fica conciliado com ele).
+  const t = await require('../terceiros/terceiros').criarSozinhos(api, { usuarioId }).catch(() => null);
+  return { id: cp.id, situacao: 'ligado', movimento_id: Number(m.id), competencia: String(m.competencia || c.dia(m.data).slice(0, 7)), completou: r.completou, aviso, terceiro: Boolean(t?.criados) };
 }
 
 /**
@@ -492,7 +494,8 @@ function linhaPublica(cp, { movimentosPorId = new Map(), casado = null, contas =
   const avisos = [];
   const empresaDoc = b.digitos(empresa);
   if (cp.pagador_documento && docCheio(cp.pagador_documento) && empresaDoc && cp.pagador_documento !== empresaDoc) {
-    avisos.push(`O pagador do ${cp.tipo === 'boleto' ? 'boleto' : 'pagamento'} é ${cp.pagador_nome || b.documentoFormatado(cp.pagador_documento)}, não a empresa: confira (reembolso a receber?).`);
+    // Fase F: vira um item a receber desse terceiro (Terceiros), com o débito do extrato.
+    avisos.push(`O pagador do ${cp.tipo === 'boleto' ? 'boleto' : 'pagamento'} é ${cp.pagador_nome || b.documentoFormatado(cp.pagador_documento)}, não a empresa: vai para Terceiros, a receber dele.`);
   }
   // O motivo técnico (diferenca) fica no banco; a tela só diz o que acontece com o arquivo.
   if (!cp.confere) avisos.push(cp.original_descartado_em ? 'O original já foi enviado no pacote e saiu do servidor.' : 'O app não refaz este idêntico ao do banco: o original fica guardado até o pacote.');

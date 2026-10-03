@@ -29,7 +29,11 @@ const CONDICOES = {
   cfop: 'CFOP da NF-e de entrada',
   origem: 'Origem do dinheiro conciliado'
 };
-const ORIGENS = { recebimento: 'Recebimento de pedido', reembolso: 'Reembolso de devolução', comissao: 'Pagamento de comissões', producao: 'Pagamento de produção' };
+const ORIGENS = {
+  recebimento: 'Recebimento de pedido', reembolso: 'Reembolso de devolução', comissao: 'Pagamento de comissões', producao: 'Pagamento de produção',
+  // Fase F: o que a empresa pagou em nome de outra (a receber) e a devolução dela.
+  terceiro: 'Pago em nome de terceiro / devolução (a receber)'
+};
 const SENTIDOS = { ambos: 'Entrada e saída', credito: 'Só entrada', debito: 'Só saída' };
 const GENERICAS = new Set([
   'PIX', 'TED', 'DOC', 'TEF', 'ENVIADO', 'ENVIADA', 'RECEBIDO', 'RECEBIDA', 'PAGAMENTO', 'PAGTO', 'PGTO', 'BOLETO', 'TRANSFERENCIA', 'TRANSF',

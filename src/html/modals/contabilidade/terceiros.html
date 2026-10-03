@@ -1,0 +1,99 @@
+<!--
+  Pago em nome de terceiros (fase F, 02/10/2026): o que a empresa pagou por
+  OUTRA empresa (a Artdeco) é conta A RECEBER dela, não despesa. O comprovante
+  do BB em que o pagador é outra empresa vira o item sozinho (e o débito do
+  extrato fica conciliado com ele); o Pix que ela manda de volta liga sozinho
+  pelo CNPJ ou pelo nome. Aqui: por terceiro, cada item, o débito, o que voltou
+  e o saldo; lançar à mão o débito sem comprovante; cancelar o item lançado por
+  engano (solta o débito).
+  Dados: GET /api/contabilidade/terceiros?competencia=&visao= e
+  /terceiros/debitos (lançar, conferir e cancelar em /terceiros/…). Script:
+  src/js/modals/contabilidade-modais.js (montarTerceiros).
+-->
+<div id="ctbTerceirosOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbTercTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbTercTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-handshake mr-2" aria-hidden="true"></i>Pago em nome de terceiros</h2>
+        <p id="ctbTercSubtitulo" class="text-xs text-gray-300 truncate">O que a empresa pagou por outra empresa: a receber dela</p>
+      </div>
+      <span id="ctbTercSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbTercAviso" class="hidden text-sm" role="alert"></div>
+        <p class="text-xs text-gray-400">O boleto ou a conta em que o pagador é outra empresa (a Artdeco) e que a empresa pagou não é despesa: é a receber dela. O comprovante do BB com o pagador de fora vira o item sozinho e o débito do extrato fica conciliado com ele; o Pix que ela mandar de volta liga sozinho (pelo CNPJ ou pelo nome). O débito sem comprovante você lança à mão, aqui embaixo.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="ctbTercCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbTercCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbTercCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbTercCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbTercCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbTercVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbTercVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="abertos">A receber (de qualquer mês)</option>
+              <option value="mes">Pagos na competência</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbTercTotais">
+          <div class="ctb-total" data-tom="bordo"><span class="ctb-total__rotulo">A receber</span><strong class="ctb-total__valor" id="ctbTercSaldo">—</strong><span class="ctb-total__nota" id="ctbTercItens">—</span></div>
+          <div class="ctb-total"><span class="ctb-total__rotulo">Pago por eles</span><strong class="ctb-total__valor" id="ctbTercPago">—</strong><span class="ctb-total__nota">Nos itens mostrados</span></div>
+          <div class="ctb-total"><span class="ctb-total__rotulo">Já voltou</span><strong class="ctb-total__valor" id="ctbTercDevolvido">—</strong><span class="ctb-total__nota">Pix ou depósito deles</span></div>
+        </div>
+
+        <div id="ctbTercLista" class="space-y-6"></div>
+
+        <div class="ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Lançar à mão</h3>
+          </div>
+          <p class="text-xs text-gray-400">Um débito do extrato desta competência que foi pago em nome de outra empresa (ou pessoa) e não tem o comprovante do BB. O débito fica conciliado com o item a receber.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="ctbTercDebito" class="ctl-rotulo text-gray-300">Débito do extrato</label>
+              <select id="ctbTercDebito" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+                <option value="">Escolha o débito…</option>
+              </select>
+            </div>
+            <div>
+              <label for="ctbTercNome" class="ctl-rotulo text-gray-300">Em nome de</label>
+              <input id="ctbTercNome" type="text" maxlength="200" placeholder="A empresa ou a pessoa"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbTercDocumento" class="ctl-rotulo text-gray-300">CPF/CNPJ (ajuda a achar a devolução)</label>
+              <input id="ctbTercDocumento" type="text" maxlength="20" inputmode="numeric" placeholder="Opcional"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label for="ctbTercDescricao" class="ctl-rotulo text-gray-300">O que foi pago</label>
+              <input id="ctbTercDescricao" type="text" maxlength="300" placeholder="Opcional (vem a descrição do banco)"
+                     class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+          </div>
+        </div>
+
+        <div id="ctbTercMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbTercConciliacao" type="button" class="btn-neutral ctl-botao text-white">Conciliação</button>
+      <button id="ctbTercConferir" type="button" data-perm="contabilidade.conciliar" class="btn-secondary ctl-botao text-white">Conferir de novo</button>
+      <button id="ctbTercLancar" type="button" data-perm="contabilidade.conciliar" class="btn-primary ctl-botao text-white min-w-[160px]">Lançar como de terceiro</button>
+    </footer>
+  </div>
+</div>

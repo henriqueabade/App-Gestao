@@ -115,6 +115,14 @@
  *   POST /aplicacoes/conferir                { competencia } — liga o extrato que chegou depois     (contabilidade.conciliar)
  *   GET  /aplicacoes/:id/pdf                 { nome, tipo, base64 } — o original, enquanto guardado (até o pacote salvo)
  *
+ * Fase F (02/10/2026 — o que a empresa pagou em nome de outra, a Artdeco: a receber dela):
+ *
+ *   GET  /terceiros?competencia=&visao=      por terceiro: cada item, o débito, o que voltou, o saldo
+ *   GET  /terceiros/debitos?competencia=     os débitos a conciliar do mês (para lançar à mão)
+ *   POST /terceiros                          { movimento_id, terceiro_nome, terceiro_documento?, descricao? } (contabilidade.conciliar)
+ *   POST /terceiros/conferir                 { competencia } — itens dos comprovantes e devoluções do mês  (contabilidade.conciliar)
+ *   POST /terceiros/:id/cancelar             { motivo } — solta o débito                                    (contabilidade.conciliar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -147,6 +155,7 @@ const dda = require('./contabilidade/dda/dda');
 const ddaEspelho = require('./contabilidade/dda/espelho');
 const comprovantes = require('./contabilidade/comprovantes/comprovantes');
 const aplicacoes = require('./contabilidade/aplicacoes/aplicacoes');
+const terceiros = require('./contabilidade/terceiros/terceiros');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -528,6 +537,26 @@ router.post('/aplicacoes/conferir', exigirPermissao(CONCILIAR), rota('POST /api/
 
 router.get('/aplicacoes/:id/pdf', exigirPermissao(VER), rota('GET /api/contabilidade/aplicacoes/:id/pdf', ({ api, req }) =>
   aplicacoes.pdfOriginal(api, req.params.id)));
+
+// ------------------------------------------------------------ pago em nome de terceiros (fase F: a Artdeco)
+
+router.get('/terceiros', exigirPermissao(VER), rota('GET /api/contabilidade/terceiros', ({ api, req }) =>
+  terceiros.listar(api, { competencia: req.query?.competencia || null, visao: req.query?.visao || 'abertos' })));
+
+router.get('/terceiros/debitos', exigirPermissao(VER), rota('GET /api/contabilidade/terceiros/debitos', ({ api, req }) =>
+  terceiros.debitosDoMes(api, { competencia: req.query?.competencia })));
+
+router.post('/terceiros', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/terceiros', ({ api, req, usuarioId }) =>
+  terceiros.criar(api, {
+    movimentoId: req.body?.movimento_id, terceiroNome: req.body?.terceiro_nome, terceiroDocumento: req.body?.terceiro_documento || null, descricao: req.body?.descricao || null, usuarioId
+  })));
+
+// "Conferir de novo": os comprovantes com pagador de fora viram itens e as devoluções do mês ligam.
+router.post('/terceiros/conferir', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/terceiros/conferir', ({ api, req, usuarioId }) =>
+  terceiros.conferir(api, { competencias: /^\d{4}-\d{2}$/.test(String(req.body?.competencia || '')) ? [String(req.body.competencia)] : [], usuarioId })));
+
+router.post('/terceiros/:id/cancelar', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/terceiros/:id/cancelar', ({ api, req, usuarioId }) =>
+  terceiros.cancelar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
 
 // ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
 

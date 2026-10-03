@@ -883,6 +883,76 @@ a API, permissões, travas) → B → C → D → E.
 8. Relatório de setembro (PDF): a seção "Aplicações financeiras".
 9. Painel de setembro: nenhuma pendência das aplicações.
 
+## Parte O — Fase F (02/10/2026): pago em nome de terceiros (a Artdeco)
+
+**O que mudou** (a sua resposta: o boleto em que o pagador é a Artdeco e que
+a Santíssimo pagou é **a receber da Artdeco**, não despesa; o Pix que ela
+manda abate)
+- **O item a receber nasce sozinho.** O comprovante do BB (Fase D) cujo
+  **pagador** é outra empresa (CPF/CNPJ inteiro, diferente do CNPJ da
+  Configuração fiscal) vira um item "a receber" dela, assim que o comprovante
+  liga ao débito do extrato. O débito fica **conciliado** com o item
+  ("De terceiro (a receber)"). Vale para o ZIP, o "Ligar sozinho", o ligar à
+  mão e a conciliação automática.
+- **A devolução liga sozinha.** O crédito do extrato que traz o CNPJ do
+  terceiro (no lançamento ou na descrição do Pix) ou o nome dele (a palavra
+  "ARTDECO") liga ao item **de mesmo valor** (se houver um só), ou a **todos
+  os em aberto** quando a soma bate. Valor diferente (devolução parcial, várias
+  juntas que não fecham): à mão, na Conciliação, escolhendo "Devolução de
+  terceiro".
+- **Tela nova "Pago em nome de terceiros"** (Ações). Um bloco por terceiro,
+  com cada item (o que foi pago, o débito, o comprovante, o que voltou, o que
+  falta) e o saldo. Visões: a receber (de qualquer mês), pagos na competência
+  e todos.
+  - **Lançar à mão:** o débito do extrato sem comprovante do BB que foi pago
+    por outra empresa ou pessoa (nome, CPF/CNPJ opcional, o que foi pago).
+  - **Cancelar:** o item lançado por engano sai e o débito volta a ficar a
+    conciliar. Com devolução ligada, não cancela (desfaça a devolução antes).
+- **O pagamento não vira despesa.** A classificação usa a regra de origem
+  nova **"Pago em nome de terceiro / devolução (a receber)"**. A conta do
+  plano é da AEA (pendência 68): até criar a regra, esses lançamentos ficam
+  sem conta.
+- **Painel (fonte Contas a pagar), avisos:**
+  - "ARTDECO MOVEIS LTDA deve R$ … à empresa", com o saldo de todos os meses
+    até o fim da competência;
+  - "N pagamentos de terceiros sem o débito do extrato conciliado", quando o
+    débito já estava ligado a outra coisa.
+- **Pacote:** o pagamento ganha pasta própria (o débito e o comprovante), sem
+  pedir nota da empresa: o documento é da Artdeco. O dossiê diz "Pago em nome
+  de terceiro (a receber)".
+- **Relatório:** seção "Pago em nome de terceiros" (pago no mês e o saldo de
+  cada um).
+- **Com o seu OFX e o seu ZIP de setembro**, num banco de teste: os **4
+  boletos** com a Artdeco de pagadora viraram itens, os 4 débitos ficaram
+  conciliados com eles, o **Pix da Artdeco** ligou sozinho a um deles (mesmo
+  valor) e **3 ficaram a receber** (o painel mostra o aviso com o saldo).
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_f.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_c.sql`, e **reiniciar a API**. Ele termina mostrando
+   "itens_de_terceiros 0".
+2. Conciliação de setembro › **Conciliar automático** (ou, se o ZIP já foi
+   anexado: Ações › Pago em nome de terceiros › **Conferir de novo**).
+3. Quando a AEA disser a conta, criar em Regras a regra de **origem "Pago em
+   nome de terceiro / devolução (a receber)"** com a conta dela.
+
+**Checklist visual**
+1. Sem o SQL: o aviso amarelo "Os pagamentos em nome de terceiros ainda não
+   estão ativados: rode sql/contabilidade_fase_f.sql…".
+2. Depois do "Conferir de novo": o bloco **ARTDECO MOVEIS LTDA** com os 4
+   itens, cada um "pelo comprovante", o débito "conciliado com o item" e o
+   botão **Comprovante**.
+3. O item que a Artdeco já devolveu: "Recebido", com a data e o valor do Pix.
+4. Os outros: "A receber" e "falta R$ …"; o cartão **A receber** com o
+   saldo.
+5. Conciliação de setembro: os 4 débitos "De terceiro (a receber)" e o Pix
+   da Artdeco "Devolução de terceiro".
+6. Painel de setembro: o aviso "ARTDECO MOVEIS LTDA deve R$ … à empresa"
+   (botão **Ver** abre a tela).
+7. Lançar à mão um débito qualquer (de teste) e **Cancelar**: o débito volta
+   a ficar a conciliar.
+8. Relatório de setembro: a seção "Pago em nome de terceiros".
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -1007,3 +1077,19 @@ a API, permissões, travas) → B → C → D → E.
     setembro só houve resgates). O app espera "dd/mm Aplicação - nº do
     depósito" com "valor capital". Se o primeiro PDF com aplicação não
     fechar, me mande o PDF.
+
+**Pago em nome de terceiros (Fase F)**
+68. **A conta do plano** para o que a Artdeco deve é da AEA. Candidatas no
+    plano dela: **1.01.02.03 Outros valores a receber** (com uma subconta
+    para a Artdeco), ou **1.02.01.03 Empréstimos a empresas ligadas**, se a
+    Artdeco for ligada à Santíssimo. Até a regra existir, os lançamentos de
+    terceiros ficam sem conta.
+69. O item nasce de **todo** comprovante com o pagador de fora ligado ao
+    extrato, mesmo quando a conciliação já ligou o débito a uma conta da
+    própria empresa. Nesse caso aparece "Débito não ligado" e o aviso no
+    painel, para você conferir (e cancelar o item, se a conta era mesmo da
+    empresa). Ok?
+70. A devolução liga sozinha **só** com o valor exato de um item, ou com a
+    soma exata de todos os em aberto. O resto é à mão, na Conciliação. Ok?
+71. O saldo a receber é **aviso** (não segura o fechamento). Ok, ou prefere
+    que vire documental depois de algum prazo (ex.: 60 dias)?

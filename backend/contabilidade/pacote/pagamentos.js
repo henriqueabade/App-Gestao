@@ -26,7 +26,8 @@ const documentos = require('../documentosRecebidos');
 const liquidacoes = require('../conciliacao/liquidacoes');
 
 const PASTA_AVULSOS = 'Comprovantes sem pagamento';
-const TIPOS_DE_PAGAMENTO = new Set(['titulo_pagamento', 'financeiro_pagamento', 'reembolso']);
+// Fase F: o pago em nome de terceiro (a receber) também ganha pasta (o comprovante e o débito vão juntos).
+const TIPOS_DE_PAGAMENTO = new Set(['titulo_pagamento', 'financeiro_pagamento', 'reembolso', 'terceiro_pago']);
 const CRITERIOS = {
   automatico: 'automático', sugestao: 'sugestão aceita', composicao: 'soma aceita', manual: 'escolhido à mão', conta_criada: 'conta lançada do extrato',
   parcela_paga: 'conta paga pela conciliação', dda_pago: 'boleto do DDA lançado e pago'
@@ -113,7 +114,7 @@ function planoDosPagamentos({
     const pag = {
       chave: l.chave, tipo: l.tipo, tipo_rotulo: l.tipo_rotulo, id: l.id, data: l.data, valor: c.centavos(l.valor_abs), forma: l.forma,
       rotulo: l.rotulo, nome: l.nome || null, documento: l.documento || null, no_banco: l.no_banco !== false,
-      conta: null, parcela: null, pagamento: null, fechamento: null, reembolso: null,
+      conta: null, parcela: null, pagamento: null, fechamento: null, reembolso: null, terceiro: null,
       documentos: [], movimentos: [], comprovantes: [], dda: null, arquivos: [], faltas: []
     };
     pag.pasta = nomeDaPasta(i + 1, pag);
@@ -142,6 +143,9 @@ function planoDosPagamentos({
       pag.fechamento = { rotulo: l.rotulo, detalhe: l.detalhe || null };
       docs = c.lista(documentosDoFechamento.get(String(l.id)));
       alvos.push(`financeiro_pagamento:${l.id}`);
+    } else if (l.tipo === 'terceiro_pago') {
+      // Fase F: pago em nome de outra empresa (a receber dela): o documento é dela, não da empresa.
+      pag.terceiro = { nome: l.nome || null, documento: b.documentoFormatado(l.documento) || null, rotulo: l.rotulo };
     } else {
       const r = reembolsos.get(String(l.id)) || null;
       pag.reembolso = { pedido_id: r?.pedido_id ?? null, rotulo: l.rotulo };
@@ -188,7 +192,7 @@ function planoDosPagamentos({
     if (pag.no_banco && !temComprovante) pag.faltas.push('Sem o comprovante do banco');
     const porBoleto = pag.forma === 'Boleto' || Boolean(b.digitos(pag.parcela?.linha_digitavel));
     if (porBoleto && !pag.dda && !pag.arquivos.some(a => a.categoria === 'boleto')) pag.faltas.push('Pago por boleto, sem o boleto');
-    if (pag.tipo !== 'reembolso' && !pag.documentos.length && !pag.arquivos.some(a => arquivos.CATEGORIAS_DE_DOCUMENTO.has(a.categoria))) {
+    if (!['reembolso', 'terceiro_pago'].includes(pag.tipo) && !pag.documentos.length && !pag.arquivos.some(a => arquivos.CATEGORIAS_DE_DOCUMENTO.has(a.categoria))) {
       pag.faltas.push('Sem nota, recibo ou guia ligados');
     }
     return pag;

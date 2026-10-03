@@ -63,7 +63,11 @@ const TIPOS = {
   // Fase C (02/10/2026): as aplicações do BB (os PDFs mensais do Rende Fácil e do CDB).
   aplicacao_importada: 'PDF de aplicação importado',
   aplicacao_conciliada: 'Aplicações conferidas com o extrato',
-  aplicacoes_descartadas: 'PDFs de aplicação descartados'
+  aplicacoes_descartadas: 'PDFs de aplicação descartados',
+  // Fase F (02/10/2026): pago em nome de outra empresa (a Artdeco) — a receber dela.
+  terceiro_lancado: 'Pago em nome de terceiro (a receber)',
+  terceiro_recebido: 'Devolução de terceiro recebida',
+  terceiro_cancelado: 'Item de terceiro cancelado'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

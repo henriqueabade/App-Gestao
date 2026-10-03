@@ -224,6 +224,26 @@ async function aplicacoesDoMes(api, competencia) {
   });
 }
 
+/** Fase F: por terceiro, o pago no mês em nome dele, o que voltou e o saldo a receber no fim do mês. [] sem o SQL. */
+async function terceirosDoMes(api, competencia) {
+  const t = require('../terceiros/terceiros');
+  const dados = await t.lerTudo(api).catch(() => null);
+  if (!dados) return [];
+  const fim = ultimoDiaDe(competencia);
+  const grupos = new Map();
+  for (const i of dados.itens.filter(x => x.situacao !== 'cancelado' && x.data <= fim)) {
+    const s = t.situacaoDoItem(i, dados.vinculos);
+    const k = t.chaveDoTerceiro(i);
+    const g = grupos.get(k) || { nome: i.terceiro_nome, documento: b.documentoFormatado(i.terceiro_documento) || null, pago_no_mes: 0, saldo: 0 };
+    if (i.competencia === competencia) g.pago_no_mes = c.centavos(g.pago_no_mes + i.valor);
+    g.saldo = c.centavos(g.saldo + s.restante);
+    grupos.set(k, g);
+  }
+  return [...grupos.values()].filter(g => g.pago_no_mes || g.saldo).sort((x, y) => y.saldo - x.saldo);
+}
+
+const ultimoDiaDe = competencia => b.ultimoDia(competencia);
+
 async function nomeDaEmpresa(api) {
   const cfg = await require('../../fiscal/configuracaoFiscal').carregar(api).catch(() => null);
   return {
@@ -428,6 +448,8 @@ async function montar(api, { competencia, hoje, desde = null }) {
     documentos: documentos ? { itens: documentos.itens, totais: documentos.totais } : null,
     // Fase C: a posição de cada aplicação no mês, pelos PDFs do BB (o rendimento fica na 00020, não é receita).
     aplicacoes: await aplicacoesDoMes(api, comp),
+    // Fase F: o que a empresa pagou em nome de outra e ainda não voltou (a receber dela).
+    terceiros: await terceirosDoMes(api, comp),
     avisos
   };
   return { ...rel, arquivo: nomeDoArquivo(rel) };

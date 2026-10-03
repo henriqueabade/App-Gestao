@@ -117,6 +117,14 @@ function secaoAplicacoes(rel) {
   return `<section><h2>Aplicações financeiras (pelos PDFs mensais do BB)</h2><p>O rendimento fica na conta da aplicação (00020), como no balancete; o IR e o IOF são os retidos nos resgates. No CDB, o saldo é o capital em ser.</p><table><thead><tr>${th('Aplicação')}${th('Saldo inicial', 'num')}${th('Aplicado', 'num')}${th('Resgatado (líquido)', 'num')}${th('Rendimento do mês', 'num')}${th('IR', 'num')}${th('IOF', 'num')}${th('Saldo final', 'num')}${th('Conferência')}</tr></thead><tbody>${linhas}</tbody></table></section>`;
 }
 
+/** Fase F: o que a empresa pagou em nome de outra (a Artdeco) e o saldo a receber. */
+function secaoTerceiros(rel) {
+  const lista = c.lista(rel.terceiros);
+  if (!lista.length) return '';
+  const linhas = lista.map(t => `<tr>${td(esc(t.nome))}${td(esc(t.documento || '—'))}${td(dinheiro(t.pago_no_mes), 'num')}${td(dinheiro(t.saldo), 'num')}</tr>`).join('');
+  return `<section><h2>Pago em nome de terceiros (a receber)</h2><p>Boletos e contas de outra empresa pagos pela conta da empresa: não são despesa; ficam a receber até a devolução (que a conciliação liga).</p><table><thead><tr>${th('Terceiro')}${th('CPF/CNPJ')}${th('Pago no mês', 'num')}${th('Saldo a receber', 'num')}</tr></thead><tbody>${linhas}</tbody></table></section>`;
+}
+
 function secaoConciliacao(rel) {
   if (!rel.conciliacao) return '';
   const blocos = rel.conciliacao.map(x => {
@@ -158,7 +166,7 @@ function html(rel) {
     + (st.previa ? '<div class="marca">PRÉVIA</div>' : '')
     + `<header class="topo"><div><h1>${esc(`Relatório mensal — ${rel.rotulo}`)}</h1><p>${esc(empresa)}</p></div>${selo}</header>`
     + `<p class="nota">${esc(st.nota)}</p>${avisos}`
-    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoAplicacoes(rel) + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
+    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoAplicacoes(rel) + secaoTerceiros(rel) + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
     + `<p class="rodape">Documento interno gerado pelo App-Gestão em ${esc(instanteImpresso(rel.gerado_em))}. Os documentos oficiais (XML, OFX, comprovantes) vão no pacote da competência.</p>`
     + '</body></html>';
 }

@@ -5513,6 +5513,169 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ pago em nome de terceiros (fase F)
+
+  const TOM_SITUACAO_TERCEIRO = { aberto: 'badge-warning', quitado: 'badge-success', cancelado: 'badge-neutral' };
+
+  /** O que a empresa pagou em nome de outra (a Artdeco): por terceiro, o débito, o que voltou e o saldo; lançar à mão; cancelar. */
+  function montarTerceiros() {
+    const compCampo = el('ctbTercCompetencia');
+    const visaoSel = el('ctbTercVisao');
+    const debitoSel = el('ctbTercDebito');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+
+    const cancelar = item => async () => {
+      const motivo = await pedirTexto({
+        titulo: 'Cancelar este item?', confirmar: 'Cancelar o item',
+        mensagem: `${item.terceiro_nome} · ${formatarMoeda(item.valor)} de ${formatarData(item.data)}. O débito do extrato volta a ficar a conciliar (era despesa da empresa, por exemplo). Diga o motivo.`
+      });
+      if (!motivo) return;
+      mostrarMensagem('ctbTercMensagem', '');
+      try {
+        await enviar(`/api/contabilidade/terceiros/${encodeURIComponent(item.id)}/cancelar`, 'POST', { motivo });
+        window.showToast?.('Item cancelado; o débito voltou a ficar a conciliar.', 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbTercMensagem', textoDoErro(e, 'Cancelar pede a permissão "Conciliar".'));
+      }
+    };
+
+    function cartao(g) {
+      const sec = criar('div', 'ctb-secao-modal');
+      const cabeca = criar('div', 'ctb-secao-modal__cabeca');
+      const titulo = criar('h3', 'ctl-secao text-[var(--color-primary)]', g.nome);
+      const lado = criar('div', 'ctb-celula-acoes');
+      lado.appendChild(tag(g.saldo > 0 ? `Deve ${formatarMoeda(g.saldo)}` : 'Nada a receber', g.saldo > 0 ? 'badge-warning' : 'badge-success'));
+      cabeca.append(titulo, lado);
+      sec.appendChild(cabeca);
+      sec.appendChild(criar('p', 'text-xs text-gray-400', [g.documento, `pago ${formatarMoeda(g.pago)}`, `voltou ${formatarMoeda(g.devolvido)}`].filter(Boolean).join(' · ')));
+      const caixa = criar('div', 'ctb-tabela glass-surface rounded-xl border border-white/10');
+      const tabela = criar('table', 'w-full text-sm');
+      const thead = criar('thead');
+      const trh = criar('tr');
+      for (const [t, cls] of [['Data', ''], ['O que foi pago', ''], ['Valor', 'text-right ctb-num'], ['Voltou', 'text-right ctb-num'], ['Situação', ''], ['', 'text-right']]) trh.appendChild(criar('th', `px-4 py-3 text-left text-xs ${cls}`, t));
+      thead.appendChild(trh);
+      const corpo = criar('tbody');
+      for (const i of g.itens) {
+        const tr = criar('tr');
+        const d = i.debito;
+        const debito = d ? `${formatarData(d.data)} · ${d.descricao || 'débito'} · ${formatarMoeda(Math.abs(Number(d.valor)))}${i.debito_ligado ? ' · conciliado com o item' : ' · conciliado com outra coisa (confira)'}` : 'Sem o débito do extrato';
+        const voltou = i.recebimentos.map(r => r.movimento ? `${formatarData(r.movimento.data)} · ${formatarMoeda(r.valor)}` : formatarMoeda(r.valor)).join(' + ');
+        const situacao = [tag(i.situacao_rotulo, TOM_SITUACAO_TERCEIRO[i.situacao] || 'badge-neutral')];
+        if (i.situacao === 'aberto' && !i.debito_ligado) situacao.push(tag('Débito não ligado', 'badge-danger'));
+        const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+        if (d) acoes.appendChild(botaoPequeno('Dossiê', 'btn-secondary', () => abrirOutro('dossie', { tipo: 'movimento', id: d.id }), { titulo: 'O débito do extrato e tudo o que o prova' }));
+        if (i.comprovante) {
+          acoes.appendChild(botaoPequeno('Comprovante', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/comprovantes/${encodeURIComponent(i.comprovante.id)}/pdf`, { abrir: true }),
+            { titulo: 'O comprovante do BB com o pagador de fora' }));
+        }
+        if (i.situacao === 'aberto' && !i.devolvido) acoes.appendChild(botaoPequeno('Cancelar', 'btn-neutral', cancelar(i), { perm: 'contabilidade.conciliar', titulo: 'Lançado por engano: sai e solta o débito' }));
+        tr.append(
+          celula(formatarData(i.data), 'px-4 py-3 ctb-nowrap', i.origem === 'comprovante' ? 'pelo comprovante' : 'lançado à mão'),
+          celula(i.descricao || '—', 'px-4 py-3', debito),
+          celula(formatarMoeda(i.valor), 'px-4 py-3 text-right ctb-num'),
+          celula(formatarMoeda(i.devolvido), 'px-4 py-3 text-right ctb-num', voltou || (i.situacao === 'aberto' ? `falta ${formatarMoeda(i.restante)}` : null)),
+          celula(situacao, 'px-4 py-3', i.motivo ? `motivo: ${i.motivo}` : null),
+          celula(acoes, 'px-4 py-3 text-right')
+        );
+        corpo.appendChild(tr);
+      }
+      tabela.append(thead, corpo);
+      caixa.appendChild(tabela);
+      sec.appendChild(caixa);
+      return sec;
+    }
+
+    function desenhar() {
+      const lista = dados?.terceiros || [];
+      const alvo = el('ctbTercLista');
+      if (!lista.length) {
+        alvo.replaceChildren(criar('p', 'text-sm text-gray-400', dados?.sql_pendente
+          ? 'Os pagamentos em nome de terceiros ainda não estão ativados (falta o SQL da fase F).'
+          : (visaoSel.value === 'abertos' ? 'Nada a receber de terceiros.' : 'Nenhum pagamento em nome de terceiro nesta visão.')));
+      } else {
+        alvo.replaceChildren(...lista.map(cartao));
+      }
+      const t = dados?.totais;
+      el('ctbTercSaldo').textContent = t ? formatarMoeda(t.saldo) : '—';
+      el('ctbTercItens').textContent = t ? (t.itens ? plural(t.itens, 'item em aberto', 'itens em aberto') : 'Nada em aberto') : '—';
+      el('ctbTercPago').textContent = t ? formatarMoeda(lista.reduce((s, g) => s + Number(g.pago || 0), 0)) : '—';
+      el('ctbTercDevolvido').textContent = t ? formatarMoeda(lista.reduce((s, g) => s + Number(g.devolvido || 0), 0)) : '—';
+      if (dados?.sql_pendente) pintarEtiqueta(el('ctbTercSituacao'), 'Falta o SQL', 'badge-warning');
+      else if (t?.saldo > 0) pintarEtiqueta(el('ctbTercSituacao'), `A receber ${formatarMoeda(t.saldo)}`, 'badge-warning');
+      else pintarEtiqueta(el('ctbTercSituacao'), 'Nada a receber', 'badge-success');
+      try { window.Permissoes?.aplicarAcoesEColunas?.(alvo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregarDebitos() {
+      debitoSel.replaceChildren(opcao('', 'Escolha o débito…'));
+      if (dados?.sql_pendente) return;
+      try {
+        const r = await fetchApi(`/api/contabilidade/terceiros/debitos?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        for (const d of r.debitos || []) debitoSel.appendChild(opcao(String(d.id), `${formatarData(d.data)} · ${d.descricao || 'débito'} · ${formatarMoeda(Math.abs(Number(d.valor)))}`));
+        if (!(r.debitos || []).length) debitoSel.replaceChildren(opcao('', 'Nenhum débito a conciliar nesta competência'));
+      } catch (_) { /* a lista fica vazia; o aviso de cima já explica */ }
+    }
+
+    async function carregar({ manterMensagem = false } = {}) {
+      const minha = ++leitura;
+      mostrarMensagem('ctbTercAviso', '');
+      if (!manterMensagem) mostrarMensagem('ctbTercMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/terceiros?competencia=${encodeURIComponent(compCampo.value || '')}&visao=${encodeURIComponent(visaoSel.value)}`);
+        if (minha !== leitura) return;
+        dados = r;
+        if (r.sql_pendente) mostrarMensagem('ctbTercAviso', `Os pagamentos em nome de terceiros ainda não estão ativados: rode ${r.sql_arquivo || 'sql/contabilidade_fase_f.sql'} no banco e reinicie a API.`, 'aviso');
+        el('ctbTercSubtitulo').textContent = `${rotuloCompetencia(compCampo.value)} · a receber de quem a empresa pagou`;
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbTercAviso', textoDoErro(e, 'Ver os terceiros pede "Ver o fechamento".'));
+      }
+      desenhar();
+      await carregarDebitos();
+    }
+
+    acionar(el('ctbTercLancar'), async () => {
+      mostrarMensagem('ctbTercMensagem', '');
+      try {
+        if (!debitoSel.value) throw new Error('Escolha o débito do extrato.');
+        await enviar('/api/contabilidade/terceiros', 'POST', {
+          movimento_id: Number(debitoSel.value), terceiro_nome: el('ctbTercNome').value.trim(), terceiro_documento: el('ctbTercDocumento').value.trim() || null,
+          descricao: el('ctbTercDescricao').value.trim() || null
+        });
+        window.showToast?.('Lançado: o débito ficou conciliado com o item a receber.', 'success');
+        for (const id of ['ctbTercNome', 'ctbTercDocumento', 'ctbTercDescricao']) el(id).value = '';
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbTercMensagem', textoDoErro(e, 'Lançar pede a permissão "Conciliar".'));
+      }
+    });
+    acionar(el('ctbTercConferir'), async () => {
+      mostrarMensagem('ctbTercMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/terceiros/conferir', 'POST', { competencia: compCampo.value });
+        const feitos = (r.criados || 0) + (r.recebidos || 0);
+        window.showToast?.(feitos ? [r.criados ? plural(r.criados, 'item novo pelos comprovantes', 'itens novos pelos comprovantes') : null,
+          r.recebidos ? plural(r.recebidos, 'devolução ligada', 'devoluções ligadas') : null].filter(Boolean).join(' · ') : 'Nada novo para ligar.', feitos ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbTercMensagem', `Não deu para ligar: ${r.falhas.join(' · ')}`, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbTercMensagem', textoDoErro(e, 'Conferir pede a permissão "Conciliar".'));
+      }
+    });
+    el('ctbTercConciliacao').addEventListener('click', () => abrirOutro('conciliacao', {}));
+    compCampo.addEventListener('change', () => carregar());
+    visaoSel.addEventListener('change', () => carregar());
+    ouvirAlteracoes(() => carregar());
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
@@ -5525,6 +5688,7 @@
     dda: { rotulo: 'Boletos do DDA', badge: 'badge-info', tipos: ['dda_vinculado', 'dda_desvinculado', 'dda_conta_lancada', 'dda_ignorado', 'dda_contestado', 'dda_restaurado'] },
     comprovantes: { rotulo: 'Comprovantes do BB', badge: 'badge-info', tipos: ['comprovantes_importados', 'comprovante_ligado', 'comprovante_desligado', 'comprovante_ignorado', 'comprovante_restaurado', 'comprovantes_descartados'] },
     aplicacoes: { rotulo: 'Aplicações (Rende Fácil, CDB)', badge: 'badge-info', tipos: ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas'] },
+    terceiros: { rotulo: 'Pago em nome de terceiros', badge: 'badge-warning', tipos: ['terceiro_lancado', 'terceiro_recebido', 'terceiro_cancelado'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -5688,7 +5852,8 @@
     ctbEntradaDfe: montarEntradaDfe,
     ctbDda: montarDda,
     ctbComprovantes: montarComprovantes,
-    ctbAplicacoes: montarAplicacoes
+    ctbAplicacoes: montarAplicacoes,
+    ctbTerceiros: montarTerceiros
   };
 
   let montagem;

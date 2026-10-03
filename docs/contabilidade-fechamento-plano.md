@@ -1923,3 +1923,58 @@ rendimento fica na 00020 (fase B). Roteiro: Parte N. SQL:
   - DEV contra o Postgres descartável com o OFX e os PDFs reais
     (`dev_e2e_aplicacoes.js`): tudo ok, banco apagado.
 - **Pendências:** 64 a 67.
+
+## AI. Fase F entregue (02/10/2026) — pago em nome de terceiros (a Artdeco)
+
+Resposta do dono (02/10): o boleto em que o pagador é a Artdeco e que a
+Santíssimo pagou é conta A RECEBER da Artdeco (reembolso), não despesa; o Pix
+que ela manda abate. Roteiro: Parte O. SQL: `sql/contabilidade_fase_f.sql`
+(depois do da Fase C; reiniciar a API). Sem permissão nova: gravar pede
+"Conciliar".
+
+- **Banco:** `contabil_terceiros_itens` (quem, CPF/CNPJ, o que, dia, valor,
+  competência, débito, comprovante, origem comprovante/manual, situação
+  aberto/cancelado + motivo). Um item por comprovante (índice único parcial;
+  o cancelado não volta sozinho). O que voltou não é coluna: sai dos vínculos
+  `terceiro_devolvido` da conciliação.
+- **Módulo** `terceiros/terceiros.js`:
+  - puras: `itemDoComprovante` (pagador com documento inteiro ≠ CNPJ da
+    Configuração fiscal; sem o CNPJ configurado, nada), `situacaoDoItem`,
+    `palavraChave` ("ARTDECO MOVEIS LTDA" → ARTDECO), `ehDoTerceiro` (CNPJ
+    na contrapartida/descrição ou a palavra do nome), `devolucoes` (o item de
+    mesmo valor, único, ou a soma de todos os em aberto até o dia; ambíguo ou
+    de antes do pagamento, não), `pendencias`;
+  - `criarSozinhos` (comprovantes ligados; pula mês fechado; o débito
+    pendente fica conciliado, critério `terceiro`), `receberSozinho`,
+    `conferir` (os dois), `criar` (à mão: débito pendente, nome, documento
+    inteiro, não o da empresa), `cancelar` (motivo; com devolução, não; solta
+    o débito), `listar` (por terceiro), `debitosDoMes`.
+- **Conciliação:** tipos de liquidação `terceiro_pago` (−1) e
+  `terceiro_devolvido` (+1) (`deTerceiro`, forma "Reembolso de terceiro",
+  subtipo `terceiro`); critério `terceiro`; `terceiros.conferir` roda em
+  `automaticaDosMeses` **depois** do automático (a conta da própria empresa
+  que casa exatamente vem primeiro); o ligar à mão do comprovante também cria
+  o item.
+- **Classificação:** origem `terceiro` (`liq.subtipo`), regra nova em
+  `ORIGENS`; a conta é da AEA (pendência 68).
+- **Painel** (fonte contas a pagar, avisos): `terceiro_saldo_<doc>` e
+  `terceiros_sem_debito`, filtro `{ acao: 'terceiros' }`.
+- **Pacote:** `terceiro_pago` ganha pasta (sem a falta "sem nota"); o dossiê
+  com a origem "Pago em nome de terceiro (a receber)".
+- **Relatório:** `terceirosDoMes` e a seção "Pago em nome de terceiros".
+- **Rotas:** GET `/terceiros`, GET `/terceiros/debitos` (ver); POST
+  `/terceiros`, `/terceiros/conferir`, `/terceiros/:id/cancelar` (conciliar).
+- **Tela:** modal `terceiros` (bloco por terceiro, totais, lançar à mão,
+  cancelar com motivo, dossiê e comprovante), botão nas Ações, grupo na
+  atividade.
+- **Testes:**
+  - `terceiros/terceiros.test.js`: 5 (comprovante → item, devoluções,
+    pendências, classificação, pasta do pacote);
+  - `contabilidadeTerceiros.test.js`: 3, de ponta a ponta (ZIP com a
+    Artdeco → item, débito e Pix ligados; à mão e cancelar; permissões e sem
+    SQL);
+  - tela: modal no padrão e a fase F;
+  - DEV contra o Postgres descartável com o OFX e o ZIP reais
+    (`dev_e2e_terceiros.js`): 4 itens, 4 débitos conciliados, o Pix da
+    Artdeco ligado a 1, 3 a receber; banco apagado.
+- **Pendências:** 68 a 71.

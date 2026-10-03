@@ -75,6 +75,12 @@ function secaoOrigem(pag) {
     ]));
   }
   if (pag.fechamento) return secao('O fechamento pago', kv([['Fechamento', esc(pag.fechamento.rotulo)], ['Detalhe', pag.fechamento.detalhe ? esc(pag.fechamento.detalhe) : null]]));
+  if (pag.terceiro) {
+    return secao('Pago em nome de terceiro (a receber)', kv([
+      ['Terceiro', esc([pag.terceiro.nome, pag.terceiro.documento].filter(Boolean).join(' · ') || '—')], ['O que foi pago', esc(pag.terceiro.rotulo || '—')],
+      ['Como fica', 'Não é despesa da empresa: o valor fica a receber do terceiro até ele devolver (a devolução liga pela conciliação).']
+    ]));
+  }
   if (pag.reembolso) {
     const notas = c.lista(pag.devolucoes).map(n => `${esc(n.rotulo)} · ${esc(data(n.data_emissao))} · ${esc(reais(n.valor_total))}${n.chave_acesso ? `<br><span class="mono">${esc(n.chave_acesso)}</span>` : ''}`);
     return secao('O reembolso', kv([['Reembolso', esc(pag.reembolso.rotulo)], ['NF-e de devolução do cliente', notas.length ? `${notas.join('<br>')}<br><small>Vai na pasta 04-Devolucoes do pacote do mês dela.</small>` : null]]));
