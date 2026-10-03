@@ -35,6 +35,7 @@ const classificacaoMod = require('./classificacao/classificacao');
 const versoes = require('./versoes');
 const parametros = require('./parametros');
 const planoMod = require('./classificacao/plano');
+const comprovantesMod = require('./comprovantes/comprovantes');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -357,7 +358,9 @@ function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
   // banco — a conta do plano marcada "o comprovante basta".
   const indicePlano = Array.isArray(pagar.plano) ? planoMod.indexar(pagar.plano) : null;
   const comprovanteBasta = t => Boolean(indicePlano) && planoMod.contaDaCategoria(t.categoria, pagar.plano, indicePlano)?.comprovante_basta === true;
-  const temComprovante = p => (mapa.get(`pagamento:${p.pagamento.id}`) || []).some(a => a.categoria === 'comprovante');
+  // Fase D: o comprovante do BB (dados) ligado ao lançamento do extrato que paga a conta também vale.
+  const comprovados = pagar.comprovados instanceof Set ? pagar.comprovados : new Set();
+  const temComprovante = p => (mapa.get(`pagamento:${p.pagamento.id}`) || []).some(a => a.categoria === 'comprovante') || comprovados.has(`titulo_pagamento:${p.pagamento.id}`);
   for (const { t, p } of pagamentos) {
     const basta = comprovanteBasta(t);
     if (temDocumento(t) || ehTarifaDoBanco(t) || (basta && temComprovante(p))) continue;
@@ -370,13 +373,24 @@ function fonteContasPagar({ pagar, competencia, hoje, ddaAtivo = false }) {
     }));
   }
   // Tarifa do banco não tem comprovante (o BB nem manda no ZIP): o extrato é a prova.
-  const semComprovante = pagamentos.filter(({ t, p }) => !ehTarifaDoBanco(t) && !(mapa.get(`pagamento:${p.pagamento.id}`) || []).some(a => a.categoria === 'comprovante'));
+  const semComprovante = pagamentos.filter(({ t, p }) => !ehTarifaDoBanco(t) && !temComprovante(p));
   if (semComprovante.length) {
+    // Fase D: o caminho é anexar o ZIP do BB (os comprovantes ligam sozinhos ao extrato).
     pend.push(pendencia({
       nivel: NIVEL.pagamento_sem_comprovante, chave: 'pagar_sem_comprovante', fonte: 'contas_pagar',
       titulo: c.plural(semComprovante.length, 'pagamento sem comprovante', 'pagamentos sem comprovante'),
-      descricao: `Total: ${c.reais(semComprovante.reduce((s, x) => s + x.p.pagamento.valor_pago, 0))} · anexe o comprovante do banco em cada um; sem ele a competência não fecha`,
-      data: semComprovante.map(x => x.p.pagamento.data).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'contas-pagar', visao: 'pagas' }
+      descricao: `Total: ${c.reais(semComprovante.reduce((s, x) => s + x.p.pagamento.valor_pago, 0))} · anexe o ZIP dos comprovantes do BB (ou o comprovante em cada pagamento); sem ele a competência não fecha`,
+      data: semComprovante.map(x => x.p.pagamento.data).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'comprovantes' }
+    }));
+  }
+  // Fase D: o comprovante anexado que não achou o lançamento do extrato.
+  const semLancamento = c.lista(pagar.comprovantes).filter(x => x && x.situacao === 'novo' && String(c.dia(x.data) || '').startsWith(competencia));
+  if (semLancamento.length) {
+    pend.push(pendencia({
+      nivel: 'aviso', chave: 'comprovantes_sem_lancamento', fonte: 'contas_pagar',
+      titulo: `${c.plural(semLancamento.length, 'comprovante do BB', 'comprovantes do BB')} sem lançamento do extrato`,
+      descricao: `Total: ${c.reais(semLancamento.reduce((s, x) => s + (Number(x.valor) || 0), 0))} · ligue ao débito do extrato (ou importe o extrato do período)`,
+      data: semLancamento.map(x => c.dia(x.data)).sort()[0], acao: 'Ver', destino: 'contabilidade', filtro: { acao: 'comprovantes', visao: 'sem_par' }
     }));
   }
   const limite = b.ultimoDia(competencia);
@@ -826,15 +840,19 @@ function montar({
  */
 async function lerContasPagar(api, hoje) {
   try {
-    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda] = await Promise.all([
+    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda, comprovantes, vinculosConc] = await Promise.all([
       titulos.lerBase(api), b.ler(api, 'documentos_recebidos'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
       documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null),
       // Fase H: os boletos do DDA (null sem o SQL dela).
-      b.lerOpcional(api, 'contabil_dda_boletos').catch(() => null)
+      b.lerOpcional(api, 'contabil_dda_boletos').catch(() => null),
+      // Fase D: os comprovantes do BB e a conciliação (o comprovante prova o pagamento pelo lançamento).
+      b.lerOpcional(api, 'contabil_comprovantes').catch(() => null),
+      b.lerOpcional(api, 'conciliacao_vinculos').catch(() => null)
     ]);
     return {
       titulos: titulos.montarTodos(base, hoje), documentos: docs, contatos: base.contatos,
-      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda
+      arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda,
+      comprovantes: comprovantes || [], comprovados: comprovantesMod.pagamentosComComprovante({ comprovantes: comprovantes || [], vinculos: vinculosConc || [] })
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;

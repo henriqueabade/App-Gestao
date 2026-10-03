@@ -1051,6 +1051,7 @@ body {
     gap: 0.75rem;
 }
 .ctb-totais--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ctb-totais--cinco { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .ctb-total {
     display: flex;
     flex-direction: column;
@@ -1129,6 +1130,8 @@ body {
    mais largura que os outros, senão o nome do mês é cortado. */
 @media (min-width: 768px) {
     .ctb-filtros-extrato { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1fr); }
+    /* Fase D: nos comprovantes a competência vem primeiro. */
+    .ctb-filtros-comprovantes { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 1.1fr); }
 }
 
 /* A barra de "classificar os marcados" (etapa 6): quantos, a conta, a observação e o botão. */

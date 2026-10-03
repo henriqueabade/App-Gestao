@@ -80,6 +80,7 @@ test('evidências: notas de saída, de fora e devolução do mês; documento sem
   assert.equal(r.itens[0].detalhe, 'Pedido 2540 · Casa Vicenzo');
   assert.deepEqual(r.itens[0].baixar, { tipo: 'saida', id: 10 });
   assert.equal(r.itens[4].falta_rotulo, 'Sem o XML', 'a NF-e só com o PDF ainda pede o XML');
-  assert.deepEqual(r.totais, { total: 8, oficial: 3, interno: 0, fornecido: 3, falta: 3, por_grupo: { saida: 2, devolucao: 1, recebidos: 3, pagamentos: 1, outros: 1 } });
+  // Fase D: `reproduzido` = os comprovantes do BB refeitos dos dados (aqui, nenhum).
+  assert.deepEqual(r.totais, { total: 8, reproduzido: 0, oficial: 3, interno: 0, fornecido: 3, falta: 3, por_grupo: { saida: 2, devolucao: 1, recebidos: 3, pagamentos: 1, outros: 1 } });
   assert.equal(r.itens[6].origem_rotulo, 'Fornecido');
 });

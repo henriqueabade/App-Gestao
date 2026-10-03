@@ -59,7 +59,7 @@ function unicos(lista) {
  * mês está fechado), `atual` (a de hoje, se outra), `manuais` (as escolhas à
  * mão, com nomes). Pura.
  */
-function dossieDoMovimento({ m, conta = null, importacao = null, importadoPor = null, vinculos = [], liqsPorChave = new Map(), tituloDoPagamento = new Map(), notasDoPedido = new Map(), cls = null, congelada = null, atual = null, manuais = [], nomes = new Map(), arquivosLista = [], historico = [] }) {
+function dossieDoMovimento({ m, conta = null, importacao = null, importadoPor = null, vinculos = [], liqsPorChave = new Map(), tituloDoPagamento = new Map(), notasDoPedido = new Map(), cls = null, congelada = null, atual = null, manuais = [], nomes = new Map(), arquivosLista = [], historico = [], comprovante = null }) {
   const estado = ESTADOS[m.estado_conciliacao] ? m.estado_conciliacao : 'pendente';
   const valendo = c.lista(vinculos).filter(v => !v.desfeito_em);
   const desfeitos = c.lista(vinculos).filter(v => v.desfeito_em);
@@ -116,6 +116,17 @@ function dossieDoMovimento({ m, conta = null, importacao = null, importadoPor = 
           ['Veio de', importacao ? [`${extratoMod.ORIGENS[importacao.origem] || importacao.origem}${importacao.nome_arquivo ? ` ${importacao.nome_arquivo}` : ''}`, quando(importacao.criado_em), importadoPor].filter(Boolean).join(' · ') : null]
         ])
       },
+      // Fase D: o comprovante do BB ligado a este lançamento (os dados; o PDF é refeito na hora).
+      ...(comprovante ? [{
+        chave: 'comprovante', titulo: 'Comprovante do banco', icone: 'fa-receipt',
+        linhas: semVazios([
+          ['Tipo', comprovante.tipo_rotulo || null], ['Favorecido', [comprovante.favorecido_nome, comprovante.favorecido_documento].filter(Boolean).join(' · ') || null],
+          ['Data do pagamento', comprovante.data ? c.impressa(comprovante.data) : null], ['Valor', comprovante.valor !== null && comprovante.valor !== undefined ? c.reais(comprovante.valor) : null],
+          ['Autenticação', comprovante.autenticacao || null], ['Documento', comprovante.documento || null], ['ID do Pix', comprovante.e2e || null],
+          ['Arquivo do BB', comprovante.nome_arquivo || null],
+          ['Original', comprovante.confere ? 'Refeito idêntico dos dados (o arquivo não foi guardado)' : (comprovante.original_guardado ? 'Guardado até o pacote do mês' : 'Já saiu no pacote (ficam os dados e o SHA-256)')]
+        ])
+      }] : []),
       { chave: 'conciliacao', titulo: 'Conciliação', icone: 'fa-check-double', linhas: linhasConc, ligacoes, vazio: ligacoes.length ? null : 'Não casa com nada registrado no app.' },
       { chave: 'classificacao', titulo: 'Classificação', icone: 'fa-tags', linhas: linhasCls }
     ],
@@ -302,10 +313,14 @@ async function doMovimento(api, id) {
     .filter(e => String(e.dados?.movimento_id ?? '') === String(m.id)
       || c.lista(e.dados?.movimentos).map(String).includes(String(m.id))
       || (m.importacao_id && String(e.dados?.importacao_id ?? '') === String(m.importacao_id)));
+  // Fase D: o comprovante do BB ligado a este lançamento.
+  const comprovantesMod = require('../comprovantes/comprovantes');
+  const cpLido = ((await b.lerOpcional(api, 'contabil_comprovantes', { movimento_id: Number(m.id) }).catch(() => null)) || []).find(x => x && x.situacao === 'ligado') || null;
+  const comprovante = cpLido ? comprovantesMod.linhaPublica(comprovantesMod.normalizar(cpLido)) : null;
   return dossieDoMovimento({
     m, conta: contas.find(x => String(x.id) === String(m.conta_id)) || null, importacao, importadoPor: nomes.get(String(importacao?.criado_por)) || null,
     vinculos, liqsPorChave, tituloDoPagamento, notasDoPedido, cls: deHoje, congelada, atual: congelada ? deHoje : null, manuais, nomes,
-    arquivosLista: listas.flat(), historico
+    arquivosLista: listas.flat(), historico, comprovante
   });
 }
 

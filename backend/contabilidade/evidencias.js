@@ -19,9 +19,12 @@ const b = require('./base');
 const arquivos = require('./arquivos');
 const documentos = require('./documentosRecebidos');
 const externas = require('../fiscal/externas');
+const comprovantes = require('./comprovantes/comprovantes');
 
 /** O rótulo curto de cada grupo (a coluna da lista; o filtro da tela tem o nome longo). */
 const GRUPOS = { saida: 'NF-e de saída', devolucao: 'Devolução', recebidos: 'Recebido', pagamentos: 'Comprovante', outros: 'Outro' };
+/** Fase D: o comprovante do BB refeito dos dados (idêntico ao original, que não é guardado). */
+const ORIGENS_EXTRA = { reproduzido: 'Reproduzido (idêntico ao original do BB)' };
 const STATUS_COM_XML = new Set(['autorizada', 'cancelada']);
 
 const doMes = (data, competencia) => String(c.dia(data) || '').startsWith(competencia);
@@ -30,7 +33,7 @@ const doMes = (data, competencia) => String(c.dia(data) || '').startsWith(compet
  * Monta a lista a partir do que já foi lido. `arquivosLista` já vem no
  * formato público (arquivos.listar). Pura.
  */
-function montar({ competencia, notas = [], externasLista = [], devolucoes = [], docs = [], arquivosLista = [], pedidos = new Map() }) {
+function montar({ competencia, notas = [], externasLista = [], devolucoes = [], docs = [], arquivosLista = [], pedidos = new Map(), comprovantesLista = [] }) {
   const itens = [];
   for (const n of notas) {
     if (!n || !doMes(n.data_emissao, competencia) || !STATUS_COM_XML.has(String(n.status_fiscal)) || !(n.xml_autorizado || n.xml_envio)) continue;
@@ -107,15 +110,18 @@ function montar({ competencia, notas = [], externasLista = [], devolucoes = [], 
       valor: null, categoria: a.categoria_rotulo, origem: a.origem, baixar: { tipo: 'arquivo', id: a.id }, falta: false
     });
   }
+  // Fase D: os comprovantes do BB do mês (refeitos dos dados, ou o original guardado até o pacote).
+  itens.push(...comprovantes.itensDeEvidencia(comprovantesLista, competencia));
   const ordem = Object.keys(GRUPOS);
   itens.sort((x, y) => ordem.indexOf(x.grupo) - ordem.indexOf(y.grupo) || String(x.data || '').localeCompare(String(y.data || '')) || x.chave.localeCompare(y.chave));
   const conta = f => itens.filter(f).length;
   return {
     competencia,
     rotulo: c.rotuloCompetencia(competencia),
-    itens: itens.map(i => ({ ...i, grupo_rotulo: GRUPOS[i.grupo], origem_rotulo: i.origem ? arquivos.ORIGENS[i.origem] : null })),
+    itens: itens.map(i => ({ ...i, grupo_rotulo: GRUPOS[i.grupo], origem_rotulo: i.origem ? (arquivos.ORIGENS[i.origem] || ORIGENS_EXTRA[i.origem] || i.origem) : null })),
     totais: {
       total: itens.length,
+      reproduzido: conta(i => i.origem === 'reproduzido'),
       oficial: conta(i => i.origem === 'oficial'),
       interno: conta(i => i.origem === 'interno'),
       fornecido: conta(i => i.origem === 'fornecido'),
@@ -127,13 +133,14 @@ function montar({ competencia, notas = [], externasLista = [], devolucoes = [], 
 
 async function carregar(api, { competencia, hoje }) {
   const comp = c.competenciaValida(competencia) ? String(competencia) : c.competenciaDe(hoje);
-  const [notas, externasLista, devolucoes, docs, arquivosLista, pedidosLista] = await Promise.all([
+  const [notas, externasLista, devolucoes, docs, arquivosLista, pedidosLista, comprovantesLidos] = await Promise.all([
     api.get('/api/notas_fiscais').then(c.lista).catch(() => []),
     externas.listarNotas(api).catch(() => []),
     api.get('/api/notas_devolucao').then(c.lista).catch(() => []),
     b.lerOpcional(api, 'documentos_recebidos'),
     arquivos.listar(api, { competencia: comp }).catch(e => (e?.extra?.sql_pendente ? null : Promise.reject(e))),
-    api.get('/api/pedidos').then(c.lista).catch(() => [])
+    api.get('/api/pedidos').then(c.lista).catch(() => []),
+    b.lerOpcional(api, 'contabil_comprovantes', { competencia: comp }).catch(() => null)
   ]);
   const pedidos = new Map(pedidosLista.filter(Boolean).map(p => [String(p.id), p.numero ?? p.id]));
   // Os arquivos ligados a documentos da competência entram mesmo que tenham outra competência.
@@ -144,7 +151,10 @@ async function carregar(api, { competencia, hoje }) {
     const vistos = new Set(todosArquivos.map(a => a.id));
     for (const a of extras.flat()) if (!vistos.has(a.id)) { vistos.add(a.id); todosArquivos.push(a); }
   }
-  const lista = montar({ competencia: comp, notas, externasLista, devolucoes, docs: docs || [], arquivosLista: todosArquivos, pedidos });
+  const lista = montar({
+    competencia: comp, notas, externasLista, devolucoes, docs: docs || [], arquivosLista: todosArquivos, pedidos,
+    comprovantesLista: (comprovantesLidos || []).filter(Boolean).map(comprovantes.normalizar)
+  });
   return { ...lista, sql_pendente: docs === null || arquivosLista === null };
 }
 

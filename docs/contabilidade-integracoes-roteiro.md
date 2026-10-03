@@ -641,6 +641,101 @@ a API, permissões, travas) → B → C → D → E.
 11. Painel de setembro, com o DDA ligado: "1 pagamento por boleto sem o
     boleto" (documental), se houver pagamento por boleto sem ele.
 
+## Parte L — Fase D (02/10/2026): os comprovantes do BB (o ZIP)
+
+**O que mudou**
+- **Tela nova "Comprovantes do BB"** (Ações da Contabilidade). O botão
+  **Anexar ZIP ou PDFs** aceita o ZIP com os comprovantes baixados do site do
+  BB, ou os PDFs soltos, vários de uma vez.
+- **O app lê e guarda só os dados**, nunca o arquivo, quando consegue refazer o
+  comprovante idêntico. De cada comprovante ficam:
+  - o texto linha a linha e o layout da página;
+  - os campos: tipo (Pix, boleto, convênio/guia, crédito em conta), data,
+    valor, tarifa, autenticação, DOCUMENTO, nº de controle, favorecido e
+    CPF/CNPJ, pagador, código de barras ou ID do Pix, agência e conta;
+  - o SHA-256 do arquivo original.
+
+  Com o ZIP de setembro (35 comprovantes) o app refez **os 35 idênticos**:
+  nenhum arquivo foi guardado.
+- **Quando a cópia não sai idêntica** (um formato que o BB mude, por exemplo),
+  o original fica guardado **só até o pacote do mês ser salvo**. Depois sai do
+  servidor e ficam os dados e o SHA-256.
+- **O PDF refeito** (botão **PDF**, Documentos da competência e pacote) é igual
+  ao do banco, com um pé pequeno: "Reproduzido pelo App-Gestão a partir do
+  comprovante original do BB … SHA-256 …". Nos Documentos da competência ele
+  aparece como **"Reproduzido (idêntico ao original do BB)"**, com o total
+  novo "Reproduzidos".
+- **Liga sozinho ao débito do extrato:** mesmo valor, até 5 dias, mesma conta.
+  - **Chave forte:** o DOCUMENTO do comprovante igual ao do extrato, o nº de
+    controle, o ID do Pix ou o CPF/CNPJ completo do favorecido. Liga sozinho
+    se só um débito tiver chave forte.
+  - **Sem chave forte:** liga sozinho só se houver um único débito, e ele for
+    do mesmo dia (ou tiver o nome do favorecido na descrição, a até 3 dias).
+  - O resto vira **sugestão** ("Ligar à sugerida").
+- **Ao ligar, o comprovante completa o CPF/CNPJ** do lançamento do extrato
+  (se estava vazio e o mês está aberto), e a **conciliação roda sozinha**.
+  Exemplo: o boleto da Vidros Norte pago pelo BB vira "conta paga" sem
+  ninguém clicar.
+- **O extrato que chega depois do ZIP também liga.** A ordem não importa:
+  ao importar o OFX ou buscar pela API, os comprovantes que esperavam o débito
+  se ligam, e a conciliação roda em seguida. Na tela, o botão **Ligar sozinho**
+  faz o mesmo.
+- **Em cada linha:**
+  - **Ligar à sugerida** e **Ligar…** (os débitos de até 10 dias, os de mesmo
+    valor primeiro);
+  - **Desligar** e **Ignorar**, os dois com motivo, e **Restaurar**;
+  - **Dossiê** do lançamento ligado;
+  - **PDF**.
+
+  O comprovante ignorado sai do aviso e do pacote.
+- **Avisos na linha:**
+  - **"O pagador do boleto é ARTDECO …, não a empresa"** (reembolso a
+    receber?, a Fase F trata);
+  - **o valor do lançamento difere** do comprovante;
+  - **o original fica guardado** até o pacote.
+- **Painel:**
+  - o **pagamento sem comprovante** (C3) deixa de ser cobrado quando o
+    pagamento está conciliado com um débito que tem comprovante ligado;
+  - **"N comprovantes sem lançamento do extrato"** é aviso.
+- **Pacote:** depois de **salvar** o ZIP, o app avisa o servidor, e os
+  originais guardados do mês saem dali ("1 original de comprovante saiu do
+  servidor"). Se precisar do pacote de novo, os refeitos saem iguais. O
+  original que já saiu aparece como **"Falta"**: anexe o PDF de novo.
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_d.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_h.sql`, e **reiniciar a API**. No fim ele mostra a
+   tabela nova `contabil_comprovantes` com 0 linhas.
+2. Ações › **Comprovantes do BB** › **Anexar ZIP ou PDFs** e escolher o ZIP de
+   setembro.
+3. Conferir os que ficaram "Sem lançamento": ligar à sugerida, escolher o
+   débito ou ignorar (com motivo). Se o extrato do mês ainda não foi
+   importado, importe e use **Ligar sozinho**.
+
+**Checklist visual**
+1. Sem o SQL, a tela mostra o aviso amarelo "Os comprovantes do BB ainda não
+   estão ativados: rode sql/contabilidade_fase_d.sql…".
+2. Anexar o ZIP de setembro. O aviso deve dizer: "35 comprovantes lidos · 35
+   novos · 35 refeitos idênticos (o arquivo não foi guardado) · N ligados ao
+   extrato…".
+3. Os quatro totais: Comprovantes, Ligados, Sem lançamento (com o valor) e
+   Originais guardados (0 com o ZIP de setembro).
+4. Em cada linha: tipo, "refeito idêntico ao do BB", favorecido com CPF/CNPJ.
+   Na coluna do extrato: "Ligado ao extrato" com o lançamento e o critério,
+   ou "Sem lançamento" com a sugestão.
+5. **PDF** abre o comprovante igual ao do BB, com o pé "Reproduzido pelo
+   App-Gestão…" no fim da página.
+6. **Ligar…** abre a caixa com os débitos ("mesmo valor · 1 dia de diferença").
+7. Anexar o mesmo ZIP de novo: "35 comprovantes lidos · 35 já estavam no app".
+8. Documentos da competência de setembro: o total "Reproduzidos" e os
+   comprovantes com a etiqueta verde "Reproduzido (idêntico ao original do
+   BB)". Abrir e Salvar funcionam.
+9. Painel de setembro: o "pagamento sem comprovante" some dos pagamentos
+   conciliados com débito que tem comprovante; aparece o aviso "N comprovantes
+   sem lançamento do extrato", se houver.
+10. Atividade: o grupo "Comprovantes do BB" no filtro, com "Comprovantes do BB
+    anexados: …".
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -677,8 +772,9 @@ a API, permissões, travas) → B → C → D → E.
 
 **CDB, comprovantes e pagamentos**
 44. CDB: só credenciais e teste até o BB dizer a API (Parte E). Ok.
-45. **Comprovantes** de pagamento: o BB não tem API pública para buscá-los;
-    continuam anexados à mão (PDF). Ok?
+45. ~~Comprovantes anexados à mão~~ — **feito na Fase D (02/10/2026):** o ZIP
+    do site do BB entra de uma vez, o app guarda só os dados, refaz o PDF
+    idêntico e liga cada um ao débito do extrato (Parte L).
 46. **Pagamentos em lote** pelo BB (API de Pagamentos) fica para uma fase
     futura, se quiser.
 
@@ -710,6 +806,20 @@ a API, permissões, travas) → B → C → D → E.
     continua pedindo a nota (crítico). Ok?
 53. Pedir ao BB a **massa de teste da homologação do DDA**. Sem ela, o teste é
     em produção (só consulta).
-54. **Vários boletos pagos num débito só** (pagamento em lote): a soma das
-    contas em aberto confirmadas pelo DDA/comprovante fica para a **Fase D**
-    (comprovantes), que confirma cada um.
+54. **Vários boletos pagos num débito só** (pagamento em lote): a Fase D liga
+    **um comprovante por débito**. O débito que é a soma de vários
+    comprovantes ainda não se liga sozinho: fica "Sem lançamento" para
+    decidir à mão. Fica para depois, se aparecer no extrato.
+
+**Comprovantes do BB (Fase D)**
+55. O **pagamento sem comprovante** (C3) é resolvido pelo débito do extrato:
+    o pagamento conciliado com o débito que tem o comprovante ligado não pede
+    mais o PDF. Ok?
+56. O original guardado (só quando o app não refaz idêntico) sai do servidor
+    quando o pacote é **salvo**, e não só gerado, para não perder o arquivo se
+    você cancelar o "Salvar". Ok?
+57. As regras de **ligar sozinho** (Parte L): chave forte única, ou um único
+    débito do mesmo dia (ou com o nome, a até 3 dias). O resto é sugestão.
+    Ok?
+58. **Comprovante sem lançamento do extrato** é **aviso** (não segura o
+    pacote). Ok, ou prefere documental?

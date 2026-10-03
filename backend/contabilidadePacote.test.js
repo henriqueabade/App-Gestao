@@ -49,7 +49,10 @@ const COLUNAS = {
   conciliacao_vinculos: ['id', 'movimento_id', 'alvo_tipo', 'alvo_id', 'valor', 'criterio', 'desfeito_em', 'motivo_desfazer'],
   plano_contas: ['id', 'codigo', 'nome', 'tipo', 'ativa', 'observacao', 'origem', 'criado_por', 'criado_em', 'atualizado_em'],
   classificacao_regras: ['id', 'condicao_tipo', 'valor', 'sentido', 'conta_id', 'prioridade', 'ativa', 'origem', 'observacao', 'criado_por', 'criado_em', 'atualizado_em'],
-  classificacoes: ['id', 'movimento_id', 'conta_id', 'observacao', 'criado_por', 'criado_em', 'substituida_em', 'substituida_por']
+  classificacoes: ['id', 'movimento_id', 'conta_id', 'observacao', 'criado_por', 'criado_em', 'substituida_em', 'substituida_por'],
+  // Fase D: os comprovantes do BB (só os dados; o original só quando não refaz idêntico).
+  contabil_comprovantes: ['id', 'sha256', 'nome_arquivo', 'formato', 'layout', 'linhas', 'confere', 'arquivo_id', 'original_descartado_em', 'tipo', 'data', 'valor', 'autenticacao',
+    'favorecido_nome', 'competencia', 'movimento_id', 'situacao', 'atualizado_em']
 };
 
 const UNICOS = {
@@ -341,6 +344,48 @@ test('sem o SQL da etapa 9: o pacote sai com aviso e sem registro; marcar como e
     const env = await ctx.chamar('POST', '/pacote/1/enviado', { para: 'contabil@exemplo.com', meio: 'E-mail' });
     assert.equal(env.status, 409);
     assert.match(env.corpo.error, /contabilidade_pacote\.sql/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fase D: o comprovante do BB vai refeito dos dados (com o pé "Reproduzido…") e o original guardado vai como veio; o pacote salvo tira o original do servidor', async () => {
+  const leitor = require('./contabilidade/comprovantes/leitor');
+  const ORIGINAL = Buffer.from('%PDF-1.4 comprovante do BB que o app não refaz');
+  const layout = { pagina: [595.28, 841.89], fonte: 'Courier', tamanho: 8, entrelinha: 9.2, x: 28.35, y: 813.54, linha_espessura: 0.57, cor_traco: 0, cor_texto: 0 };
+  const linhas = ['', '                Comprovante Pix', 'VALOR:                                  R$900,00', 'DOCUMENTO: 081501', 'AUTENTICACAO SISBB:        A.1B2.C3D.4E5.F67.890'];
+  const base = cenario();
+  const ctx = await montar(cenario({
+    contabil_arquivos: [...base.contabil_arquivos, { id: 30, nome_arquivo: '5 - 05082026 - Pagamento - 2.500,00.pdf', tipo_mime: 'application/pdf', tamanho_bytes: ORIGINAL.length, sha256: 'd'.repeat(64), categoria: 'comprovante', origem: 'oficial', competencia: null, criado_em: '2026-09-02T10:00:00Z', completo: true, partes: 1 }],
+    contabil_arquivo_partes: [...base.contabil_arquivo_partes, { id: 4, arquivo_id: 30, ordem: 0, dados: ORIGINAL.toString('base64') }],
+    contabil_comprovantes: [
+      { id: 1, sha256: 'e'.repeat(64), nome_arquivo: '4 - 15082026 - Transferência - 900,00.pdf', formato: 'bb_texto', layout: JSON.stringify(layout), linhas: JSON.stringify(linhas), confere: true, tipo: 'pix', data: '2026-08-15', valor: 900, autenticacao: 'A.1B2.C3D.4E5.F67.890', favorecido_nome: 'Ana', competencia: '2026-08', movimento_id: 5, situacao: 'ligado' },
+      { id: 2, sha256: 'd'.repeat(64), nome_arquivo: '5 - 05082026 - Pagamento - 2.500,00.pdf', formato: 'desconhecido', layout: null, linhas: '[]', confere: false, arquivo_id: 30, tipo: 'boleto', data: '2026-08-05', valor: 2500, favorecido_nome: 'Imobiliária Centro', competencia: '2026-08', movimento_id: 1, situacao: 'ligado' }
+    ]
+  }));
+  try {
+    await prontoParaPacote(ctx);
+    const r = await ctx.chamar('POST', '/pacote', { competencia: '2026-08', pdf_base64: PDF });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    const dentro = zip.ler(Buffer.from(r.corpo.base64, 'base64'));
+    const refeito = dentro.find(x => x.nome.endsWith('06-Comprovantes/4 - 15082026 - Transferência - 900,00.pdf'));
+    assert.ok(refeito, nomes(dentro).join('\n'));
+    const lido = leitor.lerPdf(refeito.dados);
+    assert.deepEqual(lido.blocos[0].linhas.map(l => l.texto), linhas);
+    assert.match(lido.blocos[1].linhas.map(l => l.texto).join(' '), /^Reproduzido pelo App-Gestão a partir do comprovante original do BB \(arquivo "4 - 15082026 - Transferência - 900,00\.pdf", SHA-256 e{64}\)/);
+    assert.ok(dentro.find(x => x.nome.endsWith('06-Comprovantes/5 - 05082026 - Pagamento - 2.500,00.pdf')).dados.equals(ORIGINAL), 'o original guardado vai como veio');
+    const indice = dentro.find(x => x.nome.endsWith('indice.csv')).dados.toString('utf8');
+    assert.ok(indice.includes('Reproduzido (idêntico ao original do BB)'));
+    assert.match(dentro.find(x => x.nome.endsWith('LEIA-ME.txt')).dados.toString('utf8'), /Comprovantes do BB com a origem "Reproduzido"/);
+
+    // A tela avisa que salvou: o original sai do servidor (ficam os dados e o SHA-256).
+    const reg = ctx.tabelas.contabil_pacotes[0];
+    const salvo = await ctx.chamar('POST', `/pacote/${reg.id}/salvo`, {});
+    assert.deepEqual([salvo.status, salvo.corpo.originais_descartados], [200, 1]);
+    assert.ok(!ctx.tabelas.contabil_arquivo_partes.some(p => p.arquivo_id === 30));
+    assert.ok(ctx.tabelas.contabil_arquivos.find(a => a.id === 30).excluido_em);
+    assert.ok(ctx.tabelas.contabil_comprovantes.find(x => x.id === 2).original_descartado_em);
+    assert.ok(ctx.tabelas.contabil_arquivo_partes.some(p => p.arquivo_id === 21), 'os outros arquivos ficam');
   } finally {
     await ctx.encerrar();
   }

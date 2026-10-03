@@ -148,7 +148,9 @@ function leiaMe({ empresa, rotulo, versao = null, fechadaEm = null, fechadaPor =
   }
   linhas.push(
     'Conferência: o indice.csv traz a pasta, a origem e o SHA-256 de cada arquivo.',
-    'XML, OFX e comprovantes são os originais guardados no app; o relatório é documento interno gerado pelo App-Gestão.'
+    'XML e OFX são os originais guardados no app; o relatório é documento interno gerado pelo App-Gestão.',
+    'Comprovantes do BB com a origem "Reproduzido": refeitos pelo App-Gestão a partir do texto do original (conferido idêntico ao anexar);',
+    'o pé de cada um traz o nome e o SHA-256 do arquivo do banco, e o código de autenticação continua conferível no BB.'
   );
   return `${linhas.join('\r\n')}\r\n`;
 }
@@ -220,6 +222,11 @@ async function previa(api, { competencia, hoje, desde = null }) {
 
 /** Lê um item dos Documentos da competência: `{ nome, dados }` (o arquivo guardado ou o XML da nota). */
 async function lerItem(api, item) {
+  // Fase D: o comprovante do BB refeito dos dados, com o pé "Reproduzido pelo App-Gestão…".
+  if (item.baixar.tipo === 'comprovante') {
+    const r = await require('../comprovantes/comprovantes').pdfDoComprovante(api, item.baixar.id, { comRodape: true });
+    return { nome: r.nome, dados: Buffer.from(r.base64, 'base64'), sha: null };
+  }
   if (item.baixar.tipo === 'arquivo') {
     const { arquivo, base64 } = await arquivos.ler(api, item.baixar.id);
     return { nome: arquivo.nome_arquivo, dados: Buffer.from(base64, 'base64'), sha: arquivo.sha256 || null };
@@ -329,6 +336,21 @@ async function gerar(api, { competencia, hoje, desde = null, usuarioId = null, p
   };
 }
 
+/**
+ * Fase D (regra do dono: "guarda só até gerar o pacote; gerado, exclui do
+ * servidor"): a tela avisa que o ZIP foi SALVO e os originais dos
+ * comprovantes do BB que ficaram guardados (os que o app não refez
+ * idênticos) saem do servidor — ficam os dados e o SHA-256, e o pacote leva
+ * o original.
+ */
+async function marcarSalvo(api, id, { usuarioId = null } = {}) {
+  if (!/^\d{1,12}$/.test(String(id ?? ''))) throw c.erro('Informe o pacote.');
+  const p = (await b.ler(api, 'contabil_pacotes', { id: Number(id) }))[0] || null;
+  if (!p) throw c.erro('Pacote não encontrado.', 404);
+  const r = await require('../comprovantes/comprovantes').descartarOriginais(api, { competencia: p.competencia, usuarioId, pacoteId: p.id });
+  return { id: p.id, competencia: p.competencia, originais_descartados: r.descartados };
+}
+
 /** Marca um pacote como enviado à contabilidade: para quem, como e quando. */
 async function marcarEnviado(api, id, { entrada = {}, usuarioId = null }) {
   if (!/^\d{1,12}$/.test(String(id ?? ''))) throw c.erro('Informe o pacote.');
@@ -347,5 +369,5 @@ async function marcarEnviado(api, id, { entrada = {}, usuarioId = null }) {
 
 module.exports = {
   PASTAS, MEIOS, LIMITE_BYTES, pastaDoItem, planoDoPacote, nomeSeguro, nomeUnico, indiceCsv, leiaMe, nomeDoPacote, pacotePublico, validarEnvio,
-  previa, gerar, marcarEnviado
+  previa, gerar, marcarEnviado, marcarSalvo
 };

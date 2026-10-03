@@ -46,7 +46,7 @@
   const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   const TOM_PARCELA = { a_vencer: 'badge-info', vence_hoje: 'badge-warning', vencida: 'badge-danger', paga: 'badge-success', cancelada: 'badge-neutral' };
   const TOM_TITULO = { aberto: 'badge-info', parcial: 'badge-warning', vencido: 'badge-danger', pago: 'badge-success', cancelado: 'badge-neutral' };
-  const TOM_ORIGEM = { oficial: 'badge-success', interno: 'badge-info', fornecido: 'badge-neutral' };
+  const TOM_ORIGEM = { oficial: 'badge-success', reproduzido: 'badge-success', interno: 'badge-info', fornecido: 'badge-neutral' };
   const ORIGENS_TITULO = { manual: 'Lançada à mão', nfe: 'NF-e de entrada', nfse: 'NFS-e', outro: 'Recibo ou guia', dda: 'Boleto do DDA' };
   // O estado da conciliação (etapa 5) de cada lançamento do extrato.
   const ROTULO_CONCILIACAO = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
@@ -1722,6 +1722,8 @@
 
     function caminhoDoItem(i) {
       if (!i.baixar) return null;
+      // Fase D: o comprovante do BB refeito dos dados (com o pé "Reproduzido…").
+      if (i.baixar.tipo === 'comprovante') return `/api/contabilidade/comprovantes/${encodeURIComponent(i.baixar.id)}/pdf`;
       return i.baixar.tipo === 'arquivo'
         ? `/api/contabilidade/arquivos/${encodeURIComponent(i.baixar.id)}`
         : `/api/contabilidade/evidencias/xml/${encodeURIComponent(i.baixar.tipo)}/${encodeURIComponent(i.baixar.id)}`;
@@ -4078,8 +4080,14 @@
         }
         const p = await enviar('/api/contabilidade/pacote', 'POST', { competencia: comp, pdf_base64: pdf });
         const salvo = await salvarBase64(p.base64, p.nome, 'Salvar o pacote da contabilidade', p.tipo);
-        if (salvo) window.showToast?.(`Pacote salvo: ${plural(p.arquivos, 'arquivo', 'arquivos')}, ${p.tamanho_rotulo}.`, 'success');
-        else window.showToast?.('O pacote foi gerado, mas não foi salvo: gere de novo para salvar.', 'info');
+        if (salvo) {
+          // Fase D: salvo o ZIP, os originais dos comprovantes que ficaram guardados saem do servidor.
+          let descartados = 0;
+          if (p.id) {
+            try { descartados = (await enviar(`/api/contabilidade/pacote/${encodeURIComponent(p.id)}/salvo`, 'POST', {})).originais_descartados || 0; } catch (_) { /* fica para o próximo pacote */ }
+          }
+          window.showToast?.(`Pacote salvo: ${plural(p.arquivos, 'arquivo', 'arquivos')}, ${p.tamanho_rotulo}.${descartados ? ` ${plural(descartados, 'original de comprovante saiu', 'originais de comprovante saíram')} do servidor.` : ''}`, 'success');
+        } else window.showToast?.('O pacote foi gerado, mas não foi salvo: gere de novo para salvar.', 'info');
         avisarAlteracao();
         await carregar();
         // Depois de reler (a leitura limpa a mensagem): o aviso do que faltou (sem PDF, sem o SQL).
@@ -5030,6 +5038,282 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ comprovantes do BB (fase D)
+
+  const TOM_SITUACAO_COMPROVANTE = { novo: 'badge-danger', ligado: 'badge-success', ignorado: 'badge-neutral' };
+  /* O corpo do POST tem limite de 30 MB (em base64): os arquivos vão em lotes de até 15 MB. */
+  const LOTE_COMPROVANTES_BYTES = 15 * 1024 * 1024;
+
+  /** Escolher o débito do extrato do comprovante (os que o backend mandou). null = desistiu. */
+  function escolherMovimento(comprovante, candidatos) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-2xl glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Ligar o comprovante a um lançamento do extrato'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', `${comprovante.favorecido_nome || 'Favorecido'} · ${formatarMoeda(comprovante.valor)} · ${formatarData(comprovante.data)}. Os débitos de até 10 dias, os de mesmo valor primeiro. O CPF/CNPJ do lançamento é completado pelo comprovante, se estiver vazio.`));
+      const lista = criar('div', 'ctb-dda-escolhas modal-scroll');
+      if (!candidatos.length) lista.appendChild(criar('p', 'text-sm text-gray-400', 'Nenhum débito livre no extrato perto desta data. Importe o extrato do mês e tente de novo.'));
+      candidatos.forEach((x, i) => {
+        const rotulo = criar('label', 'ctb-dda-escolha');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'ctbCompMovimento';
+        radio.value = String(x.movimento_id);
+        if (i === 0) radio.checked = true;
+        const texto = criar('span', 'ctb-dda-escolha__texto');
+        texto.append(
+          criar('strong', null, `${formatarData(x.data)} · ${formatarMoeda(Math.abs(Number(x.valor)))}`),
+          criar('span', 'ctb-sub', [x.descricao, x.mesmo_valor ? 'mesmo valor' : 'valor diferente', x.dias ? plural(x.dias, 'dia de diferença', 'dias de diferença') : 'mesmo dia', x.estado === 'conciliado' ? 'já conciliado' : null].filter(Boolean).join(' · '))
+        );
+        rotulo.append(radio, texto);
+        lista.appendChild(rotulo);
+      });
+      caixa.appendChild(lista);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-danger ctl-botao text-white', 'Cancelar');
+      const ok = criar('button', 'btn-success ctl-botao', 'Ligar');
+      voltar.type = 'button';
+      ok.type = 'button';
+      ok.disabled = !candidatos.length;
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => sair(lista.querySelector('input[name="ctbCompMovimento"]:checked')?.value || null));
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      (lista.querySelector('input') || voltar).focus();
+    });
+  }
+
+  /** Os comprovantes do BB: anexar o ZIP, ver o lançamento de cada um, ligar, ignorar, abrir o PDF refeito. */
+  function montarComprovantes() {
+    const corpo = el('ctbCompLista');
+    const compCampo = el('ctbCompCompetencia');
+    const visaoSel = el('ctbCompVisao');
+    const tipoSel = el('ctbCompTipo');
+    const busca = el('ctbCompBusca');
+    const seletor = el('ctbCompArquivo');
+    montarCompetencias(compCampo, contexto.competencia);
+    if (contexto.visao && [...visaoSel.options].some(o => o.value === contexto.visao)) visaoSel.value = contexto.visao;
+    let dados = null;
+    let leitura = 0;
+
+    const acao = (id, caminho, sucesso, corpoEnvio = {}) => async () => {
+      mostrarMensagem('ctbCompMensagem', '');
+      try {
+        const r = await enviar(`/api/contabilidade/comprovantes/${encodeURIComponent(id)}/${caminho}`, 'POST', corpoEnvio);
+        window.showToast?.(typeof sucesso === 'function' ? sucesso(r) : sucesso, 'success');
+        if (r?.aviso) mostrarMensagem('ctbCompMensagem', r.aviso, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r?.aviso) });
+      } catch (e) {
+        mostrarMensagem('ctbCompMensagem', textoDoErro(e, 'Isto pede a permissão "Registrar documento recebido".'));
+      }
+    };
+    const comMotivo = (id, caminho, { titulo, mensagem, confirmar, sucesso }) => async () => {
+      const motivo = await pedirTexto({ titulo, mensagem, confirmar });
+      if (!motivo) return;
+      await acao(id, caminho, sucesso, { motivo })();
+    };
+    const sucessoDaLigacao = r => [r.completou ? 'Comprovante ligado (o CPF/CNPJ do lançamento foi completado).' : 'Comprovante ligado ao lançamento.', r.conciliacao_resumo].filter(Boolean).join(' ');
+    const ligar = (id, movimentoId) => acao(id, 'ligar', sucessoDaLigacao, { movimento_id: movimentoId });
+
+    async function escolherELigar(l) {
+      mostrarMensagem('ctbCompMensagem', '');
+      try {
+        const det = await fetchApi(`/api/contabilidade/comprovantes/${encodeURIComponent(l.id)}`);
+        const movimentoId = await escolherMovimento(l, det.candidatos || []);
+        if (movimentoId) await ligar(l.id, movimentoId)();
+      } catch (e) {
+        mostrarMensagem('ctbCompMensagem', textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+      }
+    }
+
+    function acoesDaLinha(l) {
+      const botoes = [];
+      const sugerida = l.sugestoes?.[0];
+      if (l.pode.ligar && sugerida) {
+        botoes.push(botaoPequeno('Ligar à sugerida', 'btn-success', ligar(l.id, sugerida.movimento_id),
+          { perm: 'contabilidade.documento.registrar', titulo: `${formatarData(sugerida.data)} · ${sugerida.descricao || ''} · ${(sugerida.motivos || []).join(', ')}` }));
+      }
+      if (l.pode.ligar) botoes.push(botaoPequeno('Ligar…', 'btn-secondary', () => escolherELigar(l), { perm: 'contabilidade.documento.registrar', titulo: 'Escolher o débito do extrato deste comprovante' }));
+      if (l.pode.ignorar) {
+        botoes.push(botaoPequeno('Ignorar', 'btn-neutral', comMotivo(l.id, 'ignorar', {
+          titulo: 'Ignorar este comprovante?', mensagem: 'Ele sai do aviso e do pacote (repetido, de outra conta, de outra empresa…). Diga o motivo.', confirmar: 'Ignorar', sucesso: 'Comprovante ignorado.'
+        }), { perm: 'contabilidade.documento.registrar' }));
+      }
+      if (l.pode.desligar) {
+        botoes.push(botaoPequeno('Desligar', 'btn-neutral', comMotivo(l.id, 'desligar', {
+          titulo: 'Desligar o comprovante deste lançamento?', mensagem: 'Ele volta a ficar sem lançamento (o CPF/CNPJ completado no lançamento fica). Diga por quê.', confirmar: 'Desligar', sucesso: 'Comprovante desligado do lançamento.'
+        }), { perm: 'contabilidade.documento.registrar' }));
+      }
+      if (l.pode.restaurar) botoes.push(botaoPequeno('Restaurar', 'btn-neutral', acao(l.id, 'restaurar', 'O comprovante voltou a ficar sem lançamento.'), { perm: 'contabilidade.documento.registrar' }));
+      if (l.movimento) botoes.push(botaoPequeno('Dossiê', 'btn-secondary', () => abrirOutro('dossie', { tipo: 'movimento', id: l.movimento.id }), { titulo: 'O lançamento do extrato e tudo o que o prova' }));
+      if (l.pode.baixar) {
+        botoes.push(botaoPequeno('PDF', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/comprovantes/${encodeURIComponent(l.id)}/pdf`, { abrir: true }),
+          { titulo: l.confere ? 'Refeito dos dados, idêntico ao do BB (com o pé "Reproduzido pelo App-Gestão")' : 'O original do BB, guardado até o pacote' }));
+      }
+      return botoes;
+    }
+
+    function visivel(l) {
+      if (tipoSel.value && l.tipo !== tipoSel.value) return false;
+      const termo = normalizar(busca.value).trim();
+      return !termo || normalizar(`${l.favorecido_nome || ''} ${l.favorecido_documento || ''} ${l.pagador_nome || ''} ${formatarMoeda(l.valor)} ${l.autenticacao || ''} ${l.documento || ''} ${l.nome_arquivo || ''} ${l.movimento?.descricao || ''}`).includes(termo);
+    }
+
+    function pintarTotais() {
+      const c = dados?.contagem || {};
+      for (const card of overlay.querySelectorAll('#ctbCompTotais [data-total]')) card.querySelector('.ctb-total__valor').textContent = dados?.contagem ? String(c[card.dataset.total] ?? 0) : '—';
+      el('ctbCompValorSemPar').textContent = dados?.contagem ? (c.sem_par ? formatarMoeda(c.valor_sem_par) : 'Nada esperando') : '—';
+    }
+
+    function desenhar() {
+      pintarTotais();
+      const linhas = (dados?.linhas || []).filter(visivel);
+      if (!linhas.length) {
+        linhaVazia(corpo, 6, dados?.sql_pendente
+          ? 'Os comprovantes do BB ainda não estão ativados (falta o SQL da fase D).'
+          : (dados?.linhas?.length ? 'Nada com este filtro.' : 'Nenhum comprovante nesta competência. Anexe o ZIP com os comprovantes baixados do site do BB.'));
+        return;
+      }
+      corpo.replaceChildren(...linhas.map(l => {
+        const tr = criar('tr');
+        const origem = l.confere ? 'refeito idêntico ao do BB' : (l.original_guardado ? 'original guardado até o pacote' : 'original já enviado no pacote');
+        const tdData = celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap', l.conta || null);
+        if (l.autenticacao) tdData.title = `Autenticação ${l.autenticacao}`;
+        const favorecido = [l.favorecido_documento, l.documento ? `documento ${l.documento}` : null, l.segunda_via ? '2ª via' : null].filter(Boolean).join(' · ');
+        const situacao = [tag(l.situacao_rotulo, TOM_SITUACAO_COMPROVANTE[l.situacao] || 'badge-neutral')];
+        const sugerida = l.sugestoes?.[0];
+        if (l.situacao === 'novo' && sugerida) situacao.push(tag('Sugestão', 'badge-info', (sugerida.motivos || []).join(', ')));
+        const m = l.movimento;
+        const sub = [
+          m ? `${formatarData(m.data)} · ${m.descricao || 'lançamento'} · ${formatarMoeda(Math.abs(Number(m.valor)))}${m.estado === 'conciliado' ? ' · conciliado' : ''}${l.criterio_rotulo ? ` · ${l.criterio_rotulo}` : ''}` : null,
+          l.situacao === 'novo' && sugerida ? `Sugestão: ${formatarData(sugerida.data)} · ${sugerida.descricao || 'lançamento'}` : null,
+          l.situacao === 'novo' && !sugerida ? 'O extrato deste dia ainda não tem o débito (importe o extrato e use "Ligar sozinho")' : null,
+          l.motivo ? `motivo: ${l.motivo}` : null
+        ].filter(Boolean).join(' · ');
+        const tdSituacao = celula(situacao, 'px-4 py-3', sub || null);
+        for (const aviso of l.avisos || []) {
+          const a = criar('span', 'ctb-sub', aviso);
+          a.style.color = 'var(--color-primary-light)';
+          tdSituacao.appendChild(a);
+        }
+        const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+        acoes.append(...acoesDaLinha(l));
+        tr.append(
+          tdData,
+          celula(l.tipo_rotulo || '—', 'px-4 py-3', origem),
+          celula(l.favorecido_nome || '—', 'px-4 py-3', favorecido || null),
+          celula(formatarMoeda(l.valor), 'px-4 py-3 text-right ctb-num', Number(l.tarifa) > 0 ? `tarifa ${formatarMoeda(l.tarifa)}` : null),
+          tdSituacao,
+          celula(acoes, 'px-4 py-3 text-right')
+        );
+        return tr;
+      }));
+      try { window.Permissoes?.aplicarAcoesEColunas?.(corpo); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar({ manterMensagem = false } = {}) {
+      const minha = ++leitura;
+      mostrarMensagem('ctbCompAviso', '');
+      if (!manterMensagem) mostrarMensagem('ctbCompMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/comprovantes?competencia=${encodeURIComponent(compCampo.value || '')}&visao=${encodeURIComponent(visaoSel.value)}`);
+        if (minha !== leitura) return;
+        dados = r;
+        if (tipoSel.options.length <= 1 && r.tipos) for (const [valor, texto] of Object.entries(r.tipos)) tipoSel.appendChild(opcao(valor, texto));
+        const c = r.contagem || {};
+        if (r.sql_pendente) pintarEtiqueta(el('ctbCompContagem'), 'Falta o SQL', 'badge-warning');
+        else pintarEtiqueta(el('ctbCompContagem'), c.sem_par ? `${c.sem_par} sem lançamento` : (c.total ? 'Todos ligados' : 'Nenhum'), c.sem_par ? 'badge-warning' : 'badge-success');
+        el('ctbCompSubtitulo').textContent = r.sql_pendente
+          ? 'Os comprovantes de pagamento do banco, ligados ao extrato'
+          : `${rotuloCompetencia(r.competencia)} · ${plural(c.refeitos || 0, 'refeito idêntico', 'refeitos idênticos')} (sem guardar o arquivo)`;
+        if (r.sql_pendente) mostrarMensagem('ctbCompAviso', `Os comprovantes do BB ainda não estão ativados: rode ${r.sql_arquivo || 'sql/contabilidade_fase_d.sql'} no banco e reinicie a API.`, 'aviso');
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbCompAviso', textoDoErro(e, 'Ver os comprovantes pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    /** Os arquivos em lotes que cabem no corpo do POST; um arquivo grande demais vira erro. */
+    function lotes(arquivos) {
+      const saida = [];
+      let atual = [];
+      let soma = 0;
+      for (const a of arquivos) {
+        if (a.size > LOTE_COMPROVANTES_BYTES) throw new Error(`${a.name} passa de 15 MB: no site do BB, salve os comprovantes em mais de um ZIP.`);
+        if (soma + a.size > LOTE_COMPROVANTES_BYTES && atual.length) { saida.push(atual); atual = []; soma = 0; }
+        atual.push(a);
+        soma += a.size;
+      }
+      if (atual.length) saida.push(atual);
+      return saida;
+    }
+
+    acionar(el('ctbCompAnexar'), () => { seletor.value = ''; seletor.click(); });
+    seletor.addEventListener('change', async () => {
+      const escolhidos = [...(seletor.files || [])];
+      if (!escolhidos.length) return;
+      mostrarMensagem('ctbCompMensagem', '');
+      const botao = el('ctbCompAnexar');
+      botao.disabled = true;
+      try {
+        const resumos = [];
+        const falhas = [];
+        for (const lote of lotes(escolhidos)) {
+          window.showToast?.(`Lendo ${plural(lote.length, 'arquivo', 'arquivos')}…`, 'info');
+          const arquivos = [];
+          for (const a of lote) arquivos.push({ nome: a.name, base64: await lerArquivo(a) });
+          const r = await enviar('/api/contabilidade/comprovantes/importar', 'POST', { arquivos });
+          resumos.push(r.resumo);
+          falhas.push(...(r.falhas || []), ...(r.ignorados || []).map(x => `${x.nome}: ${x.motivo}`));
+        }
+        window.showToast?.(resumos.join(' | ') || 'Comprovantes anexados.', 'success');
+        if (falhas.length) mostrarMensagem('ctbCompMensagem', `Ficaram de fora: ${falhas.slice(0, 8).join(' · ')}${falhas.length > 8 ? ` e mais ${falhas.length - 8}` : ''}`, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(falhas.length) });
+      } catch (e) {
+        mostrarMensagem('ctbCompMensagem', textoDoErro(e, 'Anexar os comprovantes pede a permissão "Registrar documento recebido".'));
+      } finally {
+        botao.disabled = false;
+        seletor.value = '';
+      }
+    });
+    acionar(el('ctbCompConferir'), async () => {
+      mostrarMensagem('ctbCompMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/comprovantes/conferir', 'POST', {});
+        window.showToast?.(r.resumo, r.ligados ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbCompMensagem', `Não deu para ligar: ${r.falhas.join(' · ')}`, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbCompMensagem', textoDoErro(e, 'Ligar pede a permissão "Registrar documento recebido".'));
+      }
+    });
+    el('ctbCompConciliacao').addEventListener('click', () => abrirOutro('conciliacao', {}));
+    compCampo.addEventListener('change', () => carregar());
+    visaoSel.addEventListener('change', () => carregar());
+    tipoSel.addEventListener('change', desenhar);
+    busca.addEventListener('input', desenhar);
+    ouvirAlteracoes(() => carregar());
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
@@ -5040,6 +5324,7 @@
     integracao: { rotulo: 'Integrações', badge: 'badge-neutral', tipos: ['integracao_configurada', 'parametros_alterados'] },
     pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
     dda: { rotulo: 'Boletos do DDA', badge: 'badge-info', tipos: ['dda_vinculado', 'dda_desvinculado', 'dda_conta_lancada', 'dda_ignorado', 'dda_contestado', 'dda_restaurado'] },
+    comprovantes: { rotulo: 'Comprovantes do BB', badge: 'badge-info', tipos: ['comprovantes_importados', 'comprovante_ligado', 'comprovante_desligado', 'comprovante_ignorado', 'comprovante_restaurado', 'comprovantes_descartados'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -5201,7 +5486,8 @@
     ctbMensagens: montarMensagens,
     ctbConfiguracao: montarConfiguracao,
     ctbEntradaDfe: montarEntradaDfe,
-    ctbDda: montarDda
+    ctbDda: montarDda,
+    ctbComprovantes: montarComprovantes
   };
 
   let montagem;

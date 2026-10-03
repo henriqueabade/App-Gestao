@@ -554,6 +554,16 @@ async function automaticaDosMeses(api, { competencias = [], contaId = null, usua
   const total = { conciliados: 0, contas_pagas: 0, contas_lancadas: 0, boletos_lancados: 0, falhas: [] };
   const meses = [...new Set(c.lista(competencias).filter(x => c.competenciaValida(x)).map(String))].sort();
   if (!meses.length) return total;
+  // Fase D: o extrato que acabou de chegar pode ser o par dos comprovantes do
+  // BB anexados antes — eles se ligam primeiro (a ligação completa o CPF/CNPJ
+  // do lançamento, o que ajuda a conciliação logo abaixo).
+  try {
+    const cps = await require('../comprovantes/comprovantes').ligarSozinhos(api, { usuarioId });
+    if (cps.ligados) total.comprovantes_ligados = cps.ligados;
+    total.falhas.push(...cps.falhas);
+  } catch (e) {
+    if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
+  }
   try {
     await lerVinculos(api);
     const { contas } = await extrato.listarContas(api);
@@ -588,9 +598,10 @@ function frasesDasObrigacoes(r) {
 
 /** A frase para o resumo de quem chamou ("3 conciliados sozinhos (1 conta paga)"), ou null. Pura. */
 function resumoDaAutomatica(r) {
-  if (!r?.conciliados) return null;
+  const comprovantes = r?.comprovantes_ligados ? c.plural(r.comprovantes_ligados, 'comprovante do BB ligado ao extrato', 'comprovantes do BB ligados ao extrato') : null;
+  if (!r?.conciliados) return comprovantes;
   const extra = frasesDasObrigacoes(r);
-  return `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`;
+  return [comprovantes, `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`].filter(Boolean).join(' · ');
 }
 
 /** Os meses que um conjunto de datas toca, com o seguinte (a nota de um mês é paga no outro). Pura. */

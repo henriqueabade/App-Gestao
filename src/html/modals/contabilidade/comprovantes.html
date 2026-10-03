@@ -1,0 +1,95 @@
+<!--
+  Comprovantes do BB (fase D, 02/10/2026): o ZIP que o site do banco gera (ou
+  os PDFs soltos). O app lê cada comprovante, guarda só os DADOS e refaz o PDF
+  idêntico ao do banco quando precisa (pacote, Documentos da competência); o
+  arquivo só fica guardado quando a cópia não sai idêntica — e sai do servidor
+  quando o pacote do mês é salvo. Cada comprovante se liga ao débito do extrato
+  (sozinho pelo DOCUMENTO, controle, ID Pix ou CPF/CNPJ; ou à mão).
+  Dados: GET /api/contabilidade/comprovantes (e as ações em /comprovantes/:id/…).
+  Script: src/js/modals/contabilidade-modais.js (montarComprovantes).
+-->
+<div id="ctbComprovantesOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbCompTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbCompTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-receipt mr-2" aria-hidden="true"></i>Comprovantes do BB</h2>
+        <p id="ctbCompSubtitulo" class="text-xs text-gray-300 truncate">Os comprovantes de pagamento do banco, ligados ao extrato</p>
+      </div>
+      <span id="ctbCompContagem" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbCompAviso" class="hidden text-sm" role="alert"></div>
+        <p class="text-xs text-gray-400">Anexe o ZIP com os comprovantes baixados do site do BB, ou os PDFs soltos. O app guarda só os dados e refaz cada comprovante idêntico ao do banco; quando a cópia não sai idêntica, o original fica guardado só até o pacote do mês ser salvo.</p>
+
+        <div class="grid grid-cols-1 gap-6 ctb-filtros-comprovantes">
+          <div>
+            <label for="ctbCompCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbCompCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbCompCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbCompCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbCompCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="ctbCompVisao" class="ctl-rotulo text-gray-300">Mostrar</label>
+            <select id="ctbCompVisao" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="todos">Todos</option>
+              <option value="sem_par">Sem lançamento do extrato</option>
+              <option value="ligados">Ligados ao extrato</option>
+              <option value="ignorados">Ignorados</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbCompTipo" class="ctl-rotulo text-gray-300">Tipo</label>
+            <select id="ctbCompTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="ctbCompBusca" class="ctl-rotulo text-gray-300">Buscar</label>
+            <input id="ctbCompBusca" type="search" placeholder="Favorecido, CPF/CNPJ, valor ou autenticação"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+
+        <div class="ctb-totais" id="ctbCompTotais">
+          <div class="ctb-total" data-total="total"><span class="ctb-total__rotulo">Comprovantes</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Da competência</span></div>
+          <div class="ctb-total" data-total="ligados"><span class="ctb-total__rotulo">Ligados</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Ao débito do extrato</span></div>
+          <div class="ctb-total" data-total="sem_par" data-tom="bordo"><span class="ctb-total__rotulo">Sem lançamento</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota" id="ctbCompValorSemPar">—</span></div>
+          <div class="ctb-total" data-total="originais_guardados"><span class="ctb-total__rotulo">Originais guardados</span><strong class="ctb-total__valor">—</strong><span class="ctb-total__nota">Até o pacote ser salvo</span></div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Data</th>
+                <th class="px-4 py-3 text-left text-xs">Tipo</th>
+                <th class="px-4 py-3 text-left text-xs">Favorecido</th>
+                <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                <th class="px-4 py-3 text-left text-xs">Lançamento do extrato</th>
+                <th class="px-4 py-3 text-right text-xs">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="ctbCompLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbCompMensagem" class="hidden text-sm" role="alert"></div>
+        <input id="ctbCompArquivo" type="file" accept=".zip,.pdf" multiple class="hidden" aria-label="ZIP ou PDFs dos comprovantes" />
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbCompConciliacao" type="button" class="btn-neutral ctl-botao text-white">Conciliação</button>
+      <button id="ctbCompConferir" type="button" data-perm="contabilidade.documento.registrar" class="btn-secondary ctl-botao text-white">Ligar sozinho</button>
+      <button id="ctbCompAnexar" type="button" data-perm="contabilidade.documento.registrar" class="btn-primary ctl-botao text-white min-w-[180px]">Anexar ZIP ou PDFs</button>
+    </footer>
+  </div>
+</div>

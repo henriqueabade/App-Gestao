@@ -96,6 +96,18 @@
  *   POST /dda/:id/ignorar|contestar   { motivo }                       (contabilidade.pagar.lancar)
  *   POST /dda/:id/restaurar                                            (contabilidade.pagar.lancar)
  *
+ * Fase D (02/10/2026 — os comprovantes do BB: o ZIP do site; só os dados, o PDF é refeito):
+ *
+ *   GET  /comprovantes?competencia=&visao=   os comprovantes, o lançamento de cada um, as sugestões e a contagem
+ *   GET  /comprovantes/:id                   o comprovante (com o texto) e os lançamentos para ligar à mão
+ *   GET  /comprovantes/:id/pdf               { nome, tipo, base64 } — refeito dos dados (com o pé) ou o original guardado
+ *   POST /comprovantes/importar              { arquivos: [{ nome, base64 }] } — o ZIP ou os PDFs   (contabilidade.documento.registrar)
+ *   POST /comprovantes/conferir              liga sozinho os que agora têm par (o extrato chegou depois) (contabilidade.documento.registrar)
+ *   POST /comprovantes/:id/ligar             { movimento_id } — e a conciliação roda no mês          (contabilidade.documento.registrar)
+ *   POST /comprovantes/:id/desligar|ignorar  { motivo }                                             (contabilidade.documento.registrar)
+ *   POST /comprovantes/:id/restaurar                                                                (contabilidade.documento.registrar)
+ *   POST /pacote/:id/salvo                   o ZIP foi salvo: os originais guardados saem do servidor (contabilidade.pacote.gerar)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -126,6 +138,7 @@ const pacote = require('./contabilidade/pacote/pacote');
 const citaveis = require('./contabilidade/citaveis');
 const dda = require('./contabilidade/dda/dda');
 const ddaEspelho = require('./contabilidade/dda/espelho');
+const comprovantes = require('./contabilidade/comprovantes/comprovantes');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -452,6 +465,42 @@ router.post('/pacote', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pa
 
 router.post('/pacote/:id/enviado', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote/:id/enviado', ({ api, req, usuarioId }) =>
   pacote.marcarEnviado(api, req.params.id, { entrada: req.body || {}, usuarioId })));
+
+// Fase D: o ZIP foi salvo — os originais de comprovante guardados saem do servidor (ficam os dados e o SHA-256).
+router.post('/pacote/:id/salvo', exigirPermissao(PACOTE), rota('POST /api/contabilidade/pacote/:id/salvo', ({ api, req, usuarioId }) =>
+  pacote.marcarSalvo(api, req.params.id, { usuarioId })));
+
+// ------------------------------------------------------------ comprovantes do BB (fase D)
+
+router.get('/comprovantes', exigirPermissao(VER), rota('GET /api/contabilidade/comprovantes', ({ api, req }) =>
+  comprovantes.listar(api, { competencia: req.query?.competencia || null, visao: req.query?.visao || 'todos' })));
+
+router.post('/comprovantes/importar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/importar', ({ api, req, hoje, usuarioId }) =>
+  comprovantes.importar(api, { arquivos: req.body?.arquivos || [], usuarioId, hoje })));
+
+router.get('/comprovantes/:id', exigirPermissao(VER), rota('GET /api/contabilidade/comprovantes/:id', ({ api, req }) =>
+  comprovantes.detalhe(api, req.params.id)));
+
+router.get('/comprovantes/:id/pdf', exigirPermissao(VER), rota('GET /api/contabilidade/comprovantes/:id/pdf', ({ api, req }) =>
+  comprovantes.pdfDoComprovante(api, req.params.id, { comRodape: true })));
+
+router.post('/comprovantes/conferir', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/conferir', ({ api, hoje, usuarioId }) =>
+  comprovantes.conferir(api, { usuarioId, hoje })));
+
+// Ligado à mão: o CPF/CNPJ do lançamento pode ter sido completado — a conciliação roda no mês dele.
+router.post('/comprovantes/:id/ligar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/:id/ligar', async ({ api, req, hoje, usuarioId }) => {
+  const r = await comprovantes.ligar(api, req.params.id, { movimentoId: req.body?.movimento_id, usuarioId });
+  return comConciliacao(api, r, { competencias: [r.competencia], usuarioId, hoje });
+}));
+
+router.post('/comprovantes/:id/desligar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/:id/desligar', ({ api, req, usuarioId }) =>
+  comprovantes.desligar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/comprovantes/:id/ignorar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/:id/ignorar', ({ api, req, usuarioId }) =>
+  comprovantes.ignorar(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
+
+router.post('/comprovantes/:id/restaurar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/:id/restaurar', ({ api, req, usuarioId }) =>
+  comprovantes.restaurar(api, req.params.id, { usuarioId })));
 
 // ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
 

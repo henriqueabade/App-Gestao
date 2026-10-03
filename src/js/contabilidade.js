@@ -223,7 +223,9 @@ const CTB_ACOES = {
     'configuracao': { rotulo: 'Configurações da contabilidade', abrir: m => ctbAbrirModal('configuracao', m, {}) },
     'entrada-dfe': { rotulo: 'NF-e e NFS-e encontradas', abrir: m => ctbAbrirModal('entrada-dfe', m, {}) },
     // Fase H: os boletos contra a empresa (DDA do BB). A pendência traz a visão (sem conta / ligados).
-    'dda': { rotulo: 'Boletos do DDA', abrir: (m, extra) => ctbAbrirModal('dda', m, { visao: extra?.visao || null }) }
+    'dda': { rotulo: 'Boletos do DDA', abrir: (m, extra) => ctbAbrirModal('dda', m, { visao: extra?.visao || null }) },
+    // Fase D: os comprovantes do BB (o ZIP ou os PDFs) — lidos, refeitos dos dados e ligados ao extrato.
+    'comprovantes': { rotulo: 'Comprovantes do BB', abrir: (m, extra) => ctbAbrirModal('comprovantes', m, { visao: extra?.visao || null }) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -259,7 +261,9 @@ const CTB_MODAIS = {
     'configuracao': { html: 'modals/contabilidade/configuracao.html', overlay: 'ctbConfiguracao' },
     'entrada-dfe': { html: 'modals/contabilidade/entrada-dfe.html', overlay: 'ctbEntradaDfe' },
     // Fase H: os boletos do DDA do BB.
-    'dda': { html: 'modals/contabilidade/dda.html', overlay: 'ctbDda' }
+    'dda': { html: 'modals/contabilidade/dda.html', overlay: 'ctbDda' },
+    // Fase D: os comprovantes do BB.
+    'comprovantes': { html: 'modals/contabilidade/comprovantes.html', overlay: 'ctbComprovantes' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

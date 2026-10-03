@@ -52,7 +52,14 @@ const TIPOS = {
   dda_conta_lancada: 'Conta lançada do boleto do DDA',
   dda_ignorado: 'Boleto do DDA ignorado',
   dda_contestado: 'Boleto do DDA contestado',
-  dda_restaurado: 'Boleto do DDA restaurado'
+  dda_restaurado: 'Boleto do DDA restaurado',
+  // Fase D (02/10/2026): os comprovantes do BB (o ZIP do site).
+  comprovantes_importados: 'Comprovantes do BB anexados',
+  comprovante_ligado: 'Comprovante ligado ao extrato',
+  comprovante_desligado: 'Comprovante desligado do extrato',
+  comprovante_ignorado: 'Comprovante ignorado',
+  comprovante_restaurado: 'Comprovante restaurado',
+  comprovantes_descartados: 'Originais de comprovante descartados'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

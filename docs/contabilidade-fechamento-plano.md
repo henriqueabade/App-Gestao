@@ -1711,3 +1711,85 @@ a B2 virou a pendência 48 e a H seguiu. Roteiro: Parte K. SQL:
 - **Para depois:**
   - soma de vários boletos num débito (Fase D, pendência 54);
   - o espelho e o boleto do fornecedor na pasta de cada pagamento (Fase I).
+
+## AF. Fase D entregue (02/10/2026) — os comprovantes do BB (o ZIP)
+
+Ordem do dono: "Deixe as perguntas pendentes, siga para a próxima fase".
+Regra dele: "anexar no programa, ele ler e já organizar, sem armazenar
+arquivos no banco/servidor, só dados, de modo que consigamos recriar de forma
+oficial os comprovantes para fazer o envio do pacote". Roteiro: Parte L. SQL:
+`sql/contabilidade_fase_d.sql` (depois do da Fase H; reiniciar a API).
+
+- **O formato do BB** (visto no ZIP real de setembro, 35 comprovantes; só a
+  estrutura, sem guardar dados):
+  - jsPDF 1.5.2 sem compressão, um bloco de texto;
+  - Courier 8, entrelinha 9,20, começo em 28,35 × 813,54, linhas com "T* (…) Tj",
+    WinAnsi;
+  - tipos: boleto 18, Pix 9, convênio/guia 6, crédito em conta 2.
+- **Reproduzir em vez de guardar:**
+  - o app escreve um PDF mínimo e determinístico com o mesmo layout e as mesmas
+    linhas (`comprovantes/pdf.js`);
+  - "confere" = reler a cópia dá as mesmas linhas e o mesmo layout;
+  - conferido, nenhum arquivo é guardado; senão o original vai para
+    `contabil_arquivos` (competência nula) até o pacote ser **salvo**, e as
+    partes são apagadas (ficam os dados e o SHA-256);
+  - os 35 reais conferiram.
+- **Banco:** `contabil_comprovantes`:
+  - sha256 UNIQUE, nome, tamanho, formato, `layout` e `linhas` (jsonb),
+    `confere`, `diferenca`;
+  - `arquivo_id` e `original_descartado_em`;
+  - os campos (tipo, data, valor, tarifa, autenticação, documento, controle,
+    favorecido/pagador e documentos, código, e2e, agência, conta, 2ª via,
+    competência);
+  - `conta_id`, `movimento_id` (índice único parcial), `dda_boleto_id`;
+  - `situacao` (novo, ligado, ignorado), critério, motivo, quem e quando.
+- **Leitura** (`comprovantes/leitor.js`, puro): ZIP (store/deflate, nomes
+  UTF-8, até 500 arquivos e 60 MB), PDF (objetos, FlateDecode, os operadores
+  de texto) e `formatoSimples` (o que o app sabe refazer).
+  `comprovantes/campos.js` tira os campos do texto.
+- **Casamento** (`casar`, puro): débito de mesmo valor, até 5 dias, mesma
+  conta.
+  - Chave forte: DOCUMENTO = documento do extrato (sem zeros à esquerda),
+    controle, ID do Pix no identificador, CPF/CNPJ completo = contrapartida.
+  - Automático: chave forte única, ou candidato único do mesmo dia (ou com o
+    nome na descrição a até 3 dias), com o par único dos dois lados.
+  - Ligar completa a contrapartida vazia (mês aberto) e roda
+    `automaticaDosMeses`.
+- **Extrato depois do ZIP:** `automaticaDosMeses` chama `ligarSozinhos`
+  antes de conciliar (OFX, API do BB, notas). O resumo ganha "N comprovantes
+  do BB ligados ao extrato". Rota `POST /comprovantes/conferir` = "Ligar
+  sozinho".
+- **Painel:**
+  - C3 também vale pelo débito conciliado que tem comprovante ligado
+    (`pagamentosComComprovante`); o filtro abre a tela dos comprovantes;
+  - aviso `comprovantes_sem_lancamento`.
+- **Documentos e pacote:**
+  - origem nova "Reproduzido (idêntico ao original do BB)", total
+    `reproduzido`;
+  - o pacote lê o PDF refeito (com o pé "Reproduzido…") e o LEIA-ME explica;
+  - `POST /pacote/:id/salvo` descarta os originais guardados do mês;
+  - o dossiê do lançamento ganha a seção "Comprovante".
+- **Rotas** `/comprovantes`: listar, importar (corpo grande), conferir,
+  detalhe, pdf, ligar (com a conciliação do mês), desligar, ignorar,
+  restaurar.
+- **Tela:**
+  - modal `comprovantes`: anexar em lotes de 15 MB, totais, filtros, ligar,
+    ignorar, PDF, dossiê;
+  - botão nas Ações;
+  - Documentos com o total "Reproduzidos";
+  - o pacote avisa o "salvo";
+  - eventos `comprovante*` na atividade.
+- **Testes:**
+  - `comprovantes/comprovantes.test.js`: 5, puros;
+  - `contabilidadeComprovantes.test.js`: 3 — ponta a ponta, o extrato que
+    chega depois e "Ligar sozinho", permissões e sem SQL;
+  - `contabilidadePacote.test.js` com a Fase D;
+  - tela: modal novo no padrão, rotas, lotes, pacote salvo;
+  - as 27 baterias da Contabilidade passam;
+  - DEV contra o Postgres descartável com o ZIP real (`dev_e2e_comprovantes.js`):
+    35 novos, 35 refeitos, 0 arquivos, jsonb ok, reimportar = 35 repetidos;
+    o banco descartável foi apagado.
+- **Para depois:**
+  - vários comprovantes num débito só (pendência 54);
+  - o comprovante na pasta de cada pagamento (Fase I);
+  - o pagador que não é a empresa vira reembolso (Fase F).
