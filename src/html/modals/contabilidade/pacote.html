@@ -6,6 +6,9 @@
   no LEIA-ME), os pacotes já gerados (com o SHA-256 de cada um) e o registro
   do envio (para quem, como). O PDF do relatório é impresso aqui mesmo pelo
   Electron e vai junto; o ZIP não fica no app.
+  Fase I (02/10/2026): a pasta de cada pagamento do mês (o dossiê, o
+  comprovante, o espelho do DDA, o boleto) e onde está a nota de cada um; os
+  dossiês, o DANFE, os espelhos e o extrato em PDF são gerados na hora.
   "Gerar pacote" e "Marcar como enviado" pedem "Gerar relatório e pacote"
   (contabilidade.pacote.gerar).
   Script: src/js/modals/contabilidade-modais.js (montarPacote).
@@ -60,6 +63,27 @@
             </table>
           </div>
           <ul id="ctbPacoteFaltando" class="hidden ctb-lista-modal text-gray-300"></ul>
+        </div>
+
+        <!-- Fase I: a pasta de cada pagamento (dossiê, comprovante, boleto) e onde está a nota. -->
+        <div id="ctbPacotePagamentosBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Pagamentos do mês</h3>
+            <span id="ctbPacotePagamentosNota" class="text-xs text-gray-400">Uma pasta por pagamento em 06-Pagamentos</span>
+          </div>
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Pagamento (pasta)</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Vai na pasta</th>
+                  <th class="px-4 py-3 text-left text-xs">A nota</th>
+                </tr>
+              </thead>
+              <tbody id="ctbPacotePagamentos"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="ctb-secao-modal">

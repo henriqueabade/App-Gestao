@@ -60,7 +60,28 @@ test('pastas: cada item dos Documentos da competência na sua pasta; o OFX vai p
     { titulo: 'NF-e 1/99', detalhe: 'Madeiras Silva', motivo: 'Sem o XML' },
     { titulo: 'NF-e de fora 1/5', detalhe: null, motivo: 'Sem o XML (informada só pela chave)' }
   ]);
-  assert.deepEqual(Object.values(p.PASTAS).map(x => x.pasta), ['01-Relatorio', '02-Extrato', '03-NF-e-de-saida', '04-Devolucoes', '05-Recebidos', '06-Comprovantes', '07-Outros']);
+  // Fase I: 06 vira a pasta dos pagamentos (uma por pagamento) e entram os boletos emitidos.
+  assert.deepEqual(Object.values(p.PASTAS).map(x => x.pasta), ['01-Relatorio', '02-Extrato', '03-NF-e-de-saida', '04-Devolucoes', '05-Recebidos', '06-Pagamentos', '07-Boletos-emitidos', '08-Outros']);
+});
+
+test('fase I: o DANFE só ao lado do XML de NF-e; o que vai na pasta do pagamento sai das gerais; o nome do anexo encurtado com a extensão', () => {
+  assert.equal(p.temDanfe(item('saida', { baixar: { tipo: 'saida', id: 5 } })), true);
+  assert.equal(p.temDanfe(item('saida', { baixar: { tipo: 'externa', id: 1 } })), true);
+  assert.equal(p.temDanfe(item('devolucao', { baixar: { tipo: 'devolucao', id: 3 } })), true);
+  assert.equal(p.temDanfe(item('recebidos', { categoria: 'XML de NF-e' })), true);
+  assert.equal(p.temDanfe(item('recebidos', { categoria: 'NFS-e' })), false);
+  assert.equal(p.temDanfe(item('saida', { baixar: null, falta: true })), false);
+  const usados = { comprovantes: new Set(['4']), arquivos: new Set(['9', '21']) };
+  assert.equal(p.vaiNaPastaDoPagamento({ chave: 'comprovante:4', grupo: 'pagamentos', baixar: { tipo: 'arquivo', id: 30 } }, usados), true, 'o original guardado do comprovante, pela chave');
+  assert.equal(p.vaiNaPastaDoPagamento({ chave: 'comprovante:4', grupo: 'pagamentos', baixar: null, falta: true }, usados), true, 'a falta vai pela pasta');
+  assert.equal(p.vaiNaPastaDoPagamento({ chave: 'comprovante:5', grupo: 'pagamentos', baixar: { tipo: 'comprovante', id: 5 } }, usados), false);
+  assert.equal(p.vaiNaPastaDoPagamento({ chave: 'arquivo:9', grupo: 'outros', baixar: { tipo: 'arquivo', id: 9 } }, usados), true);
+  assert.equal(p.vaiNaPastaDoPagamento({ chave: 'arquivo:21:4', grupo: 'recebidos', baixar: { tipo: 'arquivo', id: 21 } }, usados), false, 'a nota fica no mês fiscal');
+  assert.equal(p.encurtar('boleto.pdf'), 'boleto.pdf');
+  const longo = p.encurtar(`${'Boleto do fornecedor muito comprido '.repeat(5)}.pdf`);
+  assert.ok(longo.length <= 80 && longo.endsWith('.pdf'), longo);
+  const leia = p.leiaMe({ empresa: null, rotulo: 'agosto/2026', geradoEm: '2026-09-29T11:30:00-03:00', pagamentos: 3, semImpressora: true, naoGerados: [{ titulo: 'DANFE — NF-e 2/10', motivo: 'XML sem infNFe.' }] });
+  for (const trecho of ['Pagamentos do mês: 3 pastas em 06-Pagamentos', 'vieram em HTML', 'Não deu para gerar (1):', '  - DANFE — NF-e 2/10: XML sem infNFe.', 'Com a origem "Interno"']) assert.ok(leia.includes(trecho), trecho);
 });
 
 test('nomes: seguros para o Windows e sem repetir na mesma pasta; o índice em CSV com o SHA-256; o LEIA-ME', () => {

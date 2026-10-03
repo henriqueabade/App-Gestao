@@ -155,4 +155,20 @@ function html(rel) {
     + '</body></html>';
 }
 
-module.exports = { html, esc };
+/**
+ * Fase I (02/10/2026): o extrato do mês de uma conta em PDF, para a pasta
+ * 02-Extrato do pacote — a mesma seção do livro-caixa do relatório, numa
+ * página própria e marcada como gerada (o OFX original vai ao lado).
+ */
+function htmlDoLivro(rel, livro) {
+  const empresa = [rel.empresa?.razao_social || rel.empresa?.nome, rel.empresa?.cnpj ? `CNPJ ${rel.empresa.cnpj}` : null].filter(Boolean).join(' · ');
+  const titulo = `Extrato do mês — ${livro.conta} — ${rel.rotulo}`;
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS}</style></head><body>`
+    + `<header class="topo"><div><h1>${esc(titulo)}</h1><p>${esc(empresa)}</p></div><div class="selo selo--previa">GERADO PELO APP</div></header>`
+    + '<p class="nota">Feito pelo App-Gestão a partir dos lançamentos importados do banco (OFX e API do BB). Não é o extrato oficial: o OFX original está nesta mesma pasta.</p>'
+    + secaoLivro(livro).replace('<section class="quebra">', '<section>')
+    + `<p class="rodape">Documento interno gerado pelo App-Gestão em ${esc(instanteImpresso(rel.gerado_em))}.</p>`
+    + '</body></html>';
+}
+
+module.exports = { html, htmlDoLivro, esc };

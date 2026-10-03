@@ -400,6 +400,23 @@ test('fase H (02/10/2026): os boletos do DDA — a tela abre, cada ação vai à
   assert.ok(html.includes('Estar no DDA não prova que a dívida é devida'));
 });
 
+test('fase I (02/10/2026): o pacote por pagamento — a seção das pastas no modal, as situações da nota iguais às do backend e a impressora do Electron registrada para o backend', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  const pac = ler('html', 'modals', 'contabilidade', 'pacote.html');
+  assert.ok(pac.includes('id="ctbPacotePagamentosBloco" class="hidden ctb-secao-modal"') && pac.includes('<tbody id="ctbPacotePagamentos"></tbody>'));
+  for (const th of ['Pagamento (pasta)', 'Valor', 'Vai na pasta', 'A nota']) assert.ok(pac.includes(`>${th}</th>`), th);
+  assert.ok(MODAIS.includes('function pintarPagamentos(d)') && MODAIS.includes('pintarPagamentos(d);'));
+  // As situações de "onde está a nota" (backend/contabilidade/pacote/pagamentos.js) têm rótulo e cor na tela.
+  const PAG = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'pacote', 'pagamentos.js'), 'utf8');
+  const situacoes = [...new Set([...PAG.matchAll(/situacao: '([a-z_]+)'/g)].map(m => m[1]))].sort();
+  assert.deepEqual(situacoes, ['enviada', 'gerada', 'neste', 'outro_mes', 'sem_arquivo']);
+  for (const s of situacoes) assert.ok(new RegExp(`ROTULO_NOTA_PACOTE = \\{[^}]*\\b${s}:`).test(MODAIS) && new RegExp(`TOM_NOTA_PACOTE = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
+  assert.ok(MODAIS.includes('pode levar um minuto'), 'avisa que os PDFs são feitos na hora');
+  // O main.js empresta a impressão de PDF (a mesma do DANFE) ao backend do pacote.
+  const MAIN = fs.readFileSync(path.join(RAIZ, '..', 'main.js'), 'utf8');
+  assert.match(MAIN, /require\('\.\/backend\/impressora'\)\.registrar\(async \(\) => \{[\s\S]{0,400}imprimirHtmlEmPdf\(janela, arquivoTemp, html/);
+});
+
 test('fase D (02/10/2026): os comprovantes do BB — anexar o ZIP em lotes, ligar ao extrato, abrir o PDF refeito; o pacote salvo descarta os originais', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   assert.match(TELA, /'comprovantes': \{[^}]*abrir:/);

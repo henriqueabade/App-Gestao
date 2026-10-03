@@ -186,4 +186,4 @@ async function baixarXml(api, { tipo, id }) {
   return { nome, tipo: 'application/xml', base64: Buffer.from(String(xml), 'utf8').toString('base64') };
 }
 
-module.exports = { GRUPOS, montar, carregar, baixarXml };
+module.exports = { GRUPOS, ORIGENS_EXTRA, montar, carregar, baixarXml };

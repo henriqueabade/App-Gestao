@@ -3975,6 +3975,10 @@
     return nome;
   }
 
+  // Fase I: onde está a nota de cada pagamento (backend/contabilidade/pacote/pagamentos.js, ondeEstaANota).
+  const ROTULO_NOTA_PACOTE = { neste: 'neste pacote', enviada: 'já enviada', gerada: 'em pacote não enviado', outro_mes: 'de outro mês', sem_arquivo: 'sem o arquivo' };
+  const TOM_NOTA_PACOTE = { neste: 'badge-success', enviada: 'badge-info', gerada: 'badge-warning', outro_mes: 'badge-warning', sem_arquivo: 'badge-danger' };
+
   function montarPacote() {
     const compCampo = el('ctbPacoteCompetencia');
     montarCompetencias(compCampo, contexto.competencia);
@@ -3983,6 +3987,39 @@
     let primeira = true;
     // O pacote que o "Marcar como enviado" marca: o mais novo que ainda não foi.
     const alvoDoEnvio = () => (dados?.pacotes || []).find(p => !p.enviado_em) || null;
+
+    /** Fase I: a pasta de cada pagamento — o que vai nela, onde está a nota e o que falta. */
+    function pintarPagamentos(d) {
+      const lista = d?.pagamentos || [];
+      el('ctbPacotePagamentosBloco').classList.toggle('hidden', !lista.length && !d?.pagamentos_erro);
+      const completos = lista.filter(p => !p.faltas.length).length;
+      el('ctbPacotePagamentosNota').textContent = d?.pagamentos_erro
+        ? `As pastas não puderam ser montadas: ${d.pagamentos_erro}`
+        : `${plural(lista.length, 'pasta', 'pastas')} em 06-Pagamentos · ${plural(completos, 'completa', 'completas')}`;
+      const corpo = el('ctbPacotePagamentos');
+      if (!lista.length) { linhaVazia(corpo, 4, 'Nenhum pagamento no mês.'); return; }
+      corpo.replaceChildren(...lista.map(p => {
+        const tr = criar('tr');
+        const vai = criar('div', 'ctb-pacote-itens');
+        vai.append(...p.itens.map(i => tag(i, 'badge-success')), ...p.faltas.map(f => tag(f, 'badge-danger')));
+        const notas = p.notas.length
+          ? p.notas.map(n => {
+            const caixa = criar('div', 'ctb-pacote-nota');
+            caixa.append(tag(ROTULO_NOTA_PACOTE[n.situacao] || n.situacao, TOM_NOTA_PACOTE[n.situacao] || 'badge-neutral'), criar('span', 'ctb-sub', `${n.rotulo} — ${n.texto}`));
+            return caixa;
+          })
+          : 'Sem nota ligada';
+        const pagamento = celula(p.rotulo || p.tipo_rotulo, 'px-4 py-3', [p.tipo_rotulo, p.nome].filter(Boolean).join(' · ') || null);
+        pagamento.appendChild(criar('span', 'ctb-sub ctb-pacote-pasta', p.pasta));
+        tr.append(
+          pagamento,
+          celula(formatarMoeda(p.valor), 'px-4 py-3 text-right ctb-num', formatarData(p.data)),
+          celula(vai, 'px-4 py-3'),
+          celula(notas, 'px-4 py-3')
+        );
+        return tr;
+      }));
+    }
 
     function pintar() {
       const d = dados;
@@ -3993,9 +4030,11 @@
       let nota = '';
       if (d) {
         nota = d.pode
-          ? `Pronto para gerar ${d.nome}.zip: o relatório${d.versao ? ` da versão ${d.versao}` : ''} e os originais do mês. O que faltar vai listado no LEIA-ME.`
+          ? `Pronto para gerar ${d.nome}.zip: o relatório${d.versao ? ` da versão ${d.versao}` : ''}, os originais do mês e uma pasta por pagamento. O que faltar vai listado no LEIA-ME.`
           : 'O pacote só sai com a competência fechada e sem pendência documental.';
         if (!d.sql_pacotes) nota += ' Falta rodar sql/contabilidade_pacote.sql: o pacote sai, mas não fica registrado.';
+        // Fase I: dossiês, DANFE, espelhos e o extrato em PDF são feitos na hora (pelo app; fora dele, em HTML).
+        if (d.impressora === false) nota += ' Fora do aplicativo, os documentos gerados na hora vão em HTML.';
       }
       el('ctbPacoteNota').textContent = nota;
       el('ctbPacoteBloqueiosBloco').classList.toggle('hidden', !d || d.pode);
@@ -4013,6 +4052,8 @@
           return tr;
         }));
       }
+      pintarPagamentos(d);
+
       const faltando = d?.faltando || [];
       el('ctbPacoteFaltando').classList.toggle('hidden', !faltando.length);
       el('ctbPacoteFaltando').replaceChildren(...faltando.map(f => itemDaLista(`Falta: ${f.titulo}${f.detalhe ? ` — ${f.detalhe}` : ''} (${f.motivo})`, 'fa-exclamation-triangle', 'var(--color-primary-light)')));
@@ -4070,6 +4111,8 @@
       const comp = compCampo.value || '';
       mostrarMensagem('ctbPacoteMensagem', '');
       try {
+        // Fase I: os dossiês, o DANFE, os espelhos e o extrato em PDF são feitos na hora.
+        window.showToast?.('Gerando o pacote: os PDFs de cada pagamento são feitos na hora, pode levar um minuto…', 'info');
         // O relatório em PDF: o Electron imprime o HTML do relatório (sem perguntar onde salvar).
         let pdf = null;
         if (window.electronAPI?.gerarPdfDeHtml) {

@@ -38,7 +38,8 @@ const COLUNAS = {
   contabil_arquivo_vinculos: ['id', 'arquivo_id', 'alvo_tipo', 'alvo_id'],
   contabil_arquivo_partes: ['id', 'arquivo_id', 'ordem', 'dados'],
   contabil_pacotes: ['id', 'competencia', 'versao', 'nome_arquivo', 'hash', 'tamanho_bytes', 'arquivos', 'faltando', 'gerado_em', 'gerado_por', 'enviado_em', 'enviado_por', 'enviado_para', 'envio_meio', 'envio_observacao'],
-  documentos_recebidos: ['id', 'tipo', 'numero', 'serie', 'emitente_nome', 'emitente_documento', 'contato_id', 'data_emissao', 'competencia', 'valor_total', 'excluido_em', 'cfops', 'itens', 'origem'],
+  documentos_recebidos: ['id', 'tipo', 'numero', 'serie', 'emitente_nome', 'emitente_documento', 'contato_id', 'data_emissao', 'competencia', 'valor_total', 'excluido_em', 'cfops', 'itens', 'origem',
+    'chave_acesso', 'financeiro_pagamento_id'],
   titulos_pagar: ['id', 'contato_id', 'documento_recebido_id', 'descricao', 'categoria', 'numero_documento', 'data_emissao', 'competencia', 'valor_total', 'status', 'origem',
     'observacao', 'criado_por', 'criado_em', 'atualizado_em'],
   titulo_pagar_parcelas: ['id', 'titulo_id', 'numero', 'vencimento', 'valor', 'linha_digitavel'],
@@ -52,7 +53,11 @@ const COLUNAS = {
   classificacoes: ['id', 'movimento_id', 'conta_id', 'observacao', 'criado_por', 'criado_em', 'substituida_em', 'substituida_por'],
   // Fase D: os comprovantes do BB (só os dados; o original só quando não refaz idêntico).
   contabil_comprovantes: ['id', 'sha256', 'nome_arquivo', 'formato', 'layout', 'linhas', 'confere', 'arquivo_id', 'original_descartado_em', 'tipo', 'data', 'valor', 'autenticacao',
-    'favorecido_nome', 'competencia', 'movimento_id', 'situacao', 'atualizado_em']
+    'favorecido_nome', 'competencia', 'movimento_id', 'situacao', 'atualizado_em', 'dda_boleto_id', 'documento'],
+  // Fase I: o boleto do DDA (o espelho vai na pasta do pagamento) e os boletos de cobrança emitidos no mês.
+  contabil_dda_boletos: ['id', 'chave_interna', 'situacao', 'estado_bb', 'codigo_barras', 'linha_digitavel', 'vencimento', 'valor', 'beneficiario_documento', 'beneficiario_nome',
+    'parcela_id', 'titulo_id', 'estados', 'json_original', 'seu_numero', 'data_registro', 'capturado_em', 'ambiente'],
+  boletos: ['id', 'ambiente', 'status', 'data_emissao', 'data_vencimento', 'valor', 'numero_documento', 'nosso_numero', 'codigo_barras', 'linha_digitavel', 'pagador', 'numero_parcela']
 };
 
 const UNICOS = {
@@ -117,14 +122,37 @@ const MODULOS = [
   './contabilidade/conciliacao/conciliacao', './contabilidade/conciliacao/liquidacoes', './contabilidade/conciliacao/motor',
   './contabilidade/classificacao/classificacao', './contabilidade/classificacao/regras', './contabilidade/classificacao/plano', './contabilidade/versoes',
   './contabilidade/relatorio/relatorio', './contabilidade/relatorio/documento', './contabilidade/relatorio/planilha', './contabilidade/relatorio/dossie',
-  './contabilidade/pacote/pacote', './contabilidade/pacote/zip'
+  './contabilidade/pacote/pacote', './contabilidade/pacote/zip', './contabilidade/pacote/pagamentos', './contabilidade/pacote/dossiePagamento', './impressora'
 ];
 
-async function montar(dados, { permitir = true } = {}) {
+/**
+ * Fase I: a impressora de mentira (no app é o Electron): o "PDF" é o HTML
+ * com um cabeçalho, para o teste ler o que foi impresso. `impressos` guarda
+ * o título e a orientação de cada um; `sessoes` conta abrir e fechar.
+ */
+function impressoraFalsa() {
+  const impressos = [];
+  const sessoes = { abertas: 0, fechadas: 0 };
+  const fabrica = async () => {
+    sessoes.abertas++;
+    return {
+      imprimir: async (html, { retrato = true } = {}) => {
+        impressos.push({ retrato, titulo: (/<title>([^<]*)<\/title>/.exec(html) || [])[1] || '' });
+        return Buffer.from(`%PDF-1.4 falso (${retrato ? 'retrato' : 'paisagem'})\n${html}`, 'utf8');
+      },
+      fechar: async () => { sessoes.fechadas++; }
+    };
+  };
+  return { fabrica, impressos, sessoes };
+}
+
+async function montar(dados, { permitir = true, impressora = true } = {}) {
   const upstream = criarUpstream(dados);
   await new Promise(r => upstream.servidor.listen(0, '127.0.0.1', r));
   process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
   for (const m of MODULOS) delete require.cache[require.resolve(m)];
+  const falsa = impressora ? impressoraFalsa() : null;
+  require('./impressora').registrar(falsa ? falsa.fabrica : null);
   const caminhoPerm = require.resolve('./permissionsController');
   require.cache[caminhoPerm] = {
     id: caminhoPerm, filename: caminhoPerm, loaded: true,
@@ -154,7 +182,7 @@ async function montar(dados, { permitir = true } = {}) {
     return { status: r.status, corpo: await r.json().catch(() => null) };
   };
   return {
-    chamar, tabelas: upstream.tabelas,
+    chamar, tabelas: upstream.tabelas, impressos: falsa?.impressos || [], sessoes: falsa?.sessoes || null,
     encerrar: async () => {
       await new Promise(r => server.close(r));
       await new Promise(r => upstream.servidor.close(r));
@@ -169,8 +197,28 @@ const mov = (id, data, valor, descricao, estado = 'pendente', extra = {}) => ({
 });
 const regra = (id, condicao_tipo, valor, sentido, conta_id) => ({ id, condicao_tipo, valor, sentido, conta_id, prioridade: 0, ativa: true, origem: 'padrao' });
 
-const CHAVE = '31260811444777000161550020000000891000000895';
-const XML_NFE = `<?xml version="1.0" encoding="UTF-8"?><nfeProc versao="4.00"><NFe><infNFe Id="NFe${CHAVE}"/></NFe></nfeProc>`;
+/** Fase I: uma NF-e de verdade (o DANFE sai dela), montada como no teste do DANFE. */
+function nfeDeTeste() {
+  const xmlNfe = require('./fiscal/xmlNfe');
+  const sefaz = require('./fiscal/sefazCliente');
+  const montada = xmlNfe.montarNfe({
+    configuracao: {
+      cnpj: '11444777000161', razao_social: 'SANTÍSSIMO DECOR LTDA', inscricao_estadual: '0041842150081', logradouro: 'Av. Abílio Machado', numero: '1264', bairro: 'Inconfidência',
+      codigo_municipio: '3106200', municipio: 'Belo Horizonte', uf: 'MG', cep: '30820272', crt: 1, natureza_operacao: 'Venda de produtos de fabricação própria',
+      cfop_dentro_uf: '5101', cfop_fora_uf: '6101', csosn: '101', pcred_sn: 2.33, pis_cst: '07', cofins_cst: '07', unidade_padrao: 'Peça', modalidade_frete_padrao: 9
+    },
+    ambiente: 'producao', serie: 2, numero: 89, cNF: '00000089', dhEmi: new Date('2026-08-12T10:00:00-03:00'),
+    pedido: { id: 1, numero: '2540', forma_pagamento: 'Boleto' },
+    cliente: { id: 8, razao_social: 'Casa Vicenzo LTDA', tipo_pessoa: 'PJ', cnpj: '11222333000181', indicador_ie: 9, reg_logradouro: 'Rua Diamante', reg_numero: '504', reg_bairro: 'Centro', reg_cidade: 'Contagem', reg_uf: 'MG', reg_cep: '32113000', reg_codigo_municipio: '3118601' },
+    itens: [{ id: 1, produto_id: 3, codigo: 'MESA-01', nome: 'Mesa de jantar', ncm: '94036000', quantidade: 1, valor_unitario: 3700, valor_total: 3700 }],
+    produtos: [{ id: 3, ncm: '94036000', origem_mercadoria: 0 }], parcelas: [{ numero_parcela: 1, valor: 3700, data_vencimento: '2026-08-08' }],
+    transporte: { modalidade_frete: 9 }, verProc: 'Santissimo 1.1.1'
+  });
+  const prot = `<protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>MG</verAplic><chNFe>${montada.chave}</chNFe><dhRecbto>2026-08-12T10:01:00-03:00</dhRecbto><nProt>131260000000089</nProt><digVal>x=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>`;
+  const assinada = montada.xml.replace('</infNFe></NFe>', '</infNFe><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo></SignedInfo></Signature></NFe>');
+  return { xml: sefaz.montarNfeProc(assinada, prot), chave: montada.chave };
+}
+const { xml: XML_NFE, chave: CHAVE } = nfeDeTeste();
 const BOLETO = Buffer.from('%PDF-1.4 boleto do aluguel de agosto');
 const COMPROVANTE = Buffer.from('%PDF-1.4 comprovante do aluguel de agosto');
 const OFX = Buffer.from('OFXHEADER:100\r\nDATA:OFXSGML\r\n<OFX></OFX>');
@@ -239,7 +287,10 @@ const PDF = Buffer.from('%PDF-1.4 relatório mensal de agosto').toString('base64
 /** Fecha agosto e ignora (com justificativa) as pendências documentais: o pacote passa a poder sair. */
 async function prontoParaPacote(ctx) {
   const f = await ctx.chamar('POST', '/fechar', { competencia: '2026-08' });
-  assert.equal(f.status, 200, JSON.stringify(f.corpo));
+  if (f.status !== 200) {
+    const p = await ctx.chamar('GET', '/painel?competencia=2026-08');
+    assert.fail(`${JSON.stringify(f.corpo)} · críticas: ${(p.corpo.pendencias || []).filter(x => x.nivel === 'critico').map(x => `${x.chave}: ${x.titulo} — ${x.descricao}`).join(' | ')}`);
+  }
   const painel = await ctx.chamar('GET', '/painel?competencia=2026-08');
   for (const p of painel.corpo.pendencias.filter(x => x.nivel === 'documental' && !x.ignorada)) {
     const r = await ctx.chamar('POST', '/pendencias/ignorar', { competencia: '2026-08', chave: p.chave, justificativa: 'Conferido com a contabilidade' });
@@ -257,7 +308,14 @@ test('pacote: bloqueado até fechar e sem documental viva; o ZIP com as pastas, 
     assert.equal(antes.corpo.pode, false);
     assert.ok(antes.corpo.bloqueios.includes('A competência precisa estar fechada.'), JSON.stringify(antes.corpo.bloqueios));
     const pasta = chave => antes.corpo.pastas.find(x => x.chave === chave);
-    assert.deepEqual([pasta('relatorio').quantidade, pasta('extrato').quantidade, pasta('saida').quantidade, pasta('outros').quantidade], [2, 1, 1, 1]);
+    // Fase I: o extrato e a NF-e ganham o PDF gerado ao lado; o boleto do aluguel vai na pasta do pagamento.
+    assert.deepEqual([pasta('relatorio').quantidade, pasta('extrato').quantidade, pasta('saida').quantidade, pasta('pagamentos').quantidade, pasta('outros').quantidade], [2, 2, 2, 2, 0]);
+    assert.deepEqual(antes.corpo.pagamentos.map(p => [p.pasta, p.itens]), [
+      ['001 05-08 Imobiliaria Centro 2.500,00', ['Dossiê do pagamento', 'Comprovante', 'Boleto do fornecedor']],
+      ['002 15-08 Ana 900,00', ['Dossiê do pagamento']]
+    ]);
+    assert.deepEqual(antes.corpo.pagamentos[0].notas, [{ rotulo: 'NFS-e 77', situacao: 'sem_arquivo', texto: 'Registrada sem o arquivo (falta anexar a nota neste mês).' }]);
+    assert.deepEqual(antes.corpo.pagamentos[1].faltas, ['Sem o comprovante do banco', 'Sem nota, recibo ou guia ligados']);
     assert.deepEqual(antes.corpo.faltando.map(x => [x.titulo, x.motivo]), [['NFS-e 77', 'Sem o arquivo']]);
     const bloqueado = await ctx.chamar('POST', '/pacote', { competencia: '2026-08', pdf_base64: PDF });
     assert.equal(bloqueado.status, 409);
@@ -274,25 +332,43 @@ test('pacote: bloqueado até fechar e sem documental viva; o ZIP com as pastas, 
     const bytes = Buffer.from(r.corpo.base64, 'base64');
     assert.equal(r.corpo.hash, crypto.createHash('sha256').update(bytes).digest('hex'));
     const dentro = zip.ler(bytes);
+    const PAG1 = 'Contabilidade-2026-08-v1/06-Pagamentos/001 05-08 Imobiliaria Centro 2.500,00';
     assert.deepEqual(nomes(dentro), [
       'Contabilidade-2026-08-v1/LEIA-ME.txt', 'Contabilidade-2026-08-v1/indice.csv',
       'Contabilidade-2026-08-v1/01-Relatorio/Relatorio-2026-08-v1.pdf', 'Contabilidade-2026-08-v1/01-Relatorio/Relatorio-2026-08-v1.xlsx',
-      'Contabilidade-2026-08-v1/02-Extrato/agosto.ofx', `Contabilidade-2026-08-v1/03-NF-e-de-saida/${CHAVE}-procNFe.xml`,
-      'Contabilidade-2026-08-v1/06-Comprovantes/comprovante-aluguel.pdf', 'Contabilidade-2026-08-v1/07-Outros/boleto-aluguel.pdf'
-    ], 'na ordem das pastas');
+      'Contabilidade-2026-08-v1/02-Extrato/agosto.ofx', 'Contabilidade-2026-08-v1/02-Extrato/Extrato BB — conta corrente 2026-08.pdf',
+      `Contabilidade-2026-08-v1/03-NF-e-de-saida/${CHAVE}-procNFe.xml`, `Contabilidade-2026-08-v1/03-NF-e-de-saida/${CHAVE}-DANFE.pdf`,
+      `${PAG1}/Dossie do pagamento.pdf`, `${PAG1}/comprovante-aluguel.pdf`, `${PAG1}/boleto-aluguel.pdf`,
+      'Contabilidade-2026-08-v1/06-Pagamentos/002 15-08 Ana 900,00/Dossie do pagamento.pdf'
+    ], 'na ordem das pastas; o dossiê primeiro na pasta de cada pagamento');
     const arq = nome => dentro.find(x => x.nome.endsWith(nome)).dados;
     assert.ok(arq('agosto.ofx').equals(OFX) && arq('boleto-aluguel.pdf').equals(BOLETO) && arq(`${CHAVE}-procNFe.xml`).toString('utf8') === XML_NFE, 'os originais, byte a byte');
+    // Os gerados na hora: uma sessão da impressora para o pacote todo; DANFE e dossiê em retrato, o extrato em paisagem.
+    assert.deepEqual(ctx.sessoes, { abertas: 1, fechadas: 1 });
+    assert.deepEqual(ctx.impressos.map(x => x.retrato), [true, false, true, true]);
+    assert.match(arq(`${CHAVE}-DANFE.pdf`).toString('utf8'), /^%PDF-1\.4 falso \(retrato\)/);
+    assert.match(arq('Extrato BB — conta corrente 2026-08.pdf').toString('utf8'), /Extrato do mês — BB — conta corrente — agosto\/2026[\s\S]*GERADO PELO APP[\s\S]*Livro-caixa — BB — conta corrente/);
+    const dossie = arq(`001 05-08 Imobiliaria Centro 2.500,00/Dossie do pagamento.pdf`).toString('utf8');
+    for (const trecho of ['Dossiê do pagamento', 'Aluguel de agosto', 'NFS-e 77', 'Registrada sem o arquivo', 'Pagamento de boleto - Imobiliária Centro', 'comprovante-aluguel.pdf', 'boleto-aluguel.pdf', 'DOCUMENTO INTERNO']) {
+      assert.ok(dossie.includes(trecho), `dossiê: ${trecho}`);
+    }
+    assert.ok(dossie.includes(crypto.createHash('sha256').update(BOLETO).digest('hex')), 'o dossiê traz o SHA-256 dos arquivos da pasta');
     const leia = arq('LEIA-ME.txt').toString('utf8');
     assert.match(leia, /Fechamento: versão 1, fechada em/);
     assert.match(leia, /Faltando \(1\):\r\n  - NFS-e 77 — Imobiliária Centro: Sem o arquivo/);
     assert.match(leia, /Pendências ignoradas com justificativa:/);
+    assert.match(leia, /Pagamentos do mês: 2 pastas em 06-Pagamentos/);
+    assert.ok(!/vieram em HTML/.test(leia));
     const indice = arq('indice.csv').toString('utf8');
     assert.ok(indice.includes(`02-Extrato;agosto.ofx;Extrato bancário;Oficial;`) && indice.includes(crypto.createHash('sha256').update(OFX).digest('hex')));
+    assert.ok(indice.includes('06-Pagamentos/001 05-08 Imobiliaria Centro 2.500,00;Dossie do pagamento.pdf;Dossiê do pagamento (gerado);Interno;'));
+    assert.ok(indice.includes(`03-NF-e-de-saida;${CHAVE}-DANFE.pdf;DANFE (gerado do XML);Interno;`));
+    assert.deepEqual([r.corpo.pagamentos, r.corpo.gerados, r.corpo.nao_gerados], [2, 5, []]);
 
     const reg = ctx.tabelas.contabil_pacotes[0];
     assert.deepEqual([reg.competencia, reg.versao, reg.hash, reg.tamanho_bytes], ['2026-08', 1, r.corpo.hash, bytes.length]);
-    assert.equal(JSON.parse(reg.arquivos).length, 6);
-    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao, /^Pacote de agosto\/2026 \(versão 1\) gerado: 6 arquivos, .* 1 faltando · SHA-256 [0-9a-f]{12}…$/);
+    assert.equal(JSON.parse(reg.arquivos).length, 10);
+    assert.match(ctx.tabelas.contabil_eventos.at(-1).descricao, /^Pacote de agosto\/2026 \(versão 1\) gerado: 10 arquivos, .* 1 faltando · SHA-256 [0-9a-f]{12}…$/);
 
     const semEnviar = await ctx.chamar('GET', '/painel?competencia=2026-08');
     assert.match(semEnviar.corpo.pendencias.find(x => x.chave === 'pacote_nao_enviado').descricao, /^Gerado em /);
@@ -311,15 +387,30 @@ test('pacote: bloqueado até fechar e sem documental viva; o ZIP com as pastas, 
   }
 });
 
-test('sem o PDF o pacote sai só com a planilha (avisando); PDF estragado é recusado', async () => {
-  const ctx = await montar(cenario());
+test('sem o PDF da tela a impressora do backend faz o relatório; sem impressora (fora do app) sai só a planilha e os gerados vão em HTML, avisando; PDF estragado é recusado', async () => {
+  const comImpressora = await montar(cenario());
+  try {
+    await prontoParaPacote(comImpressora);
+    const r = await comImpressora.chamar('POST', '/pacote', { competencia: '2026-08' });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.aviso, null);
+    const dentro = zip.ler(Buffer.from(r.corpo.base64, 'base64'));
+    assert.match(dentro.find(x => x.nome.endsWith('01-Relatorio/Relatorio-2026-08-v1.pdf')).dados.toString('utf8'), /^%PDF-1\.4 falso \(paisagem\)[\s\S]*Relatório mensal — agosto\/2026/);
+  } finally {
+    await comImpressora.encerrar();
+  }
+  const ctx = await montar(cenario(), { impressora: false });
   try {
     await prontoParaPacote(ctx);
     const r = await ctx.chamar('POST', '/pacote', { competencia: '2026-08' });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
     assert.match(r.corpo.aviso, /PDF não veio/);
-    const dentro = nomes(zip.ler(Buffer.from(r.corpo.base64, 'base64')));
+    assert.match(r.corpo.aviso, /foram em HTML/);
+    const lidos = zip.ler(Buffer.from(r.corpo.base64, 'base64'));
+    const dentro = nomes(lidos);
     assert.ok(!dentro.some(n => n.endsWith('.pdf') && n.includes('01-Relatorio')) && dentro.some(n => n.endsWith('Relatorio-2026-08-v1.xlsx')));
+    assert.ok(dentro.some(n => n.endsWith('001 05-08 Imobiliaria Centro 2.500,00/Dossie do pagamento.html')) && dentro.some(n => n.endsWith(`${CHAVE}-DANFE.html`)));
+    assert.match(lidos.find(x => x.nome.endsWith('LEIA-ME.txt')).dados.toString('utf8'), /vieram em HTML: o pacote foi gerado fora do aplicativo/);
     const ruim = await ctx.chamar('POST', '/pacote', { competencia: '2026-08', pdf_base64: Buffer.from('<html>').toString('base64') });
     assert.equal(ruim.status, 400);
   } finally {
@@ -368,12 +459,16 @@ test('fase D: o comprovante do BB vai refeito dos dados (com o pé "Reproduzido�
     const r = await ctx.chamar('POST', '/pacote', { competencia: '2026-08', pdf_base64: PDF });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
     const dentro = zip.ler(Buffer.from(r.corpo.base64, 'base64'));
-    const refeito = dentro.find(x => x.nome.endsWith('06-Comprovantes/4 - 15082026 - Transferência - 900,00.pdf'));
+    // Fase I: cada comprovante na pasta do pagamento que o débito do extrato paga.
+    const refeito = dentro.find(x => x.nome.endsWith('06-Pagamentos/002 15-08 Ana 900,00/4 - 15082026 - Transferência - 900,00.pdf'));
     assert.ok(refeito, nomes(dentro).join('\n'));
     const lido = leitor.lerPdf(refeito.dados);
     assert.deepEqual(lido.blocos[0].linhas.map(l => l.texto), linhas);
     assert.match(lido.blocos[1].linhas.map(l => l.texto).join(' '), /^Reproduzido pelo App-Gestão a partir do comprovante original do BB \(arquivo "4 - 15082026 - Transferência - 900,00\.pdf", SHA-256 e{64}\)/);
-    assert.ok(dentro.find(x => x.nome.endsWith('06-Comprovantes/5 - 05082026 - Pagamento - 2.500,00.pdf')).dados.equals(ORIGINAL), 'o original guardado vai como veio');
+    assert.ok(dentro.find(x => x.nome.endsWith('06-Pagamentos/001 05-08 Imobiliaria Centro 2.500,00/5 - 05082026 - Pagamento - 2.500,00.pdf')).dados.equals(ORIGINAL), 'o original guardado vai como veio');
+    assert.ok(!nomes(dentro).some(n => n.includes('Comprovantes sem pagamento')), nomes(dentro).join(' | '));
+    const dossieAna = dentro.find(x => x.nome.endsWith('002 15-08 Ana 900,00/Dossie do pagamento.pdf')).dados.toString('utf8');
+    assert.ok(dossieAna.includes('A.1B2.C3D.4E5.F67.890') && dossieAna.includes('refeito dos dados, idêntico ao original do BB'), 'o dossiê traz o comprovante');
     const indice = dentro.find(x => x.nome.endsWith('indice.csv')).dados.toString('utf8');
     assert.ok(indice.includes('Reproduzido (idêntico ao original do BB)'));
     assert.match(dentro.find(x => x.nome.endsWith('LEIA-ME.txt')).dados.toString('utf8'), /Comprovantes do BB com a origem "Reproduzido"/);
@@ -386,6 +481,79 @@ test('fase D: o comprovante do BB vai refeito dos dados (com o pé "Reproduzido�
     assert.ok(ctx.tabelas.contabil_arquivos.find(a => a.id === 30).excluido_em);
     assert.ok(ctx.tabelas.contabil_comprovantes.find(x => x.id === 2).original_descartado_em);
     assert.ok(ctx.tabelas.contabil_arquivo_partes.some(p => p.arquivo_id === 21), 'os outros arquivos ficam');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fase I: a pasta de cada pagamento — a nota de julho aponta para o pacote em que foi enviada, o espelho do boleto do DDA, o comprovante refeito; o comprovante avulso e os boletos emitidos nas pastas deles', async () => {
+  const calculo = require('./cobranca/boletoCalculo');
+  const layout = { pagina: [595.28, 841.89], fonte: 'Courier', tamanho: 8, entrelinha: 9.2, x: 28.35, y: 813.54, linha_espessura: 0.57, cor_traco: 0, cor_texto: 0 };
+  const linhasDe = (titulo, valor, doc) => ['', `                ${titulo}`, `VALOR:                                  R$${valor}`, `DOCUMENTO: ${doc}`, 'AUTENTICACAO SISBB:        B.9C8.D7E.6F5.A43.210'];
+  const barrasDda = calculo.codigoBarras({ vencimento: '2026-08-20', valor: 2000, campoLivre: '7'.padStart(25, '0'), banco: '237' });
+  const barrasEmitido = calculo.codigoBarras({ vencimento: '2026-09-12', valor: 3700, campoLivre: '300'.padStart(25, '0') });
+  const XML_VIDROS = Buffer.from('<nfeProc>NF-e 1/4521 da Vidros Norte</nfeProc>');
+  const base = cenario();
+  const ctx = await montar(cenario({
+    documentos_recebidos: [...base.documentos_recebidos, {
+      id: 5, tipo: 'nfe', serie: '1', numero: '4521', emitente_nome: 'Vidros Norte', emitente_documento: '84031759000121', contato_id: 6, data_emissao: '2026-07-20', competencia: '2026-07',
+      valor_total: 4000, chave_acesso: '31260784031759000121550010000045211000045210', origem: 'xml', itens: '[]'
+    }],
+    contabil_arquivos: [...base.contabil_arquivos, { id: 40, nome_arquivo: 'nfe-4521.xml', tipo_mime: 'application/xml', tamanho_bytes: XML_VIDROS.length, sha256: 'f'.repeat(64), categoria: 'xml_nfe', origem: 'oficial', competencia: '2026-07', criado_em: '2026-07-21T10:00:00Z', completo: true, partes: 1 }],
+    contabil_arquivo_partes: [...base.contabil_arquivo_partes, { id: 9, arquivo_id: 40, ordem: 0, dados: XML_VIDROS.toString('base64') }],
+    contabil_arquivo_vinculos: [...base.contabil_arquivo_vinculos, { id: 9, arquivo_id: 40, alvo_tipo: 'documento_recebido', alvo_id: '5' }],
+    titulos_pagar: [...base.titulos_pagar, { id: 2, contato_id: 6, documento_recebido_id: 5, descricao: 'NF-e 1/4521 — Vidros Norte', categoria: 'Serviços de Terceiros', competencia: '2026-07', valor_total: 4000, status: 'aberto', origem: 'nfe' }],
+    titulo_pagar_parcelas: [...base.titulo_pagar_parcelas, { id: 21, titulo_id: 2, numero: 1, vencimento: '2026-07-20', valor: 2000 }, { id: 22, titulo_id: 2, numero: 2, vencimento: '2026-08-20', valor: 2000, linha_digitavel: calculo.linhaDigitavel(barrasDda).digitos }],
+    titulo_pagar_pagamentos: [...base.titulo_pagar_pagamentos, { id: 102, parcela_id: 22, titulo_id: 2, data_pagamento: '2026-08-20', competencia: '2026-08', valor_pago: 2000, forma: 'Boleto' }],
+    movimentos_bancarios: [...base.movimentos_bancarios, mov(6, '2026-08-20', -2000, 'PAGAMENTO DE BOLETO', 'conciliado')],
+    conciliacao_vinculos: [...base.conciliacao_vinculos, { id: 4, movimento_id: 6, alvo_tipo: 'titulo_pagamento', alvo_id: 102, valor: 2000, criterio: 'automatico' }],
+    contabil_dda_boletos: [{
+      id: 9, chave_interna: 'k'.repeat(64), situacao: 'vinculado', estado_bb: 3, codigo_barras: barrasDda, linha_digitavel: calculo.linhaDigitavel(barrasDda).digitos, vencimento: '2026-08-20', valor: 2000,
+      beneficiario_nome: 'VIDROS NORTE LTDA', beneficiario_documento: '84031759000121', parcela_id: 22, titulo_id: 2, estados: '[]', json_original: '{}', capturado_em: '2026-08-01T10:00:00Z', ambiente: 'producao'
+    }],
+    contabil_comprovantes: [
+      { id: 4, sha256: '4'.repeat(64), nome_arquivo: '6 - 20082026 - Pagamento - 2.000,00.pdf', formato: 'bb_texto', layout: JSON.stringify(layout), linhas: JSON.stringify(linhasDe('COMPROVANTE DE PAGAMENTO DE TITULOS', '2.000,00', '082001')), confere: true, tipo: 'boleto', data: '2026-08-20', valor: 2000, autenticacao: 'B.9C8.D7E.6F5.A43.210', favorecido_nome: 'VIDROS NORTE LTDA', competencia: '2026-08', movimento_id: 6, situacao: 'ligado', dda_boleto_id: 9 },
+      // Um Pix que não é de pagamento registrado: vai em "Comprovantes sem pagamento".
+      { id: 5, sha256: '5'.repeat(64), nome_arquivo: '9 - 25082026 - Transferência - 80,00.pdf', formato: 'bb_texto', layout: JSON.stringify(layout), linhas: JSON.stringify(linhasDe('Comprovante Pix', '80,00', '082501')), confere: true, tipo: 'pix', data: '2026-08-25', valor: 80, competencia: '2026-08', movimento_id: null, situacao: 'novo' }
+    ],
+    // O pacote de julho, enviado, com o XML da nota da Vidros (o SHA-256 acha a nota).
+    contabil_pacotes: [{
+      id: 7, competencia: '2026-07', versao: 1, nome_arquivo: 'Contabilidade-2026-07-v1.zip', hash: '7'.repeat(64), tamanho_bytes: 100, faltando: '[]', gerado_em: '2026-08-05T10:00:00Z', gerado_por: 3,
+      arquivos: JSON.stringify([{ pasta: '05-Recebidos', nome: 'nfe-4521.xml', sha256: 'f'.repeat(64), origem: 'Oficial', tamanho: 10 }]), enviado_em: '2026-08-06T13:00:00Z', enviado_por: 3, enviado_para: 'contabil@aea.com.br', envio_meio: 'E-mail'
+    }],
+    boletos: [
+      { id: 300, ambiente: 'producao', status: 'registrado', data_emissao: '2026-08-12', data_vencimento: '2026-09-12', valor: 3700, numero_documento: '2540-1', nosso_numero: '00031285790000000300', codigo_barras: barrasEmitido, pagador: JSON.stringify({ nome: 'Casa Vicenzo', documento: '11222333000181' }), numero_parcela: 1 },
+      { id: 301, ambiente: 'sandbox', status: 'registrado', data_emissao: '2026-08-12', data_vencimento: '2026-09-12', valor: 10, numero_documento: 'TESTE', nosso_numero: '1', codigo_barras: barrasEmitido, pagador: '{}', numero_parcela: 1 }
+    ]
+  }));
+  try {
+    await prontoParaPacote(ctx);
+    const previa = await ctx.chamar('GET', '/pacote?competencia=2026-08');
+    const vidros = previa.corpo.pagamentos.find(p => p.pasta === '003 20-08 Vidros Norte 2.000,00');
+    assert.ok(vidros, JSON.stringify(previa.corpo.pagamentos.map(p => p.pasta)));
+    assert.deepEqual(vidros.itens, ['Dossiê do pagamento', 'Comprovante', 'Espelho DDA']);
+    assert.deepEqual(vidros.faltas, []);
+    assert.equal(vidros.notas[0].situacao, 'enviada');
+    assert.match(vidros.notas[0].texto, /^Enviada no pacote Contabilidade-2026-07-v1\.zip \(julho\/2026, versão 1\), arquivo 05-Recebidos\/nfe-4521\.xml \(SHA-256 f{16}…\), em 06\/08\/2026 para contabil@aea\.com\.br\.$/);
+    assert.equal(previa.corpo.pastas.find(x => x.chave === 'boletos').quantidade, 1, 'só o de produção');
+
+    const r = await ctx.chamar('POST', '/pacote', { competencia: '2026-08', pdf_base64: PDF });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.deepEqual(r.corpo.nao_gerados, []);
+    const dentro = zip.ler(Buffer.from(r.corpo.base64, 'base64'));
+    const PASTA = 'Contabilidade-2026-08-v1/06-Pagamentos/003 20-08 Vidros Norte 2.000,00';
+    const daPasta = nomes(dentro).filter(n => n.startsWith(`${PASTA}/`)).map(n => n.slice(PASTA.length + 1));
+    assert.deepEqual(daPasta, ['Dossie do pagamento.pdf', '6 - 20082026 - Pagamento - 2.000,00.pdf', 'Espelho DDA 20-08-2026 VIDROS NORTE LTDA 2000,00.pdf']);
+    const dossie = dentro.find(x => x.nome === `${PASTA}/Dossie do pagamento.pdf`).dados.toString('utf8');
+    for (const trecho of ['NF-e 1/4521', 'Enviada no pacote Contabilidade-2026-07-v1.zip', 'parcela', '2 de 2', 'VIDROS NORTE LTDA', 'Espelho DDA 20-08-2026 VIDROS NORTE LTDA 2000,00.pdf', 'B.9C8.D7E.6F5.A43.210', 'A cadeia está completa']) {
+      assert.ok(dossie.includes(trecho), `dossiê: ${trecho}`);
+    }
+    assert.match(dentro.find(x => x.nome.endsWith('Espelho DDA 20-08-2026 VIDROS NORTE LTDA 2000,00.pdf')).dados.toString('utf8'), /Espelho DDA[\s\S]*Não constitui segunda via/);
+    assert.ok(nomes(dentro).includes('Contabilidade-2026-08-v1/06-Pagamentos/Comprovantes sem pagamento/9 - 25082026 - Transferência - 80,00.pdf'));
+    assert.ok(!nomes(dentro).some(n => n.includes('nfe-4521.xml')), 'a nota de julho não vai de novo: o dossiê aponta o pacote de julho');
+    const emitidos = nomes(dentro).filter(n => n.includes('07-Boletos-emitidos/'));
+    assert.deepEqual(emitidos, ['Contabilidade-2026-08-v1/07-Boletos-emitidos/Boleto-25401-00031285790000000300.pdf']);
+    assert.match(dentro.find(x => x.nome === emitidos[0]).dados.toString('utf8'), /Casa Vicenzo/);
   } finally {
     await ctx.encerrar();
   }

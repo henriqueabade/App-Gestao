@@ -5408,6 +5408,26 @@ async function imprimirHtmlEmPdf(janela, arquivoTemp, html, opcoes) {
 }
 
 /**
+ * Fase I da Contabilidade (02/10/2026): o pacote da competência gera na hora
+ * os dossiês dos pagamentos, os espelhos do DDA, o DANFE e o extrato em PDF
+ * no próprio backend (backend/impressora.js). Uma sessão = uma janela oculta
+ * reaproveitada para todos os documentos do pacote.
+ */
+require('./backend/impressora').registrar(async () => {
+  const janela = new BrowserWindow({ show: false, webPreferences: { offscreen: true, javascript: false } });
+  const arquivoTemp = path.join(app.getPath('temp'), `sd-pacote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+  return {
+    imprimir: async (html, { retrato = true } = {}) => Buffer.from(await imprimirHtmlEmPdf(janela, arquivoTemp, html, {
+      printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    })),
+    fechar: async () => {
+      if (!janela.isDestroyed()) janela.close();
+      await fs.promises.unlink(arquivoTemp).catch(() => {});
+    }
+  };
+});
+
+/**
  * Salva um HTML pronto como PDF em paisagem.
  *
  * O relatório de produção é montado no renderer (é lá que estão os dados já

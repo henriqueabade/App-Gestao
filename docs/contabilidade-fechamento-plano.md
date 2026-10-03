@@ -1793,3 +1793,74 @@ oficial os comprovantes para fazer o envio do pacote". Roteiro: Parte L. SQL:
   - vários comprovantes num débito só (pendência 54);
   - o comprovante na pasta de cada pagamento (Fase I);
   - o pagador que não é a empresa vira reembolso (Fase F).
+
+## AG. Fase I entregue (02/10/2026) — o pacote por pagamento, tudo gerado na hora
+
+Ordem do dono: "Deixe as perguntas pendentes, siga para a próxima fase".
+Regra (seção AC): "o boleto sempre junto do comprovante, do pagamento, da
+nota e do extrato"; uma pasta por pagamento; a nota no mês fiscal, e o
+dossiê das parcelas seguintes aponta para ela. Roteiro: Parte M. Sem SQL.
+
+- **Impressora do backend** (`backend/impressora.js`): o `main.js` registra
+  uma fábrica de sessões com o mesmo `imprimirHtmlEmPdf` do DANFE (janela
+  oculta reaproveitada, A4, margens do `@page`). O servidor da API roda no
+  processo principal do Electron. Sem impressora (testes, servidor solto),
+  `imprimir = null` e o pacote leva o HTML, avisando.
+- **Pastas** (`pacote.js`):
+  - 01 relatório;
+  - 02 extrato (+ PDF do livro-caixa, `documento.htmlDoLivro`);
+  - 03 saída e 04 devolução (+ DANFE de `danfe.montarDanfeHtml`; logo só nas
+    nossas);
+  - 05 recebidos (+ DANFE da NF-e de entrada);
+  - 06 pagamentos (`Comprovantes sem pagamento/` para os avulsos);
+  - 07 boletos emitidos (produção, `boletoDocumento.gerarBoletosHtml`);
+  - 08 outros.
+
+  Os nomes de arquivo na pasta de um pagamento ficam com até 80 caracteres
+  (`encurtar` guarda a extensão).
+- **Plano das pastas** (`pacote/pagamentos.js`):
+  - Cada pagamento do mês vem das liquidações: `titulo_pagamento`,
+    `financeiro_pagamento` e `reembolso`, menos estornado e obrigação.
+  - O que cada pasta junta:
+    - a conta e a parcela;
+    - a nota (`documento_recebido_id`, ou a NFS-e do fechamento);
+    - o boleto do DDA (pela parcela ou pelo `dda_boleto_id` do comprovante);
+    - os lançamentos conciliados e o comprovante do BB ligado a cada um;
+    - os anexos de `pagamento:`, `titulo:`, `financeiro_pagamento:` e
+      `reembolso:` — **nunca** o arquivo de uma nota.
+  - `ondeEstaANota`:
+    - `neste` (com o caminho, na hora de gerar);
+    - `enviada` ou `gerada`: o SHA-256 do arquivo aparece no
+      `contabil_pacotes.arquivos` de algum pacote, e o enviado vence o só
+      gerado;
+    - `outro_mes` e `sem_arquivo`.
+  - Faltas: sem extrato, sem comprovante, por boleto sem o boleto, sem nota.
+  - `usados` tira das pastas gerais o que foi para a pasta do pagamento. O
+    comprovante é reconhecido pela chave `comprovante:<id>`, porque o original
+    guardado aparece como "arquivo".
+- **Dossiê** (`pacote/dossiePagamento.js`): A4 retrato, "DOCUMENTO INTERNO",
+  seções da cadeia, arquivos da pasta com SHA-256, o que falta ou "a cadeia
+  está completa"; entra primeiro na pasta.
+- **Prévia e tela:**
+  - a prévia traz `pagamentos` (`pastaPublica`), os gerados contados em cada
+    pasta e `impressora`;
+  - o modal ganhou a seção "Pagamentos do mês" (situação da nota com cor) e o
+    aviso de que os PDFs são feitos na hora.
+- **Testes:**
+  - `pacote/pagamentos.test.js`: 4, puros;
+  - `pacote/pacote.test.js`: + DANFE, filtro, `encurtar`, LEIA-ME;
+  - `contabilidadePacote.test.js`: 6. Usa uma impressora de mentira e uma
+    NF-e montada pelo `xmlNfe`. Cobre:
+    - o ZIP inteiro, nome a nome;
+    - o relatório pela impressora, e o HTML sem ela;
+    - a Fase D nas pastas;
+    - a Fase I de ponta a ponta: nota de julho enviada, espelho DDA,
+      comprovante avulso, boletos emitidos.
+  - Tela: o teste da Fase I (seção, situações iguais às do backend,
+    `main.js` registra a impressora).
+  - Electron (`fase_i_smoke`): modal e dossiê/extrato impressos em PDF de
+    verdade.
+- **Para depois (pendências 59 e 60):**
+  - tirar do servidor os outros anexos depois do pacote salvo (o painel teria
+    que contar "enviado no pacote" como documento presente);
+  - o OFX refeito dos lançamentos.

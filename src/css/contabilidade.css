@@ -1087,6 +1087,12 @@ body {
 
 /* Seção com título dentro do modal. */
 .ctb-secao-modal { display: flex; flex-direction: column; gap: 0.75rem; }
+/* Fase I: a pasta de cada pagamento no modal do pacote (o que vai nela; onde está a nota). */
+.ctb-pacote-itens { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ctb-pacote-nota { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+.ctb-pacote-nota + .ctb-pacote-nota { margin-top: 0.5rem; }
+.ctb-pacote-nota .ctb-sub { max-width: 22rem; overflow-wrap: anywhere; }
+.ctb-pacote-pasta { font-family: 'Courier New', monospace; color: var(--color-primary-light); }
 .ctb-secao-modal__cabeca { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 
 /* A lista de arquivos da ficha (nome, origem, baixar). */

@@ -736,6 +736,81 @@ a API, permissões, travas) → B → C → D → E.
 10. Atividade: o grupo "Comprovantes do BB" no filtro, com "Comprovantes do BB
     anexados: …".
 
+## Parte M — Fase I (02/10/2026): o pacote por pagamento, tudo gerado na hora
+
+**O que mudou**
+- **Pastas novas no pacote:**
+
+  | Pasta | O que vai nela |
+  | --- | --- |
+  | `02-Extrato/` | O OFX original e o **extrato do mês em PDF**, gerado: o livro-caixa de cada conta |
+  | `03-NF-e-de-saida/` e `04-Devolucoes/` | O XML e o **DANFE em PDF**, feito do XML na hora |
+  | `05-Recebidos/` | A NF-e de entrada com o **DANFE** (sem a nossa logo, porque a nota é do fornecedor), as NFS-e, os recibos e as guias |
+  | `06-Pagamentos/` | **Uma pasta por pagamento do mês** (detalhe abaixo) e `Comprovantes sem pagamento/`, para os comprovantes que não são de um pagamento registrado |
+  | `07-Boletos-emitidos/` | Os boletos de cobrança emitidos no mês, só os de produção, gerados como no Financeiro |
+  | `08-Outros/` | Contratos e o resto anexado ao mês |
+
+- **A pasta de cada pagamento:**
+  - Vale para conta a pagar, comissão/produção e reembolso. O nome é curto
+    (o Windows limita o caminho): `003 20-08 Vidros Norte 2.000,00`.
+  - O que vai nela:
+    - **`Dossie do pagamento.pdf`**, gerado na hora: o pagamento, a conta e a
+      parcela, a nota e **onde ela está**, o boleto, o lançamento do extrato,
+      o comprovante, a lista dos arquivos da pasta com o SHA-256 de cada um, e
+      **o que falta**;
+    - o **comprovante do banco** (refeito dos dados, Fase D, ou o anexado);
+    - o **Espelho DDA**, gerado, quando a parcela tem boleto no DDA;
+    - o **boleto do fornecedor** e os outros anexos do pagamento e da conta.
+- **A nota vai no mês fiscal dela** e não se repete. O dossiê diz onde ela
+  está:
+  - neste pacote, com o caminho (`05-Recebidos/…`);
+  - no pacote em que foi enviada. O app acha pelo SHA-256 do arquivo:
+    "Enviada no pacote Contabilidade-2026-07-v1.zip (julho/2026, versão 1),
+    arquivo 05-Recebidos/…, em 06/08/2026 para …";
+  - "é de julho: vai no pacote daquele mês", se ainda não foi em pacote;
+  - ou que foi registrada sem o arquivo.
+- **Tudo gerado na hora, nada guardado.** Dossiês, espelhos, DANFE, extrato
+  em PDF e boletos emitidos são feitos ao gerar o ZIP, pela mesma impressão
+  em PDF do DANFE. Os PDFs que entram no ZIP foram feitos na hora; o índice
+  mostra a origem "Interno". Se o pacote for gerado fora do aplicativo, eles
+  vão em HTML, e o LEIA-ME e o aviso dizem isso. O relatório em PDF também
+  sai daqui se a tela não mandar.
+- **Tela do pacote:** seção nova **"Pagamentos do mês"**. Em cada pasta, o
+  que vai nela (etiquetas verdes), o que falta (vermelhas) e onde está a nota
+  ("neste pacote", "já enviada", "de outro mês", "sem o arquivo"). Gerar
+  avisa que os PDFs são feitos na hora e pode levar um minuto.
+- **O que não mudou:** nada sai do servidor nesta fase além do que a Fase D
+  já fazia (o original do comprovante do BB não refeito). Ver as pendências
+  59 e 60.
+
+**O que fazer**
+1. Nada de SQL nesta fase. Basta abrir o aplicativo atualizado (o `main.js`
+   mudou, então **feche e abra o app**, não só a API).
+2. Gere de novo o pacote de um mês fechado e abra o ZIP.
+
+**Checklist visual**
+1. Pacote (modal): a seção "Pagamentos do mês" lista as pastas, com
+   "Dossiê do pagamento", "Comprovante", "Espelho DDA" e "Boleto do
+   fornecedor" quando houver, e as faltas em vermelho.
+2. A nota de um pagamento cuja NF-e é do mês anterior mostra "já enviada" e o
+   nome do pacote em que foi.
+3. No ZIP: `06-Pagamentos/001 …/Dossie do pagamento.pdf` abre em A4 retrato,
+   com "DOCUMENTO INTERNO" e as seções O pagamento, A conta a pagar, A nota,
+   O boleto, No banco (extrato), O comprovante do banco, Arquivos desta pasta.
+4. Na mesma pasta: o comprovante do BB e, se a parcela tem boleto no DDA, o
+   `Espelho DDA ….pdf`.
+5. `03-NF-e-de-saida/<chave>-DANFE.pdf` ao lado do XML; o da NF-e de entrada
+   sem a nossa logo.
+6. `02-Extrato/Extrato BB — conta corrente AAAA-MM.pdf`, em paisagem, com
+   "GERADO PELO APP".
+7. `07-Boletos-emitidos/Boleto-….pdf` para cada boleto de produção emitido no
+   mês.
+8. LEIA-ME: "Pagamentos do mês: N pastas em 06-Pagamentos…", e o
+   `indice.csv` com a origem "Interno" nos documentos gerados.
+9. Tempo: é estimativa (não medi com o app aberto, só a impressão de cada
+   documento à parte). Com uns 40 pagamentos, deve levar perto de um
+   minuto. Me diga quanto demorou aí.
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -823,3 +898,26 @@ a API, permissões, travas) → B → C → D → E.
     Ok?
 58. **Comprovante sem lançamento do extrato** é **aviso** (não segura o
     pacote). Ok, ou prefere documental?
+
+**Pacote por pagamento (Fase I)**
+59. **Tirar do servidor os outros anexos depois do pacote salvo** (a sua
+    resposta 1: boleto do fornecedor, recibos, guias e outros PDFs) **ainda
+    não foi feito**. Há duas dúvidas antes:
+    - **(a)** O recibo e a guia são o *documento* do pagamento. Depois de
+      tirados, o painel dos meses seguintes precisa contar "enviado no pacote
+      X (SHA-256 …)" como documento presente; isso exige mexer no painel.
+    - **(b)** Uma NFS-e que só existe em PDF (sem XML) também sai? O XML fica,
+      pela lei.
+
+    Sugestão: tirar só o boleto do fornecedor e o comprovante anexado à mão;
+    manter recibo, guia, nota em PDF e contrato. Qual prefere?
+60. **OFX refeito dos lançamentos** (conferido com o original, que depois
+    sai do servidor) **ainda não foi feito**. O OFX original continua no
+    pacote. Faço numa fase seguinte?
+61. **Boletos emitidos no mês** entram no pacote (`07-Boletos-emitidos`), só
+    os de produção, com a marca PAGO/BAIXADO quando for o caso. Ok?
+62. **Comissão/produção e reembolso** também ganham pasta (não só as contas
+    a pagar). Ok?
+63. O **boleto e o recibo anexados à conta** (não ao pagamento) vão na pasta
+    de **todo** pagamento daquela conta. Numa conta em 3 parcelas pagas em
+    3 meses, eles aparecem nos 3 pacotes. Ok?
