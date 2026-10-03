@@ -109,6 +109,14 @@ function secaoLivro(livro) {
   return `<section class="quebra"><h2>Livro-caixa — ${esc(livro.conta)}</h2><p>${saldoTexto}${livro.completo === false ? ' <strong>O extrato importado não cobre o mês inteiro.</strong>' : ''}</p><table><thead><tr>${th('Data')}${th('Número')}${th('Descrição')}${th('Débito', 'num')}${th('Crédito', 'num')}${th('Saldo', 'num')}${th('Conta do plano')}${th('Observação')}${th('Venc.')}</tr></thead><tbody>${corpo.join('') || `<tr>${td('<span class="vazio">Nenhum lançamento no mês.</span>')}</tr>`}</tbody><tfoot>${pe}</tfoot></table></section>`;
 }
 
+/** Fase C: as aplicações do mês (os PDFs do BB): o saldo, o que entrou e saiu, o rendimento, o IR e o IOF. */
+function secaoAplicacoes(rel) {
+  const lista = c.lista(rel.aplicacoes);
+  if (!lista.length) return '';
+  const linhas = lista.map(a => `<tr>${td(esc(a.rotulo))}${td(dinheiro(a.saldo_inicial), 'num')}${td(dinheiro(a.aplicacoes), 'num')}${td(dinheiro(a.resgates), 'num')}${td(dinheiro(a.rendimento), 'num')}${td(dinheiro(a.ir), 'num')}${td(dinheiro(a.iof), 'num')}${td(dinheiro(a.saldo_final), 'num')}${td(a.confere ? 'Confere ao centavo' : `<strong>Não fecha:</strong> ${esc(a.falhas.join('; '))}`)}</tr>`).join('');
+  return `<section><h2>Aplicações financeiras (pelos PDFs mensais do BB)</h2><p>O rendimento fica na conta da aplicação (00020), como no balancete; o IR e o IOF são os retidos nos resgates. No CDB, o saldo é o capital em ser.</p><table><thead><tr>${th('Aplicação')}${th('Saldo inicial', 'num')}${th('Aplicado', 'num')}${th('Resgatado (líquido)', 'num')}${th('Rendimento do mês', 'num')}${th('IR', 'num')}${th('IOF', 'num')}${th('Saldo final', 'num')}${th('Conferência')}</tr></thead><tbody>${linhas}</tbody></table></section>`;
+}
+
 function secaoConciliacao(rel) {
   if (!rel.conciliacao) return '';
   const blocos = rel.conciliacao.map(x => {
@@ -150,7 +158,7 @@ function html(rel) {
     + (st.previa ? '<div class="marca">PRÉVIA</div>' : '')
     + `<header class="topo"><div><h1>${esc(`Relatório mensal — ${rel.rotulo}`)}</h1><p>${esc(empresa)}</p></div>${selo}</header>`
     + `<p class="nota">${esc(st.nota)}</p>${avisos}`
-    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
+    + secaoResumo(rel) + secaoResultado(rel) + rel.livro.map(secaoLivro).join('') + secaoAplicacoes(rel) + secaoConciliacao(rel) + secaoPendencias(rel) + secaoDocumentos(rel)
     + `<p class="rodape">Documento interno gerado pelo App-Gestão em ${esc(instanteImpresso(rel.gerado_em))}. Os documentos oficiais (XML, OFX, comprovantes) vão no pacote da competência.</p>`
     + '</body></html>';
 }

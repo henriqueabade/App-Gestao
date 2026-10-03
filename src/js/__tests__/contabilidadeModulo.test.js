@@ -262,6 +262,11 @@ const MODAIS_FASE_D = {
   'comprovantes': { overlay: 'ctbComprovantes', principal: ['ctbCompAnexar', 'btn-primary', 'contabilidade.documento.registrar'] }
 };
 
+// Fase C (02/10/2026): as aplicações do BB (importar os PDFs é o principal; pede "Importar extrato").
+const MODAIS_FASE_C = {
+  'aplicacoes': { overlay: 'ctbAplicacoes', principal: ['ctbAplicImportar', 'btn-primary', 'contabilidade.extrato.importar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -271,7 +276,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -398,6 +403,25 @@ test('fase H (02/10/2026): os boletos do DDA — a tela abre, cada ação vai à
   assert.match(html, /id="ctbDdaConferir" type="button" data-perm="contabilidade\.pagar\.lancar" class="btn-secondary ctl-botao text-white"/);
   assert.match(html, /id="ctbDdaConfig" type="button" data-perm="contabilidade\.config\.view" class="btn-neutral ctl-botao text-white"/);
   assert.ok(html.includes('Estar no DDA não prova que a dívida é devida'));
+});
+
+test('fase C (02/10/2026): as aplicações do BB — a tela abre, importa os PDFs, confere de novo, abre o PDF; a pendência do painel abre a tela', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  assert.match(TELA, /'aplicacoes': \{[^}]*abrir:/);
+  assert.ok(HTML.includes('data-ctb-acao="aplicacoes"'));
+  for (const rota of [
+    "fetchApi(`/api/contabilidade/aplicacoes?competencia=", "enviar('/api/contabilidade/aplicacoes/importar', 'POST', { arquivos: arquivosLidos })",
+    "enviar('/api/contabilidade/aplicacoes/conferir', 'POST', { competencia: compCampo.value })", "/api/contabilidade/aplicacoes/${encodeURIComponent(a.id)}/pdf`"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  const html = ler('html', 'modals', 'contabilidade', 'aplicacoes.html');
+  assert.match(html, /id="ctbAplicConferir" type="button" data-perm="contabilidade\.conciliar" class="btn-secondary ctl-botao text-white"/);
+  assert.match(html, /id="ctbAplicArquivo" type="file" accept="\.pdf" multiple/);
+  // As situações do backend têm cor na tela; a pendência das aplicações abre esta tela.
+  const APL = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'aplicacoes', 'aplicacoes.js'), 'utf8');
+  const situacoes = Object.keys(require(path.join(RAIZ, '..', 'backend', 'contabilidade', 'aplicacoes', 'aplicacoes.js')).SITUACOES);
+  for (const s of situacoes) assert.ok(new RegExp(`TOM_SITUACAO_APLICACAO = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
+  assert.ok(APL.includes("const filtro = { acao: 'aplicacoes' };") && TELA.includes("'aplicacoes': {"));
+  for (const tipo of ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
 });
 
 test('fase I (02/10/2026): o pacote por pagamento — a seção das pastas no modal, as situações da nota iguais às do backend e a impressora do Electron registrada para o backend', () => {

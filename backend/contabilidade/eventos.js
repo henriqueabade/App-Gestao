@@ -59,7 +59,11 @@ const TIPOS = {
   comprovante_desligado: 'Comprovante desligado do extrato',
   comprovante_ignorado: 'Comprovante ignorado',
   comprovante_restaurado: 'Comprovante restaurado',
-  comprovantes_descartados: 'Originais de comprovante descartados'
+  comprovantes_descartados: 'Originais de comprovante descartados',
+  // Fase C (02/10/2026): as aplicações do BB (os PDFs mensais do Rende Fácil e do CDB).
+  aplicacao_importada: 'PDF de aplicação importado',
+  aplicacao_conciliada: 'Aplicações conferidas com o extrato',
+  aplicacoes_descartadas: 'PDFs de aplicação descartados'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

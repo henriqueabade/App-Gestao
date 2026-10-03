@@ -257,8 +257,8 @@ habilitada com esse certificado e me mande a mensagem.
 ## Parte E — Aplicações / CDB (etapa 12) — **fora de uso desde 02/10/2026**
 
 **Decisão do dono (02/10/2026):** o Rende Fácil e o CDB entram pelos **PDFs
-mensais do BB**, conferidos ao centavo com o extrato. Isso será a fase das
-aplicações. O cartão continua nas Configurações com a etiqueta **"Fora de
+mensais do BB**, conferidos ao centavo com o extrato. Feito na **Fase C**
+(Parte N). O cartão continua nas Configurações com a etiqueta **"Fora de
 uso"**: não liga, não testa e não cobra pendência. O texto abaixo fica só
 para o caso de o BB lançar uma API de CDB.
 
@@ -811,6 +811,78 @@ a API, permissões, travas) → B → C → D → E.
    documento à parte). Com uns 40 pagamentos, deve levar perto de um
    minuto. Me diga quanto demorou aí.
 
+## Parte N — Fase C (02/10/2026): as aplicações do BB (Rende Fácil e CDB DI)
+
+**O que mudou**
+- **Tela nova "Aplicações (Rende Fácil, CDB)"** (Ações da Contabilidade). O
+  botão **Importar PDFs** recebe os PDFs mensais que o site do BB dá, os mesmos
+  que você já baixa. Pode mandar os dois juntos.
+- **O app lê e confere cada PDF ao centavo.**
+  - Rende Fácil:
+    - saldo inicial + aplicações − resgates − IR − IOF + rendimentos = saldo
+      final;
+    - a soma do histórico = o resumo;
+    - o rendimento do mês = o dos resgates − o que vinha do mês anterior + o
+      que ficou no saldo.
+  - CDB:
+    - capital anterior − resgatado + aplicado = capital final;
+    - cada resgate: capital + juros − IR = líquido;
+    - o capital final = a tabela dos últimos meses = a soma dos depósitos em
+      ser.
+- **Cada linha do extrato liga sozinha ao PDF** (mesmo dia, valor exato):
+  - no Rende Fácil, a linha "BB RENDE FÁCIL" é a soma do dia: uma linha para
+    as aplicações, outra para os resgates;
+  - no CDB, cada resgate vem em duas linhas, o capital e o rendimento líquido.
+
+  A linha fica **conciliada** ("Conferido com o PDF da aplicação") e a
+  classificação vai para a conta da aplicação (00020.001/.002), pelas regras
+  da fase B. **O rendimento não vira receita**: fica na 00020, como no
+  balancete. Se o extrato chegar depois do PDF, a conciliação automática liga
+  na hora; o botão **Conferir de novo** faz o mesmo.
+- **Com o seu OFX e os seus dois PDFs de setembro**, num banco de teste: os dois
+  PDFs fecharam (todas as conferências ok) e as **23 linhas** das aplicações
+  no extrato (17 do Rende Fácil e 6 do CDB) ligaram sozinhas.
+- **Guarda só os dados.** O PDF original não dá para refazer igual, então fica
+  guardado **só até o pacote do mês ser salvo**. Ele vai no pacote, na pasta
+  `02-Extrato`, e depois sai do servidor. Um PDF mais novo do mesmo mês
+  substitui o anterior, solta o que o anterior tinha ligado no extrato e liga
+  de novo.
+- **Painel (fonte Extrato), com o mês encerrado** (no mês em curso, só aviso
+  ou nada):
+  - o extrato tem o Rende Fácil ou o CDB e o **PDF do mês não foi
+    importado**: crítico;
+  - o **PDF não fecha**: crítico;
+  - o **extrato não bate com o PDF**: crítico.
+- **Relatório:** seção nova "Aplicações financeiras", com saldo inicial,
+  aplicado, resgatado, rendimento do mês, IR, IOF, saldo final e a
+  conferência.
+- **Leitor de PDF:** passou a entender as fontes que o navegador usa ao
+  imprimir (Type0 com mapa de caracteres). Nenhuma biblioteca nova.
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_c.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_d.sql`, e **reiniciar a API**. Ele termina mostrando
+   "aplicacoes 0 | lancamentos 0".
+2. Ações › **Aplicações (Rende Fácil, CDB)** › **Importar PDFs** e escolher os
+   dois PDFs de setembro.
+3. Conferir que os dois cartões dizem **"Confere com o extrato"**.
+
+**Checklist visual**
+1. Sem o SQL: o aviso amarelo "As aplicações ainda não estão ativadas: rode
+   sql/contabilidade_fase_c.sql…".
+2. Importar os dois PDFs de setembro: "2 PDFs lidos · 2 importados · 23
+   linhas do extrato conferidas com o PDF".
+3. Cartão do Rende Fácil: os 8 números, "Conferências 7 de 7", a lista com
+   os ✓, e a tabela com cada dia ("Conferido").
+4. Cartão do CDB: "Conferências 6 de 6", e cada resgate em duas linhas
+   (capital e rendimento líquido), todas "Conferido".
+5. Conciliação de setembro: as linhas "BB RENDE FÁCIL" e "RESGATE BB CDB DI"
+   conciliadas, com "Conferido com o PDF da aplicação".
+6. **PDF** (no cartão) abre o original do BB.
+7. Importar o mesmo PDF de novo: "1 já estava no app".
+8. Relatório de setembro (PDF): a seção "Aplicações financeiras".
+9. Painel de setembro: nenhuma pendência das aplicações.
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -921,3 +993,17 @@ a API, permissões, travas) → B → C → D → E.
 63. O **boleto e o recibo anexados à conta** (não ao pagamento) vão na pasta
     de **todo** pagamento daquela conta. Numa conta em 3 parcelas pagas em
     3 meses, eles aparecem nos 3 pacotes. Ok?
+
+**Aplicações (Fase C)**
+64. O **rendimento** do Rende Fácil e do CDB aparece no relatório, mas **não
+    entra no resultado**: fica na 00020, como no balancete (a sua resposta).
+    O IR e o IOF retidos também ficam na 00020. Confirmar com a AEA se ela
+    quer o IR como imposto a compensar.
+65. No CDB, o saldo do relatório é o **capital em ser**. Os juros acumulados
+    (e o IR projetado) da tabela do BB aparecem só como informação. Ok?
+66. O extrato do mês em curso com o Rende Fácil e **sem o PDF**: só aviso.
+    Depois do fim do mês: **crítico** (segura o fechamento). Ok?
+67. Ainda não vi uma **aplicação nova no CDB** num PDF de verdade (em
+    setembro só houve resgates). O app espera "dd/mm Aplicação - nº do
+    depósito" com "valor capital". Se o primeiro PDF com aplicação não
+    fechar, me mande o PDF.

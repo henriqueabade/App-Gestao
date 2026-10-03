@@ -209,6 +209,21 @@ async function vencimentos(api, liqs) {
   return mapa;
 }
 
+/** Fase C: o resumo de cada aplicação do mês (Rende Fácil, CDB) pelos PDFs importados. [] sem o SQL ou sem PDF. */
+async function aplicacoesDoMes(api, competencia) {
+  const apl = require('../aplicacoes/aplicacoes');
+  const dados = await apl.lerDoMes(api, competencia).catch(() => null);
+  if (!dados) return [];
+  return dados.aplicacoes.map(a => {
+    const r = a.resumo || {};
+    return {
+      produto: a.produto, rotulo: apl.PRODUTOS[a.produto] || a.produto, saldo_inicial: a.saldo_inicial, saldo_final: a.saldo_final,
+      aplicacoes: c.centavos(r.aplicacoes || 0), resgates: c.centavos(r.resgates_liquidos || 0), rendimento: a.rendimento_mes, ir: a.ir_mes, iof: a.iof_mes,
+      juros_acumulados: r.juros_acumulados_fim ?? null, confere: a.confere, falhas: a.conferencias.filter(x => !x.ok).map(x => x.rotulo)
+    };
+  });
+}
+
 async function nomeDaEmpresa(api) {
   const cfg = await require('../../fiscal/configuracaoFiscal').carregar(api).catch(() => null);
   return {
@@ -411,6 +426,8 @@ async function montar(api, { competencia, hoje, desde = null }) {
     conciliacao,
     pendencias: { origem: versao ? 'fechamento' : 'hoje', lista: pendenciasLista },
     documentos: documentos ? { itens: documentos.itens, totais: documentos.totais } : null,
+    // Fase C: a posição de cada aplicação no mês, pelos PDFs do BB (o rendimento fica na 00020, não é receita).
+    aplicacoes: await aplicacoesDoMes(api, comp),
     avisos
   };
   return { ...rel, arquivo: nomeDoArquivo(rel) };

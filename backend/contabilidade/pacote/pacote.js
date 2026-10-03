@@ -583,7 +583,9 @@ async function marcarSalvo(api, id, { usuarioId = null } = {}) {
   const p = (await b.ler(api, 'contabil_pacotes', { id: Number(id) }))[0] || null;
   if (!p) throw c.erro('Pacote não encontrado.', 404);
   const r = await require('../comprovantes/comprovantes').descartarOriginais(api, { competencia: p.competencia, usuarioId, pacoteId: p.id });
-  return { id: p.id, competencia: p.competencia, originais_descartados: r.descartados };
+  // Fase C: o PDF mensal das aplicações também (ficam os dados e as conferências).
+  const a = await require('../aplicacoes/aplicacoes').descartarOriginais(api, { competencia: p.competencia, usuarioId, pacoteId: p.id });
+  return { id: p.id, competencia: p.competencia, originais_descartados: r.descartados + a.descartados };
 }
 
 /** Marca um pacote como enviado à contabilidade: para quem, como e quando. */

@@ -30,7 +30,9 @@ const motor = require('./motor');
 const ESTADOS = { pendente: 'A conciliar', conciliado: 'Conciliado', ignorado: 'Ignorado' };
 const CRITERIOS = {
   automatico: 'Automático', sugestao: 'Sugestão aceita', composicao: 'Soma aceita', manual: 'Escolhido à mão', conta_criada: 'Conta lançada do extrato',
-  parcela_paga: 'Conta paga pelo extrato', documento_pago: 'Nota lançada e paga pelo extrato', dda_pago: 'Boleto do DDA lançado e pago pelo extrato'
+  parcela_paga: 'Conta paga pelo extrato', documento_pago: 'Nota lançada e paga pelo extrato', dda_pago: 'Boleto do DDA lançado e pago pelo extrato',
+  // Fase C: a linha do Rende Fácil/CDB conferida com o PDF mensal do BB (aplicacoes/aplicacoes.js).
+  aplicacao: 'Conferido com o PDF da aplicação'
 };
 /** O vínculo que nasceu pagando uma obrigação: desfazer estorna o pagamento (e cancela a conta da nota ou do boleto). */
 const CRITERIOS_QUE_PAGAM = ['parcela_paga', 'documento_pago', 'dda_pago'];
@@ -564,6 +566,14 @@ async function automaticaDosMeses(api, { competencias = [], contaId = null, usua
   } catch (e) {
     if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
   }
+  // Fase C: as linhas do Rende Fácil e do CDB conferidas com os PDFs mensais já importados.
+  try {
+    const apl = await require('../aplicacoes/aplicacoes').conciliarSozinho(api, { competencias: meses, usuarioId });
+    if (apl.ligados) total.aplicacoes_ligadas = apl.ligados;
+    total.falhas.push(...apl.falhas);
+  } catch (e) {
+    if (!e?.extra?.sql_pendente) total.falhas.push(e.message);
+  }
   try {
     await lerVinculos(api);
     const { contas } = await extrato.listarContas(api);
@@ -599,9 +609,10 @@ function frasesDasObrigacoes(r) {
 /** A frase para o resumo de quem chamou ("3 conciliados sozinhos (1 conta paga)"), ou null. Pura. */
 function resumoDaAutomatica(r) {
   const comprovantes = r?.comprovantes_ligados ? c.plural(r.comprovantes_ligados, 'comprovante do BB ligado ao extrato', 'comprovantes do BB ligados ao extrato') : null;
-  if (!r?.conciliados) return comprovantes;
+  const aplicacoes = r?.aplicacoes_ligadas ? c.plural(r.aplicacoes_ligadas, 'linha de aplicação conferida com o PDF', 'linhas de aplicação conferidas com o PDF') : null;
+  if (!r?.conciliados) return [comprovantes, aplicacoes].filter(Boolean).join(' · ') || null;
   const extra = frasesDasObrigacoes(r);
-  return [comprovantes, `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`].filter(Boolean).join(' · ');
+  return [comprovantes, aplicacoes, `${c.plural(r.conciliados, 'lançamento conciliado sozinho', 'lançamentos conciliados sozinhos')}${extra ? ` (${extra})` : ''}`].filter(Boolean).join(' · ');
 }
 
 /** Os meses que um conjunto de datas toca, com o seguinte (a nota de um mês é paga no outro). Pura. */
@@ -666,5 +677,5 @@ async function criarConta(api, movimentoId, { entrada = {}, usuarioId = null, ho
 module.exports = {
   ESTADOS, CRITERIOS, CRITERIOS_QUE_PAGAM, CRITERIO_DA_OBRIGACAO, VISOES,
   paraMotor, comRestante, liqPublica, vinculosInvalidos, coberto, semLancamento, totaisDe, naVisao, janelaDoMes, resumoDaAutomatica, mesesParaConciliar,
-  lerVinculos, painel, candidatos, conciliar, desfazer, ignorar, reativar, automatica, automaticaDosMeses, criarConta
+  lerVinculos, painel, candidatos, gravar, conciliar, desfazer, ignorar, reativar, automatica, automaticaDosMeses, criarConta
 };

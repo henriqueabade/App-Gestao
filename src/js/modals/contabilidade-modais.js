@@ -5357,6 +5357,162 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ aplicações do BB (fase C)
+
+  const TOM_SITUACAO_APLICACAO = { ok: 'badge-success', falta_pdf: 'badge-danger', nao_confere: 'badge-danger', divergente: 'badge-danger', sem_movimento: 'badge-neutral', a_conferir: 'badge-warning' };
+
+  /** O Rende Fácil e o CDB pelos PDFs mensais: importar, as conferências e cada linha do extrato. */
+  function montarAplicacoes() {
+    const compCampo = el('ctbAplicCompetencia');
+    const seletor = el('ctbAplicArquivo');
+    montarCompetencias(compCampo, contexto.competencia);
+    let dados = null;
+    let leitura = 0;
+
+    const total = (rotulo, valor, nota = '', tom = null) => {
+      const d = criar('div', 'ctb-total');
+      if (tom) d.dataset.tom = tom;
+      d.append(criar('span', 'ctb-total__rotulo', rotulo), criar('strong', 'ctb-total__valor', valor), criar('span', 'ctb-total__nota', nota));
+      return d;
+    };
+
+    function cartao(p) {
+      const sec = criar('div', 'ctb-secao-modal ctb-aplicacao');
+      const cabeca = criar('div', 'ctb-secao-modal__cabeca');
+      const titulo = criar('h3', 'ctl-secao text-[var(--color-primary)]', p.rotulo);
+      const lado = criar('div', 'ctb-celula-acoes');
+      lado.appendChild(tag(p.situacao_rotulo, TOM_SITUACAO_APLICACAO[p.situacao] || 'badge-neutral'));
+      const a = p.aplicacao;
+      if (a?.original_guardado) lado.appendChild(botaoPequeno('PDF', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/aplicacoes/${encodeURIComponent(a.id)}/pdf`, { abrir: true }), { titulo: 'O PDF original do BB (fica até o pacote do mês ser salvo)' }));
+      cabeca.append(titulo, lado);
+      sec.appendChild(cabeca);
+      if (!a) {
+        sec.appendChild(criar('p', 'text-sm text-gray-400', p.situacao === 'falta_pdf'
+          ? `O extrato tem ${plural(p.sobras.length, 'lançamento', 'lançamentos')} desta aplicação e o PDF do mês não foi importado.`
+          : 'Nenhum PDF importado neste mês (e nada desta aplicação no extrato).'));
+      } else {
+        sec.appendChild(criar('p', 'text-xs text-gray-400', [a.nome_arquivo, a.periodo_inicio && a.periodo_fim ? `${formatarData(a.periodo_inicio)} a ${formatarData(a.periodo_fim)}` : null,
+          a.original_descartado ? 'o original já foi no pacote (ficam os dados)' : null].filter(Boolean).join(' · ')));
+        const totais = criar('div', 'ctb-totais');
+        const r = a.resumo || {};
+        totais.append(
+          total('Saldo inicial', formatarMoeda(a.saldo_inicial), p.produto === 'cdb' ? 'Capital em ser' : 'Saldo bruto'),
+          total('Aplicado', formatarMoeda(r.aplicacoes || 0), 'Saiu da conta corrente'),
+          total('Resgatado', formatarMoeda(r.resgates_liquidos || 0), 'Líquido, voltou à conta'),
+          total('Saldo final', formatarMoeda(a.saldo_final), p.produto === 'cdb' ? 'Capital em ser' : 'Saldo bruto'),
+          total('Rendimento do mês', formatarMoeda(a.rendimento_mes), 'Fica na conta da aplicação'),
+          total('IR retido', formatarMoeda(a.ir_mes), 'Nos resgates'),
+          total('IOF', formatarMoeda(a.iof_mes), 'Nos resgates'),
+          total('Conferências', `${a.conferencias.filter(x => x.ok).length} de ${a.conferencias.length}`, a.confere ? 'Fecha ao centavo' : 'O PDF não fecha', a.confere ? null : 'bordo')
+        );
+        sec.appendChild(totais);
+        const conf = criar('ul', 'ctb-lista-modal text-gray-300');
+        conf.append(...a.conferencias.map(x => itemDaLista(x.ok ? x.rotulo : `${x.rotulo} — esperado ${formatarMoeda(x.esperado)}, no PDF ${formatarMoeda(x.obtido)}`,
+          x.ok ? 'fa-check' : 'fa-times', x.ok ? 'var(--color-green)' : 'var(--color-red)')));
+        sec.appendChild(conf);
+      }
+      if (p.lancamentos.length || p.sobras.length) {
+        const caixa = criar('div', 'ctb-tabela glass-surface rounded-xl border border-white/10');
+        const tabela = criar('table', 'w-full text-sm');
+        const thead = criar('thead');
+        const trh = criar('tr');
+        for (const [t, cls] of [['Data', ''], ['No PDF', ''], ['Valor', 'text-right ctb-num'], ['Linha do extrato', '']]) trh.appendChild(criar('th', `px-4 py-3 text-left text-xs ${cls}`, t));
+        thead.appendChild(trh);
+        const corpo = criar('tbody');
+        for (const l of p.lancamentos) {
+          const tr = criar('tr');
+          const extrato = l.movimentos.length
+            ? [tag(l.coberto ? 'Conferido' : 'Valor diferente', l.coberto ? 'badge-success' : 'badge-danger')]
+            : [tag('Sem a linha do extrato', 'badge-danger')];
+          tr.append(
+            celula(formatarData(l.data), 'px-4 py-3 ctb-nowrap'),
+            celula(`${l.sentido_rotulo} · ${l.parte_rotulo}`, 'px-4 py-3', l.descricao),
+            celula(formatarMoeda(l.sentido === 'aplicacao' ? -l.valor : l.valor), 'px-4 py-3 text-right ctb-num'),
+            celula(extrato, 'px-4 py-3', l.movimentos.map(m => `${formatarData(m.data)} · ${m.descricao || ''} · ${formatarMoeda(m.valor)}`).join(' + ') || null)
+          );
+          corpo.appendChild(tr);
+        }
+        for (const s of p.sobras) {
+          const tr = criar('tr');
+          tr.append(celula(formatarData(s.data), 'px-4 py-3 ctb-nowrap'), celula([tag('Sem o PDF', 'badge-warning')], 'px-4 py-3', 'Está no extrato e não no PDF importado'),
+            celula(formatarMoeda(s.valor), 'px-4 py-3 text-right ctb-num'), celula(s.descricao || '—', 'px-4 py-3', s.estado === 'conciliado' ? 'conciliado com outra coisa' : 'a conciliar'));
+          corpo.appendChild(tr);
+        }
+        tabela.append(thead, corpo);
+        caixa.appendChild(tabela);
+        sec.appendChild(caixa);
+      }
+      return sec;
+    }
+
+    function desenhar() {
+      const lista = dados?.produtos || [];
+      el('ctbAplicProdutos').replaceChildren(...lista.map(cartao));
+      const problemas = lista.filter(p => ['falta_pdf', 'nao_confere', 'divergente'].includes(p.situacao));
+      if (dados?.sql_pendente) pintarEtiqueta(el('ctbAplicSituacao'), 'Falta o SQL', 'badge-warning');
+      else if (problemas.length) pintarEtiqueta(el('ctbAplicSituacao'), plural(problemas.length, 'a resolver', 'a resolver'), 'badge-danger');
+      else pintarEtiqueta(el('ctbAplicSituacao'), lista.some(p => p.aplicacao) ? 'Tudo confere' : 'Nada no mês', lista.some(p => p.aplicacao) ? 'badge-success' : 'badge-neutral');
+      el('ctbAplicSubtitulo').textContent = dados?.rotulo ? `${dados.rotulo} · Rende Fácil e CDB DI pelos PDFs do banco` : 'Rende Fácil e CDB DI pelos PDFs mensais do banco';
+    }
+
+    async function carregar({ manterMensagem = false } = {}) {
+      const minha = ++leitura;
+      mostrarMensagem('ctbAplicAviso', '');
+      if (!manterMensagem) mostrarMensagem('ctbAplicMensagem', '');
+      try {
+        const r = await fetchApi(`/api/contabilidade/aplicacoes?competencia=${encodeURIComponent(compCampo.value || '')}`);
+        if (minha !== leitura) return;
+        dados = r;
+        if (r.sql_pendente) mostrarMensagem('ctbAplicAviso', `As aplicações ainda não estão ativadas: rode ${r.sql_arquivo || 'sql/contabilidade_fase_c.sql'} no banco e reinicie a API.`, 'aviso');
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbAplicAviso', textoDoErro(e, 'Ver as aplicações pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    acionar(el('ctbAplicImportar'), () => { seletor.value = ''; seletor.click(); });
+    seletor.addEventListener('change', async () => {
+      const escolhidos = [...(seletor.files || [])];
+      if (!escolhidos.length) return;
+      mostrarMensagem('ctbAplicMensagem', '');
+      try {
+        if (escolhidos.some(a => a.size > 15 * 1024 * 1024)) throw new Error('Um dos PDFs passa de 15 MB.');
+        const arquivosLidos = [];
+        for (const a of escolhidos) arquivosLidos.push({ nome: a.name, base64: await lerArquivo(a) });
+        const r = await enviar('/api/contabilidade/aplicacoes/importar', 'POST', { arquivos: arquivosLidos });
+        window.showToast?.(r.resumo || 'PDFs importados.', r.nao_conferem ? 'warning' : 'success');
+        if (r.falhas?.length) mostrarMensagem('ctbAplicMensagem', `Ficaram de fora: ${r.falhas.join(' · ')}`, 'aviso');
+        // O PDF de outro mês: a tela vai para o mês dele.
+        const mes = r.importados?.[0]?.competencia;
+        if (mes && mes !== compCampo.value) montarCompetencias(compCampo, mes);
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbAplicMensagem', textoDoErro(e, 'Importar os PDFs pede a permissão "Importar extrato".'));
+      } finally {
+        seletor.value = '';
+      }
+    });
+    acionar(el('ctbAplicConferir'), async () => {
+      mostrarMensagem('ctbAplicMensagem', '');
+      try {
+        const r = await enviar('/api/contabilidade/aplicacoes/conferir', 'POST', { competencia: compCampo.value });
+        window.showToast?.(r.ligados ? `${plural(r.ligados, 'linha do extrato conferida', 'linhas do extrato conferidas')} com o PDF.` : 'Nada novo para conferir.', r.ligados ? 'success' : 'info');
+        if (r.falhas?.length) mostrarMensagem('ctbAplicMensagem', `Não deu para conferir: ${r.falhas.join(' · ')}`, 'aviso');
+        avisarAlteracao();
+        await carregar({ manterMensagem: Boolean(r.falhas?.length) });
+      } catch (e) {
+        mostrarMensagem('ctbAplicMensagem', textoDoErro(e, 'Conferir pede a permissão "Conciliar".'));
+      }
+    });
+    el('ctbAplicConciliacao').addEventListener('click', () => abrirOutro('conciliacao', {}));
+    compCampo.addEventListener('change', () => carregar());
+    ouvirAlteracoes(() => carregar());
+    return carregar();
+  }
+
   // ------------------------------------------------------------ atividade
 
   /* Os tipos do histórico (backend/contabilidade/eventos.js) em grupos, para o filtro e a cor da etiqueta. */
@@ -5368,6 +5524,7 @@
     pagar: { rotulo: 'Contas a pagar', badge: 'badge-warning', tipos: ['titulo_criado', 'titulo_alterado', 'titulo_cancelado', 'pagamento_registrado', 'pagamento_estornado'] },
     dda: { rotulo: 'Boletos do DDA', badge: 'badge-info', tipos: ['dda_vinculado', 'dda_desvinculado', 'dda_conta_lancada', 'dda_ignorado', 'dda_contestado', 'dda_restaurado'] },
     comprovantes: { rotulo: 'Comprovantes do BB', badge: 'badge-info', tipos: ['comprovantes_importados', 'comprovante_ligado', 'comprovante_desligado', 'comprovante_ignorado', 'comprovante_restaurado', 'comprovantes_descartados'] },
+    aplicacoes: { rotulo: 'Aplicações (Rende Fácil, CDB)', badge: 'badge-info', tipos: ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -5530,7 +5687,8 @@
     ctbConfiguracao: montarConfiguracao,
     ctbEntradaDfe: montarEntradaDfe,
     ctbDda: montarDda,
-    ctbComprovantes: montarComprovantes
+    ctbComprovantes: montarComprovantes,
+    ctbAplicacoes: montarAplicacoes
   };
 
   let montagem;

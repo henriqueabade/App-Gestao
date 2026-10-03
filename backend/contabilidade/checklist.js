@@ -36,6 +36,7 @@ const versoes = require('./versoes');
 const parametros = require('./parametros');
 const planoMod = require('./classificacao/plano');
 const comprovantesMod = require('./comprovantes/comprovantes');
+const aplicacoesMod = require('./aplicacoes/aplicacoes');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -530,6 +531,10 @@ function fonteExtrato({ extrato, competencia, hoje, encerrada, inicio = null }) 
       }));
     }
   }
+  // Fase C: o Rende Fácil e o CDB pelos PDFs mensais — falta o PDF, o PDF não fecha, o extrato não bate.
+  for (const p of aplicacoesMod.pendencias({ competencia, dados: extrato.aplicacoes || null, encerrada })) {
+    pend.push(pendencia({ ...p, fonte: 'extrato', destino: 'contabilidade' }));
+  }
   const doMes = c.lista(extrato.movimentos).filter(m => m && m.competencia === competencia);
   const totais = extratoMod.totaisDe(doMes);
   const cobreTudo = coberturas.length && coberturas.every(x => x.cob.completa);
@@ -866,13 +871,15 @@ async function lerExtrato(api, competencia) {
     const [contas, importacoes, movimentos] = await Promise.all([
       b.ler(api, 'contas_financeiras'), b.ler(api, 'extrato_importacoes'), b.ler(api, 'movimentos_bancarios', { competencia })
     ]);
+    // Fase C: as aplicações do mês (null sem o SQL dela).
+    const aplicacoes = await aplicacoesMod.lerDoMes(api, competencia).catch(() => null);
     // 19b: a conta com saldo de abertura de antes do mês precisa dos lançamentos desde ele.
     const porConta = new Map();
     for (const conta of contas) {
       const digitado = extratoMod.saldoDigitado(conta);
       if (digitado && digitado.data < `${competencia}-01`) porConta.set(String(conta.id), await b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id) }));
     }
-    return { contas, importacoes, movimentos, porConta };
+    return { contas, importacoes, movimentos, porConta, aplicacoes };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;
     throw e;

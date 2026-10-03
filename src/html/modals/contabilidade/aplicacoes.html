@@ -1,0 +1,54 @@
+<!--
+  Aplicações do BB (fase C, 02/10/2026): o Rende Fácil e o CDB DI pelos PDFs
+  mensais que o site do BB dá (o BB não tem API para eles). O app lê cada
+  PDF, guarda só os dados, confere as contas ao centavo e liga cada linha do
+  extrato da conta corrente ao que o PDF diz (no Rende Fácil a soma do dia;
+  no CDB o capital e o rendimento de cada resgate). O PDF original fica só
+  até o pacote do mês ser salvo.
+  Dados: GET /api/contabilidade/aplicacoes?competencia= (importar, conferir e
+  o PDF em /aplicacoes/…). Script: src/js/modals/contabilidade-modais.js
+  (montarAplicacoes).
+-->
+<div id="ctbAplicacoesOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbAplicTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbAplicTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-piggy-bank mr-2" aria-hidden="true"></i>Aplicações do BB</h2>
+        <p id="ctbAplicSubtitulo" class="text-xs text-gray-300 truncate">Rende Fácil e CDB DI pelos PDFs mensais do banco</p>
+      </div>
+      <span id="ctbAplicSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbAplicAviso" class="hidden text-sm" role="alert"></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label for="ctbAplicCompetenciaMes" class="ctl-rotulo text-gray-300">Competência</label>
+            <div class="ctb-competencia-campo ctb-competencia-campo--modal" data-competencia>
+              <select id="ctbAplicCompetenciaMes" data-competencia-mes aria-label="Mês" class="ctb-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="ctbAplicCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="ctb-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="ctbAplicCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone ctb-competencia-campo__ir text-white" title="Ver esta competência" aria-label="Ver esta competência"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="ctbAplicCompetencia" />
+            </div>
+          </div>
+          <p class="md:col-span-2 self-end text-xs text-gray-400">Importe os PDFs mensais do Rende Fácil e do CDB DI que o site do BB dá (os mesmos que você já baixa). O app confere as contas de cada PDF ao centavo e liga cada linha do extrato a ele. O rendimento fica na conta da aplicação, como no balancete; o PDF original fica só até o pacote do mês ser salvo.</p>
+        </div>
+
+        <div id="ctbAplicProdutos" class="space-y-6"></div>
+
+        <div id="ctbAplicMensagem" class="hidden text-sm" role="alert"></div>
+        <input id="ctbAplicArquivo" type="file" accept=".pdf" multiple class="hidden" aria-label="PDFs das aplicações" />
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbAplicConciliacao" type="button" class="btn-neutral ctl-botao text-white">Conciliação</button>
+      <button id="ctbAplicConferir" type="button" data-perm="contabilidade.conciliar" class="btn-secondary ctl-botao text-white">Conferir de novo</button>
+      <button id="ctbAplicImportar" type="button" data-perm="contabilidade.extrato.importar" class="btn-primary ctl-botao text-white min-w-[160px]">Importar PDFs</button>
+    </footer>
+  </div>
+</div>

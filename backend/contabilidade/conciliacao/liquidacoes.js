@@ -45,8 +45,12 @@ const TIPOS = {
   reembolso: { rotulo: 'Reembolso', sinal: -1 },
   parcela: { rotulo: 'Conta a pagar em aberto', sinal: -1, obrigacao: true },
   documento: { rotulo: 'Nota sem conta a pagar', sinal: -1, obrigacao: true },
-  dda: { rotulo: 'Boleto do DDA sem conta', sinal: -1, obrigacao: true }
+  dda: { rotulo: 'Boleto do DDA sem conta', sinal: -1, obrigacao: true },
+  // Fase C: o que o extrato tem de mostrar para o Rende Fácil e o CDB (o PDF mensal do BB).
+  aplicacao: { rotulo: 'Aplicação financeira', sinal: -1 },
+  resgate: { rotulo: 'Resgate de aplicação', sinal: 1 }
 };
+const PRODUTOS_APLICACAO = { rende_facil: 'BB Rende Fácil', cdb: 'BB CDB DI' };
 /** Até quantos dias antes ou depois do vencimento (ou da emissão) a obrigação pode ter sido paga. */
 const JANELA_OBRIGACAO = 30;
 const FORA_DO_BANCO = new Set(['Dinheiro']);
@@ -152,6 +156,15 @@ function deParcela(p, { titulo, contato = null, de = 1, boleto = null }) {
  * O boleto do DDA sem conta, agendado ou liquidado (obrigação, fase H):
  * conciliar com ele lança a conta do boleto e a paga com o banco. Pura.
  */
+/** Fase C: um lançamento esperado de uma aplicação (contabil_aplicacao_lancamentos). Pura. */
+function deAplicacao(l, { aplicacao = null } = {}) {
+  const produto = PRODUTOS_APLICACAO[aplicacao?.produto] || 'Aplicação';
+  return base(l.sentido === 'aplicacao' ? 'aplicacao' : 'resgate', l.id, {
+    data: l.data, valor: l.valor, forma: 'Aplicação', rotulo: l.descricao || produto,
+    detalhe: { liquido: 'soma do dia no PDF', capital: 'capital do resgate', rendimento: 'rendimento líquido do resgate' }[l.parte] || null, nome: produto
+  });
+}
+
 function deBoletoDda(bol) {
   const liquidado = Number(bol.estado_bb) === 3;
   return {
@@ -223,15 +236,21 @@ async function porId(api, tabela, ids) {
 async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes = false } = {}) {
   const extras = new Set(incluir);
   const quer = (tipo, id, ...datas) => extras.has(chaveDe(tipo, id)) || datas.some(d => naJanela(c.dia(d), de, ate));
-  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos] = await Promise.all([
+  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos, aplicacoesLidas, aplicLancsLidos] = await Promise.all([
     lerSePuder(api, 'recebimentos'), lerSePuder(api, 'reembolsos'),
     lerSePuder(api, 'financeiro_pagamentos'), lerSePuder(api, 'financeiro_fechamentos'),
     b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'titulos_pagar').then(x => x || []),
     b.lerOpcional(api, 'titulo_pagar_parcelas').then(x => x || []),
     obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'documentos_recebidos').then(x => x || []) : Promise.resolve([]),
     // Fase H: os boletos do DDA (sem o SQL dela, nenhum).
-    obrigacoes || [...extras].some(k => k.startsWith('dda:')) ? b.lerOpcional(api, 'contabil_dda_boletos').then(x => x || []).catch(() => []) : Promise.resolve([])
+    obrigacoes || [...extras].some(k => k.startsWith('dda:')) ? b.lerOpcional(api, 'contabil_dda_boletos').then(x => x || []).catch(() => []) : Promise.resolve([]),
+    // Fase C: as aplicações (sem o SQL dela, nenhuma).
+    b.lerOpcional(api, 'contabil_aplicacoes').then(x => x || []).catch(() => []),
+    b.lerOpcional(api, 'contabil_aplicacao_lancamentos').then(x => x || []).catch(() => [])
   ]);
+  const aplicacoesValendo = new Map(aplicacoesLidas.filter(a => a && !a.substituida_em).map(a => [String(a.id), a]));
+  const aplicLancs = aplicLancsLidos.filter(l => l && aplicacoesValendo.has(String(l.aplicacao_id))
+    && quer(l.sentido === 'aplicacao' ? 'aplicacao' : 'resgate', l.id, l.data));
   const recs = recebimentos.filter(r => r && quer('recebimento', r.id, r.data_recebimento, r.data_credito));
   const reems = reembolsos.filter(r => r && r.data_pagamento && quer('reembolso', r.id, r.data_pagamento));
   const fins = finPags.filter(p => p && quer('financeiro_pagamento', p.id, p.data_pagamento));
@@ -278,7 +297,8 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
       return deParcela(p, { titulo: t, contato: contatoDe(t.contato_id), de: quantas(t.id), boleto: boletoDaParcela.get(String(p.id)) || null });
     }),
     ...docs.map(d => deDocumento(d, { contato: contatoDe(d.contato_id) })),
-    ...boletos.map(deBoletoDda)
+    ...boletos.map(deBoletoDda),
+    ...aplicLancs.map(l => deAplicacao(l, { aplicacao: aplicacoesValendo.get(String(l.aplicacao_id)) }))
   ].filter(l => l.data).sort((x, y) => x.data.localeCompare(y.data) || x.chave.localeCompare(y.chave));
 }
 
@@ -302,6 +322,6 @@ function restantes(liquidacoes, vinculos) {
 
 module.exports = {
   TIPOS, FORA_DO_BANCO, DATA_INCERTA, JANELA_OBRIGACAO, chaveDe,
-  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, deBoletoDda, valorAPagar, documentoSemConta,
+  deRecebimento, deTituloPagamento, deFinanceiroPagamento, deReembolso, deParcela, deDocumento, deBoletoDda, deAplicacao, valorAPagar, documentoSemConta,
   carregar, restantes
 };

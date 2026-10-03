@@ -15,6 +15,12 @@
  *           refazer idêntico, pdf.js).
  *
  * O texto vem em WinAnsiEncoding (os acentos são bytes de 0xA0 a 0xFF).
+ *
+ * Fase C (02/10/2026): os PDFs mensais das aplicações (Rende Fácil, CDB) são
+ * impressos pelo navegador (Skia), com fontes Type0/Identity-H — cada letra é
+ * um código de 2 bytes traduzido pelo mapa /ToUnicode da fonte. O leitor
+ * entende esse mapa (bfchar e bfrange) e, com `todasPaginas`, lê todas as
+ * páginas (`paginasLidas`). Para o comprovante do BB nada muda.
  * Tudo aqui é puro (Buffer → objetos).
  */
 const zlib = require('zlib');
@@ -225,12 +231,65 @@ function tokens(bytes) {
 
 const arred = n => Math.round(Number(n) * 1000) / 1000;
 
+/** Hex de um CMap → texto (UTF-16BE). Pura. */
+const deUtf16 = hex => {
+  const b = Buffer.from(hex.length % 4 ? hex.padStart(Math.ceil(hex.length / 4) * 4, '0') : hex, 'hex');
+  let s = '';
+  for (let i = 0; i + 1 < b.length; i += 2) s += String.fromCharCode(b.readUInt16BE(i));
+  return s;
+};
+
+/**
+ * O mapa /ToUnicode de uma fonte: `{ bytes, mapa: Map(código → texto) }`
+ * (bytes = tamanho do código, do codespacerange). Entende bfchar e bfrange
+ * (com destino inicial ou com a lista). Pura.
+ */
+function lerCmap(texto) {
+  const mapa = new Map();
+  const espaco = /begincodespacerange\s*<([0-9A-Fa-f]+)>/.exec(texto);
+  const bytes = espaco ? Math.max(1, espaco[1].length / 2) : 2;
+  for (const bloco of texto.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const m of bloco[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) mapa.set(parseInt(m[1], 16), deUtf16(m[2]));
+  }
+  for (const bloco of texto.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    for (const m of bloco[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<([0-9A-Fa-f]+)>|\[([^\]]*)\])/g)) {
+      const ini = parseInt(m[1], 16);
+      const fim = parseInt(m[2], 16);
+      if (fim - ini > 0xffff) continue;
+      if (m[4]) {
+        const base = Buffer.from(m[4].padStart(Math.ceil(m[4].length / 4) * 4, '0'), 'hex');
+        for (let c = ini; c <= fim; c++) {
+          const d = Buffer.from(base);
+          d.writeUInt16BE((d.readUInt16BE(d.length - 2) + (c - ini)) & 0xffff, d.length - 2);
+          mapa.set(c, deUtf16(d.toString('hex')));
+        }
+      } else {
+        const destinos = [...m[5].matchAll(/<([0-9A-Fa-f]+)>/g)].map(x => deUtf16(x[1]));
+        for (let c = ini; c <= fim && c - ini < destinos.length; c++) mapa.set(c, destinos[c - ini]);
+      }
+    }
+  }
+  return { bytes, mapa };
+}
+
+/** Bytes de uma string do PDF → texto pelo mapa da fonte. Pura. */
+function textoPeloCmap(bytes, cmap) {
+  let s = '';
+  for (let i = 0; i + cmap.bytes - 1 < bytes.length; i += cmap.bytes) {
+    let c = 0;
+    for (let k = 0; k < cmap.bytes; k++) c = c * 256 + bytes[i + k];
+    s += cmap.mapa.has(c) ? cmap.mapa.get(c) : '';
+  }
+  return s;
+}
+
 /**
  * Interpreta o texto de um conteúdo: cada Tj vira uma linha com a posição
  * (x, y), a fonte e o tamanho. Os blocos BT…ET separados. Também os
- * operadores vistos (para saber se é o formato simples). Pura.
+ * operadores vistos (para saber se é o formato simples). `cmaps` = Map(nome
+ * da fonte no recurso → mapa ToUnicode), para as fontes Type0. Pura.
  */
-function interpretar(conteudo, fontes = new Map()) {
+function interpretar(conteudo, fontes = new Map(), cmaps = new Map()) {
   const lista = tokens(conteudo);
   const blocos = [];
   const operadores = new Set();
@@ -238,6 +297,7 @@ function interpretar(conteudo, fontes = new Map()) {
   let pilha = [];
   let bloco = null;
   let fonte = null;
+  let cmap = null;
   let tamanho = null;
   let tl = 0;
   let tm = [1, 0, 0, 1, 0, 0];
@@ -248,7 +308,7 @@ function interpretar(conteudo, fontes = new Map()) {
   };
   const escrever = (bytes, como) => {
     if (!bloco) return;
-    bloco.linhas.push({ texto: textoWinAnsi(bytes), x: arred(tm[4]), y: arred(tm[5]), fonte, tamanho, como });
+    bloco.linhas.push({ texto: cmap ? textoPeloCmap(bytes, cmap) : textoWinAnsi(bytes), x: arred(tm[4]), y: arred(tm[5]), fonte, tamanho, como });
   };
   for (const tk of lista) {
     if (tk.t !== 'op') { pilha.push(tk); continue; }
@@ -261,6 +321,7 @@ function interpretar(conteudo, fontes = new Map()) {
       case 'Tf': {
         const nomeFonte = pilha[pilha.length - 2]?.v;
         fonte = fontes.get(nomeFonte) || nomeFonte || null;
+        cmap = cmaps.get(nomeFonte) || null;
         tamanho = n(1);
         if (bloco && bloco.fonteNome === undefined) { bloco.fonteNome = nomeFonte; }
         break;
@@ -294,31 +355,107 @@ function interpretar(conteudo, fontes = new Map()) {
  * operadores, graficos }`. Só a primeira página entra nos blocos (o
  * comprovante do BB tem uma). Lança se não for PDF.
  */
-function lerPdf(buffer) {
+function lerPdf(buffer, { todasPaginas = false } = {}) {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw erro('O arquivo não é um PDF.');
   const objs = objetos(buf);
-  const paginas = [...objs.entries()].filter(([, o]) => /\/Type\s*\/Page\b(?!s)/.test(o.dict));
+  const paginas = paginasEmOrdem(objs);
   if (!paginas.length) throw erro('O PDF não tem página.');
-  const [, pag] = paginas[0];
+  const producer = /\/Producer\s*\(([^)]*)\)/.exec(buf.toString('latin1'))?.[1] || null;
+  const primeira = lerPagina(paginas[0], objs);
+  const saida = { paginas: paginas.length, pagina: primeira.pagina, producer, ...primeira.lido };
+  if (todasPaginas) saida.paginasLidas = paginas.map((p, i) => (i ? lerPagina(p, objs) : primeira).lido);
+  return saida;
+}
+
+/** As páginas na ordem da árvore (/Pages → /Kids); sem árvore, na ordem dos objetos. Pura. */
+function paginasEmOrdem(objs) {
+  const ehPagina = o => /\/Type\s*\/Page\b(?!s)/.test(o?.dict || '');
+  const raiz = [...objs.entries()].find(([, o]) => /\/Type\s*\/Pages\b/.test(o.dict) && !/\/Parent\s+\d+\s+\d+\s+R/.test(o.dict));
+  const ordem = [];
+  const vistos = new Set();
+  const visitar = num => {
+    if (vistos.has(num) || ordem.length > 2000) return;
+    vistos.add(num);
+    const o = objs.get(num);
+    if (!o) return;
+    if (ehPagina(o)) { ordem.push(o); return; }
+    const kids = /\/Kids\s*\[([^\]]*)\]/.exec(o.dict);
+    if (kids) for (const m of kids[1].matchAll(/(\d+)\s+\d+\s+R/g)) visitar(Number(m[1]));
+  };
+  if (raiz) visitar(raiz[0]);
+  return ordem.length ? ordem : [...objs.values()].filter(ehPagina);
+}
+
+/** Uma página: o tamanho, as fontes (com o mapa ToUnicode das Type0) e o texto interpretado. Pura. */
+function lerPagina(pag, objs) {
   const caixa = /\/MediaBox\s*\[\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*\]/.exec(pag.dict)
     || /\/MediaBox\s*\[\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*\]/.exec(objs.get(ref(pag.dict, 'Parent'))?.dict || '');
   const pagina = caixa ? [arred(Number(caixa[3]) - Number(caixa[1])), arred(Number(caixa[4]) - Number(caixa[2]))] : null;
   const recursos = dicionario(pag.dict, 'Resources', objs) || dicionario(objs.get(ref(pag.dict, 'Parent'))?.dict || '', 'Resources', objs);
   const dictFontes = dicionario(recursos, 'Font', objs);
   const fontes = new Map();
+  const cmaps = new Map();
   for (const m of dictFontes.matchAll(/\/([A-Za-z0-9_.+-]+)\s+(\d+)\s+\d+\s+R/g)) {
-    const base = /\/BaseFont\s*\/([A-Za-z0-9_.+-]+)/.exec(objs.get(Number(m[2]))?.dict || '');
+    const dictFonte = objs.get(Number(m[2]))?.dict || '';
+    const base = /\/BaseFont\s*\/([A-Za-z0-9_.+-]+)/.exec(dictFonte);
     fontes.set(m[1], base ? base[1] : m[1]);
+    const toUnicode = ref(dictFonte, 'ToUnicode');
+    if (/\/Subtype\s*\/Type0/.test(dictFonte) && toUnicode && objs.get(toUnicode)?.stream) {
+      cmaps.set(m[1], lerCmap(objs.get(toUnicode).stream.toString('latin1')));
+    }
   }
   const contRefs = [];
   const arr = /\/Contents\s*\[([^\]]*)\]/.exec(pag.dict);
   if (arr) for (const m of arr[1].matchAll(/(\d+)\s+\d+\s+R/g)) contRefs.push(Number(m[1]));
   else if (ref(pag.dict, 'Contents')) contRefs.push(ref(pag.dict, 'Contents'));
   const conteudo = Buffer.concat(contRefs.map(r => objs.get(r)?.stream).filter(Boolean).flatMap(x => [x, Buffer.from('\n')]));
-  const lido = interpretar(conteudo, fontes);
-  const producer = /\/Producer\s*\(([^)]*)\)/.exec(buf.toString('latin1'))?.[1] || null;
-  return { paginas: paginas.length, pagina, producer, ...lido };
+  return { pagina, lido: interpretar(conteudo, fontes, cmaps) };
+}
+
+/**
+ * As linhas da página como o olho lê (fase C): os pedaços de texto juntados
+ * pela altura (`y`, com tolerância) e, em cada linha, as colunas pela
+ * posição `x`. `[{ y, celulas: [{ x, texto }], texto }]`, de cima para baixo.
+ * O navegador (Skia) imprime com o eixo y invertido (y cresce para baixo); o
+ * iText, no eixo normal (y cresce para cima). A direção sai da ordem em que
+ * o texto aparece no conteúdo: de um pedaço para o seguinte, a leitura desce
+ * a folha na maioria das vezes (um "voto" por passo). Pura.
+ */
+function linhasDaPagina(lido, { tolerancia = 2 } = {}) {
+  const pedacos = (lido.blocos || []).flatMap(b => b.linhas).filter(l => String(l.texto).trim() !== '' || l.texto === ' ');
+  let cresce = 0;
+  let diminui = 0;
+  for (let k = 1; k < pedacos.length; k++) {
+    const d = pedacos[k].y - pedacos[k - 1].y;
+    if (d > tolerancia) cresce++;
+    else if (d < -tolerancia) diminui++;
+  }
+  const desce = cresce >= diminui;
+  const ordemY = (a, b) => (desce ? a.y - b.y : b.y - a.y);
+  const linhas = [];
+  for (const p of [...pedacos].sort((a, b) => ordemY(a, b) || a.x - b.x)) {
+    let alvo = linhas.find(l => Math.abs(l.y - p.y) <= tolerancia);
+    if (!alvo) { alvo = { y: p.y, pedacos: [] }; linhas.push(alvo); }
+    alvo.pedacos.push(p);
+  }
+  return linhas.sort(ordemY).map(l => {
+    const ordem = l.pedacos.sort((a, b) => a.x - b.x);
+    // Pedaços colados (a mesma palavra em fontes diferentes) viram uma célula; o espaço grande separa colunas.
+    const celulas = [];
+    for (const p of ordem) {
+      const ultima = celulas[celulas.length - 1];
+      const fimAnterior = ultima ? ultima.x + ultima.largura : -Infinity;
+      if (ultima && p.x - fimAnterior < Math.max(4, (p.tamanho || 10) * 0.9)) {
+        ultima.texto += p.texto;
+        ultima.largura = p.x - ultima.x + String(p.texto).length * (p.tamanho || 10) * 0.5;
+      } else {
+        celulas.push({ x: p.x, texto: p.texto, largura: String(p.texto).length * (p.tamanho || 10) * 0.5 });
+      }
+    }
+    const limpas = celulas.map(c => ({ x: c.x, texto: c.texto.replace(/\s+/g, ' ').trim() })).filter(c => c.texto);
+    return { y: l.y, celulas: limpas, texto: limpas.map(c => c.texto).join(' | ') };
+  });
 }
 
 /**
@@ -354,4 +491,7 @@ function formatoSimples(lido) {
   };
 }
 
-module.exports = { MAX_ARQUIVOS_ZIP, MAX_BYTES_DESCOMPACTADOS, WIN_ANSI, lerZip, textoWinAnsi, objetos, tokens, interpretar, lerPdf, formatoSimples };
+module.exports = {
+  MAX_ARQUIVOS_ZIP, MAX_BYTES_DESCOMPACTADOS, WIN_ANSI, lerZip, textoWinAnsi, objetos, tokens, lerCmap, textoPeloCmap, interpretar, lerPdf, paginasEmOrdem, linhasDaPagina,
+  formatoSimples
+};

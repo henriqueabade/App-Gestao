@@ -225,7 +225,9 @@ const CTB_ACOES = {
     // Fase H: os boletos contra a empresa (DDA do BB). A pendência traz a visão (sem conta / ligados).
     'dda': { rotulo: 'Boletos do DDA', abrir: (m, extra) => ctbAbrirModal('dda', m, { visao: extra?.visao || null }) },
     // Fase D: os comprovantes do BB (o ZIP ou os PDFs) — lidos, refeitos dos dados e ligados ao extrato.
-    'comprovantes': { rotulo: 'Comprovantes do BB', abrir: (m, extra) => ctbAbrirModal('comprovantes', m, { visao: extra?.visao || null }) }
+    'comprovantes': { rotulo: 'Comprovantes do BB', abrir: (m, extra) => ctbAbrirModal('comprovantes', m, { visao: extra?.visao || null }) },
+    // Fase C: o Rende Fácil e o CDB pelos PDFs mensais do BB (conferidos ao centavo com o extrato).
+    'aplicacoes': { rotulo: 'Aplicações do BB', abrir: m => ctbAbrirModal('aplicacoes', m, {}) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -263,7 +265,9 @@ const CTB_MODAIS = {
     // Fase H: os boletos do DDA do BB.
     'dda': { html: 'modals/contabilidade/dda.html', overlay: 'ctbDda' },
     // Fase D: os comprovantes do BB.
-    'comprovantes': { html: 'modals/contabilidade/comprovantes.html', overlay: 'ctbComprovantes' }
+    'comprovantes': { html: 'modals/contabilidade/comprovantes.html', overlay: 'ctbComprovantes' },
+    // Fase C: as aplicações do BB.
+    'aplicacoes': { html: 'modals/contabilidade/aplicacoes.html', overlay: 'ctbAplicacoes' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */

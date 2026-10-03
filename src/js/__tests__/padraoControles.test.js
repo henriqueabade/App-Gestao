@@ -168,7 +168,9 @@ const PADRONIZADOS = [
       // 02/10/2026 — fase H: os boletos do DDA do BB.
       'dda',
       // 02/10/2026 — fase D: os comprovantes do BB.
-      'comprovantes'
+      'comprovantes',
+      // 02/10/2026 — fase C: as aplicações do BB (Rende Fácil, CDB).
+      'aplicacoes'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

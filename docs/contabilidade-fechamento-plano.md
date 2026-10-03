@@ -1864,3 +1864,62 @@ dossiê das parcelas seguintes aponta para ela. Roteiro: Parte M. Sem SQL.
   - tirar do servidor os outros anexos depois do pacote salvo (o painel teria
     que contar "enviado no pacote" como documento presente);
   - o OFX refeito dos lançamentos.
+
+## AH. Fase C entregue (02/10/2026) — as aplicações do BB pelos PDFs mensais
+
+Ordem do dono (02/10, noite): "siga para a próxima etapa, faça isso até o fim…
+vá comitando cada etapa". Desenho aprovado antes: as aplicações entram pelos
+PDFs mensais (o BB não tem API), "100% correto"; rendimento do CDB todo mês;
+rendimento fica na 00020 (fase B). Roteiro: Parte N. SQL:
+`sql/contabilidade_fase_c.sql` (depois do da Fase D; reiniciar a API).
+
+- **Leitor** (`comprovantes/leitor.js`):
+  - fontes Type0/Identity-H pelo `/ToUnicode` (`lerCmap`, `textoPeloCmap`:
+    bfchar e bfrange);
+  - `lerPdf(…, { todasPaginas })` na ordem da árvore de páginas;
+  - `linhasDaPagina` junta os pedaços por altura e separa as colunas por `x`.
+    A direção (y para baixo no Skia, para cima no iText) sai de uma votação
+    entre pedaços consecutivos.
+- **Leitura** (`aplicacoes/leitura.js`, pura):
+  - `lerRendeFacil`: resumo e histórico pelas colunas;
+  - `lerCdb`: blocos "dd/mm Histórico - depósito" seguidos de "valor …",
+    mais as tabelas de saldos, depósitos em ser e rendimento por depósito;
+  - as conferências e os lançamentos esperados no extrato (Rende Fácil: a
+    soma do dia por sentido; CDB: capital e rendimento líquido do resgate).
+  - Real de setembro: tudo ok, 23 de 23 linhas casadas.
+- **Banco:**
+  - `contabil_aplicacoes`: dados, jsonb, conferências e `confere`;
+    `arquivo_id` até o pacote; `substituida_em` (um PDF valendo por
+    aplicação e mês);
+  - `contabil_aplicacao_lancamentos`: `sentido` aplicacao/resgate e `parte`
+    liquido/capital/rendimento.
+- **Conciliação:**
+  - tipos novos de liquidação, `aplicacao` (sinal −1) e `resgate` (+1)
+    (`deAplicacao`);
+  - critério `aplicacao` ("Conferido com o PDF da aplicação");
+  - `conciliacao.gravar` exportado;
+  - `aplicacoes.conciliarSozinho`: mesmo dia e valor exato, par único; no
+    Rende Fácil também a soma de várias linhas do dia;
+  - roda ao importar e em `automaticaDosMeses` (o extrato que chega depois);
+  - o PDF substituído solta o que ligou (`soltarDoExtrato`).
+- **Painel** (fonte extrato): `aplicacao_sem_pdf_*`,
+  `aplicacao_nao_confere_*`, `aplicacao_divergente_*`, críticos com o mês
+  encerrado.
+- **Relatório:** `aplicacoesDoMes` e a seção "Aplicações financeiras".
+- **Documentos e pacote:** `itensDeEvidencia` leva o PDF para `02-Extrato`;
+  o pacote salvo descarta o original (`descartarOriginais`).
+- **Rotas:** GET `/aplicacoes`, POST `/aplicacoes/importar` (extrato.importar,
+  corpo grande), POST `/aplicacoes/conferir` (conciliar), GET
+  `/aplicacoes/:id/pdf`.
+- **Tela:** modal `aplicacoes` (cartão por aplicação: 8 números,
+  conferências, tabela do que o PDF espera × a linha do extrato, sobras),
+  botão nas Ações, grupo na atividade.
+- **Testes:**
+  - `aplicacoes/aplicacoes.test.js`: 4 (cmap, Rende Fácil, CDB,
+    situação/pendências/documentos);
+  - `contabilidadeAplicacoes.test.js`: 3, de ponta a ponta;
+  - PDFs de mentira em `aplicacoes/pdfsDeTeste.js`;
+  - tela: modal no padrão e a fase C;
+  - DEV contra o Postgres descartável com o OFX e os PDFs reais
+    (`dev_e2e_aplicacoes.js`): tudo ok, banco apagado.
+- **Pendências:** 64 a 67.

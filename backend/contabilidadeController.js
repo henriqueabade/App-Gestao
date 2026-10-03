@@ -108,6 +108,13 @@
  *   POST /comprovantes/:id/restaurar                                                                (contabilidade.documento.registrar)
  *   POST /pacote/:id/salvo                   o ZIP foi salvo: os originais guardados saem do servidor (contabilidade.pacote.gerar)
  *
+ * Fase C (02/10/2026 — as aplicações do BB pelos PDFs mensais do Rende Fácil e do CDB):
+ *
+ *   GET  /aplicacoes?competencia=            cada aplicação do mês: o PDF, as conferências, o que o extrato tem de mostrar e o que sobrou
+ *   POST /aplicacoes/importar                { arquivos: [{ nome, base64 }] } — os PDFs              (contabilidade.extrato.importar)
+ *   POST /aplicacoes/conferir                { competencia } — liga o extrato que chegou depois     (contabilidade.conciliar)
+ *   GET  /aplicacoes/:id/pdf                 { nome, tipo, base64 } — o original, enquanto guardado (até o pacote salvo)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -139,6 +146,7 @@ const citaveis = require('./contabilidade/citaveis');
 const dda = require('./contabilidade/dda/dda');
 const ddaEspelho = require('./contabilidade/dda/espelho');
 const comprovantes = require('./contabilidade/comprovantes/comprovantes');
+const aplicacoes = require('./contabilidade/aplicacoes/aplicacoes');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -501,6 +509,25 @@ router.post('/comprovantes/:id/ignorar', exigirPermissao(REGISTRAR_DOCUMENTO), r
 
 router.post('/comprovantes/:id/restaurar', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/comprovantes/:id/restaurar', ({ api, req, usuarioId }) =>
   comprovantes.restaurar(api, req.params.id, { usuarioId })));
+
+// ------------------------------------------------------------ aplicações do BB (fase C: os PDFs do Rende Fácil e do CDB)
+
+router.get('/aplicacoes', exigirPermissao(VER), rota('GET /api/contabilidade/aplicacoes', ({ api, req, hoje }) =>
+  aplicacoes.listar(api, { competencia: req.query?.competencia || null, hoje })));
+
+router.post('/aplicacoes/importar', exigirPermissao(IMPORTAR_EXTRATO), rota('POST /api/contabilidade/aplicacoes/importar', ({ api, req, hoje, usuarioId }) =>
+  aplicacoes.importar(api, { arquivos: req.body?.arquivos || [], usuarioId, hoje })));
+
+// "Conferir de novo": liga o que o extrato trouxe depois do PDF (e a conciliação roda no mês).
+router.post('/aplicacoes/conferir', exigirPermissao(CONCILIAR), rota('POST /api/contabilidade/aplicacoes/conferir', async ({ api, req, hoje, usuarioId }) => {
+  const comp = req.body?.competencia;
+  if (!/^\d{4}-\d{2}$/.test(String(comp || ''))) throw Object.assign(new Error('Informe a competência (AAAA-MM).'), { status: 400 });
+  const r = await aplicacoes.conciliarSozinho(api, { competencias: [String(comp)], usuarioId });
+  return comConciliacao(api, r, { competencias: [String(comp)], usuarioId, hoje });
+}));
+
+router.get('/aplicacoes/:id/pdf', exigirPermissao(VER), rota('GET /api/contabilidade/aplicacoes/:id/pdf', ({ api, req }) =>
+  aplicacoes.pdfOriginal(api, req.params.id)));
 
 // ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
 
