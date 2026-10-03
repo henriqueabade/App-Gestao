@@ -5685,6 +5685,187 @@
     return carregar();
   }
 
+  // ------------------------------------------------------------ quem recebe (fase E)
+
+  const TOM_PARTE_PESSOA = { pronto_para_pagar: 'badge-warning', documentado: 'badge-success', pago_sem_nota: 'badge-danger', aguardando_nota: 'badge-neutral' };
+  const ROTULO_PARTE_PESSOA = { pronto_para_pagar: 'Nota recebida: pronta para pagar', documentado: 'Paga e com nota', pago_sem_nota: 'Paga sem a nota', aguardando_nota: 'Aguardando a nota' };
+
+  /** Uma escolha entre opções delimitadas (radio), acima dos modais. null = desistiu. */
+  function escolherDaLista({ titulo, mensagem, opcoes, confirmar = 'Escolher', vazio = 'Nada para escolher.' }) {
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-2xl glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', titulo));
+      if (mensagem) caixa.appendChild(criar('p', 'text-sm text-gray-300', mensagem));
+      const lista = criar('div', 'ctb-dda-escolhas modal-scroll');
+      if (!opcoes.length) lista.appendChild(criar('p', 'text-sm text-gray-400', vazio));
+      opcoes.forEach((o, i) => {
+        const rotulo = criar('label', 'ctb-dda-escolha');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'ctbEscolhaLista';
+        radio.value = String(o.valor);
+        if (i === 0) radio.checked = true;
+        const texto = criar('span', 'ctb-dda-escolha__texto');
+        texto.append(criar('strong', null, o.titulo), criar('span', 'ctb-sub', o.sub || ''));
+        rotulo.append(radio, texto);
+        lista.appendChild(rotulo);
+      });
+      caixa.appendChild(lista);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-danger ctl-botao text-white', 'Cancelar');
+      const ok = criar('button', 'btn-success ctl-botao', confirmar);
+      voltar.type = 'button';
+      ok.type = 'button';
+      ok.disabled = !opcoes.length;
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const sair = valor => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(valor);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', () => sair(lista.querySelector('input[name="ctbEscolhaLista"]:checked')?.value ?? null));
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      (lista.querySelector('input') || voltar).focus();
+    });
+  }
+
+  /** Quem recebe no Financeiro: o cadastro (CPF/CNPJ), as partes em aberto e as notas que não acharam a parte. */
+  function montarPessoas() {
+    let dados = null;
+    let leitura = 0;
+
+    const fazer = (metodo, caminho, corpoEnvio, sucesso) => async () => {
+      mostrarMensagem('ctbPessoasMensagem', '');
+      try {
+        const r = await enviar(caminho, metodo, corpoEnvio);
+        window.showToast?.(typeof sucesso === 'function' ? sucesso(r) : sucesso, 'success');
+        avisarAlteracao();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem('ctbPessoasMensagem', textoDoErro(e, 'Isto pede a permissão "Registrar documento recebido".'));
+      }
+    };
+
+    async function ligar(p) {
+      try {
+        const { lista } = await carregarFornecedores(null);
+        const comDoc = lista.filter(f => f.documento);
+        const id = await escolherDaLista({
+          titulo: `O cadastro de ${p.nome}`, confirmar: 'Ligar',
+          mensagem: 'Os contatos com CPF/CNPJ. Se a pessoa ainda não está em Contatos, cadastre lá (com o CPF/CNPJ) e volte aqui.',
+          opcoes: comDoc.map(f => ({ valor: f.id, titulo: f.nome, sub: [f.documento, f.tipo, f.cidade].filter(Boolean).join(' · ') })),
+          vazio: 'Nenhum contato com CPF/CNPJ: cadastre em Contatos.'
+        });
+        if (id !== null) await fazer('PUT', '/api/contabilidade/pessoas', { nome: p.nome, contato_id: Number(id) }, `${p.nome} ligado ao cadastro.`)();
+      } catch (e) {
+        mostrarMensagem('ctbPessoasMensagem', textoDoErro(e, 'Ver os contatos pede "Ver o fechamento".'));
+      }
+    }
+
+    async function escolherParte(n) {
+      try {
+        const r = await fetchApi(`/api/contabilidade/pessoas/notas/${encodeURIComponent(n.id)}/opcoes`);
+        const chave = await escolherDaLista({
+          titulo: 'Qual parte do fechamento esta nota documenta?', confirmar: 'Ligar a nota',
+          mensagem: `${n.pessoa || n.emitente || 'Quem recebe'} · nota ${n.numero || ''} · ${formatarMoeda(n.valor_total)} · ${formatarData(n.data_emissao)}. As partes em aberto dos fechamentos recentes.`,
+          opcoes: (r.opcoes || []).map(o => ({ valor: o.chave, titulo: `${o.rotulo} · ${formatarMoeda(o.valor)}`, sub: o.exato ? 'o mesmo valor da nota' : `a nota é de ${formatarMoeda(n.valor_total)}` })),
+          vazio: 'Nenhuma parte em aberto nos fechamentos dos últimos 6 meses.'
+        });
+        if (chave !== null) await fazer('POST', `/api/contabilidade/pessoas/notas/${encodeURIComponent(n.id)}/escolher`, { opcao: chave }, r2 => `Nota ligada a ${r2.rotulo}${r2.pronto_para_pagar ? ': pronta para pagar' : ''}.`)();
+      } catch (e) {
+        mostrarMensagem('ctbPessoasMensagem', textoDoErro(e, 'Ver as partes pede "Ver o fechamento".'));
+      }
+    }
+
+    function desenhar() {
+      const t = dados?.totais;
+      el('ctbPessoasTotal').textContent = t ? String(t.pessoas) : '—';
+      el('ctbPessoasSemCadastro').textContent = t ? String(t.sem_cadastro) : '—';
+      el('ctbPessoasNotas').textContent = t ? String(t.notas_para_conferir) : '—';
+      if (dados?.sql_pendente) pintarEtiqueta(el('ctbPessoasSituacao'), 'Falta o SQL', 'badge-warning');
+      else if (t?.sem_cadastro) pintarEtiqueta(el('ctbPessoasSituacao'), plural(t.sem_cadastro, 'sem CPF/CNPJ', 'sem CPF/CNPJ'), 'badge-warning');
+      else if (t?.notas_para_conferir) pintarEtiqueta(el('ctbPessoasSituacao'), plural(t.notas_para_conferir, 'nota a conferir', 'notas a conferir'), 'badge-warning');
+      else pintarEtiqueta(el('ctbPessoasSituacao'), 'Tudo ligado', 'badge-success');
+
+      const notas = dados?.notas_para_conferir || [];
+      el('ctbPessoasNotasBloco').classList.toggle('hidden', !notas.length);
+      el('ctbPessoasNotasLista').replaceChildren(...notas.map(n => {
+        const tr = criar('tr');
+        const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+        acoes.append(
+          botaoPequeno('Escolher a parte…', 'btn-success', () => escolherParte(n), { perm: 'contabilidade.documento.registrar', titulo: n.opcoes ? `${plural(n.opcoes, 'parte possível', 'partes possíveis')}` : 'Nenhuma parte com este valor' }),
+          botaoPequeno('Nota', 'btn-secondary', () => abrirOutro('documento-recebido', { documento_id: n.id }), { titulo: 'Abrir a nota registrada' })
+        );
+        tr.append(
+          celula(formatarData(n.data_emissao), 'px-4 py-3 ctb-nowrap'), celula(n.pessoa || '—', 'px-4 py-3', n.emitente || null),
+          celula(n.numero ? `NFS-e ${n.numero}` : 'Nota', 'px-4 py-3', n.opcoes ? plural(n.opcoes, 'parte possível', 'partes possíveis') : 'nenhuma parte com este valor'),
+          celula(formatarMoeda(n.valor_total), 'px-4 py-3 text-right ctb-num'), celula(acoes, 'px-4 py-3 text-right')
+        );
+        return tr;
+      }));
+
+      const corpo = el('ctbPessoasLista');
+      const lista = dados?.pessoas || [];
+      if (!lista.length) {
+        linhaVazia(corpo, 4, dados?.sql_pendente ? 'O cadastro de quem recebe ainda não está ativado (falta o SQL da fase E).' : 'Ninguém recebe comissão nem produção no Financeiro ainda.');
+      } else {
+        corpo.replaceChildren(...lista.map(p => {
+          const tr = criar('tr');
+          const cadastro = p.contato
+            ? celula([tag(p.contato.completo ? 'Ligado' : 'Sem CPF/CNPJ', p.contato.completo ? 'badge-success' : 'badge-warning')], 'px-4 py-3', [p.contato.nome, p.contato.documento].filter(Boolean).join(' · '))
+            : celula([tag('Sem cadastro', 'badge-warning')], 'px-4 py-3', 'a nota desta pessoa não é reconhecida');
+          const partes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+          for (const x of p.partes) partes.appendChild(tag(`${x.rotulo.replace(` — ${p.nome}`, '')} · ${formatarMoeda(x.valor)}`, TOM_PARTE_PESSOA[x.situacao] || 'badge-neutral', ROTULO_PARTE_PESSOA[x.situacao] || x.situacao));
+          const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
+          acoes.appendChild(botaoPequeno(p.contato ? 'Trocar' : 'Ligar ao contato…', p.contato ? 'btn-neutral' : 'btn-success', () => ligar(p), { perm: 'contabilidade.documento.registrar' }));
+          if (p.contato) {
+            acoes.appendChild(botaoPequeno('Desligar', 'btn-neutral', fazer('PUT', '/api/contabilidade/pessoas', { nome: p.nome, contato_id: null }, `${p.nome} desligado do cadastro.`),
+              { perm: 'contabilidade.documento.registrar', titulo: 'A nota desta pessoa deixa de ser reconhecida' }));
+          }
+          tr.append(
+            celula(p.nome, 'px-4 py-3', p.fontes.join(' · ') || null), cadastro,
+            celula(p.partes.length ? partes : 'Nada em aberto', 'px-4 py-3', p.partes.length ? p.partes.map(x => ROTULO_PARTE_PESSOA[x.situacao]).filter((v, i, a) => a.indexOf(v) === i).join(' · ') : null),
+            celula(acoes, 'px-4 py-3 text-right')
+          );
+          return tr;
+        }));
+      }
+      try { window.Permissoes?.aplicarAcoesEColunas?.(el('ctbPessoasOverlay')); } catch (_) { /* sem permissões carregadas */ }
+    }
+
+    async function carregar() {
+      const minha = ++leitura;
+      mostrarMensagem('ctbPessoasAviso', '');
+      try {
+        const r = await fetchApi('/api/contabilidade/pessoas');
+        if (minha !== leitura) return;
+        dados = r;
+        if (r.sql_pendente) mostrarMensagem('ctbPessoasAviso', `O cadastro de quem recebe ainda não está ativado: rode ${r.sql_arquivo || 'sql/contabilidade_fase_e.sql'} no banco e reinicie a API.`, 'aviso');
+      } catch (e) {
+        if (minha !== leitura) return;
+        dados = null;
+        mostrarMensagem('ctbPessoasAviso', textoDoErro(e, 'Ver quem recebe pede "Ver o fechamento".'));
+      }
+      desenhar();
+    }
+
+    acionar(el('ctbPessoasConferir'), fazer('POST', '/api/contabilidade/pessoas/conferir', {},
+      r => (r.ligadas ? `${plural(r.ligadas, 'nota ligada', 'notas ligadas')} ao fechamento${r.duvidas ? ` · ${plural(r.duvidas, 'para escolher', 'para escolher')}` : ''}.` : (r.duvidas ? `${plural(r.duvidas, 'nota para escolher', 'notas para escolher')}.` : 'Nada novo para ligar.'))));
+    el('ctbPessoasDocumentos').addEventListener('click', () => abrirOutro('documentos-recebidos', {}));
+    ouvirAlteracoes(() => carregar());
+    return carregar();
+  }
+
   // ------------------------------------------------------------ cartão de crédito (fase G)
 
   const TOM_SITUACAO_CARTAO = {
@@ -5985,6 +6166,7 @@
     aplicacoes: { rotulo: 'Aplicações (Rende Fácil, CDB)', badge: 'badge-info', tipos: ['aplicacao_importada', 'aplicacao_conciliada', 'aplicacoes_descartadas'] },
     terceiros: { rotulo: 'Pago em nome de terceiros', badge: 'badge-warning', tipos: ['terceiro_lancado', 'terceiro_recebido', 'terceiro_cancelado'] },
     cartao: { rotulo: 'Cartão de crédito', badge: 'badge-info', tipos: ['cartao_fatura_importada', 'cartao_nota_ligada', 'cartao_sem_nota', 'cartao_desfeito', 'cartao_conciliado'] },
+    pessoas: { rotulo: 'Quem recebe (comissão e produção)', badge: 'badge-info', tipos: ['pessoa_ligada', 'nota_fechamento_ligada', 'nota_fechamento_desfeita'] },
     extrato: { rotulo: 'Extrato', badge: 'badge-info', tipos: ['conta_financeira_criada', 'extrato_importado', 'extrato_desfeito'] },
     conciliacao: { rotulo: 'Conciliação', badge: 'badge-success', tipos: ['conciliacao_feita', 'conciliacao_desfeita', 'conciliacao_automatica', 'lancamento_ignorado', 'lancamento_reativado'] },
     classificacao: { rotulo: 'Classificação', badge: 'badge-neutral', tipos: ['lancamento_classificado', 'classificacao_removida', 'plano_conta_salva', 'regra_salva'] },
@@ -6150,7 +6332,8 @@
     ctbComprovantes: montarComprovantes,
     ctbAplicacoes: montarAplicacoes,
     ctbTerceiros: montarTerceiros,
-    ctbCartao: montarCartao
+    ctbCartao: montarCartao,
+    ctbPessoas: montarPessoas
   };
 
   let montagem;

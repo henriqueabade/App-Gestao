@@ -100,6 +100,7 @@ Só vale para **tarefas e calendário**. Clientes e prospecções não mudaram.
 | Pedido marcado como Entregue | "Pós-venda do pedido {pedido} — {cliente}", em 7 dias | O dono do cliente | Ver pedidos |
 | Comissões da competência fechadas | "Confirmar o pagamento das comissões de {competencia}", no dia do "pagar até" | Quem fechou | Confirmar pagamento |
 | Produção da competência fechada | "Confirmar o pagamento da produção de {competencia}", no dia do "pagar até" | Quem fechou | Confirmar pagamento |
+| A nota (NFS-e) de quem recebe chegou e a parte dela ainda não foi paga (Contabilidade, fase E, 02/10/2026) | "Pagar {beneficiario} — {fechamento} (nota recebida)", no dia do "pagar até"; conclui sozinha quando o pagamento da pessoa é confirmado | Quem fechou | Confirmar pagamento |
 
 Não duplica: um índice único por gatilho + registro segura o segundo disparo.
 

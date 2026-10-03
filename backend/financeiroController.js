@@ -355,8 +355,13 @@ function criarRouter() {
     await tarefaDoFechamento(api, { tipo, competencia, resultado, usuarioId });
     return resultado;
   }));
-  router.post('/pagamentos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos', ({ api, req, usuarioId, hoje }) =>
-    fechamentos.pagar({ api, entrada: req.body, hoje, usuarioId })));
+  router.post('/pagamentos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos', async ({ api, req, usuarioId, hoje }) => {
+    const r = await fechamentos.pagar({ api, entrada: req.body, hoje, usuarioId });
+    // Contabilidade, fase E: a nota de quem recebeu passa a documentar o pagamento e a tarefa de pagar conclui
+    // (nunca atrasa nem desfaz o pagamento).
+    await require('./contabilidade/pessoas/pessoas').aposPagamento(api, { fechamentoId: r?.pagamento?.fechamento_id, usuarioId });
+    return r;
+  }));
   // Depois de confirmar: avisar no sino quem recebeu (quem pagou escolhe o
   // usuário de cada pessoa; decisão do dono, 02/10/2026).
   router.post('/pagamentos/avisos', exigirPermissao(PAGAR), rota('POST /api/financeiro/pagamentos/avisos', ({ api, req, usuarioId, hoje, desde }) =>

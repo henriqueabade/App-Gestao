@@ -39,6 +39,7 @@ const comprovantesMod = require('./comprovantes/comprovantes');
 const aplicacoesMod = require('./aplicacoes/aplicacoes');
 const terceirosMod = require('./terceiros/terceiros');
 const cartaoMod = require('./cartao/cartao');
+const pessoasMod = require('./pessoas/pessoas');
 
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
 const STATUS_RECUSADA = new Set(['rejeitada', 'denegada', 'erro_tecnico']);
@@ -270,7 +271,9 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
     contatos: pagar.contatos || new Map(), titulosPorDocumento: contasPorDocumento(pagar.titulos),
     arquivosMapa: pagar.arquivosMapa || new Map(), pagamentosFechamento: pagar.pagamentosFechamento || new Map(),
     // Fase G: a nota de compra no cartão foi paga pela fatura (não pede conta a pagar).
-    noCartao: cartaoMod.documentosNoCartao(pagar.cartao?.compras)
+    noCartao: cartaoMod.documentosNoCartao(pagar.cartao?.compras),
+    // Fase E: a nota de quem recebe, ligada ao fechamento, é paga pelo Financeiro.
+    noFechamento: pessoasMod.documentosNoFechamento(pagar.pessoas?.links)
   };
   const doMes = vivos.filter(d => d.competencia === competencia).map(d => documentos.linhaDoDocumento(d, contexto));
   const pend = [];
@@ -292,9 +295,13 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
   // As NFS-e dos pagamentos de comissão e produção feitos no mês.
   const nfsePorPagamento = new Map();
   for (const d of vivos) {
-    if (!d.financeiro_pagamento_id) continue;
+    // Fase E: a nota ligada às partes do fechamento conta pelas partes (abaixo), não pelo vínculo antigo.
+    if (!d.financeiro_pagamento_id || contexto.noFechamento.has(String(d.id))) continue;
     const k = String(d.financeiro_pagamento_id);
     nfsePorPagamento.set(k, c.centavos((nfsePorPagamento.get(k) || 0) + c.centavos(d.valor_total)));
+  }
+  for (const [k, v] of pessoasMod.coberturaDosPagamentos({ links: pagar.pessoas?.links, pagamentos: [...contexto.pagamentosFechamento.values()] })) {
+    nfsePorPagamento.set(k, c.centavos((nfsePorPagamento.get(k) || 0) + v));
   }
   const pagosNoMes = [...contexto.pagamentosFechamento.values()].filter(p => String(p.data || '').startsWith(competencia) && p.valor > 0);
   const semNfse = pagosNoMes.filter(p => (nfsePorPagamento.get(String(p.id)) || 0) < p.valor - 0.009);
@@ -305,6 +312,10 @@ function fonteDocumentosRecebidos({ pagar, competencia }) {
       descricao: `${c.reais(p.valor)} pagos em ${c.impressa(p.data)}${registrado ? ` · NFS-e registradas: ${c.reais(registrado)}` : ' · registre a nota de serviço de quem recebeu'}`,
       data: p.data, acao: 'Registrar', destino: 'contabilidade', filtro: { acao: 'registrar-documento', tipo: 'nfse', financeiro_pagamento_id: p.id }
     }));
+  }
+  // Fase E: quem recebe sem o CPF/CNPJ e a nota de quem recebe que não achou a parte dela — avisos.
+  for (const p of pessoasMod.pendencias({ competencia, dados: pagar.pessoas || null })) {
+    pend.push(pendencia({ ...p, fonte: 'documentos_recebidos', destino: 'contabilidade' }));
   }
   const semConta = doMes.filter(d => d.sem_conta);
   if (semConta.length) {
@@ -875,7 +886,9 @@ async function lerContasPagar(api, hoje) {
       // Fase F: os itens de terceiros (null sem o SQL dela).
       terceiros: await terceirosMod.lerTudo(api).catch(() => null),
       // Fase G: as faturas do cartão e as compras (null sem o SQL dela).
-      cartao: await cartaoMod.lerTudo(api).catch(() => null)
+      cartao: await cartaoMod.lerTudo(api).catch(() => null),
+      // Fase E: as pessoas que recebem e as notas ligadas aos fechamentos (null sem o SQL dela).
+      pessoas: await pessoasMod.lerTudo(api).catch(() => null)
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;

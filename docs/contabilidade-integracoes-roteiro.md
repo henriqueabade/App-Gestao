@@ -1045,6 +1045,76 @@ de nota)
    outubro: "Fatura do cartão de outubro/2026 a importar".
 8. Relatório de setembro: a seção "Cartão de crédito".
 
+## Parte Q — Fase E (02/10/2026): quem recebe comissão e produção, e a nota de cada um
+
+**O que mudou** (as suas respostas: 5.1 a, 5.2 a, 5.3 b)
+- **Tela nova "Quem recebe (comissão e produção)"** (Ações). Ela lista os
+  nomes que recebem no Financeiro e de onde cada um vem:
+  - os fechamentos de comissão (CMS e Royalty);
+  - as regras de comissão;
+  - o dono do cliente;
+  - o desenhista da peça;
+  - os colaboradores da produção.
+
+  Ao lado de cada nome, o cadastro em Contatos e as partes em aberto: CMS de
+  setembro, Royalty de setembro, com a situação de cada uma (aguardando a
+  nota, nota recebida: pronta para pagar, paga e com nota, paga sem a nota).
+- **Ligar ao contato (5.1 a)**: cada nome é ligado ao cadastro dele em
+  Contatos, que precisa ter o **CPF/CNPJ completo**. É por ele que a nota da
+  pessoa é reconhecida. Quem recebe sem o cadastro gera um aviso no painel
+  ("2 pessoas que recebem sem o CPF/CNPJ").
+- **A nota que chega** (do ADN ou registrada à mão), quando o CPF/CNPJ do
+  emitente é de alguém que recebe:
+  - procura a parte dela nos fechamentos de até 6 meses antes;
+  - **CMS e Royalty juntos (5.2 a)**: se o valor bate com o total da pessoa
+    no fechamento, a nota é **repartida** sozinha entre os dois; o valor
+    líquido (com ISS ou retenção) também vale;
+  - **não vira conta a pagar**, não pede conta ("documento sem conta a
+    pagar") e não é procurada como conta no extrato: quem paga é o
+    Financeiro;
+  - **já pago**: a nota só documenta o pagamento, e o "fechamento sem NFS-e"
+    do painel some;
+  - **ainda não pago (5.3 b)**: fica **pronta para pagar** e nasce **uma**
+    tarefa de pagar para quem fechou a competência, no dia marcado ("pagar
+    até"). A regra nova está em Tarefas › Automáticas, "Nota de
+    comissão/produção recebida → pagar". Quando o pagamento é confirmado no
+    Financeiro, a tarefa conclui sozinha e a nota passa a documentar o
+    pagamento.
+  - **não bateu** (valor diferente, ou o mesmo valor em dois meses): a nota
+    fica em "Notas a conferir", com o aviso no painel, e você escolhe a
+    parte ("Escolher a parte…").
+- **A produção** (paga de uma vez): a nota de quem não recebe comissão (o
+  Bruno, MEI) liga sozinha quando o valor é o da produção inteira do mês.
+- **Conferir as notas**: faz o mesmo com as notas registradas antes (ou
+  antes de o nome ser ligado ao contato).
+
+**O que fazer**
+1. Rodar `sql/contabilidade_fase_e.sql` (DEV e produção), **depois** do
+   `contabilidade_fase_g.sql`, e **reiniciar a API**. Ele termina mostrando
+   "pessoas 0 | notas_de_fechamento 0".
+2. Em **Contatos**, ter o cadastro de cada pessoa que recebe, com o CPF/CNPJ
+   (a Márcia, a Barral & Lamounier, o Bruno…).
+3. Ações › **Quem recebe (comissão e produção)** › em cada nome, **Ligar ao
+   contato…**.
+4. **Conferir as notas**: as NFS-e que já estavam registradas se ligam aos
+   fechamentos.
+
+**Checklist visual**
+1. Sem o SQL: o aviso amarelo "O cadastro de quem recebe ainda não está
+   ativado: rode sql/contabilidade_fase_e.sql…".
+2. A lista dos nomes, com "Sem cadastro" e o botão **Ligar ao contato…**,
+   que abre os contatos com CPF/CNPJ.
+3. Depois de ligar: "Ligado", com o nome e o CPF/CNPJ do contato; a etiqueta
+   do topo diminui.
+4. Registrar à mão a NFS-e de quem recebe CMS e Royalty, com o valor da soma
+   dos dois: a nota fica ligada às duas partes, nenhuma conta a pagar é
+   lançada, e a tarefa de pagar aparece em Tarefas.
+5. Uma nota de valor diferente: aparece em "Notas a conferir" e
+   **Escolher a parte…** mostra as partes em aberto.
+6. Confirmar o pagamento no Financeiro: a tarefa de pagar fica concluída.
+7. Painel: o aviso "pessoas que recebem sem o CPF/CNPJ" some quando todos
+   estão ligados.
+
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
@@ -1204,3 +1274,19 @@ de nota)
 76. A **conta do resultado** de cada compra no cartão (material, consumo,
     combustível…) ainda não é classificada: o pagamento da fatura vai inteiro
     para a 00744. Desdobrar por compra entra junto com a B2 (pendência 48).
+
+**Quem recebe (Fase E)**
+77. **Produção com o rateio entre vários colaboradores**: o app ainda não
+    reparte a produção por colaborador. A nota de quem faz a produção só liga
+    sozinha quando o valor é o da produção inteira do mês; no rateio, cada
+    nota fica para escolher à mão. Quer que use o rateio (a parte de cada
+    colaborador)?
+78. "Pronta para pagar" aparece na Contabilidade (Quem recebe) e na tarefa.
+    No Financeiro › Próximo pagamento ainda **não** aparece a marca "nota
+    recebida". Quer a marca lá também?
+79. A tarefa de pagar vai para **quem fechou a competência** (se pode
+    "Confirmar pagamento" e não desligou a regra), no dia do "pagar até".
+    Ok?
+80. A nota procura os fechamentos de até **6 meses** antes da emissão. Ok?
+81. A nota que bate com **duas partes** (o mesmo valor em dois meses) não
+    liga sozinha: fica em "Notas a conferir" (aviso) para você escolher. Ok?

@@ -18,7 +18,9 @@ test('toda regra aponta para uma permissão que existe no catálogo', () => {
     ['prospeccao_convertida', 'pros.view'],
     ['pedido_entregue', 'ped.view'],
     ['comissoes_fechadas', 'financeiro.pagamento.confirmar'],
-    ['producao_fechada', 'financeiro.pagamento.confirmar']
+    ['producao_fechada', 'financeiro.pagamento.confirmar'],
+    // Contabilidade, fase E: a nota de quem recebe → pagar.
+    ['nota_de_fechamento', 'financeiro.pagamento.confirmar']
   ]);
   assert.ok(A.REGRAS.every(r => r.chave.length <= 40), 'tarefa_automacoes.chave é varchar(40)');
 });

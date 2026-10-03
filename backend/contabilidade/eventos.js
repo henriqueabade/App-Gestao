@@ -73,7 +73,11 @@ const TIPOS = {
   cartao_nota_ligada: 'Nota ligada a compra do cartão',
   cartao_sem_nota: 'Compra do cartão sem nota',
   cartao_desfeito: 'Decisão da compra do cartão desfeita',
-  cartao_conciliado: 'Pagamento da fatura do cartão conciliado'
+  cartao_conciliado: 'Pagamento da fatura do cartão conciliado',
+  // Fase E (02/10/2026): quem recebe comissão/royalty/produção e a nota dela.
+  pessoa_ligada: 'Quem recebe ligado ao cadastro',
+  nota_fechamento_ligada: 'Nota ligada ao fechamento',
+  nota_fechamento_desfeita: 'Nota tirada do fechamento'
 };
 
 /** A que um evento se refere (o histórico de uma conta ou de um documento). */

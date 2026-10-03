@@ -133,6 +133,17 @@
  *   POST /cartao/compras/:id/desfazer        solta a nota ou o "sem nota"                             (contabilidade.documento.registrar)
  *   (o recibo de uma compra entra por POST /arquivos com o vínculo { alvo_tipo: 'cartao_compra' })
  *
+ * Fase E (02/10/2026 — quem recebe CMS, Royalty e produção, e a nota dela):
+ *
+ *   GET  /pessoas                            os nomes do Financeiro, o contato (CPF/CNPJ), as partes e as notas a conferir
+ *   PUT  /pessoas                            { nome, contato_id } — liga (ou desliga) o nome ao contato      (contabilidade.documento.registrar)
+ *   POST /pessoas/conferir                   liga as notas já registradas que têm uma parte só              (contabilidade.documento.registrar)
+ *   GET  /pessoas/notas/:id/opcoes           as partes em aberto que a nota pode documentar
+ *   POST /pessoas/notas/:id/escolher         { opcao } — a parte escolhida (5.2: a soma de CMS + Royalty)  (contabilidade.documento.registrar)
+ *   POST /pessoas/notas/:id/desfazer         { motivo }                                                     (contabilidade.documento.registrar)
+ *   (a nota que chega pelo ADN ou registrada à mão liga sozinha; o pagamento confirmado no Financeiro
+ *    conclui a tarefa de pagar — financeiroController, POST /api/financeiro/pagamentos)
+ *
  * Sem o SQL do módulo (sql/contabilidade_base.sql), o painel volta com
  * `sql_pendente: true` (a tela avisa) e as gravações respondem 409. Sem o
  * das etapas 2 e 3 (sql/contabilidade_contas_pagar.sql), as fontes novas
@@ -167,6 +178,7 @@ const comprovantes = require('./contabilidade/comprovantes/comprovantes');
 const aplicacoes = require('./contabilidade/aplicacoes/aplicacoes');
 const terceiros = require('./contabilidade/terceiros/terceiros');
 const cartao = require('./contabilidade/cartao/cartao');
+const pessoas = require('./contabilidade/pessoas/pessoas');
 
 const VER = 'contabilidade.view';
 const FECHAR = 'contabilidade.fechar';
@@ -588,6 +600,25 @@ router.post('/cartao/compras/:id/sem-nota', exigirPermissao(REGISTRAR_DOCUMENTO)
 
 router.post('/cartao/compras/:id/desfazer', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/cartao/compras/:id/desfazer', ({ api, req, usuarioId }) =>
   cartao.desfazer(api, req.params.id, { usuarioId })));
+
+// ------------------------------------------------------------ pessoas que recebem (fase E: CMS, Royalty, produção)
+
+router.get('/pessoas', exigirPermissao(VER), rota('GET /api/contabilidade/pessoas', ({ api }) => pessoas.listar(api)));
+
+router.put('/pessoas', exigirPermissao(REGISTRAR_DOCUMENTO), rota('PUT /api/contabilidade/pessoas', ({ api, req, usuarioId }) =>
+  pessoas.ligarContato(api, { nome: req.body?.nome, contatoId: req.body?.contato_id ?? null, usuarioId })));
+
+router.post('/pessoas/conferir', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/pessoas/conferir', ({ api, usuarioId }) =>
+  pessoas.conferir(api, { usuarioId })));
+
+router.get('/pessoas/notas/:id/opcoes', exigirPermissao(VER), rota('GET /api/contabilidade/pessoas/notas/:id/opcoes', ({ api, req }) =>
+  pessoas.opcoes(api, req.params.id)));
+
+router.post('/pessoas/notas/:id/escolher', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/pessoas/notas/:id/escolher', ({ api, req, usuarioId }) =>
+  pessoas.escolher(api, req.params.id, { opcao: req.body?.opcao, usuarioId })));
+
+router.post('/pessoas/notas/:id/desfazer', exigirPermissao(REGISTRAR_DOCUMENTO), rota('POST /api/contabilidade/pessoas/notas/:id/desfazer', ({ api, req, usuarioId }) =>
+  pessoas.desfazer(api, req.params.id, { motivo: req.body?.motivo, usuarioId })));
 
 // ------------------------------------------------------------ boletos contra a empresa (DDA do BB, fase H)
 

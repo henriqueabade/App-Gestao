@@ -174,7 +174,9 @@ const PADRONIZADOS = [
       // 02/10/2026 — fase F: pago em nome de terceiros.
       'terceiros',
       // 02/10/2026 — fase G: o cartão de crédito.
-      'cartao'
+      'cartao',
+      // 02/10/2026 — fase E: quem recebe comissão e produção.
+      'pessoas'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
   // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).

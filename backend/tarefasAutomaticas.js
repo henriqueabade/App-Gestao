@@ -60,6 +60,12 @@ const REGRAS = [
     chave: 'producao_fechada', modulo: 'Financeiro', icone: 'fa-industry',
     permissao: 'financeiro.pagamento.confirmar', permissaoRotulo: 'Confirmar pagamento', prazo: 'antes_do_pagamento',
     gatilho: v => `Produção de ${texto(v.competencia)} fechada`
+  },
+  // Contabilidade, fase E (02/10/2026): a nota de quem recebe chegou — a parte dela está pronta para pagar.
+  {
+    chave: 'nota_de_fechamento', modulo: 'Contabilidade', icone: 'fa-file-invoice',
+    permissao: 'financeiro.pagamento.confirmar', permissaoRotulo: 'Confirmar pagamento', prazo: 'antes_do_pagamento',
+    gatilho: v => `Nota de ${texto(v.beneficiario)} recebida (${texto(v.fechamento)})`
   }
 ];
 

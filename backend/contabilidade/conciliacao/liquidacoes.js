@@ -259,7 +259,7 @@ async function porId(api, tabela, ids) {
 async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes = false } = {}) {
   const extras = new Set(incluir);
   const quer = (tipo, id, ...datas) => extras.has(chaveDe(tipo, id)) || datas.some(d => naJanela(c.dia(d), de, ate));
-  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos, aplicacoesLidas, aplicLancsLidos, terceirosLidos, faturasLidas, comprasCartao] = await Promise.all([
+  const [recebimentos, reembolsos, finPags, fechamentos, titPags, titulosLidos, parcelasLidas, docsLidos, boletosLidos, aplicacoesLidas, aplicLancsLidos, terceirosLidos, faturasLidas, comprasCartao, notasFechamento] = await Promise.all([
     lerSePuder(api, 'recebimentos'), lerSePuder(api, 'reembolsos'),
     lerSePuder(api, 'financeiro_pagamentos'), lerSePuder(api, 'financeiro_fechamentos'),
     b.lerOpcional(api, 'titulo_pagar_pagamentos').then(x => x || []), b.lerOpcional(api, 'titulos_pagar').then(x => x || []),
@@ -274,11 +274,14 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     b.lerOpcional(api, 'contabil_terceiros_itens').then(x => x || []).catch(() => []),
     // Fase G: as faturas do cartão e as compras (a nota de compra no cartão não é obrigação no extrato).
     b.lerOpcional(api, 'contabil_cartao_faturas').then(x => x || []).catch(() => []),
-    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'contabil_cartao_compras').then(x => x || []).catch(() => []) : Promise.resolve([])
+    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'contabil_cartao_compras').then(x => x || []).catch(() => []) : Promise.resolve([]),
+    // Fase E: a nota de quem recebe, ligada ao fechamento, é paga pelo Financeiro (não é obrigação no extrato).
+    obrigacoes || [...extras].some(k => k.startsWith('documento:')) ? b.lerOpcional(api, 'contabil_notas_fechamento').then(x => x || []).catch(() => []) : Promise.resolve([])
   ]);
   // O pagamento cai perto do vencimento (fim de semana, feriado: dias depois).
   const faturas = faturasLidas.filter(f => f && !f.substituida_em && quer('fatura_cartao', f.id, f.vencimento, somarDias(c.dia(f.vencimento), 6), somarDias(c.dia(f.vencimento), -10)));
-  const noCartao = new Set(comprasCartao.filter(x => x && x.documento_id !== null && x.documento_id !== undefined).map(x => String(x.documento_id)));
+  const foraDasObrigacoes = new Set(comprasCartao.filter(x => x && x.documento_id !== null && x.documento_id !== undefined).map(x => String(x.documento_id)));
+  for (const n of notasFechamento) if (n && !n.desfeito_em) foraDasObrigacoes.add(String(n.documento_id));
   const terceiros = terceirosLidos.filter(i => i && i.situacao !== 'cancelado');
   // O lado pago pela data; a devolução pode vir semanas depois: entra todo item até o fim da janela.
   const terceirosPagos = terceiros.filter(i => quer('terceiro_pago', i.id, i.data));
@@ -306,7 +309,7 @@ async function carregar(api, { de = null, ate = null, incluir = [], obrigacoes =
     const k = String(t.documento_recebido_id);
     contasPorDocumento.set(k, [...(contasPorDocumento.get(k) || []), t]);
   }
-  const docs = docsLidos.filter(d => documentoSemConta(d, contasPorDocumento) && !noCartao.has(String(d.id)) && querObrigacao('documento', d.id, d.data_emissao));
+  const docs = docsLidos.filter(d => documentoSemConta(d, contasPorDocumento) && !foraDasObrigacoes.has(String(d.id)) && querObrigacao('documento', d.id, d.data_emissao));
   // Fase H: o boleto ligado a cada parcela e os agendados/liquidados ainda sem conta.
   const boletoDaParcela = new Map(boletosLidos.filter(x => x && x.situacao === 'vinculado' && x.parcela_id).map(x => [String(x.parcela_id), x]));
   const boletos = boletosLidos.filter(x => x && x.situacao === 'novo' && [2, 3].includes(Number(x.estado_bb)) && querObrigacao('dda', x.id, x.vencimento));

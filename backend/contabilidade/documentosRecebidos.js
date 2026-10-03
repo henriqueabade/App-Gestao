@@ -219,7 +219,7 @@ function rotuloDoPagamentoDeFechamento(p, fechamento) {
  * é o de arquivos.porAlvo; `noCartao` (fase G) os ids das notas de compras no
  * cartão (pagas pela fatura: não pedem conta a pagar). Pura.
  */
-function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new Map(), arquivosMapa = new Map(), pagamentosFechamento = new Map(), noCartao = new Set() } = {}) {
+function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new Map(), arquivosMapa = new Map(), pagamentosFechamento = new Map(), noCartao = new Set(), noFechamento = new Set() } = {}) {
   const contato = d.contato_id !== null && d.contato_id !== undefined ? contatos.get(String(d.contato_id)) || null : null;
   const doArquivo = arquivosMapa.get(`documento_recebido:${d.id}`) || [];
   const conta = (titulosPorDocumento.get(String(d.id)) || []).find(t => t.status !== 'cancelado') || null;
@@ -240,8 +240,9 @@ function linhaDoDocumento(d, { contatos = new Map(), titulosPorDocumento = new M
     arquivos: doArquivo.length, tem_xml: temXml,
     falta_xml: d.tipo === 'nfe' && !temXml,
     falta_arquivo: d.tipo !== 'nfe' && !doArquivo.length,
-    sem_conta: !conta && !d.financeiro_pagamento_id && !(d.sem_pagamento === true || d.sem_pagamento === 'true') && !noCartao.has(String(d.id)),
+    sem_conta: !conta && !d.financeiro_pagamento_id && !(d.sem_pagamento === true || d.sem_pagamento === 'true') && !noCartao.has(String(d.id)) && !noFechamento.has(String(d.id)),
     no_cartao: noCartao.has(String(d.id)),
+    no_fechamento: noFechamento.has(String(d.id)),
     observacao: d.observacao || null,
     criado_em: b.instanteBR(d.criado_em)
   };
@@ -364,7 +365,7 @@ async function lerPagamentosDeFechamento(api) {
   return new Map(pagamentos.map(p => {
     const f = porId.get(String(p.fechamento_id)) || null;
     return [String(p.id), {
-      id: p.id, tipo: p.tipo || f?.tipo || null, competencia: String(p.competencia || f?.competencia || '').trim(),
+      id: p.id, fechamento_id: p.fechamento_id ?? null, tipo: p.tipo || f?.tipo || null, competencia: String(p.competencia || f?.competencia || '').trim(),
       beneficiario: p.beneficiario || null, tipo_comissao: p.tipo_comissao || null,
       valor: c.centavos(p.valor), data: c.dia(p.data_pagamento), forma: p.forma || null,
       rotulo: rotuloDoPagamentoDeFechamento(p, f)
@@ -373,13 +374,16 @@ async function lerPagamentosDeFechamento(api) {
 }
 
 async function lerTudo(api) {
-  const [docs, contas, arquivosLista, vinculos, contatos, pagamentosFechamento, comprasCartao] = await Promise.all([
+  const [docs, contas, arquivosLista, vinculos, contatos, pagamentosFechamento, comprasCartao, notasFechamento] = await Promise.all([
     b.ler(api, 'documentos_recebidos'), b.ler(api, 'titulos_pagar'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
     lerContatos(api), lerPagamentosDeFechamento(api),
     // Fase G: as notas das compras no cartão (sem o SQL dela, nenhuma).
-    b.lerOpcional(api, 'contabil_cartao_compras').then(x => x || []).catch(() => [])
+    b.lerOpcional(api, 'contabil_cartao_compras').then(x => x || []).catch(() => []),
+    // Fase E: as notas de quem recebe, ligadas aos fechamentos (sem o SQL dela, nenhuma).
+    b.lerOpcional(api, 'contabil_notas_fechamento').then(x => x || []).catch(() => [])
   ]);
   const noCartao = new Set(comprasCartao.filter(x => x && x.documento_id !== null && x.documento_id !== undefined).map(x => String(x.documento_id)));
+  const noFechamento = new Set(notasFechamento.filter(n => n && !n.desfeito_em).map(n => String(n.documento_id)));
   const titulosPorDocumento = new Map();
   for (const t of contas) {
     if (t.documento_recebido_id === null || t.documento_recebido_id === undefined) continue;
@@ -387,7 +391,7 @@ async function lerTudo(api) {
     if (!titulosPorDocumento.has(k)) titulosPorDocumento.set(k, []);
     titulosPorDocumento.get(k).push(t);
   }
-  return { docs, contatos, titulosPorDocumento, arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, noCartao };
+  return { docs, contatos, titulosPorDocumento, arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, noCartao, noFechamento };
 }
 
 async function listar(api, { competencia = null, tipo = null } = {}) {
@@ -655,10 +659,26 @@ async function registrar(api, { entrada = {}, usuarioId = null, hoje, podeLancar
     }
   }
 
-  // 5.4 (fase A): a conta ou o pagamento que já existe para esta nota — liga em vez de duplicar.
+  // Fase E: a nota de quem recebe comissão/royalty/produção (o CPF/CNPJ ligado ao nome no Financeiro)
+  // documenta a parte dela no fechamento — não vira conta a pagar.
   let ligadoA = null;
   let duvida = false;
+  let daPessoa = null;
   if (!pagamentoFechamento && entrada.sem_pagamento !== true) {
+    try {
+      daPessoa = await require('./pessoas/pessoas').ligarNotaSozinha(api, { ...doc, id: gravado.id }, { usuarioId });
+      if (daPessoa?.ligado) {
+        ligadoA = { tipo: 'fechamento', id: null, rotulo: `${daPessoa.ligado.rotulo}${daPessoa.ligado.pronto_para_pagar ? ' (pronta para pagar)' : ''}` };
+      } else if (daPessoa?.duvida) {
+        duvida = true;
+        avisos.push(`${rotuloDoDocumento(doc)} é de ${daPessoa.pessoa} (recebe no Financeiro), mas não bateu com uma parte só do fechamento: escolha em Contabilidade › Pessoas que recebem. Nenhuma conta a pagar foi lançada.`);
+      }
+    } catch (e) {
+      avisos.push(`Não deu para procurar o fechamento desta nota: ${e.message}`);
+    }
+  }
+  // 5.4 (fase A): a conta ou o pagamento que já existe para esta nota — liga em vez de duplicar.
+  if (!pagamentoFechamento && entrada.sem_pagamento !== true && !daPessoa) {
     try {
       const pares = await lerParesDaNota(api, { ...doc, id: gravado.id, contato_id: contato?.id ?? null });
       if (pares.length === 1) {

@@ -1,0 +1,81 @@
+<!--
+  Quem recebe comissão e produção (fase E, 02/10/2026): cada nome que recebe
+  no Financeiro (CMS, Royalty, produção) ligado ao cadastro em Contatos, com o
+  CPF/CNPJ — é por ele que a nota (NFS-e) da pessoa é reconhecida. A nota que
+  chega documenta a parte da pessoa no fechamento (a de CMS + Royalty juntos é
+  repartida quando o valor bate com o total dela), não vira conta a pagar e,
+  se a parte ainda não foi paga, fica pronta para pagar (com UMA tarefa de
+  pagar). A que não bate fica aqui para escolher.
+  Dados: GET /api/contabilidade/pessoas (ligar em PUT /pessoas; as notas em
+  /pessoas/notas/…). Script: src/js/modals/contabilidade-modais.js
+  (montarPessoas).
+-->
+<div id="ctbPessoasOverlay" data-ctb-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
+  <div role="dialog" aria-modal="true" aria-labelledby="ctbPessoasTitulo" class="w-full max-w-6xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="ctbPessoasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-user-tag mr-2" aria-hidden="true"></i>Quem recebe comissão e produção</h2>
+        <p id="ctbPessoasSubtitulo" class="text-xs text-gray-300 truncate">O nome do Financeiro, o CPF/CNPJ e a nota de cada um</p>
+      </div>
+      <span id="ctbPessoasSituacao" class="badge-neutral px-3 py-1 rounded-full text-xs font-medium justify-self-end">—</span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <div id="ctbPessoasAviso" class="hidden text-sm" role="alert"></div>
+        <p class="text-xs text-gray-400">Ligue cada nome que recebe no Financeiro (CMS, Royalty, produção) ao cadastro dele em Contatos, com o CPF/CNPJ. A nota que ele mandar é reconhecida sozinha: documenta a parte dele no fechamento (CMS e Royalty juntos são repartidos quando o valor bate com o total), não vira conta a pagar e, se ainda não foi paga, fica pronta para pagar e cria a tarefa de pagar para quem fechou a competência.</p>
+
+        <div class="ctb-totais" id="ctbPessoasTotais">
+          <div class="ctb-total"><span class="ctb-total__rotulo">Quem recebe</span><strong class="ctb-total__valor" id="ctbPessoasTotal">—</strong><span class="ctb-total__nota">Nomes do Financeiro</span></div>
+          <div class="ctb-total" data-tom="bordo"><span class="ctb-total__rotulo">Sem o CPF/CNPJ</span><strong class="ctb-total__valor" id="ctbPessoasSemCadastro">—</strong><span class="ctb-total__nota">A nota deles não é reconhecida</span></div>
+          <div class="ctb-total"><span class="ctb-total__rotulo">Notas a conferir</span><strong class="ctb-total__valor" id="ctbPessoasNotas">—</strong><span class="ctb-total__nota">Não acharam a parte</span></div>
+        </div>
+
+        <div id="ctbPessoasNotasBloco" class="hidden ctb-secao-modal">
+          <div class="ctb-secao-modal__cabeca">
+            <h3 class="ctl-secao text-[var(--color-primary)]">Notas a conferir</h3>
+            <span class="text-xs text-gray-400">O valor não bateu com uma parte só: escolha qual parte a nota documenta</span>
+          </div>
+          <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Emissão</th>
+                  <th class="px-4 py-3 text-left text-xs">Quem</th>
+                  <th class="px-4 py-3 text-left text-xs">Nota</th>
+                  <th class="px-4 py-3 text-right text-xs ctb-num">Valor</th>
+                  <th class="px-4 py-3 text-right text-xs"></th>
+                </tr>
+              </thead>
+              <tbody id="ctbPessoasNotasLista"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ctb-tabela glass-surface rounded-xl border border-white/10">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-3 text-left text-xs">Quem recebe</th>
+                <th class="px-4 py-3 text-left text-xs">Cadastro (CPF/CNPJ)</th>
+                <th class="px-4 py-3 text-left text-xs">Partes em aberto</th>
+                <th class="px-4 py-3 text-right text-xs"></th>
+              </tr>
+            </thead>
+            <tbody id="ctbPessoasLista"></tbody>
+          </table>
+        </div>
+
+        <div id="ctbPessoasMensagem" class="hidden text-sm" role="alert"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 ctl-acoes justify-end flex-shrink-0">
+      <button type="button" data-ctb-fechar class="btn-danger ctl-botao text-white min-w-[120px]">Fechar</button>
+      <button id="ctbPessoasDocumentos" type="button" class="btn-neutral ctl-botao text-white">Documentos recebidos</button>
+      <button id="ctbPessoasConferir" type="button" data-perm="contabilidade.documento.registrar" class="btn-primary ctl-botao text-white min-w-[160px]">Conferir as notas</button>
+    </footer>
+  </div>
+</div>

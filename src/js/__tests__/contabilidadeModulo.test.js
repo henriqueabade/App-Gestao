@@ -277,6 +277,11 @@ const MODAIS_FASE_G = {
   'cartao': { overlay: 'ctbCartao', principal: ['ctbCartaoImportar', 'btn-primary', 'contabilidade.extrato.importar'] }
 };
 
+// Fase E (02/10/2026): quem recebe (conferir as notas é o principal; pede "Registrar documento").
+const MODAIS_FASE_E = {
+  'pessoas': { overlay: 'ctbPessoas', principal: ['ctbPessoasConferir', 'btn-primary', 'contabilidade.documento.registrar'] }
+};
+
 const MODAIS_ETAPA6 = {
   'classificacao': { overlay: 'ctbClassificacao', principal: ['ctbClassAplicar', 'btn-primary', 'contabilidade.classificar'] },
   'plano-contas': { overlay: 'ctbPlanoContas', principal: ['ctbPlanoSalvar', 'btn-primary', 'contabilidade.plano.gerir'] },
@@ -286,7 +291,7 @@ const MODAIS_ETAPA6 = {
 test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botão principal com a cor e a permissão certas; a tela e o script conhecem todos', () => {
   const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
   const chaves = new Set(CATALOGO.contabilidade.actions.map(a => a.key));
-  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_FASE_F, ...MODAIS_FASE_G, ...MODAIS_TELA })) {
+  for (const [nome, e] of Object.entries({ ...MODAIS_ETAPA3, ...MODAIS_ETAPA4, ...MODAIS_ETAPA5, ...MODAIS_ETAPA6, ...MODAIS_ETAPA7, ...MODAIS_ETAPA8, ...MODAIS_ETAPA9, ...MODAIS_ETAPA10, ...MODAIS_FASE_H, ...MODAIS_FASE_D, ...MODAIS_FASE_C, ...MODAIS_FASE_F, ...MODAIS_FASE_G, ...MODAIS_FASE_E, ...MODAIS_TELA })) {
     const html = ler('html', 'modals', 'contabilidade', `${nome}.html`);
     assert.ok(html.includes(`id="${e.overlay}Overlay" data-ctb-modal`), `${nome}: overlay`);
     assert.ok(html.includes('ctl-padrao') && html.includes('ctl-modal-titulo') && html.includes('class="btn-neutral ctl-botao text-white justify-self-start">← Voltar'), `${nome}: cabeçalho`);
@@ -477,6 +482,28 @@ test('fase G (02/10/2026): o cartão de crédito — a tela abre, importa o XLSX
   const cfg = ler('html', 'modals', 'contabilidade', 'configuracao.html');
   assert.ok(cfg.includes('id="ctbConfigCartaoAtivo"') && cfg.includes('id="ctbConfigCartaoLimite"'));
   assert.ok(MODAIS.includes("cartao_ativo: el('ctbConfigCartaoAtivo').value, cartao_limite_sem_nota: el('ctbConfigCartaoLimite').value"));
+});
+
+test('fase E (02/10/2026): quem recebe — a tela abre, liga o nome ao contato, escolhe a parte da nota, confere; a pendência abre a tela; a tarefa automática nova', () => {
+  const MODAIS = ler('js', 'modals', 'contabilidade-modais.js');
+  assert.match(TELA, /'pessoas': \{[^}]*abrir:/);
+  assert.ok(HTML.includes('data-ctb-acao="pessoas"'));
+  for (const rota of [
+    "fetchApi('/api/contabilidade/pessoas')", "fazer('PUT', '/api/contabilidade/pessoas', { nome: p.nome, contato_id: Number(id) }",
+    "fetchApi(`/api/contabilidade/pessoas/notas/${encodeURIComponent(n.id)}/opcoes`)", "`/api/contabilidade/pessoas/notas/${encodeURIComponent(n.id)}/escolher`",
+    "fazer('POST', '/api/contabilidade/pessoas/conferir', {}"
+  ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
+  const html = ler('html', 'modals', 'contabilidade', 'pessoas.html');
+  assert.ok(html.includes('id="ctbPessoasNotasBloco" class="hidden ctb-secao-modal"') && html.includes('<tbody id="ctbPessoasLista"></tbody>'));
+  // As situações das partes têm cor e texto; a pendência abre esta tela; a atividade tem o grupo.
+  for (const s of ['pronto_para_pagar', 'documentado', 'pago_sem_nota', 'aguardando_nota']) {
+    assert.ok(new RegExp(`TOM_PARTE_PESSOA = \\{[^}]*\\b${s}:`).test(MODAIS) && new RegExp(`ROTULO_PARTE_PESSOA = \\{[^}]*\\b${s}:`).test(MODAIS), `situação ${s}`);
+  }
+  const ARQ = fs.readFileSync(path.join(RAIZ, '..', 'backend', 'contabilidade', 'pessoas', 'pessoas.js'), 'utf8');
+  assert.ok(ARQ.includes("const filtro = { acao: 'pessoas' };") && TELA.includes("'pessoas': {"));
+  for (const tipo of ['pessoa_ligada', 'nota_fechamento_ligada', 'nota_fechamento_desfeita']) assert.ok(MODAIS.includes(`'${tipo}'`), `atividade: ${tipo}`);
+  // A regra da tarefa automática nova está no catálogo (Tarefas › Automáticas).
+  assert.ok(require(path.join(RAIZ, '..', 'backend', 'tarefasAutomaticas.js')).REGRAS.some(r => r.chave === 'nota_de_fechamento'));
 });
 
 test('fase I (02/10/2026): o pacote por pagamento — a seção das pastas no modal, as situações da nota iguais às do backend e a impressora do Electron registrada para o backend', () => {

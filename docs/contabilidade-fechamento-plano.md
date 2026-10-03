@@ -2050,3 +2050,59 @@ configurável) não precisa de nota. Roteiro: Parte P. SQL:
     (`dev_e2e_cartao.js`): fecha, o pagamento de 14/09 ligou e foi para a
     00744, relatório e painel ok; banco apagado.
 - **Pendências:** 72 a 76.
+
+## AK. Fase E entregue (02/10/2026) — quem recebe comissão e produção, e a nota de cada um
+
+Respostas do dono: 5.1 a (cada nome do Financeiro ligado a um contato com
+CPF/CNPJ), 5.2 a (a nota de CMS + Royalty reparte sozinha quando bate com o
+total da pessoa; senão pendência), 5.3 b (a nota documenta, fica "pronta para
+pagar" e cria UMA tarefa de pagar). Roteiro: Parte Q. SQL:
+`sql/contabilidade_fase_e.sql` (depois do da Fase G; reiniciar a API).
+
+- **Banco:**
+  - `contabil_pessoas`: nome, `nome_chave` (sem acento, minúsculas, único)
+    e `contato_id`;
+  - `contabil_notas_fechamento`: documento → fechamento, tipo, competência,
+    beneficiário, `tipo_comissao`, valor, critério (automatico/escolhido),
+    `tarefa_id`, desfeito;
+  - a regra `nota_de_fechamento` em `tarefa_automacoes` (num DO-block).
+- **Módulo** `pessoas/pessoas.js`:
+  - puras: `linhasDoFechamento` (as linhas do `por_setor` das comissões; a
+    produção inteira sem pessoa), `cobre` (as regras do Financeiro: sem
+    pessoa e sem tipo cobre todos), `notasDaLinha`, `opcoesDaNota` (as
+    linhas sem nota da pessoa nos 6 meses antes da emissão, a soma das
+    linhas da pessoa no mesmo fechamento; a produção só para quem não recebe
+    comissão; automático = uma só de valor exato, valor cheio ou líquido),
+    `coberturaDosPagamentos`, `documentosNoFechamento`, `pendencias`;
+  - `ligarContato` (só contato com CPF/CNPJ inteiro), `ligarNotaSozinha`
+    (chamada no registro da nota, antes da procura da fase A — com ela, não
+    há conta a pagar), `opcoes`/`escolher`/`desfazer`, `conferir`,
+    `aposPagamento` (gancho no POST /api/financeiro/pagamentos: o vínculo
+    antigo `financeiro_pagamento_id` e a tarefa concluída), `listar` (os
+    nomes de fechamentos, regras, dono do cliente, desenhista e
+    colaboradores).
+- **Efeitos:** a nota ligada sai de "documento sem conta a pagar"
+  (`linhaDoDocumento({ noFechamento })`) e das obrigações do extrato; o
+  "fechamento sem NFS-e" do painel conta as partes documentadas.
+- **Tarefa:** a regra nova `nota_de_fechamento` em
+  `tarefasAutomaticas.REGRAS` (permissão "Confirmar pagamento", prazo "antes
+  do pagamento") e `criarTarefaAutomatica` com o refId
+  fechamento-pessoa (uma por pessoa no fechamento), responsável = quem
+  fechou (`fechado_por`).
+- **Painel** (fonte documentos recebidos, avisos): `pessoas_sem_cadastro` e
+  `nota_pessoa_conferir_<id>`; filtro `{ acao: 'pessoas' }`.
+- **Rotas:** GET `/pessoas`, PUT `/pessoas`, POST `/pessoas/conferir`, GET
+  `/pessoas/notas/:id/opcoes`, POST `/pessoas/notas/:id/escolher` e
+  `/desfazer`.
+- **Tela:** modal `pessoas` (totais, notas a conferir, a tabela dos nomes com
+  o cadastro e as partes, "Ligar ao contato…", "Escolher a parte…"), o
+  seletor `escolherDaLista`, o botão nas Ações e o grupo na atividade.
+- **Testes:**
+  - `pessoas/pessoas.test.js`: 4;
+  - `contabilidadePessoas.test.js`: 3, de ponta a ponta (registro da NFS-e,
+    soma repartida, tarefa criada, escolher, desfazer, pagamento confirmado,
+    painel);
+  - `tarefasAutomaticas.test.js` com a regra nova;
+  - tela: modal no padrão e a fase E;
+  - smoke fe-* (as respostas pelo `listar` sobre a API em memória).
+- **Pendências:** 77 a 81.

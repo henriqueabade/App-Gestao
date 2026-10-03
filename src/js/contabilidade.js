@@ -231,7 +231,9 @@ const CTB_ACOES = {
     // Fase F: o que a empresa pagou em nome de outra empresa (a Artdeco) — a receber dela.
     'terceiros': { rotulo: 'Pago em nome de terceiros', abrir: m => ctbAbrirModal('terceiros', m, {}) },
     // Fase G: o cartão de crédito do BB pela fatura em XLSX (as compras e a nota de cada uma).
-    'cartao': { rotulo: 'Cartão de crédito', abrir: m => ctbAbrirModal('cartao', m, {}) }
+    'cartao': { rotulo: 'Cartão de crédito', abrir: m => ctbAbrirModal('cartao', m, {}) },
+    // Fase E: quem recebe comissão e produção (o CPF/CNPJ de cada nome) e a nota de cada um.
+    'pessoas': { rotulo: 'Quem recebe comissão e produção', abrir: m => ctbAbrirModal('pessoas', m, {}) }
 };
 
 /* Modais do módulo (src/html/modals/contabilidade). Todos usam o mesmo script,
@@ -275,7 +277,9 @@ const CTB_MODAIS = {
     // Fase F: pago em nome de terceiros.
     'terceiros': { html: 'modals/contabilidade/terceiros.html', overlay: 'ctbTerceiros' },
     // Fase G: o cartão de crédito.
-    'cartao': { html: 'modals/contabilidade/cartao.html', overlay: 'ctbCartao' }
+    'cartao': { html: 'modals/contabilidade/cartao.html', overlay: 'ctbCartao' },
+    // Fase E: quem recebe.
+    'pessoas': { html: 'modals/contabilidade/pessoas.html', overlay: 'ctbPessoas' }
 };
 
 /** O que a pendência da Contabilidade abre: a ação do filtro, com o filtro como extra. */
