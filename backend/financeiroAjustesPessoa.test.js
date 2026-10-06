@@ -78,6 +78,50 @@ test('a base da comissão é o valor real: boleto vivo (em dia), ordem de pagame
   assert.equal(comissoes.valorRealDaParcela({ valor: 900 }, null).origem, 'parcela');
 });
 
+test('recebida: o Adicional lançado depois do pagamento conta (o PED105); juros do atraso não; pago a menos conta o que entrou', () => {
+  const real = (parcela, rec) => comissoes.valorRealDaParcela({ valor: parcela }, { valor_recebido: rec.recebido, valor_parcela: rec.parcela, valor_abatimento: rec.abatimento || 0 }).valor;
+  // PED105: o Pix de R$ 12.800,25 entrou numa parcela de R$ 12.774,28; depois o
+  // "Pagamento do pedido" pôs o Adicional e a parcela foi para R$ 12.800,25.
+  assert.equal(real(12800.25, { recebido: 12800.25, parcela: 12774.28 }), 12800.25);
+  // Antes do Adicional, os R$ 25,97 a mais eram a mais mesmo: a parcela manda.
+  assert.equal(real(12774.28, { recebido: 12800.25, parcela: 12774.28 }), 12774.28);
+  // Boleto pago com atraso: multa e juros passam da parcela e ficam fora.
+  assert.equal(real(1000, { recebido: 1080, parcela: 1000 }), 1000);
+  // Boleto com abatimento: o abatimento conta como coberto (sai à parte).
+  assert.equal(real(1000, { recebido: 900, parcela: 1000, abatimento: 100 }), 1000);
+  // Pagou a menos (desconto na hora): conta o que entrou.
+  assert.equal(real(1000, { recebido: 950, parcela: 1000 }), 950);
+  // Boleto importado maior que a parcela, pago: vale o boleto.
+  assert.equal(real(1000, { recebido: 1200, parcela: 1200 }), 1200);
+
+  // Na conta inteira: a comissão do PED105 sai sobre os R$ 12.800,25.
+  const { apuradas } = apurado({
+    parcelas: [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: '12800.25', data_vencimento: '2026-08-26' }],
+    recebimentos: [{ id: 7, pedido_id: 55, numero_parcela: 1, status: 'confirmado', data_recebimento: '2026-08-26', competencia: '2026-08', valor_parcela: '12774.28', valor_abatimento: '0', valor_recebido: '12800.25', valor_encargos: '25.97' }]
+  });
+  const p = apuradas.find(x => x.numero_parcela === 1);
+  assert.equal(p.liquido, 12800.25);
+  assert.deepEqual([p.pendentes[0].base, p.potencial.cms, p.potencial.royalty], [12800.25, 1280.03, 1280.03]);
+
+  // Agosto já fechado com o valor antigo: a diferença do Adicional vem no
+  // próximo fechamento, dizendo o porquê (o fechado não muda).
+  const recebimentos = [{ id: 7, pedido_id: 55, numero_parcela: 1, status: 'confirmado', data_recebimento: '2026-08-26', competencia: '2026-08', valor_parcela: '12774.28', valor_abatimento: '0', valor_recebido: '12800.25' }];
+  const antes = apurado({ parcelas: [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: '12774.28', data_vencimento: '2026-08-26' }], recebimentos, hoje: '2026-09-02' });
+  const r = comissoes.montarFechamento({ apuradas: antes.apuradas, estado: antes.estado, competencia: '2026-08' });
+  assert.equal(r.base, 12774.28);
+  const fechamento = { id: 1, tipo: 'comissao', competencia: '2026-08', status: 'fechado', total: r.a_pagar, pagar_ate: '2026-09-15', por_setor: JSON.stringify(r.beneficiarios) };
+  const itens = r.itens.map((i, n) => ({
+    id: 100 + n, fechamento_id: 1, tipo_item: i.tipo_item, pedido_id: i.pedido_id, numero_parcela: i.numero_parcela, recebimento_id: i.recebimento_id,
+    valor_parcela: String(i.valor_parcela), base: String(i.base), cms: String(i.cms), royalty: String(i.royalty), total: String(i.total),
+    detalhes: JSON.stringify({ ...i.detalhes, motivo: i.motivo || null })
+  }));
+  const depois = apurado({ parcelas: [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: '12800.25', data_vencimento: '2026-08-26' }], recebimentos, fechamentos: [fechamento], itens, hoje: '2026-10-06' });
+  const pd = depois.apuradas.find(x => x.numero_parcela === 1);
+  // Entra no mês em que a diferença apareceu (como os outros ajustes depois do fechamento).
+  assert.deepEqual(pd.pendentes.map(i => [i.tipo_item, i.competencia, i.cms, i.royalty]), [['ajuste', '2026-10', 2.6, 2.6]]);
+  assert.match(pd.pendentes[0].motivo, /^Adicional no pedido: a parcela foi de R\$\s12\.774,28 para R\$\s12\.800,25$/);
+});
+
 test('ajuste por pessoa na CMS: entra no mês dela; negativo não se paga e vai para o mês seguinte como restante', () => {
   const parcelas = [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: '5000.00', data_vencimento: '2026-10-05' }];
   const recebimentos = [{ id: 7, pedido_id: 55, numero_parcela: 1, status: 'confirmado', data_recebimento: '2026-10-05', competencia: '2026-10', valor_parcela: '5000.00', valor_abatimento: '0', valor_recebido: '5000.00' }];

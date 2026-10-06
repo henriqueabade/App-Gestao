@@ -16,10 +16,22 @@ Pedido do dono em 06/10/2026:
 
 | A parcela                         | Base da CMS e do Royalty                                       |
 |-----------------------------------|----------------------------------------------------------------|
-| recebida                          | o que o recebimento cobriu da parcela (`valor_parcela`)         |
+| recebida                          | o que o cliente pagou, até o valor da parcela HOJE (com o Adicional lançado depois do pagamento) |
 | em aberto com boleto vivo         | o valor em dia do boleto: cheio − desconto até o vencimento    |
 | em aberto com ordem de pagamento  | o valor da ordem                                               |
 | sem nenhum dos dois               | a parcela do pedido — que já leva o Adicional ou o Desconto    |
+
+**O caso do PED105 (visto pelo dono no mesmo dia):** o Pix de R$ 12.800,25
+entrou em 26/08 numa parcela de R$ 12.774,28; em 28/09 o "Pagamento do
+pedido" lançou o Adicional de R$ 25,97 ("Acréscimo por arredondamento") e a
+parcela foi para R$ 12.800,25. O recebimento continuava dizendo que cobria
+R$ 12.774,28 (o valor da parcela no dia do Pix) e a comissão saía sobre ele,
+com os R$ 25,97 tratados como juros. Agora a parcela recebida vale o que o
+cliente pagou, até o valor que a parcela tem hoje — o maior entre o do
+recebimento e o da parcela; o que passa disso (multa e juros do atraso)
+continua fora; pago a menos, conta o que entrou. Se a comissão daquele mês já
+estava fechada, a diferença entra como ajuste no mês em que apareceu, com o
+motivo "Adicional no pedido: a parcela foi de R$ X para R$ Y".
 
 Antes, a parcela em aberto valia sempre pelo valor gravado na parcela, mesmo
 quando o boleto (importado do BB, por exemplo) ou a ordem cobrava outro valor
@@ -124,8 +136,10 @@ fechamento.
 
 ## Testes
 
-- `backend/financeiroAjustesPessoa.test.js` (4): a base pelo valor real
-  (boleto, ordem, parcela com Adicional, recebimento); o ajuste de CMS no mês,
+- `backend/financeiroAjustesPessoa.test.js` (5): a base pelo valor real
+  (boleto, ordem, parcela com Adicional, recebimento); o PED105 (Adicional
+  depois do Pix conta; juros não; pago a menos conta o que entrou; mês já
+  fechado recebe a diferença com o motivo); o ajuste de CMS no mês,
   o negativo projetado e o do fechamento; o ajuste da produção por processo;
   a validação; e a ponta a ponta (registrar, resumo, relatórios, fechar,
   travar mês fechado, não cancelar o fechado, cancelar o aberto).

@@ -137,14 +137,29 @@ const competenciaAlvo = (natural, proxima) => (proxima && natural && natural < p
 
 /**
  * O valor real da parcela, que é a base da comissão (pedido do dono,
- * 06/10/2026). Recebida: o que o recebimento cobriu da parcela (o boleto em
- * dia, ou a parcela no pagamento à mão; multa e juros continuam fora). Em
- * aberto: o boleto vivo pelo valor em dia (o cheio menos o desconto até o
+ * 06/10/2026).
+ *
+ * Recebida: o que o cliente pagou dela, sem passar do valor da parcela. O
+ * valor da parcela é o maior entre o que o recebimento registrou (o boleto em
+ * dia, ou a parcela do dia do pagamento) e o que a parcela vale HOJE — o
+ * Adicional lançado no "Pagamento do pedido" depois do pagamento conta (o
+ * PED105: Pix de R$ 12.800,25 numa parcela de R$ 12.774,28 que depois virou
+ * R$ 12.800,25; a comissão ficava nos R$ 12.774,28 e tratava a diferença como
+ * juros). Multa e juros do atraso continuam fora: passam do valor da parcela.
+ *
+ * Em aberto: o boleto vivo pelo valor em dia (o cheio menos o desconto até o
  * vencimento — o abatimento sai à parte), ou a ordem de pagamento aberta; sem
  * nenhum dos dois, a parcela do pedido. Pura.
  */
 function valorRealDaParcela(linha, confirmado) {
-  if (confirmado) return { valor: c.centavos(confirmado.valor_parcela ?? linha.valor), origem: 'recebimento' };
+  if (confirmado) {
+    const registrado = c.centavos(confirmado.valor_parcela ?? linha?.valor);
+    const hoje = linha?.valor === null || linha?.valor === undefined ? registrado : c.centavos(linha.valor);
+    const teto = Math.max(registrado, hoje);
+    // O abatimento do boleto conta como coberto (ele sai da base à parte, em apurar).
+    const cobriu = c.centavos(Number(confirmado.valor_recebido || 0) + Number(confirmado.valor_abatimento || 0));
+    return { valor: cobriu > 0 ? c.centavos(Math.min(cobriu, teto)) : teto, origem: 'recebimento' };
+  }
   if (Number(linha?.valor_boleto) > 0) {
     return { valor: c.centavos(Number(linha.valor_boleto) - Number(linha.desconto_condicional || 0)), origem: 'boleto' };
   }
@@ -304,7 +319,13 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
         motivo = cancelado ? 'Pedido cancelado depois do fechamento' : 'Recebimento estornado depois do fechamento';
         dataRef = diaEmBrasilia(estornado?.estornado_em) || hoje;
       } else {
+        // A parcela mudou de valor depois do fechamento (Adicional ou Desconto
+        // lançado no pedido): a diferença vem com o motivo dito (06/10/2026).
+        const fechadaCom = ultimoParcela && ultimoParcela.valor_parcela !== null && ultimoParcela.valor_parcela !== undefined
+          ? c.centavos(ultimoParcela.valor_parcela) : null;
+        const mudouValor = fechadaCom !== null && Math.abs(valorOriginal - fechadaCom) >= 0.01;
         const partes = [
+          ...(mudouValor ? [`${valorOriginal > fechadaCom ? 'Adicional' : 'Desconto'} no pedido: a parcela foi de ${c.reais(fechadaCom)} para ${c.reais(valorOriginal)}`] : []),
           ...novos.map(a => `${TIPOS_AJUSTE[a.tipo] || a.tipo} de ${c.reais(a.valor)} em ${c.impressa(a.data_ajuste)}`),
           ...desfeitos.map(a => `${TIPOS_AJUSTE[a.tipo] || a.tipo} de ${c.reais(a.valor)} cancelado`)
         ];
