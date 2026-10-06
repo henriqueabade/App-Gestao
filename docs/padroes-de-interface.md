@@ -464,11 +464,32 @@ não por `[role="dialog"]`. Coberto por
 ### Carregamento
 
 Modal que lê o servidor antes de mostrar alguma coisa **não aparece vazio**:
-fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo 1 s
+fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo
+**0,3 s** (era 1 s até 06/10/2026 — ver `docs/plano-desempenho-carregamento.md`)
 e o modal aparece já preenchido. No Financeiro, `finSpinnerDoModal()`
 (`src/js/financeiro.js`) põe o spinner e `window.FinanceiroModalPronto()` o
 troca pelo modal quando a primeira leitura termina (no máximo 15 s). Trocar um
 filtro dentro do modal mostra uma linha com o mesmo spinner no lugar da tabela.
+
+**Modal aberto pela tela do módulo** (Clientes, Produtos, Orçamentos, Usuários…):
+`Modal.openModuleModal(html, script, id)` — fecha os outros, põe o spinner,
+revela quando o modal avisa (`modalSpinnerLoaded`, `modal-ready` ou
+`pedidoModalLoaded`; os de Orçamentos passam
+`{ eventosDePronto: ['orcamentoModalLoaded'] }`), com relógio de 15 s e limpeza
+se o modal for fechado ou a página dele não chegar. Nada de spinner montado à
+mão no módulo: eram dez cópias, sem relógio, e um modal com erro deixava a tela
+escura presa. O overlay nasce com `hidden`, e o modal só avisa **depois** das
+leituras da abertura (`Promise.allSettled(cargas).finally(avisar)`).
+
+**Módulo novo:** a primeira carga é publicada para o menu —
+`window.moduloPronto?.(carregarX());` no init. A máscara do módulo sai quando
+ela termina (teto de 20 s), e não por palpite.
+
+**Volta instantânea:** ao voltar a um módulo já visitado, o menu mostra a foto
+da última visita com o selo "Atualizando…" enquanto o módulo recarrega por
+baixo (`src/js/utils/foto-do-modulo.js`). O módulo não precisa fazer nada;
+só não pode depender da animação de entrada para funcionar (de volta pela
+foto, a subida é desligada com `.modulo-volta-instantanea`).
 
 Nos modais de Pedidos quem faz isso é `Modal.openWithSpinner`. Do lado do
 modal, a regra é **revelar depois de carregar**:

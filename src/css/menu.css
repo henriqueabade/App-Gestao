@@ -1546,6 +1546,60 @@ header.glass-surface {
     background: transparent;
 }
 
+/* Volta instantânea (desempenho, 06/10/2026): a foto do módulo da última
+   visita cobre a área enquanto ele recarrega por baixo (ver menu.js ›
+   fotografarModuloAtual). Mesma camada da máscara; bloqueia o clique — a foto
+   não é a tela de verdade. */
+.module-snapshot {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    overflow: hidden;
+    cursor: progress;
+    user-select: none;
+}
+
+.module-snapshot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* Embaixo, no meio: no alto à direita ele cobria o botão principal do módulo. */
+.module-snapshot-badge {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(26, 0, 9, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+[data-menu-theme="light"] .module-snapshot-badge {
+    color: #1f2937;
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(17, 24, 39, 0.15);
+}
+
+/* De volta pela foto, o módulo entra sem a subida: a foto já mostrou a tela. */
+.modulo-volta-instantanea .animate-fade-in-up,
+.modulo-volta-instantanea .module-enter-after-loading {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+}
+
 .module-loading-heading {
     position: absolute;
     top: 0;

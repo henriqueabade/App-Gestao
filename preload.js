@@ -41,7 +41,7 @@ const LIMITE_LENTIDAO_MS = 800;
  * `waitForModuleLoading` é uma ESPERA, não trabalho: o cronômetro genérico
  * repetiria o mesmo número sem o porquê, ao lado da linha que explica.
  */
-const SEM_CRONOMETRO_GENERICO = new Set(['waitForModuleLoading', 'beginModuleLoading']);
+const SEM_CRONOMETRO_GENERICO = new Set(['waitForModuleLoading', 'beginModuleLoading', 'fotografarArea', 'lerFotoDaArea']);
 
 function beginModuleLoading() {
   return { sequence: ipcRequestSequence, startedAt: Date.now() };
@@ -254,6 +254,12 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   getRuntimeConfig: () => getRuntimeConfigCached(),
   // 'DEV' ou 'PROD' — só para o selo do cabeçalho.
   getModoBanco: () => ipcRenderer.invoke('get-modo-banco'),
+  // Foto da área do módulo para a volta instantânea (utils/foto-do-modulo.js):
+  // `fotografarArea` lê a tela e devolve um número; `lerFotoDaArea` devolve o
+  // JPEG dele. Pelo invoke CRU, fora da contagem: não é dado do módulo, e
+  // contá-la seguraria a máscara do módulo seguinte.
+  fotografarArea: (area) => electronIpcRenderer.invoke('modulo:fotografar', area),
+  lerFotoDaArea: (id) => electronIpcRenderer.invoke('modulo:foto', id),
   // Abre o seletor de arquivo do certificado fiscal; devolve só o caminho.
   selecionarCertificadoFiscal: () => ipcRenderer.invoke('fiscal:selecionar-certificado'),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),

@@ -3353,6 +3353,11 @@ function keepModuleIntroductionVisible(module) {
     });
 }
 
+// Volta instantânea (desempenho, Fase 4 — 06/10/2026): a foto do módulo da
+// última visita no lugar do spinner. A lógica mora em
+// src/js/utils/foto-do-modulo.js; sem ela, a máscara de sempre.
+const fotoDoModulo = () => window.FotoDoModulo || null;
+
 async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
     if (!content || !page) return;
@@ -3365,6 +3370,10 @@ async function loadPage(page, options = {}) {
         document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
         return;
     }
+
+    // A foto do módulo que está saindo (volta instantânea) é pedida JÁ, no
+    // clique, com a tela ainda intacta; a troca espera por ela mais abaixo.
+    const fotoDaSaida = Promise.resolve(fotoDoModulo()?.fotografar(content)).catch(() => null);
 
     // Nenhum módulo é buscado antes de as permissões chegarem: sem elas (ou
     // sem a permissão do módulo) o HTML dele nem sai do disco.
@@ -3401,6 +3410,16 @@ async function loadPage(page, options = {}) {
     // sem ela a tela aparecia montando aos pedaços, com cara de bug. A máscara
     // segura a revelação até tudo estar pronto (mínimo de 0,3 s, ver abaixo).
     const usesLoadingMask = true;
+
+    // Antes de trocar a tela, a foto de quem sai (no máximo
+    // FotoDoModulo.ESPERA_MAXIMA_MS). Depois, a de quem entra, se ainda conferir.
+    await fotoDaSaida;
+    if (loadId !== moduleLoadSequence) return;
+    const fotoDaVolta = usesLoadingMask ? (fotoDoModulo()?.queServe(page, content) || null) : null;
+    // Guardada para o `finally`: a rolagem só pode voltar depois de o módulo
+    // receber o modo de rolagem dele.
+    let rolagemDaVolta = null;
+
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
@@ -3417,7 +3436,10 @@ async function loadPage(page, options = {}) {
     // importante em módulos longos, cuja montagem não pode deslocar o centro do
     // spinner. Voltar ao topo também garante que a máscara apareça sempre.
     content.scrollTop = 0;
-    content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
+    // Com foto, ela no lugar da máscara: a tela de antes, na hora, com o selo
+    // "Atualizando…". O mesmo véu fica até o módulo ficar pronto.
+    const veuDaFoto = fotoDaVolta ? fotoDoModulo().criarVeu(fotoDaVolta, moduleTitle) : null;
+    content.replaceChildren(...(veuDaFoto ? [veuDaFoto] : usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 
     document.getElementById('page-style')?.remove();
     document.getElementById('page-script')?.remove();
@@ -3440,10 +3462,13 @@ async function loadPage(page, options = {}) {
             module.classList.add('module-loading-content');
             keepModuleIntroductionVisible(module);
         }
+        // Voltando pela foto, o módulo entra sem a animação de subida: a foto
+        // já mostrou a tela — animar depois dela seria um piscar.
+        if (veuDaFoto) module.classList.add('modulo-volta-instantanea');
         const introduction = readModuleIntroduction(module, moduleTitle);
-        const mask = usesLoadingMask
+        const mask = veuDaFoto || (usesLoadingMask
             ? createModuleLoadingMask(page, introduction.title, introduction.description, { keepsModuleIntroduction: true })
-            : null;
+            : null);
         content.replaceChildren(module, ...(mask ? [mask] : []));
 
         const style = document.createElement('link');
@@ -3512,7 +3537,8 @@ async function loadPage(page, options = {}) {
 
         if (loadId !== moduleLoadSequence) return;
 
-        if (usesLoadingMask) {
+        // O piso é do SPINNER (não piscar). Com a foto não há spinner para piscar.
+        if (usesLoadingMask && !veuDaFoto) {
             const restante = MIN_MODULE_SPINNER_MS - (Date.now() - inicioSpinnerModulo);
             if (restante > 0) await new Promise(r => setTimeout(r, restante));
             if (loadId !== moduleLoadSequence) return;
@@ -3521,6 +3547,7 @@ async function loadPage(page, options = {}) {
         module.classList.remove('module-loading-content');
         mask?.remove();
         content.classList.remove('is-module-loading');
+        if (fotoDaVolta) rolagemDaVolta = fotoDaVolta.rolagem;
     } catch (err) {
         if (loadId !== moduleLoadSequence) return;
         console.error('Erro ao carregar página', page, err);
@@ -3534,6 +3561,10 @@ async function loadPage(page, options = {}) {
     } finally {
         if (loadId === moduleLoadSequence) {
             applyModuleScrollBehavior(page);
+            // De volta pela foto: na mesma altura em que a foto mostrava.
+            if (rolagemDaVolta > 0) {
+                content.scrollTop = Math.min(rolagemDaVolta, Math.max(0, content.scrollHeight - content.clientHeight));
+            }
             document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
         }
     }
