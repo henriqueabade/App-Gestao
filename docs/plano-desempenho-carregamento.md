@@ -4,6 +4,8 @@ Pedido do dono em 06/10/2026: "muita lentidão de carregamento nos módulos e
 modais, principalmente Financeiro e Contabilidade, mas no geral em todos".
 Este documento é o diagnóstico (medido, não estimado), o plano e, logo abaixo,
 a entrega das quatro fases (06/10/2026, autorizada de uma vez pelo dono).
+Tudo está na branch `Otimização-de-Carregamentos`, nos dois repositórios
+(App-Gestao e Santissimo-db-API).
 
 ## Entrega
 
@@ -22,15 +24,20 @@ a entrega das quatro fases (06/10/2026, autorizada de uma vez pelo dono).
 - **Abrir o Financeiro** (três painéis juntos): de 419 idas e 7 MB para 50 idas e 0,73 MB, antes do gzip.
 - **Contabilidade:** de 4,5 MB para 0,26 MB.
 - **Pico de chamadas simultâneas à API:** também caiu (Financeiro de 104 para 28, Contabilidade de 73 para 41).
-- **Na tela:** o piso do spinner caiu de 1 s para 0,3 s. Voltar a um módulo já visitado mostra a tela na hora (Fase 4).
+- **Na tela:** voltar a um módulo já visitado mostra a tela na hora (Fase 4). O piso do spinner continua o de antes.
 
-### Decisões tomadas (o dono deixou a meu critério)
-1. **Piso do spinner:** 0,3 s. Ainda não pisca, e o que carrega rápido não espera à toa.
-2. **API da internet:** foi alterada (Fase 2). Precisa ser publicada de novo. Sem isso o programa funciona igual, só baixa mais.
-3. **Volta instantânea:** implementada com FOTO da tela, não com a tela antiga viva. Motivos:
-   - o módulo recomeça do zero como sempre;
-   - nunca há dois elementos com o mesmo id;
-   - ninguém edita dado velho.
+### Decisões (as do dono, de 06/10/2026, e as técnicas)
+1. **Piso do spinner (dono): NÃO baixar.** Ficou como sempre foi:
+   - 1 s nos módulos, no Financeiro, na Contabilidade e nos modais dos módulos;
+   - 0,5 s nos modais de Pedidos e nos abertos por cima;
+   - nenhum no Visualizar/Editar orçamento, que aparece quando o orçamento chega.
+   - Uma primeira versão tinha baixado tudo para 0,3 s; foi desfeita.
+2. **API da internet (dono): pode, desde que não quebre nada.** Foi auditada ponto a ponto (abaixo, Fase 2). Precisa ser publicada de novo; sem isso o programa funciona igual, só baixa mais.
+3. **Volta instantânea (dono): sim, mas sem perder a atualização ao vivo.** Por isso é uma FOTO só para a espera, e não um cache:
+   - a cada volta, o módulo é buscado e lido do zero, como sempre;
+   - a foto sai assim que os dados novos chegam;
+   - o que outro usuário mudou aparece na volta, e as atualizações por evento e o sino continuam iguais;
+   - nunca há dois elementos com o mesmo id, nem ninguém editando dado velho.
 4. **Otimizado nos dois modos** (DEV e PROD). O `select` vale também no `localDataClient`.
 
 ### O que mudou, fase por fase
@@ -52,6 +59,20 @@ a entrega das quatro fases (06/10/2026, autorizada de uma vez pelo dono).
 - gzip nas respostas (`consultas/compactar.js`);
 - `usuarios.senha` nunca sai, e `password_reset_tokens` fica fechada (403).
 
+**Auditoria "não quebrar nada" (Fase 2):**
+- **`select` respeitado:** conferidos os ~50 pontos do programa que mandam `select` e o que cada um usa depois.
+  - Achada e corrigida uma quebra real: o `getFiltrado` de Matéria-prima e Produtos refiltra pela coluna do filtro, e leituras como `{ categoria, select: 'id' }` vinham sem ela.
+  - O efeito era "a categoria/unidade/processo/coleção tem dependência?" e "o produto está em orçamento?" responderem sempre "não", e as linhas da rota de um produto excluído não serem achadas.
+  - O defeito já existia no modo DEV. Agora o `separarFiltrosQuery` põe a coluna do filtro no `select`.
+  - Trava: `backend/filtrosComSelect.test.js`, que falha sem a correção.
+- **Notas sem XML:** nenhum dos cinco lugares que pedem `SEM_XML` usa os XMLs. As evidências, o DANFE, o e-mail e o download leem a nota inteira.
+- **Memória por requisição:** a chave inclui o `select`, então a nota inteira e a nota sem XML nunca se misturam. Ela vive só durante uma rota.
+- **`senha` e tokens:**
+  - o login, o "esqueci a senha", o cadastro e a troca de senha da API leem o banco direto, não pela rota genérica;
+  - o login do modo DEV também lê o banco direto;
+  - nenhum código do programa lê o hash pela API.
+- **gzip:** só vai para quem pede. O `fetch` do Node (backend e `main.js`) descompacta sozinho; os transportes de banco/SEFAZ não falam com a API.
+
 **Fase 3 (tela):**
 - **spinner único:**
   - `Modal.openModuleModal` no lugar das dez cópias, com relógio de 15 s;
@@ -65,7 +86,7 @@ a entrega das quatro fases (06/10/2026, autorizada de uma vez pelo dono).
 - trava: `src/js/__tests__/desempenhoTela.test.js`;
 - **ficou de fora, de propósito:**
   - "carregar uma vez os scripts grandes do Financeiro e da Contabilidade". Medido: ler e compilar custa ~6 ms por abertura. Reescrever os scripts para isso traria risco sem ganho que se sinta;
-  - o spinner próprio do Financeiro e da Contabilidade foi mantido: já tinha relógio, limpeza e agora o piso de 0,3 s.
+  - o spinner próprio do Financeiro e da Contabilidade foi mantido: já tinha relógio e limpeza, com o piso de 1 s de sempre.
 
 **Fase 4 (volta instantânea):**
 - ao sair de um módulo pronto, o menu pede ao Electron uma foto só da área do módulo (`main.js › 'modulo:fotografar'`);
@@ -78,12 +99,14 @@ a entrega das quatro fases (06/10/2026, autorizada de uma vez pelo dono).
   - a foto passou de 30 min;
   - nesses casos, a máscara de sempre;
 - a foto fica só na memória da janela;
-- trava: `src/js/__tests__/voltaInstantanea.test.js`. Conferido no Electron com o `menu.html` e o `preload.js` de verdade.
+- trava: `src/js/__tests__/voltaInstantanea.test.js`, que também confere que a foto nunca encurta a releitura;
+- conferido no Electron com o `menu.html` e o `preload.js` de verdade, inclusive com um "outro usuário" cadastrando um cliente entre a saída e a volta. A foto mostrou 12 clientes; a tela viva, logo depois, os 13.
 
 ### O que o dono precisa fazer
-1. **Publicar a API** (Santissimo-db-API) e reiniciá-la. Até lá, o programa funciona, só baixa mais.
-2. **Fechar e abrir o programa.** `main.js` e `preload.js` mudaram (a foto da volta instantânea).
-3. Nenhum SQL novo.
+1. Tudo está na branch `Otimização-de-Carregamentos` (nos dois repositórios); a `main` ficou como estava. Juntar à `main` quando aprovar.
+2. **Publicar a API** (Santissimo-db-API, a partir dessa branch) e reiniciá-la. Até lá, o programa funciona, só baixa mais.
+3. **Fechar e abrir o programa.** `main.js` e `preload.js` mudaram (a foto da volta instantânea).
+4. Nenhum SQL novo.
 
 ## Como foi medido
 
@@ -183,7 +206,7 @@ testes e com a medição acima repetida no fim de cada fase.
 1. **Um spinner só para todo modal:** as 9 cópias e os mecanismos do Financeiro e da Contabilidade passam a usar o `Modal.openWithSpinner`, com relógio de segurança de 15 s, limpeza quando o modal fecha antes e um piso único.
 2. **Aviso de pronto só depois dos dados:** `cliente-novo` (as duas cópias) e `servico-novo`, mais uma passada pelos outros modais que avisam cedo.
 3. **Os 12 módulos sem aviso** passam a publicar o `moduleReadyPromise`: a máscara sai exatamente quando os dados chegam, nem antes nem depois.
-4. **Piso do spinner** (decisão sua, pergunta 1): de 1 s para 0,3 s.
+4. **Piso do spinner** (decisão sua, pergunta 1): de 1 s para 0,3 s. *Resposta do dono: não baixar — ficou 1 s.*
 5. **Os modais que abrem sem spinner e carregam dados:** sub-modais de Matéria-prima, Produtos, Orçamentos e Prospecções. Os de confirmação (excluir) continuam como estão; os que leem dados ganham o spinner.
 6. **Scripts grandes** (Financeiro e Contabilidade): carregados uma vez e reaproveitados nos modais seguintes.
 

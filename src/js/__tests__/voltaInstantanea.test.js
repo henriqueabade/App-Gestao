@@ -208,6 +208,15 @@ test('o menu usa a foto: pede na saída, espera antes de trocar, mostra na volta
   assert.ok(pedido > 0 && pedido < permissoes, 'a foto precisa ser pedida antes da primeira espera');
   assert.ok(espera > 0 && espera < troca, 'a tela não pode trocar antes de a foto sair');
   assert.match(corpo, /fotoDoModulo\(\)\?\.queServe\(page, content\)/);
+
+  // A foto NUNCA dispensa a releitura (usuários simultâneos, dado ao vivo —
+  // pedido do dono): com ou sem foto, o módulo é buscado e executado do zero,
+  // e a foto só sai depois das mesmas esperas de dados da máscara.
+  const veu = corpo.indexOf('const veuDaFoto = ');
+  assert.ok(veu > 0 && veu < corpo.indexOf('await fetch(`../html/${page}.html`'), 'com foto, o módulo tem de ser buscado assim mesmo');
+  assert.ok(corpo.indexOf('await aguardarDadosDoModulo()') < corpo.indexOf('mask?.remove();'), 'a foto saiu antes dos dados novos');
+  assert.ok(corpo.indexOf('Promise.resolve(module.moduleReadyPromise)') < corpo.indexOf('mask?.remove();'));
+  assert.doesNotMatch(corpo, /if \(veuDaFoto\)[^\n]*return/, 'a foto não pode encurtar a carga');
   assert.match(corpo, /if \(veuDaFoto\) module\.classList\.add\('modulo-volta-instantanea'\);/);
   assert.match(corpo, /if \(usesLoadingMask && !veuDaFoto\) \{/, 'o piso do spinner não vale para a foto');
   assert.match(corpo, /content\.scrollTop = Math\.min\(rolagemDaVolta/, 'a rolagem da foto não volta');

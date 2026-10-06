@@ -464,9 +464,9 @@ não por `[role="dialog"]`. Coberto por
 ### Carregamento
 
 Modal que lê o servidor antes de mostrar alguma coisa **não aparece vazio**:
-fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo
-**0,3 s** (era 1 s até 06/10/2026 — ver `docs/plano-desempenho-carregamento.md`)
-e o modal aparece já preenchido. No Financeiro, `finSpinnerDoModal()`
+fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo 1 s
+(decisão do dono, mantida em 06/10/2026 — não baixar) e o modal aparece já
+preenchido. No Financeiro, `finSpinnerDoModal()`
 (`src/js/financeiro.js`) põe o spinner e `window.FinanceiroModalPronto()` o
 troca pelo modal quando a primeira leitura termina (no máximo 15 s). Trocar um
 filtro dentro do modal mostra uma linha com o mesmo spinner no lugar da tabela.
@@ -487,9 +487,17 @@ ela termina (teto de 20 s), e não por palpite.
 
 **Volta instantânea:** ao voltar a um módulo já visitado, o menu mostra a foto
 da última visita com o selo "Atualizando…" enquanto o módulo recarrega por
-baixo (`src/js/utils/foto-do-modulo.js`). O módulo não precisa fazer nada;
-só não pode depender da animação de entrada para funcionar (de volta pela
-foto, a subida é desligada com `.modulo-volta-instantanea`).
+baixo (`src/js/utils/foto-do-modulo.js`). A foto **nunca** substitui a
+releitura: o módulo é buscado do zero como sempre (usuários simultâneos — o
+dado novo de outra pessoa aparece na volta) e a foto só sai quando os dados
+novos chegaram. O módulo não precisa fazer nada; só não pode depender da
+animação de entrada para funcionar (de volta pela foto, a subida é desligada
+com `.modulo-volta-instantanea`).
+
+**Leitura com `select` e filtro local** (backend): a API respeita o `select`
+desde 06/10/2026. Quem refiltra a resposta por uma coluna (`getFiltrado` de
+Produtos e Matéria-prima) precisa dessa coluna no `select` — o
+`separarFiltrosQuery` já a acrescenta sozinho.
 
 Nos modais de Pedidos quem faz isso é `Modal.openWithSpinner`. Do lado do
 modal, a regra é **revelar depois de carregar**:
