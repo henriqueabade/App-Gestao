@@ -20,6 +20,7 @@ const c = require('../financeiro/comum');
 const b = require('./base');
 const fiscalPainel = require('../fiscal/painel');
 const externasFiscais = require('../fiscal/externas');
+const { SEM_XML } = require('../fiscal/colunasDaNota');
 const contasReceber = require('../cobranca/contasReceber');
 const fechamentos = require('../financeiro/fechamentos');
 const baseFinanceiro = require('../financeiro/base');
@@ -870,25 +871,28 @@ function montar({
  */
 async function lerContasPagar(api, hoje) {
   try {
-    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda, comprovantes, vinculosConc] = await Promise.all([
+    // Tudo numa onda só (desempenho, 06/10/2026): terceiros, cartão e pessoas
+    // eram lidos depois, um esperando o outro.
+    const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda, comprovantes, vinculosConc, terceiros, cartao, pessoas] = await Promise.all([
       titulos.lerBase(api), b.ler(api, 'documentos_recebidos'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
       documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null),
       // Fase H: os boletos do DDA (null sem o SQL dela).
       b.lerOpcional(api, 'contabil_dda_boletos').catch(() => null),
       // Fase D: os comprovantes do BB e a conciliação (o comprovante prova o pagamento pelo lançamento).
       b.lerOpcional(api, 'contabil_comprovantes').catch(() => null),
-      b.lerOpcional(api, 'conciliacao_vinculos').catch(() => null)
+      b.lerOpcional(api, 'conciliacao_vinculos').catch(() => null),
+      // Fase F: os itens de terceiros (null sem o SQL dela).
+      terceirosMod.lerTudo(api).catch(() => null),
+      // Fase G: as faturas do cartão e as compras (null sem o SQL dela).
+      cartaoMod.lerTudo(api).catch(() => null),
+      // Fase E: as pessoas que recebem e as notas ligadas aos fechamentos (null sem o SQL dela).
+      pessoasMod.lerTudo(api).catch(() => null)
     ]);
     return {
       titulos: titulos.montarTodos(base, hoje), documentos: docs, contatos: base.contatos,
       arquivosMapa: arquivos.porAlvo(arquivosLista, vinculos), pagamentosFechamento, plano, dda,
       comprovantes: comprovantes || [], comprovados: comprovantesMod.pagamentosComComprovante({ comprovantes: comprovantes || [], vinculos: vinculosConc || [] }),
-      // Fase F: os itens de terceiros (null sem o SQL dela).
-      terceiros: await terceirosMod.lerTudo(api).catch(() => null),
-      // Fase G: as faturas do cartão e as compras (null sem o SQL dela).
-      cartao: await cartaoMod.lerTudo(api).catch(() => null),
-      // Fase E: as pessoas que recebem e as notas ligadas aos fechamentos (null sem o SQL dela).
-      pessoas: await pessoasMod.lerTudo(api).catch(() => null)
+      terceiros, cartao, pessoas
     };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;
@@ -899,17 +903,19 @@ async function lerContasPagar(api, hoje) {
 /** Contas, importações e os movimentos do mês, para a fonte do extrato. null = falta o SQL da etapa 4. */
 async function lerExtrato(api, competencia) {
   try {
-    const [contas, importacoes, movimentos] = await Promise.all([
-      b.ler(api, 'contas_financeiras'), b.ler(api, 'extrato_importacoes'), b.ler(api, 'movimentos_bancarios', { competencia })
+    const [contas, importacoes, movimentos, aplicacoes] = await Promise.all([
+      b.ler(api, 'contas_financeiras'), b.ler(api, 'extrato_importacoes'), b.ler(api, 'movimentos_bancarios', { competencia }),
+      // Fase C: as aplicações do mês (null sem o SQL dela).
+      aplicacoesMod.lerDoMes(api, competencia).catch(() => null)
     ]);
-    // Fase C: as aplicações do mês (null sem o SQL dela).
-    const aplicacoes = await aplicacoesMod.lerDoMes(api, competencia).catch(() => null);
     // 19b: a conta com saldo de abertura de antes do mês precisa dos lançamentos desde ele.
-    const porConta = new Map();
-    for (const conta of contas) {
+    // Todas as contas juntas (antes, uma esperando a outra).
+    const antigas = contas.filter(conta => {
       const digitado = extratoMod.saldoDigitado(conta);
-      if (digitado && digitado.data < `${competencia}-01`) porConta.set(String(conta.id), await b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id) }));
-    }
+      return digitado && digitado.data < `${competencia}-01`;
+    });
+    const lidas = await Promise.all(antigas.map(conta => b.ler(api, 'movimentos_bancarios', { conta_id: Number(conta.id) })));
+    const porConta = new Map(antigas.map((conta, i) => [String(conta.id), lidas[i]]));
     return { contas, importacoes, movimentos, porConta, aplicacoes };
   } catch (e) {
     if (e?.extra?.sql_pendente) return null;
@@ -965,33 +971,55 @@ async function carregar({ api, competencia, hoje, desde = null }) {
   let sqlPendente = false;
   let situacao = null;
   let resolucoes = [];
-  const [pedidos, notas, externas, receberLido, fech, reembolsosPendencias] = await Promise.all([
+  // Duas ondas em vez de oito (desempenho, 06/10/2026): tudo o que não
+  // depende de nada vai junto; depois só a versão do mês fechado, a
+  // conciliação (que precisa do extrato e da versão) e os nomes.
+  const capturar = promessa => promessa.then(valor => ({ valor }), erro => ({ erro }));
+  const [pedidos, notas, externas, receberLido, fech, reembolsosPendencias, situacaoLida, versoesLidas, pacotesLidos, entradaDfeLida, integracoesLidas, pagar, extrato, inicio] = await Promise.all([
     api.get('/api/pedidos').then(c.lista).catch(() => []),
-    api.get('/api/notas_fiscais').then(c.lista).catch(() => []),
+    // Sem os XMLs: o painel só olha número, série e situação (e é a mesma
+    // leitura das contas a receber — a leitura única da requisição junta as duas).
+    api.get('/api/notas_fiscais', { query: { select: SEM_XML } }).then(c.lista).catch(() => []),
     externasFiscais.listarNotas(api).catch(() => []),
     contasReceber.carregarPainel({ api, competencia: comp, hoje, desde }).then(painel => ({ painel, erro: null })).catch(erro => ({ painel: null, erro })),
     baseFinanceiro.lerFechamentos(api).then(dados => [...fechamentos.listarDe(dados, 'comissao'), ...fechamentos.listarDe(dados, 'producao')]).catch(() => null),
-    reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => [])
+    reembolsos.pendenciasDoPainel({ api, hoje }).catch(() => []),
+    capturar(Promise.all([b.ler(api, 'competencia_contabil', { competencia: comp }), b.ler(api, 'contabil_pendencias_resolucoes', { competencia: comp })])),
+    // Mês fechado (etapa 7): as versões — só valem se a competência estiver fechada.
+    capturar(versoes.lerVersoes(api, comp)),
+    // Etapa 9: os pacotes da competência (null sem o SQL da etapa 9).
+    capturar(b.lerOpcional(api, 'contabil_pacotes', { competencia: comp })),
+    // Etapas 10 a 13: a caixa de entrada e o estado das integrações (null sem o SQL delas).
+    b.lerOpcional(api, 'contabil_dfe_recebidos').catch(() => null),
+    b.lerOpcional(api, 'contabil_integracoes').catch(() => null),
+    lerContasPagar(api, hoje), lerExtrato(api, comp), parametros.inicio(api)
   ]);
-  try {
-    situacao = (await b.ler(api, 'competencia_contabil', { competencia: comp }))[0] || null;
-    resolucoes = await b.ler(api, 'contabil_pendencias_resolucoes', { competencia: comp });
-  } catch (e) {
-    if (!e?.extra?.sql_pendente) throw e;
+  if (situacaoLida.erro) {
+    if (!situacaoLida.erro?.extra?.sql_pendente) throw situacaoLida.erro;
     sqlPendente = true;
+  } else {
+    situacao = situacaoLida.valor[0][0] || null;
+    resolucoes = situacaoLida.valor[1];
   }
   // Mês fechado (etapa 7): a versão que vale — a classificação dela e a foto para comparar.
-  const versao = situacao?.status === 'fechada' ? versoes.ultima((await versoes.lerVersoes(api, comp)) || []) : null;
-  // Etapa 9: os pacotes da competência (null sem o SQL da etapa 9).
-  const pacotes = sqlPendente ? null : await b.lerOpcional(api, 'contabil_pacotes', { competencia: comp });
-  // Etapas 10 a 13: a caixa de entrada e o estado das integrações (null sem o SQL delas).
-  const [entradaDfe, integracoes] = sqlPendente ? [null, null] : await Promise.all([
-    b.lerOpcional(api, 'contabil_dfe_recebidos').catch(() => null), b.lerOpcional(api, 'contabil_integracoes').catch(() => null)
-  ]);
-  const [pagar, extrato, inicio] = await Promise.all([lerContasPagar(api, hoje), lerExtrato(api, comp), parametros.inicio(api)]);
-  const conciliacao = await lerConciliacao(api, comp, extrato, c.dia(hoje), versao);
+  let versao = null;
+  if (situacao?.status === 'fechada') {
+    if (versoesLidas.erro) throw versoesLidas.erro;
+    versao = versoes.ultima(versoesLidas.valor || []);
+  }
+  let pacotes = null;
+  if (!sqlPendente) {
+    if (pacotesLidos.erro) throw pacotesLidos.erro;
+    pacotes = pacotesLidos.valor;
+  }
+  // Sem o SQL da etapa 7 nada disto conta (era assim quando nem se lia).
+  const entradaDfe = sqlPendente ? null : entradaDfeLida;
+  const integracoes = sqlPendente ? null : integracoesLidas;
   const aguardando = fiscalPainel.pedidosAguardandoNfe({ pedidos, notas: notas.map(semXml), desde: `${comp}-01`, hoje, externas });
-  const nomes = await b.nomesDeUsuarios(api, [situacao?.fechada_por, situacao?.reaberta_por, ...resolucoes.map(r => r.usuario_id)]);
+  const [conciliacao, nomes] = await Promise.all([
+    lerConciliacao(api, comp, extrato, c.dia(hoje), versao),
+    b.nomesDeUsuarios(api, [situacao?.fechada_por, situacao?.reaberta_por, ...resolucoes.map(r => r.usuario_id)])
+  ]);
   const painel = montar({
     competencia: comp, hoje, notas, externas, aguardando, receber: receberLido.painel, receberErro: receberLido.erro,
     fechamentos: fech, reembolsosPendencias, situacao, resolucoes, nomes, sqlPendente, pagar, extrato, conciliacao,

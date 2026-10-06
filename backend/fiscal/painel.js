@@ -13,6 +13,7 @@
  * por fora, e contar esses pedidos velhos só faria ruído.
  */
 const externasFiscais = require('./externas');
+const { SEM_XML } = require('./colunasDaNota');
 
 const STATUS_VIVOS = new Set(['autorizada', 'processando', 'enviando', 'cancelamento_pendente']);
 const STATUS_A_CAMINHO = new Set(['processando', 'enviando']);
@@ -256,7 +257,8 @@ function montar({ pedidos = [], notas = [], eventosCce = [], clientes = [], comp
 async function carregar({ api, competencia, hoje = new Date(), certificado = null, pendenciasConfiguracao = [], ambiente = null }) {
   const [pedidos, notas, eventosCce, externas] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
-    api.get('/api/notas_fiscais').then(lista).catch(() => []),
+    // O painel nunca usa os XMLs (`enxuta`): nem vêm da API (fiscal/colunasDaNota.js).
+    api.get('/api/notas_fiscais', { query: { select: SEM_XML } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => []),
     // Sem sql/nfe_boletos_externos.sql, lista vazia: o painel fica como era.
     externasFiscais.listarNotas(api).catch(() => [])

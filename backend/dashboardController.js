@@ -271,7 +271,11 @@ function lerTabela(api, identidade, tabela, { opcional = false } = {}) {
   const guardado = cache.get(chave);
   if (guardado) return guardado.promessa;
 
-  const promessa = comTempoLimite(api.get(`/api/${tabela}`), TEMPO_LIMITE_MS, tabela)
+  // As notas vêm sem os XMLs: o Dashboard nunca os usa (fiscal/colunasDaNota.js).
+  const leitura = tabela === 'notas_fiscais'
+    ? api.get(`/api/${tabela}`, { query: { select: require('./fiscal/colunasDaNota').SEM_XML } })
+    : api.get(`/api/${tabela}`);
+  const promessa = comTempoLimite(leitura, TEMPO_LIMITE_MS, tabela)
     .then(dados => ({ linhas: extrairLinhas(dados, tabela), lidoEm: agora }))
     .catch(err => {
       // Tabela OPCIONAL que não veio (as da devolução, antes de sql/devolucoes.sql):

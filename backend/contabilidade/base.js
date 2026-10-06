@@ -167,7 +167,8 @@ async function excluir(api, tabela, id) {
 /** Os nomes dos usuários citados (fechou, reabriu, ignorou): `Map(id -> nome)`. */
 async function nomesDeUsuarios(api, ids) {
   const unicos = [...new Set(ids.filter(v => v !== null && v !== undefined && v !== '').map(String))];
-  const achados = await Promise.all(unicos.map(id => api.get('/api/usuarios', { query: { id } })
+  // Só o que o nome usa (sem a foto de perfil — desempenho, 06/10/2026).
+  const achados = await Promise.all(unicos.map(id => api.get('/api/usuarios', { query: { id, select: 'id,nome,email' } })
     .then(r => c.lista(r).find(u => String(u?.id) === id) || null)
     .catch(() => null)));
   return new Map(achados.filter(Boolean).map(u => [String(u.id), u.nome || u.email || `Usuário ${u.id}`]));

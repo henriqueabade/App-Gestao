@@ -18,7 +18,8 @@ const ROTULO_SITUACAO = {
 
 async function nomesDosUsuarios(api, ids) {
   const unicos = [...new Set(ids.filter(v => v !== null && v !== undefined && v !== '').map(String))];
-  const achados = await Promise.all(unicos.map(id => api.get(`/api/usuarios/${id}`).then(u => [id, u?.nome || null]).catch(() => [id, null])));
+  // Só id e nome (sem a foto de perfil — desempenho, 06/10/2026).
+  const achados = await Promise.all(unicos.map(id => api.get(`/api/usuarios/${id}`, { query: { select: 'id,nome' } }).then(u => [id, u?.nome || null]).catch(() => [id, null])));
   return new Map(achados);
 }
 
