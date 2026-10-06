@@ -40,38 +40,13 @@ function updateEmptyStateServicos(hasData) {
 }
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
-    // Registra como reabrir este modal, para restaurar o trabalho apos queda.
-    window.__registrarModalAberto?.({ htmlPath, scriptPath, overlayId });
-    Modal.closeAll();
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
-    spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
-    document.body.appendChild(spinner);
-    // Tempo mínimo de exibição do spinner: evita o "piscar" do modal e a
-    // sensação de travamento. Não atrasa o carregamento dos dados — apenas
-    // segura a revelação do modal caso ele fique pronto antes disso.
-    const MIN_SPINNER_MS = 1000;
-    const inicioSpinner = Date.now();
-    function handleLoaded(e) {
-        if (e.detail !== overlayId) return;
-        const restante = Math.max(0, MIN_SPINNER_MS - (Date.now() - inicioSpinner));
-        setTimeout(() => {
-            const overlay = document.getElementById(`${overlayId}Overlay`);
-            spinner.remove();
-            overlay?.classList.remove('hidden');
-        }, restante);
-        window.removeEventListener('modalSpinnerLoaded', handleLoaded);
-    }
-    window.addEventListener('modalSpinnerLoaded', handleLoaded);
-    Modal.openWithTemplate({
-        templatePath: 'modals/shared/dialog-base.html',
-        contentPath: htmlPath,
-        scriptPath,
-        overlayId,
-        keepExisting: true
-    });
+    // Um spinner só no programa inteiro (src/utils/modal.js › openModuleModal,
+    // desempenho 06/10/2026): fecha os outros modais, revela o overlay quando o
+    // modal avisa `modalSpinnerLoaded` (tira o `hidden` — classList.remove('hidden')),
+    // com piso de 0,3 s, relógio de segurança e limpeza se fechar antes. Antes
+    // eram nove cópias desta função, com 1 s de piso e sem relógio: modal que
+    // desse erro deixava a tela escura presa.
+    return Modal.openModuleModal(htmlPath, scriptPath, overlayId);
 }
 
 function toTitleCase(value) {
@@ -339,7 +314,8 @@ function initServicosLaminacao() {
     }
 
     window.addEventListener('servicoLaminacaoAtualizado', () => carregarServicos());
-    carregarServicos();
+    // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
+    window.moduloPronto?.(carregarServicos());
 }
 
 if (document.readyState === 'loading') {

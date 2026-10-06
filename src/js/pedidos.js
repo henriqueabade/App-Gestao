@@ -875,7 +875,8 @@ function initPedidos() {
         });
     }
 
-    carregarPedidos();
+    // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
+    window.moduloPronto?.(carregarPedidos());
 }
 
 // De fora do módulo (tarefa, calendário): abrir um pedido direto. O script é

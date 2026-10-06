@@ -22,7 +22,10 @@ test('configurações publica sua promessa e o menu aguarda a inicialização', 
   assert.match(configuracoes, /moduleElement\.moduleReadyPromise\s*=\s*Promise\.resolve\(profileReady\)/);
   assert.doesNotMatch(configuracoes, /document\.addEventListener\('module-change'/,
     'o evento do menu não deve disparar uma segunda carga do perfil');
-  assert.match(menu, /await module\.moduleReadyPromise/);
+  // O menu espera a promessa do módulo — com teto (06/10/2026): um módulo
+  // cuja primeira carga nunca termina não prende a máscara para sempre.
+  assert.match(menu, /Promise\.resolve\(module\.moduleReadyPromise\)\.then\(\(\) => false\)/);
+  assert.match(menu, /setTimeout\(\(\) => resolve\(true\), TETO_DA_CARGA_DO_MODULO_MS\)/);
 });
 
 test('máscara de módulo centraliza o spinner na viewport, não no conteúdo longo', () => {

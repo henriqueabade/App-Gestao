@@ -10,8 +10,16 @@
   document.getElementById('cancelarNovoCliente')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
-  // signal spinner loaded immediately
-  window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoCliente' }));
+  // O modal só aparece com as listas prontas (desempenho, 06/10/2026): antes o
+  // aviso saía logo aqui, e "Dono" e os países se enchiam na frente do usuário.
+  // `cargas` junta o que o modal busca ao abrir; o aviso sai no fim, dê certo ou não.
+  const cargas = [];
+  let avisouPronto = false;
+  const avisarPronto = () => {
+    if (avisouPronto) return;
+    avisouPronto = true;
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoCliente' }));
+  };
 
   // Redes sociais, uma por linha (01/10/2026), logo abaixo do Site.
   const redesSociais = window.RedesSociais?.montar(document.getElementById('empresaRedesLista'));
@@ -124,7 +132,7 @@
       console.error('Erro ao carregar usuários', err);
     }
   }
-  carregarUsuarios();
+  cargas.push(carregarUsuarios());
 
   async function ensureGeo(){
     if(window.geoService) return;
@@ -136,7 +144,11 @@
       document.head.appendChild(s);
     });
   }
-  await ensureGeo();
+  try {
+    await ensureGeo();
+  } catch (err) {
+    console.error('Erro ao carregar a lista de países', err);
+  }
 
   async function setupEndereco(prefix){
     const paisSel = document.getElementById(prefix + 'Pais');
@@ -166,7 +178,7 @@
       }
     });
   }
-  ['reg','cob','ent'].forEach(setupEndereco);
+  ['reg','cob','ent'].forEach(prefixo => cargas.push(setupEndereco(prefixo).catch(err => console.error('Erro ao montar o endereço', err))));
   // CEP preenche rua, bairro, cidade, estado e o código IBGE do bloco.
   ['reg','cob','ent'].forEach(p => window.CepBusca?.ligar(p));
 
@@ -399,4 +411,7 @@
       showToast('Erro ao registrar cliente', 'error');
     }
   });
+
+  // Tudo montado e as listas carregadas (ou falharam): agora o spinner sai.
+  Promise.allSettled(cargas).finally(avisarPronto);
 })();

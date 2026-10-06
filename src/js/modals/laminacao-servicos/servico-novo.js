@@ -22,7 +22,9 @@
   };
   document.addEventListener('keydown', handleEsc);
 
-  window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
+  // O aviso de pronto sai depois da lista de clientes (desempenho, 06/10/2026):
+  // antes saía aqui e o modal aparecia com o "Cliente" ainda vazio.
+  const avisarPronto = () => window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
 
   const openStandardDialog = (options = {}) => {
     if (!window.DialogPadrao?.openAsync) {
@@ -298,7 +300,7 @@
     }
   }
 
-  carregarClientes();
+  const clientesProntos = carregarClientes();
 
   const pecas = [];
   let pecaEmEdicao = null;
@@ -821,4 +823,7 @@
     event.preventDefault();
     salvarDados();
   });
+
+  // Montado e com os clientes carregados (ou a falha registrada): o spinner sai.
+  Promise.resolve(clientesProntos).catch(() => null).finally(avisarPronto);
 })();

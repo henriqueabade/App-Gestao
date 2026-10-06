@@ -312,8 +312,9 @@ function ctbAbrirModal(chave, moduleEl, extra = {}) {
     window.Modal.open(modal.html, CTB_SCRIPT_MODAIS, modal.overlay, extra.empilhar === true);
 }
 
-/* Tempo mínimo e máximo do spinner, como no Financeiro. */
-const CTB_SPINNER_MINIMO_MS = 1000;
+/* Tempo mínimo e máximo do spinner, como no Financeiro (o mínimo era 1 s;
+   0,3 s desde 06/10/2026 — ver financeiro.js). */
+const CTB_SPINNER_MINIMO_MS = 300;
 const CTB_SPINNER_MAXIMO_MS = 15000;
 const ctbSpinners = new Map();
 

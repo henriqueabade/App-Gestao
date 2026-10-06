@@ -197,22 +197,11 @@ function showFunctionUnavailableDialog(message) {
 }
 
 function openQuoteModal(htmlPath, scriptPath, overlayId) {
-    Modal.closeAll();
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
-    spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
-    document.body.appendChild(spinner);
-    function handleLoaded(e) {
-        if (e.detail !== overlayId) return;
-        const overlay = document.getElementById(`${overlayId}Overlay`);
-        spinner.remove();
-        overlay?.classList.remove('hidden');
-        window.removeEventListener('orcamentoModalLoaded', handleLoaded);
-    }
-    window.addEventListener('orcamentoModalLoaded', handleLoaded);
-    Modal.open(htmlPath, scriptPath, overlayId, true);
+    // O spinner único (src/utils/modal.js › openModuleModal, desempenho
+    // 06/10/2026). Visualizar e Editar avisam `orcamentoModalLoaded` depois de
+    // ler o orçamento. A cópia antiga não tinha relógio: orçamento que não
+    // carregava (id vazio, erro) deixava a tela escura presa.
+    return Modal.openModuleModal(htmlPath, scriptPath, overlayId, { eventosDePronto: ['orcamentoModalLoaded'] });
 }
 
 function openConversionFlow(id) {
@@ -560,7 +549,7 @@ function initOrcamentos() {
     const novoBtn = document.getElementById('novoOrcamentoBtn');
     if (novoBtn) {
         novoBtn.addEventListener('click', () => {
-            Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
+            Modal.openModuleModal('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
         });
     }
     // Proposta para quem ainda NÃO é cliente. Abre o mesmo modal: o que muda é
@@ -570,7 +559,7 @@ function initOrcamentos() {
     if (novoProspeccaoBtn) {
         novoProspeccaoBtn.addEventListener('click', () => {
             window.orcamentoProspeccao = { escolher: true };
-            Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
+            Modal.openModuleModal('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
         });
     }
 
@@ -599,7 +588,8 @@ function initOrcamentos() {
         });
     }
 
-    carregarOrcamentos();
+    // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
+    window.moduloPronto?.(carregarOrcamentos());
 }
 
 // De fora do módulo (tarefa, calendário): abrir um orçamento direto.

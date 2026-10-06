@@ -3311,6 +3311,26 @@ function aguardarDadosDoModulo({ quietMs = 90, timeoutMs = 8000 } = {}) {
     });
 }
 
+/**
+ * O módulo diz quando a PRIMEIRA carga dos dados dele terminou (desempenho,
+ * 06/10/2026). Antes, 12 módulos não diziam nada e a máscara saía por palpite
+ * — "a rede ficou quieta por 90 ms" —, às vezes cedo (tela pela metade), às
+ * vezes tarde (qualquer outra chamada em andamento segurava a tela). O módulo
+ * chama `window.moduloPronto(carregarX())` no init; o menu espera essa
+ * promessa (com teto, ver `loadPage`). Erro na carga também libera a tela: o
+ * módulo mostra o erro dele.
+ */
+window.moduloPronto = promessa => {
+    const modulo = document.querySelector('#content .modulo-container');
+    if (modulo && promessa && typeof promessa.then === 'function') {
+        modulo.moduleReadyPromise = Promise.resolve(promessa).catch(() => null);
+    }
+    return promessa;
+};
+
+/** Teto da espera pelo `moduleReadyPromise`: um módulo nunca prende a máscara. */
+const TETO_DA_CARGA_DO_MODULO_MS = 20000;
+
 function readModuleIntroduction(module, fallbackTitle) {
     const heading = module?.querySelector('h1');
     const description = heading?.parentElement?.querySelector('p');
@@ -3379,15 +3399,17 @@ async function loadPage(page, options = {}) {
     }
     // Todos os módulos usam a máscara de carregamento, inclusive Configurações:
     // sem ela a tela aparecia montando aos pedaços, com cara de bug. A máscara
-    // segura a revelação até tudo estar pronto (mínimo de 1s, ver abaixo).
+    // segura a revelação até tudo estar pronto (mínimo de 0,3 s, ver abaixo).
     const usesLoadingMask = true;
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
     // Tempo mínimo de exibição do spinner do módulo: se o carregamento for mais
     // rápido que isso, seguramos a revelação para não "piscar". Nada é somado
-    // quando o carregamento já demora mais que o mínimo.
-    const MIN_MODULE_SPINNER_MS = 1000;
+    // quando o carregamento já demora mais que o mínimo. Era 1 s em todo
+    // módulo, mesmo nos que carregam em 0,1 s; 0,3 s ainda não pisca
+    // (desempenho, 06/10/2026).
+    const MIN_MODULE_SPINNER_MS = 300;
     const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
     // A máscara é ancorada no topo da área do módulo e tem a altura da viewport
@@ -3462,7 +3484,13 @@ async function loadPage(page, options = {}) {
         // primeira abertura.
         if (usesLoadingMask && module.moduleReadyPromise) {
             try {
-                await module.moduleReadyPromise;
+                let teto = null;
+                const estourou = await Promise.race([
+                    Promise.resolve(module.moduleReadyPromise).then(() => false),
+                    new Promise(resolve => { teto = setTimeout(() => resolve(true), TETO_DA_CARGA_DO_MODULO_MS); })
+                ]);
+                clearTimeout(teto);
+                if (estourou) console.warn(`[lento] ${page}: a primeira carga passou de ${TETO_DA_CARGA_DO_MODULO_MS} ms; a tela foi revelada assim mesmo.`);
             } catch (moduleReadyError) {
                 console.warn(`Inicialização de ${page} concluída com erro.`, moduleReadyError);
             }

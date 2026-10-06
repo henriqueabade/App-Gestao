@@ -787,38 +787,13 @@ function renderTabela(lista) {
 // ---------------------------------------------------------------------------
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
-    // Registra como reabrir este modal, para restaurar o trabalho apos queda.
-    window.__registrarModalAberto?.({ htmlPath, scriptPath, overlayId });
-    Modal.closeAll();
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
-    spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
-    document.body.appendChild(spinner);
-    // Tempo mínimo de exibição do spinner: evita o "piscar" do modal e a
-    // sensação de travamento. Não atrasa o carregamento dos dados — apenas
-    // segura a revelação do modal caso ele fique pronto antes disso.
-    const MIN_SPINNER_MS = 1000;
-    const inicioSpinner = Date.now();
-    // Promessa concluída só quando o modal aparece: é ela que segura o ícone da
-    // grade em "carregando" e engole o segundo clique enquanto isso.
-    let concluir;
-    const pronto = new Promise(r => { concluir = r; });
-    function handleLoaded(e) {
-        if (e.detail !== overlayId) return;
-        const restante = Math.max(0, MIN_SPINNER_MS - (Date.now() - inicioSpinner));
-        setTimeout(() => {
-            const overlay = document.getElementById(`${overlayId}Overlay`);
-            spinner.remove();
-            overlay?.classList.remove('hidden');
-            concluir();
-        }, restante);
-        window.removeEventListener('modalSpinnerLoaded', handleLoaded);
-    }
-    window.addEventListener('modalSpinnerLoaded', handleLoaded);
-    Modal.open(htmlPath, scriptPath, overlayId, true);
-    return pronto;
+    // Um spinner só no programa inteiro (src/utils/modal.js › openModuleModal,
+    // desempenho 06/10/2026): fecha os outros modais, revela o overlay quando o
+    // modal avisa `modalSpinnerLoaded` (tira o `hidden` — classList.remove('hidden')),
+    // com piso de 0,3 s, relógio de segurança e limpeza se fechar antes. Antes
+    // eram nove cópias desta função, com 1 s de piso e sem relógio: modal que
+    // desse erro deixava a tela escura presa.
+    return Modal.openModuleModal(htmlPath, scriptPath, overlayId);
 }
 
 function abrirExcluirProspeccao(prospeccao) {
@@ -840,7 +815,9 @@ function abrirExcluirProspeccao(prospeccao) {
 function abrirTrocarResponsavel(prospeccao) {
     window.prospeccaoAcaoAlvo = prospeccao;
     window.prospeccaoAcaoContatos = [];
-    return Modal.open('modals/prospeccoes/responsavel.html', '../js/modals/prospeccao-responsavel.js', 'responsavelProspeccao');
+    // Com spinner: o modal só aparece com a lista de usuários montada
+    // (desempenho, 06/10/2026). A promessa resolve quando ele aparece.
+    return openModalWithSpinner('modals/prospeccoes/responsavel.html', '../js/modals/prospeccao-responsavel.js', 'responsavelProspeccao');
 }
 
 function abrirMoverEtapa(prospeccao) {
@@ -1079,7 +1056,8 @@ function initProspeccoes() {
         aplicarFiltros();
     });
 
-    carregarProspeccoes();
+    // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
+    window.moduloPronto?.(carregarProspeccoes());
 }
 
 function loadProspeccoesScriptOnce(src) {
