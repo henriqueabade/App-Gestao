@@ -4,7 +4,8 @@
  *  1. nove módulos tinham cada um a sua cópia do "abrir modal com spinner",
  *     com 1 s de piso e SEM relógio: modal que desse erro antes de avisar
  *     deixava a tela escura presa para sempre. Agora é um só,
- *     `Modal.openModuleModal`, com piso de 0,3 s e relógio de segurança;
+ *     `Modal.openModuleModal`, com o mesmo piso de 1 s (o dono decidiu não
+ *     baixar) e relógio de segurança;
  *  2. modais que avisavam "pronto" antes dos dados (Novo cliente, Novo
  *     orçamento, Novo insumo…) apareciam com os selects vazios;
  *  3. doze módulos não diziam ao menu quando a primeira carga terminava e a
@@ -71,7 +72,7 @@ test('openModuleModal: o aviso de OUTRO modal não revela este', async () => {
   await promessa; // o relógio encerra, para o teste não ficar pendurado
 });
 
-test('openModuleModal: o piso segura a revelação por 0,3 s, não por 1 s', async () => {
+test('openModuleModal: o piso de 1 s dos modais dos módulos continua (decisão do dono)', async () => {
   const { janela, documento, Modal } = montar();
   const inicio = Date.now();
   const promessa = Modal.openModuleModal('x.html', null, 'x');
@@ -81,7 +82,7 @@ test('openModuleModal: o piso segura a revelação por 0,3 s, não por 1 s', asy
   assert.ok(documento.getElementById('modalLoading'), 'revelou sem respeitar o piso');
   await promessa;
   const levou = Date.now() - inicio;
-  assert.ok(levou >= 250 && levou < 900, `levou ${levou} ms`);
+  assert.ok(levou >= 950 && levou < 1600, `levou ${levou} ms`);
 });
 
 test('openModuleModal: modal que nunca avisa é revelado pelo relógio, com rastro no console', async () => {
@@ -166,7 +167,7 @@ test('os módulos abrem os modais pelo spinner único, sem cópia própria', () 
   const orcamentos = ler('js/orcamentos.js');
   assert.ok(orcamentos.includes("Modal.openModuleModal('modals/orcamentos/novo.html'"), 'Novo orçamento sem o spinner único');
   // Visualizar e Editar: a décima cópia, que ouvia `orcamentoModalLoaded` sem relógio.
-  assert.ok(orcamentos.includes("return Modal.openModuleModal(htmlPath, scriptPath, overlayId, { eventosDePronto: ['orcamentoModalLoaded'] });"),
+  assert.ok(orcamentos.includes("return Modal.openModuleModal(htmlPath, scriptPath, overlayId, { eventosDePronto: ['orcamentoModalLoaded'], minSpinnerMs: 0 });"),
     'openQuoteModal sem o spinner único');
   assert.doesNotMatch(orcamentos, /function openQuoteModal[^}]*createElement\('div'\)/, 'openQuoteModal voltou a montar spinner próprio');
 });
@@ -192,11 +193,16 @@ test('sub-modais que leem dados abrem com spinner e nascem escondidos', () => {
     .includes("const aviso = overlayId === 'novoOrcamento' ? 'modalSpinnerLoaded' : 'orcamentoModalLoaded';"));
 });
 
-test('os pisos de spinner do programa são de 0,3 s', () => {
-  assert.match(ler('utils/modal.js'), /minSpinnerMs = 300,/);
-  assert.match(ler('js/menu.js'), /const MIN_MODULE_SPINNER_MS = 300;/);
-  assert.match(ler('js/financeiro.js'), /const FIN_SPINNER_MINIMO_MS = 300;/);
-  assert.match(ler('js/contabilidade.js'), /const CTB_SPINNER_MINIMO_MS = 300;/);
+test('os pisos de spinner continuam os de antes (o dono decidiu NÃO baixar)', () => {
+  const modal = ler('utils/modal.js');
+  assert.match(modal, /minSpinnerMs = 500,/, 'openWithSpinner (Pedidos e por cima) era 0,5 s');
+  assert.match(modal, /const PISO_DOS_MODAIS_DO_MODULO_MS = 1000;/, 'modais dos módulos eram 1 s');
+  assert.match(modal, /minSpinnerMs: PISO_DOS_MODAIS_DO_MODULO_MS,\s*\.\.\.opcoes,/);
+  assert.match(ler('js/menu.js'), /const MIN_MODULE_SPINNER_MS = 1000;/);
+  assert.match(ler('js/financeiro.js'), /const FIN_SPINNER_MINIMO_MS = 1000;/);
+  assert.match(ler('js/contabilidade.js'), /const CTB_SPINNER_MINIMO_MS = 1000;/);
+  // Visualizar/Editar orçamento nunca teve piso: aparece quando o orçamento chega.
+  assert.ok(ler('js/orcamentos.js').includes("{ eventosDePronto: ['orcamentoModalLoaded'], minSpinnerMs: 0 }"));
 });
 
 test('os modais de cadastro só avisam "pronto" depois dos dados', () => {

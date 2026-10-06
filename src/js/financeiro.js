@@ -148,10 +148,10 @@ function finAbrirModal(chave, moduleEl, extra = {}) {
     window.Modal.open(modal.html, FIN_SCRIPT_MODAIS, modal.overlay, extra.empilhar === true);
 }
 
-/* Tempo mínimo do spinner, o mesmo do programa inteiro (Modal.openWithSpinner):
-   evita o "piscar" quando o modal fica pronto rápido demais. Era 1 s; 0,3 s
-   ainda não pisca e o modal rápido não espera à toa (desempenho, 06/10/2026). */
-const FIN_SPINNER_MINIMO_MS = 300;
+/* Tempo mínimo do spinner, o mesmo dos modais dos outros módulos
+   (Modal.openModuleModal): evita o "piscar" quando o modal fica pronto rápido
+   demais. 1 s, decisão do dono (06/10/2026). */
+const FIN_SPINNER_MINIMO_MS = 1000;
 /* E o máximo: se a leitura não voltar, o modal aparece mesmo assim (com o
    aviso de erro dele), em vez de o spinner ficar para sempre. */
 const FIN_SPINNER_MAXIMO_MS = 15000;

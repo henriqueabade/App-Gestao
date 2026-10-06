@@ -159,9 +159,9 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     // Um spinner só no programa inteiro (src/utils/modal.js › openModuleModal,
     // desempenho 06/10/2026): fecha os outros modais, revela o overlay quando o
     // modal avisa `modalSpinnerLoaded` (tira o `hidden` — classList.remove('hidden')),
-    // com piso de 0,3 s, relógio de segurança e limpeza se fechar antes. Antes
-    // eram nove cópias desta função, com 1 s de piso e sem relógio: modal que
-    // desse erro deixava a tela escura presa.
+    // com o piso de 1 s de sempre, relógio de segurança e limpeza se fechar
+    // antes. Antes eram nove cópias desta função, sem relógio: modal que desse
+    // erro deixava a tela escura presa.
     return Modal.openModuleModal(htmlPath, scriptPath, overlayId);
 }
 

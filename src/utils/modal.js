@@ -284,10 +284,10 @@ const ModalManager = (() => {
    */
   function openWithSpinner(htmlPath, scriptPath, overlayId, {
     keepExisting = false,
-    // Piso único do programa (desempenho, 06/10/2026): 0,3 s ainda não deixa
-    // o spinner "piscar", e o modal que carrega rápido não espera à toa. Era
-    // 0,5 s aqui e 1 s nas nove cópias que os módulos tinham.
-    minSpinnerMs = 300,
+    // 0,5 s, como sempre foi aqui (modais de Pedidos e os abertos por cima).
+    // Os modais dos módulos usam 1 s (openModuleModal). O dono decidiu, em
+    // 06/10/2026, não baixar esses pisos.
+    minSpinnerMs = 500,
     timeoutMs = 15000,
     // Chamado uma vez, quando o modal aparece (ou é fechado antes disso).
     aoTerminar = null,
@@ -372,15 +372,22 @@ const ModalManager = (() => {
    * O jeito de os módulos abrirem um modal com spinner (06/10/2026): fecha os
    * outros, mostra o spinner da casa e revela quando o modal avisa
    * (`modalSpinnerLoaded`, `modal-ready` ou `pedidoModalLoaded`) — com piso de
-   * 0,3 s, relógio de segurança e limpeza se o modal for fechado antes.
+   * 1 s (o das nove cópias que os módulos tinham; o dono pediu para manter),
+   * relógio de segurança e limpeza se o modal for fechado antes.
    *
    * A promessa resolve quando o modal APARECE (ou é fechado antes): é ela que
    * segura o ícone da linha em "carregando" e engole o segundo clique (IA).
    */
+  const PISO_DOS_MODAIS_DO_MODULO_MS = 1000;
   function openModuleModal(htmlPath, scriptPath, overlayId, opcoes = {}) {
     closeAll();
     return new Promise(resolve => {
-      openWithSpinner(htmlPath, scriptPath, overlayId, { ...opcoes, keepExisting: true, aoTerminar: resolve });
+      openWithSpinner(htmlPath, scriptPath, overlayId, {
+        minSpinnerMs: PISO_DOS_MODAIS_DO_MODULO_MS,
+        ...opcoes,
+        keepExisting: true,
+        aoTerminar: resolve
+      });
     });
   }
 

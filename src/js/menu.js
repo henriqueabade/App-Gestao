@@ -3408,7 +3408,7 @@ async function loadPage(page, options = {}) {
     }
     // Todos os módulos usam a máscara de carregamento, inclusive Configurações:
     // sem ela a tela aparecia montando aos pedaços, com cara de bug. A máscara
-    // segura a revelação até tudo estar pronto (mínimo de 0,3 s, ver abaixo).
+    // segura a revelação até tudo estar pronto (mínimo de 1 s, ver abaixo).
     const usesLoadingMask = true;
 
     // Antes de trocar a tela, a foto de quem sai (no máximo
@@ -3425,10 +3425,9 @@ async function loadPage(page, options = {}) {
     content.dataset.activePage = page;
     // Tempo mínimo de exibição do spinner do módulo: se o carregamento for mais
     // rápido que isso, seguramos a revelação para não "piscar". Nada é somado
-    // quando o carregamento já demora mais que o mínimo. Era 1 s em todo
-    // módulo, mesmo nos que carregam em 0,1 s; 0,3 s ainda não pisca
-    // (desempenho, 06/10/2026).
-    const MIN_MODULE_SPINNER_MS = 300;
+    // quando o carregamento já demora mais que o mínimo. O dono decidiu manter
+    // 1 s (06/10/2026). Na volta pela foto não há spinner, e o piso não vale.
+    const MIN_MODULE_SPINNER_MS = 1000;
     const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
     // A máscara é ancorada no topo da área do módulo e tem a altura da viewport

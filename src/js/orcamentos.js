@@ -200,8 +200,9 @@ function openQuoteModal(htmlPath, scriptPath, overlayId) {
     // O spinner único (src/utils/modal.js › openModuleModal, desempenho
     // 06/10/2026). Visualizar e Editar avisam `orcamentoModalLoaded` depois de
     // ler o orçamento. A cópia antiga não tinha relógio: orçamento que não
-    // carregava (id vazio, erro) deixava a tela escura presa.
-    return Modal.openModuleModal(htmlPath, scriptPath, overlayId, { eventosDePronto: ['orcamentoModalLoaded'] });
+    // carregava (id vazio, erro) deixava a tela escura presa. Sem piso, como
+    // sempre foi aqui: aparece assim que o orçamento chega.
+    return Modal.openModuleModal(htmlPath, scriptPath, overlayId, { eventosDePronto: ['orcamentoModalLoaded'], minSpinnerMs: 0 });
 }
 
 function openConversionFlow(id) {

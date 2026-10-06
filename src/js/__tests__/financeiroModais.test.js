@@ -870,8 +870,8 @@ test('atividade: Financeiro e SEFAZ numa linha só, do mais novo ao mais antigo,
 test('spinner da casa: o modal só aparece depois da primeira leitura, com tempo mínimo', () => {
     // O módulo põe o spinner ANTES de abrir o modal (o mesmo desenho dos outros módulos)...
     assert.match(MODULO, /finSpinnerDoModal\(modal\.overlay\);\s*window\.Modal\.open\(modal\.html/);
-    // Piso de 0,3 s (desempenho, 06/10/2026: era 1 s e todo modal esperava à toa).
-    assert.match(MODULO, /const FIN_SPINNER_MINIMO_MS = 300;/);
+    // Piso de 1 s: o dono decidiu não baixar (06/10/2026).
+    assert.match(MODULO, /const FIN_SPINNER_MINIMO_MS = 1000;/);
     assert.match(MODULO, /indicador\.className = 'app-loading-indicator app-loading-indicator--compact';/);
     assert.match(MODULO, /orbita\.className = 'module-loading-orbit';/);
     assert.match(MODULO, /limite = setTimeout\(\(\) => registro\.remover\(\), FIN_SPINNER_MAXIMO_MS\);/, 'nunca fica para sempre');
