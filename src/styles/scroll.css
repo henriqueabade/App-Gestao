@@ -49,6 +49,9 @@ body[data-current-module="produtos"] #content.no-scroll .table-scroll,
 body[data-current-module="orcamentos"] #content.no-scroll .table-scroll,
 body[data-current-module="pedidos"] #content.no-scroll .table-scroll,
 body[data-current-module="clientes"] #content.no-scroll .table-scroll,
+/* Contatos estava em MODULES_WITHOUT_SCROLL mas faltava aqui: a tabela ficava
+   com overflow hidden — cortada no fim, sem rolagem (06/10/2026). */
+body[data-current-module="contatos"] #content.no-scroll .table-scroll,
 body[data-current-module="calendario"] #content.no-scroll .table-scroll,
 body[data-current-module="tarefas"] #content.no-scroll .table-scroll,
 body[data-current-module="prospeccoes"] #content.no-scroll .table-scroll,

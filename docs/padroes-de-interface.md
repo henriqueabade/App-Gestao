@@ -400,6 +400,24 @@ módulo vira coluna flexível e a tabela ocupa **o que sobra**
 quebram em duas linhas e a conta fixa deixava as últimas linhas fora da
 tela. Módulo novo nesse formato: prefira o jeito de Clientes.
 
+Módulo que entra em `MODULES_WITHOUT_SCROLL` com `.table-scroll` precisa entrar
+**também** na lista `body[data-current-module="…"] #content.no-scroll .table-scroll`
+de `src/styles/scroll.css` — sem ela a tabela fica com `overflow hidden`:
+cortada no fim e sem rolagem. Foi o defeito de Contatos (06/10/2026);
+`entradaCascata.test.js` confere todos.
+
+### Entrada em cascata dos módulos
+
+Os blocos com `animate-fade-in-up` sobem e aparecem um depois do outro, como
+no Financeiro: `src/js/utils/entrada-cascata.js` dá o atraso pela **ordem**
+(0,2 s, 0,3 s, 0,4 s… até 0,6 s; o cabeçalho não anima) e, terminada a
+entrada, deixa o bloco parado (`.entrada-feita`) — mostrar de novo não refaz a
+subida. Financeiro, Contabilidade, Dashboard e Relatórios têm a cascata deles.
+
+**Nunca ponha `opacity`/`transform` inline nos blocos da entrada**: o
+`fadeInUp` só tem o `to` e parte do valor que o bloco já tem — com opacity 1
+a animação existe mas não se vê. Era assim em 12 módulos até 06/10/2026.
+
 ### Menu lateral: o conteúdo desliza, não recalcula
 
 Abrir/recolher o menu muda a margem do `#mainContent` **de uma vez** e o

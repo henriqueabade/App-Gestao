@@ -3464,6 +3464,9 @@ async function loadPage(page, options = {}) {
         // Voltando pela foto, o módulo entra sem a animação de subida: a foto
         // já mostrou a tela — animar depois dela seria um piscar.
         if (veuDaFoto) module.classList.add('modulo-volta-instantanea');
+        // Sem foto, a entrada em cascata do Financeiro: um bloco depois do
+        // outro, pela ordem (src/js/utils/entrada-cascata.js).
+        else window.EntradaCascata?.ordenar(module, page);
         const introduction = readModuleIntroduction(module, moduleTitle);
         const mask = veuDaFoto || (usesLoadingMask
             ? createModuleLoadingMask(page, introduction.title, introduction.description, { keepsModuleIntroduction: true })
@@ -3547,6 +3550,9 @@ async function loadPage(page, options = {}) {
         mask?.remove();
         content.classList.remove('is-module-loading');
         if (fotoDaVolta) rolagemDaVolta = fotoDaVolta.rolagem;
+        // Terminada a entrada, os blocos ficam parados: mostrar de novo (lista
+        // vazia e depois com resultado) não refaz a subida.
+        window.EntradaCascata?.concluir(module, page);
     } catch (err) {
         if (loadId !== moduleLoadSequence) return;
         console.error('Erro ao carregar página', page, err);

@@ -215,12 +215,17 @@ Ao voltar a um módulo já visitado, a tela mostra na hora o que tinha da últim
 visita e atualiza por trás, com um aviso discreto enquanto atualiza. Hoje cada
 visita recomeça do zero.
 
-## Pendências pedidas para depois do plano
+## Pendências pedidas para depois do plano — feitas (06/10/2026)
 
-- **Animação de entrada:** todos os módulos já usam a mesma classe
-  (`animate-fade-in-up`, com atraso progressivo em `menu.css`), mas o
-  Financeiro e a Contabilidade aplicam em 6 blocos e os outros em 3. Por isso
-  lá os itens sobem "em cascata" e nos outros quase não se nota. A correção é
-  aplicar o mesmo efeito, bloco a bloco, nos outros módulos.
-- **Contatos:** a tabela está sem rolagem e fora do padrão visual das outras
-  tabelas. Ainda não investigado.
+- **Animação de entrada:** a causa não era o número de blocos. Em 12 módulos
+  o JavaScript punha `opacity: 1` inline nos blocos durante a carga, e o
+  `fadeInUp` (só `to`) partia de 1: a animação rodava, mas não se via.
+  - O trecho saiu dos módulos.
+  - `src/js/utils/entrada-cascata.js` dá o atraso pela ordem: antes, em Prospecções e na IA a tabela subia antes dos filtros.
+  - O bloco fica parado depois da entrada, para não repetir a subida ao filtrar.
+  - O cabeçalho deixou de ficar 20 px abaixo até o fim.
+  - Conferido quadro a quadro no Electron, ao lado do Financeiro.
+- **Contatos:**
+  - a tabela não rolava porque o módulo faltava na lista de `scroll.css`;
+  - os botões Filtrar/Limpar quebravam linha, espremidos pelas etiquetas de tipo.
+  - Agora a tela é igual à de Clientes.

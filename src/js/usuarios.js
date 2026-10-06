@@ -904,13 +904,10 @@ function initUsuarios() {
             btnModelosPermissao.classList.add('hidden');
         }
     }
-    // animação de entrada
-    document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
-        setTimeout(() => {
-            el.style.opacity = '1';
-            el.style.transform = 'translateY(0)';
-        }, index * 100);
-    });
+    // A entrada em cascata é só do CSS (`animate-fade-in-up`, um bloco depois do
+    // outro, como no Financeiro). Não ponha opacity/transform inline aqui: o
+    // fadeInUp parte do valor que o bloco já tem, e com opacity 1 a animação
+    // ficava invisível (06/10/2026).
 
     // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
     window.moduloPronto?.(carregarUsuarios());
