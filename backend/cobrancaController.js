@@ -331,8 +331,12 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     const pagador = dados.cliente ? bbBoleto.pagadorDoCliente(dados.cliente) : null;
     const pendenciasPagador = pagador ? bbBoleto.pendenciasDoPagador(pagador) : ['Pedido sem cliente.'];
     if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
-    // Cada parcela com o boleto e o pagamento (Pix, cartão, boleto pago…).
-    const linhas = boletos.parcelasComBoletos(dados);
+    // Cada parcela com o boleto e o pagamento (Pix, cartão, boleto pago…), e
+    // quem emitiu / quem registrou o pagamento (o balão das etiquetas).
+    const nomes = await require('./historicoSocial').nomesDosUsuarios(api);
+    const linhas = boletos.parcelasComBoletos({ ...dados, nomes });
+    const total = Math.round(Number(dados.pedido.valor_final || 0) * 100) / 100;
+    const ajuste = Math.round(Number(dados.pedido.ajuste_valor || 0) * 100) / 100;
     return {
       // `faturamento_regra` vai junto: boleto gerado antes do embarque num
       // pedido "ao embarcar" pode ter o vencimento mudado no envio, e a tela
@@ -340,8 +344,12 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       pedido: {
         id: dados.pedido.id, numero: dados.pedido.numero, situacao: dados.pedido.situacao,
         faturamento_regra: dados.pedido.faturamento_regra || null,
-        cliente: dados.cliente ? (dados.cliente.nome_fantasia || dados.cliente.razao_social || dados.cliente.nome || null) : null
+        cliente: dados.cliente ? (dados.cliente.nome_fantasia || dados.cliente.razao_social || dados.cliente.nome || null) : null,
+        // Para o "Gerar boletos" com data e valor escolhidos: a soma das
+        // parcelas fora disso pede justificativa (06/10/2026).
+        valor_final: total, ajuste_valor: ajuste, valor_itens: Math.round((total - ajuste) * 100) / 100
       },
+      hoje: hojeEmBrasilia(),
       ambiente,
       nota_fiscal: dados.notaViva ? { id: dados.notaViva.id, serie: dados.notaViva.serie, numero: dados.notaViva.numero } : null,
       parcelas: linhas,
@@ -377,10 +385,14 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
       const faltas = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
       if (faltas.length) throw erro(`A cobrança não está pronta: ${faltas.join('; ')}.`, 409, { pendencias: faltas });
       const parcelaIds = Array.isArray(req.body?.parcelas) ? req.body.parcelas : [];
+      // Data e valor escolhidos por parcela (boleto novo no lugar do cancelado,
+      // 06/10/2026) e a justificativa quando o total do pedido muda.
+      const ajustes = req.body?.ajustes && typeof req.body.ajustes === 'object' && !Array.isArray(req.body.ajustes) ? req.body.ajustes : {};
       res.json(await boletos.registrar({
         api, pedidoId: req.params.id, parcelaIds, notaFiscalId: req.body?.nota_fiscal_id ?? null,
         bb: cliente, credenciais: { clientId: c.clientId, clientSecret: f.secret }, appKey: c.appKey,
-        ambiente, cfg, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia()
+        ambiente, cfg, usuarioId: usuarioDaRequisicao(req), hoje: hojeEmBrasilia(),
+        ajustes, justificativa: req.body?.justificativa ?? null
       }));
     } catch (err) {
       responder(res, err, 'POST /api/cobranca/pedidos/:id/boletos');
@@ -565,13 +577,49 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
   // O HTML volta para o app, que gera o PDF (printToPDF) — a API do BB não
   // devolve o boleto impresso. Nada é enviado ao cliente.
 
+  /**
+   * Os boletos prontos para a ficha (06/10/2026). O boleto IMPORTADO do BB
+   * entra sem pagador, número do documento, instruções e Pix — a lista do
+   * banco não traz —, e o PDF saía em branco. Cada um a quem falta algo é
+   * consultado no BB uma vez (boletoOperacoes.completarParaDocumento); o que
+   * o banco não der sai do pedido (cliente e configuração). Nunca impede o PDF.
+   */
+  async function prontosParaDocumento(api, lista, { pedido, comprador, cfg, usuarioId }) {
+    const conexoes = new Map();
+    const conexao = ambiente => {
+      if (!conexoes.has(ambiente)) conexoes.set(ambiente, conexaoDoAmbiente(api, cfg, ambiente).catch(() => null));
+      return conexoes.get(ambiente);
+    };
+    const prontos = [];
+    const complementos = {};
+    for (const b of lista) {
+      let atual = b;
+      if (operacoes.faltaParaDocumento(b)) {
+        try {
+          atual = await operacoes.completarParaDocumento({ api, bb: cliente, conexao: await conexao(b.ambiente), boleto: b, cfg, hoje: hojeEmBrasilia(), usuarioId });
+        } catch (e) {
+          console.warn(`[cobranca] boleto ${b.id}: dados do PDF não completados no BB: ${e.message}`);
+        }
+      }
+      prontos.push(atual);
+      // `comprador` é o cliente do pedido (aqui `cliente` é o do BB).
+      complementos[atual.id] = operacoes.complementoDoDocumento(atual, { pedido, cliente: comprador, cfg });
+    }
+    return { prontos, complementos };
+  }
+
   /** Um boleto (a ficha completa, com recibo e código de barras). */
   router.get('/boletos/:id/documento', exigirPermissao('financeiro.boleto.view'), async (req, res) => {
     try {
       const api = createApiClient(req);
       const [boleto, cfg] = await Promise.all([boletos.ler(api, req.params.id), configuracao.carregar(api)]);
-      const { html, dados } = await boletoDocumento.gerarBoletosHtml(boleto, cfg);
-      res.json({ nome: dados[0].nomeArquivo, html, boleto: boletos.enxuto(boleto) });
+      // O pedido do boleto dá o pagador e o número do documento quando faltam.
+      const doPedido = boleto.pedido_id ? await boletos.lerPedidoCobranca(api, boleto.pedido_id).catch(() => null) : null;
+      const { prontos, complementos } = await prontosParaDocumento(api, [boleto], {
+        pedido: doPedido?.pedido || null, comprador: doPedido?.cliente || null, cfg, usuarioId: usuarioDaRequisicao(req)
+      });
+      const { html, dados } = await boletoDocumento.gerarBoletosHtml(prontos[0], cfg, { complementos });
+      res.json({ nome: dados[0].nomeArquivo, html, boleto: boletos.enxuto(prontos[0]) });
     } catch (err) {
       responder(res, err, 'GET /api/cobranca/boletos/:id/documento');
     }
@@ -586,7 +634,10 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
         .map(p => boletos.boletoDaParcela(dados.boletos, p))
         .filter(b => b && boletos.STATUS_A_PAGAR.has(String(b.status)));
       if (!aPagar.length) throw erro('Este pedido não tem boleto registrado a pagar.', 404);
-      const { html } = await boletoDocumento.gerarBoletosHtml(aPagar, dados.configuracao);
+      const { prontos, complementos } = await prontosParaDocumento(api, aPagar, {
+        pedido: dados.pedido, comprador: dados.cliente, cfg: dados.configuracao, usuarioId: usuarioDaRequisicao(req)
+      });
+      const { html } = await boletoDocumento.gerarBoletosHtml(prontos, dados.configuracao, { complementos });
       const numero = String(dados.pedido.numero || dados.pedido.id).replace(/[^A-Za-z0-9]/g, '');
       res.json({ nome: `Boletos-${numero}`, html, quantidade: aPagar.length });
     } catch (err) {
@@ -665,9 +716,11 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
     try {
       const api = createApiClient(req);
       const boleto = await boletos.ler(api, req.params.id);
+      // Quem fez cada passo (06/10/2026): o nome no lugar do id.
+      const [eventos, nomes] = await Promise.all([operacoes.historico(api, boleto), require('./historicoSocial').nomesDosUsuarios(api)]);
       res.json({
         boleto: boletos.enxuto(boleto),
-        eventos: await operacoes.historico(api, boleto),
+        eventos: eventos.map(e => ({ ...e, usuario: e.usuario_id ? (nomes.get(Number(e.usuario_id)) || `usuário #${e.usuario_id}`) : null })),
         acoes: operacoes.acoesDoBoleto(boleto),
         sql_pronto: operacoes.sqlPronto(boleto),
         motivos: operacoes.MOTIVOS_BAIXA,

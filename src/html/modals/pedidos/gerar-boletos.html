@@ -46,6 +46,17 @@
           </div>
         </div>
 
+        <!-- Data e valor escolhidos (06/10/2026): a parcela marcada aceita outro vencimento e
+             outro valor; o boleto novo sai com eles e a parcela passa a ter os dele. Se a soma
+             das parcelas sair do total do pedido, a justificativa é obrigatória. -->
+        <div id="gerarBoletosAjuste" class="hidden space-y-2" role="status">
+          <p id="gerarBoletosSoma" class="text-sm text-gray-200"></p>
+          <div id="gerarBoletosJustificativaCaixa" class="hidden space-y-1">
+            <label for="gerarBoletosJustificativa" class="ctl-rotulo text-gray-300">Justificativa da mudança no total (obrigatória, ao menos 10 letras)</label>
+            <textarea id="gerarBoletosJustificativa" rows="2" maxlength="1000" data-no-restore="true" placeholder="Por que o total do pedido muda (renegociação, juros do atraso, desconto combinado…)" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+          </div>
+        </div>
+
         <p id="gerarBoletosAviso" class="text-xs text-gray-400">Os boletos são registrados no Banco do Brasil com juros, multa, protesto e Pix da configuração de cobrança. Nada é enviado ao cliente: o PDF sai pelo pedido.</p>
         <p id="gerarBoletosCompleto" class="hidden text-sm" style="color: var(--color-green)" role="status"></p>
         <div id="gerarBoletosMensagem" class="hidden text-sm" role="alert"></div>

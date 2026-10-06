@@ -372,6 +372,14 @@ Só depois do "ok" no DEV.
 Juntei aqui tudo o que ficou em aberto nas etapas; a numeração substitui a
 dos relatórios de cada etapa.
 
+**Já respondidas (02/10/2026):** 2 (plano da AEA, Fase B), 3 (início em
+setembro/2026), 4 (C1 aviso), 5 (C2 e C3 críticos), 6 (C4 crítico), 8 (sem
+caixa físico), 9 (Extrato v2 testado), 10 (C5 crítico), 11 (valor + dia +
+nome concilia sozinho), 12 (C6 crítico), 13 (a tarifa da cobrança vem à
+parte), 14 (trocadas pelas contas da AEA), 15 (C7 crítico), 17 (C8
+documental), 24 (saldo de abertura digitado), 28 (C9 aviso) e 30 (mensagem
+nova avisa todos que veem a Contabilidade). As outras continuam abertas.
+
 **Gerais**
 1. Pendência documental e aviso podem ser ignorados com justificativa; erro
    crítico nunca; o mês só fecha depois do último dia. Confirmar.

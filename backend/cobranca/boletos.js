@@ -25,11 +25,13 @@ const STATUS_VIVOS = new Set(['registrado', 'pago', 'vencido', 'protestado']);
 const STATUS_A_PAGAR = new Set(['registrado', 'vencido', 'protestado']);
 const STATUS_REUTILIZAVEIS = new Set(['reservado', 'erro']);
 /**
- * Baixa que resolve a parcela (fase D): quitada por fora ou cobrança
- * cancelada. A parcela não ganha boleto novo sozinha; a baixa para
- * reemissão (ou a do próprio banco, por prazo) deixa gerar outro.
+ * Baixa que resolve a parcela (fase D): só a quitação por fora — a parcela
+ * está paga. O boleto CANCELADO deixa a parcela livre para um boleto novo,
+ * com a data e o valor que se quiser (decisão do dono, 06/10/2026: antes o
+ * cancelado ocupava a parcela para sempre e não havia como cobrar de novo);
+ * a geração automática (ao emitir a NF-e) não refaz o que foi cancelado.
  */
-const MOTIVOS_QUE_ENCERRAM = new Set(['quitado_por_fora', 'cancelado']);
+const MOTIVOS_QUE_ENCERRAM = new Set(['quitado_por_fora']);
 const TENTATIVAS_NUMERO = 30;
 /** Quantas vezes o registro troca de nosso número quando o BB diz que ele já existe. */
 const TENTATIVAS_NO_BB = 5;
@@ -180,6 +182,14 @@ function boletosDaParcela(boletos, parcela) {
     || (b.parcela_id === null && Number(b.numero_parcela) === Number(parcela?.numero_parcela))));
 }
 
+/** O boleto mais novo da parcela foi baixado como cobrança cancelada (e nenhum vale)? Pura. */
+function canceladoNaParcela(boletos, parcela) {
+  const daParcela = boletosDaParcela(boletos, parcela).sort((a, b) => Number(b.id) - Number(a.id));
+  if (daParcela.some(b => STATUS_VIVOS.has(String(b.status)))) return null;
+  const ultimo = daParcela.find(b => !STATUS_REUTILIZAVEIS.has(String(b.status))) || null;
+  return ultimo && String(ultimo.status) === 'baixado' && String(ultimo.motivo_baixa || '') === 'cancelado' ? ultimo : null;
+}
+
 /** O boleto que vale para a parcela (vivo mais novo); senão o reaproveitável mais novo; senão null. */
 function boletoDaParcela(boletos, parcela) {
   const daParcela = boletosDaParcela(boletos, parcela);
@@ -189,12 +199,73 @@ function boletoDaParcela(boletos, parcela) {
     || null;
 }
 
+/** 'dd/mm/aaaa hh:mm' em Brasília, de um instante ISO; só a data quando vem 'YYYY-MM-DD'. Pura. */
+function quandoLegivel(v) {
+  const texto = String(v ?? '').trim();
+  if (!texto) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto.split('-').reverse().join('/');
+  const d = new Date(texto);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+}
+
+const MOTIVO_DA_BAIXA = { quitado_por_fora: 'quitado por fora', cancelado: 'cobrança cancelada', reemissao: 'reemissão', banco: 'pelo banco', quitacao_estornada: 'quitação estornada' };
+
+/**
+ * Quem fez o quê no boleto e no pagamento da parcela, em linhas para o balão
+ * das etiquetas "registrado" e "pago" (pedido do dono, 06/10/2026: quem
+ * emitiu o boleto, quem registrou o pagamento, se foi automático). Sai do
+ * próprio boleto (criado_por, origem, baixa) e do recebimento (origem,
+ * criado_por, aviso do banco). `nomes`: id → nome dos usuários. Pura.
+ */
+function auditoriaDaParcela({ boleto = null, recebimento = null, substituido = null, nomes = new Map() } = {}) {
+  const nome = id => (id === null || id === undefined ? '' : (nomes.get(Number(id)) || `usuário #${id}`));
+  const linhas = [];
+  if (boleto) {
+    const quem = nome(boleto.criado_por);
+    const quando = quandoLegivel(boleto.criado_em) || quandoLegivel(String(boleto.data_emissao || '').slice(0, 10));
+    if (String(boleto.origem || '') === 'importado') {
+      const noBB = quandoLegivel(String(boleto.data_emissao || '').slice(0, 10));
+      linhas.push(`Importado do Banco do Brasil${quem ? ` por ${quem}` : ''}${quando ? ` em ${quando}` : ''}${noBB ? ` (emitido no BB em ${noBB})` : ''}`);
+    } else {
+      linhas.push(`Emitido no programa${quem ? ` por ${quem}` : ''}${quando ? ` em ${quando}` : ''}`);
+    }
+    if (substituido) linhas.push(`No lugar do boleto ${substituido.nosso_numero || `#${substituido.id}`} (${MOTIVO_DA_BAIXA[substituido.motivo_baixa] || 'baixado'})`);
+    if (String(boleto.status) === 'baixado') {
+      const motivo = MOTIVO_DA_BAIXA[boleto.motivo_baixa] || 'baixado';
+      const porQuem = boleto.motivo_baixa === 'banco' ? '' : nome(boleto.baixado_por);
+      linhas.push(`Baixado (${motivo})${porQuem ? ` por ${porQuem}` : ''}${boleto.data_baixa ? ` em ${quandoLegivel(String(boleto.data_baixa).slice(0, 10))}` : ''}${boleto.observacao_baixa ? ` — ${boleto.observacao_baixa}` : ''}`);
+    }
+  }
+  const r = recebimento;
+  if (r) {
+    const dia = quandoLegivel(String(r.data_recebimento || '').slice(0, 10));
+    const valor = Number(r.valor_recebido) > 0 ? reais(r.valor_recebido) : '';
+    const detalhe = [dia ? `em ${dia}` : '', valor, r.forma || '', r.canal || ''].filter(Boolean).join(' · ');
+    const quem = nome(r.criado_por);
+    const lancado = quandoLegivel(r.criado_em);
+    if (r.origem === 'boleto') {
+      linhas.push(quem
+        ? `Pago no Banco do Brasil (${detalhe}) — conferido na consulta ao BB feita por ${quem}${lancado ? ` em ${lancado}` : ''}`
+        : `Pago no Banco do Brasil (${detalhe}) — baixa AUTOMÁTICA${r.evento_id ? ' pelo aviso do banco' : ' pela conciliação com o BB'}${lancado ? ` em ${lancado}` : ''}`);
+    } else if (r.origem === 'quitado_por_fora') {
+      linhas.push(`Quitado por fora (${detalhe}) — registrado${quem ? ` por ${quem}` : ''}${lancado ? ` em ${lancado}` : ''}`);
+    } else {
+      linhas.push(`Pagamento registrado à mão (${detalhe})${quem ? ` por ${quem}` : ''}${lancado ? ` em ${lancado}` : ''}`);
+    }
+  } else if (boleto && String(boleto.status) === 'pago') {
+    const dia = quandoLegivel(String(boleto.data_pagamento || '').slice(0, 10));
+    linhas.push(`Pago no Banco do Brasil${dia ? ` em ${dia}` : ''}${Number(boleto.valor_pago) > 0 ? ` (${reais(boleto.valor_pago)})` : ''} — o lançamento no Financeiro ainda vai entrar pela conciliação`);
+  }
+  return linhas;
+}
+
 /**
  * As parcelas com o boleto de cada uma — o que a tela do pedido mostra.
  * Sem boleto que valha, aparece o último (baixado), para a tela mostrar o
  * histórico; a parcela continua livre para gerar outro.
  */
-function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [], ordens = [], descontos = new Map() }) {
+function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimentos = [], ordens = [], descontos = new Map(), nomes = new Map() }) {
   return (parcelas || []).map(p => {
     const b = boletoDaParcela(boletos, p)
       || boletosDaParcela(boletos, p).sort((x, y) => Number(y.id) - Number(x.id))[0]
@@ -204,9 +275,15 @@ function parcelasComBoletos({ parcelas, boletos, boletosExternos = [], recebimen
     const deFora = externas.boletoParaTela(externas.boletoExternoDaParcela(boletosExternos, p));
     // O pagamento de cada parcela: a coluna BOLETO do Visualizar mostra "pago"
     // também na parcela paga sem boleto, e parcela paga não recebe boleto.
+    const pagamento = pagamentoDaParcela(recebimentos, p);
+    const substituido = b?.substitui_boleto_id ? (boletos || []).find(x => Number(x?.id) === Number(b.substitui_boleto_id)) || null : null;
     return {
       parcela: p, boleto: enxuto(b), tem_boleto_vivo: ocupaParcela(b), boleto_externo: deFora,
-      recebimento: pagamentoParaTela(pagamentoDaParcela(recebimentos, p)),
+      // O boleto dela foi cancelado: a parcela está livre para um boleto novo.
+      cancelado: Boolean(canceladoNaParcela(boletos, p)),
+      recebimento: pagamentoParaTela(pagamento),
+      // Quem emitiu, quem registrou o pagamento, se foi automático (o balão das etiquetas).
+      auditoria: auditoriaDaParcela({ boleto: b, recebimento: pagamento, substituido, nomes }),
       // Ordem de pagamento aberta (Pix, cartão… para uma data): ocupa a parcela.
       ordem: ordemParaTela(ordemDaParcela(ordens, p)),
       // O desconto até o vencimento que o boleto NOVO desta parcela vai levar.
@@ -224,6 +301,110 @@ function resumo(boletos) {
     com_erro: (boletos || []).filter(b => b.status === 'erro').length,
     valor_registrado: Math.round(vivos.reduce((s, b) => s + Number(b.valor || 0), 0) * 100) / 100
   };
+}
+
+// ------------------------------------------- data e valor escolhidos
+
+const centavos = v => Math.round(Number(v || 0) * 100) / 100;
+const diaDe = v => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? '').trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+};
+const impressa = iso => (iso ? iso.split('-').reverse().join('/') : '');
+const reais = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function diaValido(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return false;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso;
+}
+
+/**
+ * Os boletos novos com a data e o valor que se quiser (decisão do dono,
+ * 06/10/2026). `ajustes` = { [parcelaId]: { vencimento, valor } } das parcelas
+ * MARCADAS; a parcela passa a ter a data e o valor do boleto novo depois que
+ * ele é registrado. A soma das parcelas pode sair do total do pedido — para
+ * mais ou para menos —, e então a JUSTIFICATIVA é obrigatória, como no
+ * "Pagamento do pedido" (pedidoParcelas.js): o total do pedido passa a ser a
+ * soma e a diferença vira a linha "Adicional"/"Desconto". Pura.
+ *
+ * @returns {{ pedidas: Map, somaNova, totalAntes, valorItens, ajuste, ajusteAnterior, mudaTotal, justificativa }}
+ */
+function conferirAjustes({ pedido, parcelas = [], ajustes = {}, alvoIds = new Set(), justificativa = null, hoje }) {
+  const pedidoParcelas = require('../pedidoParcelas');
+  const pedidas = new Map();
+  for (const [chave, a] of Object.entries(ajustes || {})) {
+    const id = Number(chave);
+    const parcela = parcelas.find(p => Number(p?.id) === id);
+    if (!parcela) throw erro(`A parcela ${chave} não é deste pedido.`, 400);
+    const n = parcela.numero_parcela;
+    if (!alvoIds.has(id)) throw erro(`A ${n}ª parcela não está marcada para gerar boleto.`, 400);
+    const antes = { valor: centavos(parcela.valor), vencimento: diaDe(parcela.data_vencimento) };
+    const vencimento = a?.vencimento ? diaDe(a.vencimento) : antes.vencimento;
+    if (!vencimento || !diaValido(vencimento)) throw erro(`Informe o vencimento da ${n}ª parcela.`, 422);
+    if (hoje && vencimento < hoje) throw erro(`O vencimento da ${n}ª parcela (${impressa(vencimento)}) já passou: escolha hoje ou uma data à frente.`, 422);
+    const informado = a?.valor === undefined || a?.valor === null || a?.valor === '' ? antes.valor : Number(a.valor);
+    const valor = centavos(informado);
+    if (!Number.isFinite(informado) || !(valor > 0)) throw erro(`Informe o valor da ${n}ª parcela.`, 422);
+    const mudouValor = Math.abs(valor - antes.valor) > 0.005;
+    const mudouData = vencimento !== antes.vencimento;
+    if (mudouValor || mudouData) pedidas.set(id, { id, numero: n, valor, vencimento, mudouValor, mudouData, antes });
+  }
+  const totalAntes = centavos(pedido?.valor_final);
+  const ajusteAnterior = centavos(pedido?.ajuste_valor || 0);
+  const valorItens = centavos(totalAntes - ajusteAnterior);
+  const somaNova = centavos(parcelas.reduce((s, p) => s + (pedidas.get(Number(p.id))?.valor ?? centavos(p.valor)), 0));
+  const ajuste = pedidoParcelas.ajusteDaSoma(somaNova, valorItens);
+  const mudaTotal = [...pedidas.values()].some(x => x.mudouValor) && Math.abs(ajuste - ajusteAnterior) > 0.005;
+  let texto = null;
+  if (mudaTotal) {
+    const j = pedidoParcelas.conferirJustificativa(ajuste, justificativa);
+    if (!j.ok) {
+      throw erro(`Com esses valores as parcelas somam ${reais(somaNova)}, ${reais(Math.abs(ajuste))} ${ajuste > 0 ? 'a mais' : 'a menos'} que os itens do pedido: escreva a justificativa (ao menos ${pedidoParcelas.MINIMO_JUSTIFICATIVA} letras) para gerar os boletos.`, 422, {
+        code: 'JUSTIFICATIVA_OBRIGATORIA', soma_parcelas: somaNova, total_pedido: totalAntes, valor_itens: valorItens, ajuste
+      });
+    }
+    texto = j.texto;
+  }
+  return { pedidas, somaNova, totalAntes, valorItens, ajuste, ajusteAnterior, mudaTotal, justificativa: texto };
+}
+
+/** A frase do que mudou na parcela para o histórico: "vencimento 12/10 → 20/10 · valor R$ 1 → R$ 2". Pura. */
+function textoDoAjuste(p) {
+  const partes = [];
+  if (p.mudouData) partes.push(`vencimento ${impressa(p.antes.vencimento)} → ${impressa(p.vencimento)}`);
+  if (p.mudouValor) partes.push(`valor ${reais(p.antes.valor)} → ${reais(p.valor)}`);
+  return partes.join(' · ');
+}
+
+/**
+ * Depois dos boletos: o total do pedido acompanha a soma das parcelas (só as
+ * que mudaram de verdade — boleto que o BB recusou não muda a parcela) e o
+ * ajuste entra no histórico do pedido (quem, quando, de quanto para quanto e
+ * por quê).
+ */
+async function gravarTotalDoPedido({ api, pedido, parcelas, plano, usuarioId }) {
+  const pedidoParcelas = require('../pedidoParcelas');
+  const somaReal = centavos(parcelas.reduce((s, p) => s + centavos(p.valor), 0));
+  const ajuste = pedidoParcelas.ajusteDaSoma(somaReal, plano.valorItens);
+  if (Math.abs(ajuste - plano.ajusteAnterior) <= 0.005) return null;
+  const valorFinal = ajuste ? somaReal : plano.valorItens;
+  const usuario = usuarioId ? await api.get(`/api/usuarios/${usuarioId}`).catch(() => null) : null;
+  const quando = new Date().toISOString();
+  const campos = {
+    valor_final: valorFinal,
+    ajuste_valor: ajuste,
+    ajuste_motivo: ajuste ? plano.justificativa : null,
+    ajuste_em: ajuste ? quando : null,
+    ajuste_por: ajuste ? usuarioId : null,
+    ajuste_historico: pedidoParcelas.historicoComMais(pedido.ajuste_historico, {
+      em: quando, por: usuarioId, por_nome: usuario && !usuario.error ? (usuario.nome || null) : null,
+      total_antes: plano.totalAntes, total_depois: valorFinal, valor_itens: plano.valorItens, ajuste,
+      motivo: plano.justificativa || (ajuste ? null : 'Ajuste retirado: as parcelas voltaram a fechar com os itens.'),
+      origem: 'boletos'
+    })
+  };
+  await api.put(`/api/pedidos/${pedido.id}`, campos);
+  return { total_antes: plano.totalAntes, total_depois: valorFinal, ajuste };
 }
 
 // -------------------------------------------------------------- registro
@@ -309,9 +490,13 @@ async function atualizarBoleto(api, boleto, campos) {
  * liga o novo ao baixado. Uma reemissão que falhou guarda a data: tentar de
  * novo pelo pedido usa a mesma.
  *
- * @param {object} p { api, pedidoId, parcelaIds, notaFiscalId, cliente (do BB: chamar/credenciais), ambiente, cfg, usuarioId, hoje, vencimentos, substituiBoletoId }
+ * Data e valor escolhidos (06/10/2026): `ajustes` ({ [parcelaId]: { vencimento,
+ * valor } }) e `justificativa` — ver conferirAjustes. A parcela só muda
+ * depois que o boleto dela é registrado.
+ *
+ * @param {object} p { api, pedidoId, parcelaIds, notaFiscalId, cliente (do BB: chamar/credenciais), ambiente, cfg, usuarioId, hoje, vencimentos, substituiBoletoId, ajustes, justificativa }
  */
-async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, bb, credenciais, appKey, ambiente, cfg, usuarioId = null, hoje, vencimentos = {}, substituiBoletoId = null }) {
+async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, bb, credenciais, appKey, ambiente, cfg, usuarioId = null, hoje, vencimentos = {}, substituiBoletoId = null, ajustes = {}, justificativa = null }) {
   const dados = await lerPedidoCobranca(api, pedidoId);
   const cfgCobranca = cfg || dados.configuracao;
   if (!cfgCobranca) throw erro('Configuração de cobrança ainda não cadastrada (rode sql/cobranca_base.sql).', 409);
@@ -319,9 +504,26 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
   if (!dados.parcelas.length) throw erro('O pedido não tem parcelas: cadastre o pagamento antes de gerar boletos.', 409);
 
   const pedidas = new Set((parcelaIds || []).map(Number).filter(Number.isFinite));
-  // Sem escolha ("todas"), a parcela já paga fica de fora sem barulho; escolhida, responde com o motivo.
-  const alvo = dados.parcelas.filter(p => (pedidas.size ? pedidas.has(Number(p.id)) : !pagamentoDaParcela(dados.recebimentos, p) && !ordemDaParcela(dados.ordens, p)));
+  // Sem escolha ("todas", a geração automática ao emitir a NF-e), a parcela
+  // já paga, com ordem ou com o boleto CANCELADO fica de fora sem barulho:
+  // quem cancelou decide quando cobrar de novo. Escolhida, responde com o motivo.
+  const alvo = dados.parcelas.filter(p => (pedidas.size
+    ? pedidas.has(Number(p.id))
+    : !pagamentoDaParcela(dados.recebimentos, p) && !ordemDaParcela(dados.ordens, p) && !canceladoNaParcela(dados.boletos, p)));
   if (!alvo.length) throw erro('Nenhuma parcela encontrada para gerar boleto.', 404);
+
+  // Data e valor escolhidos: tudo conferido ANTES de ir ao BB (a justificativa também).
+  const plano = conferirAjustes({
+    pedido: dados.pedido, parcelas: dados.parcelas, ajustes, alvoIds: new Set(alvo.map(p => Number(p.id))), justificativa, hoje
+  });
+  // O desconto até o vencimento acompanha o valor novo da parcela.
+  const descontos = plano.pedidas.size
+    ? descontoCondicional.descontosDasParcelas({
+      pedido: dados.pedido, itens: dados.itens,
+      parcelas: dados.parcelas.map(p => (plano.pedidas.has(Number(p.id)) ? { ...p, valor: plano.pedidas.get(Number(p.id)).valor } : p))
+    })
+    : dados.descontos;
+  const aplicados = [];
 
   const notaId = notaFiscalId ?? dados.notaViva?.id ?? null;
   const notaNumero = dados.notaViva ? `${dados.notaViva.numero} SERIE ${dados.notaViva.serie}` : null;
@@ -349,17 +551,25 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, com_ordem: true, erro: textoDaParcelaComOrdem(parcela, ordem) });
       continue;
     }
-    const substitui = substituiBoletoId ?? existente?.substitui_boleto_id ?? null;
-    const vencimentoNovo = vencimentos?.[parcela.id]
+    // O boleto novo no lugar do cancelado fica ligado a ele (histórico e auditoria).
+    const cancelado = canceladoNaParcela(dados.boletos, parcela);
+    const substitui = substituiBoletoId ?? existente?.substitui_boleto_id ?? cancelado?.id ?? null;
+    const escolhido = plano.pedidas.get(Number(parcela.id)) || null;
+    const vencimentoNovo = escolhido?.vencimento
+      || vencimentos?.[parcela.id]
       || (existente?.substitui_boleto_id ? String(existente.data_vencimento || '').slice(0, 10) : null);
-    const parcelaDoBoleto = vencimentoNovo ? { ...parcela, data_vencimento: vencimentoNovo } : parcela;
+    const parcelaDoBoleto = {
+      ...parcela,
+      ...(vencimentoNovo ? { data_vencimento: vencimentoNovo } : {}),
+      ...(escolhido ? { valor: escolhido.valor } : {})
+    };
 
     let montado;
     try {
       const sequencial = existente ? Number(existente.sequencial) : configuracao.proximoSequencial(cfgCobranca, ambiente);
       montado = bbBoleto.montarRegistro({
         cfg: cfgCobranca, ambiente, sequencial, pedido: dados.pedido, parcela: parcelaDoBoleto, cliente: dados.cliente, hoje, notaNumero,
-        desconto: dados.descontos?.get(Number(parcela.numero_parcela)) || 0
+        desconto: descontos?.get(Number(parcela.numero_parcela)) || 0
       });
     } catch (e) {
       resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, pendencias: e.extra?.pendencias || [] });
@@ -424,7 +634,27 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
       boleto = await atualizarBoleto(api, boleto, { ...lido, status: 'registrado', codigo_estado_bb: '01', situacao_bb: 'Normal', erro: null, requisicao: payload, resposta });
       await registrarEvento(api, boleto.id, { tipo: 'registrado', nosso_numero: boleto.nosso_numero, mensagem: `Registrado no BB (${ambiente}): ${lido.linha_digitavel || lido.numero_bb || 'sem linha digitável'}`, payload: lido, usuario_id: usuarioId });
       dados.boletos.unshift(boleto);
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, boleto: enxuto(boleto) });
+      // A parcela fica com a data e o valor do boleto novo (sobrescreve) — e o
+      // histórico do boleto diz o que mudou e no lugar de qual ele saiu.
+      let aviso = null;
+      if (escolhido) {
+        try {
+          await api.put(`/api/pedido_parcelas/${parcela.id}`, { valor: escolhido.valor, data_vencimento: escolhido.vencimento });
+          Object.assign(parcela, { valor: escolhido.valor, data_vencimento: escolhido.vencimento });
+          aplicados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ...escolhido });
+        } catch (e) {
+          aviso = `Boleto registrado, mas a parcela não foi atualizada com a data/valor novos: ${e.message}`;
+        }
+      }
+      if (escolhido || cancelado) {
+        const partes = [
+          cancelado ? `No lugar do boleto ${cancelado.nosso_numero || cancelado.id} (cancelado)` : 'Data/valor escolhidos',
+          escolhido ? `parcela ${parcela.numero_parcela}: ${textoDoAjuste(escolhido)}` : '',
+          escolhido?.mudouValor && plano.justificativa ? `justificativa: ${plano.justificativa}` : ''
+        ].filter(Boolean);
+        await registrarEvento(api, boleto.id, { tipo: 'parcela_ajustada', nosso_numero: boleto.nosso_numero, mensagem: `${partes.join(' · ')}.`, usuario_id: usuarioId });
+      }
+      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, boleto: enxuto(boleto), ...(aviso ? { aviso } : {}) });
     } catch (e) {
       const detalhe = e?.extra?.bb ? { bb: e.extra.bb, http: e.extra.http } : null;
       boleto = await atualizarBoleto(api, boleto, { status: 'erro', erro: String(e.message || e).slice(0, 2000), requisicao: payload, resposta: detalhe?.bb || null }).catch(() => boleto);
@@ -434,12 +664,25 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
     }
   }
 
+  // O total do pedido acompanha as parcelas que mudaram de valor (com a justificativa no histórico).
+  let total = null;
+  if (aplicados.some(a => a.mudouValor)) {
+    try {
+      total = await gravarTotalDoPedido({ api, pedido: dados.pedido, parcelas: dados.parcelas, plano, usuarioId });
+    } catch (e) {
+      console.error(`Total do pedido ${dados.pedido.id} não atualizado depois dos boletos:`, e.message);
+      total = { erro: `As parcelas mudaram, mas o total do pedido não foi atualizado: ${e.message}` };
+    }
+  }
+
   return {
     pedido: { id: dados.pedido.id, numero: dados.pedido.numero },
     ambiente,
     resultados,
     registrados: resultados.filter(r => r.ok && !r.ja_existia).length,
     erros: resultados.filter(r => !r.ok).length,
+    parcelas_ajustadas: aplicados.map(a => ({ parcela_id: a.parcela_id, numero_parcela: a.numero_parcela, valor: a.valor, vencimento: a.vencimento, antes: a.antes })),
+    total,
     resumo: resumo(dados.boletos)
   };
 }
@@ -460,7 +703,8 @@ async function ler(api, boletoId) {
 
 module.exports = {
   STATUS_VIVOS, STATUS_A_PAGAR, STATUS_REUTILIZAVEIS, MOTIVOS_QUE_ENCERRAM, TENTATIVAS_NUMERO, TENTATIVAS_NO_BB,
-  enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, ocupaParcela, boletoDaParcela, parcelasComBoletos, resumo,
+  enxuto, ehNumeroDuplicado, ehNossoNumeroJaIncluido, renumerar, registrarEvento, lerPedidoCobranca, ocupaParcela, boletoDaParcela, canceladoNaParcela, parcelasComBoletos, resumo,
+  conferirAjustes, textoDoAjuste, gravarTotalDoPedido, auditoriaDaParcela, quandoLegivel,
   pagamentoDaParcela, pagamentoParaTela, textoDaParcelaPaga, ordemDaParcela, ordemParaTela, textoDaParcelaComOrdem,
   reservarBoleto, atualizarBoleto, registrar, listar, ler
 };

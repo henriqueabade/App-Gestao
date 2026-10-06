@@ -90,12 +90,21 @@ async function qrPixSvg(emv) {
   }
 }
 
+/** O pagador gravado no boleto tem o que a ficha precisa? Pura. */
+const pagadorCompleto = p => Boolean(p && String(p.nome || '').trim());
+
 /**
  * Os dados de UM boleto já no formato da página. Sem linha digitável ou
  * código de barras do BB, as contas vêm de boletoCalculo (mesmo convênio,
  * sequencial, carteira, vencimento e valor).
+ *
+ * `complemento` ({ pagador, numeroDocumento, instrucoes }) é o que a rota tira
+ * do pedido quando o boleto não tem: o boleto IMPORTADO do BB entra sem
+ * pagador, sem "seu número" e sem instruções (a lista do banco não traz), e
+ * saía em branco no PDF (print do dono, 06/10/2026). O gravado no boleto
+ * sempre vale mais.
  */
-function dadosDoBoleto(boleto, cfg) {
+function dadosDoBoleto(boleto, cfg, complemento = {}) {
   if (!boleto) throw Object.assign(new Error('Boleto não encontrado.'), { status: 404 });
   if (!STATUS_IMPRIMIVEIS.has(String(boleto.status))) {
     throw Object.assign(new Error(`O boleto da parcela ${boleto.numero_parcela ?? '?'} ainda não foi registrado no BB (situação "${boleto.status}"): não há o que imprimir.`), { status: 409 });
@@ -115,11 +124,13 @@ function dadosDoBoleto(boleto, cfg) {
   const ag = conta.teste ? conta.agencia : `${conta.agencia}${cfg?.agencia_dv ? `-${cfg.agencia_dv}` : ''}`;
   const cc = conta.teste ? conta.conta : `${conta.conta}${cfg?.conta_dv ? `-${cfg.conta_dv}` : ''}`;
 
-  const pagador = json(boleto.pagador) || {};
+  const gravado = json(boleto.pagador);
+  const pagador = pagadorCompleto(gravado) ? gravado : (pagadorCompleto(complemento.pagador) ? complemento.pagador : (gravado || {}));
   const instrucoes = [];
   const lista = json(boleto.instrucoes);
   if (Array.isArray(lista)) instrucoes.push(...lista.filter(Boolean));
   else if (typeof boleto.instrucoes === 'string' && boleto.instrucoes.trim() && !lista) instrucoes.push(boleto.instrucoes.trim());
+  if (!instrucoes.length && Array.isArray(complemento.instrucoes)) instrucoes.push(...complemento.instrucoes.filter(Boolean));
   // "Receber até N dias" é regra do registro; no papel o BB mostra só juros, multa e protesto.
   const impressas = instrucoes.filter(t => !/^Receber até/i.test(t));
   if (cfg?.mensagem_boleto) impressas.push(String(cfg.mensagem_boleto));
@@ -135,7 +146,7 @@ function dadosDoBoleto(boleto, cfg) {
     linha,
     barras,
     nossoNumero,
-    numeroDocumento: boleto.numero_documento || '',
+    numeroDocumento: String(boleto.numero_documento || '').trim() || String(complemento.numeroDocumento || '').trim(),
     vencimento: calculo.dataImpressa(vencimento),
     emissao: calculo.dataImpressa(String(boleto.data_emissao || '').slice(0, 10)),
     valor: moeda(valor),
@@ -278,22 +289,22 @@ function paginaHtml(d, qrSvg) {
  * HTML de um ou mais boletos (uma página cada). `qr` é um mapa id → SVG do
  * QR Code (gerado antes, porque a biblioteca é assíncrona).
  */
-function montarBoletosHtml(boletos, cfg, { qr = {} } = {}) {
-  const dados = (Array.isArray(boletos) ? boletos : [boletos]).map(b => dadosDoBoleto(b, cfg));
+function montarBoletosHtml(boletos, cfg, { qr = {}, complementos = {} } = {}) {
+  const dados = (Array.isArray(boletos) ? boletos : [boletos]).map(b => dadosDoBoleto(b, cfg, complementos[b?.id] || {}));
   if (!dados.length) throw Object.assign(new Error('Nenhum boleto registrado para imprimir.'), { status: 404 });
   const titulo = dados.length === 1 ? `Boleto ${dados[0].numeroDocumento}` : `Boletos ${dados.map(d => d.numeroDocumento).join(', ')}`;
   const corpo = dados.map(d => paginaHtml(d, qr[d.id] || '')).join('');
   return { html: `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS}</style></head><body>${corpo}</body></html>`, dados };
 }
 
-/** Monta com os QR Codes do Pix já gerados. */
-async function gerarBoletosHtml(boletos, cfg) {
+/** Monta com os QR Codes do Pix já gerados. `complementos`: id → o que vem do pedido (ver dadosDoBoleto). */
+async function gerarBoletosHtml(boletos, cfg, { complementos = {} } = {}) {
   const lista = Array.isArray(boletos) ? boletos : [boletos];
   const qr = {};
   for (const b of lista) {
     if (b?.pix_emv) qr[b.id] = await qrPixSvg(b.pix_emv);
   }
-  return montarBoletosHtml(lista, cfg, { qr });
+  return montarBoletosHtml(lista, cfg, { qr, complementos });
 }
 
-module.exports = { ITF_DIGITOS, LOCAL_PAGAMENTO, STATUS_IMPRIMIVEIS, itf25Svg, itf25Padrao, qrPixSvg, dadosDoBoleto, montarBoletosHtml, gerarBoletosHtml };
+module.exports = { ITF_DIGITOS, LOCAL_PAGAMENTO, STATUS_IMPRIMIVEIS, itf25Svg, itf25Padrao, qrPixSvg, pagadorCompleto, dadosDoBoleto, montarBoletosHtml, gerarBoletosHtml };

@@ -84,11 +84,19 @@
     const aviso = !l?.tem_boleto_vivo && descontoNovo > 0
       ? `o boleto sai com ${reais(valorParcela + descontoNovo)} e desconto de ${reais(descontoNovo)} até o vencimento`
       : '';
+    // Boleto cancelado: a parcela está livre de novo (decisão do dono, 06/10/2026).
+    const cancelado = !l?.tem_boleto_vivo && Boolean(l?.cancelado)
+      ? 'boleto cancelado: marque para gerar um novo — com a data e o valor que quiser'
+      : '';
     return {
       id: l?.parcela?.id ?? null,
       numero: l?.parcela?.numero_parcela ?? null,
       vencimento: vencParcela,
       valor: Number(l?.parcela?.valor) || 0,
+      // A parte da parcela no desconto até o vencimento (acompanha o valor escolhido).
+      desconto: descontoNovo,
+      // Quem emitiu, quem registrou o pagamento, se foi automático (o balão da etiqueta).
+      auditoria: Array.isArray(l?.auditoria) ? l.auditoria.filter(Boolean) : [],
       podeGerar: !l?.tem_boleto_vivo,
       // Tem o que imprimir: registrado, vencido ou em protesto (pago e baixado não se pagam mais).
       temPdf: Boolean(b && ['registrado', 'vencido', 'protestado'].includes(String(b.status))),
@@ -98,9 +106,72 @@
       classe, rotulo,
       detalhe: [
         b ? (b.status === 'erro' ? (b.erro || '') : [b.nosso_numero ? `${b.nosso_numero}${b.nosso_numero_dv ? `-${b.nosso_numero_dv}` : ''}` : '', b.linha_digitavel || '', ...extras].filter(Boolean).join(' · ')) : '',
+        cancelado,
         aviso
       ].filter(Boolean).join(' · ')
     };
+  }
+
+  /** '3.326,51', 'R$ 3.326,51' ou '3326.51' → 3326.51; vazio ou inválido → null. Pura. */
+  function lerValor(texto) {
+    const limpo = String(texto ?? '').replace(/[^\d.,]/g, '');
+    if (!limpo) return null;
+    const normal = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo;
+    const n = Number(normal);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+  }
+
+  /**
+   * O que a tela manda quando a data ou o valor das parcelas marcadas mudam
+   * (06/10/2026) e se o total do pedido muda junto — a mesma conta do backend
+   * (cobranca/boletos.conferirAjustes): diferença até R$ 0,02 é arredondamento.
+   * `edicoes`: id → { vencimento, valor (texto) }. Pura.
+   */
+  function planoDaTela(estado, edicoes, marcadas) {
+    const centavos = v => Math.round(Number(v || 0) * 100) / 100;
+    const linhas = (estado?.parcelas || []).map(linhaDaParcela);
+    const ajustes = {};
+    const mudancas = [];
+    const erros = [];
+    const hoje = String(estado?.hoje || '').slice(0, 10);
+    let soma = 0;
+    for (const l of linhas) {
+      const e = edicoes?.get?.(l.id);
+      const marcada = (marcadas || []).includes(Number(l.id));
+      let valor = centavos(l.valor);
+      if (marcada && e) {
+        const vencimento = String(e.vencimento || l.vencimento || '').slice(0, 10);
+        const lido = e.valor === undefined ? l.valor : lerValor(e.valor);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimento)) erros.push(`Informe o vencimento da ${l.numero}ª parcela.`);
+        else if (hoje && vencimento < hoje) erros.push(`O vencimento da ${l.numero}ª parcela já passou: escolha hoje ou uma data à frente.`);
+        if (!(lido > 0)) erros.push(`Informe o valor da ${l.numero}ª parcela.`);
+        const novo = lido > 0 ? centavos(lido) : valor;
+        const mudouData = vencimento !== l.vencimento;
+        const mudouValor = Math.abs(novo - valor) > 0.005;
+        if (mudouData || mudouValor) {
+          ajustes[l.id] = { vencimento, valor: novo };
+          mudancas.push({ numero: l.numero, mudouData, mudouValor, antes: { vencimento: l.vencimento, valor }, vencimento, valor: novo });
+        }
+        valor = novo;
+      }
+      soma = centavos(soma + valor);
+    }
+    const total = centavos(estado?.pedido?.valor_final);
+    const ajusteAntes = centavos(estado?.pedido?.ajuste_valor);
+    const itens = centavos(total - ajusteAntes);
+    const diferenca = centavos(soma - itens);
+    const ajuste = Math.abs(diferenca) <= 0.02 ? 0 : diferenca;
+    const mudaTotal = mudancas.some(m => m.mudouValor) && Math.abs(ajuste - ajusteAntes) > 0.005;
+    return { ajustes, mudancas, erros, soma, total, itens, ajuste, mudaTotal, totalDepois: ajuste ? soma : itens };
+  }
+
+  /** "2ª: vencimento 12/10/2026 → 20/10/2026 · valor R$ 1,00 → R$ 2,00". Pura. */
+  function textoDaMudanca(m) {
+    const reais = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const partes = [];
+    if (m.mudouData) partes.push(`vencimento ${diaCurto(m.antes.vencimento)} → ${diaCurto(m.vencimento)}`);
+    if (m.mudouValor) partes.push(`valor ${reais(m.antes.valor)} → ${reais(m.valor)}`);
+    return `${m.numero}ª parcela: ${partes.join(' · ')}`;
   }
 
   /** O aviso depois de gerar: quantos saíram, quantos já existiam, quantos deram erro. */
@@ -186,6 +257,12 @@
   let estado = null;
   let emAndamento = false;
   let fechado = false;
+  // Data e valor escolhidos nas parcelas marcadas: id → { vencimento, valor (texto) }.
+  const edicoes = new Map();
+  const ajusteEl = el('gerarBoletosAjuste');
+  const somaEl = el('gerarBoletosSoma');
+  const justificativaCaixa = el('gerarBoletosJustificativaCaixa');
+  const justificativaEl = el('gerarBoletosJustificativa');
 
   function desligarOuvintes() {
     document.removeEventListener('keydown', aoEsc);
@@ -265,7 +342,6 @@
       caixa.checked = l.podeGerar && Boolean(estado?.pode_gerar);
       caixa.disabled = !l.podeGerar || !estado?.pode_gerar;
       caixa.style.accentColor = 'var(--color-primary)';
-      caixa.addEventListener('change', atualizarBotao);
       tdCaixa.appendChild(caixa);
       const celula = (texto, classe = 'px-4 py-3 text-white') => { const td = document.createElement('td'); td.className = classe; td.textContent = texto; return td; };
       const tdBoleto = document.createElement('td');
@@ -273,6 +349,11 @@
       const tag = document.createElement('span');
       tag.className = `${l.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       tag.textContent = l.rotulo;
+      // Quem emitiu, quem registrou o pagamento, se foi automático (06/10/2026).
+      if (l.auditoria.length) {
+        tag.title = l.auditoria.join('\n');
+        tag.style.cursor = 'help';
+      }
       tdBoleto.appendChild(tag);
       if (l.temDetalhe) {
         const ver = document.createElement('button');
@@ -302,11 +383,90 @@
         det.textContent = l.detalhe;
         tdBoleto.appendChild(det);
       }
-      tr.append(tdCaixa, celula(l.numero ? `${l.numero}ª` : '—'), celula(formatarDia(l.vencimento)), celula(formatarMoeda(l.valor), 'px-4 py-3 text-right text-white'), tdBoleto);
+      // Parcela que pode ganhar boleto: o vencimento e o valor são editáveis
+      // (o boleto novo sai com eles e a parcela passa a ter os dele).
+      let tdVenc;
+      let tdValor;
+      if (!caixa.disabled) {
+        const editado = edicoes.get(l.id) || {};
+        const data = document.createElement('input');
+        data.type = 'date';
+        data.value = editado.vencimento || l.vencimento || '';
+        if (estado?.hoje) data.min = String(estado.hoje).slice(0, 10);
+        data.dataset.noRestore = 'true';
+        data.setAttribute('aria-label', `Vencimento da ${l.numero}ª parcela`);
+        data.className = 'ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        data.style.width = '10.5rem';
+        const valor = document.createElement('input');
+        valor.type = 'text';
+        valor.inputMode = 'decimal';
+        valor.autocomplete = 'off';
+        valor.dataset.noRestore = 'true';
+        valor.dataset.numeric = 'false';
+        valor.value = editado.valor ?? Number(l.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        valor.setAttribute('aria-label', `Valor da ${l.numero}ª parcela`);
+        valor.className = 'ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition';
+        valor.style.width = '8.5rem';
+        const lembrar = () => {
+          edicoes.set(l.id, { vencimento: data.value, valor: valor.value });
+          atualizarAjuste();
+        };
+        data.addEventListener('change', lembrar);
+        data.addEventListener('input', lembrar);
+        valor.addEventListener('input', lembrar);
+        valor.addEventListener('blur', () => {
+          const n = lerValor(valor.value);
+          if (n !== null) valor.value = n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          lembrar();
+        });
+        const habilitar = () => {
+          data.disabled = !caixa.checked;
+          valor.disabled = !caixa.checked;
+          data.style.opacity = caixa.checked ? '' : '0.5';
+          valor.style.opacity = caixa.checked ? '' : '0.5';
+        };
+        habilitar();
+        caixa.addEventListener('change', () => { habilitar(); atualizarBotao(); });
+        tdVenc = document.createElement('td');
+        tdVenc.className = 'px-4 py-2';
+        tdVenc.appendChild(data);
+        tdValor = document.createElement('td');
+        tdValor.className = 'px-4 py-2 text-right';
+        tdValor.appendChild(valor);
+      } else {
+        caixa.addEventListener('change', atualizarBotao);
+        tdVenc = celula(formatarDia(l.vencimento));
+        tdValor = celula(formatarMoeda(l.valor), 'px-4 py-3 text-right text-white');
+      }
+      tr.append(tdCaixa, celula(l.numero ? `${l.numero}ª` : '—'), tdVenc, tdValor, tdBoleto);
       linhasEl.appendChild(tr);
     }
     el('gerarBoletosTabela').classList.toggle('hidden', !(estado?.parcelas || []).length);
     atualizarBotao();
+  }
+
+  /**
+   * A soma das parcelas com a data e o valor escolhidos: o total do pedido
+   * muda junto? Então a justificativa aparece (e é obrigatória).
+   */
+  function atualizarAjuste() {
+    if (!ajusteEl) return;
+    const plano = planoDaTela(estado, edicoes, marcadas());
+    const mostrar = plano.mudancas.length > 0;
+    ajusteEl.classList.toggle('hidden', !mostrar);
+    if (!mostrar) return;
+    const partes = [`${plano.mudancas.length === 1 ? '1 parcela muda' : `${plano.mudancas.length} parcelas mudam`}: ${plano.mudancas.map(textoDaMudanca).join('; ')}.`];
+    if (plano.mudaTotal) {
+      const rotulo = plano.ajuste > 0 ? 'Adicional' : (plano.ajuste < 0 ? 'Desconto' : '');
+      partes.push(`As parcelas passam a somar ${formatarMoeda(plano.soma)}: o total do pedido vai de ${formatarMoeda(plano.total)} para ${formatarMoeda(plano.totalDepois)}${rotulo ? ` (${rotulo} de ${formatarMoeda(Math.abs(plano.ajuste))} sobre os itens)` : ''}.`);
+      if (estado?.nota_fiscal) partes.push(`A NF-e ${estado.nota_fiscal.serie}/${estado.nota_fiscal.numero} já emitida não muda.`);
+    } else {
+      partes.push(`O total do pedido continua ${formatarMoeda(plano.total)}.`);
+    }
+    if (plano.erros.length) partes.push(plano.erros[0]);
+    somaEl.textContent = partes.join(' ');
+    somaEl.style.color = plano.erros.length ? 'var(--color-red)' : '';
+    justificativaCaixa?.classList.toggle('hidden', !plano.mudaTotal);
   }
 
   function atualizarBotao() {
@@ -326,6 +486,7 @@
       aviso.textContent = rodape.aviso;
       aviso.classList.toggle('hidden', !rodape.aviso);
     }
+    atualizarAjuste();
   }
 
   function gerarPdf(boletoId) {
@@ -403,10 +564,28 @@
     if (emAndamento || fechado) return;
     const ids = marcadas();
     if (!ids.length) { exibirMensagem('erro', 'Marque ao menos uma parcela.'); return; }
+    // Data e valor escolhidos: conferidos aqui antes da caixa (o backend confere de novo).
+    const plano = planoDaTela(estado, edicoes, ids);
+    if (plano.erros.length) { exibirMensagem('erro', plano.erros[0]); return; }
+    const justificativa = String(justificativaEl?.value || '').replace(/\s+/g, ' ').trim();
+    if (plano.mudaTotal && justificativa.length < 10) {
+      exibirMensagem('erro', 'O total do pedido muda com esses valores: escreva a justificativa (ao menos 10 letras).');
+      justificativaCaixa?.classList.remove('hidden');
+      justificativaEl?.focus();
+      return;
+    }
     const producao = estado?.ambiente === 'producao';
+    const secoes = plano.mudancas.length ? [{
+      titulo: 'Data e valor escolhidos', icone: 'fa-pen',
+      lista: [
+        ...plano.mudancas.map(textoDaMudanca),
+        ...(plano.mudaTotal ? [`Total do pedido: ${formatarMoeda(plano.total)} → ${formatarMoeda(plano.totalDepois)}`] : [])
+      ]
+    }] : [];
     const ok = await window.DialogPadrao?.confirm?.({
       title: producao ? 'Registrar boletos reais?' : 'Registrar boletos na homologação?',
-      message: `${ids.length === 1 ? '1 boleto será registrado' : `${ids.length} boletos serão registrados`} no Banco do Brasil (${producao ? 'PRODUÇÃO — com valor' : 'homologação, conta de teste, sem valor'}) para o pedido ${ctx.numero}. Nada é enviado ao cliente.`,
+      message: `${ids.length === 1 ? '1 boleto será registrado' : `${ids.length} boletos serão registrados`} no Banco do Brasil (${producao ? 'PRODUÇÃO — com valor' : 'homologação, conta de teste, sem valor'}) para o pedido ${ctx.numero}. Nada é enviado ao cliente.${plano.mudancas.length ? ' Cada parcela passa a ter a data e o valor do boleto novo.' : ''}`,
+      ...(secoes.length ? { secoes } : {}),
       confirmText: 'Gerar boletos'
     });
     if (!ok) return;
@@ -417,14 +596,24 @@
       let resp;
       try {
         resp = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(ctx.pedidoId)}/boletos`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parcelas: ids, nota_fiscal_id: estado?.nota_fiscal?.id ?? null })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parcelas: ids, nota_fiscal_id: estado?.nota_fiscal?.id ?? null,
+            ...(plano.mudancas.length ? { ajustes: plano.ajustes } : {}),
+            ...(plano.mudaTotal ? { justificativa } : {})
+          })
         });
       } catch (err) {
         exibirMensagem('erro', 'Não foi possível falar com o servidor. Tente de novo.');
         return;
       }
       const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) { exibirMensagem('erro', mensagemDeErro(resp.status, corpo)); return; }
+      if (!resp.ok) {
+        exibirMensagem('erro', mensagemDeErro(resp.status, corpo));
+        if (corpo?.code === 'JUSTIFICATIVA_OBRIGATORIA') { justificativaCaixa?.classList.remove('hidden'); justificativaEl?.focus(); }
+        return;
+      }
       const r = resumoDosResultados(corpo);
       exibirMensagem(r.tipo === 'error' ? 'erro' : (r.tipo === 'success' ? 'ok' : 'info'), r.texto);
       resultadoEl.replaceChildren();
@@ -432,11 +621,26 @@
         const li = document.createElement('li');
         li.style.color = item.ok ? 'var(--color-green)' : 'var(--color-red)';
         li.textContent = item.ok
-          ? `Parcela ${item.numero_parcela}: ${item.ja_existia ? 'já tinha boleto' : 'registrado'} ${item.boleto?.nosso_numero ? `· ${item.boleto.nosso_numero}` : ''}${item.boleto?.linha_digitavel ? ` · ${item.boleto.linha_digitavel}` : ''}`
+          ? `Parcela ${item.numero_parcela}: ${item.ja_existia ? 'já tinha boleto' : 'registrado'} ${item.boleto?.nosso_numero ? `· ${item.boleto.nosso_numero}` : ''}${item.boleto?.linha_digitavel ? ` · ${item.boleto.linha_digitavel}` : ''}${item.aviso ? ` · ${item.aviso}` : ''}`
           : `Parcela ${item.numero_parcela}: ${item.erro}`;
         resultadoEl.appendChild(li);
       }
+      // A parcela ficou com a data e o valor do boleto novo; e o total do pedido, se mudou.
+      for (const a of corpo?.parcelas_ajustadas || []) {
+        const li = document.createElement('li');
+        li.style.color = 'var(--color-primary-light)';
+        li.textContent = `${a.numero_parcela}ª parcela agora: ${formatarDia(a.vencimento)} · ${formatarMoeda(a.valor)}`;
+        resultadoEl.appendChild(li);
+      }
+      if (corpo?.total?.erro || corpo?.total?.total_depois !== undefined) {
+        const li = document.createElement('li');
+        li.style.color = corpo.total.erro ? 'var(--color-red)' : 'var(--color-primary-light)';
+        li.textContent = corpo.total.erro || `Total do pedido: ${formatarMoeda(corpo.total.total_antes)} → ${formatarMoeda(corpo.total.total_depois)}`;
+        resultadoEl.appendChild(li);
+      }
       resultadoEl.classList.remove('hidden');
+      edicoes.clear();
+      if (justificativaEl) justificativaEl.value = '';
       window.showToast?.(r.texto, r.tipo);
       window.dispatchEvent(new CustomEvent('boletos:gerados', { detail: { pedidoId: ctx.pedidoId, resultado: corpo } }));
       window.carregarPedidos?.();

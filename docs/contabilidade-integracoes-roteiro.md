@@ -615,8 +615,8 @@ a API, permissões, travas) → B → C → D → E.
    dias e os 3 estados marcados. Em "Credenciais do BB": "Do cartão do Extrato
    pela API (…): client_id ok, app key ok, client_secret guardado".
 3. **Testar conexão**: "Token e DDA ok (escopos: dda-info; com o certificado da
-   empresa). N boletos a pagar com vencimento de … a …. Pagador no BB:
-   11.444.777/0001-61. Nada foi gravado." Se o pagador não for o CNPJ da
+   empresa). N boletos a pagar com vencimento de … a …. Pagador no BB: (o
+   CNPJ da Santíssimo). Nada foi gravado." Se o pagador não for o CNPJ da
    empresa, o teste avisa.
 4. **Buscar agora**: "N boletos no DDA com vencimento de … a … (x a pagar, y
    liquidados) · N novos · K ligados sozinhos às contas…".
@@ -1118,8 +1118,8 @@ de nota)
 ## Pendências novas (continuam a lista 1–33 do roteiro de homologação)
 
 **NF-e de entrada (SEFAZ)**
-34. **Ciência automática** para toda NF-e nova (é o que libera o XML; não
-    confirma a compra). Ok?
+34. ~~Ciência automática para toda NF-e nova~~ — **respondido (02/10/2026):**
+    sim, ciência automática.
 35. ~~Registro automático sem a conta~~ — **respondido (7b, 02/10/2026):** a
     nota completa registra **e** lança a conta pelas duplicatas (marque
     "Lançar a conta a pagar junto" nos cartões da SEFAZ e do ADN). Desde a
@@ -1130,9 +1130,9 @@ de nota)
     02/10/2026; feito na Fase A):** a nota manifestada como desconhecimento ou
     operação não realizada **continua pendente** (etiqueta "Recusada na
     SEFAZ") até alguém **Ignorar** à mão, com o motivo.
-38. A primeira busca traz ~90 dias: as notas de **meses já fechados** ficam
-    na caixa com o motivo. Prefere que o app as **ignore sozinho** (com o
-    motivo "mês já fechado"), ou decide uma a uma?
+38. ~~Notas de meses já fechados na primeira busca~~ — **respondido
+    (02/10/2026):** ficam na caixa de entrada para você decidir uma a uma
+    (registrar ou guardar como histórico).
 
 **Agenda e segurança**
 39. A busca automática roda **só com o App-Gestão aberto e alguém logado**.
@@ -1150,12 +1150,15 @@ de nota)
     completa a linha do OFX com o CPF/CNPJ de quem recebeu/pagou.
 
 **CDB, comprovantes e pagamentos**
-44. CDB: só credenciais e teste até o BB dizer a API (Parte E). Ok.
+44. ~~CDB pela API~~ — **substituído (Fase C, 02/10/2026):** o Rende Fácil e
+    o CDB entram pelos PDFs mensais do BB (Parte N); o cartão da Parte E
+    ficou fora de uso.
 45. ~~Comprovantes anexados à mão~~ — **feito na Fase D (02/10/2026):** o ZIP
     do site do BB entra de uma vez, o app guarda só os dados, refaz o PDF
     idêntico e liga cada um ao débito do extrato (Parte L).
-46. **Pagamentos em lote** pelo BB (API de Pagamentos) fica para uma fase
-    futura, se quiser.
+46. ~~Pagamentos em lote~~ — **respondido (02/10/2026):** pagamentos em lote
+    e Pix pelo BB ficam para uma fase futura (pedem o convênio PAG na
+    agência).
 
 **NFS-e (ADN)**
 47. Confirmar, na primeira busca em produção, que as NFS-e de **Contagem** e

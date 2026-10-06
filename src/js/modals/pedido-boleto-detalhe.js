@@ -25,7 +25,10 @@
   const EVENTOS = {
     reservado: 'Nosso número reservado', registrado: 'Registrado no BB', erro: 'BB recusou o registro', renumerado: 'Nosso número trocado',
     consulta: 'Consulta ao BB', consulta_erro: 'Consulta ao BB falhou', prorrogado: 'Vencimento prorrogado', multa_atualizada: 'Multa atualizada',
-    abatimento: 'Abatimento', baixado: 'Baixado', alteracao_erro: 'BB recusou a alteração', baixa_operacional: 'Aviso de pagamento do BB'
+    abatimento: 'Abatimento', baixado: 'Baixado', alteracao_erro: 'BB recusou a alteração', baixa_operacional: 'Aviso de pagamento do BB',
+    // 06/10/2026: boleto novo com data/valor escolhidos e os dados completados para o PDF.
+    parcela_ajustada: 'Parcela com data/valor novos', completado_para_pdf: 'Dados completados para o PDF',
+    recebimento: 'Pagamento lançado no Financeiro', importado: 'Importado do BB', pago: 'Pago no BB'
   };
 
   const moeda = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -235,7 +238,9 @@
       li.className = 'px-4 py-2';
       const topo = document.createElement('p');
       topo.className = 'text-xs text-gray-400';
-      topo.textContent = [momento(e.criado_em), rotuloDoEvento(e), e.pendente && e.origem === 'webhook' ? 'na fila' : ''].filter(Boolean).join(' · ');
+      // Quem fez (06/10/2026): o nome de quem mexeu; sem ninguém, foi automático.
+      const quem = e.usuario ? `por ${e.usuario}` : (['webhook', 'consulta'].includes(e.origem) ? 'automático' : '');
+      topo.textContent = [momento(e.criado_em), rotuloDoEvento(e), quem, e.pendente && e.origem === 'webhook' ? 'na fila' : ''].filter(Boolean).join(' · ');
       li.appendChild(topo);
       if (e.mensagem) {
         const texto = document.createElement('p');

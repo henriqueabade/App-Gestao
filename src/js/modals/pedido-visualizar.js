@@ -487,7 +487,9 @@
         const tagPago = document.createElement('span');
         tagPago.className = `${pago.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
         tagPago.textContent = pago.texto;
-        tagPago.title = 'Pagamento registrado à mão — veja em "Pagamentos"';
+        // Quem registrou o pagamento e quando (06/10/2026).
+        tagPago.title = [...(linha.auditoria || []), 'Veja em "Pagamentos"'].join('\n');
+        tagPago.style.cursor = 'help';
         td.appendChild(tagPago);
         tr.appendChild(td);
         return;
@@ -511,13 +513,18 @@
       const tag = document.createElement('span');
       tag.className = `${r.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       tag.textContent = r.texto;
-      if (r.detalhe) tag.title = r.detalhe;
+      // O balão diz quem emitiu o boleto, quem registrou o pagamento e se foi
+      // automático (pedido do dono, 06/10/2026), e depois a linha digitável.
+      const autoria = Array.isArray(linha?.auditoria) ? linha.auditoria.filter(Boolean) : [];
+      const balao = [...autoria, r.detalhe].filter(Boolean).join('\n');
+      if (balao) tag.title = balao;
+      if (autoria.length) tag.style.cursor = 'help';
       // Boleto a pagar: a tag gera o PDF daquela parcela.
       if (linha?.boleto && boletoImprimivel(linha.boleto) && window.BoletoDocumentos) {
         tag.classList.add('cursor-pointer');
         tag.setAttribute('role', 'button');
         tag.dataset.perm = 'financeiro.boleto.view';
-        tag.title = `${r.detalhe ? `${r.detalhe} — ` : ''}clique para gerar o PDF do boleto`;
+        tag.title = [...autoria, `${r.detalhe ? `${r.detalhe} — ` : ''}clique para gerar o PDF do boleto`].join('\n');
         tag.addEventListener('click', () => window.BoletoDocumentos.gerarBoletoPdf(linha.boleto.id));
       }
       td.appendChild(tag);

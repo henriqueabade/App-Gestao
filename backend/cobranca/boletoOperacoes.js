@@ -100,6 +100,101 @@ function canalDePagamento(codigo) {
   return [local, forma].filter(Boolean).join(' · ');
 }
 
+/** O primeiro valor preenchido entre as chaves (o BB varia os nomes entre versões). Pura. */
+function primeiroDe(obj, chaves) {
+  for (const chave of chaves) {
+    const v = obj?.[chave];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return null;
+}
+const textoDe = (obj, chaves) => String(primeiroDe(obj, chaves) ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * O cadastro do boleto no detalhe do BB: o pagador, o "seu número", a emissão
+ * e as regras de juros, multa e protesto. É o que falta no boleto IMPORTADO —
+ * a lista do banco não traz — e que o PDF precisa: sem isso a ficha saía com
+ * o pagador, o número do documento e as instruções em branco (print do dono,
+ * 06/10/2026). Cada dado é procurado em mais de uma chave. Pura.
+ */
+function lerCadastroDoBB(detalhe) {
+  const r = detalhe || {};
+  const tipo = numero(primeiroDe(r, ['codigoTipoInscricaoSacado', 'tipoInscricaoSacado', 'codigoTipoInscricaoPagador', 'tipoInscricaoPagador']));
+  const docBruto = digitos(primeiroDe(r, ['numeroInscricaoSacadoCobranca', 'numeroInscricaoSacado', 'numeroInscricaoPagador']));
+  // O BB devolve o documento como número: o zero da frente some.
+  const tamanho = tipo === 1 ? 11 : (tipo === 2 ? 14 : (docBruto.length > 11 ? 14 : 11));
+  const documento = docBruto && docBruto !== '0' ? docBruto.padStart(tamanho, '0') : '';
+  const cepBruto = digitos(primeiroDe(r, ['numeroCepSacadoCobranca', 'numeroCepSacado', 'cepPagador']));
+  const nome = textoDe(r, ['nomeSacadoCobranca', 'nomeSacado', 'nomePagador']);
+  const pagador = nome ? {
+    tipo_pessoa: tamanho === 11 ? 'PF' : 'PJ',
+    documento,
+    nome,
+    endereco: textoDe(r, ['textoEnderecoSacadoCobranca', 'textoEnderecoSacado', 'enderecoPagador']),
+    bairro: textoDe(r, ['nomeBairroSacadoCobranca', 'nomeBairroSacado', 'bairroPagador']),
+    cidade: textoDe(r, ['nomeMunicipioSacadoCobranca', 'nomeMunicipioSacado', 'cidadePagador']),
+    uf: textoDe(r, ['siglaUnidadeFederacaoSacadoCobranca', 'siglaUfSacado', 'ufPagador']).toUpperCase(),
+    cep: cepBruto && cepBruto !== '0' ? cepBruto.padStart(8, '0') : ''
+  } : null;
+
+  const tipoJuros = numero(primeiroDe(r, ['codigoTipoJuroMora', 'tipoJuroMora', 'codigoTipoJurosMora']));
+  const valorJuros = numero(primeiroDe(r, ['valorJuroMoraTitulo', 'valorJurosMoraTitulo', 'valorJuroMora']));
+  const pctJuros = numero(primeiroDe(r, ['percentualJuroMoraTitulo', 'percentualJurosMoraTitulo', 'percentualJuroMora']));
+  const tipoMulta = numero(primeiroDe(r, ['codigoTipoMulta', 'tipoMulta']));
+  const pctMulta = numero(primeiroDe(r, ['percentualMultaTitulo', 'percentualMulta']));
+  const protesto = numero(primeiroDe(r, ['quantidadeDiaProtesto', 'quantidadeDiasProtesto']));
+  const limite = numero(primeiroDe(r, ['quantidadeDiaPrazoLimiteRecebimento', 'quantidadeDiasLimiteRecebimento', 'numeroDiasLimiteRecebimento']));
+  return {
+    pagador,
+    seuNumero: textoDe(r, ['numeroTituloCedenteCobranca', 'numeroTituloBeneficiario', 'textoNumeroTituloBeneficiario', 'numeroDocumentoTituloCobranca']).slice(0, 15) || null,
+    emissao: isoDoBB(primeiroDe(r, ['dataEmissaoTituloCobranca', 'dataRegistroTituloCobranca'])),
+    // 1 = valor por dia; 2 = taxa mensal; 0/3 = sem juros.
+    jurosValorDia: tipoJuros === 1 && valorJuros > 0 ? centavos(valorJuros) : null,
+    jurosPercentualMes: tipoJuros === 2 && pctJuros > 0 ? pctJuros : null,
+    semJuros: tipoJuros === 0 || tipoJuros === 3,
+    // 2 = percentual; 0 = sem multa.
+    multaPercentual: tipoMulta === 2 && pctMulta > 0 ? pctMulta : (tipoMulta === 0 ? 0 : null),
+    protestoDias: protesto > 0 ? protesto : null,
+    diasLimite: limite !== null && limite >= 0 ? limite : null
+  };
+}
+
+const vazio = v => v === null || v === undefined || String(v).trim() === '';
+const listaDe = v => {
+  if (Array.isArray(v)) return v;
+  try { const l = JSON.parse(v || 'null'); return Array.isArray(l) ? l : null; } catch (_) { return null; }
+};
+const objetoDe = v => {
+  if (v && typeof v === 'object') return v;
+  try { const o = JSON.parse(v || 'null'); return o && typeof o === 'object' ? o : null; } catch (_) { return null; }
+};
+
+/**
+ * O que a consulta acrescenta ao boleto a partir do cadastro do BB — só o que
+ * está VAZIO aqui: o que o app gravou no registro continua valendo. As
+ * instruções do papel saem das regras (as do BB, ou as da configuração). Pura.
+ */
+function camposDoCadastro(boleto, cadastro, { vencimento, cfg = null } = {}) {
+  const c = {};
+  if (!cadastro) return c;
+  if (!objetoDe(boleto.pagador)?.nome && cadastro.pagador?.nome) c.pagador = cadastro.pagador;
+  if (vazio(boleto.numero_documento) && cadastro.seuNumero) c.numero_documento = cadastro.seuNumero;
+  if (vazio(boleto.data_emissao) && cadastro.emissao) c.data_emissao = cadastro.emissao;
+  if (vazio(boleto.juros_valor_dia) && vazio(boleto.juros_percentual_mes)) {
+    if (cadastro.jurosValorDia) c.juros_valor_dia = cadastro.jurosValorDia;
+    if (cadastro.jurosPercentualMes) c.juros_percentual_mes = cadastro.jurosPercentualMes;
+    // Sem juros no BB: grava 0 (vazio voltaria aos juros da configuração).
+    if (cadastro.semJuros) c.juros_percentual_mes = 0;
+  }
+  if (vazio(boleto.multa_percentual) && cadastro.multaPercentual !== null) c.multa_percentual = cadastro.multaPercentual;
+  if (vazio(boleto.protesto_dias) && cadastro.protestoDias) c.protesto_dias = cadastro.protestoDias;
+  if (vazio(boleto.dias_limite_recebimento) && cadastro.diasLimite !== null) c.dias_limite_recebimento = cadastro.diasLimite;
+  if (!(listaDe(boleto.instrucoes) || []).length && vencimento) {
+    c.instrucoes = encargosDoBoleto({ ...boleto, ...c }, vencimento, cfg).instrucoes;
+  }
+  return c;
+}
+
 /** O detalhe do GET /boletos/{id} no que o app usa. */
 function lerDetalhe(detalhe) {
   const r = detalhe || {};
@@ -122,7 +217,8 @@ function lerDetalhe(detalhe) {
     baixaAutomaticaEm: isoDoBB(r.dataBaixaAutomaticoTitulo),
     multaAPartirDe: isoDoBB(r.dataMultaTitulo),
     linha: linha.length === 47 ? bbBoleto.formatarLinha(linha) : null,
-    barras: barras.length === 44 ? barras : null
+    barras: barras.length === 44 ? barras : null,
+    cadastro: lerCadastroDoBB(r)
   };
 }
 
@@ -158,7 +254,11 @@ function encargosDoBoleto(boleto, vencimento, cfg, { descontoAte = null } = {}) 
     descontoFixo: desconto > 0 ? { valor: desconto, ate: descontoAte || dia(boleto.desconto_ate) || vencimento } : null,
     cfg: {
       ...base,
-      juros_tipo: temValorDia ? 'valor_dia' : (Number(boleto.juros_percentual_mes) > 0 ? 'percentual_mes' : 'sem'),
+      // Boleto sem nada de juros gravado (o importado do BB antes da consulta):
+      // valem os juros da configuração; o "sem juros" do BB grava 0.
+      juros_tipo: temValorDia ? 'valor_dia'
+        : (Number(boleto.juros_percentual_mes) > 0 ? 'percentual_mes'
+          : (vazio(boleto.juros_percentual_mes) ? (base.juros_tipo || 'valor_dia') : 'sem')),
       juros_percentual_mes: pctMes,
       multa_percentual: boleto.multa_percentual ?? base.multa_percentual,
       protesto_dias: boleto.protesto_dias ?? base.protesto_dias,
@@ -208,6 +308,10 @@ function camposDaSincronizacao(boleto, lido, { hoje, agora, cfg = null, manter =
     campos.data_baixa = hoje;
     if (!boleto.motivo_baixa) campos.motivo_baixa = 'banco';
   }
+  // O boleto importado do BB entra sem pagador, "seu número" e regras: a
+  // consulta completa o que estiver vazio (o PDF precisa disso).
+  // (As instruções que ele monta já usam o vencimento que vale no BB.)
+  Object.assign(campos, camposDoCadastro(boleto, lido.cadastro, { vencimento, cfg }));
   return { campos, divergencias };
 }
 
@@ -221,6 +325,7 @@ function resumoDaConsulta(boleto, lido, campos) {
     partes.push(`pago${lido.pagoEm ? ` em ${impressa(lido.pagoEm)}` : ''}${lido.valorPago ? ` ${reais(lido.valorPago)}` : ''}${lido.canal ? ` (${lido.canal})` : ''}`);
   }
   if (campos.status === 'baixado' && lido.tipoBaixa) partes.push(lido.tipoBaixa);
+  if (campos.pagador || campos.numero_documento) partes.push('pagador e número do documento completados com o cadastro do BB');
   return partes.join(' · ');
 }
 
@@ -504,6 +609,83 @@ async function baixar({ api, bb, conexao, boleto, entrada, hoje, usuarioId = nul
   return { boleto: atual, reemissao, recebimento, avisos };
 }
 
+/** O Pix do boleto na resposta do BB (o formato varia), ou null. Pura. */
+function lerPixDoBB(resposta) {
+  const r = resposta || {};
+  const q = r.qrCode && typeof r.qrCode === 'object' ? r.qrCode : r;
+  const emv = String(q.emv || q.textoQrCode || r.emv || r.textoQrCode || '').trim();
+  if (!emv) return null;
+  return {
+    pix_emv: emv,
+    pix_txid: String(q.txId || q.txid || r.txId || r.txid || '').trim() || null,
+    pix_url: String(q.url || r.url || r.urlImagemQrCode || '').trim() || null
+  };
+}
+
+/** O boleto já foi completado para o PDF (marca em boletos_eventos), para não ir ao BB a cada impressão. */
+async function jaCompletado(api, boleto) {
+  const eventos = await api.get('/api/boletos_eventos', { query: { boleto_id: boleto.id, tipo: 'completado_para_pdf' } }).catch(() => []);
+  return (Array.isArray(eventos) ? eventos : []).some(e => e && Number(e.boleto_id) === Number(boleto.id) && e.tipo === 'completado_para_pdf');
+}
+
+/** Falta algo para a ficha: pagador, número do documento, instruções ou o Pix. Pura. */
+function faltaParaDocumento(boleto) {
+  return !objetoDe(boleto?.pagador)?.nome || vazio(boleto?.numero_documento) || !(listaDe(boleto?.instrucoes) || []).length || !boleto?.pix_emv;
+}
+
+/**
+ * Antes do PDF: o boleto a pagar a quem falta pagador, número do documento,
+ * instruções ou Pix (o IMPORTADO do BB) é consultado no banco uma vez — o
+ * detalhe completa o cadastro e GET /boletos/{id}/pix traz o QR Code, quando
+ * o boleto tem Pix. Nunca impede o PDF: o que o BB não der, a rota tira do
+ * pedido (cliente e configuração). Deixa a marca para não repetir.
+ */
+async function completarParaDocumento({ api, bb, conexao, boleto, cfg = null, hoje, usuarioId = null }) {
+  if (!boleto || !boletos.STATUS_A_PAGAR.has(String(boleto.status)) || !faltaParaDocumento(boleto)) return boleto;
+  if (!conexao || await jaCompletado(api, boleto)) return boleto;
+  let atual = boleto;
+  const feito = [];
+  if (!objetoDe(atual.pagador)?.nome || vazio(atual.numero_documento) || !(listaDe(atual.instrucoes) || []).length) {
+    try {
+      const r = await sincronizar({ api, bb, conexao, boleto: atual, cfg, hoje, usuarioId, origem: 'consulta' });
+      atual = r.boleto;
+      feito.push('cadastro consultado no BB');
+    } catch (e) {
+      feito.push(`cadastro não consultado (${e.message})`);
+    }
+  }
+  if (!atual.pix_emv) {
+    try {
+      const resposta = await bb.chamar({ ...conexao, metodo: 'GET', caminho: `${caminhoNoBB(atual)}/pix`, query: { numeroConvenio: digitos(atual.convenio) } });
+      const pix = lerPixDoBB(resposta);
+      if (pix) {
+        atual = await boletos.atualizarBoleto(api, atual, pix);
+        feito.push('Pix do BB guardado');
+      } else {
+        feito.push('o boleto não tem Pix no BB');
+      }
+    } catch (e) {
+      feito.push(`Pix não consultado (${e.message})`);
+    }
+  }
+  await evento(api, atual, usuarioId, 'completado_para_pdf', `Dados do boleto para o PDF: ${feito.join('; ')}.`);
+  return atual;
+}
+
+/**
+ * O que o PDF usa quando o boleto não tem (ver boletoDocumento.dadosDoBoleto):
+ * o pagador do cliente do pedido, o número do documento como o app gera
+ * ("PED107P1") e as instruções pelas regras do boleto ou da configuração. Pura.
+ */
+function complementoDoDocumento(boleto, { pedido = null, cliente = null, cfg = null } = {}) {
+  const vencimento = dia(boleto?.data_vencimento);
+  return {
+    pagador: cliente ? bbBoleto.pagadorDoCliente(cliente) : null,
+    numeroDocumento: pedido ? bbBoleto.alfanumerico(`${pedido.numero ?? pedido.id ?? ''}P${boleto?.numero_parcela ?? 1}`, 15).replace(/ /g, '') : '',
+    instrucoes: vencimento ? encargosDoBoleto(boleto, vencimento, cfg).instrucoes : []
+  };
+}
+
 /** Consulta todos os boletos a pagar do pedido; um erro não para os outros. */
 async function sincronizarPedido({ api, bb, conexao, pedidoId, cfg = null, hoje, usuarioId = null }) {
   const dados = await boletos.lerPedidoCobranca(api, pedidoId);
@@ -542,14 +724,15 @@ async function historico(api, boleto) {
     const doBoleto = Number(e.boleto_id) === Number(boleto.id)
       || ((e.boleto_id === null || e.boleto_id === undefined) && e.nosso_numero === boleto.nosso_numero);
     if (!doBoleto) continue;
-    vistos.set(e.id, { id: e.id, origem: e.origem, tipo: e.tipo, mensagem: e.mensagem || '', criado_em: e.criado_em || null, pendente: !e.processado_em });
+    vistos.set(e.id, { id: e.id, origem: e.origem, tipo: e.tipo, mensagem: e.mensagem || '', criado_em: e.criado_em || null, pendente: !e.processado_em, usuario_id: e.usuario_id ?? null });
   }
   return [...vistos.values()].sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 100);
 }
 
 module.exports = {
   ESTADOS_BB, TIPOS_BAIXA_BB, MOTIVOS_BAIXA, MOTIVOS_ESCOLHIVEIS, FORMAS_RECEBIMENTO, INDICADORES, COLUNAS_DA_FASE,
-  dataValida, isoDoBB, canalDePagamento, lerDetalhe, statusPeloBB, encargosDoBoleto, camposDaSincronizacao, resumoDaConsulta,
+  dataValida, isoDoBB, canalDePagamento, lerDetalhe, lerCadastroDoBB, camposDoCadastro, statusPeloBB, encargosDoBoleto, camposDaSincronizacao, resumoDaConsulta,
+  lerPixDoBB, faltaParaDocumento, completarParaDocumento, complementoDoDocumento,
   payloadAlteracao, payloadProrrogacao, payloadAbatimento, payloadMulta, payloadDataDesconto, payloadBaixa,
   acoesDoBoleto, sqlPronto, exigirSql, validarProrrogacao, validarAbatimento, validarBaixa,
   sincronizar, prorrogar, concederAbatimento, baixar, sincronizarPedido, historico

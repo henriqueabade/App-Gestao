@@ -30,7 +30,8 @@ function puras() {
 test('linhaDaParcela: só a parcela sem boleto vivo pode ser marcada; a tag e o detalhe seguem o boleto', () => {
   const f = puras();
   const sem = plano(f.linhaDaParcela({ parcela: { id: 1, numero_parcela: 1, data_vencimento: '2027-01-18T00:00:00.000Z', valor: '1000.00' }, boleto: null, tem_boleto_vivo: false }));
-  assert.deepStrictEqual(sem, { id: 1, numero: 1, vencimento: '2027-01-18', valor: 1000, podeGerar: true, temPdf: false, temDetalhe: false, boletoId: null, classe: 'badge-neutral', rotulo: 'Sem boleto', detalhe: '' });
+  // `desconto` e `auditoria` (06/10/2026): a parte no desconto até o vencimento e o balão de quem fez o quê.
+  assert.deepStrictEqual(sem, { id: 1, numero: 1, vencimento: '2027-01-18', valor: 1000, desconto: 0, auditoria: [], podeGerar: true, temPdf: false, temDetalhe: false, boletoId: null, classe: 'badge-neutral', rotulo: 'Sem boleto', detalhe: '' });
   const registrado = plano(f.linhaDaParcela({ parcela: { id: 2, numero_parcela: 2, data_vencimento: '2027-02-17', valor: 1000 }, tem_boleto_vivo: true,
     boleto: { id: 41, status: 'registrado', nosso_numero: '00034534810000000002', nosso_numero_dv: '5', linha_digitavel: '00190.00009 …' } }));
   assert.strictEqual(registrado.temPdf, true, 'registrado tem PDF');
@@ -107,7 +108,9 @@ test('HTML: overlay escondido, parcelas com caixa, pendências, botões só com 
 
 test('script: lê e grava em /api/cobranca, confirma na caixa da casa, marca só as parcelas sem boleto, sem innerHTML nem confirm()', () => {
   assert.ok(FONTE.includes('/api/cobranca/pedidos/${encodeURIComponent(ctx.pedidoId)}/boletos'));
-  assert.ok(FONTE.includes("body: JSON.stringify({ parcelas: ids, nota_fiscal_id: estado?.nota_fiscal?.id ?? null })"), 'manda as parcelas marcadas e a NF-e viva');
+  // As parcelas marcadas e a NF-e viva; e, quando mudam, a data/valor escolhidos e a justificativa (06/10/2026).
+  assert.ok(FONTE.includes('parcelas: ids, nota_fiscal_id: estado?.nota_fiscal?.id ?? null,'), 'manda as parcelas marcadas e a NF-e viva');
+  assert.ok(FONTE.includes('...(plano.mudancas.length ? { ajustes: plano.ajustes } : {}),') && FONTE.includes('...(plano.mudaTotal ? { justificativa } : {})'));
   assert.ok(FONTE.includes('window.DialogPadrao?.confirm?.({') && FONTE.includes("confirmText: 'Gerar boletos'"));
   assert.ok(!/window\.confirm\(|showStatusConfirmDialog|innerHTML|insertAdjacentHTML/.test(FONTE));
   assert.ok(FONTE.includes('caixa.checked = l.podeGerar && Boolean(estado?.pode_gerar);') && FONTE.includes('caixa.disabled = !l.podeGerar || !estado?.pode_gerar;'));

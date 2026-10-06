@@ -369,7 +369,8 @@ test('baixar: quitado por fora grava o recebimento; cancelado; reemissão chama 
   await op.baixar({ api: api2, bb: bbFalso(), conexao: CONEXAO, boleto: api2.dados.boletos[0], entrada: { motivo: 'cancelado', observacao: 'pedido desfeito' }, hoje: HOJE });
   assert.equal(api2.dados.boletos[0].motivo_baixa, 'cancelado');
   assert.equal(api2.dados.boletos[0].data_pagamento, null);
-  assert.equal(boletos.ocupaParcela(api2.dados.boletos[0]), true);
+  // Decisão do dono (06/10/2026): o cancelado deixa a parcela livre para um boleto novo.
+  assert.equal(boletos.ocupaParcela(api2.dados.boletos[0]), false);
 
   const api3 = apiFalsa({ boletos: [boletoBase()], boletos_eventos: [] });
   const pedidos = [];
