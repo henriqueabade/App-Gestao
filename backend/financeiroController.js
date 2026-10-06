@@ -16,8 +16,12 @@
  *   GET    /buscas/clientes|pedidos|produtos|donos   listas enxutas para escolher na tela de regras
  *   GET    /parcelas?visao=atrasadas|previstas|ajustaveis[&competencia=]  (com a competência: as do mês, que passam para os seguintes até serem pagas)
  *   GET    /parcelas/:pedidoId/:numero          detalhes da parcela (valores, ajustes, histórico)
- *   POST   /ajustes, POST /ajustes/:id/cancelar
- *   GET    /producao/pedidos                    pedidos em que se registra produção
+ *   POST   /ajustes, POST /ajustes/:id/cancelar   ajuste na PARCELA (a devolução usa; a tela não abre mais)
+ *   GET    /ajustes-pessoa/opcoes               quem recebe em cada área, tipos, competências abertas
+ *   GET    /ajustes-pessoa?competencia=         os ajustes por pessoa do mês e quanto cada um tem no mês
+ *   POST   /ajustes-pessoa                      { area: cms|royalty|producao, beneficiario | setor_id+colaborador_id, tipo, valor, data_ajuste, competencia, referencia, motivo, observacao }
+ *   POST   /ajustes-pessoa/:id/cancelar         { motivo } — só fora de fechamento
+ *   GET    /producao/pedidos                   pedidos em que se registra produção
  *   GET    /producao/pedidos/:id                itens, saldo por setor e registros
  *   POST   /producao, POST /producao/:id/estornar
  *   GET    /producao?competencia=               a produção da competência (prévia ou fechada)
@@ -42,6 +46,8 @@ const c = require('./financeiro/comum');
 const regras = require('./financeiro/regras');
 const comissoes = require('./financeiro/comissoes');
 const ajustes = require('./financeiro/ajustes');
+// Ajustes por pessoa na CMS, no Royalty e na Produção (06/10/2026).
+const ajustesPessoa = require('./financeiro/ajustesPessoa');
 const producao = require('./financeiro/producao');
 const confirmacao = require('./financeiro/producaoConfirmacao');
 const fechamentos = require('./financeiro/fechamentos');
@@ -132,7 +138,7 @@ const linhaDaParcela = p => ({
   pedido_id: p.pedido_id, pedido: p.pedido, cliente_id: p.cliente_id, cliente: p.cliente, nf: p.nf,
   numero_parcela: p.numero_parcela, parcela: p.parcela, vencimento: p.vencimento, dias_atraso: p.dias_atraso, faixa: p.faixa,
   situacao: p.situacao, estado_parcela: p.estado_parcela, controlada: p.controlada,
-  valor_original: p.valor_original, abatimento_boleto: p.abatimento_boleto, ajustes_total: p.ajustes_total, liquido: p.liquido,
+  valor_original: p.valor_original, base_origem: p.base_origem || null, abatimento_boleto: p.abatimento_boleto, ajustes_total: p.ajustes_total, liquido: p.liquido,
   cms: p.potencial.cms, royalty: p.potencial.royalty, comissao: p.potencial.total,
   // Quem recebe (CMS/Royalty por pessoa): a tela usa nas etiquetas e no filtro.
   benef_lista: (p.potencial.beneficiarios || []).map(x => ({
@@ -287,7 +293,7 @@ function criarRouter() {
     let escolhidas;
     if (visao === 'atrasadas') escolhidas = mes ? mes.atrasadas : v.atrasadas;
     else if (visao === 'previstas') escolhidas = mes ? mes.previstas : v.previstas;
-    else escolhidas = apuradas.filter(p => p.estado_parcela !== 'cancelada' && p.situacao !== 'nao_realizada')
+    else escolhidas = apuradas.filter(p => p.tipo_entrada !== 'ajuste_pessoa' && p.estado_parcela !== 'cancelada' && p.situacao !== 'nao_realizada')
       .sort((x, y) => String(y.pedido).localeCompare(String(x.pedido), 'pt-BR', { numeric: true }) || x.numero_parcela - y.numero_parcela);
     const nomes = await base.nomesDosClientes(api, escolhidas.map(p => p.cliente_id));
     const linhas = escolhidas.map(p => ({ ...linhaDaParcela(p), cliente: p.cliente || nomes.get(String(p.cliente_id)) || null }));
@@ -318,6 +324,16 @@ function criarRouter() {
     ajustes.registrar({ api, entrada: req.body, usuarioId, hoje, desde })));
   router.post('/ajustes/:id/cancelar', exigirPermissao(REGISTRAR_AJUSTE), rota('POST /api/financeiro/ajustes/:id/cancelar', async ({ api, req, usuarioId, hoje, desde }) =>
     ({ ajuste: await ajustes.cancelar({ api, id: req.params.id, motivo: req.body?.motivo, usuarioId, hoje, desde }) })));
+
+  // Ajustes por pessoa (CMS, Royalty, Produção): o modal "Registrar ajuste".
+  router.get('/ajustes-pessoa/opcoes', exigirPermissao(VER), rota('GET /api/financeiro/ajustes-pessoa/opcoes', ({ api }) =>
+    ajustesPessoa.opcoes({ api })));
+  router.get('/ajustes-pessoa', exigirPermissao(VER), rota('GET /api/financeiro/ajustes-pessoa', ({ api, req, hoje, desde }) =>
+    ajustesPessoa.doMes({ api, competencia: c.competenciaValida(req.query?.competencia) ? req.query.competencia : c.competenciaDe(hoje), hoje, desde })));
+  router.post('/ajustes-pessoa', exigirPermissao(REGISTRAR_AJUSTE), rota('POST /api/financeiro/ajustes-pessoa', ({ api, req, usuarioId, hoje }) =>
+    ajustesPessoa.registrar({ api, entrada: req.body, usuarioId, hoje })));
+  router.post('/ajustes-pessoa/:id/cancelar', exigirPermissao(REGISTRAR_AJUSTE), rota('POST /api/financeiro/ajustes-pessoa/:id/cancelar', ({ api, req, usuarioId }) =>
+    ajustesPessoa.cancelar({ api, id: req.params.id, motivo: req.body?.motivo, usuarioId })));
 
   // ------------------------------------------------------------ produção
   router.get('/producao/pedidos', exigirPermissao(REGISTRAR_PRODUCAO), rota('GET /api/financeiro/producao/pedidos', async ({ api }) =>

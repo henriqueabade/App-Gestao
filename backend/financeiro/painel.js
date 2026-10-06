@@ -243,6 +243,13 @@ async function carregar({ api, competencia, hoje, desde }) {
       // Ajustes à mão do mês: quantos, quanto saiu da base e quanta comissão
       // isso tirou (o card mostra para o número não mudar sozinho).
       ajustes_manuais: resumo.ajustes_manuais || { quantidade: 0, valor: 0, comissao: 0 },
+      // Ajustes por pessoa do mês (bonificação, adiantamento, correção…) e o
+      // que veio negativo do mês anterior (pedido do dono, 06/10/2026).
+      ajustes_pessoa: resumo.ajustes_pessoa || { quantidade: 0, valor: 0, somam: 0, descontam: 0 },
+      restante_anterior: c.centavos(resumo.restante_anterior || 0),
+      // Quem terminou o mês negativo: a diferença vai para o mês seguinte.
+      ficam_para_o_proximo: (resumo.beneficiarios || []).filter(b => Number(b.valor) < 0)
+        .map(b => ({ tipo: b.tipo, beneficiario: b.beneficiario, valor: c.centavos(b.valor) })),
       proximo_pagamento: pagarComissao,
       situacao: situacaoDe(resumo),
       // Quem recebe o quê (CMS e Royalty, por pessoa): a tela mostra com
@@ -258,6 +265,11 @@ async function carregar({ api, competencia, hoje, desde }) {
       parciais: pedidosParciais({ eventos: prod.eventos, itensPor: prod.itensPor }),
       pecas_mes: prodComp.pecas,
       valor: prodComp.a_pagar,
+      ajustes: c.centavos(prodComp.ajustes || 0),
+      ajustes_quantidade: prodComp.ajustes_quantidade || 0,
+      restante_anterior: c.centavos(prodComp.restante_anterior || 0),
+      ficam_para_o_proximo: (prodComp.setores || []).filter(s => Number(s.total) < 0)
+        .map(s => ({ setor_id: s.setor_id, setor: s.setor, valor: c.centavos(s.total) })),
       atrasada: repasseProducao.valor,
       atrasada_rotulo: repasseProducao.rotulo,
       proximo_pagamento: pagarProducao,

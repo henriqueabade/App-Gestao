@@ -1,9 +1,14 @@
 <!--
-  Registrar ajuste (devolução, desconto, abatimento, cancelamento parcial,
-  outros) de uma parcela. Modal médio. As parcelas vêm de
-  GET /api/financeiro/parcelas?visao=ajustaveis; o painel de impacto
-  recalcula o valor líquido e a comissão na tela; "Registrar ajuste" grava
-  por POST /api/financeiro/ajustes (financeiro.ajuste.registrar).
+  Registrar ajuste POR PESSOA (pedido do dono, 06/10/2026). Acerta o que UMA
+  pessoa recebe no mês — na CMS (o dono do cliente), no Royalty (o
+  desenhista) ou na Produção (o processo e, se houver rateio, o colaborador)
+  — sem mexer no pedido do cliente. Tipo (soma ou desconta), valor, data, a
+  competência em que entra, referência, motivo e observação. O quadro mostra
+  o valor da pessoa no mês antes e depois; se ficar negativo, a diferença vai
+  para o mês seguinte como "Ajuste restante do mês anterior". Embaixo, os
+  ajustes lançados no mês, com "Cancelar" enquanto não entraram em fechamento.
+  Lê GET /api/financeiro/ajustes-pessoa/opcoes e /ajustes-pessoa?competencia=;
+  grava por POST /api/financeiro/ajustes-pessoa (financeiro.ajuste.registrar).
   Script: src/js/modals/financeiro-modais.js (montarAjuste).
 -->
 <div id="finRegistrarAjusteOverlay" data-fin-modal class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
@@ -11,33 +16,58 @@
 
     <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button type="button" data-fin-fechar class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
-      <h2 id="finAjusteTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-undo mr-2" aria-hidden="true"></i>Registrar ajuste</h2>
+      <h2 id="finAjusteTitulo" class="ctl-modal-titulo text-white text-center truncate"><i class="fas fa-sliders-h mr-2" aria-hidden="true"></i>Registrar ajuste</h2>
       <span id="finAjusteContexto" class="text-sm text-gray-300 justify-self-end truncate"></span>
     </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <section class="px-8 py-6 space-y-6">
-        <div>
-          <label for="finAjusteBusca" class="ctl-rotulo text-gray-300">Buscar parcela</label>
-          <input id="finAjusteBusca" type="text" placeholder="Pedido, cliente ou NF" autocomplete="off"
-                 class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        </div>
-        <div>
-          <label for="finAjusteParcela" class="ctl-rotulo text-gray-300">Parcela <span class="fin-obrigatorio">*</span></label>
-          <select id="finAjusteParcela" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-          <p id="finAjusteCarregando" class="hidden text-xs text-gray-400 mt-2">Carregando dados...</p>
+        <p class="text-sm text-gray-300">O ajuste muda o que <strong class="text-white">uma pessoa</strong> recebe no mês escolhido — na CMS, no Royalty ou na Produção. O pedido do cliente não muda.</p>
+        <p id="finAjusteCarregando" class="hidden text-xs text-gray-400">Carregando dados...</p>
+
+        <div role="radiogroup" aria-labelledby="finAjusteAreaTitulo">
+          <p id="finAjusteAreaTitulo" class="ctl-rotulo text-gray-300">Onde entra o ajuste <span class="fin-obrigatorio">*</span></p>
+          <div class="fin-segmento">
+            <label><input type="radio" name="finAjusteArea" value="cms" checked /><span>CMS (dono do cliente)</span></label>
+            <label><input type="radio" name="finAjusteArea" value="royalty" /><span>Royalty (desenhista)</span></label>
+            <label><input type="radio" name="finAjusteArea" value="producao" /><span>Produção</span></label>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- CMS e Royalty: a pessoa. "Outro nome…" abre o campo de texto. -->
+          <div id="finAjustePessoaBloco">
+            <label for="finAjustePessoa" class="ctl-rotulo text-gray-300">Para quem <span class="fin-obrigatorio">*</span></label>
+            <select id="finAjustePessoa" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+            <input id="finAjustePessoaOutro" type="text" maxlength="120" placeholder="Nome de quem recebe" autocomplete="off"
+                   class="hidden mt-2 w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <!-- Produção: o processo (é por processo que a produção fecha e se paga) e o colaborador, se houver. -->
+          <div id="finAjusteProcessoBloco" class="hidden">
+            <label for="finAjusteProcesso" class="ctl-rotulo text-gray-300">Processo <span class="fin-obrigatorio">*</span></label>
+            <select id="finAjusteProcesso" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
+          <div id="finAjusteColaboradorBloco" class="hidden">
+            <label for="finAjusteColaborador" class="ctl-rotulo text-gray-300">Colaborador</label>
+            <select id="finAjusteColaborador" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+          </div>
           <div>
             <label for="finAjusteTipo" class="ctl-rotulo text-gray-300">Tipo de ajuste <span class="fin-obrigatorio">*</span></label>
             <select id="finAjusteTipo" class="w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
               <option value="">Selecione</option>
-              <option value="devolucao">Devolução</option>
-              <option value="desconto">Desconto comercial</option>
-              <option value="abatimento">Abatimento</option>
-              <option value="cancelamento">Cancelamento parcial</option>
-              <option value="outros">Outros</option>
+              <optgroup label="Soma ao que a pessoa recebe">
+                <option value="acrescimo">Acréscimo</option>
+                <option value="bonificacao">Bonificação</option>
+                <option value="correcao_mais">Correção para mais</option>
+                <option value="outros_mais">Outros (soma)</option>
+              </optgroup>
+              <optgroup label="Desconta do que a pessoa recebe">
+                <option value="desconto">Desconto</option>
+                <option value="adiantamento">Adiantamento já pago</option>
+                <option value="estorno">Estorno</option>
+                <option value="correcao_menos">Correção para menos</option>
+                <option value="outros_menos">Outros (desconta)</option>
+              </optgroup>
             </select>
           </div>
           <div>
@@ -46,65 +76,87 @@
                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <label for="finAjusteData" class="ctl-rotulo text-gray-300">Data <span class="fin-obrigatorio">*</span></label>
+            <label for="finAjusteData" class="ctl-rotulo text-gray-300">Data do ajuste <span class="fin-obrigatorio">*</span></label>
             <input id="finAjusteData" type="date"
                    class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
+            <label for="finAjusteCompetenciaMes" class="ctl-rotulo text-gray-300">Mês em que entra <span class="fin-obrigatorio">*</span></label>
+            <!-- Competência: mês, ano (também dá para digitar) e a lupa que entra no mês. -->
+            <div class="fin-competencia-campo fin-competencia-campo--modal" data-competencia>
+              <select id="finAjusteCompetenciaMes" data-competencia-mes aria-label="Mês" class="fin-competencia-campo__mes w-full appearance-none select-arrow ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
+              <input id="finAjusteCompetenciaAno" data-competencia-ano type="number" inputmode="numeric" step="1" aria-label="Ano" class="fin-competencia-campo__ano ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <button id="finAjusteCompetenciaIr" data-competencia-ir type="button" class="btn-neutral ctl-botao ctl-botao--icone fin-competencia-campo__ir text-white" title="Ver este mês" aria-label="Ver este mês"><i class="fas fa-search" aria-hidden="true"></i></button>
+              <input type="hidden" id="finAjusteCompetencia" />
+            </div>
+          </div>
+          <div>
+            <label for="finAjusteReferencia" class="ctl-rotulo text-gray-300">Referência</label>
+            <input id="finAjusteReferencia" type="text" maxlength="120" placeholder="Opcional — ex.: PED115, NF 2/345" autocomplete="off"
+                   class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div class="md:col-span-2">
             <label for="finAjusteMotivo" class="ctl-rotulo text-gray-300">Motivo <span class="fin-obrigatorio">*</span></label>
-            <input id="finAjusteMotivo" type="text" maxlength="200" placeholder="Ex.: peça devolvida com avaria" autocomplete="off"
+            <input id="finAjusteMotivo" type="text" maxlength="200" placeholder="Ex.: adiantamento pago em dinheiro no dia 03" autocomplete="off"
                    class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="md:col-span-2">
             <label for="finAjusteObservacoes" class="ctl-rotulo text-gray-300">Observações</label>
-            <textarea id="finAjusteObservacoes" rows="3" maxlength="500" placeholder="Opcional"
+            <textarea id="finAjusteObservacoes" rows="3" maxlength="1000" placeholder="Opcional"
                       class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
           </div>
         </div>
 
-        <!-- Impacto do ajuste: como o novo valor líquido e a comissão são formados. -->
+        <!-- O mês da pessoa: o que ela tem hoje, o ajuste e com quanto fica. -->
         <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
-          <p class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Impacto do ajuste</p>
+          <p id="finAjusteQuadroTitulo" class="px-4 py-3 text-xs text-gray-400 border-b border-white/10">Valor da pessoa no mês</p>
           <div class="divide-y divide-white/10">
             <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Valor original</span>
-              <span id="finAjusteOriginal" class="text-sm text-white">—</span>
+              <span class="text-sm text-gray-400">Hoje no mês (com os ajustes já lançados)</span>
+              <span id="finAjusteAntes" class="text-sm text-white">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Ajustes anteriores (inclui abatimento do boleto)</span>
-              <span id="finAjusteAnteriores" class="text-sm text-white">—</span>
-            </div>
-            <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Novo ajuste</span>
+              <span class="text-sm text-gray-400">Este ajuste</span>
               <span id="finAjusteNovo" class="text-sm text-white">—</span>
             </div>
             <div class="flex items-center justify-between px-4 py-4">
-              <span class="text-base font-medium text-white">Novo valor líquido</span>
-              <span id="finAjusteLiquido" class="text-xl font-bold" style="color: var(--color-green)">—</span>
-            </div>
-            <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">CMS recalculada <span id="finAjustePctCms" class="text-xs"></span></span>
-              <span id="finAjusteCms" class="text-sm text-white">—</span>
-            </div>
-            <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-sm text-gray-400">Royalty <span id="finAjustePctRoyalty" class="text-xs"></span></span>
-              <span id="finAjusteRoyalty" class="text-sm text-white">—</span>
+              <span class="text-base font-medium text-white">Fica no mês</span>
+              <span id="finAjusteDepois" class="text-xl font-bold" style="color: var(--color-green)">—</span>
             </div>
           </div>
         </div>
 
-        <!-- Só quando a comissão daquela parcela já foi fechada. -->
-        <div id="finAjusteEstorno" class="hidden fin-aviso" role="status">
-          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
-          <span>A comissão desta parcela já foi fechada: este ajuste gerará um estorno na próxima competência (o fechamento anterior não muda).</span>
+        <!-- Negativo: não se paga no mês; vai para o seguinte e abate lá. -->
+        <div id="finAjusteRestante" class="hidden fin-aviso" role="status">
+          <i class="fas fa-share" aria-hidden="true"></i>
+          <span id="finAjusteRestanteTexto"></span>
         </div>
-        <div id="finAjusteBoleto" class="hidden fin-aviso" role="status">
-          <i class="fas fa-barcode" aria-hidden="true"></i>
-          <span id="finAjusteBoletoTexto"></span>
+        <!-- Mês já fechado nesta área: o ajuste precisa ir para um mês aberto. -->
+        <div id="finAjusteFechada" class="hidden fin-aviso" role="status">
+          <i class="fas fa-lock" aria-hidden="true"></i>
+          <span id="finAjusteFechadaTexto"></span>
         </div>
-        <p id="finAjusteSemRegra" class="hidden text-xs text-gray-400">Este pedido ainda não tem regra de CMS/Royalty: a comissão fica zero até ela ser cadastrada.</p>
 
         <div id="finAjusteMensagem" class="hidden text-sm" role="alert"></div>
+
+        <div class="space-y-3">
+          <p id="finAjusteListaTitulo" class="ctl-rotulo text-gray-300">Ajustes lançados no mês</p>
+          <div id="finAjusteListaTabela" class="fin-tabela glass-surface rounded-xl border border-white/10">
+            <table class="w-full text-sm">
+              <thead>
+                <!-- Cinco colunas para caber sem rolagem de lado: o tipo vai junto do motivo e o Cancelar junto da situação. -->
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs">Data</th>
+                  <th class="px-4 py-3 text-left text-xs">Para quem</th>
+                  <th class="px-4 py-3 text-left text-xs">Ajuste</th>
+                  <th class="px-4 py-3 text-right text-xs">Valor</th>
+                  <th class="px-4 py-3 text-left text-xs">Situação</th>
+                </tr>
+              </thead>
+              <tbody id="finAjusteLista" class="divide-y divide-white/10"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
     </div>
 

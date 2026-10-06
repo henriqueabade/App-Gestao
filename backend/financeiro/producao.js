@@ -17,6 +17,12 @@
  * Corrigir: registro ainda não fechado é estornado (sai das contas e devolve
  * as peças); registro já fechado ganha um registro NEGATIVO na data do
  * estorno, com o mesmo valor com que foi fechado — o fechamento antigo não muda.
+ *
+ * Ajuste por pessoa na produção (ajustesPessoa.js, 06/10/2026): entra como
+ * uma linha `tipo_item: 'ajuste'` do processo escolhido, no mês escolhido.
+ * Processo que termina o mês negativo leva a diferença para o seguinte — o
+ * "Ajuste restante do mês anterior" (`saldosAnteriores` e, nos meses ainda
+ * abertos, `restantesProjetados`).
  */
 const c = require('./comum');
 const regras = require('./regras');
@@ -24,6 +30,7 @@ const auditoria = require('./auditoria');
 const base = require('./base');
 const unidades = require('./producaoUnidades');
 const avisos = require('../avisosEnvolvidos');
+const ajustesPessoa = require('./ajustesPessoa');
 const { estadoDosFechamentos, competenciaAlvo } = require('./comissoes');
 const { carregarInsumos, carregarRota } = require('../cancelamentoEstorno');
 
@@ -162,20 +169,61 @@ function congeladas(estado, fechamentoId) {
       estorno_de: i.detalhes?.estorno_de ?? null, competencia: i.competencia, competencia_natural: String(i.competencia_origem || '').trim() || i.competencia,
       valor_unitario: i.valor_unitario === null || i.valor_unitario === undefined ? null : c.centavos(i.valor_unitario),
       valor_peca: i.detalhes?.valor_peca ?? null, fracao: i.detalhes?.fracao ?? null, regra: i.detalhes?.regra ?? null,
-      sem_valor: false, total: c.centavos(i.total), status_item: i.detalhes?.status_item || null, motivo: i.detalhes?.motivo || null
+      sem_valor: false, total: c.centavos(i.total), status_item: i.detalhes?.status_item || (i.tipo_item === 'ajuste' ? 'Ajuste' : null),
+      motivo: i.detalhes?.motivo || null,
+      ajuste_pessoa_id: i.ajuste_pessoa_id ?? i.detalhes?.ajuste_pessoa_id ?? null, colaborador: i.detalhes?.colaborador || null
     }));
+}
+
+/**
+ * Uma linha de SALDO — o "Ajuste restante do mês anterior": o que o processo
+ * terminou devendo em `origem` e abate em `destino`. Pura.
+ */
+function linhaDeRestante(s, { origem, destino, fechamentoId = null, projetado = false }) {
+  const rotulo = c.rotuloCompetencia(String(origem).trim());
+  const total = c.centavos(s.total);
+  return {
+    evento_id: null, tipo_item: 'saldo', pedido_id: null, pedido: '—', produto: `Ajuste restante de ${rotulo}`,
+    setor_id: s.setor_id ?? null, setor: s.setor, data: null, quantidade: 0, competencia: destino, competencia_natural: String(origem).trim(),
+    valor_unitario: null, sem_valor: false, total, status_item: 'Restante do mês anterior',
+    motivo: `Ajuste restante do mês anterior (${rotulo}): ${s.setor} terminou ${rotulo} com ${c.reais(total)}`,
+    fechamento_origem: fechamentoId, projetado
+  };
 }
 
 /** Saldo negativo de um processo no último fechamento: passa para o próximo. Pura. */
 function saldosAnteriores(estado) {
   const ultimo = estado.ultimo;
   if (!ultimo) return [];
-  return (ultimo.resumo || []).filter(s => Number(s.total) < 0).map(s => ({
-    evento_id: null, tipo_item: 'saldo', pedido_id: null, pedido: '—', produto: `Saldo de ${c.rotuloCompetencia(String(ultimo.competencia).trim())}`,
-    setor_id: s.setor_id ?? null, setor: s.setor, data: null, quantidade: 0, competencia: estado.proxima, competencia_natural: estado.proxima,
-    valor_unitario: null, sem_valor: false, total: c.centavos(s.total), motivo: `Saldo negativo de ${s.setor} em ${c.rotuloCompetencia(String(ultimo.competencia).trim())}`,
-    fechamento_origem: ultimo.id
-  }));
+  return (ultimo.resumo || []).filter(s => Number(s.total) < 0)
+    .map(s => linhaDeRestante(s, { origem: ultimo.competencia, destino: estado.proxima, fechamentoId: ultimo.id }));
+}
+
+/**
+ * O restante negativo que os meses AINDA ABERTOS deixam, processo a
+ * processo, até `competencia` — a mesma conta de comissoes.restantesProjetados
+ * (é uma projeção: o mês de origem ainda muda até fechar). Pura.
+ */
+function restantesProjetados({ pend, estado, competencia }) {
+  if (!c.competenciaValida(competencia) || estado.fechados.has(competencia)) return [];
+  const linhas = Array.isArray(pend) ? pend : [];
+  const inicio = estado.proxima || linhas.map(l => String(l.competencia || '')).filter(c.competenciaValida).sort()[0] || null;
+  if (!inicio || !(inicio < competencia)) return [];
+  let levadas = estado.proxima ? saldosAnteriores(estado) : [];
+  let mes = inicio;
+  for (let voltas = 0; mes < competencia && voltas < 240; voltas++) {
+    const seguinte = c.somarMeses(mes, 1);
+    const r = resumir([...linhas.filter(l => l.competencia === mes), ...levadas]);
+    levadas = r.setores.filter(s => s.total <= -0.01).map(s => linhaDeRestante(s, { origem: mes, destino: seguinte, projetado: true }));
+    mes = seguinte;
+  }
+  return levadas;
+}
+
+/** O restante que cai numa competência aberta (ver comissoes.restantesDoMes). Pura. */
+function restantesDoMes({ pend, estado, competencia, propria = false }) {
+  if (estado.proxima === competencia) return saldosAnteriores(estado);
+  return propria ? restantesProjetados({ pend, estado, competencia }) : [];
 }
 
 /**
@@ -213,7 +261,13 @@ function resumir(linhas) {
   }
   const setores = [...porSetor.values()].sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR'));
   const contagem = contarPecasEProcessos(linhas);
+  const somaDe = l => c.centavos(l.reduce((s, x) => s + Number(x.total || 0), 0));
+  const deAjuste = linhas.filter(l => l.tipo_item === 'ajuste');
   return {
+    // Os ajustes por pessoa do mês e o que veio negativo do mês anterior (06/10/2026).
+    ajustes: somaDe(deAjuste),
+    ajustes_quantidade: deAjuste.length,
+    restante_anterior: somaDe(linhas.filter(l => l.tipo_item === 'saldo')),
     // `pecas` passou a ser a contagem de PEÇAS (era a soma das quantidades,
     // que virou `unidades`): "8 peças finalizadas" eram 2 peças × 4 processos.
     pecas: contagem.pecas,
@@ -232,13 +286,14 @@ function resumir(linhas) {
  * A competência de produção: fechada (congelada) ou em aberto (prévia). Pura.
  * `propria`: só o que cai nesta competência (o painel — o que ficou de meses
  * não fechados é "a repassar", repasses.js); sem ela, a prévia do fechamento.
+ * O negativo de um mês anterior aberto abate aqui também (restantesDoMes).
  */
 function montarCompetencia({ pend, estado, competencia, propria = false }) {
   const fechado = estado.fechados.get(competencia) || null;
   const cabe = p => p.competencia && (propria ? p.competencia === competencia : p.competencia <= competencia);
   const linhas = fechado
     ? congeladas(estado, fechado.id)
-    : [...pend.filter(cabe), ...(estado.proxima === competencia ? saldosAnteriores(estado) : [])];
+    : [...pend.filter(cabe), ...restantesDoMes({ pend, estado, competencia, propria })];
   const r = resumir(linhas);
   return {
     competencia, fechado: Boolean(fechado),
@@ -309,12 +364,14 @@ async function montarFilas(api, { itens, etapasPor }) {
 
 /** Tudo que as telas de produção precisam. */
 async function lerBase(api) {
-  const [eventos, tudo, fech, pedidos, precos] = await Promise.all([
+  const [eventos, tudo, fech, pedidos, precos, porPessoa] = await Promise.all([
     c.ler(api, 'producao_eventos'),
     regras.lerTudo(api),
     base.lerFechamentos(api),
     api.get('/api/pedidos').then(c.lista).catch(() => []),
-    precosDaTabela(api)
+    precosDaTabela(api),
+    // Sem o SQL dos ajustes por pessoa, nenhum (null).
+    ajustesPessoa.lerTodos(api, { area: 'producao' })
   ]);
   const itens = await itensDe(api, eventos.map(e => e.pedido_id));
   const estado = estadoDosFechamentos({ ...fech, tipo: 'producao' });
@@ -323,7 +380,13 @@ async function lerBase(api) {
   const etapasPor = new Map(tudo.etapas.map(e => [String(e.id), e]));
   const { filaDe } = await montarFilas(api, { itens, etapasPor });
   const precoDe = produtoId => precos.get(String(produtoId)) ?? null;
-  const pend = pendentes({ eventos, estado, valores: tudo.valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores: tudo.setores });
+  const pend = [
+    ...pendentes({ eventos, estado, valores: tudo.valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores: tudo.setores }),
+    ...ajustesPessoa.linhasDeProducao({
+      ajustes: porPessoa || [], estado, competenciaAlvo,
+      processos: new Map(tudo.etapas.map(e => [String(e.id), e.nome]))
+    })
+  ];
   return { eventos, regras: tudo, estado, pedidos, pedidosPor, itensPor, etapasPor, setoresPor: etapasPor, pend };
 }
 
@@ -491,7 +554,8 @@ async function estornar({ api, id, motivo, usuarioId = null, hoje }) {
 }
 
 module.exports = {
-  SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas, saldosAnteriores, resumir, contarPecasEProcessos, montarCompetencia,
+  SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas,
+  linhaDeRestante, saldosAnteriores, restantesProjetados, restantesDoMes, resumir, contarPecasEProcessos, montarCompetencia,
   lerBase, pedidosParaProduzir, doPedido, valorDasProximas, registrar, estornar,
   // A confirmação da produção (producaoConfirmacao.js) monta as filas do mesmo jeito.
   itensDe, extDe, precosDaTabela, montarFilas, chaveItemSetor

@@ -265,6 +265,12 @@
           <div class="fin-resumo__linha"><dt title="Previstas + atrasadas: a comissão que o mês ainda espera">Previsto no mês</dt><dd data-fin="resumoComissoes.previstoMes">—</dd></div>
           <!-- Ajustes à mão: o quanto eles tiraram da comissão do mês (e quantos são). -->
           <div class="fin-resumo__linha"><dt title="Ajustes à mão: quantos são, quanto saiu da base e a comissão que isso tirou do mês">Ajustes <span class="fin-resumo__nota" data-fin="resumoComissoes.ajustesQuantidade"></span></dt><dd data-fin="resumoComissoes.ajustes">—</dd></div>
+          <!-- Ajustes por pessoa (06/10/2026): bonificação, adiantamento, correção… lançados
+               no mês para alguém da CMS ou do Royalty; e o que alguém terminou devendo no mês
+               anterior, que abate neste, e o que fica negativo agora e vai para o seguinte. -->
+          <div class="fin-resumo__linha"><dt title="Ajustes lançados no mês para uma pessoa (somam ou descontam do que ela recebe)">Ajustes por pessoa <span class="fin-resumo__nota" data-fin-opcional="resumoComissoes.ajustesPessoaNota" hidden></span></dt><dd data-fin="resumoComissoes.ajustesPessoa">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="O que alguém terminou devendo no mês anterior (ajuste maior que o mês dele): abate neste mês">Restante do mês anterior</dt><dd data-fin="resumoComissoes.restante">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="Quem termina este mês negativo: não recebe nada nele e a diferença vai para o mês seguinte como ajuste restante do mês anterior">Fica para o próximo mês <span class="fin-resumo__nota" data-fin-opcional="resumoComissoes.ficamNota" hidden></span></dt><dd class="fin-resumo__atencao" data-fin="resumoComissoes.ficam">—</dd></div>
         </dl>
         <!-- Quem recebe: CMS (dono do cliente) e Royalty (desenhista da peça), por pessoa,
              com a cor de cada um e a legenda. Some quando não há regra nenhuma. -->
@@ -303,6 +309,10 @@
           <div class="fin-resumo__linha"><dt>Parcialmente concluídos</dt><dd data-fin="resumoProducao.parciais">—</dd></div>
           <div class="fin-resumo__linha"><dt>Peças finalizadas no mês</dt><dd data-fin="resumoProducao.pecasMes">—</dd></div>
           <div class="fin-resumo__linha"><dt>Valor da competência</dt><dd data-fin="resumoProducao.valorCompetencia">—</dd></div>
+          <!-- Ajustes por pessoa na produção (06/10/2026), por processo, e o restante negativo. -->
+          <div class="fin-resumo__linha"><dt title="Ajustes lançados no mês para um processo ou colaborador (somam ou descontam)">Ajustes por pessoa <span class="fin-resumo__nota" data-fin-opcional="resumoProducao.ajustesNota" hidden></span></dt><dd data-fin="resumoProducao.ajustes">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="O que um processo terminou devendo no mês anterior: abate neste mês">Restante do mês anterior</dt><dd data-fin="resumoProducao.restante">—</dd></div>
+          <div class="fin-resumo__linha"><dt title="Processo que termina este mês negativo: a diferença vai para o mês seguinte">Fica para o próximo mês <span class="fin-resumo__nota" data-fin-opcional="resumoProducao.ficamNota" hidden></span></dt><dd class="fin-resumo__atencao" data-fin="resumoProducao.ficam">—</dd></div>
           <div class="fin-resumo__linha"><dt title="Produção de competências anteriores que passou do prazo sem ser fechada ou sem o pagamento registrado: passa de mês em mês até o pagamento">Atrasada — a repassar <span class="fin-resumo__nota" data-fin-opcional="resumoProducao.atrasadaNota" hidden></span></dt><dd class="fin-resumo__atencao" data-fin="resumoProducao.atrasada">—</dd></div>
         </dl>
         <footer class="fin-proximo" data-fin-acao="confirmar-pagamento-producao" role="button" tabindex="0" title="Confirmar pagamento da produção">

@@ -324,6 +324,61 @@
     ].filter(Boolean).join(' • ');
   }
 
+  /**
+   * Ajuste POR PESSOA (pedido do dono, 06/10/2026): os tipos, cada um com o
+   * sinal — os que somam e os que descontam. Os mesmos do backend
+   * (backend/financeiro/ajustesPessoa.js).
+   */
+  const TIPOS_AJUSTE_PESSOA = {
+    acrescimo: { rotulo: 'Acréscimo', sinal: 1 },
+    bonificacao: { rotulo: 'Bonificação', sinal: 1 },
+    correcao_mais: { rotulo: 'Correção para mais', sinal: 1 },
+    outros_mais: { rotulo: 'Outros (soma)', sinal: 1 },
+    desconto: { rotulo: 'Desconto', sinal: -1 },
+    adiantamento: { rotulo: 'Adiantamento já pago', sinal: -1 },
+    estorno: { rotulo: 'Estorno', sinal: -1 },
+    correcao_menos: { rotulo: 'Correção para menos', sinal: -1 },
+    outros_menos: { rotulo: 'Outros (desconta)', sinal: -1 }
+  };
+  const AREAS_AJUSTE = { cms: 'CMS', royalty: 'Royalty', producao: 'Produção' };
+
+  /** 'AAAA-MM' + n meses. Pura. */
+  function somarMesesComp(comp, n) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(comp || ''));
+    if (!m) return null;
+    const total = Number(m[1]) * 12 + (Number(m[2]) - 1) + Number(n || 0);
+    return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+  }
+
+  /**
+   * Quanto a pessoa tem no mês (com os ajustes já lançados), nos `totais` de
+   * GET /api/financeiro/ajustes-pessoa. Na produção a conta é do processo.
+   * Quem não aparece tem zero; sem os totais, null. Pura.
+   */
+  function valorDaPessoaNoMes(totais, { area, beneficiario = '', setorId = null } = {}) {
+    if (!totais) return null;
+    if (area === 'producao') {
+      if (!setorId) return null;
+      const s = (totais.producao || []).find(x => String(x.setor_id) === String(setorId));
+      return s ? centavos(s.valor) : 0;
+    }
+    const alvo = semAcento(beneficiario).trim();
+    if (!alvo) return null;
+    const b = (totais[area] || []).find(x => semAcento(x.beneficiario).trim() === alvo);
+    return b ? centavos(b.valor) : 0;
+  }
+
+  /**
+   * O mês da pessoa com um ajuste novo: antes, depois, o que se paga e o que
+   * fica negativo (vai para o mês seguinte como "Ajuste restante do mês
+   * anterior"). Pura.
+   */
+  function impactoDoAjustePessoa({ atual = 0, valor = 0, sinal = 1 } = {}) {
+    const antes = centavos(atual);
+    const depois = centavos(antes + Math.abs(Number(valor) || 0) * (Number(sinal) < 0 ? -1 : 1));
+    return { antes, depois, a_pagar: depois > 0 ? depois : 0, restante: depois < 0 ? depois : 0 };
+  }
+
   /** "Vale para" de uma regra de comissão. */
   function alcanceDaRegra(r) {
     if (r?.escopo === 'cliente') return `Cliente: ${r.alvo || r.cliente_id}`;
@@ -737,6 +792,34 @@
         { chave: 'comissao', rotulo: 'Comissão não realizada', tipo: 'moeda', total: true }
       ]
     },
+    // Ajustes por pessoa (06/10/2026): o que se lançou no mês para cada um, a
+    // situação (em aberto, no fechamento, cancelado) e o restante que veio do
+    // mês anterior. "Ajustes da produção" é o mesmo, só da produção.
+    'ajustes-pessoa': {
+      titulo: 'Ajustes por pessoa (CMS, Royalty e Produção)',
+      colunas: [
+        { chave: 'data', rotulo: 'Data', tipo: 'data' },
+        { chave: 'area', rotulo: 'Onde' },
+        { chave: 'beneficiario', rotulo: 'Para quem' },
+        { chave: 'tipo', rotulo: 'Tipo' },
+        { chave: 'motivo', rotulo: 'Motivo' },
+        { chave: 'situacao', rotulo: 'Situação' },
+        { chave: 'usuario', rotulo: 'Lançado por' },
+        { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
+      ]
+    },
+    'ajustes-producao': {
+      titulo: 'Ajustes da produção',
+      colunas: [
+        { chave: 'data', rotulo: 'Data', tipo: 'data' },
+        { chave: 'beneficiario', rotulo: 'Processo / colaborador' },
+        { chave: 'tipo', rotulo: 'Tipo' },
+        { chave: 'motivo', rotulo: 'Motivo' },
+        { chave: 'situacao', rotulo: 'Situação' },
+        { chave: 'usuario', rotulo: 'Lançado por' },
+        { chave: 'valor', rotulo: 'Valor', tipo: 'moeda', total: true }
+      ]
+    },
     'producao-competencia': {
       titulo: 'Produção da competência',
       colunas: [
@@ -979,6 +1062,7 @@
     rotuloCompetenciaCurto, calcularParcelas, lerPrazos, impactoDoAjuste, statusAposRegistro, valorDasProximas,
     faixaDeAtraso, resumoAtrasadas, textoDoRepasse, agingDe, indicadoresDaProducao, percentualTexto, montarRelatorio, relatorioEmCsv,
     filtrarParcelasAjuste, rotuloDaParcelaAjuste, alcanceDaRegra, SITUACOES_PARCELA, TIPOS_AJUSTE,
+    TIPOS_AJUSTE_PESSOA, AREAS_AJUSTE, somarMesesComp, valorDaPessoaNoMes, impactoDoAjustePessoa,
     rotuloStatusNota, filtrarNotas, resumoDeNotas, notaDeForaNaLista, juntarNotas, condicaoDoPedido, linhasAguardando, linhasDoRelatorioAguardando, previaDeEncargos,
     rotuloBoletoDaParcela, filtrarRecebimentos, totalDaVisao, valorAReceberHoje, rotuloDaParcelaAberta, resumoDoRecebimento, ORIGENS_RECEBIMENTO,
     textoDaConciliacao, BADGE_DO_AVISO,
@@ -2027,117 +2111,228 @@
     return tratarSalvamento(res, 'Relatório salvo em PDF.');
   }
 
+  /**
+   * Registrar ajuste POR PESSOA (pedido do dono, 06/10/2026): na CMS (dono do
+   * cliente), no Royalty (desenhista) ou na Produção (processo e, se houver
+   * rateio, o colaborador). Não mexe no pedido do cliente. O quadro mostra o
+   * valor da pessoa no mês antes e depois; se ficar negativo, a diferença vai
+   * para o mês seguinte como "Ajuste restante do mês anterior". Depois de
+   * gravar o modal continua aberto (costuma-se lançar mais de um) e a lista
+   * do mês se relê.
+   */
   function montarAjuste() {
-    const buscaCampo = el('finAjusteBusca');
-    const parcelaSel = el('finAjusteParcela');
+    const pessoaSel = el('finAjustePessoa');
+    const pessoaOutro = el('finAjustePessoaOutro');
+    const processoSel = el('finAjusteProcesso');
+    const colaboradorSel = el('finAjusteColaborador');
     const tipoSel = el('finAjusteTipo');
     const valorCampo = el('finAjusteValor');
     const dataCampo = el('finAjusteData');
-    const hoje = hojeLocal();
-    dataCampo.max = hoje;
-    let linhas = [];
-    // Vinda dos Detalhes da parcela: já escolhida.
-    const pedida = contexto.parcela && contexto.parcela.pedido_id ? contexto.parcela : null;
-    const chaveDe = l => `${l.pedido_id}:${l.numero_parcela}`;
-    const escolhida = () => linhas.find(l => chaveDe(l) === parcelaSel.value) || null;
-    const boletoAberto = l => BOLETO_A_PAGAR.includes(String(l?.boleto?.status || ''));
+    const compCampo = el('finAjusteCompetencia');
+    const registrarBtn = el('finAjusteRegistrar');
+    const OUTRO = '__outro__';
+    let opcoes = null;
+    let mes = null;
+    let leitura = 0;
+    // Vindo dos Detalhes da parcela: a referência e, se a CMS da parcela é de uma pessoa só, ela.
+    const daParcela = contexto.parcela && contexto.parcela.pedido_id ? contexto.parcela : null;
 
-    function montarOpcoes() {
-      const selecionada = parcelaSel.value;
-      const visiveis = filtrarParcelasAjuste(linhas, buscaCampo.value);
-      parcelaSel.replaceChildren(opcao('', visiveis.length ? 'Escolha a parcela' : 'Nenhuma parcela com esta busca'));
-      for (const l of visiveis.slice(0, 300)) parcelaSel.appendChild(opcao(chaveDe(l), rotuloDaParcelaAjuste(l)));
-      if (visiveis.some(l => chaveDe(l) === selecionada)) parcelaSel.value = selecionada;
+    montarCompetencias(compCampo, contexto.competencia);
+    const area = () => overlay.querySelector('input[name="finAjusteArea"]:checked')?.value || 'cms';
+    const competencia = () => (window.Competencia?.escolhido ? window.Competencia.escolhido(compCampo) : '') || compCampo.value;
+    const pessoa = () => (pessoaSel.value === OUTRO ? pessoaOutro.value.trim() : pessoaSel.value);
+    const sqlPendente = () => Boolean(opcoes?.sql_pendente || mes?.sql_pendente);
+
+    /** Quem recebe, como a tela mostra ("Marcenaria", "João (Marcenaria)", "Marcia"). */
+    function quemTexto() {
+      if (area() !== 'producao') return pessoa();
+      const processo = processoSel.value ? processoSel.selectedOptions[0]?.textContent || '' : '';
+      const colaborador = colaboradorSel.value ? colaboradorSel.selectedOptions[0]?.textContent || '' : '';
+      return colaborador ? `${colaborador} (${processo})` : processo;
+    }
+
+    /** O mês já fechou nesta área? Devolve o texto do aviso, ou ''. */
+    function avisoDeFechada(a, comp) {
+      if (!opcoes || !/^\d{4}-\d{2}$/.test(comp)) return '';
+      const qual = a === 'producao' ? 'producao' : 'comissao';
+      const proxima = opcoes.proximas?.[qual] || null;
+      const fechada = (opcoes.fechadas?.[qual] || []).includes(comp) || (proxima && comp < proxima);
+      if (!fechada) return '';
+      const oque = qual === 'producao' ? 'A produção' : 'As comissões';
+      return `${oque} de ${rotuloCompetenciaCurto(comp)} já ${qual === 'producao' ? 'foi fechada' : 'foram fechadas'}: o ajuste precisa entrar em ${rotuloCompetenciaCurto(proxima)} ou depois.`;
+    }
+
+    function montarPessoas() {
+      const a = area();
+      const producao = a === 'producao';
+      el('finAjustePessoaBloco').classList.toggle('hidden', producao);
+      el('finAjusteProcessoBloco').classList.toggle('hidden', !producao);
+      el('finAjusteColaboradorBloco').classList.toggle('hidden', !producao || !(opcoes?.colaboradores || []).length);
+      if (producao) return;
+      const atual = pessoaSel.value;
+      const nomes = opcoes?.pessoas?.[a] || [];
+      pessoaSel.replaceChildren(opcao('', nomes.length ? (a === 'cms' ? 'Escolha o dono do cliente' : 'Escolha o desenhista') : 'Ninguém na lista — use "Outro nome…"'));
+      for (const nome of nomes) pessoaSel.appendChild(opcao(nome, nome));
+      pessoaSel.appendChild(opcao(OUTRO, 'Outro nome…'));
+      if ([...pessoaSel.options].some(o => o.value === atual)) pessoaSel.value = atual;
+      pessoaOutro.classList.toggle('hidden', pessoaSel.value !== OUTRO);
+    }
+
+    function montarProcessos() {
+      processoSel.replaceChildren(opcao('', 'Escolha o processo'));
+      for (const p of opcoes?.processos || []) processoSel.appendChild(opcao(String(p.id), p.nome));
+      colaboradorSel.replaceChildren(opcao('', '— o processo todo —'));
+      for (const x of opcoes?.colaboradores || []) colaboradorSel.appendChild(opcao(String(x.id), x.nome));
     }
 
     function atualizar() {
-      const l = escolhida();
+      const a = area();
+      const comp = competencia();
+      el('finAjusteContexto').textContent = /^\d{4}-\d{2}$/.test(comp) ? rotuloCompetenciaCurto(comp) : '';
+      const tipo = TIPOS_AJUSTE_PESSOA[tipoSel.value] || null;
       const valor = lerMoeda(valorCampo.value) || 0;
-      el('finAjusteContexto').textContent = l ? `Pedido ${l.pedido}${l.nf ? ` • NF ${l.nf}` : ''} • Parcela ${l.parcela}` : '';
-      if (!l) {
-        ['finAjusteOriginal', 'finAjusteAnteriores', 'finAjusteNovo', 'finAjusteLiquido', 'finAjusteCms', 'finAjusteRoyalty'].forEach(id => { el(id).textContent = '—'; });
-        el('finAjustePctCms').textContent = '';
-        el('finAjustePctRoyalty').textContent = '';
-        ['finAjusteEstorno', 'finAjusteBoleto', 'finAjusteSemRegra'].forEach(id => el(id).classList.add('hidden'));
-        return;
-      }
-      const i = impactoDoAjuste(l, valor);
-      el('finAjusteOriginal').textContent = formatarMoeda(i.original);
-      el('finAjusteAnteriores').textContent = formatarMoeda(i.anteriores);
-      el('finAjusteNovo').textContent = formatarMoeda(i.novo);
-      el('finAjusteLiquido').textContent = formatarMoeda(i.liquido);
-      el('finAjusteCms').textContent = formatarMoeda(i.cms);
-      el('finAjusteRoyalty').textContent = formatarMoeda(i.royalty);
-      el('finAjustePctCms').textContent = `(${percentualTexto(i.pct_cms)})`;
-      el('finAjustePctRoyalty').textContent = `(${percentualTexto(i.pct_royalty)})`;
-      el('finAjusteEstorno').classList.toggle('hidden', !(i.gera_estorno && valor > 0));
-      el('finAjusteSemRegra').classList.toggle('hidden', !l.sem_regra);
-      let aviso = '';
-      if (boletoAberto(l)) {
-        aviso = tipoSel.value === 'abatimento'
-          ? `Esta parcela tem boleto em aberto no BB (${l.boleto.nosso_numero}): o abatimento é feito no próprio boleto (Recebimentos → Boleto), e ele já reduz a base da comissão.`
-          : `Esta parcela tem boleto em aberto no BB (${l.boleto.nosso_numero}), que continua cobrando o valor cheio. Se o cliente vai pagar menos, conceda o abatimento no boleto em vez de registrar aqui — os dois juntos descontariam em dobro.`;
-      }
-      el('finAjusteBoletoTexto').textContent = aviso;
-      el('finAjusteBoleto').classList.toggle('hidden', !aviso);
-      mostrarMensagem('finAjusteMensagem', i.excede ? `O ajuste passa do valor líquido que resta na parcela (${formatarMoeda(i.liquido_antes)}).` : '');
+      const quem = quemTexto();
+      const atual = mes && quem
+        ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null })
+        : null;
+      el('finAjusteQuadroTitulo').textContent = quem
+        ? `${AREAS_AJUSTE[a]} de ${quem} em ${rotuloCompetenciaCurto(comp)}${a === 'producao' && colaboradorSel.value ? ' (a conta é do processo)' : ''}`
+        : 'Valor da pessoa no mês';
+      const completo = atual !== null && tipo && valor > 0;
+      const i = impactoDoAjustePessoa({ atual: atual ?? 0, valor: completo ? valor : 0, sinal: tipo?.sinal ?? 1 });
+      el('finAjusteAntes').textContent = atual === null ? '—' : formatarMoeda(i.antes);
+      el('finAjusteNovo').textContent = tipo && valor > 0 ? formatarMoeda(tipo.sinal * valor) : '—';
+      const depois = el('finAjusteDepois');
+      depois.textContent = completo ? formatarMoeda(i.depois) : '—';
+      depois.style.color = completo && i.depois < 0 ? 'var(--color-red)' : 'var(--color-green)';
+
+      // Negativo: não se paga no mês; vai para o seguinte e abate lá.
+      const negativo = completo && i.restante < 0;
+      const seguinte = /^\d{4}-\d{2}$/.test(comp) ? somarMesesComp(comp, 1) : null;
+      el('finAjusteRestanteTexto').textContent = negativo
+        ? `${formatarMoeda(-i.restante)} não se paga em ${rotuloCompetenciaCurto(comp)}: vai para ${rotuloCompetenciaCurto(seguinte)} como "Ajuste restante do mês anterior" e abate o que ${a === 'producao' ? `o processo ${processoSel.selectedOptions[0]?.textContent || ''}` : quem} tiver lá.`
+        : '';
+      el('finAjusteRestante').classList.toggle('hidden', !negativo);
+
+      const fechada = avisoDeFechada(a, comp);
+      el('finAjusteFechadaTexto').textContent = fechada;
+      el('finAjusteFechada').classList.toggle('hidden', !fechada);
+      registrarBtn.disabled = Boolean(fechada) || sqlPendente() || !opcoes;
     }
 
-    async function carregar() {
-      mostrarMensagem('finAjusteMensagem', '');
-      el('finAjusteCarregando').classList.remove('hidden');
+    function pintarLista() {
+      const corpo = el('finAjusteLista');
+      corpo.replaceChildren();
+      const comp = compCampo.value;
+      el('finAjusteListaTitulo').textContent = `Ajustes lançados em ${rotuloCompetenciaCurto(comp)}`;
+      const lista = mes?.ajustes || [];
+      if (!lista.length) { linhaVazia(corpo, 5, mes ? 'Nenhum ajuste lançado neste mês.' : '—'); return; }
+      for (const a of lista) {
+        // Situação e Cancelar na mesma célula (cinco colunas: sem rolagem de lado).
+        const situacao = criar('div', 'flex flex-wrap items-center gap-2');
+        situacao.appendChild(a.status !== 'ativo' ? tagG('Cancelado', 'badge-danger', a.motivo_cancelamento || '')
+          : (a.no_fechamento ? tagG('Fechado', 'badge-neutral', `Entrou no fechamento de ${rotuloCompetenciaCurto(a.fechamento_competencia)}`) : tagG('Em aberto', 'badge-success')));
+        if (a.status === 'ativo' && !a.no_fechamento) {
+          botaoG(situacao, 'Cancelar', () => cancelarAjuste(a), { classe: 'btn-danger text-white', perm: 'financeiro.ajuste.registrar', titulo: 'Desfazer este ajuste (ainda não entrou em fechamento)' });
+        }
+        const quem = criar('div');
+        quem.append(criar('span', 'block text-white', `${a.beneficiario}${a.setor && a.beneficiario !== a.setor ? ` (${a.setor})` : ''}`), criar('span', 'block text-xs text-gray-400', a.area_rotulo));
+        // O tipo em cima e o motivo (com a referência e a observação) embaixo.
+        const ajuste = criar('div');
+        ajuste.append(criar('span', 'block text-white', a.tipo_rotulo),
+          criar('span', 'block text-xs text-gray-400', [a.motivo, a.referencia ? `ref. ${a.referencia}` : null, a.observacao].filter(Boolean).join(' — ')));
+        const valor = celulaG(formatarMoeda(a.valor_com_sinal), 'px-4 py-3 text-right whitespace-nowrap');
+        if (a.valor_com_sinal < 0) valor.style.color = 'var(--color-red)';
+        const tr = document.createElement('tr');
+        tr.title = `Lançado por ${a.criado_por_nome || '—'}${a.criado_em ? ` em ${instanteCurto(a.criado_em)}` : ''}`;
+        tr.append(celulaG(formatarData(a.data_ajuste), 'px-4 py-3 text-white whitespace-nowrap'), celulaG(quem), celulaG(ajuste), valor, celulaG(situacao));
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function carregarOpcoes() {
       try {
-        const corpo = await fetchApi('/api/financeiro/parcelas?visao=ajustaveis');
-        linhas = Array.isArray(corpo?.linhas) ? corpo.linhas : [];
+        opcoes = await fetchApi('/api/financeiro/ajustes-pessoa/opcoes');
       } catch (e) {
-        linhas = [];
-        mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para ver as parcelas.'));
-      } finally {
-        el('finAjusteCarregando').classList.add('hidden');
+        opcoes = null;
+        mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para ver comissões e produção.'));
       }
-      montarOpcoes();
-      if (pedida) {
-        parcelaSel.value = `${pedida.pedido_id}:${pedida.numero_parcela}`;
-        if (!escolhida()) mostrarMensagem('finAjusteMensagem', `A parcela ${pedida.numero_parcela} do pedido ${pedida.pedido || pedida.pedido_id} não aceita ajuste (cancelada ou fora das contas).`);
+      if (opcoes?.sql_pendente) {
+        mostrarMensagem('finAjusteMensagem', `Falta rodar ${opcoes.arquivo || 'sql/financeiro_ajustes_pessoa.sql'} no banco e reiniciar a API: até lá não dá para registrar ajuste por pessoa.`);
       }
+      montarPessoas();
+      montarProcessos();
+      // Vindo da parcela: a CMS dela é de uma pessoa só? Ela já vem escolhida.
+      const daCms = (daParcela?.beneficiarios || []).filter(b => b.tipo === 'cms');
+      if (daCms.length === 1 && [...pessoaSel.options].some(o => o.value === daCms[0].beneficiario)) pessoaSel.value = daCms[0].beneficiario;
+    }
+
+    async function carregarMes() {
+      const minha = ++leitura;
+      const comp = compCampo.value;
+      el('finAjusteCarregando').classList.remove('hidden');
+      let lido = null;
+      let erro = null;
+      try {
+        lido = await fetchApi(`/api/financeiro/ajustes-pessoa?competencia=${encodeURIComponent(comp)}`);
+      } catch (e) {
+        erro = e;
+      }
+      if (minha !== leitura) return;
+      el('finAjusteCarregando').classList.add('hidden');
+      mes = erro ? null : lido;
+      if (erro) mostrarMensagem('finAjusteMensagem', textoDoErro(erro, 'Você não tem permissão para ver comissões e produção.'));
+      pintarLista();
       atualizar();
     }
 
     async function registrar() {
       mostrarMensagem('finAjusteMensagem', '');
-      const l = escolhida();
+      const a = area();
+      const tipo = TIPOS_AJUSTE_PESSOA[tipoSel.value] || null;
       const valor = lerMoeda(valorCampo.value);
       const motivo = el('finAjusteMotivo').value.trim();
-      const erro = !l ? 'Escolha a parcela.'
-        : !tipoSel.value ? 'Escolha o tipo de ajuste.'
-          : !(valor > 0) ? 'Informe o valor do ajuste.'
-            : !dataCampo.value ? 'Informe a data do ajuste.'
-              : dataCampo.value > hoje ? 'A data do ajuste não pode ser futura.'
-                : motivo.length < 3 ? 'Diga o motivo do ajuste.' : '';
+      const comp = competencia();
+      const quem = quemTexto();
+      const erro = (a !== 'producao' && !pessoa()) ? (a === 'cms' ? 'Escolha quem recebe a CMS (o dono do cliente).' : 'Escolha o desenhista que recebe o Royalty.')
+        : (a === 'producao' && !processoSel.value) ? 'Escolha o processo da produção.'
+          : !tipo ? 'Escolha o tipo de ajuste.'
+            : !(valor > 0) ? 'Informe o valor do ajuste.'
+              : !dataCampo.value ? 'Informe a data do ajuste.'
+                : !/^\d{4}-\d{2}$/.test(comp) ? 'Escolha o mês em que o ajuste entra.'
+                  : motivo.replace(/[^\p{L}]/gu, '').length < 5 ? 'Diga o motivo do ajuste (ao menos 5 letras).' : '';
       if (erro) { mostrarMensagem('finAjusteMensagem', erro); return; }
-      const i = impactoDoAjuste(l, valor);
-      if (i.excede) { mostrarMensagem('finAjusteMensagem', `O ajuste passa do valor líquido que resta na parcela (${formatarMoeda(i.liquido_antes)}).`); return; }
-      if (tipoSel.value === 'abatimento' && boletoAberto(l)) { mostrarMensagem('finAjusteMensagem', 'Parcela com boleto em aberto: conceda o abatimento no próprio boleto.'); return; }
+      const fechada = avisoDeFechada(a, comp);
+      if (fechada) { mostrarMensagem('finAjusteMensagem', fechada); return; }
+      const atual = mes ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null }) : null;
+      const i = impactoDoAjustePessoa({ atual: atual ?? 0, valor, sinal: tipo.sinal });
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Registrar o ajuste?',
-        message: `${TIPOS_AJUSTE[tipoSel.value]} de ${formatarMoeda(valor)} na parcela ${l.parcela} do pedido ${l.pedido}. Novo valor líquido: ${formatarMoeda(i.liquido)}; comissão: ${formatarMoeda(centavos(i.cms + i.royalty))}.`
-          + (i.gera_estorno ? ' A comissão desta parcela já foi fechada: a diferença entra como estorno na próxima competência.' : ''),
+        message: `${tipo.rotulo} de ${formatarMoeda(valor)} (${tipo.sinal < 0 ? 'desconta' : 'soma'}) na ${AREAS_AJUSTE[a]} de ${quem} em ${rotuloCompetenciaCurto(comp)}.`
+          + (atual !== null ? ` Fica no mês: ${formatarMoeda(i.depois)}.` : '')
+          + (atual !== null && i.restante < 0 ? ` ${formatarMoeda(-i.restante)} vai para ${rotuloCompetenciaCurto(somarMesesComp(comp, 1))} como ajuste restante do mês anterior.` : ''),
         confirmText: 'Registrar'
       });
       if (!confirmado) return;
       processando = true;
       try {
-        await fetchApi('/api/financeiro/ajustes', {
+        await fetchApi('/api/financeiro/ajustes-pessoa', {
           method: 'POST',
           body: JSON.stringify({
-            pedido_id: l.pedido_id, numero_parcela: l.numero_parcela, tipo: tipoSel.value, valor,
-            data_ajuste: dataCampo.value, motivo, observacao: el('finAjusteObservacoes').value
+            area: a, beneficiario: a === 'producao' ? null : pessoa(),
+            setor_id: a === 'producao' ? Number(processoSel.value) : null,
+            colaborador_id: a === 'producao' && colaboradorSel.value ? Number(colaboradorSel.value) : null,
+            tipo: tipoSel.value, valor, data_ajuste: dataCampo.value, competencia: comp,
+            referencia: el('finAjusteReferencia').value.trim() || null, motivo, observacao: el('finAjusteObservacoes').value.trim() || null
           })
         });
         window.showToast?.('Ajuste registrado.', 'success');
+        valorCampo.value = '';
+        el('finAjusteMotivo').value = '';
+        el('finAjusteObservacoes').value = '';
+        mostrarMensagem('finAjusteMensagem', `Ajuste registrado: ${tipo.rotulo.toLowerCase()} de ${formatarMoeda(valor)} na ${AREAS_AJUSTE[a]} de ${quem}. Ele já está na lista abaixo e no resumo do mês.`, 'ok');
+        // A lista daqui (e as abertas por baixo) se relê pelo aviso.
         avisarAlteracao();
-        processando = false;
-        fechar();
       } catch (e) {
         mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para registrar ajustes.'));
       } finally {
@@ -2145,12 +2340,45 @@
       }
     }
 
-    buscaCampo.addEventListener('input', () => { montarOpcoes(); atualizar(); });
-    parcelaSel.addEventListener('change', atualizar);
-    tipoSel.addEventListener('change', atualizar);
+    async function cancelarAjuste(a) {
+      const motivo = await pedirTexto({
+        titulo: 'Cancelar este ajuste?',
+        mensagem: `${a.tipo_rotulo} de ${formatarMoeda(a.valor)} na ${a.area_rotulo} de ${a.beneficiario} (${rotuloCompetenciaCurto(a.competencia)}): ele sai do mês.`,
+        placeholder: 'Por que está sendo cancelado (obrigatório)',
+        confirmar: 'Cancelar ajuste'
+      });
+      if (motivo === null) return;
+      try {
+        await fetchApi(`/api/financeiro/ajustes-pessoa/${encodeURIComponent(a.id)}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        window.showToast?.('Ajuste cancelado.', 'success');
+        avisarAlteracao();
+      } catch (e) {
+        mostrarMensagem('finAjusteMensagem', textoDoErro(e, 'Você não tem permissão para cancelar ajustes.'));
+      }
+    }
+
+    overlay.querySelectorAll('input[name="finAjusteArea"]').forEach(r => r.addEventListener('change', () => { montarPessoas(); atualizar(); }));
+    pessoaSel.addEventListener('change', () => { pessoaOutro.classList.toggle('hidden', pessoaSel.value !== OUTRO); if (pessoaSel.value === OUTRO) pessoaOutro.focus(); atualizar(); });
+    pessoaOutro.addEventListener('input', atualizar);
+    [processoSel, colaboradorSel, tipoSel].forEach(s => s.addEventListener('change', atualizar));
     ligarCampoMoeda(valorCampo, atualizar);
-    acionar(el('finAjusteRegistrar'), registrar);
-    return carregar();
+    // A data puxa o mês em que o ajuste entra (dá para trocar o mês depois).
+    dataCampo.addEventListener('change', () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dataCampo.value)) return;
+      definirCompetencia(compCampo, dataCampo.value.slice(0, 7));
+      carregarMes();
+    });
+    // O mês e o ano valem na hora (como a lupa): o quadro precisa do mês certo.
+    const caixaComp = compCampo.closest('[data-competencia]');
+    caixaComp?.querySelector('[data-competencia-mes]')?.addEventListener('change', () => el('finAjusteCompetenciaIr')?.click());
+    caixaComp?.querySelector('[data-competencia-ano]')?.addEventListener('change', () => el('finAjusteCompetenciaIr')?.click());
+    compCampo.addEventListener('change', carregarMes);
+    acionar(registrarBtn, registrar);
+    aoAlterar(carregarMes);
+    if (daParcela) el('finAjusteReferencia').value = `Pedido ${daParcela.pedido || daParcela.pedido_id} · parcela ${daParcela.numero_parcela}`;
+    pintarLista();
+    atualizar();
+    return carregarOpcoes().then(carregarMes);
   }
 
   /**
@@ -3571,7 +3799,11 @@
     }
 
     aoAlterar(carregar);
-    acionar(registrarBtn, () => abrirOutro('registrar-ajuste', { parcela: { pedido_id: alvo.pedido_id, numero_parcela: alvo.numero_parcela, pedido: dados?.pedido } }));
+    // O ajuste agora é POR PESSOA (06/10/2026): a parcela vai como referência e,
+    // se a CMS dela é de uma pessoa só, ela já vem escolhida.
+    acionar(registrarBtn, () => abrirOutro('registrar-ajuste', {
+      parcela: { pedido_id: alvo.pedido_id, numero_parcela: alvo.numero_parcela, pedido: dados?.pedido, beneficiarios: dados?.potencial?.beneficiarios || [] }
+    }));
     return carregar();
   }
 

@@ -5,6 +5,7 @@
 const c = require('./comum');
 const regras = require('./regras');
 const contasReceber = require('../cobranca/contasReceber');
+const ajustesPessoa = require('./ajustesPessoa');
 
 async function lerFechamentos(api) {
   const [fechamentos, itens, pagamentos] = await Promise.all([
@@ -60,21 +61,23 @@ function contextoDosPedidos({ pedidos = [], itens = [], produtos = [], clientes 
 /**
  * A base das comissões: as contas a receber (fase E), os ajustes, as regras,
  * os fechamentos e quem recebe em cada pedido. `desde` é o corte
- * "controlar a partir de" da cobrança.
+ * "controlar a partir de" da cobrança. `ajustesPessoa`: os ajustes por
+ * pessoa (vazio enquanto o SQL deles não roda).
  */
 async function lerComissoes(api, { hoje, desde = null }) {
-  const [receber, ajustes, tudo, fech, itens, produtos, clientes] = await Promise.all([
+  const [receber, ajustes, tudo, fech, itens, produtos, clientes, porPessoa] = await Promise.all([
     contasReceber.lerBase(api, hoje),
     c.ler(api, 'ajustes_financeiros'),
     regras.lerTudo(api),
     lerFechamentos(api),
     api.get('/api/pedidos_itens').then(c.lista).catch(() => []),
     api.get('/api/produtos', { query: { select: 'id,desenhado_por' } }).then(c.lista).catch(() => []),
-    api.get('/api/clientes', { query: { select: 'id,dono_cliente' } }).then(c.lista).catch(() => [])
+    api.get('/api/clientes', { query: { select: 'id,dono_cliente' } }).then(c.lista).catch(() => []),
+    ajustesPessoa.lerTodos(api)
   ]);
   const linhas = contasReceber.parcelasDosPedidos({ ...receber, hoje, desde });
   const contexto = contextoDosPedidos({ pedidos: receber.pedidos, itens, produtos, clientes });
-  return { receber, linhas, ajustes, regras: tudo, contexto, ...fech };
+  return { receber, linhas, ajustes, regras: tudo, contexto, ajustesPessoa: porPessoa || [], ...fech };
 }
 
 /** Nomes dos clientes que aparecem (um GET por cliente, como as contas a receber). */

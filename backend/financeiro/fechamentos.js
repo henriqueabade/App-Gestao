@@ -85,7 +85,7 @@ async function dadosComissao(api, { competencia, hoje, desde }) {
   const estado = comissoes.estadoDosFechamentos({ ...b, tipo: 'comissao' });
   const apuradas = comissoes.apurar({
     linhas: b.linhas, pedidos: b.receber.pedidos, parcelas: b.receber.parcelas, recebimentos: b.receber.recebimentos,
-    ajustes: b.ajustes, regrasLista: b.regras.regras, estado, hoje, contexto: b.contexto
+    ajustes: b.ajustes, regrasLista: b.regras.regras, estado, hoje, contexto: b.contexto, ajustesPessoa: b.ajustesPessoa
   });
   const resumo = comissoes.montarFechamento({ apuradas, estado, competencia });
   return { b, estado, apuradas, resumo };
@@ -144,7 +144,15 @@ async function limparTentativa(api, cabecalho) {
   await api.delete(`/api/financeiro_fechamentos/${cabecalho.id}`);
 }
 
-const linhaItemComissao = (fechamentoId, i) => ({
+/**
+ * O ajuste por pessoa (ajustesPessoa.js) leva o id na coluna própria, com
+ * índice único: um ajuste entra em um fechamento só. A coluna nasce com o SQL
+ * dos ajustes por pessoa — sem ajuste, ela nem vai na linha (o fechamento de
+ * quem não rodou o SQL continua igual).
+ */
+const comAjustePessoa = (linha, id) => (id === null || id === undefined ? linha : { ...linha, ajuste_pessoa_id: id });
+
+const linhaItemComissao = (fechamentoId, i) => comAjustePessoa({
   fechamento_id: fechamentoId, tipo_item: i.tipo_item, pedido_id: i.pedido_id ?? null, numero_parcela: i.numero_parcela ?? null,
   recebimento_id: i.tipo_item === 'parcela' ? (i.recebimento_id ?? null) : null, producao_evento_id: null,
   competencia_origem: i.competencia_natural || null, data_referencia: i.data_referencia || null,
@@ -154,9 +162,9 @@ const linhaItemComissao = (fechamentoId, i) => ({
   total: c.centavos(i.total),
   detalhes: JSON.stringify({ ...i.detalhes, pedido: i.pedido ?? null, parcela: i.parcela ?? null, nf: i.nf ?? null, cliente_id: i.cliente_id ?? null, motivo: i.motivo || i.detalhes?.motivo || null }),
   criado_em: c.agora()
-});
+}, i.ajuste_pessoa_id ?? i.detalhes?.ajuste_pessoa_id);
 
-const linhaItemProducao = (fechamentoId, l) => ({
+const linhaItemProducao = (fechamentoId, l) => comAjustePessoa({
   fechamento_id: fechamentoId, tipo_item: l.tipo_item, pedido_id: l.pedido_id ?? null, numero_parcela: null, recebimento_id: null,
   producao_evento_id: l.tipo_item === 'producao' ? l.evento_id : null,
   competencia_origem: l.competencia_natural || null, data_referencia: l.data || null,
@@ -167,10 +175,12 @@ const linhaItemProducao = (fechamentoId, l) => ({
     pedido: l.pedido ?? null, pedido_item_id: l.pedido_item_id ?? null, produto_id: l.produto_id ?? null, setor_id: l.setor_id ?? null,
     estorno_de: l.estorno_de ?? null, valor_origem: l.valor_origem ?? null, status_item: l.status_item ?? null, motivo: l.motivo || null,
     valor_peca: l.valor_peca ?? null, fracao: l.fracao ?? null, regra: l.regra ?? null,
-    fechamento_origem: l.fechamento_origem ?? null
+    fechamento_origem: l.fechamento_origem ?? null,
+    ...(l.ajuste_pessoa_id ? { ajuste_pessoa_id: l.ajuste_pessoa_id, ajuste_pessoa: l.ajuste_pessoa || null, colaborador: l.colaborador || null } : {}),
+    ...(l.tipo_item === 'saldo' ? { origem: l.competencia_natural || null } : {})
   }),
   criado_em: c.agora()
-});
+}, l.ajuste_pessoa_id);
 
 async function fechar({ api, tipo, competencia, hoje, desde, usuarioId = null }) {
   const p = await previa({ api, tipo, competencia, hoje, desde });

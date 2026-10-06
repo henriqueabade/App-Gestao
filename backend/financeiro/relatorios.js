@@ -11,6 +11,7 @@ const fechamentos = require('./fechamentos');
 const base = require('./base');
 const calendario = require('./calendario');
 const repasses = require('./repasses');
+const ajustesPessoa = require('./ajustesPessoa');
 
 const TITULOS = {
   'resumo-comissoes': 'Comissões do mês',
@@ -19,13 +20,17 @@ const TITULOS = {
   'comissoes-apuradas': 'Comissões apuradas',
   'ajustes-anteriores': 'Ajustes de períodos anteriores',
   'comissoes-nao-realizadas': 'Comissões não realizadas',
+  'ajustes-pessoa': 'Ajustes por pessoa (CMS, Royalty e Produção)',
   'producao-competencia': 'Produção da competência',
   'pagamento-marcenaria': 'Pagamento marcenaria',
   'pagamento-acabamento': 'Pagamento acabamento',
   'pagamento-montagem': 'Pagamento montagem',
   'pagamento-embalagem': 'Pagamento embalagem',
-  'producao-por-pedido': 'Produção por pedido'
+  'producao-por-pedido': 'Produção por pedido',
+  'ajustes-producao': 'Ajustes da produção'
 };
+
+const RESTANTE = 'Ajuste restante do mês anterior';
 
 /** Os relatórios de pagamento por processo (o nome do processo, sem acento). */
 const PROCESSOS_DO_RELATORIO = {
@@ -78,10 +83,13 @@ const linhaDeItem = i => {
     pedido_id: i.pedido_id, pedido: i.pedido, cliente: i.cliente, nf: i.nf, parcela: i.parcela, numero_parcela: i.numero_parcela,
     liquidacao: i.data_referencia, data: i.data_referencia, liquido: i.base, cms: i.cms, royalty: i.royalty, comissao: i.total, valor: i.total,
     benef_lista: benef, beneficiarios: textoDosBeneficiarios(benef),
-    motivo: i.motivo || (i.tipo_item === 'saldo' ? 'Saldo anterior' : ''), origem: i.tipo_item === 'saldo' ? 'Saldo' : c.rotuloCompetencia(i.competencia_natural),
-    tipo: i.tipo_item === 'saldo' ? 'Saldo' : 'Ajuste'
+    motivo: i.motivo || (i.tipo_item === 'saldo' ? RESTANTE : ''), origem: c.rotuloCompetencia(i.competencia_natural),
+    tipo: i.tipo_item === 'saldo' ? RESTANTE : (i.detalhes?.ajuste_pessoa_id ? 'Ajuste por pessoa' : 'Ajuste')
   };
 };
+
+/** A situação de um item que não é parcela, na tabela do mês. */
+const situacaoDoItem = i => (i.tipo_item === 'saldo' ? RESTANTE : (i.detalhes?.ajuste_pessoa_id ? 'Ajuste por pessoa' : 'Ajuste'));
 
 async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
@@ -127,7 +135,7 @@ async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }
         comissao: r.valor, benef_lista: benef, beneficiarios: textoDosBeneficiarios(benef)
       }];
     });
-    const doProprio = proprio.itens.map(i => ({ ...linhaDeItem(i), situacao: i.tipo_item === 'parcela' ? situacaoDoProprio : (i.tipo_item === 'saldo' ? 'Saldo anterior' : 'Ajuste') }));
+    const doProprio = proprio.itens.map(i => ({ ...linhaDeItem(i), situacao: i.tipo_item === 'parcela' ? situacaoDoProprio : situacaoDoItem(i) }));
     linhas = [
       ...previstas.map(p => linhaDeParcela(p, { situacao: 'Prevista', data: p.vencimento })),
       ...atrasadas.map(p => linhaDeParcela(p, { situacao: `Atrasada · cliente não pagou · ${c.plural(p.dias_atraso, 'dia', 'dias')}`, data: p.vencimento })),
@@ -135,12 +143,16 @@ async function comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave }
       ...linhasDoRepasse
     ];
     const total = l => c.centavos(l.reduce((s, x) => s + (Number(x.comissao) || 0), 0));
+    const porPessoa = c.centavos(proprio.ajustes_pessoa?.valor || 0);
+    const restante = c.centavos(proprio.restante_anterior || 0);
     const partes = [
       ['Previstas', total(previstas.map(p => ({ comissao: p.potencial.total })))],
       ['Apuradas', proprio.comissao],
       ['Atrasadas (cliente não pagou)', total(atrasadas.map(p => ({ comissao: p.potencial.total })))],
       ['Atrasadas (a repassar)', repasses.resumir(repasse).valor],
-      ['Ajustes', proprio.ajustes]
+      ['Ajustes', c.centavos(proprio.ajustes - porPessoa - restante)],
+      ...(porPessoa ? [['Ajustes por pessoa', porPessoa]] : []),
+      ...(restante ? [['Restante do mês anterior', restante]] : [])
     ];
     crit.texto += ` · ${partes.map(([rotulo, valor]) => `${rotulo} ${c.reais(valor)}`).join(' · ')}${mes ? ` — ${posicao}` : ''}`;
   } else if (chave === 'previsao-comissoes') {
@@ -200,7 +212,7 @@ async function producaoDe(api, { hoje, competencia, inicio, fim, chave }) {
   const nomes = await base.nomesDosClientes(api, linhas.map(l => p.pedidosPor.get(String(l.pedido_id))?.cliente_id));
   const comCliente = linhas.map(l => ({
     ...l, cliente: nomes.get(String(p.pedidosPor.get(String(l.pedido_id))?.cliente_id)) || null,
-    unitario: l.valor_unitario, status: l.status_item || (l.tipo_item === 'saldo' ? 'Saldo' : ''), produtoCompleto: l.produto
+    unitario: l.valor_unitario, status: l.status_item || (l.tipo_item === 'saldo' ? RESTANTE : ''), produtoCompleto: l.produto
   }));
   if (PROCESSOS_DO_RELATORIO[chave]) {
     const alvo = PROCESSOS_DO_RELATORIO[chave];
@@ -222,11 +234,70 @@ async function producaoDe(api, { hoje, competencia, inicio, fim, chave }) {
   return { filtro: crit.texto, linhas: comCliente };
 }
 
+/**
+ * Os ajustes por pessoa (ajustesPessoa.js) da competência — ou do período,
+ * pela data do ajuste —, com a situação de cada um (em aberto, no fechamento
+ * de tal mês, cancelado) e quem lançou. Na competência entram também as
+ * linhas do "Ajuste restante do mês anterior" que caem nela.
+ * `ajustes-producao` é o mesmo, só da produção.
+ */
+async function ajustesDe(api, { hoje, desde, competencia, inicio, fim, chave }) {
+  const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
+  const crit = criterio({ competencia: comp, inicio, fim });
+  const soProducao = chave === 'ajustes-producao';
+  const nomesDosUsuarios = require('../historicoSocial').nomesDosUsuarios;
+  const [lidos, fech, nomes] = await Promise.all([
+    ajustesPessoa.lerTodos(api, soProducao ? { area: 'producao' } : {}),
+    base.lerFechamentos(api),
+    nomesDosUsuarios(api).catch(() => new Map())
+  ]);
+  const competenciaDoFechamento = new Map(fech.fechamentos.map(f => [String(f.id), f.competencia]));
+  const congelados = ajustesPessoa.idsNoFechamento(fech.itens.map(i => ({
+    ...i, detalhes: c.jsonDe(i.detalhes, {}), competencia: competenciaDoFechamento.get(String(i.fechamento_id)) || null
+  })));
+  const cabe = a => (crit.periodo ? crit.cabe(c.dia(a.data_ajuste)) : String(a.competencia || '').trim() === comp);
+  const linhas = (lidos || []).filter(cabe)
+    .map(a => ajustesPessoa.paraTela(a, { nomes, congelados }))
+    .sort((a, b) => String(a.data_ajuste).localeCompare(String(b.data_ajuste)) || Number(a.id) - Number(b.id))
+    .map(t => {
+      const cancelado = t.status !== 'ativo';
+      return {
+        data: t.data_ajuste, area: t.area_rotulo,
+        beneficiario: t.setor && t.beneficiario !== t.setor ? `${t.beneficiario} (${t.setor})` : t.beneficiario,
+        tipo: t.tipo_rotulo,
+        motivo: [t.motivo, t.referencia ? `ref. ${t.referencia}` : null, t.observacao ? `obs.: ${t.observacao}` : null].filter(Boolean).join(' · '),
+        competencia: c.rotuloCompetencia(t.competencia),
+        situacao: cancelado ? `Cancelado${t.motivo_cancelamento ? ` — ${t.motivo_cancelamento}` : ''}`
+          : (t.no_fechamento ? `No fechamento de ${c.rotuloCompetencia(t.fechamento_competencia)}` : 'Em aberto'),
+        usuario: t.criado_por_nome || '—',
+        valor: cancelado ? null : t.valor_com_sinal
+      };
+    });
+  if (!crit.periodo) {
+    // O que veio negativo do mês anterior e abate neste (fechado ou projetado).
+    const restante = (texto, valor, area, quem) => ({ data: null, area, beneficiario: quem, tipo: RESTANTE, motivo: texto, competencia: c.rotuloCompetencia(comp), situacao: 'Abate neste mês', usuario: '—', valor });
+    const prod = await producao.lerBase(api);
+    const r = producao.montarCompetencia({ pend: prod.pend, estado: prod.estado, competencia: comp, propria: true });
+    for (const l of r.linhas.filter(x => x.tipo_item === 'saldo')) linhas.push(restante(l.motivo, l.total, 'Produção', l.setor));
+    if (!soProducao) {
+      const { estado, apuradas } = await fechamentos.dadosComissao(api, { competencia: comp, hoje, desde });
+      const proprio = comissoes.montarFechamento({ apuradas, estado, competencia: comp, propria: true });
+      for (const i of proprio.itens.filter(x => x.tipo_item === 'saldo')) {
+        const b = (i.detalhes?.beneficiarios || [])[0] || {};
+        linhas.push(restante(i.motivo, i.total, b.tipo === 'royalty' ? 'Royalty' : 'CMS', b.beneficiario || '—'));
+      }
+    }
+  }
+  if (lidos === null) crit.texto += ` · falta rodar ${ajustesPessoa.SQL_ARQUIVO}`;
+  return { filtro: crit.texto, linhas };
+}
+
 async function gerar({ api, chave, competencia, inicio, fim, hoje, desde }) {
   if (!TITULOS[chave]) throw c.erro('Relatório desconhecido.', 404);
-  const r = chave.startsWith('producao') || chave.startsWith('pagamento')
-    ? await producaoDe(api, { hoje, competencia, inicio, fim, chave })
-    : await comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave });
+  let r;
+  if (chave === 'ajustes-pessoa' || chave === 'ajustes-producao') r = await ajustesDe(api, { hoje, desde, competencia, inicio, fim, chave });
+  else if (chave.startsWith('producao') || chave.startsWith('pagamento')) r = await producaoDe(api, { hoje, competencia, inicio, fim, chave });
+  else r = await comissoesDe(api, { hoje, desde, competencia, inicio, fim, chave });
   return { chave, titulo: TITULOS[chave], ...r };
 }
 

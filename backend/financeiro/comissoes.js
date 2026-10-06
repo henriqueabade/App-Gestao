@@ -19,12 +19,25 @@
  * Ex.: fechada sobre R$ 20.000 a 10% + 10%; devolução de R$ 3.000 →
  * −R$ 300 de CMS e −R$ 300 de Royalty no próximo fechamento.
  *
- * Saldo negativo de um beneficiário num fechamento (só houve estornos)
- * não se paga: passa para o fechamento seguinte como item de SALDO.
+ * Saldo negativo de um beneficiário num fechamento (estornos, ou um ajuste
+ * por pessoa maior que o mês dele) não se paga: passa para o fechamento
+ * seguinte como item de SALDO — o "Ajuste restante do mês anterior".
+ *
+ * A base é o VALOR REAL do que se cobra (pedido do dono, 06/10/2026): a
+ * parcela recebida vale o que o recebimento cobriu dela; a parcela em aberto,
+ * o boleto vivo (o valor em dia) ou a ordem de pagamento aberta; sem nenhum
+ * dos dois, a parcela do pedido — que já leva o Adicional ou o Desconto do
+ * "Pagamento do pedido" e do "Gerar boletos".
+ *
+ * Os ajustes POR PESSOA (ajustesPessoa.js: bonificação, adiantamento,
+ * correção… na CMS ou no Royalty de alguém) entram como itens de ajuste do
+ * mês escolhido, numa entrada própria de `apurar` (tipo_entrada
+ * 'ajuste_pessoa', sem pedido nem parcela).
  */
 const c = require('./comum');
 const regras = require('./regras');
 const vencimentos = require('../cobranca/vencimento');
+const ajustesPessoa = require('./ajustesPessoa');
 
 const FAIXAS = ['1–15', '16–30', '31–60', '61–90', '+90'];
 const TIPOS_AJUSTE = { devolucao: 'Devolução', desconto: 'Desconto comercial', abatimento: 'Abatimento', cancelamento: 'Cancelamento parcial', outros: 'Outros' };
@@ -123,14 +136,50 @@ function estadoDosFechamentos({ fechamentos = [], itens = [], pagamentos = [], t
 const competenciaAlvo = (natural, proxima) => (proxima && natural && natural < proxima ? proxima : natural);
 
 /**
+ * O valor real da parcela, que é a base da comissão (pedido do dono,
+ * 06/10/2026). Recebida: o que o recebimento cobriu da parcela (o boleto em
+ * dia, ou a parcela no pagamento à mão; multa e juros continuam fora). Em
+ * aberto: o boleto vivo pelo valor em dia (o cheio menos o desconto até o
+ * vencimento — o abatimento sai à parte), ou a ordem de pagamento aberta; sem
+ * nenhum dos dois, a parcela do pedido. Pura.
+ */
+function valorRealDaParcela(linha, confirmado) {
+  if (confirmado) return { valor: c.centavos(confirmado.valor_parcela ?? linha.valor), origem: 'recebimento' };
+  if (Number(linha?.valor_boleto) > 0) {
+    return { valor: c.centavos(Number(linha.valor_boleto) - Number(linha.desconto_condicional || 0)), origem: 'boleto' };
+  }
+  if (linha?.ordem && Number(linha.ordem.valor) > 0) return { valor: c.centavos(linha.ordem.valor), origem: 'ordem' };
+  return { valor: c.centavos(linha?.valor), origem: 'parcela' };
+}
+
+/**
+ * A entrada de `apurar` de um ajuste por pessoa: não é parcela de ninguém
+ * (sem pedido, sem vencimento, fora das visões de parcela) e leva o item do
+ * fechamento em `pendentes`, como as parcelas. Pura.
+ */
+function entradaDoAjustePessoa(item) {
+  return {
+    chave: item.chave, tipo_entrada: 'ajuste_pessoa', ajuste_pessoa: item.detalhes.ajuste_pessoa,
+    pedido_id: null, pedido: null, cliente_id: null, cliente: null, nf: null, numero_parcela: null, parcela: null,
+    vencimento: null, dias_atraso: 0, faixa: null, controlada: false, estado_parcela: 'ajuste', lancamento_pendente: false,
+    boleto: null, recebimento: null, valor_original: 0, base_origem: null, abatimento_boleto: 0, ajustes_total: 0, liquido: 0, ajustes: [],
+    taxas: { cms: [], royalty: [], pct_cms: 0, pct_royalty: 0, congeladas: false }, sem_regra: false,
+    potencial: { cms: 0, royalty: 0, total: 0, beneficiarios: [] }, congelado: { cms: 0, royalty: 0, total: 0, itens: [] },
+    comissao_fechada: false, pendentes: [item], situacao: 'ajuste_pessoa'
+  };
+}
+
+/**
  * A situação de comissão de todas as parcelas. `linhas` vem de
  * contasReceber.parcelasDosPedidos; `recebimentos` são todos (com os
  * estornados); `ajustes`, todos; `estado`, de estadoDosFechamentos.
  * `contexto` (base.contextoDosPedidos): o dono do cliente e os desenhistas de
  * cada pedido — é com ele que a CMS vai para o dono do cliente e o Royalty
  * para os desenhistas. Sem ele, a conta antiga (quem recebe vem da regra).
+ * `ajustesPessoa`: as linhas de financeiro_ajustes_pessoa (as de CMS e
+ * Royalty fora de fechamento viram entradas próprias, no fim da lista).
  */
-function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], ajustes = [], regrasLista = [], estado, hoje, contexto = null }) {
+function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], ajustes = [], regrasLista = [], estado, hoje, contexto = null, ajustesPessoa: porPessoa = [] }) {
   const pedidosPor = new Map(pedidos.filter(Boolean).map(p => [String(p.id), p]));
   const recPor = new Map(recebimentos.filter(Boolean).map(r => [String(r.id), r]));
   const confirmadoPor = new Map(recebimentos.filter(r => r && r.status === 'confirmado').map(r => [chaveDe(r.pedido_id, r.numero_parcela), r]));
@@ -184,7 +233,8 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
         congeladas: false
       };
 
-    const valorOriginal = c.centavos(confirmado ? (confirmado.valor_parcela ?? linha.valor) : linha.valor);
+    const real = valorRealDaParcela(linha, confirmado);
+    const valorOriginal = real.valor;
     const abatimentoBoleto = c.centavos(confirmado ? (confirmado.valor_abatimento || 0) : (linha.abatimento || 0));
     const ajustesTotal = c.centavos(ativos.reduce((s, a) => s + Number(a.valor || 0), 0));
     const liquido = c.centavos(Math.max(0, valorOriginal - abatimentoBoleto - ajustesTotal));
@@ -279,7 +329,9 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
       controlada: linha.controlada !== false, estado_parcela: cancelado ? 'cancelada' : linha.estado, lancamento_pendente: Boolean(linha.lancamento_pendente),
       boleto: linha.boleto || null,
       recebimento: confirmado ? { id: confirmado.id, data: c.dia(confirmado.data_recebimento), valor: c.centavos(confirmado.valor_recebido), competencia: String(confirmado.competencia || '').trim(), forma: confirmado.forma || null } : null,
-      valor_original: valorOriginal, abatimento_boleto: abatimentoBoleto, ajustes_total: ajustesTotal, liquido,
+      // `base_origem`: de onde veio o valor (recebimento, boleto, ordem ou parcela).
+      valor_original: valorOriginal, base_origem: real.origem, valor_parcela_pedido: c.centavos(linha.valor),
+      abatimento_boleto: abatimentoBoleto, ajustes_total: ajustesTotal, liquido,
       ajustes: daParcela.map(a => ({ ...a, data_ajuste: c.dia(a.data_ajuste), valor: c.centavos(a.valor), rotulo: TIPOS_AJUSTE[a.tipo] || a.tipo, no_fechamento: idsNoFechamento.has(String(a.id)) })),
       taxas, sem_regra: !taxas.congeladas && taxas.sem_regra,
       potencial, congelado: { ...congeladoTot, total: c.centavos(congeladoTot.cms + congeladoTot.royalty), itens: congelados },
@@ -287,11 +339,31 @@ function apurar({ linhas = [], pedidos = [], parcelas = [], recebimentos = [], a
       pendentes, situacao
     });
   }
+  for (const item of ajustesPessoa.itensDeComissao({ ajustes: porPessoa, estado, competenciaAlvo })) {
+    saida.push(entradaDoAjustePessoa(item));
+  }
   return saida;
 }
 
 /** Todos os itens pendentes (ainda não fechados). */
 const pendentesDe = apuradas => apuradas.flatMap(p => p.pendentes);
+
+/**
+ * Um item de SALDO — o "Ajuste restante do mês anterior": o que `b` ficou
+ * devendo no fim de `origem` e abate em `destino`. Pura.
+ */
+function itemDeRestante(b, { origem, destino, fechamentoId = null, projetado = false }) {
+  const valor = c.centavos(b.valor);
+  const rotulo = c.rotuloCompetencia(String(origem).trim());
+  return {
+    chave: `saldo:${fechamentoId ?? `proj:${origem}`}:${chaveBenef(b)}`, tipo_item: 'saldo', pedido_id: null, numero_parcela: null,
+    competencia_natural: String(origem).trim(), competencia: destino, data_referencia: null,
+    cms: b.tipo === 'cms' ? valor : 0, royalty: b.tipo === 'royalty' ? valor : 0, total: valor,
+    motivo: `Ajuste restante do mês anterior (${rotulo}): ${b.beneficiario} terminou ${rotulo} com ${c.reais(valor)}`,
+    projetado,
+    detalhes: { beneficiarios: [{ tipo: b.tipo, beneficiario: b.beneficiario, percentual: null, valor }], fechamento_id: fechamentoId, origem: String(origem).trim(), projetado }
+  };
+}
 
 /**
  * Itens de SALDO: beneficiários que terminaram o último fechamento no
@@ -302,13 +374,34 @@ function saldosAnteriores(estado) {
   if (!ultimo) return [];
   return (ultimo.resumo || [])
     .filter(b => Number(b.valor) < 0)
-    .map(b => ({
-      chave: `saldo:${ultimo.id}:${chaveBenef(b)}`, tipo_item: 'saldo', pedido_id: null, numero_parcela: null,
-      competencia_natural: estado.proxima, competencia: estado.proxima, data_referencia: null,
-      cms: b.tipo === 'cms' ? c.centavos(b.valor) : 0, royalty: b.tipo === 'royalty' ? c.centavos(b.valor) : 0, total: c.centavos(b.valor),
-      motivo: `Saldo negativo de ${b.beneficiario} em ${c.rotuloCompetencia(String(ultimo.competencia).trim())}`,
-      detalhes: { beneficiarios: [{ tipo: b.tipo, beneficiario: b.beneficiario, percentual: null, valor: c.centavos(b.valor) }], fechamento_id: ultimo.id }
-    }));
+    .map(b => itemDeRestante(b, { origem: ultimo.competencia, destino: estado.proxima, fechamentoId: ultimo.id }));
+}
+
+/**
+ * O restante negativo que um mês AINDA ABERTO deixa para o seguinte, mês a
+ * mês, até `competencia` (pedido do dono, 06/10/2026: "se o ajuste deixar o
+ * valor negativo, a diferença vai para o próximo mês, abatendo, e aparece
+ * como ajuste restante do mês anterior"). Começa no saldo do último
+ * fechamento; cada mês aberto soma os seus itens, e quem termina negativo
+ * leva a diferença. É uma PROJEÇÃO: o mês de origem ainda pode mudar até
+ * fechar — quando fechar, o saldo dele vira o de `saldosAnteriores`. Pura.
+ */
+function restantesProjetados({ apuradas, estado, competencia }) {
+  if (!c.competenciaValida(competencia) || estado.fechados.has(competencia)) return [];
+  const pendentes = pendentesDe(apuradas || []);
+  const inicio = estado.proxima || pendentes.map(p => String(p.competencia || '')).filter(c.competenciaValida).sort()[0] || null;
+  if (!inicio || !(inicio < competencia)) return [];
+  let levados = estado.proxima ? saldosAnteriores(estado) : [];
+  let mes = inicio;
+  for (let voltas = 0; mes < competencia && voltas < 240; voltas++) {
+    const doMes = [...pendentes.filter(p => p.competencia === mes), ...levados];
+    const seguinte = c.somarMeses(mes, 1);
+    levados = [...somarBeneficiarios(doMes.map(i => i.detalhes?.beneficiarios || [])).values()]
+      .filter(b => b.valor <= -0.01)
+      .map(b => itemDeRestante(b, { origem: mes, destino: seguinte, projetado: true }));
+    mes = seguinte;
+  }
+  return levados;
 }
 
 /**
@@ -340,7 +433,8 @@ function itemCongelado(i) {
  * competência. Sem ela — a prévia do fechamento — entra também o que ficou de
  * meses ainda não fechados, porque é isso que o fechamento leva. No painel o
  * que ficou de antes é "a repassar" (repasses.js), e contar lá e aqui seria
- * contar duas vezes.
+ * contar duas vezes. O que ficou NEGATIVO num mês anterior ainda aberto,
+ * porém, abate aqui — como o fechamento faria (`restantesProjetados`).
  */
 function montarFechamento({ apuradas, estado, competencia, propria = false }) {
   const fechado = estado.fechados.get(competencia) || null;
@@ -349,9 +443,21 @@ function montarFechamento({ apuradas, estado, competencia, propria = false }) {
     ? estado.congelados.filter(i => String(i.fechamento_id) === String(fechado.id)).map(itemCongelado)
     : [
       ...pendentesDe(apuradas).filter(cabe),
-      ...(estado.proxima === competencia ? saldosAnteriores(estado) : [])
+      ...restantesDoMes({ apuradas, estado, competencia, propria })
     ];
   return resumirItens(itens, { fechado, competencia });
+}
+
+/**
+ * O "Ajuste restante do mês anterior" que cai em `competencia` (aberta): o
+ * saldo do último fechamento, se ela é a próxima a fechar; senão, na visão
+ * do próprio mês, o projetado dos meses abertos antes dela. A prévia que
+ * junta tudo até o mês (`propria` falso) já soma os negativos dos meses
+ * anteriores nos próprios itens e não precisa da projeção. Pura.
+ */
+function restantesDoMes({ apuradas, estado, competencia, propria = false }) {
+  if (estado.proxima === competencia) return saldosAnteriores(estado);
+  return propria ? restantesProjetados({ apuradas, estado, competencia }) : [];
 }
 
 function resumirItens(itens, { fechado = null, competencia }) {
@@ -371,6 +477,11 @@ function resumirItens(itens, { fechado = null, competencia }) {
     valor: num(parcelasI.reduce((s, i) => s + Number(i.detalhes?.ajuste_manual || 0), 0)),
     comissao: num(parcelasI.reduce((s, i) => s + (Number(i.detalhes?.ajuste_manual || 0) * pctDe(i)) / 100, 0))
   };
+  // Os ajustes por pessoa do mês (ajustesPessoa.js) e o que veio negativo do
+  // mês anterior: cada um com a sua linha no resumo (pedido do dono, 06/10/2026).
+  const porPessoa = itens.filter(i => i.detalhes?.ajuste_pessoa_id);
+  const restantes = itens.filter(i => i.tipo_item === 'saldo');
+  const totalDe = l => num(l.reduce((s, i) => s + Number(i.total || 0), 0));
   return {
     competencia,
     fechado: Boolean(fechado),
@@ -386,7 +497,12 @@ function resumirItens(itens, { fechado = null, competencia }) {
     comissao: num(parcelasI.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
     ajustes: num(ajustesI.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
     ajustes_manuais: ajustesManuais,
-    liquido: num(itens.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
+    ajustes_pessoa: {
+      quantidade: porPessoa.length, valor: totalDe(porPessoa),
+      somam: totalDe(porPessoa.filter(i => Number(i.total) > 0)), descontam: totalDe(porPessoa.filter(i => Number(i.total) < 0))
+    },
+    restante_anterior: totalDe(restantes),
+    liquido:num(itens.reduce((s, i) => s + Number(i.cms || 0) + Number(i.royalty || 0), 0)),
     a_pagar: fechado ? num(fechado.total) : aPagar,
     a_compensar: aCompensar,
     beneficiarios: porBenef,
@@ -462,6 +578,7 @@ function visaoDoMes(apuradas, { competencia, hoje, feriados = [] }) {
 
 module.exports = {
   FAIXAS, TIPOS_AJUSTE, chaveDe, chaveBenef, faixaDeAtraso, diaEmBrasilia, somarBeneficiarios, totaisDe,
-  estadoDosFechamentos, competenciaAlvo, apurar, pendentesDe, saldosAnteriores, itemCongelado, montarFechamento, resumirItens, aging, visoes, soma,
+  estadoDosFechamentos, competenciaAlvo, valorRealDaParcela, apurar, pendentesDe, itemDeRestante, saldosAnteriores, restantesProjetados, restantesDoMes,
+  itemCongelado, montarFechamento, resumirItens, aging, visoes, soma,
   ultimoDiaDoMes, visaoDoMes
 };

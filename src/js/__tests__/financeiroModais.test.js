@@ -277,8 +277,10 @@ test('produção da competência: um cartão por setor, total em destaque e o qu
 test('todo relatório da central tem folha: colunas e totais; planilha CSV para o Excel', () => {
     const f = puro();
     const chavesDaCentral = [...fs.readFileSync(path.join(PASTA_HTML, 'relatorios.html'), 'utf8').matchAll(/name="finRelatorio" value="([^"]+)"/g)].map(m => m[1]);
-    assert.strictEqual(chavesDaCentral.length, 12);
+    assert.strictEqual(chavesDaCentral.length, 14);
     assert.ok(chavesDaCentral.includes('resumo-comissoes'), 'Comissões do mês (o "Ver detalhes" do resumo) também na central');
+    // Ajustes por pessoa (06/10/2026): um na aba Comissões (as três áreas) e um na Produção.
+    assert.ok(chavesDaCentral.includes('ajustes-pessoa') && chavesDaCentral.includes('ajustes-producao'), 'os ajustes por pessoa têm relatório');
     assert.ok(!chavesDaCentral.includes('pagamento-pintura'), 'Pintura não é processo');
     for (const processo of ['marcenaria', 'acabamento', 'montagem', 'embalagem']) assert.ok(chavesDaCentral.includes(`pagamento-${processo}`));
     for (const chave of chavesDaCentral) {
@@ -625,8 +627,11 @@ test('recebimentos são REAIS: o registro e a lista falam com /api/cobranca, con
 
 test('comissões e produção são REAIS (fase G): cada modal fala com /api/financeiro e confirma na caixa da casa', () => {
     const chamadas = [
-        "fetchApi('/api/financeiro/parcelas?visao=ajustaveis')",
-        "fetchApi('/api/financeiro/ajustes', {",
+        // O ajuste é POR PESSOA desde 06/10/2026 (CMS, Royalty, Produção): não escolhe mais parcela.
+        "fetchApi('/api/financeiro/ajustes-pessoa/opcoes')",
+        'fetchApi(`/api/financeiro/ajustes-pessoa?competencia=${encodeURIComponent(comp)}`)',
+        "fetchApi('/api/financeiro/ajustes-pessoa', {",
+        'fetchApi(`/api/financeiro/ajustes-pessoa/${encodeURIComponent(a.id)}/cancelar`',
         "fetchApi('/api/financeiro/producao/pedidos')",
         'fetchApi(`/api/financeiro/producao/pedidos/${encodeURIComponent(id)}`)',
         "fetchApi('/api/financeiro/producao', {",
@@ -886,4 +891,26 @@ test('comissões do mês (dono, 24/09/2026): "Previsto no mês" = previstas + at
     assert.ok(SCRIPT.includes("el('finAtrasadasSubtitulo').textContent"), 'o modal diz de que mês e de quando é a foto');
     const atrasadasHtml = fs.readFileSync(path.join(PASTA_HTML, 'comissoes-atrasadas.html'), 'utf8');
     assert.ok(atrasadasHtml.includes('id="finAtrasadasSubtitulo"'));
+});
+
+test('ajuste por pessoa (06/10/2026): o valor dela no mês, o antes e depois e o que vai para o mês seguinte', () => {
+    const f = puro();
+    const totais = {
+        cms: [{ beneficiario: 'Márcia Lamounier', valor: 500 }], royalty: [{ beneficiario: 'Barral', valor: 200 }],
+        producao: [{ setor_id: 2, setor: 'Acabamento', valor: 1000 }]
+    };
+    assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'cms', beneficiario: 'marcia lamounier' }), 500, 'acento e caixa não separam a pessoa');
+    assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'royalty', beneficiario: 'Outra' }), 0, 'quem não tem nada no mês tem zero');
+    assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'producao', setorId: '2' }), 1000, 'na produção a conta é do processo');
+    assert.strictEqual(f.valorDaPessoaNoMes(null, { area: 'cms', beneficiario: 'X' }), null);
+    assert.deepStrictEqual(plano(f.impactoDoAjustePessoa({ atual: 500, valor: 800, sinal: f.TIPOS_AJUSTE_PESSOA.adiantamento.sinal })), { antes: 500, depois: -300, a_pagar: 0, restante: -300 });
+    assert.deepStrictEqual(plano(f.impactoDoAjustePessoa({ atual: 500, valor: 100, sinal: f.TIPOS_AJUSTE_PESSOA.bonificacao.sinal })), { antes: 500, depois: 600, a_pagar: 600, restante: 0 });
+    assert.strictEqual(f.somarMesesComp('2026-12', 1), '2027-01');
+    // Os tipos da tela são os do backend (o mesmo sinal).
+    const doBackend = require(path.join(RAIZ, '..', 'backend', 'financeiro', 'ajustesPessoa.js')).TIPOS;
+    assert.deepStrictEqual(plano(f.TIPOS_AJUSTE_PESSOA), plano(doBackend));
+    const html = fs.readFileSync(path.join(PASTA_HTML, 'registrar-ajuste.html'), 'utf8');
+    assert.deepStrictEqual([...html.matchAll(/<option value="([a-z_]+)">/g)].map(m => m[1]), Object.keys(doBackend), 'o select tem todos os tipos, na ordem');
+    assert.ok(!html.includes('finAjusteParcela'), 'o ajuste não escolhe mais parcela do cliente');
+    assert.match(html, /name="finAjusteArea" value="cms"[^>]*>.*name="finAjusteArea" value="royalty".*name="finAjusteArea" value="producao"/s, 'CMS, Royalty e Produção');
 });

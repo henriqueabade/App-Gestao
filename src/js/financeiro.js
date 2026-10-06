@@ -475,6 +475,36 @@ function finCartaoDasAtrasadas(a = {}, temRegras = true) {
     };
 }
 
+/**
+ * As linhas dos ajustes POR PESSOA no resumo (pedido do dono, 06/10/2026):
+ * quanto os ajustes do mês somaram ou descontaram, o que veio negativo do mês
+ * anterior e o que fica negativo agora (vai para o mês seguinte, com quem).
+ * `nomeDe` tira o nome de cada um que fica (pessoa ou processo). Pura.
+ */
+function finAjustesPorPessoa(porPessoa, restante, ficamLista, nomeDe) {
+    const p = porPessoa || {};
+    const quantidade = Number(p.quantidade) || 0;
+    const ficam = Array.isArray(ficamLista) ? ficamLista : [];
+    const nomes = [...new Set(ficam.map(nomeDe).filter(Boolean))];
+    const partes = [
+        Number(p.somam) ? `+${finFormatarMoeda(p.somam)}` : '',
+        Number(p.descontam) ? finFormatarMoeda(p.descontam) : ''
+    ].filter(Boolean);
+    return {
+        ajustesPessoa: finCentavos(p.valor),
+        ajustesPessoaNota: quantidade ? `(${[finPlural(quantidade, 'ajuste', 'ajustes'), ...partes].join(' · ')})` : '',
+        restante: finCentavos(restante),
+        ficam: finCentavos(ficam.reduce((s, b) => s + (Number(b.valor) || 0), 0)),
+        ficamNota: nomes.length ? `(${nomes.slice(0, 3).join(', ')}${nomes.length > 3 ? '…' : ''})` : ''
+    };
+}
+
+/** As mesmas linhas no Resumo de Produção (a conta é por processo). Pura. */
+function finProducaoPorPessoa(rp = {}) {
+    const r = finAjustesPorPessoa({ quantidade: rp.ajustes_quantidade, valor: rp.ajustes }, rp.restante_anterior, rp.ficam_para_o_proximo, s => s.setor);
+    return { ajustes: r.ajustesPessoa, ajustesNota: r.ajustesPessoaNota, restante: r.restante, ficam: r.ficam, ficamNota: r.ficamNota };
+}
+
 function finMapearComissoes(painel, erro) {
     if (!painel) {
         const sqlPendente = Boolean(erro?.corpo?.sql_pendente);
@@ -485,8 +515,8 @@ function finMapearComissoes(painel, erro) {
         const vazio = { valor: null, auxiliar: '', rodape: motivo, repasse: '', atraso: '' };
         return {
             kpis: { comissoes: vazio, atrasadas: vazio, producao: vazio },
-            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, atrasadasRepasse: null, atrasadasRepasseNota: '', previstoMes: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, proximoPagamento: '—', beneficiarios: [], previstos: [], repassar: [], pago: 0, faltaPagar: null },
-            resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, atrasada: null, atrasadaNota: '', proximoPagamento: '—' },
+            resumoComissoes: { previstas: null, apuradas: null, atrasadas: null, atrasadasRepasse: null, atrasadasRepasseNota: '', previstoMes: null, ajustes: null, ajustesQuantidade: 0, ajustesBase: 0, ajustesPessoa: null, ajustesPessoaNota: '', restante: null, ficam: null, ficamNota: '', proximoPagamento: '—', beneficiarios: [], previstos: [], repassar: [], pago: 0, faltaPagar: null },
+            resumoProducao: { emProducao: null, parciais: null, pecasMes: null, valorCompetencia: null, ajustes: null, ajustesNota: '', restante: null, ficam: null, ficamNota: '', atrasada: null, atrasadaNota: '', proximoPagamento: '—' },
             pendencias: sqlPendente
                 ? [{ nivel: 'critico', titulo: 'Comissões e produção ainda não ativadas', descricao: motivo, data: null, acao: 'Tentar de novo', destino: 'atualizar' }]
                 : (erro && erro.status !== 403
@@ -536,12 +566,16 @@ function finMapearComissoes(painel, erro) {
             previstoMes: rc.previsto_mes === undefined || rc.previsto_mes === null
                 ? finCentavos((Number(rc.previstas) || 0) + (Number(rc.atrasadas) || 0))
                 : Number(rc.previsto_mes) || 0,
-            // O efeito TOTAL dos ajustes no mês: o estorno do que já estava
-            // fechado (rc.ajustes) mais a comissão que os ajustes à mão
-            // tiraram das parcelas apuradas agora.
-            ajustes: finCentavos((Number(rc.ajustes) || 0) - (Number(rc.ajustes_manuais?.comissao) || 0)),
+            // O efeito dos ajustes NAS PARCELAS no mês: o estorno do que já
+            // estava fechado mais a comissão que os ajustes à mão tiraram das
+            // parcelas apuradas agora. Os ajustes por pessoa e o restante do
+            // mês anterior também estão em rc.ajustes, mas têm linha própria.
+            ajustes: finCentavos((Number(rc.ajustes) || 0) - (Number(rc.ajustes_manuais?.comissao) || 0)
+                - (Number(rc.ajustes_pessoa?.valor) || 0) - (Number(rc.restante_anterior) || 0)),
             ajustesQuantidade: Number(rc.ajustes_manuais?.quantidade) || 0,
             ajustesBase: Number(rc.ajustes_manuais?.valor) || 0,
+            // Ajustes por pessoa (06/10/2026) e o negativo que passa de um mês para o outro.
+            ...finAjustesPorPessoa(rc.ajustes_pessoa, rc.restante_anterior, rc.ficam_para_o_proximo, b => b.beneficiario),
             proximoPagamento: `${finFormatarData(rc.proximo_pagamento)}${rc.situacao && rc.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rc.situacao]}` : ''}`,
             // Quem recebe: o apurado do mês; sem apuração, a previsão (para o card nunca ficar vazio à toa).
             beneficiarios: Array.isArray(rc.beneficiarios) ? rc.beneficiarios : [],
@@ -551,6 +585,7 @@ function finMapearComissoes(painel, erro) {
         },
         resumoProducao: {
             emProducao: Number(rp.em_producao) || 0, parciais: Number(rp.parciais) || 0, pecasMes: Number(rp.pecas_mes) || 0, valorCompetencia: Number(rp.valor) || 0,
+            ...finProducaoPorPessoa(rp),
             atrasada: Number(rp.atrasada) || 0, atrasadaNota: rp.atrasada_rotulo ? `(${rp.atrasada_rotulo})` : '',
             proximoPagamento: `${finFormatarData(rp.proximo_pagamento)} (${diaUtil})${rp.situacao && rp.situacao !== 'aberta' ? ` · ${FIN_SITUACAO[rp.situacao]}` : ''}`
         },
@@ -816,6 +851,12 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoComissoes.ajustesQuantidade', c.ajustesQuantidade
         ? `(${finPlural(c.ajustesQuantidade, 'manual', 'manuais')}${c.ajustesBase ? ` · ${finFormatarMoeda(c.ajustesBase)}` : ''})`
         : '');
+    // Ajustes por pessoa, o restante do mês anterior e o que fica para o próximo (06/10/2026).
+    finPreencher(moduleEl, 'resumoComissoes.ajustesPessoa', finFormatarMoeda(c.ajustesPessoa));
+    finPreencherOpcional(moduleEl, 'resumoComissoes.ajustesPessoaNota', c.ajustesPessoaNota || '');
+    finPreencher(moduleEl, 'resumoComissoes.restante', finFormatarMoeda(c.restante));
+    finPreencher(moduleEl, 'resumoComissoes.ficam', finFormatarMoeda(c.ficam));
+    finPreencherOpcional(moduleEl, 'resumoComissoes.ficamNota', c.ficamNota || '');
     finPreencher(moduleEl, 'resumoComissoes.proximoPagamento', c.proximoPagamento);
     finRenderizarBeneficiarios(moduleEl, c);
     finRenderizarRepasse(moduleEl, c);
@@ -825,6 +866,11 @@ function finRenderizarResumos(moduleEl, dados) {
     finPreencher(moduleEl, 'resumoProducao.parciais', finFormatarInteiro(p.parciais));
     finPreencher(moduleEl, 'resumoProducao.pecasMes', finFormatarInteiro(p.pecasMes));
     finPreencher(moduleEl, 'resumoProducao.valorCompetencia', finFormatarMoeda(p.valorCompetencia));
+    finPreencher(moduleEl, 'resumoProducao.ajustes', finFormatarMoeda(p.ajustes));
+    finPreencherOpcional(moduleEl, 'resumoProducao.ajustesNota', p.ajustesNota || '');
+    finPreencher(moduleEl, 'resumoProducao.restante', finFormatarMoeda(p.restante));
+    finPreencher(moduleEl, 'resumoProducao.ficam', finFormatarMoeda(p.ficam));
+    finPreencherOpcional(moduleEl, 'resumoProducao.ficamNota', p.ficamNota || '');
     finPreencher(moduleEl, 'resumoProducao.atrasada', finFormatarMoeda(p.atrasada));
     finPreencherOpcional(moduleEl, 'resumoProducao.atrasadaNota', p.atrasada ? p.atrasadaNota : '');
     finPreencher(moduleEl, 'resumoProducao.proximoPagamento', p.proximoPagamento);
@@ -860,17 +906,24 @@ function finRenderizarBeneficiarios(moduleEl, resumo) {
         const nome = finCriar('div', 'fin-benef__nome');
         nome.appendChild(window.Beneficiarios.ponto(pessoa.beneficiario));
         nome.appendChild(finCriar('span', null, pessoa.beneficiario || '—'));
-        if (pessoa.cms > 0) {
+        // Negativo também mostra a etiqueta (um ajuste maior que o mês da pessoa).
+        if (pessoa.cms !== 0) {
             const tag = finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--cms', 'CMS');
             tag.title = `CMS: ${finFormatarMoeda(pessoa.cms)}`;
             nome.appendChild(tag);
         }
-        if (pessoa.royalty > 0) {
+        if (pessoa.royalty !== 0) {
             const tag = finCriar('span', 'fin-etiqueta-benef__tipo fin-etiqueta-benef__tipo--royalty', 'Royalty');
             tag.title = `Royalty: ${finFormatarMoeda(pessoa.royalty)}`;
             nome.appendChild(tag);
         }
         const valor = finCriar('span', 'fin-benef__valor', finFormatarMoeda(pessoa.total));
+        // Negativo (um ajuste maior que o mês dela): não recebe nada agora e a
+        // diferença vai para o mês seguinte (06/10/2026).
+        if (pessoa.total < 0) {
+            valor.classList.add('fin-benef__total--atraso');
+            valor.title = 'Termina o mês negativo: não recebe nada nele e a diferença vai para o mês seguinte como ajuste restante do mês anterior';
+        }
         item.append(nome, valor);
         lista.appendChild(item);
     }

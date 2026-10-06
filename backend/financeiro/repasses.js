@@ -99,9 +99,10 @@ function deComissao({ estado, apuradas, configuracao, referencia }) {
         fechamento_id: f.id, itens: r.fechadoNela ? [] : itens
       };
     } else {
+      // O negativo de um mês anterior (fechado ou ainda aberto) abate aqui.
       const itens = [
         ...pendentes.filter(p => String(p.competencia || '').trim() === competencia),
-        ...(estado.proxima === competencia ? comissoes.saldosAnteriores(estado) : [])
+        ...comissoes.restantesDoMes({ apuradas, estado, competencia, propria: true })
       ];
       const resumo = comissoes.resumirItens(itens, { competencia });
       if (!(resumo.a_pagar > 0)) continue;
@@ -144,7 +145,7 @@ function deProducao({ estado, pend, configuracao, feriados = [], referencia }) {
     } else {
       const linhas = [
         ...linhasPend.filter(l => String(l.competencia || '').trim() === competencia),
-        ...(estado.proxima === competencia ? producao.saldosAnteriores(estado) : [])
+        ...producao.restantesDoMes({ pend: linhasPend, estado, competencia, propria: true })
       ];
       const r = producao.resumir(linhas);
       if (!(r.a_pagar > 0)) continue;
