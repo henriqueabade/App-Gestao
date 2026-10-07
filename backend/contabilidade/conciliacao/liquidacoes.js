@@ -243,9 +243,19 @@ const lerSePuder = (api, tabela) => api.get(`/api/${tabela}`).then(c.lista).catc
 // Sem janela nenhuma (só `incluir`), nada entra pela data.
 const naJanela = (data, de, ate) => Boolean(data) && Boolean(de || ate) && (!de || data >= de) && (!ate || data <= ate);
 
+/**
+ * A partir de quantos ids a tabela é lida inteira numa ida só (desempenho,
+ * 06/10/2026: o painel da Contabilidade fazia 125 idas, uma por pedido e uma
+ * por cliente).
+ */
+const IDS_DE_UMA_VEZ_A_PARTIR = 4;
+
 async function porId(api, tabela, ids) {
   const unicos = [...new Set([...ids].map(String).filter(x => x && x !== 'null' && x !== 'undefined'))];
-  const linhas = await Promise.all(unicos.map(id => api.get(`/api/${tabela}/${id}`).catch(() => null)));
+  if (!unicos.length) return new Map();
+  const linhas = unicos.length >= IDS_DE_UMA_VEZ_A_PARTIR
+    ? c.lista(await api.get(`/api/${tabela}`).catch(() => [])).filter(x => x && unicos.includes(String(x.id)))
+    : await Promise.all(unicos.map(id => api.get(`/api/${tabela}/${id}`).catch(() => null)));
   return new Map(linhas.filter(x => x && !x.error && x.id !== undefined).map(x => [String(x.id), x]));
 }
 

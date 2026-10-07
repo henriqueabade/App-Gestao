@@ -159,7 +159,55 @@ function garantirDestinoSeguroEmTeste(method, url) {
   throw error;
 }
 
+/**
+ * LEITURA ÚNICA POR REQUISIÇÃO (desempenho, 06/10/2026).
+ *
+ * Dentro de uma mesma rota, a mesma tabela com o mesmo filtro era lida várias
+ * vezes — o painel da Contabilidade lia os vínculos da conciliação seis vezes,
+ * o do Financeiro os feriados três —, cada leitura uma ida à API. Aqui a
+ * primeira leitura fica guardada enquanto a requisição dura, e as seguintes
+ * recebem uma CÓPIA (quem ordena ou mexe no que leu não estraga o dos outros).
+ *
+ * Qualquer escrita (POST, PUT, PATCH, DELETE) esquece tudo, antes e depois:
+ * quem grava e relê para conferir (duas máquinas ao mesmo tempo, o boleto
+ * relido por id) lê de novo de verdade. Só vale com uma requisição Express de
+ * verdade (`req.method`): as tarefas em segundo plano (conciliação agendada,
+ * integrações) usam o mesmo cliente por muito tempo e continuam sem memória.
+ */
+const VALIDADE_DA_LEITURA_MS = 30000;
+
+function comLeituraUnica(api) {
+  const lidas = new Map();
+  const copia = valor => (valor !== null && typeof valor === 'object' ? structuredClone(valor) : valor);
+  const esquecer = () => lidas.clear();
+  const get = (path, options = {}) => {
+    const chave = `${path}|${JSON.stringify(options?.query || {})}`;
+    const guardada = lidas.get(chave);
+    if (guardada && Date.now() - guardada.em < VALIDADE_DA_LEITURA_MS) return guardada.promessa.then(copia);
+    const promessa = api.get(path, options);
+    lidas.set(chave, { promessa, em: Date.now() });
+    return promessa.then(copia);
+  };
+  const escrita = metodo => (...args) => {
+    esquecer();
+    return Promise.resolve().then(() => api[metodo](...args)).finally(esquecer);
+  };
+  const embrulhado = { ...api, get };
+  // `query` (só o cliente do banco local) pode escrever: esquece também.
+  for (const metodo of ['post', 'put', 'patch', 'delete', 'query']) {
+    if (typeof api[metodo] === 'function') embrulhado[metodo] = escrita(metodo);
+  }
+  return embrulhado;
+}
+
+const ehRequisicaoExpress = req => Boolean(req && typeof req.method === 'string' && req.headers);
+
 function createApiClient(req) {
+  const api = criarCliente(req);
+  return ehRequisicaoExpress(req) ? comLeituraUnica(api) : api;
+}
+
+function criarCliente(req) {
   if (isDev) {
     return require('./localDataClient').createLocalDataClient(undefined, {
       token: req?.headers?.authorization || getToken()
@@ -253,5 +301,6 @@ function createApiClient(req) {
 
 module.exports = {
   createApiClient,
+  comLeituraUnica,
   normalizeToken
 };

@@ -175,5 +175,9 @@
     form.addEventListener('submit', e => { e.preventDefault(); salvar(); });
   }
 
-  carregarOpcoes();
+  // O spinner só sai com categorias, unidades e processos carregados
+  // (desempenho, 06/10/2026 — antes o modal aparecia com os selects vazios).
+  Promise.resolve(carregarOpcoes()).catch(() => null).finally(() => {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoInsumo' }));
+  });
 })();

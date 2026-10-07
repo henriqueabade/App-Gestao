@@ -99,7 +99,29 @@ function separarFiltrosQuery(query = {}) {
     filtrosLocais[chave] = valor;
   }
 
+  incluirColunasDoFiltro(queryParams, filtrosLocais);
   return { queryParams, filtrosLocais };
+}
+
+/**
+ * O `select` traz também as colunas do filtro local (06/10/2026).
+ *
+ * `aplicarFiltrosLocais` compara `item[coluna]`: com `{ categoria, select: 'id' }`
+ * a linha vinha sem `categoria` e o filtro descartava TUDO — "a categoria tem
+ * dependência?" respondia sempre "não" e a exclusão passava. A API antiga
+ * ignorava o `select` e escondia o defeito (no modo DEV ele já existia); agora
+ * ela o respeita. Só mexe em lista de nomes: "*", "-coluna" e vazio já trazem
+ * a linha inteira.
+ */
+function incluirColunasDoFiltro(queryParams, filtrosLocais) {
+  const select = queryParams.select;
+  if (typeof select !== 'string' || !select.trim()) return;
+  const colunas = select.split(',').map(s => s.trim()).filter(Boolean);
+  if (colunas.some(c => c === '*' || c.startsWith('-'))) return;
+  for (const chave of Object.keys(filtrosLocais)) {
+    if (!colunas.includes(chave)) colunas.push(chave);
+  }
+  queryParams.select = colunas.join(',');
 }
 
 function aplicarFiltrosLocais(lista, filtrosLocais) {

@@ -37,6 +37,23 @@ function createLocalDataClient(queryable = database, options = {}) {
     }
     return columnTypes.get(table);
   }
+  /**
+   * As colunas do SELECT, pelo `select` (o mesmo contrato da API remota,
+   * Santissimo-db-API/consultas/colunas.js): nomes = só eles; "-nome" = todas
+   * menos essas (as listas de notas pedem sem os XMLs); vazio ou "*" = todas.
+   */
+  async function selecaoDe(table, select) {
+    if (!select || select === '*') return '*';
+    const pedidas = String(Array.isArray(select) ? select.join(',') : select).split(',').map(s => s.trim()).filter(Boolean);
+    const tirar = pedidas.filter(s => s.startsWith('-')).map(s => s.slice(1));
+    const manter = pedidas.filter(s => !s.startsWith('-'));
+    if (!tirar.length) return manter.map(identifier).join(', ');
+    tirar.forEach(identifier);
+    const todas = [...(await getColumnTypes(table)).keys()];
+    const base = manter.length ? todas.filter(c => manter.includes(c)) : todas;
+    const saida = base.filter(c => !tirar.includes(c));
+    return saida.length ? saida.map(identifier).join(', ') : '*';
+  }
   async function send(method, path, { query = {}, body } = {}) {
     if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('#')) throw invalid();
     const [pathname, search = ''] = path.split('?');
@@ -111,7 +128,7 @@ function createLocalDataClient(queryable = database, options = {}) {
     }
     const condition = where.length ? ` WHERE ${where.join(' AND ')}` : '';
     if (method === 'GET') {
-      const selection = !params.select || params.select === '*' ? '*' : String(params.select).split(',').map(s => identifier(s.trim())).join(', ');
+      const selection = await selecaoDe(table, params.select);
       let sql = `SELECT ${selection} FROM ${qualified}${condition}`;
       if (params.order) {
         sql += ' ORDER BY ' + String(params.order).split(',').map(item => {

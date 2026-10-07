@@ -284,18 +284,27 @@ const ModalManager = (() => {
    */
   function openWithSpinner(htmlPath, scriptPath, overlayId, {
     keepExisting = false,
+    // 0,5 s, como sempre foi aqui (modais de Pedidos e os abertos por cima).
+    // Os modais dos módulos usam 1 s (openModuleModal). O dono decidiu, em
+    // 06/10/2026, não baixar esses pisos.
     minSpinnerMs = 500,
-    timeoutMs = 15000
+    timeoutMs = 15000,
+    // Chamado uma vez, quando o modal aparece (ou é fechado antes disso).
+    aoTerminar = null,
+    // Avisos de pronto além dos três da casa — os modais de Orçamentos
+    // avisam com `orcamentoModalLoaded`. Só para quem pede: o Novo orçamento
+    // dispara esse evento ANTES dos dados e avisa de verdade depois.
+    eventosDePronto = []
   } = {}) {
     const spinner = criarSpinner();
     document.body.appendChild(spinner);
     const inicio = Date.now();
     let encerrado = false;
     let relogio = null;
+    const avisos = ['pedidoModalLoaded', 'modal-ready', 'modalSpinnerLoaded', ...eventosDePronto];
 
     const desligar = () => {
-      window.removeEventListener('pedidoModalLoaded', aoAvisar);
-      window.removeEventListener('modal-ready', aoAvisar);
+      avisos.forEach(nome => window.removeEventListener(nome, aoAvisar));
       window.removeEventListener('modalFechado', aoFechar);
       if (relogio) clearTimeout(relogio);
     };
@@ -308,6 +317,7 @@ const ModalManager = (() => {
         const alvo = document.getElementById(`${overlayId}Overlay`);
         alvo?.classList.remove('hidden');
         alvo?.removeAttribute('aria-hidden');
+        if (typeof aoTerminar === 'function') aoTerminar();
       };
       const resta = Math.max(0, minSpinnerMs - (Date.now() - inicio));
       if (resta <= 0) aplicar();
@@ -321,17 +331,64 @@ const ModalManager = (() => {
       encerrado = true;
       desligar();
       spinner.remove();
+      if (typeof aoTerminar === 'function') aoTerminar();
     }
 
     // Os ouvintes entram DEPOIS da chamada: o trecho síncrono de `open` pode
     // fechar este mesmo id (closeAll ao reabrir), e esse fechamento não é o
     // nosso — ouvi-lo tiraria o spinner antes da hora.
     const aberto = open(htmlPath, scriptPath, overlayId, keepExisting);
-    window.addEventListener('pedidoModalLoaded', aoAvisar);
-    window.addEventListener('modal-ready', aoAvisar);
+    // `modalSpinnerLoaded` é o aviso dos modais dos módulos (Clientes,
+    // Produtos, Usuários…): desde 06/10/2026 eles abrem por aqui também, em
+    // vez de nove cópias sem relógio.
+    avisos.forEach(nome => window.addEventListener(nome, aoAvisar));
     window.addEventListener('modalFechado', aoFechar);
-    relogio = setTimeout(revelar, timeoutMs);
+    relogio = setTimeout(() => {
+      // Relógio de segurança: o modal não avisou (erro no meio da carga). Mostra
+      // assim mesmo — a tela escura presa era pior — e deixa o rastro.
+      if (!encerrado) console.warn(`[modal] ${overlayId} não avisou que estava pronto em ${timeoutMs} ms; revelado assim mesmo.`);
+      revelar();
+    }, timeoutMs);
+    // A página do modal nem chegou (arquivo faltando, erro no fetch) ou a
+    // abertura foi cancelada no meio (outro `closeAll` antes de a página
+    // chegar): não há o que revelar — tira o spinner na hora em vez de deixar
+    // a tela escura até o relógio.
+    const desistir = erro => {
+      if (encerrado) return;
+      encerrado = true;
+      desligar();
+      spinner.remove();
+      if (erro) console.error(`[modal] ${overlayId} não abriu`, erro);
+      if (typeof aoTerminar === 'function') aoTerminar();
+    };
+    Promise.resolve(aberto).then(
+      () => { if (!document.getElementById(`${overlayId}Overlay`)) desistir(null); },
+      erro => desistir(erro || new Error('falha ao abrir'))
+    );
     return aberto;
+  }
+
+  /**
+   * O jeito de os módulos abrirem um modal com spinner (06/10/2026): fecha os
+   * outros, mostra o spinner da casa e revela quando o modal avisa
+   * (`modalSpinnerLoaded`, `modal-ready` ou `pedidoModalLoaded`) — com piso de
+   * 1 s (o das nove cópias que os módulos tinham; o dono pediu para manter),
+   * relógio de segurança e limpeza se o modal for fechado antes.
+   *
+   * A promessa resolve quando o modal APARECE (ou é fechado antes): é ela que
+   * segura o ícone da linha em "carregando" e engole o segundo clique (IA).
+   */
+  const PISO_DOS_MODAIS_DO_MODULO_MS = 1000;
+  function openModuleModal(htmlPath, scriptPath, overlayId, opcoes = {}) {
+    closeAll();
+    return new Promise(resolve => {
+      openWithSpinner(htmlPath, scriptPath, overlayId, {
+        minSpinnerMs: PISO_DOS_MODAIS_DO_MODULO_MS,
+        ...opcoes,
+        keepExisting: true,
+        aoTerminar: resolve
+      });
+    });
   }
 
   function close(overlayId) {
@@ -408,7 +465,7 @@ const ModalManager = (() => {
     });
   }
 
-  return { open, openWithTemplate, openWithSpinner, close, closeAll, signalReady, waitForReady };
+  return { open, openWithTemplate, openWithSpinner, openModuleModal, close, closeAll, signalReady, waitForReady };
 })();
 
 window.ModalManager = ModalManager;

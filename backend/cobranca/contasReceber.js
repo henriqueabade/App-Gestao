@@ -24,6 +24,7 @@ const execucoes = require('./execucoes');
 const webhookEstado = require('./webhookEstado');
 const vencimentos = require('./vencimento');
 const descontoCondicional = require('./descontoCondicional');
+const { SEM_XML } = require('../fiscal/colunasDaNota');
 
 const SITUACOES_FATURADAS = new Set(['enviado', 'entregue']);
 /** Dias depois do vencimento em que o BB ainda recebe o boleto (configuração padrão). */
@@ -293,29 +294,33 @@ async function lerFeriados(api) {
 
 /** Lê tudo o que as contas precisam. Clientes só dos pedidos que aparecem. */
 async function lerBase(api, hoje) {
-  const [pedidos, parcelas, bols, notas, eventos, feriados, ordens] = await Promise.all([
+  // Tudo numa onda só (desempenho, 06/10/2026): os recebimentos e a última
+  // conciliação eram lidos depois, cada um esperando o anterior.
+  const [pedidos, parcelas, bols, notas, eventos, feriados, ordens, lidosRecs, execs] = await Promise.all([
     api.get('/api/pedidos').then(lista).catch(() => []),
     api.get('/api/pedido_parcelas').then(lista).catch(() => []),
     api.get('/api/boletos').then(lista).catch(() => []),
-    api.get('/api/notas_fiscais').then(lista).catch(() => []),
+    // Sem os XMLs (fiscal/colunasDaNota.js): aqui só se usa número, série e situação.
+    api.get('/api/notas_fiscais', { query: { select: SEM_XML } }).then(lista).catch(() => []),
     api.get('/api/boletos_eventos', { query: { origem: 'webhook' } }).then(lista).catch(() => []),
     lerFeriados(api),
     // Ordens de pagamento abertas (sql/ordens_pagamento.sql); sem a tabela, nenhuma.
-    api.get('/api/ordens_pagamento', { query: { status: 'aberta' } }).then(lista).catch(() => [])
+    api.get('/api/ordens_pagamento', { query: { status: 'aberta' } }).then(lista).catch(() => []),
+    recebimentos.lerTodos(api).then(linhas => ({ linhas }), erro => ({ erro })),
+    // Sem a tabela da fase F, simplesmente não há "última conciliação".
+    execucoes.recentes(api, 1).catch(() => ({ linhas: [] }))
   ]);
   let recs = [];
   let sqlPendente = false;
-  try {
-    recs = await recebimentos.lerTodos(api);
-  } catch (e) {
-    if (!e?.extra?.sql_pendente) throw e;
+  if (lidosRecs.erro) {
+    if (!lidosRecs.erro?.extra?.sql_pendente) throw lidosRecs.erro;
     sqlPendente = true;
+  } else {
+    recs = lidosRecs.linhas;
   }
   // Os XMLs das notas não servem aqui.
   const notasLeves = notas.map(n => ({ id: n.id, pedido_id: n.pedido_id, serie: n.serie, numero: n.numero, status_fiscal: n.status_fiscal, data_emissao: n.data_emissao ?? null, valor_total: n.valor_total ?? null }));
   const doWebhook = eventos.filter(e => e && e.origem === 'webhook');
-  // Sem a tabela da fase F, simplesmente não há "última conciliação".
-  const execs = await execucoes.recentes(api, 1).catch(() => ({ linhas: [] }));
   return {
     pedidos, parcelas, boletos: bols, notas: notasLeves, recebimentos: recs, sqlPendente, feriados,
     ordens: ordens.filter(o => o && o.status === 'aberta'),
@@ -329,8 +334,11 @@ async function lerBase(api, hoje) {
   };
 }
 
+/** Os clientes que aparecem: poucos, um GET por cliente; muitos (4+), a tabela numa ida só. */
 async function clientesDe(api, ids) {
   const unicos = [...new Set(ids.filter(v => v !== null && v !== undefined).map(String))];
+  if (!unicos.length) return [];
+  if (unicos.length >= 4) return lista(await api.get('/api/clientes').catch(() => [])).filter(c => c && unicos.includes(String(c.id)));
   const achados = await Promise.all(unicos.map(id => api.get('/api/clientes', { query: { id } }).then(r => lista(r).find(c => String(c?.id) === id) || null).catch(() => null)));
   return achados.filter(Boolean);
 }

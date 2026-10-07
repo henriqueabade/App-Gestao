@@ -558,6 +558,49 @@ test('pagamento por beneficiário: dá para pagar só a CMS, só uma pessoa, e o
   }
 });
 
+test('pagamento anterior ao fechamento (fechou atrasado, pagou antes): só com justificativa, que fica no pagamento e na atividade', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const ontem = (() => { const d = new Date(`${hoje}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.regras.editar', 'financeiro.competencia.fechar', 'financeiro.pagamento.confirmar');
+    await t.chamar('POST', '/api/financeiro/regras', { tipo: 'cms', beneficiario: 'Marcia Lamounier', percentual: 10, escopo: 'todos' });
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'comissao', competencia: ant })).status, 200);
+
+    // A tela recebe o dia do fechamento (Brasília) para saber quando pedir a justificativa.
+    const lista = await t.chamar('GET', '/api/financeiro/fechamentos?tipo=comissao');
+    assert.equal(lista.corpo.fechamentos[0].fechado_dia, hoje);
+
+    const pagar = corpo => t.chamar('POST', '/api/financeiro/pagamentos', { tipo: 'comissao', competencia: ant, data_pagamento: ontem, forma: 'Pix', ...corpo });
+    const sem = await pagar({});
+    assert.equal(sem.status, 422, 'sem justificativa, a data anterior ao fechamento é recusada');
+    assert.match(sem.corpo.error, /anterior ao fechamento da competência .*: escreva a justificativa \(ao menos 10 letras\)/);
+    assert.equal((await pagar({ justificativa: 'pago' })).status, 422, 'justificativa curta demais');
+    assert.equal(t.tabelas.financeiro_pagamentos.length, 0, 'nada foi gravado');
+
+    const com = await pagar({ justificativa: 'Pago no dia; fechei a competência atrasado', observacao: 'Nota 3 emitida no mesmo dia' });
+    assert.equal(com.status, 200, JSON.stringify(com.corpo));
+    assert.equal(com.corpo.antes_do_fechamento, true);
+    const gravado = t.tabelas.financeiro_pagamentos[0];
+    assert.equal(String(gravado.data_pagamento).slice(0, 10), ontem, 'a data de verdade fica');
+    assert.match(gravado.observacao, /^Pago antes do fechamento \(\d{2}\/\d{2}\/\d{4}\): Pago no dia; fechei a competência atrasado · Nota 3 emitida no mesmo dia$/);
+    const evento = t.tabelas.financeiro_eventos.find(e => e.tipo === 'pagamento_confirmado');
+    assert.match(evento.descricao, /antes do fechamento \(\d{2}\/\d{2}\/\d{4}\): Pago no dia; fechei a competência atrasado/);
+    assert.equal(JSON.parse(evento.dados).justificativa, 'Pago no dia; fechei a competência atrasado');
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('pagamento no dia do fechamento ou depois continua sem justificativa', () => {
+  const { justificativaAntesDoFechamento } = require('./financeiro/fechamentos');
+  assert.equal(justificativaAntesDoFechamento('2026-10-06', '2026-10-06', ''), null);
+  assert.equal(justificativaAntesDoFechamento('2026-10-07', '2026-10-06', ''), null);
+  assert.equal(justificativaAntesDoFechamento('2026-09-17', '2026-10-06', '  pago   no dia certo  '), 'pago no dia certo');
+  assert.throws(() => justificativaAntesDoFechamento('2026-09-17', '2026-10-06', 'curta'), /ao menos 10 letras/);
+});
+
 test('ajuste manual aparece no painel: o cartão mostra o que falta pagar e o resumo diz quanto os ajustes tiraram', async () => {
   const hoje = hojeBR();
   const ant = mesesAntes(hoje.slice(0, 7), 1);

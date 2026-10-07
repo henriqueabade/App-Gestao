@@ -15,6 +15,11 @@
   document.getElementById('voltarNovoProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
+  // As leituras da abertura (etapas, coleções, desenhistas, Regra Produção):
+  // o modal só avisa que está pronto quando todas voltaram — antes ele
+  // aparecia com os selects vazios enchendo-se na frente do usuário.
+  const cargasIniciais = [];
+
   const form = document.getElementById('novoProdutoForm');
   // O botão de Registrar/Salvar mora no RODAPÉ do modal, fora do `<form>`,
   // ligado por `form="..."` — o HTML permite. `querySelector` dos
@@ -130,11 +135,11 @@
     .forEach(inp => inp.addEventListener('input', updateTotals));
 
   if(etapaSelect){
-    window.electronAPI.listarEtapasProducao().then(procs => {
+    cargasIniciais.push(window.electronAPI.listarEtapasProducao().then(procs => {
       procs.sort((a,b)=> (a.ordem ?? 0) - (b.ordem ?? 0));
       etapaSelect.innerHTML = procs.map(p => `<option value="${p.id}">${p.nome ?? p}</option>`).join('');
       etapaSelect.selectedIndex = 0;
-    }).catch(err => console.error('Erro ao carregar processos', err));
+    }).catch(err => console.error('Erro ao carregar processos', err)));
   }
 
   if(colecaoSelect){
@@ -257,7 +262,7 @@
 
    
     if (colecaoSelect) {
-      carregarColecoes();
+      cargasIniciais.push(carregarColecoes());
 
 
 
@@ -321,7 +326,7 @@
   }
 
   if (desenhistaSelect) {
-    carregarDesenhistas('');
+    cargasIniciais.push(carregarDesenhistas(''));
     handleDesenhistaAtualizado = (event) => {
       const detalhe = event?.detail || {};
       let selecionado = detalhe.selecionado ?? desenhistaSelect.value;
@@ -423,7 +428,7 @@
     });
   });
 
-  prepararRegra().then(pintarRegra).catch(err => console.error('Erro ao preparar a Regra Produção', err));
+  cargasIniciais.push(prepararRegra().then(pintarRegra).catch(err => console.error('Erro ao preparar a Regra Produção', err)));
 
   const tableBody = document.querySelector('#itensTabela tbody');
   const ordemContainer = document.getElementById('confirmarOrdemContainer');
@@ -902,4 +907,11 @@
   }
 
   updateTotals();
+
+  // Pronto só com tudo o que a abertura leu (o spinner de Produtos e a
+  // leitura de IA esperam este aviso). Erro numa carga não segura a tela:
+  // cada uma já avisa o próprio erro.
+  Promise.allSettled(cargasIniciais).finally(() => {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoProduto' }));
+  });
 })();

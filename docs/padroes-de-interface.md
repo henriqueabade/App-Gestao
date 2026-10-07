@@ -400,6 +400,24 @@ módulo vira coluna flexível e a tabela ocupa **o que sobra**
 quebram em duas linhas e a conta fixa deixava as últimas linhas fora da
 tela. Módulo novo nesse formato: prefira o jeito de Clientes.
 
+Módulo que entra em `MODULES_WITHOUT_SCROLL` com `.table-scroll` precisa entrar
+**também** na lista `body[data-current-module="…"] #content.no-scroll .table-scroll`
+de `src/styles/scroll.css` — sem ela a tabela fica com `overflow hidden`:
+cortada no fim e sem rolagem. Foi o defeito de Contatos (06/10/2026);
+`entradaCascata.test.js` confere todos.
+
+### Entrada em cascata dos módulos
+
+Os blocos com `animate-fade-in-up` sobem e aparecem um depois do outro, como
+no Financeiro: `src/js/utils/entrada-cascata.js` dá o atraso pela **ordem**
+(0,2 s, 0,3 s, 0,4 s… até 0,6 s; o cabeçalho não anima) e, terminada a
+entrada, deixa o bloco parado (`.entrada-feita`) — mostrar de novo não refaz a
+subida. Financeiro, Contabilidade, Dashboard e Relatórios têm a cascata deles.
+
+**Nunca ponha `opacity`/`transform` inline nos blocos da entrada**: o
+`fadeInUp` só tem o `to` e parte do valor que o bloco já tem — com opacity 1
+a animação existe mas não se vê. Era assim em 12 módulos até 06/10/2026.
+
 ### Menu lateral: o conteúdo desliza, não recalcula
 
 Abrir/recolher o menu muda a margem do `#mainContent` **de uma vez** e o
@@ -465,10 +483,36 @@ não por `[role="dialog"]`. Coberto por
 
 Modal que lê o servidor antes de mostrar alguma coisa **não aparece vazio**:
 fica o spinner da casa (`.app-loading-indicator` com a logo) por no mínimo 1 s
-e o modal aparece já preenchido. No Financeiro, `finSpinnerDoModal()`
+(decisão do dono, mantida em 06/10/2026 — não baixar) e o modal aparece já
+preenchido. No Financeiro, `finSpinnerDoModal()`
 (`src/js/financeiro.js`) põe o spinner e `window.FinanceiroModalPronto()` o
 troca pelo modal quando a primeira leitura termina (no máximo 15 s). Trocar um
 filtro dentro do modal mostra uma linha com o mesmo spinner no lugar da tabela.
+
+**Modal aberto pela tela do módulo** (Clientes, Produtos, Orçamentos, Usuários…):
+`Modal.openModuleModal(html, script, id)` — fecha os outros, põe o spinner,
+revela quando o modal avisa (`modalSpinnerLoaded`, `modal-ready` ou
+`pedidoModalLoaded`; os de Orçamentos passam
+`{ eventosDePronto: ['orcamentoModalLoaded'] }`), com relógio de 15 s e limpeza
+se o modal for fechado ou a página dele não chegar. Nada de spinner montado à
+mão no módulo: eram dez cópias, sem relógio, e um modal com erro deixava a tela
+escura presa. O overlay nasce com `hidden`, e o modal só avisa **depois** das
+leituras da abertura (`Promise.allSettled(cargas).finally(avisar)`).
+
+**Módulo novo:** a primeira carga é publicada para o menu —
+`window.moduloPronto?.(carregarX());` no init. A máscara do módulo sai quando
+ela termina (teto de 20 s), e não por palpite.
+
+**Voltar a um módulo recarrega a tela de verdade** (máscara, spinner de 1 s e
+a entrada em cascata), como na primeira vez. Uma "volta instantânea" com a
+foto da última visita chegou a ser feita em 06/10/2026 e foi tirada no dia
+seguinte a pedido do dono: a troca da foto pela tela parecia uma travada, e a
+carga real já está rápida. Não a reponha sem ele pedir.
+
+**Leitura com `select` e filtro local** (backend): a API respeita o `select`
+desde 06/10/2026. Quem refiltra a resposta por uma coluna (`getFiltrado` de
+Produtos e Matéria-prima) precisa dessa coluna no `select` — o
+`separarFiltrosQuery` já a acrescenta sozinho.
 
 Nos modais de Pedidos quem faz isso é `Modal.openWithSpinner`. Do lado do
 modal, a regra é **revelar depois de carregar**:

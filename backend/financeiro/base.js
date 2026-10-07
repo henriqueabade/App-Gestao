@@ -80,11 +80,19 @@ async function lerComissoes(api, { hoje, desde = null }) {
   return { receber, linhas, ajustes, regras: tudo, contexto, ajustesPessoa: porPessoa || [], ...fech };
 }
 
-/** Nomes dos clientes que aparecem (um GET por cliente, como as contas a receber). */
+/**
+ * Nomes dos clientes que aparecem. Poucos: um GET por cliente, juntos. Muitos
+ * (a partir de 4): a tabela numa ida só (desempenho, 06/10/2026 — o modal de
+ * Produção fazia 70 idas só de nomes).
+ */
 async function nomesDosClientes(api, ids) {
   const unicos = [...new Set(ids.filter(v => v !== null && v !== undefined).map(String))];
-  const achados = await Promise.all(unicos.map(id => api.get('/api/clientes', { query: { id, select: 'id,nome_fantasia,razao_social' } })
-    .then(r => c.lista(r).find(x => String(x?.id) === id) || null).catch(() => null)));
+  if (!unicos.length) return new Map();
+  const select = 'id,nome_fantasia,razao_social';
+  const achados = unicos.length >= 4
+    ? c.lista(await api.get('/api/clientes', { query: { select } }).catch(() => [])).filter(x => x && unicos.includes(String(x.id)))
+    : await Promise.all(unicos.map(id => api.get('/api/clientes', { query: { id, select } })
+      .then(r => c.lista(r).find(x => String(x?.id) === id) || null).catch(() => null)));
   return new Map(achados.filter(Boolean).map(x => [String(x.id), c.nomeDoCliente(x)]));
 }
 

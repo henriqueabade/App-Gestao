@@ -214,6 +214,21 @@ body {
     }
 }
 
+/* Filtrar e Limpar nunca encolhem: com as etiquetas de tipo (nomes longos)
+   o bloco dos totais pedia a largura de todas numa linha e os dois botões
+   quebravam um embaixo do outro, deixando a barra alta e torta (06/10/2026).
+   Quem cede é o bloco das etiquetas — e a que não cabe some (tags-uma-linha),
+   como em Clientes. */
+.filter-bar > #bt-actions {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+}
+
+.filter-bar > .contatos-totais {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
 @media (max-width: 767px) {
     .filter-bar {
         flex-direction: column;

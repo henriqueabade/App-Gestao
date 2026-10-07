@@ -273,6 +273,27 @@ function alvoDoPagamento(f, entrada, jaPagos) {
 const mesmaChaveDePagamento = (p, alvo) => semAcento(p.beneficiario) === semAcento(alvo.beneficiario)
   && String(p.tipo_comissao || '') === String(alvo.tipo_comissao || '');
 
+/** O dia (Brasília) em que a competência foi fechada — 'YYYY-MM-DD'. */
+const diaDoFechamento = f => comissoes.diaEmBrasilia(f.fechado_em || f.criado_em) || null;
+
+/**
+ * Pagamento com data ANTERIOR ao fechamento (07/10/2026, pedido do dono:
+ * "fechei atrasado mas foi pago"): vale, desde que com justificativa — o
+ * mínimo de letras é o mesmo do "Gerar boletos". A justificativa fica no
+ * pagamento (observação) e na atividade.
+ */
+const MINIMO_JUSTIFICATIVA = 10;
+
+function justificativaAntesDoFechamento(data, fechadoEm, texto) {
+  if (!fechadoEm || !(data < fechadoEm)) return null;
+  const limpa = String(texto ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (limpa.length < MINIMO_JUSTIFICATIVA) {
+    throw c.erro(`O pagamento (${c.impressa(data)}) é anterior ao fechamento da competência (${c.impressa(fechadoEm)}): `
+      + `escreva a justificativa (ao menos ${MINIMO_JUSTIFICATIVA} letras) para confirmar.`, 422, { antes_do_fechamento: true, fechado_em: fechadoEm });
+  }
+  return limpa;
+}
+
 async function pagar({ api, entrada, hoje, usuarioId = null }) {
   const tipo = validarTipo(String(entrada?.tipo || ''));
   const competencia = validarCompetencia(String(entrada?.competencia || ''));
@@ -294,13 +315,19 @@ async function pagar({ api, entrada, hoje, usuarioId = null }) {
   if (c.centavos(pagoAte + valor) > c.centavos(f.total)) {
     throw c.erro(`O pagamento passa do total da competência: já foram pagos ${c.reais(pagoAte)} de ${c.reais(f.total)}.`, 409);
   }
-  if (data < (comissoes.diaEmBrasilia(f.fechado_em || f.criado_em) || data)) throw c.erro('O pagamento não pode ser anterior ao fechamento.');
+  // Antes do fechamento, só com justificativa (fechou atrasado, pagou antes).
+  const fechadoEm = diaDoFechamento(f);
+  const justificativa = justificativaAntesDoFechamento(data, fechadoEm, entrada?.justificativa);
+  const nota = c.texto(entrada?.observacao, 500) || null;
+  const observacao = justificativa
+    ? c.texto(`Pago antes do fechamento (${c.impressa(fechadoEm)}): ${justificativa}${nota ? ` · ${nota}` : ''}`, 500)
+    : nota;
   let pagamento;
   try {
     pagamento = await c.inserir(api, 'financeiro_pagamentos', {
       fechamento_id: f.id, tipo, competencia, valor, data_pagamento: data, forma,
       beneficiario: alvo.beneficiario, tipo_comissao: alvo.tipo_comissao,
-      observacao: c.texto(entrada?.observacao, 500) || null, criado_por: usuarioId, criado_em: c.agora()
+      observacao, criado_por: usuarioId, criado_em: c.agora()
     });
   } catch (e) {
     if (c.ehDuplicado(e)) throw c.erro(`${alvo.rotulo} acabou de ser pago por outra pessoa.`, 409);
@@ -314,8 +341,10 @@ async function pagar({ api, entrada, hoje, usuarioId = null }) {
     descricao: `Pagamento de ${TIPOS[tipo].toLowerCase()} de ${c.rotuloCompetencia(competencia)}${paraQuem}: `
       + `${c.reais(valor)} em ${c.impressa(data)} (${forma})`
       + `${falta > 0 ? `; ainda faltam ${c.reais(falta)}` : ''}${atraso ? ` — depois do prazo (${c.impressa(f.pagar_ate)})` : ''}`
+      + `${justificativa ? ` — antes do fechamento (${c.impressa(fechadoEm)}): ${justificativa}` : ''}`,
+    dados: justificativa ? { antes_do_fechamento: true, fechado_em: fechadoEm, justificativa } : null
   });
-  return { pagamento, atrasado: Boolean(atraso), falta_pagar: falta, alvo: alvo.rotulo };
+  return { pagamento, atrasado: Boolean(atraso), antes_do_fechamento: Boolean(justificativa), falta_pagar: falta, alvo: alvo.rotulo };
 }
 
 /** Os fechamentos de um tipo (mais novos primeiro), com o pagamento. */
@@ -330,7 +359,9 @@ function listarDe(fech, tipo) {
       const total = c.centavos(f.total);
       return {
         id: f.id, tipo, competencia: f.competencia, quantidade: Number(f.quantidade) || 0, total,
-        pagar_ate: c.dia(f.pagar_ate), fechado_em: f.fechado_em, resumo: c.jsonDe(f.por_setor, []),
+        // O dia do fechamento em Brasília: a tela pede a justificativa do
+        // pagamento anterior a ele com a mesma conta do servidor.
+        pagar_ate: c.dia(f.pagar_ate), fechado_em: f.fechado_em, fechado_dia: diaDoFechamento(f), resumo: c.jsonDe(f.por_setor, []),
         pagamento: pg ? { data: pg.data_pagamento, valor: c.centavos(pg.valor), forma: pg.forma } : null,
         // Pagar por beneficiário: a competência pode estar paga só em parte.
         pagamentos: pagos.map(x => ({
@@ -347,4 +378,4 @@ async function listar(api, tipo) {
   return listarDe(await base.lerFechamentos(api), tipo);
 }
 
-module.exports = { TIPOS, FORMAS_PAGAMENTO, TIPOS_COMISSAO, conferir, dadosComissao, previa, fechar, pagar, alvoDoPagamento, listarDe, listar, limparTentativa };
+module.exports = { TIPOS, FORMAS_PAGAMENTO, TIPOS_COMISSAO, MINIMO_JUSTIFICATIVA, conferir, dadosComissao, previa, fechar, pagar, alvoDoPagamento, justificativaAntesDoFechamento, listarDe, listar, limparTentativa };

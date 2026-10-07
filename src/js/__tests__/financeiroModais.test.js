@@ -816,6 +816,18 @@ test('comissões por quem recebe: etiquetas com cor, legenda e filtro nas telas;
     assert.match(SCRIPT, /confirmarBtn\.classList\.toggle\('hidden', !\(falta > 0\)\);/, 'com saldo, ainda dá para pagar o resto');
     assert.match(SCRIPT, /'Escolha quem foi pago \(ou marque "Pagar tudo o que falta"\)\.'/);
     assert.match(MODULO, /parcial: 'paga em parte'/, 'a competência paga pela metade tem situação própria');
+
+    // Pagamento antes do fechamento (fechou atrasado, pagou antes — dono, 07/10/2026):
+    // a justificativa aparece só nesse caso, é obrigatória e vai junto no POST.
+    assert.match(pagamento, /<div id="finPagamentoJustificativaCaixa" class="md:col-span-2 hidden">/, 'nasce escondida');
+    assert.match(pagamento, /<textarea id="finPagamentoJustificativa" rows="2" maxlength="300"/);
+    assert.ok(pagamento.indexOf('finPagamentoJustificativaCaixa') > pagamento.indexOf('id="finPagamentoData"')
+      && pagamento.indexOf('finPagamentoJustificativaCaixa') < pagamento.indexOf('id="finPagamentoObservacoes"'), 'entre a data e as observações');
+    assert.match(SCRIPT, /return dia && dataCampo\.value && dataCampo\.value < dia \? dia : null;/, 'compara com o dia do fechamento (fechado_dia, do servidor)');
+    assert.match(SCRIPT, /fechadoDepois && justificativa\.length < MINIMO_JUSTIFICATIVA/);
+    assert.match(SCRIPT, /\.\.\.\(fechadoDepois \? \{ justificativa \} : \{\}\)/);
+    assert.match(SCRIPT, /dataCampo\.addEventListener\('input', \(\) => pintarJustificativa\(atual\(\)\)\);/, 'aparece ao mudar a data');
+    assert.doesNotMatch(SCRIPT, /não pode ser anterior ao fechamento/);
 });
 
 test('atividade: Financeiro e SEFAZ numa linha só, do mais novo ao mais antigo, com quem fez', () => {
@@ -870,6 +882,7 @@ test('atividade: Financeiro e SEFAZ numa linha só, do mais novo ao mais antigo,
 test('spinner da casa: o modal só aparece depois da primeira leitura, com tempo mínimo', () => {
     // O módulo põe o spinner ANTES de abrir o modal (o mesmo desenho dos outros módulos)...
     assert.match(MODULO, /finSpinnerDoModal\(modal\.overlay\);\s*window\.Modal\.open\(modal\.html/);
+    // Piso de 1 s: o dono decidiu não baixar (06/10/2026).
     assert.match(MODULO, /const FIN_SPINNER_MINIMO_MS = 1000;/);
     assert.match(MODULO, /indicador\.className = 'app-loading-indicator app-loading-indicator--compact';/);
     assert.match(MODULO, /orbita\.className = 'module-loading-orbit';/);

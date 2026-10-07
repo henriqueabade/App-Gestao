@@ -5270,7 +5270,8 @@ function initRelatoriosModule() {
     }
 
     if (initialTabKey && loadTableForTab) {
-        loadTableForTab(initialTabKey);
+        // A primeira carga, publicada para o menu tirar a máscara na hora certa (06/10/2026).
+        window.moduloPronto?.(loadTableForTab(initialTabKey));
     }
 }
 
@@ -5372,10 +5373,15 @@ function setupReportTables(root) {
 
     const fallback = root.querySelector('#relatoriosTableFallback');
 
+    // A carga em andamento: pedir de novo a mesma aba devolve ela, e não uma
+    // promessa já resolvida (o menu tiraria a máscara antes da tabela).
+    let cargaAtual = null;
     const loadTable = async key => {
-        if (!key || container.dataset.currentTab === key) return;
+        if (!key) return;
+        if (container.dataset.currentTab === key) return cargaAtual;
 
         container.dataset.currentTab = key;
+        cargaAtual = null;
         container.innerHTML = '';
 
         const template = templates.get(key);
@@ -5392,9 +5398,11 @@ function setupReportTables(root) {
                     }, { once: true });
                 }
             });
-            populateReportTable(key, container).catch(error => {
+            // Devolvida para a primeira carga ser publicada ao menu (moduloPronto).
+            cargaAtual = populateReportTable(key, container).catch(error => {
                 console.error(`Erro ao carregar tabela do relatório "${key}"`, error);
             });
+            return cargaAtual;
         } else if (fallback) {
             container.appendChild(fallback.content.cloneNode(true));
         } else {

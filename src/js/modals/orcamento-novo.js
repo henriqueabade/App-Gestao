@@ -15,6 +15,10 @@
     .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
+  // As listas que o modal busca ao abrir (clientes, donos, produtos): o
+  // spinner só sai depois delas (desempenho, 06/10/2026 — antes o modal
+  // aparecia vazio e os selects se enchiam na frente do usuário).
+  const cargasIniciais = [];
 
   const form = document.getElementById('novoOrcamentoForm');
 
@@ -430,12 +434,11 @@
     // vínculo com a prospecção se perderia sem aviso.
     window.EstadoTrabalho?.registrarContexto?.(overlayId,
       () => ({ orcamentoProspeccao: prospeccao }));
-    prepararProspeccao();
+    cargasIniciais.push(prepararProspeccao());
   } else {
-    carregarClientes();
+    cargasIniciais.push(carregarClientes());
   }
-  carregarUsuarios();
-  carregarProdutos();
+  cargasIniciais.push(carregarUsuarios(), carregarProdutos());
 
   function formatCurrency(v) {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1006,6 +1009,11 @@
   // já faziam. Este era o único dos três que não avisava — e quem abre o modal
   // esperando o aviso ficava preso na máscara de espera até o tempo limite.
   window.dispatchEvent(new CustomEvent('orcamentoModalLoaded', { detail: overlayId }));
+  // O spinner da casa (Modal.openModuleModal) e o preenchimento da IA esperam
+  // as listas: o aviso de pronto sai quando elas chegam (ou falham).
+  Promise.allSettled(cargasIniciais).finally(() => {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
+  });
 
   const limparBtn = document.getElementById('limparNovoOrcamento');
   if (limparBtn) {

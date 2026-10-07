@@ -1224,6 +1224,14 @@ header.glass-surface {
         transform: none;
         transition: none;
     }
+
+    /* Sem animação, o bloco de entrada fica visível (06/10/2026). Antes era o
+       JavaScript de cada módulo que punha opacity 1 — e com isso anulava a
+       animação para todo mundo. As folhas que definem o próprio
+       `.animate-fade-in-up` (carregadas depois) continuam valendo. */
+    .animate-fade-in-up {
+        opacity: 1;
+    }
 }
 
 .rotating {
@@ -1506,9 +1514,14 @@ header.glass-surface {
     animation-play-state: paused;
 }
 
+/* O cabeçalho (título e descrição) não sobe: fica no lugar desde a máscara.
+   `transform` também: sem ele, o `translateY(20px)` de partida da subida
+   deixava o cabeçalho 20 px abaixo até o fim da entrada, e ele "pulava" no
+   final. Era o JavaScript antigo dos módulos que o zerava (06/10/2026). */
 .module-introduction-row.animate-fade-in-up {
     opacity: 1;
     animation: none;
+    transform: translateY(0);
 }
 
 .module-loading-mask {
@@ -1544,6 +1557,15 @@ header.glass-surface {
 
 [data-menu-theme="light"] .module-loading-mask--module-mounted {
     background: transparent;
+}
+
+/* Entrada concluída (src/js/utils/entrada-cascata.js): o bloco fica parado no
+   estado final da subida. Sem isto, esconder e mostrar de novo (lista vazia ao
+   filtrar, depois com resultado) refazia a subida a cada vez (06/10/2026). */
+.animate-fade-in-up.entrada-feita {
+    animation: none;
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .module-loading-heading {

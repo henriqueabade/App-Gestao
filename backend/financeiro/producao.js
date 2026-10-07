@@ -32,7 +32,7 @@ const unidades = require('./producaoUnidades');
 const avisos = require('../avisosEnvolvidos');
 const ajustesPessoa = require('./ajustesPessoa');
 const { estadoDosFechamentos, competenciaAlvo } = require('./comissoes');
-const { carregarInsumos, carregarRota } = require('../cancelamentoEstorno');
+const { carregarInsumos, carregarRota, carregarRotas } = require('../cancelamentoEstorno');
 
 const semAcento = unidades.semAcento;
 /** Pedidos em que se registra produção (a produção começa antes da NF). */
@@ -310,19 +310,28 @@ function montarCompetencia({ pend, estado, competencia, propria = false }) {
 
 // ------------------------------------------------------------------- leitura
 
-async function itensDe(api, pedidoIds) {
+/**
+ * A partir de quantos pedidos uma tabela é lida inteira, numa ida só, em vez
+ * de uma ida por pedido (desempenho, 06/10/2026: o painel do Financeiro fazia
+ * ~210 idas só aqui).
+ */
+const PEDIDOS_DE_UMA_VEZ_A_PARTIR = 4;
+
+/** As linhas de `tabela` dos pedidos dados (`campo` é a coluna do pedido). */
+async function linhasDosPedidos(api, tabela, campo, pedidoIds) {
   const unicos = [...new Set(pedidoIds.filter(Boolean).map(String))];
-  const listas = await Promise.all(unicos.map(id => api.get('/api/pedidos_itens', { query: { pedido_id: id } })
-    .then(r => c.lista(r).filter(i => String(i?.pedido_id) === id)).catch(() => [])));
+  if (!unicos.length) return [];
+  if (unicos.length >= PEDIDOS_DE_UMA_VEZ_A_PARTIR) {
+    const desejados = new Set(unicos);
+    return c.lista(await api.get(`/api/${tabela}`).catch(() => [])).filter(l => l && desejados.has(String(l[campo])));
+  }
+  const listas = await Promise.all(unicos.map(id => api.get(`/api/${tabela}`, { query: { [campo]: id } })
+    .then(r => c.lista(r).filter(l => String(l?.[campo]) === id)).catch(() => [])));
   return listas.flat();
 }
 
-async function extDe(api, pedidoIds) {
-  const unicos = [...new Set(pedidoIds.filter(Boolean).map(String))];
-  const listas = await Promise.all(unicos.map(id => api.get('/api/pedido_itens_ext', { query: { id_pedido: id } })
-    .then(r => c.lista(r).filter(x => String(x?.id_pedido) === id)).catch(() => [])));
-  return listas.flat();
-}
+const itensDe = (api, pedidoIds) => linhasDosPedidos(api, 'pedidos_itens', 'pedido_id', pedidoIds);
+const extDe = (api, pedidoIds) => linhasDosPedidos(api, 'pedido_itens_ext', 'id_pedido', pedidoIds);
 
 async function precosDaTabela(api) {
   const linhas = c.lista(await api.get('/api/tabela_fixa').catch(() => []));
@@ -345,6 +354,9 @@ async function montarFilas(api, { itens, etapasPor }) {
   const cacheRotas = new Map();
   const gruposPor = new Map();
   const rotaPor = new Map();
+  // As rotas de todas as peças de uma vez: antes era uma ida à API por peça,
+  // em fila (150 peças × a latência — ~18 s com a internet).
+  await carregarRotas(api, itens.map(i => i.produto_id), cacheRotas, insumos).catch(() => cacheRotas);
   for (const item of itens) {
     const rota = item.produto_id === null || item.produto_id === undefined ? [] : await carregarRota(api, item.produto_id, cacheRotas, insumos).catch(() => []);
     rotaPor.set(String(item.id), rota);

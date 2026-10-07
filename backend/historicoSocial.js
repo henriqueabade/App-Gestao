@@ -281,7 +281,9 @@ function montarLinhaDoTempo({
 /** Mapa id → nome de todos os usuários (uma leitura só: a API não filtra por lista). */
 async function nomesDosUsuarios(api) {
   try {
-    const usuarios = await api.get('/api/usuarios');
+    // Só id e nome (desempenho, 06/10/2026): a linha inteira trazia a foto de
+    // perfil de cada usuário (em base64 no banco local) só para pegar o nome.
+    const usuarios = await api.get('/api/usuarios', { query: { select: 'id,nome' } });
     return new Map(lista(usuarios).map(u => [Number(u.id), u.nome]));
   } catch (err) {
     console.warn('[historico-social] sem nomes de usuário:', err?.message || err);

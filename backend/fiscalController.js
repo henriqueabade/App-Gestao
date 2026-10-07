@@ -599,7 +599,8 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       const lista = r => (Array.isArray(r) ? r : []);
       const [pedidos, notas, eventosCce] = await Promise.all([
         api.get('/api/pedidos').then(lista).catch(() => []),
-        api.get('/api/notas_fiscais').then(lista).catch(() => []),
+        // A atividade só olha datas e situações: sem os XMLs (fiscal/colunasDaNota.js).
+        api.get('/api/notas_fiscais', { query: { select: require('./fiscal/colunasDaNota').SEM_XML } }).then(lista).catch(() => []),
         api.get('/api/notas_fiscais_eventos', { query: { tipo: 'cce' } }).then(lista).catch(() => [])
       ]);
       res.json({ itens: painel.atividadeRecente({ notas, eventosCce, pedidos, limite }) });

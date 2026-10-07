@@ -79,7 +79,45 @@ async function carregarRota(api, produtoId, cache, insumos) {
   const bruta = await api
     .get('/api/produtos_insumos', { query: { produto_id: chave } })
     .catch(() => []);
-  const rota = (Array.isArray(bruta) ? bruta : [])
+  const rota = rotaDasLinhas(bruta, insumos);
+  cache.set(chave, rota);
+  return rota;
+}
+
+/**
+ * A partir de quantos produtos vale ler `produtos_insumos` inteira de uma vez
+ * em vez de um produto por vez (desempenho, 06/10/2026: o Financeiro lia 150
+ * rotas em fila, uma ida à API por peça).
+ */
+const ROTAS_DE_UMA_VEZ_A_PARTIR = 4;
+
+/**
+ * As rotas de vários produtos, guardadas em `cache` (o mesmo de carregarRota).
+ * Poucos produtos: uma leitura por produto, todas juntas. Muitos: a tabela
+ * inteira numa leitura só, repartida aqui.
+ */
+async function carregarRotas(api, produtoIds, cache, insumos) {
+  const faltam = [...new Set((produtoIds || []).filter(id => id !== null && id !== undefined).map(Number))]
+    .filter(id => Number.isFinite(id) && !cache.has(id));
+  if (!faltam.length) return cache;
+  if (faltam.length < ROTAS_DE_UMA_VEZ_A_PARTIR) {
+    await Promise.all(faltam.map(id => carregarRota(api, id, cache, insumos).catch(() => cache.set(id, []))));
+    return cache;
+  }
+  const todas = await api.get('/api/produtos_insumos').catch(() => []);
+  const porProduto = new Map();
+  for (const linha of (Array.isArray(todas) ? todas : [])) {
+    const id = Number(linha?.produto_id);
+    if (!porProduto.has(id)) porProduto.set(id, []);
+    porProduto.get(id).push(linha);
+  }
+  for (const id of faltam) cache.set(id, rotaDasLinhas(porProduto.get(id) || [], insumos));
+  return cache;
+}
+
+/** As linhas de produtos_insumos de UM produto viram a rota dele, em ordem. Pura. */
+function rotaDasLinhas(bruta, insumos) {
+  return (Array.isArray(bruta) ? bruta : [])
     .map(p => {
       const materia = insumos?.get(Number(p.insumo_id)) || null;
       return {
@@ -93,9 +131,6 @@ async function carregarRota(api, produtoId, cache, insumos) {
     })
     .filter(p => Number.isFinite(p.insumo_id))
     .sort((a, b) => a.ordem - b.ordem);
-
-  cache.set(chave, rota);
-  return rota;
 }
 
 /**
@@ -237,6 +272,8 @@ async function necessidadeDoPedido(api, pedidoId, cacheRotas, insumos) {
   }
 
   const necessidade = new Map();
+  // As rotas de todas as peças de uma vez (antes era uma ida por peça, em fila).
+  await carregarRotas(api, (Array.isArray(itens) ? itens : []).map(i => i.produto_id), cacheRotas, insumos);
 
   for (const item of (Array.isArray(itens) ? itens : [])) {
     const rota = await carregarRota(api, item.produto_id, cacheRotas, insumos);
@@ -1012,6 +1049,7 @@ async function estornarCancelamento(api, {
   // pedido tem, nada é escrito e o pedido NÃO é cancelado.
   // ------------------------------------------------------------------
   const preparados = [];
+  await carregarRotas(api, listaItens.filter(item => (porItem.get(String(item.id)) || []).length).map(item => item.produto_id), cacheRotas, insumos);
   for (const item of listaItens) {
     const chave = String(item.id);
     const decisoes = porItem.get(chave);
@@ -1507,6 +1545,7 @@ async function opcoesDeEstorno(api, pedidoId) {
 
   const cacheRotas = new Map();
   const saida = [];
+  await carregarRotas(api, (Array.isArray(itens) ? itens : []).map(i => i.produto_id), cacheRotas, insumos);
 
   for (const item of (Array.isArray(itens) ? itens : [])) {
     const chave = String(item.id);
@@ -1546,5 +1585,5 @@ async function opcoesDeEstorno(api, pedidoId) {
 module.exports = {
   estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos,
   // A devolução (backend/devolucoes/estoque.js) devolve peça pronta ao estoque pelo mesmo caminho.
-  carregarInsumos, carregarRota, lotePara, TABELA_LOTES
+  carregarInsumos, carregarRota, carregarRotas, rotaDasLinhas, lotePara, TABELA_LOTES
 };

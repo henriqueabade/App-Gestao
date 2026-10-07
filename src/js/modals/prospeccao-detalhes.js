@@ -889,12 +889,16 @@
     espera.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
     document.body.appendChild(espera);
 
+    // O Novo orçamento avisa `orcamentoModalLoaded` logo que monta e
+    // `modalSpinnerLoaded` quando clientes, usuários e peças chegaram
+    // (desempenho, 06/10/2026): é este o que tira a máscara.
+    const aviso = overlayId === 'novoOrcamento' ? 'modalSpinnerLoaded' : 'orcamentoModalLoaded';
     let encerrado = false;
     const revelar = () => {
       if (encerrado) return;
       encerrado = true;
       clearTimeout(desistir);
-      window.removeEventListener('orcamentoModalLoaded', aoCarregar);
+      window.removeEventListener(aviso, aoCarregar);
       espera.remove();
       document.getElementById(`${overlayId}Overlay`)?.classList.remove('hidden');
       concluir();
@@ -916,7 +920,7 @@
       }
     }, 8000);
 
-    window.addEventListener('orcamentoModalLoaded', aoCarregar);
+    window.addEventListener(aviso, aoCarregar);
 
     // Nem todo modal de orçamento nasce escondido. Quando o overlay já vem
     // visível, esperar o evento só serve para deixar a máscara por cima de uma
