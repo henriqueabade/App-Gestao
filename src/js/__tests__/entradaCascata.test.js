@@ -86,10 +86,12 @@ test('nenhum módulo põe opacity/transform inline nos blocos da entrada (era o 
   assert.deepStrictEqual(culpados, [], `voltou o trecho que anula a entrada: ${culpados.join(', ')}`);
 });
 
-test('menu: ordena na montagem (sem foto), conclui depois de revelar; o utilitário vem antes do menu.js', () => {
+test('menu: ordena na montagem, conclui depois de revelar; o utilitário vem antes do menu.js', () => {
   const menu = ler('js/menu.js');
   const corpo = menu.slice(menu.indexOf('async function loadPage('), menu.indexOf('window.loadPage = loadPage;'));
-  assert.match(corpo, /if \(veuDaFoto\) module\.classList\.add\('modulo-volta-instantanea'\);\s*(\/\/[^\n]*\n\s*)*else window\.EntradaCascata\?\.ordenar\(module, page\);/);
+  assert.match(corpo, /\n\s*window\.EntradaCascata\?\.ordenar\(module, page\);/);
+  assert.ok(corpo.indexOf('window.EntradaCascata?.ordenar(module, page);') < corpo.indexOf('content.replaceChildren(module'),
+    'os atrasos têm de estar postos antes de o módulo entrar na tela');
   const revela = corpo.indexOf("content.classList.remove('is-module-loading');");
   const conclui = corpo.indexOf('window.EntradaCascata?.concluir(module, page);');
   assert.ok(revela > 0 && conclui > revela, 'concluir tem de vir depois de a máscara sair');
@@ -106,8 +108,19 @@ test('CSS: bloco parado no estado final, cabeçalho no lugar, e visível para qu
     'o cabeçalho ficava 20 px abaixo até o fim da entrada');
   const reduzido = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce) {\n    .animate-fade-in-up,'));
   assert.match(reduzido.slice(0, 900), /\.animate-fade-in-up \{\s*opacity: 1;\s*\}/, 'sem animação o bloco ficava invisível');
-  // A volta pela foto termina no mesmo estado final, não em `none`.
-  assert.match(css, /\.modulo-volta-instantanea \.module-enter-after-loading \{[^}]*transform: translateY\(0\) !important;/);
+});
+
+test('voltar a um módulo recarrega a tela de verdade: a foto da última visita saiu (decisão do dono, 07/10/2026)', () => {
+  // "A foto ao reentrar dá como se fosse uma travada, uma piscada" — o dono
+  // prefere a recarga normal (máscara, spinner de 1 s e a entrada em cascata).
+  const menu = ler('js/menu.js');
+  assert.doesNotMatch(menu, /FotoDoModulo|fotoDaSaida|veuDaFoto|modulo-volta-instantanea/);
+  assert.ok(!fs.existsSync(path.join(SRC, 'js', 'utils', 'foto-do-modulo.js')));
+  assert.doesNotMatch(ler('html/menu.html'), /foto-do-modulo\.js/);
+  assert.doesNotMatch(ler('css/menu.css'), /module-snapshot|modulo-volta-instantanea/);
+  const raiz = path.join(SRC, '..');
+  assert.doesNotMatch(fs.readFileSync(path.join(raiz, 'main.js'), 'utf8'), /modulo:fotografar|modulo:foto/);
+  assert.doesNotMatch(fs.readFileSync(path.join(raiz, 'preload.js'), 'utf8'), /fotografarArea|lerFotoDaArea/);
 });
 
 test('todo módulo que não rola e tem tabela com rolagem própria está na lista do scroll.css (Contatos faltava)', () => {

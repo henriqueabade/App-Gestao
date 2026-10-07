@@ -24,7 +24,7 @@ Tudo está na branch `Otimização-de-Carregamentos`, nos dois repositórios
 - **Abrir o Financeiro** (três painéis juntos): de 419 idas e 7 MB para 50 idas e 0,73 MB, antes do gzip.
 - **Contabilidade:** de 4,5 MB para 0,26 MB.
 - **Pico de chamadas simultâneas à API:** também caiu (Financeiro de 104 para 28, Contabilidade de 73 para 41).
-- **Na tela:** voltar a um módulo já visitado mostra a tela na hora (Fase 4). O piso do spinner continua o de antes.
+- **Na tela:** o piso do spinner continua o de antes. Voltar a um módulo recarrega a tela de verdade, como na primeira vez (a Fase 4 foi tirada, abaixo).
 
 ### Decisões (as do dono, de 06/10/2026, e as técnicas)
 1. **Piso do spinner (dono): NÃO baixar.** Ficou como sempre foi:
@@ -33,11 +33,7 @@ Tudo está na branch `Otimização-de-Carregamentos`, nos dois repositórios
    - nenhum no Visualizar/Editar orçamento, que aparece quando o orçamento chega.
    - Uma primeira versão tinha baixado tudo para 0,3 s; foi desfeita.
 2. **API da internet (dono): pode, desde que não quebre nada.** Foi auditada ponto a ponto (abaixo, Fase 2). Precisa ser publicada de novo; sem isso o programa funciona igual, só baixa mais.
-3. **Volta instantânea (dono): sim, mas sem perder a atualização ao vivo.** Por isso é uma FOTO só para a espera, e não um cache:
-   - a cada volta, o módulo é buscado e lido do zero, como sempre;
-   - a foto sai assim que os dados novos chegam;
-   - o que outro usuário mudou aparece na volta, e as atualizações por evento e o sino continuam iguais;
-   - nunca há dois elementos com o mesmo id, nem ninguém editando dado velho.
+3. **Volta instantânea (dono): tirada em 07/10/2026.** Foi feita como uma foto da última visita, mostrada só enquanto o módulo relia tudo. O dono viu e preferiu a recarga normal: a troca da foto pela tela parecia "uma travada, uma piscada", e a carga real já está rápida. Saiu inteira: `main.js`, `preload.js`, o utilitário, o CSS e o teste.
 4. **Otimizado nos dois modos** (DEV e PROD). O `select` vale também no `localDataClient`.
 
 ### O que mudou, fase por fase
@@ -88,24 +84,15 @@ Tudo está na branch `Otimização-de-Carregamentos`, nos dois repositórios
   - "carregar uma vez os scripts grandes do Financeiro e da Contabilidade". Medido: ler e compilar custa ~6 ms por abertura. Reescrever os scripts para isso traria risco sem ganho que se sinta;
   - o spinner próprio do Financeiro e da Contabilidade foi mantido: já tinha relógio e limpeza, com o piso de 1 s de sempre.
 
-**Fase 4 (volta instantânea):**
-- ao sair de um módulo pronto, o menu pede ao Electron uma foto só da área do módulo (`main.js › 'modulo:fotografar'`);
-- a troca de módulo espera só a leitura da tela: 30–50 ms medidos, com teto de 150 ms. O JPEG (~10 ms) sai depois, por fora;
-- ao voltar, a foto aparece com o selo "Atualizando…" e o módulo carrega por baixo. Quando ele fica pronto, a troca é sem animação e na mesma rolagem;
-- **não há foto quando:**
-  - há modal ou aviso por cima;
-  - o módulo ainda está carregando;
-  - o layout mudou (janela, barra lateral, tema);
-  - a foto passou de 30 min;
-  - nesses casos, a máscara de sempre;
-- a foto fica só na memória da janela;
-- trava: `src/js/__tests__/voltaInstantanea.test.js`, que também confere que a foto nunca encurta a releitura;
-- conferido no Electron com o `menu.html` e o `preload.js` de verdade, inclusive com um "outro usuário" cadastrando um cliente entre a saída e a volta. A foto mostrou 12 clientes; a tela viva, logo depois, os 13.
+**Fase 4 (volta instantânea): feita em 06/10 e tirada em 07/10/2026, a pedido do dono.**
+- Ao voltar a um módulo, ela mostrava a foto da última visita enquanto o módulo relia tudo por baixo.
+- Na prática, a troca da foto pela tela parecia uma travada. Com as Fases 1 a 3 a carga real já é rápida, então voltar recarrega a tela de verdade: máscara, spinner de 1 s e a entrada em cascata.
+- `entradaCascata.test.js` confere que ela não volta sem querer.
 
 ### O que o dono precisa fazer
 1. Tudo está na branch `Otimização-de-Carregamentos` (nos dois repositórios); a `main` ficou como estava. Juntar à `main` quando aprovar.
 2. **Publicar a API** (Santissimo-db-API, a partir dessa branch) e reiniciá-la. Até lá, o programa funciona, só baixa mais.
-3. **Fechar e abrir o programa.** `main.js` e `preload.js` mudaram (a foto da volta instantânea).
+3. **Fechar e abrir o programa.**
 4. Nenhum SQL novo.
 
 ## Como foi medido

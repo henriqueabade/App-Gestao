@@ -3353,11 +3353,6 @@ function keepModuleIntroductionVisible(module) {
     });
 }
 
-// Volta instantânea (desempenho, Fase 4 — 06/10/2026): a foto do módulo da
-// última visita no lugar do spinner. A lógica mora em
-// src/js/utils/foto-do-modulo.js; sem ela, a máscara de sempre.
-const fotoDoModulo = () => window.FotoDoModulo || null;
-
 async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
     if (!content || !page) return;
@@ -3370,10 +3365,6 @@ async function loadPage(page, options = {}) {
         document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
         return;
     }
-
-    // A foto do módulo que está saindo (volta instantânea) é pedida JÁ, no
-    // clique, com a tela ainda intacta; a troca espera por ela mais abaixo.
-    const fotoDaSaida = Promise.resolve(fotoDoModulo()?.fotografar(content)).catch(() => null);
 
     // Nenhum módulo é buscado antes de as permissões chegarem: sem elas (ou
     // sem a permissão do módulo) o HTML dele nem sai do disco.
@@ -3410,23 +3401,13 @@ async function loadPage(page, options = {}) {
     // sem ela a tela aparecia montando aos pedaços, com cara de bug. A máscara
     // segura a revelação até tudo estar pronto (mínimo de 1 s, ver abaixo).
     const usesLoadingMask = true;
-
-    // Antes de trocar a tela, a foto de quem sai (no máximo
-    // FotoDoModulo.ESPERA_MAXIMA_MS). Depois, a de quem entra, se ainda conferir.
-    await fotoDaSaida;
-    if (loadId !== moduleLoadSequence) return;
-    const fotoDaVolta = usesLoadingMask ? (fotoDoModulo()?.queServe(page, content) || null) : null;
-    // Guardada para o `finally`: a rolagem só pode voltar depois de o módulo
-    // receber o modo de rolagem dele.
-    let rolagemDaVolta = null;
-
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
     // Tempo mínimo de exibição do spinner do módulo: se o carregamento for mais
     // rápido que isso, seguramos a revelação para não "piscar". Nada é somado
     // quando o carregamento já demora mais que o mínimo. O dono decidiu manter
-    // 1 s (06/10/2026). Na volta pela foto não há spinner, e o piso não vale.
+    // 1 s (06/10/2026).
     const MIN_MODULE_SPINNER_MS = 1000;
     const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
@@ -3435,10 +3416,7 @@ async function loadPage(page, options = {}) {
     // importante em módulos longos, cuja montagem não pode deslocar o centro do
     // spinner. Voltar ao topo também garante que a máscara apareça sempre.
     content.scrollTop = 0;
-    // Com foto, ela no lugar da máscara: a tela de antes, na hora, com o selo
-    // "Atualizando…". O mesmo véu fica até o módulo ficar pronto.
-    const veuDaFoto = fotoDaVolta ? fotoDoModulo().criarVeu(fotoDaVolta, moduleTitle) : null;
-    content.replaceChildren(...(veuDaFoto ? [veuDaFoto] : usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
+    content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 
     document.getElementById('page-style')?.remove();
     document.getElementById('page-script')?.remove();
@@ -3461,16 +3439,13 @@ async function loadPage(page, options = {}) {
             module.classList.add('module-loading-content');
             keepModuleIntroductionVisible(module);
         }
-        // Voltando pela foto, o módulo entra sem a animação de subida: a foto
-        // já mostrou a tela — animar depois dela seria um piscar.
-        if (veuDaFoto) module.classList.add('modulo-volta-instantanea');
-        // Sem foto, a entrada em cascata do Financeiro: um bloco depois do
-        // outro, pela ordem (src/js/utils/entrada-cascata.js).
-        else window.EntradaCascata?.ordenar(module, page);
+        // A entrada em cascata do Financeiro: um bloco depois do outro, pela
+        // ordem (src/js/utils/entrada-cascata.js).
+        window.EntradaCascata?.ordenar(module, page);
         const introduction = readModuleIntroduction(module, moduleTitle);
-        const mask = veuDaFoto || (usesLoadingMask
+        const mask = usesLoadingMask
             ? createModuleLoadingMask(page, introduction.title, introduction.description, { keepsModuleIntroduction: true })
-            : null);
+            : null;
         content.replaceChildren(module, ...(mask ? [mask] : []));
 
         const style = document.createElement('link');
@@ -3539,8 +3514,7 @@ async function loadPage(page, options = {}) {
 
         if (loadId !== moduleLoadSequence) return;
 
-        // O piso é do SPINNER (não piscar). Com a foto não há spinner para piscar.
-        if (usesLoadingMask && !veuDaFoto) {
+        if (usesLoadingMask) {
             const restante = MIN_MODULE_SPINNER_MS - (Date.now() - inicioSpinnerModulo);
             if (restante > 0) await new Promise(r => setTimeout(r, restante));
             if (loadId !== moduleLoadSequence) return;
@@ -3549,7 +3523,6 @@ async function loadPage(page, options = {}) {
         module.classList.remove('module-loading-content');
         mask?.remove();
         content.classList.remove('is-module-loading');
-        if (fotoDaVolta) rolagemDaVolta = fotoDaVolta.rolagem;
         // Terminada a entrada, os blocos ficam parados: mostrar de novo (lista
         // vazia e depois com resultado) não refaz a subida.
         window.EntradaCascata?.concluir(module, page);
@@ -3566,10 +3539,6 @@ async function loadPage(page, options = {}) {
     } finally {
         if (loadId === moduleLoadSequence) {
             applyModuleScrollBehavior(page);
-            // De volta pela foto: na mesma altura em que a foto mostrava.
-            if (rolagemDaVolta > 0) {
-                content.scrollTop = Math.min(rolagemDaVolta, Math.max(0, content.scrollHeight - content.clientHeight));
-            }
             document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
         }
     }

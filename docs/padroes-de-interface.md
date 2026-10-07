@@ -503,14 +503,11 @@ leituras da abertura (`Promise.allSettled(cargas).finally(avisar)`).
 `window.moduloPronto?.(carregarX());` no init. A máscara do módulo sai quando
 ela termina (teto de 20 s), e não por palpite.
 
-**Volta instantânea:** ao voltar a um módulo já visitado, o menu mostra a foto
-da última visita com o selo "Atualizando…" enquanto o módulo recarrega por
-baixo (`src/js/utils/foto-do-modulo.js`). A foto **nunca** substitui a
-releitura: o módulo é buscado do zero como sempre (usuários simultâneos — o
-dado novo de outra pessoa aparece na volta) e a foto só sai quando os dados
-novos chegaram. O módulo não precisa fazer nada; só não pode depender da
-animação de entrada para funcionar (de volta pela foto, a subida é desligada
-com `.modulo-volta-instantanea`).
+**Voltar a um módulo recarrega a tela de verdade** (máscara, spinner de 1 s e
+a entrada em cascata), como na primeira vez. Uma "volta instantânea" com a
+foto da última visita chegou a ser feita em 06/10/2026 e foi tirada no dia
+seguinte a pedido do dono: a troca da foto pela tela parecia uma travada, e a
+carga real já está rápida. Não a reponha sem ele pedir.
 
 **Leitura com `select` e filtro local** (backend): a API respeita o `select`
 desde 06/10/2026. Quem refiltra a resposta por uma coluna (`getFiltrado` de

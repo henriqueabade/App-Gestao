@@ -175,50 +175,6 @@ ipcMain.handle('get-runtime-config', () => {
 // decidido na inicialização —, não o que o .env diz agora.
 ipcMain.handle('get-modo-banco', () => (useLocalDatabase ? 'DEV' : 'PROD'));
 
-// Volta instantânea dos módulos (desempenho, 06/10/2026): ao sair de um
-// módulo, a tela pede uma foto da área dele e a mostra quando o usuário volta,
-// enquanto o módulo recarrega por baixo. Só a janela que pede é fotografada,
-// só o retângulo pedido, e a foto volta em JPEG para a própria tela — nada vai
-// para disco.
-//
-// Em duas etapas: 'modulo:fotografar' só LÊ a tela e devolve um número — é
-// por ele que a troca de módulo espera —; 'modulo:foto' faz o JPEG depois,
-// fora do caminho do clique. A foto não buscada some em 15 s, e só a janela
-// que tirou pode buscá-la.
-const FOTOS_DE_MODULO = new Map();
-let ultimaFotoDeModulo = 0;
-ipcMain.handle('modulo:fotografar', async (event, area) => {
-  const r = area || {};
-  const rect = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
-  const valido = [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)
-    && rect.x >= 0 && rect.y >= 0 && rect.width >= 1 && rect.height >= 1
-    && rect.width <= 8000 && rect.height <= 8000;
-  if (!valido) return null;
-  try {
-    const imagem = await event.sender.capturePage(rect);
-    if (!imagem || imagem.isEmpty()) return null;
-    const id = ++ultimaFotoDeModulo;
-    FOTOS_DE_MODULO.set(id, { imagem, dono: event.sender.id });
-    const validade = setTimeout(() => FOTOS_DE_MODULO.delete(id), 15000);
-    validade.unref?.();
-    return id;
-  } catch (err) {
-    console.warn('[modulo:fotografar] falhou:', err?.message || err);
-    return null;
-  }
-});
-ipcMain.handle('modulo:foto', (event, id) => {
-  const foto = FOTOS_DE_MODULO.get(id);
-  if (!foto || foto.dono !== event.sender.id) return null;
-  FOTOS_DE_MODULO.delete(id);
-  try {
-    return foto.imagem.toJPEG(82);
-  } catch (err) {
-    console.warn('[modulo:foto] falhou:', err?.message || err);
-    return null;
-  }
-});
-
 // Escolha do .pfx do certificado fiscal. Só o CAMINHO volta ao renderer: quem
 // lê o arquivo, valida a senha e o guarda cifrado é o backend
 // (backend/fiscalController.js). A chave privada nunca passa pela tela.
