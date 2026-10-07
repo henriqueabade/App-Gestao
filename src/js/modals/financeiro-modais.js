@@ -3151,6 +3151,12 @@
     const caixaQuem = el('finPagamentoQuemRecebe');
     const listaQuem = el('finPagamentoBeneficiarios');
     const tudoCampo = el('finPagamentoTudo');
+    // Pagamento antes do fechamento (fechou atrasado, pagou antes — pedido do
+    // dono, 07/10/2026): vale com justificativa, o mesmo mínimo do servidor.
+    const justCaixa = el('finPagamentoJustificativaCaixa');
+    const justCampo = el('finPagamentoJustificativa');
+    const justDica = el('finPagamentoJustificativaDica');
+    const MINIMO_JUSTIFICATIVA = 10;
     const hoje = hojeLocal();
     dataCampo.max = hoje;
     const listas = {};
@@ -3307,9 +3313,26 @@
       return linhas;
     }
 
+    /** O dia do fechamento, quando a data escolhida fica antes dele; senão null. */
+    function fechamentoDepoisDaData(f) {
+      const dia = f?.fechado_dia || null;
+      return dia && dataCampo.value && dataCampo.value < dia ? dia : null;
+    }
+
+    function pintarJustificativa(f) {
+      const dia = fechamentoDepoisDaData(f);
+      justCaixa?.classList.toggle('hidden', !dia);
+      if (justDica) {
+        justDica.textContent = dia
+          ? `A competência foi fechada em ${formatarData(dia)} e o pagamento é de ${formatarData(dataCampo.value)}: diga por quê (ao menos ${MINIMO_JUSTIFICATIVA} letras). Fica no pagamento e na atividade.`
+          : '';
+      }
+    }
+
     function pintar() {
       const lida = Boolean(listas[tipoAtual()]);
       const f = atual();
+      pintarJustificativa(f);
       const linhas = pintarQuemRecebe(f);
       const porPessoa = Boolean(linhas.length) && !tudoCampo.checked;
       const selecionadas = linhas.filter(l => !l.pago && escolhidos.has(l.chave));
@@ -3362,14 +3385,22 @@
       const alvos = porPessoa ? linhas.filter(l => !l.pago && escolhidos.has(l.chave)) : [];
       const falta = f ? Number(f.falta_pagar ?? f.total) || 0 : 0;
       const valor = porPessoa ? somaDe(alvos) : falta;
+      const fechadoDepois = fechamentoDepoisDaData(f);
+      const justificativa = fechadoDepois ? String(justCampo?.value || '').replace(/\s+/g, ' ').trim() : '';
       const erro = !f ? 'Esta competência ainda não foi fechada.'
         : !(Number(f.total) > 0) ? 'Não há valor a pagar nesta competência.'
           : !(falta > 0) ? 'O pagamento desta competência já foi confirmado por inteiro.'
             : porPessoa && !alvos.length ? 'Escolha quem foi pago (ou marque "Pagar tudo o que falta").'
               : !dataCampo.value ? 'Informe a data do pagamento.'
                 : dataCampo.value > hoje ? 'A data do pagamento não pode ser futura.'
-                  : !formaSel.value ? 'Informe como foi pago.' : '';
-      if (erro) { mostrarMensagem('finPagamentoMensagem', erro); return; }
+                  : fechadoDepois && justificativa.length < MINIMO_JUSTIFICATIVA
+                    ? `O pagamento é anterior ao fechamento (${formatarData(fechadoDepois)}): escreva a justificativa (ao menos ${MINIMO_JUSTIFICATIVA} letras).`
+                    : !formaSel.value ? 'Informe como foi pago.' : '';
+      if (erro) {
+        mostrarMensagem('finPagamentoMensagem', erro);
+        if (fechadoDepois && justificativa.length < MINIMO_JUSTIFICATIVA) justCampo?.focus();
+        return;
+      }
       const tipo = tipoAtual();
       const quem = porPessoa ? alvos.map(l => `${TIPOS_COMISSAO[l.tipo]} de ${l.beneficiario}`).join(', ') : 'tudo o que falta';
       // Quem será avisado no sino (as escolhas da lista "Avisar no sino").
@@ -3379,11 +3410,15 @@
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Confirmar o pagamento?',
         message: `${tipo === 'comissao' ? 'Comissões' : 'Produção'} de ${rotuloCompetenciaCurto(compSel.value)} — ${quem}: `
-          + `${formatarMoeda(valor)} pagos em ${formatarData(dataCampo.value)} (${formaSel.value}). Não tem volta.`,
+          + `${formatarMoeda(valor)} pagos em ${formatarData(dataCampo.value)} (${formaSel.value}).`
+          + `${fechadoDepois ? ` Antes do fechamento (${formatarData(fechadoDepois)}): ${justificativa}.` : ''} Não tem volta.`,
         confirmText: 'Confirmar pagamento'
       });
       if (!confirmado) return;
-      const base = { tipo, competencia: compSel.value, data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finPagamentoObservacoes').value };
+      const base = {
+        tipo, competencia: compSel.value, data_pagamento: dataCampo.value, forma: formaSel.value, observacao: el('finPagamentoObservacoes').value,
+        ...(fechadoDepois ? { justificativa } : {})
+      };
       // Um pagamento por beneficiário escolhido: cada um fica registrado com o nome dele.
       const envios = porPessoa ? alvos.map(l => ({ ...base, beneficiario: l.beneficiario, tipo_comissao: l.tipo })) : [base];
       processando = true;
@@ -3435,6 +3470,9 @@
     radios.forEach(r => r.addEventListener('change', () => { escolhidos.clear(); carregar(); }));
     compSel.addEventListener('change', () => { escolhidos.clear(); pintar(); carregarRateio(); });
     tudoCampo?.addEventListener('change', pintar);
+    // A data muda: a justificativa aparece (ou some) na hora.
+    dataCampo.addEventListener('input', () => pintarJustificativa(atual()));
+    dataCampo.addEventListener('change', () => pintarJustificativa(atual()));
     acionar(confirmarBtn, confirmarPagamento);
     carregarUsuarios();
     return carregar();
