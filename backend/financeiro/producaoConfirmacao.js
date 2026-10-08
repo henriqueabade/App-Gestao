@@ -63,6 +63,29 @@ async function lerConfirmacoes(api, competencia) {
   }
 }
 
+/**
+ * Setembro/2026 é o primeiro mês da produção no sistema. Dele em diante, as
+ * peças só são confirmadas no fechamento de um mês depois que o mês ANTERIOR
+ * foi fechado (pedido do dono, 08/10/2026: peças de setembro foram
+ * confirmadas em outubro por engano, com setembro ainda aberto).
+ */
+const PRIMEIRA_COMPETENCIA = '2026-09';
+
+async function exigirMesAnteriorFechado(api, competencia) {
+  if (competencia === PRIMEIRA_COMPETENCIA) return;
+  const rotulo = c.rotuloCompetencia;
+  if (competencia < PRIMEIRA_COMPETENCIA) {
+    throw c.erro(`A produção começa em ${rotulo(PRIMEIRA_COMPETENCIA)}: não há peças a confirmar em ${rotulo(competencia)}.`, 409);
+  }
+  const anterior = c.somarMeses(competencia, -1);
+  const fechamentos = await c.ler(api, 'financeiro_fechamentos', { tipo: 'producao' });
+  const fechado = fechamentos.some(f => String(f.competencia || '').trim() === anterior && f.status === 'fechado');
+  if (!fechado) {
+    throw c.erro(`Feche antes a produção de ${rotulo(anterior)}: as peças de ${rotulo(competencia)} só são confirmadas depois que ${rotulo(anterior)} estiver fechado.`, 409,
+      { codigo: 'MES_ANTERIOR_ABERTO', mes_anterior: anterior });
+  }
+}
+
 /** O último dia da competência (o evento tem de cair no mês que está fechando). */
 function diaDaCompetencia(competencia, hoje) {
   const [ano, mes] = String(competencia).split('-').map(Number);
@@ -192,6 +215,17 @@ async function pedidosSemDecisao(api, { competencia, hoje }) {
   return r.pedidos.filter(p => !p.confirmado).map(p => p.numero);
 }
 
+/** Apaga um registro de produção que acabou de entrar (e o histórico dele). Nunca lança. */
+async function desfazerRegistro(api, eventoId) {
+  try {
+    const historico = await c.ler(api, 'financeiro_eventos', { tipo: 'producao_registrada', referencia_id: eventoId }).catch(() => []);
+    for (const h of historico) await api.delete(`/api/financeiro_eventos/${h.id}`).catch(() => {});
+    await api.delete(`/api/producao_eventos/${eventoId}`);
+  } catch (e) {
+    console.error(`[financeiro] o registro de produção ${eventoId} ficou sem decisão e não pôde ser apagado:`, e?.message || e);
+  }
+}
+
 async function gravarDecisao({ api, atual, campos, usuarioId }) {
   const quando = c.agora();
   if (atual) {
@@ -208,9 +242,12 @@ async function gravarDecisao({ api, atual, campos, usuarioId }) {
  * mês seguinte, 07/10/2026).
  * Reconfirmar a mesma competência refaz a decisão (enquanto não fechou).
  */
-async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = 'fechamento', data = null, usuarioId = null, hoje }) {
+async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = 'fechamento', data = null, usuarioId = null, hoje, somentePendentes = false }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   if (!ORIGENS[origem]) throw c.erro('Origem da confirmação inválida.');
+  // A trava vale para a tela do fechamento. O envio ao cliente confirma
+  // sozinho, no mês do envio, e não pode falhar por causa dela.
+  if (origem === 'fechamento') await exigirMesAnteriorFechado(api, comp);
   const pendencias = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
   const card = pendencias.pedidos.find(p => String(p.pedido_id) === String(pedidoId));
   if (!card) throw c.erro('Este pedido não tem produção pendente nesta competência.', 409);
@@ -220,6 +257,9 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
 
   const feitas = [];
   for (const d of decisoes) {
+    // "Tudo pronto"/"Nada pronto" do pedido decidem só o que falta: uma
+    // decisão já tomada (até numa tela desatualizada, em outra aba) fica.
+    if (somentePendentes && decisaoPor.has(chave(d.pedido_item_id, d.etapa_id))) continue;
     const peca = card.pecas.find(p => String(p.pedido_item_id) === String(d.pedido_item_id));
     const processo = peca?.processos.find(e => String(e.etapa_id) === String(d.etapa_id));
     if (!processo) throw c.erro('Uma das peças/processos não está mais pendente. Atualize a tela.', 409);
@@ -252,21 +292,29 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
       evento = r.evento;
     }
     const pendentes = quatro(Math.max(0, disponivel - prontas));
-    await gravarDecisao({
-      api, atual, usuarioId,
-      campos: {
-        competencia: comp, pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
-        quantidade_pronta: prontas, quantidade_pendente: pendentes, origem,
-        producao_evento_id: evento?.id ?? (prontas > 0 ? atual?.producao_evento_id ?? null : null)
-      }
-    });
+    try {
+      await gravarDecisao({
+        api, atual, usuarioId,
+        campos: {
+          competencia: comp, pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
+          quantidade_pronta: prontas, quantidade_pendente: pendentes, origem,
+          producao_evento_id: evento?.id ?? (prontas > 0 ? atual?.producao_evento_id ?? null : null)
+        }
+      });
+    } catch (e) {
+      // A decisão não entrou (a trava do banco, uma queda): o registro feito
+      // logo acima não pode ficar solto — sem decisão, ele contaria no mês e
+      // "comeria" o processo da peça (08/10/2026).
+      if (evento?.id) await desfazerRegistro(api, evento.id);
+      throw e;
+    }
     feitas.push({ pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id, prontas, pendentes, peca: peca.codigo || peca.nome, processo: processo.nome });
   }
 
   const prontasTotais = quatro(feitas.reduce((s, x) => s + x.prontas, 0));
   const pendentesTotais = quatro(feitas.reduce((s, x) => s + x.pendentes, 0));
   const unidadesNoTexto = (n, uma, varias) => `${lerUnidades(n)} ${n === 1 ? uma : varias}`;
-  await auditoria.registrar(api, {
+  if (feitas.length) await auditoria.registrar(api, {
     tipo: 'producao_confirmada', pedidoId: card.pedido_id, usuarioId,
     descricao: `Produção do pedido ${card.numero} confirmada ${ORIGENS[origem]} em ${c.rotuloCompetencia(comp)}: `
       + `${unidadesNoTexto(prontasTotais, 'unidade pronta', 'unidades prontas')}, ${unidadesNoTexto(pendentesTotais, 'unidade fica', 'unidades ficam')} para o mês seguinte.`
@@ -443,7 +491,7 @@ async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = n
 }
 
 module.exports = {
-  TABELA, SQL_CONFIRMACAO, ORIGENS,
-  lerConfirmacoes, lerPendencias, pedidosSemDecisao, confirmar, confirmarTudoDoPedido, diaDaCompetencia,
+  TABELA, SQL_CONFIRMACAO, ORIGENS, PRIMEIRA_COMPETENCIA,
+  exigirMesAnteriorFechado, lerConfirmacoes, lerPendencias, pedidosSemDecisao, confirmar, confirmarTudoDoPedido, diaDaCompetencia,
   avancoNoProcesso, fracaoJaPaga, confirmarCancelamento
 };

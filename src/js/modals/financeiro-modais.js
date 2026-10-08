@@ -1915,6 +1915,32 @@
     return e?.message || 'Erro inesperado.';
   }
 
+  /**
+   * A trava do mês anterior da produção (08/10/2026): setembro/2026 é o
+   * primeiro mês e os seguintes só recebem peças com o anterior fechado. A
+   * frase vem do backend (código MES_ANTERIOR_ABERTO) ou, de um caminho que só
+   * o banco pegou, no meio do erro dele ("… Erro no INSERT: Feche antes …") —
+   * aqui ela sai limpa. Pura.
+   */
+  function fraseDoMesAnterior(texto) {
+    const bruto = String(texto || '');
+    const i = bruto.indexOf('Feche antes a produção de');
+    return i === -1 ? null : bruto.slice(i).trim();
+  }
+
+  /** Mostra a trava na caixa padrão. Devolve true quando era ela. */
+  async function avisarMesAnteriorAberto(textoOuErro) {
+    const texto = typeof textoOuErro === 'string' ? textoOuErro : textoOuErro?.message;
+    const frase = fraseDoMesAnterior(texto);
+    if (!frase || !window.DialogPadrao?.info) return false;
+    await window.DialogPadrao.info({
+      title: 'Mês anterior em aberto', tom: 'aviso', icone: 'fa-lock',
+      message: frase,
+      nota: 'A produção fecha em ordem, a partir de setembro/2026: feche o mês anterior em "Fechar competência — produção" e depois confirme as peças deste mês.'
+    });
+    return true;
+  }
+
   function opcao(valor, texto) {
     const o = document.createElement('option');
     o.value = valor;
@@ -2883,7 +2909,9 @@
       // decidida mantém os botões VISÍVEIS, só inativos.
       const marcarPeca = valor => {
         for (const processo of peca.processos) {
-          if (!processo.saldo) continue;
+          // Processo já decidido não se sobrescreve (08/10/2026): para mudar
+          // um deles, edite o número dele e use "Confirmar peça".
+          if (!processo.saldo || processo.decidido) continue;
           escolhas.set(chaveDoProcesso(peca, processo), valor === 'tudo' ? limite(processo) : 0);
         }
         pintar();
@@ -3048,16 +3076,17 @@
       pintar();
     }
 
-    async function enviarDecisoes(pedido, decisoes, mensagem) {
+    async function enviarDecisoes(pedido, decisoes, mensagem, extra = {}) {
       try {
         await fetchApi('/api/financeiro/producao/confirmar', {
           method: 'POST',
-          body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes })
+          body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes, ...extra })
         });
         window.showToast?.(mensagem, 'success');
         avisarAlteracao();
         await carregar();
       } catch (e) {
+        if (await avisarMesAnteriorAberto(e)) { aviso(''); await carregar(); return; }
         aviso(textoDoErro(e, 'Você não tem permissão para registrar produção.'));
       }
     }
@@ -3079,20 +3108,39 @@
       await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`);
     }
 
+    /**
+     * O que "Tudo pronto" e "Nada pronto" do pedido decidem: só os processos
+     * SEM decisão nesta competência. O que já foi decidido nunca é
+     * sobrescrito por eles (pedido do dono, 08/10/2026: um "Nada pronto"
+     * zerou uma Marcenaria já confirmada) — para mudar um, edite o número
+     * dele e use "Confirmar peça".
+     */
+    function semDecisaoNoPedido(pedido) {
+      return pedido.pecas.flatMap(peca => peca.processos
+        .filter(processo => limite(processo) > 0 && !processo.decidido)
+        .map(processo => ({ peca, processo })));
+    }
+
+    function resumoDoQueFalta(alvo) {
+      const unidades = alvo.reduce((s, { processo }) => s + limite(processo), 0);
+      const valor = alvo.reduce((s, { processo }) => s + (Number(processo.valor_pendente) || 0), 0);
+      return `${un(unidades)} un., ${formatarMoeda(valor)}`;
+    }
+
     async function confirmarPedidoInteiro(pedido) {
+      aviso('');
+      const alvo = semDecisaoNoPedido(pedido);
+      if (!alvo.length) { aviso(`Tudo no pedido ${pedido.numero} já está decidido.`); return; }
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Tudo pronto neste pedido?',
-        message: `Todas as unidades pendentes do pedido ${pedido.numero} entram como prontas nesta competência `
-          + `(${un(pedido.unidades_pendentes)} un., ${formatarMoeda(pedido.valor_pendente)}).`,
+        message: `As unidades ainda sem decisão do pedido ${pedido.numero} entram como prontas nesta competência `
+          + `(${resumoDoQueFalta(alvo)}). O que já foi decidido continua como está.`,
         confirmText: 'Confirmar tudo'
       });
       if (!confirmado) return;
-      const decisoes = pedido.pecas.flatMap(peca => peca.processos
-        .filter(processo => limite(processo) > 0)
-        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) })));
-      if (!decisoes.length) return;
+      const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) }));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`);
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`, { somente_pendentes: true });
     }
 
     /**
@@ -3102,19 +3150,19 @@
      * pedido para a frente.
      */
     async function marcarPedidoInteiro(pedido) {
+      aviso('');
+      const alvo = semDecisaoNoPedido(pedido);
+      if (!alvo.length) { aviso(`Tudo no pedido ${pedido.numero} já está decidido.`); return; }
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Nada pronto neste pedido?', tom: 'aviso', icone: 'fa-industry',
-        message: `Nenhuma unidade pendente do pedido ${pedido.numero} entra nesta competência `
-          + `(${un(pedido.unidades_pendentes)} un., ${formatarMoeda(pedido.valor_pendente)} ficam para o mês seguinte).`,
+        message: `Nenhuma unidade ainda sem decisão do pedido ${pedido.numero} entra nesta competência `
+          + `(${resumoDoQueFalta(alvo)} ficam para o mês seguinte). O que já foi decidido continua como está.`,
         confirmText: 'Nada ficou pronto', confirmVariant: 'danger'
       });
       if (!confirmado) return;
-      const decisoes = pedido.pecas.flatMap(peca => peca.processos
-        .filter(processo => limite(processo) > 0)
-        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 })));
-      if (!decisoes.length) return;
+      const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 }));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`);
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`, { somente_pendentes: true });
     }
 
     async function fecharCompetencia() {
@@ -3136,7 +3184,10 @@
         return;
       }
       if (!previa.pode_fechar) {
-        aviso((previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
+        const bloqueios = previa.bloqueios || [];
+        const doMesAnterior = bloqueios.find(b => fraseDoMesAnterior(b));
+        if (doMesAnterior && await avisarMesAnteriorAberto(doMesAnterior)) return;
+        aviso(bloqueios.join(' ') || 'Esta competência não pode ser fechada agora.');
         return;
       }
       const confirmado = await window.DialogPadrao?.confirm?.({
@@ -3156,6 +3207,7 @@
       } catch (e) {
         processando = false;
         await carregar();
+        if (await avisarMesAnteriorAberto(e)) return;
         aviso(textoDoErro(e, 'Você não tem permissão para fechar competência.'));
       } finally {
         processando = false;
