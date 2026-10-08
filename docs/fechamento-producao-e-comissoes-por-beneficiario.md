@@ -50,6 +50,25 @@ Na tela nova (`src/html/modals/financeiro/fechar-producao.html`):
 - O rodapé fecha a competência como antes (prévia, bloqueios, avisos e
   resumo por processo).
 
+### Decisão quebrada: "0,5 da etapa ficou pronta" (07/10/2026)
+
+Pedido do dono: o número de cada processo pode ser **quebrado** (até 2 casas;
+vírgula ou ponto). Ele conta em unidades:
+
+- **Unidade nova:** 0,5 é metade daquele processo feita no mês. Paga metade do valor da peça inteira, e a outra metade fica pendente para o mês seguinte.
+- **No mês seguinte:** a unidade herdada aparece como "0,5 un. a decidir · a 1ª já tem 50% feito". "Tudo" a termina e paga só o que faltava; um novo número quebrado (0,3, por exemplo) avança mais um pedaço.
+- **Mais de uma unidade:** 1,5 de 2 é uma inteira mais metade da segunda.
+- **Peça do estoque** que já vinha adiantada: a unidade vale o que ela devia. Metade dela é metade desse resto.
+- **Ao digitar:** a linha mostra na hora quanto fica para o mês seguinte. Decisão quebrada também é decisão: a peça conta como decidida no mês.
+
+Como fica gravado, sem SQL novo:
+
+- **O registro (`producao_eventos`):** as unidades tocadas (inteiro, como a coluna exige) mais a fração de peça paga (`fracao_paga`, a mesma coluna do cancelamento).
+- **A fila:** `alocar` passou a consumir a fração exata e pode parar no meio de uma unidade (`backend/financeiro/producaoUnidades.js`, `alocar` e `planoDaDecisao`).
+- **A decisão (`producao_confirmacoes`):** as unidades decididas com decimais (`quantidade_pronta` e `quantidade_pendente` já eram `numeric`).
+- **A prévia:** conta o que foi feito, por exemplo "Marcenaria (2,5 peças)".
+- **Testes:** `financeiroController.test.js` cobre os dois meses, que somam o valor cheio do pedido; `producaoUnidades.test.js` cobre a fila.
+
 ### Quando o sistema confirma sozinho
 
 | Situação | O que acontece |

@@ -2757,8 +2757,16 @@
 
     const chaveDaPeca = (pedido, peca) => `${pedido.pedido_id}:${peca.pedido_item_id}`;
     const chaveDoProcesso = (peca, processo) => `${peca.pedido_item_id}:${processo.etapa_id}`;
-    /** Quantas unidades ainda cabem na decisão (o saldo mais o que já foi confirmado no mês). */
-    const limite = processo => processo.saldo + (processo.decidido?.prontas || 0);
+    /**
+     * Quantas unidades ainda cabem na decisão (o saldo mais o que já foi
+     * confirmado no mês). Pode ser quebrado (07/10/2026, pedido do dono):
+     * 0,5 = metade da etapa feita; o resto fica para o mês seguinte.
+     */
+    const limite = processo => (processo.disponivel ?? (processo.saldo + (processo.decidido?.prontas || 0)));
+    const formatoUnidades = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+    /** "1,5" — unidades como se leem. */
+    const un = n => formatoUnidades.format(Number(n) || 0);
+    const duasCasas = n => Math.round((Number(n) || 0) * 100) / 100;
     /** A escolha da tela; vazio (null) = ninguém decidiu ainda. */
     const escolhido = (peca, processo) => {
       const k = chaveDoProcesso(peca, processo);
@@ -2775,7 +2783,9 @@
       const esquerda = criar('div', 'min-w-0');
       esquerda.appendChild(criar('p', 'text-sm text-white', processo.nome));
       const detalhe = [
-        `${processo.saldo} un. a decidir de ${processo.pedida}`,
+        `${un(processo.saldo)} un. a decidir de ${processo.pedida}`,
+        // A primeira unidade em aberto já veio com parte feita (decisão quebrada de um mês anterior).
+        processo.ja_feito > 0 ? `a 1ª já tem ${un(processo.ja_feito * 100)}% feito` : null,
         processo.valor_unitario === null ? 'sem regra de produção' : `${formatarMoeda(processo.valor_unitario)} por peça inteira`,
         processo.valor_pendente === null ? null : `pendente ${formatarMoeda(processo.valor_pendente)}`
       ].filter(Boolean).join(' · ');
@@ -2783,23 +2793,37 @@
       if (processo.regra) sub.title = `Regra: ${processo.regra}`;
       esquerda.appendChild(sub);
       if (processo.decidido) {
-        esquerda.appendChild(criar('p', 'text-xs', `Já decidido ${processo.decidido.rotulo}: ${processo.decidido.prontas} pronta(s), ${processo.decidido.pendentes} pendente(s)`));
+        esquerda.appendChild(criar('p', 'text-xs', `Já decidido ${processo.decidido.rotulo}: ${un(processo.decidido.prontas)} pronta(s), ${un(processo.decidido.pendentes)} pendente(s)`));
         esquerda.lastChild.style.color = 'var(--color-green)';
       }
+      // Quanto fica para o mês seguinte, enquanto a escolha é menor que o todo.
+      const resto = criar('p', 'text-xs hidden');
+      resto.style.color = 'var(--color-primary)';
+      esquerda.appendChild(resto);
 
       const controles = criar('div', 'flex items-center gap-2');
       const campo = criar('input', 'w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      // Número quebrado vale (0.5 = metade da etapa): o NumericInput aceita vírgula ou ponto.
       campo.type = 'number';
       campo.min = '0';
       campo.max = String(limite(processo));
-      campo.step = '1';
+      campo.step = '0.01';
+      campo.dataset.numericDecimals = '2';
       campo.placeholder = '—';
+      campo.title = 'Pode ser quebrado: 0.5 = metade da etapa feita neste mês; o resto fica para o mês seguinte';
       const atual = escolhido(peca, processo);
       campo.value = atual === null ? '' : String(atual);
       campo.setAttribute('aria-label', `Unidades prontas em ${processo.nome}`);
+      const pintarResto = () => {
+        const escolha = escolhido(peca, processo);
+        const falta = escolha === null ? 0 : duasCasas(limite(processo) - escolha);
+        resto.classList.toggle('hidden', !(escolha > 0 && falta > 0));
+        resto.textContent = falta > 0 ? `${un(falta)} un. fica(m) para o mês seguinte` : '';
+      };
       const marcar = valor => {
         escolhas.set(chaveDoProcesso(peca, processo), valor);
         campo.value = String(valor);
+        pintarResto();
         pintarCabecaDaPeca(pedido, peca);
       };
       const tudo = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo');
@@ -2811,15 +2835,18 @@
       nada.title = 'Nada ficou pronto: tudo fica pendente para o mês seguinte';
       nada.addEventListener('click', () => marcar(0));
       campo.addEventListener('input', () => {
-        const n = Math.max(0, Math.min(limite(processo), Math.trunc(Number(campo.value) || 0)));
+        const lido = Number(String(campo.value).replace(',', '.'));
+        const n = Math.max(0, Math.min(limite(processo), duasCasas(Number.isFinite(lido) ? lido : 0)));
         escolhas.set(chaveDoProcesso(peca, processo), campo.value === '' ? null : n);
+        pintarResto();
         pintarCabecaDaPeca(pedido, peca);
       });
       campo.addEventListener('blur', () => {
         const escolha = escolhido(peca, processo);
         if (escolha !== null) campo.value = String(escolha);
       });
-      controles.append(tudo, nada, campo, criar('span', 'text-xs text-gray-400', `de ${limite(processo)}`));
+      pintarResto();
+      controles.append(tudo, nada, campo, criar('span', 'text-xs text-gray-400', `de ${un(limite(processo))}`));
       linha.append(esquerda, controles);
       return linha;
     }
@@ -2918,7 +2945,7 @@
         ? tagG('Confirmado', 'badge-success', pedido.confirmado_em
           ? `Tudo confirmado em ${instanteCurto(pedido.confirmado_em)}`
           : 'Todas as peças deste pedido já foram decididas')
-        : tagG(`${pedido.unidades_pendentes} un. a decidir`, 'badge-warning', 'Diga, em cada processo de cada peça, quantas unidades ficaram prontas'));
+        : tagG(`${un(pedido.unidades_pendentes)} un. a decidir`, 'badge-warning', 'Diga, em cada processo de cada peça, quantas unidades ficaram prontas (pode ser quebrado: 0.5 = metade)'));
       card.appendChild(topo);
 
       const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
@@ -2955,7 +2982,7 @@
     function pintar() {
       const totais = dados?.totais || null;
       el('finFecharProducaoPedidos').textContent = totais ? `${totais.pendentes} de ${totais.pedidos}` : '—';
-      el('finFecharProducaoUnidades').textContent = totais ? String(totais.unidades_pendentes) : '—';
+      el('finFecharProducaoUnidades').textContent = totais ? un(totais.unidades_pendentes) : '—';
       el('finFecharProducaoPendente').textContent = totais ? formatarMoeda(totais.valor_pendente) : '—';
       el('finFecharProducaoConfirmado').textContent = previa ? formatarMoeda(previa.a_pagar) : '—';
       pintarSituacao(el('finFecharProducaoSituacao'), !previa ? '—' : (previa.fechamento?.pagamento ? 'Paga' : (previa.fechado ? 'Fechada' : 'Em aberto')));
@@ -2976,7 +3003,7 @@
       for (const s of previa?.setores || []) {
         const linha = criar('div', 'flex items-center justify-between px-4 py-3');
         linha.append(
-          criar('span', 'text-sm text-gray-400', `${s.setor} (${s.pecas} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
+          criar('span', 'text-sm text-gray-400', `${s.setor} (${un(s.pecas)} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
           criar('span', 'text-sm text-white', formatarMoeda(s.total))
         );
         processos.appendChild(linha);
@@ -3056,7 +3083,7 @@
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Tudo pronto neste pedido?',
         message: `Todas as unidades pendentes do pedido ${pedido.numero} entram como prontas nesta competência `
-          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)}).`,
+          + `(${un(pedido.unidades_pendentes)} un., ${formatarMoeda(pedido.valor_pendente)}).`,
         confirmText: 'Confirmar tudo'
       });
       if (!confirmado) return;
@@ -3078,7 +3105,7 @@
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Nada pronto neste pedido?', tom: 'aviso', icone: 'fa-industry',
         message: `Nenhuma unidade pendente do pedido ${pedido.numero} entra nesta competência `
-          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)} ficam para o mês seguinte).`,
+          + `(${un(pedido.unidades_pendentes)} un., ${formatarMoeda(pedido.valor_pendente)} ficam para o mês seguinte).`,
         confirmText: 'Nada ficou pronto', confirmVariant: 'danger'
       });
       if (!confirmado) return;
