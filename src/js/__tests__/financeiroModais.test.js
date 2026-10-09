@@ -662,9 +662,9 @@ test('comissões e produção são REAIS (fase G): cada modal fala com /api/fina
     // As listas de baixo se relêem quando outro modal grava.
     assert.match(SCRIPT, /const avisarAlteracao = \(\) => window\.dispatchEvent\(new CustomEvent\('financeiro:alterado'\)\);/);
     assert.match(SCRIPT, /aoDesligar\.push\(\(\) => window\.removeEventListener\('financeiro:alterado', ouvinte\)\);/);
-    // Exportação: PDF montado com DOM e planilha CSV pelo Electron.
+    // Exportação: PDF montado com DOM (no "Visualizar documento", Fase 3) e planilha CSV pelo Electron.
     assert.match(SCRIPT, /document\.implementation\.createHTMLDocument/);
-    assert.match(SCRIPT, /salvarHtmlComoPdf\?\.\(\{ html: documentoDoRelatorio\(r\)/);
+    assert.match(SCRIPT, /gerar: window\.VisualizadorPdf\.deHtml\(documentoDoRelatorio\(r\)\)/);
     assert.match(SCRIPT, /salvarTextoComoArquivo\?\.\(\{\s*conteudo: relatorioEmCsv\(r\), nomeSugerido: nome, extensao: 'csv'/);
     assert.ok(!/EXEMPLO|TAXA_CMS|TAXA_ROYALTY/.test(SCRIPT), 'nenhum dado de exemplo sobrou');
     assert.match(SCRIPT, /finRegras: montarRegras/);

@@ -121,3 +121,18 @@ test('Fase 2: DANFE, cartas de correção, boletos, etiquetas e relatório de pr
     assert.ok(producao.includes('gerar: window.VisualizadorPdf.deHtml(montarDocumentoParaPdf(numero))'), 'o mesmo documento, em paisagem');
     assert.ok(!producao.includes('salvarHtmlComoPdf'));
 });
+
+test('Fase 3: relatórios do Financeiro, ficha e movimentações de Produtos, auditoria da Matéria-prima', () => {
+    const fin = ler('src/js/modals/financeiro-modais.js');
+    const exportar = fin.slice(fin.indexOf('async function exportarRelatorio'), fin.indexOf('function montarAjuste'));
+    assert.ok(exportar.includes('gerar: window.VisualizadorPdf.deHtml(documentoDoRelatorio(r))') && !exportar.includes('salvarHtmlComoPdf'));
+    assert.ok(exportar.includes("extensao: 'csv'"), 'a planilha continua indo para a janela de salvar');
+    const produto = ler('src/js/modals/produto-visualizar.js');
+    assert.ok(produto.includes("gerar: async () => (await montarPdfDoProduto()).output('arraybuffer')"), 'o mesmo PDF do jsPDF, em bytes');
+    assert.ok(!produto.includes('doc.save('));
+    for (const [arquivo, titulo] of [['src/js/modals/produto-movimentos.js', 'Salvar Movimentações em PDF'], ['src/js/modals/materia-prima-movimentos.js', 'Salvar Auditoria do Insumo em PDF']]) {
+        const js = ler(arquivo);
+        assert.ok(js.includes('gerar: window.VisualizadorPdf.deHtml(montarDocumentoParaPdf(nome))'), arquivo);
+        assert.ok(js.includes(`tituloSalvar: '${titulo}'`) && !js.includes('salvarHtmlComoPdf'), arquivo);
+    }
+});

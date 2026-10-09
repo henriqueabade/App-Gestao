@@ -239,45 +239,21 @@
 </html>`;
   }
 
-  function mostrarProgresso(ligado, texto) {
-    if (!btnImprimir) return;
-    btnImprimir.innerHTML = ligado
-      ? `<i class="fas fa-circle-notch fa-spin"></i> ${escapar(texto || 'Gerando PDF...')}`
-      : '<i class="fas fa-print"></i> Imprimir';
-    const aviso = document.getElementById('movimentosInsumoAviso');
-    if (aviso) {
-      aviso.textContent = ligado ? (texto || 'Gerando o PDF...') : '';
-      aviso.classList.toggle('hidden', !ligado);
-    }
-  }
-
+  // Visualizador de PDF (Fase 3): "Imprimir" abre a auditoria no "Visualizar
+  // documento" — o mesmo PDF que ia para a janela de salvar.
   async function gerarPdf() {
     if (!corpo?.innerHTML?.trim()) return;
-    mostrarProgresso(true, 'Gerando o PDF da auditoria...');
-    try {
-      if (!window.electronAPI?.salvarHtmlComoPdf) {
-        throw new Error('Geração de PDF indisponível neste ambiente.');
-      }
-      const nome = (insumo.nome || insumo.id).toString().replace(/[\\/:*?"<>|]/g, '-');
-      const resultado = await window.electronAPI.salvarHtmlComoPdf({
-        html: montarDocumentoParaPdf(nome),
-        nomeSugerido: `auditoria-${nome}`,
-        titulo: 'Salvar Auditoria do Insumo em PDF'
-      });
-
-      if (resultado?.canceled) {
-        window.showToast?.('Geração cancelada.', 'info');
-      } else if (resultado?.success) {
-        window.showToast?.(resultado.message || 'Auditoria salva em PDF.', 'success');
-      } else {
-        throw new Error(resultado?.message || 'Não foi possível gerar o PDF.');
-      }
-    } catch (err) {
-      console.error('Erro ao gerar o PDF da auditoria', err);
-      window.showToast?.(err?.message || 'Erro ao gerar o PDF.', 'error');
-    } finally {
-      mostrarProgresso(false);
+    if (!window.VisualizadorPdf) {
+      window.showToast?.('Visualizador de documentos indisponível nesta janela.', 'error');
+      return;
     }
+    const nome = (insumo.nome || insumo.id).toString().replace(/[\\/:*?"<>|]/g, '-');
+    window.VisualizadorPdf.abrir({
+      titulo: `Auditoria do insumo — ${insumo.nome || insumo.id}`,
+      nomeArquivo: `auditoria-${nome}`,
+      tituloSalvar: 'Salvar Auditoria do Insumo em PDF',
+      gerar: window.VisualizadorPdf.deHtml(montarDocumentoParaPdf(nome))
+    });
   }
 
   if (window.BotaoAcao?.bind) {

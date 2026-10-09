@@ -134,72 +134,78 @@
         document.head.appendChild(script);
       });
     }
-    async function generatePdf() {
-      const button = byId('gerarPdfProduto');
-      try {
-        button.disabled = true;
-        button.textContent = 'Gerando...';
-        const JsPDF = await loadJsPdf();
-        const doc = new JsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-        const margin = 42, width = 511, bottom = 800;
-        let y = 45;
-        const addPageIfNeeded = height => { if (y + height > bottom) { doc.addPage('a4', 'portrait'); y = 45; } };
-        const line = (label, value, bold = false) => { addPageIfNeeded(18); doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.text(`${label}: ${value}`, margin, y); y += 18; };
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Ficha de Cadastro do Produto', margin, y); y += 28;
-        doc.setFontSize(10); line('Nome', produto.nome || '—'); line('Código', produto.codigo || '—'); line('NCM', produto.ncm || '—'); line('Coleção', produto.categoria || '—'); line('Status', produto.status || '—'); line('Preço de venda cadastrado', currency(produto.preco_venda), true);
-        y += 8; doc.setFontSize(13); line('PERCENTAGENS', '', true); doc.setFontSize(10);
-        [['Marcenaria','fabricacao'],['Acabamento','acabamento'],['Montagem','montagem'],['Embalagem','embalagem'],['Markup','markup'],['Comissão','comissao'],['Imposto','imposto']].forEach(([label,key]) => line(label, `${number(fields[key].value)}%`));
-        y += 8; doc.setFontSize(13); line('SOMAS E VALORES', '', true); doc.setFontSize(10);
-        [['Total insumos','totalInsumos'],['Total mão-de-obra','totalMaoObra'],['Subtotal','subTotal'],['Markup','markupValor'],['Custo total','custoTotal'],['Comissão','comissaoValor'],['Imposto','impostoValor'],['Valor de venda da peça','valorVenda']].forEach(([label,key]) => line(label, currency(somas[key]), key === 'valorVenda'));
-        const processGroups = groupItemsByProcess();
-        y += 10; addPageIfNeeded(50); doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.text('ITENS', margin, y); y += 18;
-        doc.setFontSize(8);
-        let badgeX = margin;
-        [...processGroups, { process: 'Valor Total', total: somas.totalInsumos, isTotal: true }].forEach(group => {
-          const label = `${group.process}: ${currency(group.total)}`;
-          const badgeWidth = Math.min(doc.getTextWidth(label) + 14, width);
-          if (badgeX > margin && badgeX + badgeWidth > margin + width) {
-            badgeX = margin;
-            y += 22;
-          }
-          if (y + 12 > bottom) { doc.addPage('a4', 'portrait'); y = 45; badgeX = margin; }
-          doc.setFillColor(...(group.isTotal ? [220, 242, 224] : [225, 235, 244]));
-          doc.roundedRect(badgeX, y - 10, badgeWidth, 16, 7, 7, 'F');
-          doc.setTextColor(...(group.isTotal ? [25, 110, 55] : [30, 83, 120]));
-          doc.setFont('helvetica', 'bold'); doc.text(label, badgeX + 7, y);
-          badgeX += badgeWidth + 6;
+    /** A ficha do produto em PDF (jsPDF): o documento, para o visualizador. */
+    async function montarPdfDoProduto() {
+      const JsPDF = await loadJsPdf();
+      const doc = new JsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const margin = 42, width = 511, bottom = 800;
+      let y = 45;
+      const addPageIfNeeded = height => { if (y + height > bottom) { doc.addPage('a4', 'portrait'); y = 45; } };
+      const line = (label, value, bold = false) => { addPageIfNeeded(18); doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.text(`${label}: ${value}`, margin, y); y += 18; };
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Ficha de Cadastro do Produto', margin, y); y += 28;
+      doc.setFontSize(10); line('Nome', produto.nome || '—'); line('Código', produto.codigo || '—'); line('NCM', produto.ncm || '—'); line('Coleção', produto.categoria || '—'); line('Status', produto.status || '—'); line('Preço de venda cadastrado', currency(produto.preco_venda), true);
+      y += 8; doc.setFontSize(13); line('PERCENTAGENS', '', true); doc.setFontSize(10);
+      [['Marcenaria','fabricacao'],['Acabamento','acabamento'],['Montagem','montagem'],['Embalagem','embalagem'],['Markup','markup'],['Comissão','comissao'],['Imposto','imposto']].forEach(([label,key]) => line(label, `${number(fields[key].value)}%`));
+      y += 8; doc.setFontSize(13); line('SOMAS E VALORES', '', true); doc.setFontSize(10);
+      [['Total insumos','totalInsumos'],['Total mão-de-obra','totalMaoObra'],['Subtotal','subTotal'],['Markup','markupValor'],['Custo total','custoTotal'],['Comissão','comissaoValor'],['Imposto','impostoValor'],['Valor de venda da peça','valorVenda']].forEach(([label,key]) => line(label, currency(somas[key]), key === 'valorVenda'));
+      const processGroups = groupItemsByProcess();
+      y += 10; addPageIfNeeded(50); doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.text('ITENS', margin, y); y += 18;
+      doc.setFontSize(8);
+      let badgeX = margin;
+      [...processGroups, { process: 'Valor Total', total: somas.totalInsumos, isTotal: true }].forEach(group => {
+        const label = `${group.process}: ${currency(group.total)}`;
+        const badgeWidth = Math.min(doc.getTextWidth(label) + 14, width);
+        if (badgeX > margin && badgeX + badgeWidth > margin + width) {
+          badgeX = margin;
+          y += 22;
+        }
+        if (y + 12 > bottom) { doc.addPage('a4', 'portrait'); y = 45; badgeX = margin; }
+        doc.setFillColor(...(group.isTotal ? [220, 242, 224] : [225, 235, 244]));
+        doc.roundedRect(badgeX, y - 10, badgeWidth, 16, 7, 7, 'F');
+        doc.setTextColor(...(group.isTotal ? [25, 110, 55] : [30, 83, 120]));
+        doc.setFont('helvetica', 'bold'); doc.text(label, badgeX + 7, y);
+        badgeX += badgeWidth + 6;
+      });
+      y += 22;
+      doc.setTextColor(0, 0, 0);
+      const cols = [margin, 245, 320, 375, 455];
+      const header = ['Item','Qtd.','Un.','Unitário','Total'];
+      const drawHeader = fontSize => { doc.setFillColor(235,235,235); doc.rect(margin, y - 12, width, 20, 'F'); doc.setFontSize(fontSize); doc.setFont('helvetica','bold'); header.forEach((text,index) => doc.text(text, cols[index], y)); y += 14; };
+      processGroups.forEach(group => {
+        const availableOnPage = bottom - y;
+        const regularHeight = 38 + group.items.length * 16;
+        // O cabeçalho e todos os itens formam um bloco indivisível. Só inicia
+        // outra página quando o processo realmente não cabe no espaço restante.
+        if (regularHeight > availableOnPage) { doc.addPage('a4','portrait'); y = 45; }
+        const availableHeight = bottom - y - 36;
+        const rowHeight = Math.min(16, Math.max(7, availableHeight / Math.max(group.items.length, 1)));
+        const fontSize = Math.min(8, Math.max(5, rowHeight - 2));
+        doc.setFillColor(215, 222, 229); doc.rect(margin, y - 12, width, 20, 'F');
+        doc.setTextColor(55, 65, 81); doc.setFontSize(9); doc.setFont('helvetica','bold');
+        doc.text(String(group.process).toUpperCase(), margin + width / 2, y, { align: 'center' }); y += 14;
+        drawHeader(fontSize); doc.setTextColor(0, 0, 0); doc.setFont('helvetica','normal'); doc.setFontSize(fontSize);
+        group.items.forEach(item => {
+          const name = doc.splitTextToSize(String(item.nome || '—'), 185)[0];
+          [name, number(item.quantidade), item.unidade || '—', currency(item.preco_unitario), currency((Number(item.quantidade)||0)*(Number(item.preco_unitario)||0))].forEach((text,index) => doc.text(String(text), cols[index], y));
+          y += rowHeight;
         });
-        y += 22;
-        doc.setTextColor(0, 0, 0);
-        const cols = [margin, 245, 320, 375, 455];
-        const header = ['Item','Qtd.','Un.','Unitário','Total'];
-        const drawHeader = fontSize => { doc.setFillColor(235,235,235); doc.rect(margin, y - 12, width, 20, 'F'); doc.setFontSize(fontSize); doc.setFont('helvetica','bold'); header.forEach((text,index) => doc.text(text, cols[index], y)); y += 14; };
-        processGroups.forEach(group => {
-          const availableOnPage = bottom - y;
-          const regularHeight = 38 + group.items.length * 16;
-          // O cabeçalho e todos os itens formam um bloco indivisível. Só inicia
-          // outra página quando o processo realmente não cabe no espaço restante.
-          if (regularHeight > availableOnPage) { doc.addPage('a4','portrait'); y = 45; }
-          const availableHeight = bottom - y - 36;
-          const rowHeight = Math.min(16, Math.max(7, availableHeight / Math.max(group.items.length, 1)));
-          const fontSize = Math.min(8, Math.max(5, rowHeight - 2));
-          doc.setFillColor(215, 222, 229); doc.rect(margin, y - 12, width, 20, 'F');
-          doc.setTextColor(55, 65, 81); doc.setFontSize(9); doc.setFont('helvetica','bold');
-          doc.text(String(group.process).toUpperCase(), margin + width / 2, y, { align: 'center' }); y += 14;
-          drawHeader(fontSize); doc.setTextColor(0, 0, 0); doc.setFont('helvetica','normal'); doc.setFontSize(fontSize);
-          group.items.forEach(item => {
-            const name = doc.splitTextToSize(String(item.nome || '—'), 185)[0];
-            [name, number(item.quantidade), item.unidade || '—', currency(item.preco_unitario), currency((Number(item.quantidade)||0)*(Number(item.preco_unitario)||0))].forEach((text,index) => doc.text(String(text), cols[index], y));
-            y += rowHeight;
-          });
-        });
-        const filename = `produto-${String(produto.codigo || produto.id).replace(/[^a-z0-9_-]/gi, '_')}.pdf`;
-        doc.save(filename);
-        if (typeof showToast === 'function') showToast('PDF gerado com sucesso', 'success');
-      } catch (error) {
-        console.error('Erro ao gerar PDF do produto', error);
-        if (typeof showToast === 'function') showToast('Erro ao gerar PDF', 'error');
-      } finally { button.disabled = false; button.textContent = 'Gerar PDF'; }
+      });
+      return doc;
+    }
+    // Visualizador de PDF (Fase 3): a ficha abre no "Visualizar documento" —
+    // o mesmo PDF do jsPDF que antes era baixado —, para ver, imprimir ou salvar.
+    function generatePdf() {
+      if (!window.VisualizadorPdf) {
+        if (typeof showToast === 'function') showToast('Visualizador de documentos indisponível nesta janela.', 'error');
+        return;
+      }
+      window.VisualizadorPdf.abrir({
+        titulo: `Ficha do produto${produto.codigo ? ` — ${produto.codigo}` : ''}`,
+        subtitulo: produto.nome || '',
+        nomeArquivo: `produto-${String(produto.codigo || produto.id).replace(/[^a-z0-9_-]/gi, '_')}`,
+        tituloSalvar: 'Salvar ficha do produto em PDF',
+        gerar: async () => (await montarPdfDoProduto()).output('arraybuffer')
+      });
     }
     byId('gerarPdfProduto')?.addEventListener('click', generatePdf);
 

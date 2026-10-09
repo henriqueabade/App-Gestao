@@ -2219,7 +2219,11 @@
     window.showToast?.(mensagemOk, 'success');
   }
 
-  /** PDF pelo Electron; "Excel" é uma planilha CSV (ponto e vírgula), que o Excel abre. */
+  /**
+   * PDF no "Visualizar documento" (Visualizador de PDF, Fase 3: antes ia
+   * direto para a janela de salvar) — o mesmo documento, impresso pelo
+   * Electron; "Excel" é uma planilha CSV (ponto e vírgula), que o Excel abre.
+   */
   async function exportarRelatorio(formato, r) {
     const nome = `${r.chave}-${r.periodo ? `${r.periodo.inicio}_${r.periodo.fim}` : r.competencia}`;
     if (formato === 'excel') {
@@ -2228,8 +2232,13 @@
       });
       return tratarSalvamento(res, 'Planilha salva.');
     }
-    const res = await window.electronAPI?.salvarHtmlComoPdf?.({ html: documentoDoRelatorio(r), nomeSugerido: nome, titulo: 'Salvar relatório em PDF' });
-    return tratarSalvamento(res, 'Relatório salvo em PDF.');
+    if (!window.VisualizadorPdf) throw new Error('Visualizador de documentos indisponível nesta janela.');
+    window.VisualizadorPdf.abrir({
+      titulo: tituloDoRelatorio(r),
+      nomeArquivo: nome,
+      tituloSalvar: 'Salvar relatório em PDF',
+      gerar: window.VisualizadorPdf.deHtml(documentoDoRelatorio(r))
+    });
   }
 
   /**

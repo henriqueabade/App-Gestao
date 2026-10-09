@@ -50,11 +50,13 @@ Os geradores prontos:
 | 2 | Boletos: um (Detalhes do boleto, Gerar boletos, a tag da parcela) e todos do pedido ("Boletos (PDF)") | `BoletoDocumentos` |
 | 2 | Visualizar pedido › Etiquetas (caixas) | deHtml (paisagem, com as páginas nomeadas do CSS) |
 | 2 | Relatório de produção / Peças do pedido › Imprimir | deHtml (paisagem) |
+| 3 | Financeiro › Relatórios (Gerar em PDF e o PDF do relatório aberto) | deHtml (paisagem); a planilha CSV continua indo para a janela de salvar |
+| 3 | Produtos › Visualizar › Gerar PDF (ficha) | jsPDF → `output('arraybuffer')` |
+| 3 | Produtos › Movimentações › Imprimir | deHtml (paisagem) |
+| 3 | Matéria-prima › Auditoria do insumo › Imprimir | deHtml (paisagem) |
 
 Ficam para as próximas fases:
 
-- **Fase 3:** Financeiro (relatórios), Produtos (Visualizar com jsPDF e
-  movimentos) e Matéria-prima (movimentos).
 - **Fase 4:** Relatórios (o PDF da tabela e o Master-Detail com jsPDF, Imprimir
   e Agrupamento).
 - **Fase 5:** Contabilidade (relatório mensal, Espelho DDA, comprovantes e
