@@ -1915,6 +1915,32 @@
     return e?.message || 'Erro inesperado.';
   }
 
+  /**
+   * A trava do mês anterior da produção (08/10/2026): setembro/2026 é o
+   * primeiro mês e os seguintes só recebem peças com o anterior fechado. A
+   * frase vem do backend (código MES_ANTERIOR_ABERTO) ou, de um caminho que só
+   * o banco pegou, no meio do erro dele ("… Erro no INSERT: Feche antes …") —
+   * aqui ela sai limpa. Pura.
+   */
+  function fraseDoMesAnterior(texto) {
+    const bruto = String(texto || '');
+    const i = bruto.indexOf('Feche antes a produção de');
+    return i === -1 ? null : bruto.slice(i).trim();
+  }
+
+  /** Mostra a trava na caixa padrão. Devolve true quando era ela. */
+  async function avisarMesAnteriorAberto(textoOuErro) {
+    const texto = typeof textoOuErro === 'string' ? textoOuErro : textoOuErro?.message;
+    const frase = fraseDoMesAnterior(texto);
+    if (!frase || !window.DialogPadrao?.info) return false;
+    await window.DialogPadrao.info({
+      title: 'Mês anterior em aberto', tom: 'aviso', icone: 'fa-lock',
+      message: frase,
+      nota: 'A produção fecha em ordem, a partir de setembro/2026: feche o mês anterior em "Fechar competência — produção" e depois confirme as peças deste mês.'
+    });
+    return true;
+  }
+
   function opcao(valor, texto) {
     const o = document.createElement('option');
     o.value = valor;
@@ -2757,8 +2783,16 @@
 
     const chaveDaPeca = (pedido, peca) => `${pedido.pedido_id}:${peca.pedido_item_id}`;
     const chaveDoProcesso = (peca, processo) => `${peca.pedido_item_id}:${processo.etapa_id}`;
-    /** Quantas unidades ainda cabem na decisão (o saldo mais o que já foi confirmado no mês). */
-    const limite = processo => processo.saldo + (processo.decidido?.prontas || 0);
+    /**
+     * Quantas unidades ainda cabem na decisão (o saldo mais o que já foi
+     * confirmado no mês). Pode ser quebrado (07/10/2026, pedido do dono):
+     * 0,5 = metade da etapa feita; o resto fica para o mês seguinte.
+     */
+    const limite = processo => (processo.disponivel ?? (processo.saldo + (processo.decidido?.prontas || 0)));
+    const formatoUnidades = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+    /** "1,5" — unidades como se leem. */
+    const un = n => formatoUnidades.format(Number(n) || 0);
+    const duasCasas = n => Math.round((Number(n) || 0) * 100) / 100;
     /** A escolha da tela; vazio (null) = ninguém decidiu ainda. */
     const escolhido = (peca, processo) => {
       const k = chaveDoProcesso(peca, processo);
@@ -2769,13 +2803,51 @@
     const nomeDaPecaCurto = peca => [peca.codigo, peca.nome].filter(Boolean).join(' — ') || `peça ${peca.pedido_item_id}`;
     const faltamNaPeca = peca => peca.processos.filter(p => limite(p) > 0 && escolhido(peca, p) === null).length;
 
+    // ------------------------------------------------------------ filtro
+    // A barra "Filtrar pedidos" (dono, 08/10/2026): número do pedido, cliente,
+    // nome ou código da peça. Todos os termos têm de casar ("jackie banco").
+    // Casou pelo pedido/cliente: o card vem inteiro. Casou só por peça: o card
+    // vem só com as peças que casaram.
+    const filtroCampo = el('finFecharProducaoFiltro');
+    const termosDoFiltro = () => window.BuscaAoDigitar?.termos(filtroCampo?.value || '') || [];
+    function visivelNoFiltro(pedido, termos) {
+      if (!termos.length || !window.BuscaAoDigitar) return pedido.pecas;
+      const casa = window.BuscaAoDigitar.casa;
+      const cabeca = [pedido.numero, pedido.cliente];
+      if (casa(termos, cabeca)) return pedido.pecas;
+      const pecas = pedido.pecas.filter(peca => casa(termos, cabeca, peca.codigo, peca.nome));
+      return pecas.length ? pecas : null;
+    }
+
+    // ------------------------------------------------------------ a tela parada
+    // Confirmar uma peça recolhe os campos dela e relê a competência. Antes, a
+    // lista era refeita e a tela pulava (o "Carregando" aparecia em cima dos
+    // cards e a rolagem voltava): agora o bloco que a pessoa usou fica no mesmo
+    // ponto da tela (dono, 08/10/2026).
+    const rolagem = () => caixaCards.closest('.modal-scroll');
+    function marcarAncora(seletor) {
+      const alvo = seletor ? caixaCards.querySelector(seletor) : null;
+      return { seletor, topo: alvo ? alvo.getBoundingClientRect().top : null, scroll: rolagem()?.scrollTop ?? 0 };
+    }
+    function voltarAncora(ancora) {
+      const caixa = rolagem();
+      if (!ancora || !caixa) return;
+      const alvo = ancora.seletor ? caixaCards.querySelector(ancora.seletor) : null;
+      if (alvo && ancora.topo !== null) caixa.scrollTop += alvo.getBoundingClientRect().top - ancora.topo;
+      else caixa.scrollTop = ancora.scroll;
+    }
+    const seletorDaPeca = (pedido, peca) => `[data-peca="${chaveDaPeca(pedido, peca)}"]`;
+    const seletorDoPedido = pedido => `[data-pedido-card="${pedido.pedido_id}"]`;
+
     // ------------------------------------------------------------ desenho
     function linhaDoProcesso(pedido, peca, processo) {
       const linha = criar('div', 'flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10');
       const esquerda = criar('div', 'min-w-0');
       esquerda.appendChild(criar('p', 'text-sm text-white', processo.nome));
       const detalhe = [
-        `${processo.saldo} un. a decidir de ${processo.pedida}`,
+        `${un(processo.saldo)} un. a decidir de ${processo.pedida}`,
+        // A primeira unidade em aberto já veio com parte feita (decisão quebrada de um mês anterior).
+        processo.ja_feito > 0 ? `a 1ª já tem ${un(processo.ja_feito * 100)}% feito` : null,
         processo.valor_unitario === null ? 'sem regra de produção' : `${formatarMoeda(processo.valor_unitario)} por peça inteira`,
         processo.valor_pendente === null ? null : `pendente ${formatarMoeda(processo.valor_pendente)}`
       ].filter(Boolean).join(' · ');
@@ -2783,23 +2855,37 @@
       if (processo.regra) sub.title = `Regra: ${processo.regra}`;
       esquerda.appendChild(sub);
       if (processo.decidido) {
-        esquerda.appendChild(criar('p', 'text-xs', `Já decidido ${processo.decidido.rotulo}: ${processo.decidido.prontas} pronta(s), ${processo.decidido.pendentes} pendente(s)`));
+        esquerda.appendChild(criar('p', 'text-xs', `Já decidido ${processo.decidido.rotulo}: ${un(processo.decidido.prontas)} pronta(s), ${un(processo.decidido.pendentes)} pendente(s)`));
         esquerda.lastChild.style.color = 'var(--color-green)';
       }
+      // Quanto fica para o mês seguinte, enquanto a escolha é menor que o todo.
+      const resto = criar('p', 'text-xs hidden');
+      resto.style.color = 'var(--color-primary)';
+      esquerda.appendChild(resto);
 
       const controles = criar('div', 'flex items-center gap-2');
       const campo = criar('input', 'w-20 ctl-campo ctl-campo--pequeno bg-input border border-inputBorder text-white text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition');
+      // Número quebrado vale (0.5 = metade da etapa): o NumericInput aceita vírgula ou ponto.
       campo.type = 'number';
       campo.min = '0';
       campo.max = String(limite(processo));
-      campo.step = '1';
+      campo.step = '0.01';
+      campo.dataset.numericDecimals = '2';
       campo.placeholder = '—';
+      campo.title = 'Pode ser quebrado: 0.5 = metade da etapa feita neste mês; o resto fica para o mês seguinte';
       const atual = escolhido(peca, processo);
       campo.value = atual === null ? '' : String(atual);
       campo.setAttribute('aria-label', `Unidades prontas em ${processo.nome}`);
+      const pintarResto = () => {
+        const escolha = escolhido(peca, processo);
+        const falta = escolha === null ? 0 : duasCasas(limite(processo) - escolha);
+        resto.classList.toggle('hidden', !(escolha > 0 && falta > 0));
+        resto.textContent = falta > 0 ? `${un(falta)} un. fica(m) para o mês seguinte` : '';
+      };
       const marcar = valor => {
         escolhas.set(chaveDoProcesso(peca, processo), valor);
         campo.value = String(valor);
+        pintarResto();
         pintarCabecaDaPeca(pedido, peca);
       };
       const tudo = criar('button', 'btn-success ctl-botao ctl-botao--pequeno', 'Tudo');
@@ -2811,15 +2897,18 @@
       nada.title = 'Nada ficou pronto: tudo fica pendente para o mês seguinte';
       nada.addEventListener('click', () => marcar(0));
       campo.addEventListener('input', () => {
-        const n = Math.max(0, Math.min(limite(processo), Math.trunc(Number(campo.value) || 0)));
+        const lido = Number(String(campo.value).replace(',', '.'));
+        const n = Math.max(0, Math.min(limite(processo), duasCasas(Number.isFinite(lido) ? lido : 0)));
         escolhas.set(chaveDoProcesso(peca, processo), campo.value === '' ? null : n);
+        pintarResto();
         pintarCabecaDaPeca(pedido, peca);
       });
       campo.addEventListener('blur', () => {
         const escolha = escolhido(peca, processo);
         if (escolha !== null) campo.value = String(escolha);
       });
-      controles.append(tudo, nada, campo, criar('span', 'text-xs text-gray-400', `de ${limite(processo)}`));
+      pintarResto();
+      controles.append(tudo, nada, campo, criar('span', 'text-xs text-gray-400', `de ${un(limite(processo))}`));
       linha.append(esquerda, controles);
       return linha;
     }
@@ -2856,10 +2945,14 @@
       // decidida mantém os botões VISÍVEIS, só inativos.
       const marcarPeca = valor => {
         for (const processo of peca.processos) {
-          if (!processo.saldo) continue;
+          // Processo já decidido não se sobrescreve (08/10/2026): para mudar
+          // um deles, edite o número dele e use "Confirmar peça".
+          if (!processo.saldo || processo.decidido) continue;
           escolhas.set(chaveDoProcesso(peca, processo), valor === 'tudo' ? limite(processo) : 0);
         }
+        const ancora = marcarAncora(seletorDaPeca(pedido, peca));
         pintar();
+        voltarAncora(ancora);
       };
       const botaoDaPeca = (rotulo, classe, titulo, valor) => {
         const b = criar('button', `${classe} ctl-botao ctl-botao--pequeno`, rotulo);
@@ -2908,8 +3001,9 @@
       return bloco;
     }
 
-    function cardDoPedido(pedido) {
+    function cardDoPedido(pedido, pecasVisiveis = pedido.pecas) {
       const card = criar('div', 'glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4');
+      card.dataset.pedidoCard = String(pedido.pedido_id);
       const topo = criar('div', 'flex items-start justify-between gap-3');
       const titulo = criar('div', 'min-w-0');
       titulo.appendChild(criar('p', 'text-white font-semibold truncate', `Pedido ${pedido.numero}`));
@@ -2918,7 +3012,7 @@
         ? tagG('Confirmado', 'badge-success', pedido.confirmado_em
           ? `Tudo confirmado em ${instanteCurto(pedido.confirmado_em)}`
           : 'Todas as peças deste pedido já foram decididas')
-        : tagG(`${pedido.unidades_pendentes} un. a decidir`, 'badge-warning', 'Diga, em cada processo de cada peça, quantas unidades ficaram prontas'));
+        : tagG(`${un(pedido.unidades_pendentes)} un. a decidir`, 'badge-warning', 'Diga, em cada processo de cada peça, quantas unidades ficaram prontas (pode ser quebrado: 0.5 = metade)'));
       card.appendChild(topo);
 
       const etiquetas = criar('div', 'flex flex-wrap items-center gap-2');
@@ -2948,22 +3042,43 @@
       );
       card.appendChild(etiquetas);
 
-      for (const peca of pedido.pecas) card.appendChild(blocoDaPeca(pedido, peca));
+      // O filtro deixou só parte das peças: diz isso, para ninguém achar que o
+      // pedido tem só estas (os botões do pedido continuam valendo para todas).
+      if (pecasVisiveis.length < pedido.pecas.length) {
+        card.appendChild(criar('p', 'text-xs text-gray-400',
+          `Mostrando ${pecasVisiveis.length} de ${pedido.pecas.length} peças (filtro). "Tudo pronto" e "Nada pronto" valem para o pedido inteiro.`));
+      }
+      for (const peca of pecasVisiveis) card.appendChild(blocoDaPeca(pedido, peca));
       return card;
     }
 
     function pintar() {
       const totais = dados?.totais || null;
       el('finFecharProducaoPedidos').textContent = totais ? `${totais.pendentes} de ${totais.pedidos}` : '—';
-      el('finFecharProducaoUnidades').textContent = totais ? String(totais.unidades_pendentes) : '—';
+      el('finFecharProducaoUnidades').textContent = totais ? un(totais.unidades_pendentes) : '—';
       el('finFecharProducaoPendente').textContent = totais ? formatarMoeda(totais.valor_pendente) : '—';
       el('finFecharProducaoConfirmado').textContent = previa ? formatarMoeda(previa.a_pagar) : '—';
       pintarSituacao(el('finFecharProducaoSituacao'), !previa ? '—' : (previa.fechamento?.pagamento ? 'Paga' : (previa.fechado ? 'Fechada' : 'Em aberto')));
 
       caixaCards.replaceChildren();
-      for (const pedido of dados?.pedidos || []) caixaCards.appendChild(cardDoPedido(pedido));
+      const termos = termosDoFiltro();
+      let mostrados = 0;
+      for (const pedido of dados?.pedidos || []) {
+        const pecas = visivelNoFiltro(pedido, termos);
+        if (!pecas) continue;
+        mostrados += 1;
+        caixaCards.appendChild(cardDoPedido(pedido, pecas));
+      }
       for (const pedido of dados?.pedidos || []) for (const peca of pedido.pecas) pintarCabecaDaPeca(pedido, peca);
       el('finFecharProducaoVazio').classList.toggle('hidden', Boolean(dados?.pedidos?.length) || !dados);
+      const totalDePedidos = dados?.pedidos?.length || 0;
+      el('finFecharProducaoFiltroVazio')?.classList.toggle('hidden', !(termos.length && totalDePedidos && !mostrados));
+      const resumoDoFiltro = el('finFecharProducaoFiltroResumo');
+      if (resumoDoFiltro) {
+        resumoDoFiltro.textContent = termos.length
+          ? `Mostrando ${mostrados} de ${totalDePedidos} pedido(s).`
+          : 'Vários termos juntos valem: “jackie banco”.';
+      }
 
       // Peças e processos são coisas diferentes: 2 peças × 4 processos = 8
       // linhas de pagamento, mas 2 peças (defeito pego pelo dono em 24/09).
@@ -2976,7 +3091,7 @@
       for (const s of previa?.setores || []) {
         const linha = criar('div', 'flex items-center justify-between px-4 py-3');
         linha.append(
-          criar('span', 'text-sm text-gray-400', `${s.setor} (${s.pecas} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
+          criar('span', 'text-sm text-gray-400', `${s.setor} (${un(s.pecas)} ${Math.abs(s.pecas) === 1 ? 'peça' : 'peças'})`),
           criar('span', 'text-sm text-white', formatarMoeda(s.total))
         );
         processos.appendChild(linha);
@@ -2993,10 +3108,15 @@
     }
 
     // ------------------------------------------------------------ dados
-    async function carregar() {
+    /**
+     * `silencioso` (depois de confirmar): sem o "Carregando os pedidos..." em
+     * cima dos cards — ele empurrava tudo para baixo e a tela pulava. `ancora`:
+     * o bloco que volta ao mesmo ponto da tela depois de redesenhar.
+     */
+    async function carregar({ silencioso = false, ancora = null } = {}) {
       const minha = ++leitura;
       aviso('');
-      el('finFecharProducaoCarregando').classList.remove('hidden');
+      if (!silencioso) el('finFecharProducaoCarregando').classList.remove('hidden');
       try {
         const [pend, prev] = await Promise.all([
           fetchApi(`/api/financeiro/producao/pendencias?competencia=${encodeURIComponent(compSel.value)}`),
@@ -3018,19 +3138,22 @@
       } finally {
         if (minha === leitura) el('finFecharProducaoCarregando').classList.add('hidden');
       }
+      if (minha !== leitura) return;
       pintar();
+      voltarAncora(ancora);
     }
 
-    async function enviarDecisoes(pedido, decisoes, mensagem) {
+    async function enviarDecisoes(pedido, decisoes, mensagem, extra = {}, { ancora = null } = {}) {
       try {
         await fetchApi('/api/financeiro/producao/confirmar', {
           method: 'POST',
-          body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes })
+          body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes, ...extra })
         });
         window.showToast?.(mensagem, 'success');
         avisarAlteracao();
-        await carregar();
+        await carregar({ silencioso: true, ancora });
       } catch (e) {
+        if (await avisarMesAnteriorAberto(e)) { aviso(''); await carregar({ silencioso: true, ancora }); return; }
         aviso(textoDoErro(e, 'Você não tem permissão para registrar produção.'));
       }
     }
@@ -3048,24 +3171,47 @@
         decisoes.push({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: valor });
       }
       if (!decisoes.length) return;
+      // O cabeçalho da peça fica onde está na tela: os campos recolhem e o
+      // que vem abaixo sobe, sem a tela pular.
+      const ancora = marcarAncora(seletorDaPeca(pedido, peca));
       abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`);
+      await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`, {}, { ancora });
+    }
+
+    /**
+     * O que "Tudo pronto" e "Nada pronto" do pedido decidem: só os processos
+     * SEM decisão nesta competência. O que já foi decidido nunca é
+     * sobrescrito por eles (pedido do dono, 08/10/2026: um "Nada pronto"
+     * zerou uma Marcenaria já confirmada) — para mudar um, edite o número
+     * dele e use "Confirmar peça".
+     */
+    function semDecisaoNoPedido(pedido) {
+      return pedido.pecas.flatMap(peca => peca.processos
+        .filter(processo => limite(processo) > 0 && !processo.decidido)
+        .map(processo => ({ peca, processo })));
+    }
+
+    function resumoDoQueFalta(alvo) {
+      const unidades = alvo.reduce((s, { processo }) => s + limite(processo), 0);
+      const valor = alvo.reduce((s, { processo }) => s + (Number(processo.valor_pendente) || 0), 0);
+      return `${un(unidades)} un., ${formatarMoeda(valor)}`;
     }
 
     async function confirmarPedidoInteiro(pedido) {
+      aviso('');
+      const alvo = semDecisaoNoPedido(pedido);
+      if (!alvo.length) { aviso(`Tudo no pedido ${pedido.numero} já está decidido.`); return; }
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Tudo pronto neste pedido?',
-        message: `Todas as unidades pendentes do pedido ${pedido.numero} entram como prontas nesta competência `
-          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)}).`,
+        message: `As unidades ainda sem decisão do pedido ${pedido.numero} entram como prontas nesta competência `
+          + `(${resumoDoQueFalta(alvo)}). O que já foi decidido continua como está.`,
         confirmText: 'Confirmar tudo'
       });
       if (!confirmado) return;
-      const decisoes = pedido.pecas.flatMap(peca => peca.processos
-        .filter(processo => limite(processo) > 0)
-        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) })));
-      if (!decisoes.length) return;
+      const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) }));
+      const ancora = marcarAncora(seletorDoPedido(pedido));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`);
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`, { somente_pendentes: true }, { ancora });
     }
 
     /**
@@ -3075,19 +3221,20 @@
      * pedido para a frente.
      */
     async function marcarPedidoInteiro(pedido) {
+      aviso('');
+      const alvo = semDecisaoNoPedido(pedido);
+      if (!alvo.length) { aviso(`Tudo no pedido ${pedido.numero} já está decidido.`); return; }
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Nada pronto neste pedido?', tom: 'aviso', icone: 'fa-industry',
-        message: `Nenhuma unidade pendente do pedido ${pedido.numero} entra nesta competência `
-          + `(${pedido.unidades_pendentes} un., ${formatarMoeda(pedido.valor_pendente)} ficam para o mês seguinte).`,
+        message: `Nenhuma unidade ainda sem decisão do pedido ${pedido.numero} entra nesta competência `
+          + `(${resumoDoQueFalta(alvo)} ficam para o mês seguinte). O que já foi decidido continua como está.`,
         confirmText: 'Nada ficou pronto', confirmVariant: 'danger'
       });
       if (!confirmado) return;
-      const decisoes = pedido.pecas.flatMap(peca => peca.processos
-        .filter(processo => limite(processo) > 0)
-        .map(processo => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 })));
-      if (!decisoes.length) return;
+      const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 }));
+      const ancora = marcarAncora(seletorDoPedido(pedido));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`);
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`, { somente_pendentes: true }, { ancora });
     }
 
     async function fecharCompetencia() {
@@ -3109,7 +3256,10 @@
         return;
       }
       if (!previa.pode_fechar) {
-        aviso((previa.bloqueios || []).join(' ') || 'Esta competência não pode ser fechada agora.');
+        const bloqueios = previa.bloqueios || [];
+        const doMesAnterior = bloqueios.find(b => fraseDoMesAnterior(b));
+        if (doMesAnterior && await avisarMesAnteriorAberto(doMesAnterior)) return;
+        aviso(bloqueios.join(' ') || 'Esta competência não pode ser fechada agora.');
         return;
       }
       const confirmado = await window.DialogPadrao?.confirm?.({
@@ -3129,6 +3279,7 @@
       } catch (e) {
         processando = false;
         await carregar();
+        if (await avisarMesAnteriorAberto(e)) return;
         aviso(textoDoErro(e, 'Você não tem permissão para fechar competência.'));
       } finally {
         processando = false;
@@ -3137,6 +3288,23 @@
 
     compSel.addEventListener('change', () => { escolhas.clear(); abertas.clear(); carregar(); });
     acionar(confirmarBtn, fecharCompetencia);
+
+    // A barra "Filtrar pedidos": nasce retraída (seção retrátil), filtra
+    // enquanto digita, sem reler nada — só redesenha os cards.
+    const secaoDoFiltro = el('finFecharProducaoFiltroSecao');
+    if (secaoDoFiltro) {
+      window.SecaoRetratil?.ligar(secaoDoFiltro.parentElement || document);
+      el('finFecharProducaoFiltroBarra')?.addEventListener('click', () => {
+        setTimeout(() => { if (window.SecaoRetratil?.estaAberta(secaoDoFiltro)) filtroCampo?.focus(); }, 0);
+      });
+    }
+    window.BuscaAoDigitar?.ligar(filtroCampo, pintar);
+    el('finFecharProducaoFiltroLimpar')?.addEventListener('click', () => {
+      if (filtroCampo) filtroCampo.value = '';
+      if (secaoDoFiltro) window.SecaoRetratil?.resumir(secaoDoFiltro);
+      pintar();
+      filtroCampo?.focus();
+    });
     return carregar();
   }
 

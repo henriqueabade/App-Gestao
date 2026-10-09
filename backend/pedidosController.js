@@ -974,8 +974,14 @@ router.get('/:id/etiquetas-produto', exigirPermissao('ped.view'), async (req, re
     ]);
     const doPedido = (Array.isArray(itens) ? itens : []).filter(it => String(it?.pedido_id) === String(id));
     const linhas = etiquetasProduto.linhasDasEtiquetas(doPedido);
+    // Peça que saiu pronta do estoque já tem etiqueta e fica fora da planilha.
+    const doEstoque = doPedido.reduce((soma, it) => soma + etiquetasProduto.prontasDoEstoque(it), 0);
     if (!linhas.length) {
-      return res.status(422).json({ error: 'O pedido não tem peças para gerar etiquetas.' });
+      return res.status(422).json({
+        error: doEstoque > 0
+          ? 'Todas as peças deste pedido saíram prontas do estoque: não há etiqueta para emitir.'
+          : 'O pedido não tem peças para gerar etiquetas.'
+      });
     }
 
     const nomeCliente = cliente ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || '') : '';
@@ -983,6 +989,7 @@ router.get('/:id/etiquetas-produto', exigirPermissao('ped.view'), async (req, re
     res.json({
       nome: etiquetasProduto.nomeDoArquivo(pedido.numero, nomeCliente),
       linhas: linhas.length,
+      do_estoque: doEstoque,
       base64: planilha.toString('base64')
     });
   } catch (err) {
@@ -1043,6 +1050,9 @@ router.delete('/:id', exigirPermissao('ped.delete'), exigirSupAdmin, async (req,
     // Lido antes: depois de excluído não há de onde tirar o número e o dono.
     const antes = await api.get(`/api/pedidos/${id}`).catch(() => null);
     const { removidos, avisos } = await excluirPedidoEmCascata(api, id);
+    // A tarefa automática de pós-venda de um pedido que não existe mais é
+    // cancelada (fim natural, 08/10/2026).
+    await tarefas.encerrarTarefasDoRegistro(api, { tipo: 'pedido', id, registro: null, usuarioId: idDoUsuarioDaRequisicao(req) });
     if (antes && !antes.error) {
       await sino.avisarDaVenda(api, {
         origem: 'pedido', registro: { ...antes, id: Number(id) }, usuarioId: idDoUsuarioDaRequisicao(req),

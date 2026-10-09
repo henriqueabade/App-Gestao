@@ -1,0 +1,94 @@
+/* ---------------------------------------------------------------------------
+   Filtros avançados retráteis (src/js/utils/filtros-avancados.js).
+
+   O mesmo de Prospecções (src/css/prospeccoes.css), agora global: Produtos,
+   Orçamentos e Pedidos usam (dono, 08/10/2026). Anima por max-height medido
+   em JS; o grid 0fr → 1fr não abria neste Chromium.
+   --------------------------------------------------------------------------- */
+
+.filtros-avancados {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Grade à mão (o Tailwind offline não tem as variantes md:grid-cols-*). */
+.filtros-avancados-grade {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+}
+
+.filtros-avancados-grade .linha-inteira {
+    grid-column: 1 / -1;
+}
+
+.botao-filtros-avancados {
+    position: relative;
+}
+
+.botao-filtros-avancados__seta {
+    transition: transform 200ms ease;
+}
+
+.botao-filtros-avancados[aria-expanded="true"] .botao-filtros-avancados__seta {
+    transform: rotate(180deg);
+}
+
+/* Aberto: o botão fica aceso, como o de Prospecções. */
+.botao-filtros-avancados[aria-expanded="true"] {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Fechado mas filtrando: um ponto dourado no canto do botão. */
+.botao-filtros-avancados[data-filtrando="1"]:not([aria-expanded="true"])::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-primary, #b6a03e);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+/* A dica embaixo do campo do filtro avançado. */
+.filtros-avancados__dica {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* O que o filtro avançado achou, dentro da linha da tabela. */
+.filtro-avancado-achados {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.3rem;
+    white-space: normal;
+}
+
+.filtro-avancado-achados__item {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: var(--color-primary-light, #e6d27a);
+    background: rgba(182, 160, 62, 0.14);
+    border: 1px solid rgba(182, 160, 62, 0.35);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .filtros-avancados,
+    .botao-filtros-avancados__seta {
+        transition: none;
+    }
+}

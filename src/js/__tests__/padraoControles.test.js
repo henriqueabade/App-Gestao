@@ -179,7 +179,7 @@ const PADRONIZADOS = [
       'pessoas'
     ].map(m => `html/modals/contabilidade/${m}.html`)]
   },
-  // Tela com os 8 filtros e as caixas "Salvar modelo" / "Agendar" (na mesma página).
+  // Tela com os 8 filtros e a caixa "Salvar modelo" (na mesma página; o "Agendar" saiu em 08/10/2026).
   { modulo: 'relatorios', arquivos: ['html/relatorios.html'] },
   { modulo: 'configuracoes', arquivos: ['html/configuracoes.html'] },
 ];

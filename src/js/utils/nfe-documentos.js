@@ -36,6 +36,32 @@
     return false;
   }
 
+  /**
+   * Abre o documento no "Visualizar documento" (src/js/utils/visualizador-pdf.js,
+   * 09/10/2026): o MESMO PDF que o "Salvar" fazia — o HTML do backend impresso
+   * pelo Electron, em retrato —, para ver, imprimir ou salvar dali. Erro ao
+   * buscar aparece no próprio modal, com "Tentar de novo".
+   */
+  function paraVisualizador(caminho, { titulo, tituloSalvar }) {
+    if (!window.VisualizadorPdf) { avisar('Visualizador de documentos indisponível nesta janela.', 'error'); return false; }
+    window.VisualizadorPdf.abrir({
+      titulo,
+      tituloSalvar,
+      gerar: async () => {
+        const corpo = await fetchApi(caminho);
+        const pdf = await window.VisualizadorPdf.deHtml(corpo.html, { retrato: true })();
+        return { ...pdf, nomeArquivo: corpo.nome, subtitulo: corpo.nome };
+      }
+    });
+    return true;
+  }
+
+  /** O DANFE da nota no visualizador. */
+  function verDanfe(notaId) {
+    if (!notaId) return false;
+    return paraVisualizador(`/api/fiscal/notas/${encodeURIComponent(notaId)}/danfe`, { titulo: 'DANFE da NF-e', tituloSalvar: 'Salvar DANFE em PDF' });
+  }
+
   /** Salva um texto como .xml pelo diálogo do Electron. */
   async function paraArquivoXml(conteudo, nome, titulo, descricao = 'XML da NF-e') {
     return window.electronAPI?.salvarTextoComoArquivo?.({ conteudo, nomeSugerido: nome, extensao: 'xml', titulo, descricao });
@@ -173,6 +199,7 @@
   }
 
   window.NfeDocumentos = {
+    verDanfe,
     gerarDanfe, salvarXml, gerarCartaCorrecaoPdf, salvarXmlCartaCorrecao, listarCartasCorrecao,
     gerarDanfeExterna, salvarXmlExterna, gerarCartaExternaPdf, salvarXmlCartaExterna
   };

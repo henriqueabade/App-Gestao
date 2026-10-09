@@ -55,6 +55,12 @@ function conferir({ tipo, competencia, estado, hoje, extra = {} }) {
       ? `${c.rotuloCompetencia(competencia)} é anterior ao último fechamento (${c.rotuloCompetencia(estado.ultimo.competencia)}): o que era dela entra em ${c.rotuloCompetencia(estado.proxima)}.`
       : `Feche antes ${c.rotuloCompetencia(estado.proxima)} (as competências fecham em ordem).`);
   }
+  // Produção: setembro/2026 é o primeiro mês. Sem nenhum fechamento ainda, só
+  // ele fecha — os seguintes esperam o anterior (com fechamento, a regra de
+  // ordem acima já garante isso).
+  if (tipo === 'producao' && !estado.proxima && competencia > confirmacao.PRIMEIRA_COMPETENCIA) {
+    bloqueios.push(`Feche antes a produção de ${c.rotuloCompetencia(confirmacao.PRIMEIRA_COMPETENCIA)} (as competências da produção fecham em ordem, a partir dela).`);
+  }
   if (competencia === atual) avisos.push(`${c.rotuloCompetencia(competencia)} ainda não terminou: o que for registrado com data deste mês depois do fechamento entra em ${c.rotuloCompetencia(c.somarMeses(competencia, 1))}.`);
   if (tipo === 'comissao') {
     if (extra.aLancar) bloqueios.push(`${c.plural(extra.aLancar, 'boleto pago ainda não foi lançado', 'boletos pagos ainda não foram lançados')} nos recebimentos: use "Conciliar com o BB" antes de fechar.`);

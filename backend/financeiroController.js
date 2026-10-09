@@ -353,7 +353,9 @@ function criarRouter() {
       competencia: String(req.body?.competencia || ''),
       pedidoId: req.body?.pedido_id,
       decisoes: Array.isArray(req.body?.decisoes) ? req.body.decisoes : [],
-      origem: 'fechamento'
+      origem: 'fechamento',
+      // "Tudo pronto"/"Nada pronto" do pedido: nunca sobrescrevem uma decisão.
+      somentePendentes: req.body?.somente_pendentes === true
     })));
 
   router.get('/producao', exigirPermissao(VER), rota('GET /api/financeiro/producao', ({ api, req, hoje, desde }) =>

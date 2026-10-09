@@ -54,6 +54,36 @@ test('alocar: os registros consomem a fila na ordem; o estornado devolve as peç
   assert.deepEqual(r.pendentes, [1]);
 });
 
+test('alocar com fração (dono, 07/10/2026): o registro quebrado para no meio da unidade e o resto fica pendente', () => {
+  const ev = (id, quantidade, fracao_paga, data) => ({ id, status: 'ativo', quantidade, fracao_paga, data_finalizacao: data });
+  // Meia unidade em setembro: paga 0,5; a mesma unidade continua aberta com 0,5.
+  let r = u.alocar({ fila: [1, 1], eventos: [ev(1, 1, 0.5, '2026-09-30')] });
+  assert.deepEqual([r.usadas, r.pendentes, r.cotas, r.porEvento.get('1').fracao], [0, [0.5, 1], [0.5, 1], 0.5]);
+  // Em outubro, um registro comum de 1 termina a unidade: leva só a metade que faltava.
+  r = u.alocar({ fila: [1, 1], eventos: [ev(1, 1, 0.5, '2026-09-30'), ev(2, 1, null, '2026-10-31')] });
+  assert.deepEqual([r.usadas, r.pendentes, r.porEvento.get('2').fracoes], [1, [1], [0.5]]);
+  // 1,5 de 2 numa vez só (fração 1,5): uma inteira e metade da outra.
+  r = u.alocar({ fila: [1, 1], eventos: [ev(3, 2, 1.5, '2026-09-30')] });
+  assert.deepEqual([r.usadas, r.pendentes, r.cotas], [1, [0.5], [0.5]]);
+  // A do estoque que só devia metade: "metade dela" é 0,25 de peça, e a cota que sobra é 0,5.
+  r = u.alocar({ fila: [0.5, 1], eventos: [ev(4, 1, 0.25, '2026-09-30')] });
+  assert.deepEqual([r.pendentes, r.cotas], [[0.25, 1], [0.5, 1]]);
+  // Registro sem fração continua igual a antes (peças inteiras).
+  r = u.alocar({ fila: [0.1, 0.5, 1], eventos: [ev(5, 2, null, '2026-09-01')] });
+  assert.deepEqual([r.usadas, r.pendentes, r.cotas], [2, [1], [1]]);
+});
+
+test('plano da decisão: quanto de peça as unidades (quebradas) pagam e se param no meio de uma', () => {
+  const aberto = { pendentes: [0.5, 1, 1], cotas: [1, 1, 1] }; // a primeira é do estoque e só devia metade
+  assert.deepEqual(u.planoDaDecisao(aberto, 0.5), { fracao: 0.25, tocadas: 1, parcial: true });
+  assert.deepEqual(u.planoDaDecisao(aberto, 1), { fracao: 0.5, tocadas: 1, parcial: false });
+  assert.deepEqual(u.planoDaDecisao(aberto, 1.5), { fracao: 1, tocadas: 2, parcial: true });
+  assert.deepEqual(u.planoDaDecisao(aberto, 3), { fracao: 2.5, tocadas: 3, parcial: false });
+  // Unidade herdada pela metade: 0,5 a termina (sem parar no meio).
+  assert.deepEqual(u.planoDaDecisao({ pendentes: [0.5, 1], cotas: [0.5, 1] }, 0.5), { fracao: 0.5, tocadas: 1, parcial: false });
+  assert.deepEqual(u.planoDaDecisao(aberto, 0), { fracao: 0, tocadas: 0, parcial: false });
+});
+
 test('regra de todas as peças: vale para toda peça sem regra própria ATIVA; a que tem a dela segue a dela', () => {
   // Regra do dono (21/09/2026): "a regra de todas as peças é válida para todas
   // as peças que não têm cadastro específico ativo; se tiver algum cadastro

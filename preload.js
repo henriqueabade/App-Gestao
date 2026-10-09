@@ -494,6 +494,10 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   salvarTextoComoArquivo: (payload) => ipcRenderer.invoke('salvar-texto-como-arquivo', payload),
   salvarArquivoBinario: (payload) => ipcRenderer.invoke('salvar-arquivo-binario', payload),
   gerarPdfDeHtml: (payload) => ipcRenderer.invoke('gerar-pdf-de-html', payload),
+  // Visualizar documento (src/js/utils/visualizador-pdf.js): salvar e imprimir
+  // os mesmos bytes que o modal mostra.
+  salvarPdf: (payload) => ipcRenderer.invoke('salvar-pdf', payload),
+  imprimirPdf: (payload) => ipcRenderer.invoke('imprimir-pdf', payload),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openExternalHtml: (html) => ipcRenderer.invoke('open-external-html', html),
   recordActivity: (info) => {

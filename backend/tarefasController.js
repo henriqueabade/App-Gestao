@@ -98,6 +98,10 @@ async function lerBase(ctx) {
     ctx.api.get('/api/tarefas'),
     ctx.api.get('/api/tarefa_participantes').catch(() => [])
   ]);
+  // Fim natural das automáticas que ficaram para trás (orçamento já aprovado,
+  // rejeitado, expirado; registro excluído) — em segundo plano, no máximo uma
+  // vez por minuto (tarefasServico.conferirEncerramentos, 08/10/2026).
+  S.conferirEncerramentos(ctx.api, tarefas, { usuarioId: ctx.usuarioId }).catch(() => null);
   return { tarefas: lista(tarefas), participantes: lista(participantes) };
 }
 

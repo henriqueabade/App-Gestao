@@ -36,6 +36,18 @@ const ORIGENS = { fechamento: 'no fechamento', envio: 'no envio ao cliente', can
 const chave = (itemId, etapaId) => `${itemId}:${etapaId}`;
 const inteiro = v => Math.max(0, Math.trunc(Number(v) || 0));
 const soma = lista => lista.reduce((s, x) => s + (Number(x) || 0), 0);
+/**
+ * Unidades da decisão: podem ser QUEBRADAS (07/10/2026, pedido do dono) —
+ * "0,5" é metade daquele processo feita no mês; o resto fica para o seguinte.
+ */
+const quatro = v => Math.round((Number(v) || 0) * 10000) / 10000;
+const QUASE_ZERO = 0.0001;
+const unidadesDe = v => {
+  const n = Number(String(v ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? quatro(n) : NaN;
+};
+/** "1,5" — o número da unidade como se lê (vírgula, sem zeros à direita). */
+const lerUnidades = n => String(quatro(n)).replace('.', ',');
 
 /** As decisões de uma competência (409 quando o SQL ainda não rodou). */
 async function lerConfirmacoes(api, competencia) {
@@ -48,6 +60,29 @@ async function lerConfirmacoes(api, competencia) {
       throw c.erro(SQL_CONFIRMACAO, 409, { sql_pendente: true });
     }
     throw e;
+  }
+}
+
+/**
+ * Setembro/2026 é o primeiro mês da produção no sistema. Dele em diante, as
+ * peças só são confirmadas no fechamento de um mês depois que o mês ANTERIOR
+ * foi fechado (pedido do dono, 08/10/2026: peças de setembro foram
+ * confirmadas em outubro por engano, com setembro ainda aberto).
+ */
+const PRIMEIRA_COMPETENCIA = '2026-09';
+
+async function exigirMesAnteriorFechado(api, competencia) {
+  if (competencia === PRIMEIRA_COMPETENCIA) return;
+  const rotulo = c.rotuloCompetencia;
+  if (competencia < PRIMEIRA_COMPETENCIA) {
+    throw c.erro(`A produção começa em ${rotulo(PRIMEIRA_COMPETENCIA)}: não há peças a confirmar em ${rotulo(competencia)}.`, 409);
+  }
+  const anterior = c.somarMeses(competencia, -1);
+  const fechamentos = await c.ler(api, 'financeiro_fechamentos', { tipo: 'producao' });
+  const fechado = fechamentos.some(f => String(f.competencia || '').trim() === anterior && f.status === 'fechado');
+  if (!fechado) {
+    throw c.erro(`Feche antes a produção de ${rotulo(anterior)}: as peças de ${rotulo(competencia)} só são confirmadas depois que ${rotulo(anterior)} estiver fechado.`, 409,
+      { codigo: 'MES_ANTERIOR_ABERTO', mes_anterior: anterior });
   }
 }
 
@@ -91,25 +126,37 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
       const processos = ativas.map(e => {
         const fila = filaDe(i.id, e.id);
         if (!fila.length) return null;
-        const alocado = unidades.alocar({
-          fila,
-          eventos: comEtapa.filter(x => String(x.pedido_item_id) === String(i.id) && String(x.etapa_id) === String(e.id))
-        });
+        const doProcesso = comEtapa.filter(x => String(x.pedido_item_id) === String(i.id) && String(x.etapa_id) === String(e.id));
+        const alocado = unidades.alocar({ fila, eventos: doProcesso });
         const regra = unidades.regraDaPeca(tudo.valores, i.produto_id, e.id);
         const valorPeca = unidades.valorDaPecaInteira(regra, preco);
         const d = decisaoPor.get(chave(i.id, e.id)) || null;
-        const saldo = alocado.pendentes.length;
-        if (!saldo && !d) return null;
+        // A fila como estava ANTES da decisão desta competência: é dela que a
+        // decisão (e a reconfirmação, enquanto não fecha) parte.
+        const antes = d?.producao_evento_id
+          ? unidades.alocar({ fila, eventos: doProcesso.filter(x => String(x.id) !== String(d.producao_evento_id)) })
+          : alocado;
+        // Em unidades, podendo ser quebradas: 0,5 = metade de uma unidade em aberto.
+        const saldo = quatro(soma(alocado.cotas));
+        if (!(saldo > QUASE_ZERO) && !d) return null;
+        const prontas = d ? quatro(d.quantidade_pronta) : 0;
+        const plano = d ? unidades.planoDaDecisao(antes, prontas) : null;
         return {
           etapa_id: e.id, nome: e.nome,
           pedida: fila.length, finalizada: alocado.usadas, saldo,
-          proximas: alocado.pendentes.map(f => Math.round(f * 10000) / 10000),
+          // Quanto cabe na decisão desta competência (o saldo mais o que ela já confirmou).
+          disponivel: quatro(soma(antes.cotas)),
+          // A primeira unidade em aberto já veio com parte feita (decisão quebrada de um mês anterior).
+          ja_feito: antes.cotas.length && antes.cotas[0] < 1 - QUASE_ZERO ? quatro(1 - antes.cotas[0]) : 0,
+          em_aberto: { pendentes: antes.pendentes, cotas: antes.cotas },
+          proximas: alocado.pendentes,
           valor_unitario: valorPeca,
           regra: regra ? unidades.descreverRegra(regra) : null,
           sem_valor: valorPeca === null,
           valor_pendente: valorPeca === null ? null : c.centavos(valorPeca * soma(alocado.pendentes)),
           decidido: d ? {
-            prontas: inteiro(d.quantidade_pronta), pendentes: inteiro(d.quantidade_pendente),
+            prontas, pendentes: quatro(d.quantidade_pendente),
+            valor: valorPeca === null ? null : c.centavos(valorPeca * plano.fracao),
             origem: d.origem || 'fechamento', rotulo: ORIGENS[d.origem] || ORIGENS.fechamento,
             // Quando a decisão foi tomada: a tela mostra no hover da etiqueta.
             em: d.criado_em || null
@@ -124,7 +171,7 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
         do_estoque: grupos.filter(g => g.origem === 'estoque').reduce((s, g) => s + g.quantidade, 0),
         preco_tabela: preco,
         processos,
-        decidida: processos.every(e => !e.saldo || e.decidido),
+        decidida: processos.every(e => !(e.saldo > QUASE_ZERO) || e.decidido),
         decidida_em: datas.length ? datas[datas.length - 1] : null,
         sem_valor: processos.some(e => e.sem_valor && (e.saldo > 0 || (e.decidido?.prontas || 0) > 0))
       };
@@ -135,9 +182,9 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
       pedido_id: p.id, numero: p.numero ?? String(p.id), situacao: p.situacao,
       cliente: nomes.get(String(p.cliente_id)) || null,
       pecas,
-      unidades_pendentes: todos.reduce((s, e) => s + e.saldo, 0),
+      unidades_pendentes: quatro(todos.reduce((s, e) => s + e.saldo, 0)),
       valor_pendente: c.centavos(todos.reduce((s, e) => s + (e.valor_pendente || 0), 0)),
-      valor_decidido: c.centavos(todos.reduce((s, e) => s + (e.decidido && e.valor_unitario !== null ? e.valor_unitario * somaDasProntas(e) : 0), 0)),
+      valor_decidido: c.centavos(todos.reduce((s, e) => s + (e.decidido?.valor || 0), 0)),
       sem_valor: todos.some(e => e.sem_valor && (e.saldo > 0 || (e.decidido?.prontas || 0) > 0)),
       // Quais peças estão sem regra (a tela lista no hover da etiqueta) e
       // quando o pedido inteiro ficou decidido.
@@ -155,23 +202,28 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
     totais: {
       pedidos: cards.length,
       pendentes: cards.filter(x => !x.confirmado).length,
-      unidades_pendentes: cards.reduce((s, x) => s + x.unidades_pendentes, 0),
+      unidades_pendentes: quatro(cards.reduce((s, x) => s + x.unidades_pendentes, 0)),
       valor_pendente: c.centavos(cards.reduce((s, x) => s + x.valor_pendente, 0)),
       sem_valor: cards.filter(x => x.sem_valor).map(x => x.numero)
     }
   };
 }
 
-/** As primeiras `prontas` frações da fila pendente (o valor do que foi confirmado). */
-function somaDasProntas(processo) {
-  const quantas = processo?.decidido?.prontas || 0;
-  return soma((processo.proximas || []).slice(0, quantas));
-}
-
 /** Os pedidos que ainda têm unidade sem decisão nesta competência. */
 async function pedidosSemDecisao(api, { competencia, hoje }) {
   const r = await lerPendencias(api, { competencia, hoje });
   return r.pedidos.filter(p => !p.confirmado).map(p => p.numero);
+}
+
+/** Apaga um registro de produção que acabou de entrar (e o histórico dele). Nunca lança. */
+async function desfazerRegistro(api, eventoId) {
+  try {
+    const historico = await c.ler(api, 'financeiro_eventos', { tipo: 'producao_registrada', referencia_id: eventoId }).catch(() => []);
+    for (const h of historico) await api.delete(`/api/financeiro_eventos/${h.id}`).catch(() => {});
+    await api.delete(`/api/producao_eventos/${eventoId}`);
+  } catch (e) {
+    console.error(`[financeiro] o registro de produção ${eventoId} ficou sem decisão e não pôde ser apagado:`, e?.message || e);
+  }
 }
 
 async function gravarDecisao({ api, atual, campos, usuarioId }) {
@@ -185,12 +237,17 @@ async function gravarDecisao({ api, atual, campos, usuarioId }) {
 
 /**
  * Confirma o que ficou pronto num pedido.
- * `decisoes`: [{ pedido_item_id, etapa_id, prontas }] — `prontas` de 0 ao saldo.
+ * `decisoes`: [{ pedido_item_id, etapa_id, prontas }] — `prontas` de 0 ao
+ * saldo, podendo ser QUEBRADO (0,5 = metade da unidade; o resto fica para o
+ * mês seguinte, 07/10/2026).
  * Reconfirmar a mesma competência refaz a decisão (enquanto não fechou).
  */
-async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = 'fechamento', data = null, usuarioId = null, hoje }) {
+async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = 'fechamento', data = null, usuarioId = null, hoje, somentePendentes = false }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   if (!ORIGENS[origem]) throw c.erro('Origem da confirmação inválida.');
+  // A trava vale para a tela do fechamento. O envio ao cliente confirma
+  // sozinho, no mês do envio, e não pode falhar por causa dela.
+  if (origem === 'fechamento') await exigirMesAnteriorFechado(api, comp);
   const pendencias = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
   const card = pendencias.pedidos.find(p => String(p.pedido_id) === String(pedidoId));
   if (!card) throw c.erro('Este pedido não tem produção pendente nesta competência.', 409);
@@ -200,48 +257,67 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
 
   const feitas = [];
   for (const d of decisoes) {
+    // "Tudo pronto"/"Nada pronto" do pedido decidem só o que falta: uma
+    // decisão já tomada (até numa tela desatualizada, em outra aba) fica.
+    if (somentePendentes && decisaoPor.has(chave(d.pedido_item_id, d.etapa_id))) continue;
     const peca = card.pecas.find(p => String(p.pedido_item_id) === String(d.pedido_item_id));
     const processo = peca?.processos.find(e => String(e.etapa_id) === String(d.etapa_id));
     if (!processo) throw c.erro('Uma das peças/processos não está mais pendente. Atualize a tela.', 409);
-    const prontas = inteiro(d.prontas);
-    const disponivel = processo.saldo + (processo.decidido?.prontas || 0);
-    if (prontas > disponivel) throw c.erro(`${peca.codigo || peca.nome || 'A peça'} em ${processo.nome}: ${prontas} passa das ${disponivel} unidades que faltam.`, 409);
+    const nomeDaPeca = peca.codigo || peca.nome || 'A peça';
+    const prontas = unidadesDe(d.prontas);
+    if (!(prontas >= 0)) throw c.erro(`${nomeDaPeca} em ${processo.nome}: diga quanto ficou pronto (um número, pode ser 0,5).`, 422);
+    const disponivel = processo.disponivel;
+    if (prontas > disponivel + QUASE_ZERO) throw c.erro(`${nomeDaPeca} em ${processo.nome}: ${lerUnidades(prontas)} passa das ${lerUnidades(disponivel)} unidades que faltam.`, 409);
 
     const atual = decisaoPor.get(chave(d.pedido_item_id, d.etapa_id)) || null;
+    const mudou = !atual || Math.abs(quatro(atual.quantidade_pronta) - prontas) > QUASE_ZERO;
     // Mudou de ideia antes de fechar: o registro anterior sai e entra o novo.
-    if (atual?.producao_evento_id && inteiro(atual.quantidade_pronta) !== prontas) {
+    if (atual?.producao_evento_id && mudou) {
       await producao.estornar({ api, id: atual.producao_evento_id, motivo: 'Decisão do fechamento refeita', usuarioId, hoje }).catch(() => {});
     }
     let evento = null;
-    if (prontas > 0 && (!atual?.producao_evento_id || inteiro(atual.quantidade_pronta) !== prontas)) {
+    if (prontas > 0 && (!atual?.producao_evento_id || mudou)) {
+      // A decisão quebrada para no meio de uma unidade: o registro leva a
+      // fração paga (o resto da unidade fica pendente para o mês seguinte).
+      const plano = unidades.planoDaDecisao(processo.em_aberto, prontas);
       const r = await producao.registrar({
         api, usuarioId, hoje,
         entrada: {
           pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
-          quantidade: prontas, data_finalizacao: dia,
-          observacao: `Confirmado ${ORIGENS[origem]} (${c.rotuloCompetencia(comp)})`
-        }
+          quantidade: plano.tocadas, data_finalizacao: dia,
+          observacao: `Confirmado ${ORIGENS[origem]} (${c.rotuloCompetencia(comp)})${plano.parcial ? ` — ${lerUnidades(prontas)} un.; o resto fica para o mês seguinte` : ''}`
+        },
+        fracao: plano.parcial ? plano.fracao : null
       });
       evento = r.evento;
     }
-    const pendentes = Math.max(0, disponivel - prontas);
-    await gravarDecisao({
-      api, atual, usuarioId,
-      campos: {
-        competencia: comp, pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
-        quantidade_pronta: prontas, quantidade_pendente: pendentes, origem,
-        producao_evento_id: evento?.id ?? (prontas > 0 ? atual?.producao_evento_id ?? null : null)
-      }
-    });
+    const pendentes = quatro(Math.max(0, disponivel - prontas));
+    try {
+      await gravarDecisao({
+        api, atual, usuarioId,
+        campos: {
+          competencia: comp, pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
+          quantidade_pronta: prontas, quantidade_pendente: pendentes, origem,
+          producao_evento_id: evento?.id ?? (prontas > 0 ? atual?.producao_evento_id ?? null : null)
+        }
+      });
+    } catch (e) {
+      // A decisão não entrou (a trava do banco, uma queda): o registro feito
+      // logo acima não pode ficar solto — sem decisão, ele contaria no mês e
+      // "comeria" o processo da peça (08/10/2026).
+      if (evento?.id) await desfazerRegistro(api, evento.id);
+      throw e;
+    }
     feitas.push({ pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id, prontas, pendentes, peca: peca.codigo || peca.nome, processo: processo.nome });
   }
 
-  const prontasTotais = feitas.reduce((s, x) => s + x.prontas, 0);
-  const pendentesTotais = feitas.reduce((s, x) => s + x.pendentes, 0);
-  await auditoria.registrar(api, {
+  const prontasTotais = quatro(feitas.reduce((s, x) => s + x.prontas, 0));
+  const pendentesTotais = quatro(feitas.reduce((s, x) => s + x.pendentes, 0));
+  const unidadesNoTexto = (n, uma, varias) => `${lerUnidades(n)} ${n === 1 ? uma : varias}`;
+  if (feitas.length) await auditoria.registrar(api, {
     tipo: 'producao_confirmada', pedidoId: card.pedido_id, usuarioId,
     descricao: `Produção do pedido ${card.numero} confirmada ${ORIGENS[origem]} em ${c.rotuloCompetencia(comp)}: `
-      + `${c.plural(prontasTotais, 'unidade pronta', 'unidades prontas')}, ${c.plural(pendentesTotais, 'unidade fica', 'unidades ficam')} para o mês seguinte.`
+      + `${unidadesNoTexto(prontasTotais, 'unidade pronta', 'unidades prontas')}, ${unidadesNoTexto(pendentesTotais, 'unidade fica', 'unidades ficam')} para o mês seguinte.`
   });
 
   const depois = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
@@ -262,8 +338,8 @@ async function confirmarTudoDoPedido({ api, pedidoId, origem = 'envio', data = n
   const pendencias = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
   const card = pendencias.pedidos.find(p => String(p.pedido_id) === String(pedidoId));
   if (!card) return { confirmado: false, motivo: 'sem produção pendente' };
-  const decisoes = card.pecas.flatMap(p => p.processos.filter(e => e.saldo > 0).map(e => ({
-    pedido_item_id: p.pedido_item_id, etapa_id: e.etapa_id, prontas: e.saldo + (e.decidido?.prontas || 0)
+  const decisoes = card.pecas.flatMap(p => p.processos.filter(e => e.saldo > QUASE_ZERO).map(e => ({
+    pedido_item_id: p.pedido_item_id, etapa_id: e.etapa_id, prontas: e.disponivel
   })));
   if (!decisoes.length) return { confirmado: false, motivo: 'nada pendente' };
   const r = await confirmar({ api, competencia: comp, pedidoId, decisoes, origem, data, usuarioId, hoje });
@@ -415,7 +491,7 @@ async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = n
 }
 
 module.exports = {
-  TABELA, SQL_CONFIRMACAO, ORIGENS,
-  lerConfirmacoes, lerPendencias, pedidosSemDecisao, confirmar, confirmarTudoDoPedido, diaDaCompetencia,
+  TABELA, SQL_CONFIRMACAO, ORIGENS, PRIMEIRA_COMPETENCIA,
+  exigirMesAnteriorFechado, lerConfirmacoes, lerPendencias, pedidosSemDecisao, confirmar, confirmarTudoDoPedido, diaDaCompetencia,
   avancoNoProcesso, fracaoJaPaga, confirmarCancelamento
 };

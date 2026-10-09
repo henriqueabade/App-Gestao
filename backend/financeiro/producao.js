@@ -143,6 +143,9 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
         competencia_natural: natural, competencia: competenciaAlvo(natural, estado.proxima),
         valor_unitario: total === null || !quantidade ? null : c.centavos(total / quantidade),
         valor_peca: valorPeca, fracao, regra: regraTexto, valor_origem: origem,
+        // Registro pago pela fração (decisão quebrada do fechamento, cancelamento):
+        // a contagem por processo usa a fração, não as unidades tocadas.
+        fracao_manual: e.fracao_paga !== null && e.fracao_paga !== undefined && !e.estorno_de,
         sem_valor: total === null,
         total: total === null ? 0 : total,
         status_item: al ? statusDoItem(al.fila.length, al.usadas) : null, observacao: e.observacao || null
@@ -255,7 +258,8 @@ function resumir(linhas) {
   for (const l of linhas) {
     const k = String(l.setor_id ?? l.setor);
     const s = porSetor.get(k) || { setor_id: l.setor_id ?? null, setor: l.setor, pecas: 0, total: 0 };
-    s.pecas += Number(l.quantidade) || 0;
+    // Decisão quebrada conta o que foi feito (1,5), não as unidades tocadas (2).
+    s.pecas = Math.round((s.pecas + (l.fracao_manual ? Number(l.fracao) || 0 : Number(l.quantidade) || 0)) * 10000) / 10000;
     s.total = c.centavos(s.total + Number(l.total || 0));
     porSetor.set(k, s);
   }
@@ -453,7 +457,11 @@ async function doPedido(api, pedidoId) {
             setor_id: e.id, pedida: fila.length, finalizada: al.usadas, saldo: al.pendentes.length,
             status: statusDoItem(fila.length, al.usadas),
             valor_unitario: valorPeca, valor_origem: regra ? regra.origem : null, regra: regra ? unidades.descreverRegra(regra) : null,
-            proximas: al.pendentes.map(f => Math.round(f * 10000) / 10000)
+            proximas: al.pendentes.map(f => Math.round(f * 10000) / 10000),
+            // Quanto falta de cada unidade em aberto (0,5 = feita pela metade num fechamento).
+            cotas: al.cotas,
+            // A fila inteira: é com ela que o registro confere, depois de gravar, se não passou do que faltava.
+            fila
           };
         }).filter(Boolean)
       };
@@ -473,7 +481,13 @@ function valorDasProximas(doSetor, quantidade) {
   return c.centavos(doSetor.valor_unitario * fracao);
 }
 
-async function registrar({ api, entrada, usuarioId = null, hoje }) {
+/**
+ * Grava um registro de produção. `fracao` (só o fechamento passa, nunca o
+ * corpo da requisição): a decisão quebrada — paga essa fração de peça e pode
+ * deixar uma unidade pela metade para o mês seguinte; `quantidade` são as
+ * unidades tocadas.
+ */
+async function registrar({ api, entrada, usuarioId = null, hoje, fracao = null }) {
   const pedidoId = Number(entrada?.pedido_id);
   const itemId = Number(entrada?.pedido_item_id);
   const etapaId = Number(entrada?.etapa_id ?? entrada?.setor_id);
@@ -495,28 +509,63 @@ async function registrar({ api, entrada, usuarioId = null, hoje }) {
   const doSetor = item.setores.find(s => Number(s.setor_id) === etapaId);
   if (!doSetor) throw c.erro(`${[item.codigo, item.nome].filter(Boolean).join(' — ') || 'Esta peça'} não passa por ${etapa.nome} (não tem insumo desse processo, ou todas saíram do estoque com ele pronto).`, 409);
   if (quantidade > doSetor.saldo) throw c.erro(`Passa do saldo: ${doSetor.pedida} peça(s) precisam de ${etapa.nome} e ${doSetor.finalizada} já foram registradas (saldo ${doSetor.saldo}).`, 409);
-  const valor = valorDasProximas(doSetor, quantidade);
+  const fracaoPaga = fracao === null || fracao === undefined ? null : Math.round(Number(fracao) * 10000) / 10000;
+  if (fracaoPaga !== null) {
+    const falta = (doSetor.proximas || []).reduce((s, f) => s + f, 0);
+    if (!(fracaoPaga > 0) || fracaoPaga > falta + 0.0001) throw c.erro(`Passa do que falta de ${etapa.nome} nesta peça.`, 409);
+  }
+  const valor = fracaoPaga !== null
+    ? (doSetor.valor_unitario === null || doSetor.valor_unitario === undefined ? null : c.centavos(doSetor.valor_unitario * fracaoPaga))
+    : valorDasProximas(doSetor, quantidade);
 
   const descricaoPeca = [item.codigo, item.nome].filter(Boolean).join(' — ') || `item ${item.id}`;
   const evento = await c.inserir(api, 'producao_eventos', {
     pedido_id: pedidoId, pedido_item_id: itemId, produto_id: item.produto_id, setor_id: null, etapa_id: etapaId, quantidade,
+    ...(fracaoPaga !== null ? { fracao_paga: fracaoPaga } : {}),
     data_finalizacao: data, competencia: c.competenciaDe(data), observacao: c.texto(entrada?.observacao, 500) || null,
     status: 'ativo', criado_por: usuarioId, criado_em: c.agora()
   });
+  const desfazer = motivo => (evento?.id
+    ? c.atualizar(api, 'producao_eventos', evento.id, { status: 'estornado', estornado_em: c.agora(), estornado_por: usuarioId, motivo_estorno: motivo }).catch(() => {})
+    : Promise.resolve());
 
-  // Duas máquinas ao mesmo tempo: relê e desfaz se passou do que precisa ser feito.
+  // Duas máquinas ao mesmo tempo: relê e desfaz se passou do que precisa ser
+  // feito. Pela FILA, não pela soma das quantidades: uma unidade feita pela
+  // metade num mês e terminada no outro tem dois registros de 1 (07/10/2026).
   const eventosDepois = await c.ler(api, 'producao_eventos', { pedido_id: pedidoId });
-  const depois = eventosDepois.filter(e => ativoEv(e) && !e.estornado_em && !e.estorno_de && Number(e.pedido_item_id) === itemId && Number(e.etapa_id) === etapaId)
-    .reduce((s, e) => s + Number(e.quantidade || 0), 0);
-  if (depois > doSetor.pedida && evento.id) {
-    await c.atualizar(api, 'producao_eventos', evento.id, { status: 'estornado', estornado_em: c.agora(), estornado_por: usuarioId, motivo_estorno: 'Registro simultâneo passou do saldo do processo' });
+  const doProcesso = eventosDepois.filter(e => ativoEv(e) && !e.estornado_em && !e.estorno_de
+    && Number(e.pedido_item_id) === itemId && Number(e.etapa_id) === etapaId);
+  const gravado = doProcesso.find(e => String(e.id) === String(evento?.id)) || null;
+  // A fração tem de ter ido para o banco: sem a coluna, o registro seria pago
+  // pela unidade inteira (a API genérica descarta coluna desconhecida).
+  if (fracaoPaga !== null && (!gravado || unidades.fracaoDoRegistro(gravado) === null)) {
+    await desfazer('Coluna producao_eventos.fracao_paga ausente');
+    throw c.erro('Falta rodar sql/fechamento_producao_e_pagamentos.sql no banco e reiniciar a API (coluna producao_eventos.fracao_paga).', 409, { sql_pendente: true });
+  }
+  // Algum registro ficou sem o que devia receber? Só conta contra ESTE se o
+  // estouro não existia sem ele (dado antigo torto não trava os novos).
+  const faltou = eventos => {
+    const al = unidades.alocar({ fila: doSetor.fila || [], eventos });
+    return eventos.some(e => {
+      const r = al.porEvento.get(String(e.id));
+      if (!r) return false;
+      const manual = unidades.fracaoDoRegistro(e);
+      return manual !== null ? r.fracao + 0.0001 < manual : r.fracoes.length < Math.trunc(Number(e.quantidade) || 0);
+    });
+  };
+  if (evento?.id && faltou(doProcesso) && !faltou(doProcesso.filter(e => String(e.id) !== String(evento.id)))) {
+    await desfazer('Registro simultâneo passou do saldo do processo');
     throw c.erro('Outro registro desta peça entrou ao mesmo tempo e o saldo acabou. Confira e registre de novo.', 409);
   }
 
-  const parcial = (doSetor.proximas || []).slice(0, quantidade).some(f => f < 1);
+  const doEstoque = (doSetor.proximas || []).slice(0, quantidade).some(f => f < 1);
+  const quanto = fracaoPaga !== null
+    ? `${String(fracaoPaga).replace('.', ',')} de peça de ${descricaoPeca} feita em ${etapa.nome}`
+    : `${quantidade} × ${descricaoPeca} finalizada(s) em ${etapa.nome}`;
   await auditoria.registrar(api, {
     tipo: 'producao_registrada', pedidoId, referenciaId: evento.id, usuarioId, valor,
-    descricao: `${quantidade} × ${descricaoPeca} finalizada(s) em ${etapa.nome} (${c.impressa(data)}) — pedido ${dados.pedido.numero}${parcial ? ' (parte das peças saiu do estoque com o processo adiantado)' : ''}`
+    descricao: `${quanto} (${c.impressa(data)}) — pedido ${dados.pedido.numero}`
+      + `${fracaoPaga === null && doEstoque ? ' (parte das peças saiu do estoque com o processo adiantado)' : ''}`
   });
   const feita = doSetor.finalizada + quantidade;
   return {

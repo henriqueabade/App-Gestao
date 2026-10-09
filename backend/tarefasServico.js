@@ -174,11 +174,21 @@ async function convidar(api, t, ids = [], { usuarioId, nomes = new Map(), mensag
 /**
  * Fecha a tarefa. `interacao`: { origem: 'prospeccao'|'cliente', id } da
  * atividade que a conclusão gerou (fica o elo para abrir de um lado e do outro).
+ * `quando`: o instante da conclusão (padrão: agora) — o fim natural de uma
+ * tarefa automática usa o do fechamento do registro.
+ *
+ * A TAREFA AUTOMÁTICA CONCLUÍDA VAI PARA O DIA EM QUE FOI CONCLUÍDA (dono,
+ * 08/10/2026). O dia dela era só um lembrete ("cobrar daqui a 7 dias"); feito
+ * o que ela cobrava, deixá-la no dia antigo punha no calendário uma tarefa
+ * concluída num dia em que nada aconteceu. A troca do dia fica na linha do
+ * tempo da tarefa. As que alguém criou à mão continuam no dia que a pessoa
+ * escolheu.
  */
-async function concluirTarefa(api, t, { usuarioId, resultado = null, nota = null, interacao = null, nomes = new Map(), registrarFicha = true } = {}) {
+async function concluirTarefa(api, t, { usuarioId, resultado = null, nota = null, interacao = null, nomes = new Map(), registrarFicha = true, quando = null } = {}) {
+  const instante = quando && !Number.isNaN(new Date(quando).getTime()) ? new Date(quando) : new Date();
   const patch = {
     status: 'concluida',
-    concluida_em: new Date().toISOString(),
+    concluida_em: instante.toISOString(),
     concluida_por: usuarioId ?? null,
     resultado: resultado && R.RESULTADOS[resultado] ? resultado : null,
     resultado_nota: texto(nota) || null,
@@ -186,11 +196,153 @@ async function concluirTarefa(api, t, { usuarioId, resultado = null, nota = null
     interacao_id: interacao?.id ?? null,
     atualizado_em: new Date().toISOString()
   };
+  const diaDoFim = t.origem === 'automacao' ? R.agoraEmBrasilia(instante).dia : null;
+  const trocaDoDia = diaDoFim && R.diaISO(t.data) !== diaDoFim
+    ? R.diferencasDaTarefa(t, { data: diaDoFim }, nomes).map(e => ({ ...e, observacao: 'A tarefa automática fica no dia em que foi concluída' }))
+    : [];
+  if (trocaDoDia.length) patch.data = diaDoFim;
   await api.put(`/api/tarefas/${t.id}`, patch);
   const legivel = [R.RESULTADOS[patch.resultado], patch.resultado_nota].filter(Boolean).join(' — ') || 'Concluída';
-  await registrarNaTarefa(api, t.id, [{ tipo: 'situacao', acao: 'concluiu', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status] || null, valor_novo: legivel }], usuarioId);
-  if (registrarFicha) await registrarNaFicha(api, { ...t, ...patch }, eventoNaFicha('concluiu', t, { nomes, valor: legivel }), usuarioId);
+  await registrarNaTarefa(api, t.id, [
+    ...trocaDoDia,
+    { tipo: 'situacao', acao: 'concluiu', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status] || null, valor_novo: legivel }
+  ], usuarioId);
+  if (registrarFicha) await registrarNaFicha(api, { ...t, ...patch }, eventoNaFicha('concluiu', { ...t, ...patch }, { nomes, valor: legivel }), usuarioId);
   return { ...t, ...patch };
+}
+
+// ------------------------------------------------------------ fim natural
+
+/**
+ * Aplica o fim natural (backend/tarefasAutomaticas.js › encerramentoDaTarefa)
+ * a uma tarefa automática aberta: conclui no dia do fechamento ou cancela.
+ * `avisar`: quem responde/criou fica sabendo (a conferência das antigas não
+ * avisa, para não chegar uma enxurrada de uma vez).
+ */
+async function encerrarTarefa(api, t, decisao, { usuarioId = null, nomes = null, avisar: deveAvisar = true, registrarFicha = true } = {}) {
+  if (!decisao || !t || !R.ABERTOS.has(t.status) || t.excluida_em) return null;
+  if (decisao.acao === 'cancelar') {
+    await cancelar(api, t, usuarioId, decisao.motivo);
+    return 'cancelada';
+  }
+  const nomesUsados = nomes || await social.nomesDosUsuarios(api);
+  await concluirTarefa(api, t, {
+    usuarioId, resultado: 'feito', nota: `Concluída sozinha: ${decisao.motivo}.`,
+    nomes: nomesUsados, registrarFicha, quando: decisao.quando
+  });
+  if (deveAvisar) {
+    const para = social.destinatarios([t.responsavel_id, t.criado_por], usuarioId);
+    if (para.length) {
+      await avisar(api, para, {
+        tipo: 'acao_concluida', titulo: 'Tarefa concluída sozinha',
+        mensagem: `${decisao.motivo}: "${t.titulo}" foi concluída no dia do fechamento.`,
+        origem: 'tarefa', registro_id: Number(t.id), autor_id: usuarioId ?? null
+      });
+    }
+  }
+  return 'concluida';
+}
+
+/** Leitura do registro de cada tipo (o id vai no fim). */
+const ROTA_DO_REGISTRO = { orcamento: '/api/orcamentos/', pedido: '/api/pedidos/', cliente: '/api/clientes/' };
+
+/**
+ * Lê um registro: o objeto, `null` se ele NÃO EXISTE (404 / "Not found") ou
+ * `undefined` se não deu para saber (rede, permissão) — e aí nada se faz.
+ */
+async function lerRegistro(api, tipo, id) {
+  try {
+    const r = await api.get(`${ROTA_DO_REGISTRO[tipo]}${Number(id)}`);
+    if (!r) return null;
+    if (r.error) return /not found/i.test(String(r.error)) ? null : undefined;
+    return r;
+  } catch (err) {
+    return err?.status === 404 ? null : undefined;
+  }
+}
+
+/**
+ * O registro mudou (orçamento aprovado/rejeitado/expirado, orçamento, pedido
+ * ou cliente excluído): fecha as tarefas automáticas abertas presas a ele.
+ * `registro`: o registro já lido (null = acabou de ser excluído); sem ele, lê.
+ * Nunca derruba quem chamou.
+ */
+async function encerrarTarefasDoRegistro(api, { tipo, id, registro, usuarioId = null } = {}) {
+  try {
+    const regras = Object.entries(A.ENCERRAMENTOS).filter(([, f]) => f.registro === tipo);
+    if (!regras.length || id === undefined || id === null || id === '') return [];
+    const campo = regras[0][1].campo;
+    const abertas = lista(await api.get('/api/tarefas', { query: { [campo]: Number(id) } }))
+      .filter(t => t.origem === 'automacao' && R.ABERTOS.has(t.status) && !t.excluida_em
+        && mesmoId(t[campo], id) && regras.some(([chave]) => A.regraDaTarefa(t) === chave));
+    if (!abertas.length) return [];
+    const alvo = registro === undefined ? await lerRegistro(api, tipo, id) : registro;
+    if (alvo === undefined) return [];
+    const nomes = await social.nomesDosUsuarios(api);
+    const feitas = [];
+    for (const t of abertas) {
+      const como = await encerrarTarefa(api, t, A.encerramentoDaTarefa(t, alvo), { usuarioId, nomes });
+      if (como) feitas.push({ id: t.id, como });
+    }
+    return feitas;
+  } catch (err) {
+    if (!social.semTabela(err)) console.error(`[tarefas] fim natural (${tipo} ${id}) não conferido:`, err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Conferência das tarefas automáticas ABERTAS que já perderam o sentido —
+ * as que ficaram para trás antes desta regra existir, ou cujo registro
+ * fechou por um caminho que não passa por aqui. Roda quando alguém abre
+ * Tarefas/Calendário, no máximo uma vez por minuto, sem segurar a tela.
+ * Não avisa e não escreve na ficha do cliente (seriam avisos atrasados de
+ * coisas antigas): a linha do tempo da tarefa conta o que houve.
+ * "Excluído" só vale com a confirmação de que o registro não existe (404):
+ * uma lista que volta vazia por falta de permissão não pode cancelar nada.
+ */
+let ultimaConferencia = 0;
+const INTERVALO_DA_CONFERENCIA_MS = 60 * 1000;
+const LEITURA_DA_CONFERENCIA = {
+  orcamento: ['/api/orcamentos', 'id,numero,situacao,data_aprovacao'],
+  pedido: ['/api/pedidos', 'id'],
+  cliente: ['/api/clientes', 'id']
+};
+
+async function conferirEncerramentos(api, tarefas, { usuarioId = null, agora = Date.now(), forcar = false } = {}) {
+  if (!forcar && agora - ultimaConferencia < INTERVALO_DA_CONFERENCIA_MS) return [];
+  ultimaConferencia = agora;
+  try {
+    const candidatas = lista(tarefas).filter(t => t && t.origem === 'automacao' && R.ABERTOS.has(t.status) && !t.excluida_em
+      && A.ENCERRAMENTOS[A.regraDaTarefa(t)]);
+    if (!candidatas.length) return [];
+    const porTipo = new Map();
+    for (const tipo of new Set(candidatas.map(t => A.ENCERRAMENTOS[A.regraDaTarefa(t)].registro))) {
+      const [rota, select] = LEITURA_DA_CONFERENCIA[tipo];
+      const linhas = await api.get(rota, { query: { select } }).catch(() => null);
+      if (Array.isArray(linhas)) porTipo.set(tipo, new Map(linhas.map(r => [String(r.id), r])));
+    }
+    let nomes = null;
+    const feitas = [];
+    for (const t of candidatas) {
+      const fim = A.ENCERRAMENTOS[A.regraDaTarefa(t)];
+      const idDoRegistro = t[fim.campo];
+      const mapa = porTipo.get(fim.registro);
+      if (idDoRegistro === null || idDoRegistro === undefined || !mapa) continue;
+      let registro = mapa.get(String(idDoRegistro));
+      if (registro === undefined) registro = await lerRegistro(api, fim.registro, idDoRegistro);
+      const decisao = A.encerramentoDaTarefa(t, registro);
+      if (!decisao) continue;
+      if (!nomes) nomes = await social.nomesDosUsuarios(api);
+      const como = await encerrarTarefa(api, t, decisao, { usuarioId, nomes, avisar: false, registrarFicha: false });
+      if (como) feitas.push({ id: t.id, como });
+    }
+    if (feitas.length) console.log(`[tarefas] fim natural: ${feitas.length} tarefa(s) automática(s) fechada(s) na conferência.`);
+    return feitas;
+  } catch (err) {
+    if (!social.semTabela(err)) console.error('[tarefas] conferência do fim natural falhou:', err?.message || err);
+    return [];
+  }
 }
 
 // ------------------------------------------------------------ próximo passo
@@ -352,5 +504,6 @@ module.exports = {
   prazoLegivel, retratoDaTarefa, eventoNaFicha, registrarNaFicha, registrarNaTarefa,
   criarTarefa, convidar, concluirTarefa, cancelar,
   sincronizarPassoDaProspeccao, criarTarefaAutomatica, usuarioPeloNome,
-  preferenciasDoUsuario, recebeAutomatica
+  preferenciasDoUsuario, recebeAutomatica,
+  encerrarTarefa, encerrarTarefasDoRegistro, conferirEncerramentos
 };

@@ -271,3 +271,23 @@ rodar, reiniciar a API de novo.
 - **`querySelectorAll('[data-visao]')`** pegava também o `.cal-area` (que marca a visão): use `.cal-visoes [data-visao]`.
 - **`requestAnimationFrame` não roda com a janela escondida**: rolagem que precisa acontecer ao redesenhar vai direto (a grade já está na tela).
 - Módulos embrulhados numa IIFE pelo `menu.js` só são alcançáveis pelo que publicam em `window` (`PedidosModulo`, `OrcamentosModulo`, `ProspeccoesModulo`, `ClientesModulo`).
+
+## 8. Fim natural das tarefas automáticas (08/10/2026)
+
+A tarefa automática fecha junto com o registro dela.
+
+- **O registro chegou ao fim que ela esperava:** a tarefa é **concluída no dia
+  do fechamento**. É o caso do orçamento aprovado, rejeitado ou expirado, que
+  fecha o follow-up.
+- **O registro foi excluído:** a tarefa é **cancelada**.
+- **Toda automática concluída vai para o dia da conclusão.** Vale para a de
+  pagar também.
+
+A tabela regra a regra, onde se percebe e a conferência das antigas estão em
+`docs/filtros-relatorios-producao-tarefas.md` (§10). O código está em
+`tarefasAutomaticas.ENCERRAMENTOS` e em
+`tarefasServico.encerrarTarefasDoRegistro` / `conferirEncerramentos`.
+
+**Regra automática nova:** diga em `ENCERRAMENTOS` o que a encerra. Se o
+registro dela muda por um caminho que grava direto na API, chame
+`encerrarTarefasDoRegistro` ali, como na prospecção perdida.

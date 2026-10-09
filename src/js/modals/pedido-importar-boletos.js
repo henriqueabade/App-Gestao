@@ -362,8 +362,12 @@
     escolhaEl.classList.add('hidden');
   }
 
+  // A busca roda enquanto se digita (08/10/2026): a resposta de uma busca
+  // velha que chega depois da nova é descartada pela senha.
+  let senhaDaBusca = 0;
   async function procurarParcelas() {
     if (!escolhendo) return;
+    const minha = ++senhaDaBusca;
     resultadoBuscaEl.replaceChildren();
     const aviso = document.createElement('li');
     aviso.className = 'text-xs text-gray-400';
@@ -374,8 +378,10 @@
       const busca = encodeURIComponent(buscaEl.value.trim());
       const resp = await fetchApi(`/api/cobranca/importacao/parcelas?busca=${busca}`);
       corpo = await resp.json().catch(() => null);
+      if (minha !== senhaDaBusca) return;
       if (!resp.ok) throw new Error(mensagemDeErro(resp.status, corpo));
     } catch (e) {
+      if (minha !== senhaDaBusca) return;
       aviso.textContent = e.message || 'Não foi possível procurar os pedidos.';
       aviso.style.color = 'var(--color-red)';
       return;
@@ -426,7 +432,9 @@
 
   el('importarBoletosEscolhaFechar')?.addEventListener('click', fecharEscolha);
   el('importarBoletosBuscarParcela')?.addEventListener('click', procurarParcelas);
-  buscaEl?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); procurarParcelas(); } });
+  // Procura enquanto digita, como todos os filtros (08/10/2026); Enter não espera.
+  if (window.BuscaAoDigitar) window.BuscaAoDigitar.ligar(buscaEl, procurarParcelas, { espera: 350 });
+  else buscaEl?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); procurarParcelas(); } });
   el('importarBoletosSemParcela')?.addEventListener('click', () => {
     if (!escolhendo) return;
     escolhas.set(escolhendo.nosso_numero, { sem_parcela: true });

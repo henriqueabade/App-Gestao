@@ -1069,6 +1069,39 @@ header.glass-surface {
     will-change: width;
 }
 
+/* ---------------------------------------------------------------------------
+   Rolagem do menu lateral (dono, 08/10/2026): quando os itens passam da altura
+   da tela, o menu rola — com a barrinha dourada do programa, que só aparece
+   com o mouse sobre o menu.
+
+   Sem mexer em largura nenhuma: o espaço da barra (6 px) fica SEMPRE
+   reservado (`scrollbar-gutter: stable`) e sai do recuo da direita, que era
+   0,5 rem (8 px) e passa a 2 px. 2 + 6 = 8: os itens têm exatamente a largura
+   de antes, com a barra visível ou não, aberto ou recolhido.
+
+   Fora do menu, `overflow-y: hidden` esconde a barra (o lugar dela continua
+   reservado, então nada se mexe); com o mouse em cima, `auto` a mostra se
+   houver o que rolar. Trocar o overflow, e não só a cor da barra, é de
+   propósito: o Chromium nem sempre repinta a barra quando só o :hover do pai
+   muda. A posição da rolagem se mantém nas duas trocas.
+
+   A barra em si (6 px, dourada, sem trilho; a cor do tema claro) é a regra
+   global de src/styles/scroll.css (3d): não se escreve barra nova aqui.
+   --------------------------------------------------------------------------- */
+#sidebar > nav {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
+    padding-right: 2px;
+    overscroll-behavior: contain;
+}
+
+#sidebar:hover > nav,
+#sidebar:focus-within > nav {
+    overflow-y: auto;
+}
+
 .sidebar-item,
 .submenu-item {
     /* Default menu color and smooth transition */

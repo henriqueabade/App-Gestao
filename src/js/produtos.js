@@ -16,6 +16,96 @@ let filtrosAplicados = {
 let filtrosPendentes = false;
 let avisoNovoItemEl = null;
 
+// ---------------------------------------------------------------------------
+// FILTRO AVANÇADO: AS PEÇAS DE UM CLIENTE OU DE UM PEDIDO (dono, 08/10/2026)
+//
+// A lista de produtos não sabe em que pedido cada peça está. O elo vem de
+// GET /api/vinculos-pecas/produtos (backend/vinculosDasPecas.js), lido só na
+// primeira vez que alguém usa o filtro e de novo a cada recarga da lista.
+// `vinculosAchados` guarda, por peça, os documentos que casaram — a linha os
+// mostra embaixo do nome, para a pessoa ver POR QUE a peça ficou.
+// ---------------------------------------------------------------------------
+let vinculosDosProdutos = null;
+let vinculosCarregando = null;
+let vinculosAchados = new Map();
+let controleFiltrosAvancados = null;
+
+async function carregarVinculosDosProdutos() {
+    if (vinculosDosProdutos) return vinculosDosProdutos;
+    if (vinculosCarregando) return vinculosCarregando;
+    vinculosCarregando = (async () => {
+        try {
+            const base = await window.apiConfig.getApiBaseUrl();
+            const resp = await fetch(`${base}/api/vinculos-pecas/produtos`);
+            const corpo = await resp.json().catch(() => null);
+            if (!resp.ok) throw new Error(corpo?.error || `HTTP ${resp.status}`);
+            vinculosDosProdutos = corpo?.vinculos || {};
+            const dica = document.getElementById('filtroVinculoProdutosDica');
+            if (dica && corpo && (!corpo.pedidos || !corpo.orcamentos)) {
+                dica.textContent = corpo.pedidos
+                    ? 'Mostra só as peças que estão nos pedidos desse cliente ou desse número (orçamentos: sem permissão).'
+                    : (corpo.orcamentos
+                        ? 'Mostra só as peças que estão nos orçamentos desse cliente ou desse número (pedidos: sem permissão).'
+                        : 'Sem permissão para ver pedidos nem orçamentos: o filtro não tem o que procurar.');
+            }
+        } catch (err) {
+            console.error('Erro ao ler as peças dos pedidos', err);
+            showToast('Não foi possível ler as peças dos pedidos para o filtro avançado.', 'error');
+            vinculosDosProdutos = {};
+        } finally {
+            vinculosCarregando = null;
+        }
+        return vinculosDosProdutos;
+    })();
+    return vinculosCarregando;
+}
+
+/** "PED115", "ORC30" etc. de onde a peça está, com o cliente. */
+function rotuloDoVinculo(doc) {
+    const numero = doc.numero || (doc.tipo === 'pedido' ? `Pedido ${doc.id}` : `Orçamento ${doc.id}`);
+    return doc.cliente ? `${numero} · ${doc.cliente}` : numero;
+}
+
+/**
+ * Aplica o filtro avançado à lista. Devolve a lista filtrada e preenche
+ * `vinculosAchados`. Sem termo, devolve a lista como veio.
+ */
+function filtrarPorVinculo(produtos) {
+    vinculosAchados = new Map();
+    const campo = document.getElementById('filtroVinculoProdutos');
+    const termos = window.BuscaAoDigitar?.termos(campo?.value || '') || [];
+    const onde = document.getElementById('filtroVinculoOndeProdutos')?.value || '';
+    controleFiltrosAvancados?.sinalizar(termos.length > 0);
+    if (!termos.length) return produtos;
+    if (!vinculosDosProdutos) {
+        // Primeira vez: lê e refaz o filtro quando chegar. Até lá, a lista
+        // fica como está (sem piscar vazia).
+        carregarVinculosDosProdutos().then(() => aplicarFiltro(false));
+        return produtos;
+    }
+    return produtos.filter(produto => {
+        const docs = (vinculosDosProdutos[String(produto.id)] || [])
+            .filter(doc => !onde || doc.tipo === onde)
+            .filter(doc => window.BuscaAoDigitar.casa(termos, doc.numero, doc.cliente));
+        if (!docs.length) return false;
+        vinculosAchados.set(String(produto.id), docs);
+        return true;
+    });
+}
+
+function achadosDoProdutoHtml(produto) {
+    const docs = vinculosAchados.get(String(produto?.id));
+    if (!docs?.length) return '';
+    const escapar = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const mostrados = docs.slice(0, 3).map(doc =>
+        `<span class="filtro-avancado-achados__item" title="${escapar(`${doc.tipo === 'pedido' ? 'Pedido' : 'Orçamento'} ${rotuloDoVinculo(doc)}${doc.situacao ? ` — ${doc.situacao}` : ''}`)}">${escapar(rotuloDoVinculo(doc))}</span>`);
+    if (docs.length > 3) {
+        const resto = docs.slice(3).map(rotuloDoVinculo).join('\n');
+        mostrados.push(`<span class="filtro-avancado-achados__item" title="${escapar(resto)}">+${docs.length - 3}</span>`);
+    }
+    return `<div class="filtro-avancado-achados">${mostrados.join('')}</div>`;
+}
+
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
 let currentProductPopup = null;
@@ -175,6 +265,8 @@ async function carregarProdutos(options = {}) {
     refreshInProgress = true;
     try {
         listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
+        // Pedidos e orçamentos mudam junto: o filtro avançado relê na próxima vez.
+        vinculosDosProdutos = null;
         popularFiltros();
         if (options.resetFiltros) {
             resetarFiltrosUI();
@@ -269,7 +361,7 @@ function criarLinhaProduto(produto, index) {
                 </div>
             </td>
             <td data-perm-col="col_prod_nome" class="px-6 py-4 whitespace-nowrap text-sm text-white">
-                <span class="cell-text" title="${produto.nome || ''}">${nome}</span>
+                <span class="cell-text" title="${produto.nome || ''}">${nome}</span>${achadosDoProdutoHtml(produto)}
             </td>
             <td data-perm-col="col_prod_colecao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
                 <span class="cell-text" title="${categoria}">${categoria}</span>
@@ -411,6 +503,7 @@ function aplicarFiltro(aplicarNovos = false) {
     if (zeroEstoque) {
         filtrados = filtrados.filter(p => Number(p.quantidade_total) === 0);
     }
+    filtrados = filtrarPorVinculo(filtrados);
 
     if (aplicarNovos) {
         filtrosAplicados = {
@@ -448,6 +541,10 @@ function resetarFiltrosUI() {
     if (precoMin) precoMin.value = '';
     if (precoMax) precoMax.value = '';
     if (zero) zero.checked = false;
+    const vinculo = document.getElementById('filtroVinculoProdutos');
+    const onde = document.getElementById('filtroVinculoOndeProdutos');
+    if (vinculo) vinculo.value = '';
+    if (onde) onde.value = '';
     filtrosAplicados = { busca: '', categoria: '', status: '', precoMin: '', precoMax: '', zeroEstoque: false };
     filtrosPendentes = false;
 }
@@ -754,9 +851,26 @@ function initProdutos() {
     document.getElementById('filterSearch')?.addEventListener('input', () => aplicarFiltro(false));
     document.getElementById('filterCategory')?.addEventListener('change', marcarFiltrosPendentes);
     document.getElementById('filterStatus')?.addEventListener('change', marcarFiltrosPendentes);
-    document.getElementById('filterPriceMin')?.addEventListener('input', marcarFiltrosPendentes);
-    document.getElementById('filterPriceMax')?.addEventListener('input', marcarFiltrosPendentes);
+    // Preço mínimo e máximo filtram enquanto digita, como toda caixa de texto
+    // de filtro (08/10/2026). Aplicam o que está na barra inteira.
+    ['filterPriceMin', 'filterPriceMax'].forEach(id => {
+        const campo = document.getElementById(id);
+        if (window.BuscaAoDigitar) window.BuscaAoDigitar.ligar(campo, () => aplicarFiltro(true), { espera: 300 });
+        else campo?.addEventListener('input', marcarFiltrosPendentes);
+    });
     document.getElementById('zeroStock')?.addEventListener('change', () => aplicarFiltro(true));
+
+    // Filtros avançados: retraídos, crescem para baixo; filtram enquanto digita.
+    controleFiltrosAvancados = window.FiltrosAvancados?.ligar({
+        botao: document.getElementById('btnFiltrosAvancadosProdutos'),
+        painel: document.getElementById('produtosFiltrosAvancados'),
+        aoAbrir: () => {
+            carregarVinculosDosProdutos();
+            setTimeout(() => document.getElementById('filtroVinculoProdutos')?.focus(), 50);
+        }
+    }) || null;
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroVinculoProdutos'), () => aplicarFiltro(false));
+    document.getElementById('filtroVinculoOndeProdutos')?.addEventListener('change', () => aplicarFiltro(false));
 
     document.getElementById('produtosEmptyNew')?.addEventListener('click', () => {
         document.getElementById('btnNovoProduto')?.click();

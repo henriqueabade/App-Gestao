@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
         http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: http://localhost:3000 http://127.0.0.1:* https://api.santissimodecor.com.br; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' http://localhost:3000 http://127.0.0.1:* https://api.santissimodecor.com.br; frame-ancestors 'none';"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: http://localhost:3000 http://127.0.0.1:* https://api.santissimodecor.com.br; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' http://localhost:3000 http://127.0.0.1:* https://api.santissimodecor.com.br; frame-src 'self' blob:; frame-ancestors 'none';"
     />
     <title>Santíssimo Decor - Dashboard</title>
     <link rel="stylesheet" href="../styles/tailwind-offline.css" />
@@ -42,6 +42,10 @@
 
     <!-- Seções retráteis dos modais (a parte fiscal da peça, por enquanto). -->
     <link rel="stylesheet" href="../styles/secao-retratil.css">
+    <!-- "Filtros avançados" retráteis dos cards de filtro (Produtos, Orçamentos, Pedidos). -->
+    <link rel="stylesheet" href="../styles/filtros-avancados.css">
+    <!-- "Visualizar documento": o modal padrão de todo PDF (ver, imprimir, salvar). -->
+    <link rel="stylesheet" href="../styles/visualizador-pdf.css">
 
     <!-- Histórico social (curtidas, comentários, observações) de Prospecções e Clientes. -->
     <link rel="stylesheet" href="../styles/historico-social.css">
@@ -393,6 +397,12 @@
     <script src="../js/utils/competencia.js"></script>
     <!-- Seções retráteis dos modais: abrem sozinhas quando falta preencher algo ao salvar. -->
     <script src="../js/utils/secao-retratil.js"></script>
+    <!-- Filtros: busca enquanto digita (todas as caixas de texto de filtro) e
+         o painel "Filtros avançados" retrátil (Produtos, Orçamentos, Pedidos). -->
+    <script src="../js/utils/busca-ao-digitar.js"></script>
+    <script src="../js/utils/filtros-avancados.js"></script>
+    <!-- "Visualizar documento": todo PDF abre aqui antes de salvar (09/10/2026). -->
+    <script src="../js/utils/visualizador-pdf.js"></script>
     <!-- Rolagem encadeada entre página/modal e as tabelas (padrão de TODAS as tabelas). -->
     <script src="../js/utils/rolagem-encadeada.js"></script>
     <script src="../js/utils/historico-social.js"></script>

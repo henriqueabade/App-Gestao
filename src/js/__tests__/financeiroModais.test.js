@@ -830,6 +830,19 @@ test('comissões por quem recebe: etiquetas com cor, legenda e filtro nas telas;
     assert.doesNotMatch(SCRIPT, /não pode ser anterior ao fechamento/);
 });
 
+test('fechar produção: a decisão pode ser quebrada (0.5 = metade da etapa) e o resto fica para o mês seguinte', () => {
+    // Pedido do dono, 07/10/2026: o campo aceita decimais, sem truncar.
+    assert.match(SCRIPT, /campo\.step = '0\.01';\s*campo\.dataset\.numericDecimals = '2';/);
+    assert.doesNotMatch(SCRIPT, /Math\.trunc\(Number\(campo\.value\) \|\| 0\)/, 'voltou a truncar a decisão');
+    assert.match(SCRIPT, /const n = Math\.max\(0, Math\.min\(limite\(processo\), duasCasas\(/);
+    // O limite vem do servidor (a fila antes da decisão do mês), também quebrado.
+    assert.match(SCRIPT, /const limite = processo => \(processo\.disponivel \?\? \(processo\.saldo \+ \(processo\.decidido\?\.prontas \|\| 0\)\)\);/);
+    // A tela mostra o que já foi feito da unidade herdada e o que fica para o mês seguinte.
+    assert.match(SCRIPT, /processo\.ja_feito > 0 \? `a 1ª já tem \$\{un\(processo\.ja_feito \* 100\)\}% feito` : null/);
+    assert.match(SCRIPT, /`\$\{un\(falta\)\} un\. fica\(m\) para o mês seguinte`/);
+    assert.match(SCRIPT, /`\$\{un\(processo\.saldo\)\} un\. a decidir de \$\{processo\.pedida\}`/);
+});
+
 test('atividade: Financeiro e SEFAZ numa linha só, do mais novo ao mais antigo, com quem fez', () => {
     const f = puro();
     assert.strictEqual(f.grupoDaAtividade('ajuste_desconto'), 'ajuste');

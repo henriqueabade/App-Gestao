@@ -778,6 +778,12 @@ router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
       }
     } catch (_) {}
     await api.delete(`/api/clientes/${id}`);
+    // A tarefa automática de boas-vindas de um cliente que não existe mais é
+    // cancelada (fim natural, 08/10/2026). Preguiçoso: tarefasServico puxa o
+    // histórico social, que puxa este arquivo.
+    await require('./tarefasServico').encerrarTarefasDoRegistro(api, {
+      tipo: 'cliente', id, registro: null, usuarioId: usuarioDaRequisicao(req)
+    });
 
     // O dono e quem cadastrou ficam sabendo, com o motivo.
     if (antes && !antes.error) {
