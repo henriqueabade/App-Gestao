@@ -136,6 +136,20 @@ test('Fase 4: Relatórios — PDF da tabela, Master-Detail, Imprimir e Agrupamen
     assert.match(ler('src/js/utils/visualizador-pdf.js'), /const r = await api\(\{ html, retrato, tamanhoDoCss \}\);/);
 });
 
+test('Fase 5: Contabilidade — relatório mensal, Espelho DDA, comprovantes e aplicações no visualizador', () => {
+    const ctb = ler('src/js/modals/contabilidade-modais.js');
+    assert.ok(!ctb.includes('salvarHtmlComoPdf'), 'nenhum PDF da Contabilidade vai mais direto para a janela de salvar');
+    assert.ok(ctb.includes("tituloSalvar: 'Salvar o relatório mensal em PDF'") && ctb.includes("tituloSalvar: 'Salvar o Espelho DDA em PDF'"));
+    assert.strictEqual((ctb.match(/const pdf = await window\.VisualizadorPdf\.deHtml\(r\.html\)\(\);/g) || []).length, 2, 'o mesmo HTML e a mesma orientação (paisagem) do Salvar');
+    // Os PDFs guardados vão com os bytes que vieram, sem refazer.
+    assert.ok(ctb.includes('function verPdfGuardado(caminho, { titulo, tituloSalvar = \'Salvar PDF\' })'));
+    assert.ok(ctb.includes("return { base64: r.base64, nomeArquivo: String(r.nome || 'documento').replace(/\\.pdf$/i, ''), subtitulo: r.nome || '' };"));
+    assert.strictEqual((ctb.match(/verPdfGuardado\(`\/api\/contabilidade\/(comprovantes|aplicacoes)\//g) || []).length, 3, 'os dois botões do comprovante e o da aplicação');
+    // O pacote continua gerando o PDF por dentro, sem mostrar.
+    assert.ok(ctb.includes('const impresso = await window.electronAPI.gerarPdfDeHtml({ html: doc.html });'));
+    assert.match(ler('src/html/modals/contabilidade/relatorio.html'), /id="ctbRelPdf"[^>]*>Ver PDF<\/button>/);
+});
+
 test('Fase 3: relatórios do Financeiro, ficha e movimentações de Produtos, auditoria da Matéria-prima', () => {
     const fin = ler('src/js/modals/financeiro-modais.js');
     const exportar = fin.slice(fin.indexOf('async function exportarRelatorio'), fin.indexOf('function montarAjuste'));

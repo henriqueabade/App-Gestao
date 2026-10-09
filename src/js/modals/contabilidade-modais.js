@@ -374,6 +374,29 @@
     return { nome: arquivo.name, tipo: arquivo.type || null, base64: await lerArquivo(arquivo) };
   }
 
+  /**
+   * Um PDF guardado (comprovante, aplicação) no "Visualizar documento"
+   * (Visualizador de PDF, Fase 5): os bytes que a rota devolve, sem refazer
+   * nada — para ver, imprimir ou salvar dali.
+   */
+  function verPdfGuardado(caminho, { titulo, tituloSalvar = 'Salvar PDF' }) {
+    if (!window.VisualizadorPdf) return baixarArquivo(caminho, { abrir: true });
+    window.VisualizadorPdf.abrir({
+      titulo,
+      tituloSalvar,
+      gerar: async () => {
+        let r;
+        try {
+          r = await fetchApi(caminho);
+        } catch (e) {
+          throw new Error(textoDoErro(e, 'Você não tem permissão para ver este arquivo.'));
+        }
+        return { base64: r.base64, nomeArquivo: String(r.nome || 'documento').replace(/\.pdf$/i, ''), subtitulo: r.nome || '' };
+      }
+    });
+    return Promise.resolve();
+  }
+
   /** Baixa (ou abre) um arquivo que a rota devolve como { nome, base64 }. */
   async function baixarArquivo(caminho, { abrir = false } = {}) {
     try {
@@ -3838,17 +3861,25 @@
       pintar();
     }
 
-    acionar(el('ctbRelPdf'), async () => {
-      try {
-        if (!window.electronAPI?.salvarHtmlComoPdf) throw new Error('O PDF só é gerado dentro do aplicativo.');
-        const r = await fetchApi(`/api/contabilidade/relatorio/documento?competencia=${encodeURIComponent(compCampo.value || '')}`);
-        const s = await window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o relatório mensal em PDF' });
-        if (s?.canceled) return;
-        if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar o PDF.');
-        window.showToast?.(r.previa ? 'Prévia do relatório salva em PDF.' : `Relatório (versão ${r.versao}) salvo em PDF.`, 'success');
-      } catch (e) {
-        window.showToast?.(textoDoErro(e, 'Salvar o relatório pede a permissão "Gerar relatório e pacote".'), 'error');
-      }
+    // Visualizador de PDF (Fase 5): o relatório mensal abre no "Visualizar
+    // documento" — o mesmo PDF que ia para a janela de salvar.
+    acionar(el('ctbRelPdf'), () => {
+      if (!window.VisualizadorPdf) { window.showToast?.('Visualizador de documentos indisponível nesta janela.', 'error'); return; }
+      const competencia = compCampo.value || '';
+      window.VisualizadorPdf.abrir({
+        titulo: 'Relatório mensal da Contabilidade',
+        tituloSalvar: 'Salvar o relatório mensal em PDF',
+        gerar: async () => {
+          let r;
+          try {
+            r = await fetchApi(`/api/contabilidade/relatorio/documento?competencia=${encodeURIComponent(competencia)}`);
+          } catch (e) {
+            throw new Error(textoDoErro(e, 'O PDF do relatório pede a permissão "Gerar relatório e pacote".'));
+          }
+          const pdf = await window.VisualizadorPdf.deHtml(r.html)();
+          return { ...pdf, nomeArquivo: r.nome, subtitulo: r.previa ? 'Prévia (o mês ainda não foi fechado)' : `Versão ${r.versao}` };
+        }
+      });
     });
     acionar(el('ctbRelPlanilha'), async () => {
       try {
@@ -4932,17 +4963,24 @@
       }
     }
 
-    async function salvarEspelho(l) {
-      try {
-        if (!window.electronAPI?.salvarHtmlComoPdf) throw new Error('O PDF só é gerado dentro do aplicativo.');
-        const r = await fetchApi(`/api/contabilidade/dda/${encodeURIComponent(l.id)}/espelho`);
-        const s = await window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o Espelho DDA em PDF' });
-        if (s?.canceled) return;
-        if (!s?.success) throw new Error(s?.message || 'Não foi possível salvar o PDF.');
-        window.showToast?.('Espelho DDA salvo em PDF (documento interno, não é 2ª via do boleto).', 'success');
-      } catch (e) {
-        window.showToast?.(textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'), 'error');
-      }
+    // Visualizador de PDF (Fase 5): o Espelho DDA abre no "Visualizar
+    // documento" — o mesmo PDF que ia para a janela de salvar.
+    function salvarEspelho(l) {
+      if (!window.VisualizadorPdf) { window.showToast?.('Visualizador de documentos indisponível nesta janela.', 'error'); return; }
+      window.VisualizadorPdf.abrir({
+        titulo: 'Espelho DDA',
+        tituloSalvar: 'Salvar o Espelho DDA em PDF',
+        gerar: async () => {
+          let r;
+          try {
+            r = await fetchApi(`/api/contabilidade/dda/${encodeURIComponent(l.id)}/espelho`);
+          } catch (e) {
+            throw new Error(textoDoErro(e, 'Você não tem permissão para ver a Contabilidade.'));
+          }
+          const pdf = await window.VisualizadorPdf.deHtml(r.html)();
+          return { ...pdf, nomeArquivo: r.nome, subtitulo: 'Documento interno, não é 2ª via do boleto' };
+        }
+      });
     }
 
     function acoesDaLinha(l) {
@@ -5213,7 +5251,7 @@
       if (l.pode.restaurar) botoes.push(botaoPequeno('Restaurar', 'btn-neutral', acao(l.id, 'restaurar', 'O comprovante voltou a ficar sem lançamento.'), { perm: 'contabilidade.documento.registrar' }));
       if (l.movimento) botoes.push(botaoPequeno('Dossiê', 'btn-secondary', () => abrirOutro('dossie', { tipo: 'movimento', id: l.movimento.id }), { titulo: 'O lançamento do extrato e tudo o que o prova' }));
       if (l.pode.baixar) {
-        botoes.push(botaoPequeno('PDF', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/comprovantes/${encodeURIComponent(l.id)}/pdf`, { abrir: true }),
+        botoes.push(botaoPequeno('PDF', 'btn-neutral', () => verPdfGuardado(`/api/contabilidade/comprovantes/${encodeURIComponent(l.id)}/pdf`, { titulo: 'Comprovante do BB', tituloSalvar: 'Salvar o comprovante em PDF' }),
           { titulo: l.confere ? 'Refeito dos dados, idêntico ao do BB (com o pé "Reproduzido pelo App-Gestão")' : 'O original do BB, guardado até o pacote' }));
       }
       return botoes;
@@ -5392,7 +5430,7 @@
       const lado = criar('div', 'ctb-celula-acoes');
       lado.appendChild(tag(p.situacao_rotulo, TOM_SITUACAO_APLICACAO[p.situacao] || 'badge-neutral'));
       const a = p.aplicacao;
-      if (a?.original_guardado) lado.appendChild(botaoPequeno('PDF', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/aplicacoes/${encodeURIComponent(a.id)}/pdf`, { abrir: true }), { titulo: 'O PDF original do BB (fica até o pacote do mês ser salvo)' }));
+      if (a?.original_guardado) lado.appendChild(botaoPequeno('PDF', 'btn-neutral', () => verPdfGuardado(`/api/contabilidade/aplicacoes/${encodeURIComponent(a.id)}/pdf`, { titulo: 'Aplicação — PDF original do BB', tituloSalvar: 'Salvar o PDF da aplicação' }), { titulo: 'O PDF original do BB (fica até o pacote do mês ser salvo)' }));
       cabeca.append(titulo, lado);
       sec.appendChild(cabeca);
       if (!a) {
@@ -5578,7 +5616,7 @@
         const acoes = criar('div', 'ctb-celula-acoes ctb-celula-acoes--quebra');
         if (d) acoes.appendChild(botaoPequeno('Dossiê', 'btn-secondary', () => abrirOutro('dossie', { tipo: 'movimento', id: d.id }), { titulo: 'O débito do extrato e tudo o que o prova' }));
         if (i.comprovante) {
-          acoes.appendChild(botaoPequeno('Comprovante', 'btn-neutral', () => baixarArquivo(`/api/contabilidade/comprovantes/${encodeURIComponent(i.comprovante.id)}/pdf`, { abrir: true }),
+          acoes.appendChild(botaoPequeno('Comprovante', 'btn-neutral', () => verPdfGuardado(`/api/contabilidade/comprovantes/${encodeURIComponent(i.comprovante.id)}/pdf`, { titulo: 'Comprovante do BB', tituloSalvar: 'Salvar o comprovante em PDF' }),
             { titulo: 'O comprovante do BB com o pagador de fora' }));
         }
         if (i.situacao === 'aberto' && !i.devolvido) acoes.appendChild(botaoPequeno('Cancelar', 'btn-neutral', cancelar(i), { perm: 'contabilidade.conciliar', titulo: 'Lançado por engano: sai e solta o débito' }));

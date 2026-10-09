@@ -57,10 +57,15 @@ Os geradores prontos:
 | 4 | Relatórios › Exportar › PDF (a tabela) e PDF Master-Detail | jsPDF → `output('arraybuffer')` |
 | 4 | Relatórios › Exportar › Imprimir, Agrupamento e Agrupamento com detalhe (antes abriam no navegador) | deHtml com `tamanhoDoCss`: o `@page` do documento manda (`preferCSSPageSize`) |
 
-Ficam para as próximas fases:
+| 5 | Contabilidade › Relatório mensal › Ver PDF (era "Salvar PDF") | deHtml (paisagem); a planilha continua indo para a janela de salvar |
+| 5 | Contabilidade › DDA › Espelho | deHtml (paisagem) |
+| 5 | Contabilidade › Comprovantes (PDF) e Terceiros (Comprovante); Aplicações (PDF original) | os bytes guardados, sem refazer (`verPdfGuardado`) |
 
-- **Fase 5:** Contabilidade (relatório mensal, Espelho DDA, comprovantes e
-  aplicações).
+O pacote da contabilidade continua gerando o PDF do relatório por dentro, sem
+mostrar.
+
+Fica para a próxima fase:
+
 - **Fase 6:** anexos em PDF (histórico social, arquivos da Contabilidade).
 
 O que **não** muda: a planilha de etiquetas de produto (Excel), os XML e o

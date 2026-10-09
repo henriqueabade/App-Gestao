@@ -339,7 +339,8 @@ test('modais das etapas 2 a 9: anatomia da casa, Fechar/Cancelar vermelho, botã
   for (const rota of ['/api/contabilidade/relatorio?competencia=', '/api/contabilidade/relatorio/documento?competencia=', '/api/contabilidade/relatorio/planilha?competencia=', '/api/contabilidade/dossie?tipo=']) {
     assert.ok(MODAIS.includes(rota), `rota ${rota}`);
   }
-  assert.ok(MODAIS.includes('window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome') && MODAIS.includes('window.electronAPI.salvarArquivoBinario({ base64: r.base64, nomeSugerido: r.nome'));
+  // O PDF abre no "Visualizar documento" (Visualizador de PDF, Fase 5); a planilha vai para a janela de salvar.
+  assert.ok(MODAIS.includes("tituloSalvar: 'Salvar o relatório mensal em PDF'") && MODAIS.includes('window.electronAPI.salvarArquivoBinario({ base64: r.base64, nomeSugerido: r.nome'));
   const rel = ler('html', 'modals', 'contabilidade', 'relatorio.html');
   assert.match(rel, /id="ctbRelPlanilha" type="button" data-perm="contabilidade\.pacote\.gerar" class="btn-primary ctl-botao/);
   for (const aba of ['resumo', 'livro', 'resultado', 'conciliacao', 'pendencias', 'documentos']) assert.ok(rel.includes(`data-ctb-aba="${aba}"`) && rel.includes(`data-ctb-painel="${aba}"`), `aba ${aba}`);
@@ -404,8 +405,8 @@ test('fase H (02/10/2026): os boletos do DDA — a tela abre, cada ação vai à
     "/api/contabilidade/dda/${encodeURIComponent(ddaId)}/lancar`, 'POST'"
   ]) assert.ok(MODAIS.includes(rota), `rota ${rota}`);
   for (const caminho of ["'vincular'", "'contestar'", "'ignorar'", "'restaurar'", "'desvincular'"]) assert.ok(MODAIS.includes(caminho), `ação ${caminho}`);
-  // O espelho é PDF salvo pelo Electron e diz que é documento interno.
-  assert.ok(MODAIS.includes("window.electronAPI.salvarHtmlComoPdf({ html: r.html, nomeSugerido: r.nome, titulo: 'Salvar o Espelho DDA em PDF' })"));
+  // O espelho é PDF (no "Visualizar documento", Fase 5) e diz que é documento interno.
+  assert.ok(MODAIS.includes("tituloSalvar: 'Salvar o Espelho DDA em PDF'") && MODAIS.includes("subtitulo: 'Documento interno, não é 2ª via do boleto'"));
   // O cartão: vezes por dia viram o intervalo; as credenciais podem vir do cartão do Extrato; "Ver os boletos".
   assert.ok(MODAIS.includes('Math.round(1440 / n)') && MODAIS.includes('Quantas vezes por dia'));
   assert.ok(MODAIS.includes("'usar_credenciais_do_extrato'") && MODAIS.includes("botaoPequeno('Ver os boletos'"));
