@@ -263,12 +263,16 @@
     return aberto;
   }
 
-  /** O `gerar` de um HTML: o mesmo PDF que o "Salvar" fazia (Electron, A4, sem margem). */
-  function deHtml(html, { retrato = false } = {}) {
+  /**
+   * O `gerar` de um HTML: o mesmo PDF que o "Salvar" fazia (Electron, A4, sem
+   * margem). `tamanhoDoCss`: o @page do documento manda (os documentos de
+   * impressão dos Relatórios, que antes abriam no navegador).
+   */
+  function deHtml(html, { retrato = false, tamanhoDoCss = false } = {}) {
     return async () => {
       const api = window.electronAPI?.gerarPdfDeHtml;
       if (typeof api !== 'function') throw new Error('A geração de PDF só funciona dentro do aplicativo.');
-      const r = await api({ html, retrato });
+      const r = await api({ html, retrato, tamanhoDoCss });
       if (!r?.success) throw new Error(r?.message || 'Não foi possível gerar o PDF.');
       return { base64: r.base64 };
     };

@@ -5504,15 +5504,20 @@ ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titu
  * Gera o PDF de um HTML e devolve os bytes em base64, sem diálogo — para o
  * DANFE ir anexado ao e-mail. Mesma janela oculta do PDF salvo.
  */
-ipcMain.handle('gerar-pdf-de-html', async (_event, { html, retrato = false } = {}) => {
+ipcMain.handle('gerar-pdf-de-html', async (_event, { html, retrato = false, tamanhoDoCss = false } = {}) => {
   if (!html || typeof html !== 'string') return { success: false, message: 'Nada para gerar.' };
   const arquivoTemp = path.join(app.getPath('temp'), `sd-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
   let janela = null;
   try {
     janela = new BrowserWindow({ show: false, webPreferences: { offscreen: true, javascript: false } });
-    const pdf = await imprimirHtmlEmPdf(janela, arquivoTemp, html, {
-      printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 }
-    });
+    // `tamanhoDoCss` (Visualizador de PDF, Fase 4 — Relatórios › Imprimir e
+    // Agrupamento): o @page do documento manda no tamanho, na orientação e
+    // nas margens, como na janela de impressão do navegador, onde esses
+    // documentos abriam antes.
+    const opcoes = tamanhoDoCss
+      ? { printBackground: true, pageSize: 'A4', preferCSSPageSize: true }
+      : { printBackground: true, pageSize: 'A4', landscape: !retrato, margins: { top: 0, bottom: 0, left: 0, right: 0 } };
+    const pdf = await imprimirHtmlEmPdf(janela, arquivoTemp, html, opcoes);
     return { success: true, base64: Buffer.from(pdf).toString('base64'), tamanho: pdf.length };
   } catch (err) {
     console.error('Erro ao gerar PDF em memória:', err);

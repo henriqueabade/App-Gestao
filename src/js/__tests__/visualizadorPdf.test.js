@@ -122,6 +122,20 @@ test('Fase 2: DANFE, cartas de correção, boletos, etiquetas e relatório de pr
     assert.ok(!producao.includes('salvarHtmlComoPdf'));
 });
 
+test('Fase 4: Relatórios — PDF da tabela, Master-Detail, Imprimir e Agrupamento no visualizador', () => {
+    const rel = ler('src/js/relatorios.js');
+    assert.ok(rel.includes("gerar: async () => (await montarPdfDaTabela(title, headers, rows)).output('arraybuffer')"), 'o mesmo PDF do jsPDF, em bytes');
+    assert.ok(rel.includes("gerar: async () => (await montarPdfMasterDetail(title, entries, options)).output('arraybuffer')"));
+    assert.strictEqual((rel.match(/gerar: window\.VisualizadorPdf\?\.deHtml\(html, \{ tamanhoDoCss: true \}\)/g) || []).length, 2, 'Imprimir e Agrupamento: o @page do documento manda');
+    // Fora do aplicativo (sem o visualizador), o caminho antigo continua.
+    assert.ok(rel.includes('if (!aberto) (await montarPdfDaTabela(title, headers, rows)).save(filename);'));
+    const main = ler('main.js');
+    const gerar = main.slice(main.indexOf("ipcMain.handle('gerar-pdf-de-html'"), main.indexOf("ipcMain.handle('salvar-texto-como-arquivo'"));
+    assert.match(gerar, /\{ html, retrato = false, tamanhoDoCss = false \}/);
+    assert.match(gerar, /\? \{ printBackground: true, pageSize: 'A4', preferCSSPageSize: true \}/);
+    assert.match(ler('src/js/utils/visualizador-pdf.js'), /const r = await api\(\{ html, retrato, tamanhoDoCss \}\);/);
+});
+
 test('Fase 3: relatórios do Financeiro, ficha e movimentações de Produtos, auditoria da Matéria-prima', () => {
     const fin = ler('src/js/modals/financeiro-modais.js');
     const exportar = fin.slice(fin.indexOf('async function exportarRelatorio'), fin.indexOf('function montarAjuste'));

@@ -54,11 +54,11 @@ Os geradores prontos:
 | 3 | Produtos › Visualizar › Gerar PDF (ficha) | jsPDF → `output('arraybuffer')` |
 | 3 | Produtos › Movimentações › Imprimir | deHtml (paisagem) |
 | 3 | Matéria-prima › Auditoria do insumo › Imprimir | deHtml (paisagem) |
+| 4 | Relatórios › Exportar › PDF (a tabela) e PDF Master-Detail | jsPDF → `output('arraybuffer')` |
+| 4 | Relatórios › Exportar › Imprimir, Agrupamento e Agrupamento com detalhe (antes abriam no navegador) | deHtml com `tamanhoDoCss`: o `@page` do documento manda (`preferCSSPageSize`) |
 
 Ficam para as próximas fases:
 
-- **Fase 4:** Relatórios (o PDF da tabela e o Master-Detail com jsPDF, Imprimir
-  e Agrupamento).
 - **Fase 5:** Contabilidade (relatório mensal, Espelho DDA, comprovantes e
   aplicações).
 - **Fase 6:** anexos em PDF (histórico social, arquivos da Contabilidade).

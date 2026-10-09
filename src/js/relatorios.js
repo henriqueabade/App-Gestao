@@ -807,7 +807,33 @@ function loadJsPdfLibrary() {
     return jsPdfLoaderPromise;
 }
 
+/**
+ * Visualizador de PDF (Fase 4): o PDF da tabela e o do Master-Detail abrem no
+ * "Visualizar documento" — o mesmo PDF do jsPDF que antes era baixado —, e
+ * o Imprimir e o Agrupamento também (antes abriam no navegador). Fora do
+ * aplicativo, sem o visualizador, fica o caminho antigo.
+ */
+function abrirRelatorioNoVisualizador({ titulo, nomeArquivo, gerar }) {
+    if (typeof window === 'undefined' || !window.VisualizadorPdf) return false;
+    window.VisualizadorPdf.abrir({
+        titulo,
+        nomeArquivo: String(nomeArquivo || 'relatorio').replace(/\.pdf$/i, ''),
+        tituloSalvar: 'Salvar relatório em PDF',
+        gerar
+    });
+    return true;
+}
+
 async function exportReportAsPdf(title, headers, rows, filename) {
+    const aberto = abrirRelatorioNoVisualizador({
+        titulo: title,
+        nomeArquivo: filename,
+        gerar: async () => (await montarPdfDaTabela(title, headers, rows)).output('arraybuffer')
+    });
+    if (!aberto) (await montarPdfDaTabela(title, headers, rows)).save(filename);
+}
+
+async function montarPdfDaTabela(title, headers, rows) {
     const jsPDFConstructor = await loadJsPdfLibrary();
     const normalizedHeaders = Array.isArray(headers) ? headers : [];
     const normalizedRows = Array.isArray(rows) ? rows : [];
@@ -961,7 +987,7 @@ async function exportReportAsPdf(title, headers, rows, filename) {
         normalizedRows.forEach(row => drawBodyRow(row));
     }
 
-    doc.save(filename);
+    return doc;
 }
 
 function buildMasterDetailDetail(key, item) {
@@ -1037,7 +1063,15 @@ async function exportMasterDetailAsPdf(title, selectionItems, filename, options 
     if (!entries.length) {
         throw new Error('Nenhum item selecionado para exportar.');
     }
+    const aberto = abrirRelatorioNoVisualizador({
+        titulo: `${title} — detalhes`,
+        nomeArquivo: filename,
+        gerar: async () => (await montarPdfMasterDetail(title, entries, options)).output('arraybuffer')
+    });
+    if (!aberto) (await montarPdfMasterDetail(title, entries, options)).save(filename);
+}
 
+async function montarPdfMasterDetail(title, entries, options = {}) {
     const jsPDFConstructor = await loadJsPdfLibrary();
     const doc = new jsPDFConstructor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
 
@@ -1234,13 +1268,18 @@ async function exportMasterDetailAsPdf(title, selectionItems, filename, options 
         renderItem(item, height);
     });
 
-    doc.save(filename);
+    return doc;
 }
 
 function openReportPrintWindow(title, headers, rows) {
     if (typeof window === 'undefined') return;
 
     const html = createReportPrintHtml(title, headers, rows);
+    if (abrirRelatorioNoVisualizador({
+        titulo: title,
+        nomeArquivo: title,
+        gerar: window.VisualizadorPdf?.deHtml(html, { tamanhoDoCss: true })
+    })) return;
 
     const openInExternalBrowser = async () => {
         if (window.electronAPI?.openExternalHtml) {
@@ -1499,6 +1538,11 @@ function createAgrupamentoPrintHtml(doc, { incluirDetalhe = false, titulo = 'Agr
 function abrirAgrupamentoParaImpressao(doc, opcoes) {
     if (typeof window === 'undefined') return;
     const html = createAgrupamentoPrintHtml(doc, opcoes);
+    if (abrirRelatorioNoVisualizador({
+        titulo: opcoes?.titulo || 'Agrupamento Pedidos',
+        nomeArquivo: opcoes?.incluirDetalhe ? 'agrupamento-pedidos-detalhado' : 'agrupamento-pedidos',
+        gerar: window.VisualizadorPdf?.deHtml(html, { tamanhoDoCss: true })
+    })) return;
 
     const abrirExterno = async () => {
         if (window.electronAPI?.openExternalHtml) {
@@ -5947,44 +5991,16 @@ async function handleReportExport(root, key, type) {
             return;
         }
 
-        const showLoadingFn = typeof window !== 'undefined' && typeof window.showLoading === 'function'
-            ? window.showLoading.bind(window)
-            : null;
-        const hideLoadingFn = typeof window !== 'undefined' && typeof window.hideLoading === 'function'
-            ? window.hideLoading.bind(window)
-            : null;
-
-        if (showLoadingFn) {
-            try {
-                showLoadingFn('Gerando PDF dos detalhes selecionados...');
-            } catch (error) {
-                console.warn('Não foi possível exibir o indicador de carregamento da exportação.', error);
-            }
-        }
-
-        const countLabel = items.length === 1
-            ? '1 registro'
-            : `${items.length} registros`;
-        showRelatoriosToast(`Gerando PDF com detalhes de ${countLabel}...`, 'info');
-
+        // O visualizador mostra o "Montando o documento…" e o erro, se houver.
         try {
             const filename = createReportFileName(key, `${title} Master-Detail`, 'pdf');
             await exportMasterDetailAsPdf(title, items, filename, { reportKey: snapshot?.key || key });
-            showRelatoriosToast('Detalhes exportados em PDF.', 'success');
         } catch (error) {
             showRelatoriosToast('Não foi possível gerar o PDF com os detalhes selecionados.', 'error');
             if (error && typeof error === 'object') {
                 error.__relatoriosHandled = true;
             }
             throw error;
-        } finally {
-            if (hideLoadingFn) {
-                try {
-                    hideLoadingFn();
-                } catch (error) {
-                    console.warn('Não foi possível ocultar o indicador de carregamento da exportação.', error);
-                }
-            }
         }
         return;
     }
@@ -6021,15 +6037,14 @@ async function handleReportExport(root, key, type) {
         return;
     }
 
+    // PDF e Imprimir abrem no "Visualizar documento" (Fase 4).
     if (type === 'pdf') {
         await exportReportAsPdf(title, headers, rows, createReportFileName(key, title, 'pdf'));
-        showRelatoriosToast('Relatório exportado em PDF.', 'success');
         return;
     }
 
     if (type === 'print') {
         openReportPrintWindow(title, headers, rows);
-        showRelatoriosToast('Preparando visualização para impressão...', 'info');
         return;
     }
 
