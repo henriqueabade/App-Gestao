@@ -215,6 +215,18 @@ estão em
 
 Detalhes em `docs/filtros-relatorios-producao-tarefas.md` (§4).
 
+## Trocas, peças avulsas e o negativo por pessoa (09/10/2026)
+
+- **Card "Peças avulsas — PEDx (cancelado)"**: a peça que o cancelamento
+  mandou "continuar produzindo" é confirmada aqui. Terminada, ela entra no
+  estoque pronta. O card também tem "Devolver ao estoque", "Cancelar a
+  produção" e "Substituir a peça de um pedido".
+- **Decisão selada**: a decisão do mês tomada antes de uma troca ou de uma
+  avulsa daquela peça continua paga, e a unidade nova aparece "a decidir".
+  Confirmá-la cria um registro novo, sem estornar o antigo.
+- Detalhes em `docs/trocas-de-pecas-e-pecas-avulsas.md`. O negativo por
+  colaborador está em `docs/rateio-da-producao-por-colaborador.md`.
+
 ## Depois de puxar o código
 
 1. Rodar **`sql/fechamento_producao_e_pagamentos.sql`** no banco.

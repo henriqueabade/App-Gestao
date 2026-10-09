@@ -482,6 +482,14 @@ function abrirRelatorioProducao(pedidoId, cliente) {
     );
 }
 
+/** Trocar peças deste pedido com as de outro (src/js/modals/pedido-trocar-pecas.js). */
+function abrirTrocarPecas(pedidoId) {
+    if (!pedidoId) return;
+    window.trocarPecasContext = { pedidoId };
+    window.selectedOrderId = pedidoId;
+    openPedidoModal('modals/pedidos/trocar-pecas.html', '../js/modals/pedido-trocar-pecas.js', 'trocarPecas');
+}
+
 function abrirConverterOrcamentos() {
     openPedidoModal(
         'modals/pedidos/converter-orcamentos.html',
@@ -546,6 +554,8 @@ async function carregarPedidos() {
             const isDraft = p.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Ver PDF';
+            // Trocar peças com outro pedido (09/10/2026): só o pedido que ainda não saiu.
+            const trocaLiberada = ['Aprovado', 'Produção'].includes(p.situacao);
             const dataFormatada = formatarDataLocal(p.data_emissao);
             const dataFormatada2 = formatarDataLocal(p.data_aprovacao);
             // Colunas DATE: cortadas como texto (ver formatarDiaDate).
@@ -573,6 +583,7 @@ async function carregarPedidos() {
                         <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i data-perm="${statusPerm}" class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i data-perm="ped.report" class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
+                        <i data-perm="ped.trocar_pecas" class="fas fa-exchange-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-trocar-pecas ${trocaLiberada ? '' : 'icon-disabled'}" style="color: var(--color-primary)" title="${trocaLiberada ? 'Trocar peças com outro pedido' : 'Trocar peças: só o pedido Aprovado ou em Produção'}"></i>
                         <i data-perm="ped.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-sup-admin hidden" title="Excluir pedido" style="color: var(--color-red)"></i>
                         <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
@@ -733,6 +744,22 @@ async function carregarPedidos() {
                 e.stopPropagation();
                 const tr = e.currentTarget.closest('tr');
                 abrirRelatorioProducao(tr?.dataset.id, tr?.dataset.cliente || tr?.cells?.[1]?.innerText?.trim() || '');
+            });
+        });
+
+        // Trocar peças com outro pedido (09/10/2026).
+        tbody.querySelectorAll('.acao-trocar-pecas').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                if (icon.classList.contains('icon-disabled')) {
+                    window.DialogPadrao?.info?.({
+                        title: 'Trocar peças', tom: 'aviso', icone: 'fa-exchange-alt',
+                        message: 'Só troca peça o pedido que ainda não saiu: Aprovado ou em Produção.'
+                    });
+                    return;
+                }
+                abrirTrocarPecas(tr?.dataset.id);
             });
         });
 

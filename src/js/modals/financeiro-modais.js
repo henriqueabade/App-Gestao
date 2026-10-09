@@ -352,14 +352,20 @@
 
   /**
    * Quanto a pessoa tem no mês (com os ajustes já lançados), nos `totais` de
-   * GET /api/financeiro/ajustes-pessoa. Na produção a conta é do processo.
+   * GET /api/financeiro/ajustes-pessoa. Na produção a conta é do processo —
+   * ou, com o rateio em uso e o colaborador escolhido, a dele naquele
+   * processo (09/10/2026: o negativo é de quem recebeu a mais).
    * Quem não aparece tem zero; sem os totais, null. Pura.
    */
-  function valorDaPessoaNoMes(totais, { area, beneficiario = '', setorId = null } = {}) {
+  function valorDaPessoaNoMes(totais, { area, beneficiario = '', setorId = null, colaboradorId = null } = {}) {
     if (!totais) return null;
     if (area === 'producao') {
       if (!setorId) return null;
       const s = (totais.producao || []).find(x => String(x.setor_id) === String(setorId));
+      if (colaboradorId && Array.isArray(s?.colaboradores)) {
+        const p = s.colaboradores.find(x => String(x.colaborador_id) === String(colaboradorId));
+        return p ? centavos(p.valor) : 0;
+      }
       return s ? centavos(s.valor) : 0;
     }
     const alvo = semAcento(beneficiario).trim();
@@ -2141,6 +2147,84 @@
     });
   }
 
+  /**
+   * Encerrar a peça avulsa (09/10/2026): "Devolver ao estoque" (no ponto em
+   * que ela está, ou noutro a partir de onde ela entrou) ou "Cancelar a
+   * produção". `opcoes` vem de GET /api/pecas-avulsas/:id/opcoes; `enviar`
+   * grava (a caixa fica aberta com o recado se a API recusar).
+   */
+  function pedirEncerrarAvulsa({ tipo, opcoes, enviar }) {
+    const estoque = tipo === 'estoque';
+    const minimo = opcoes?.minimo_motivo || 10;
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.dataset.encerrarAvulsa = tipo;
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', estoque ? 'Devolver a peça avulsa ao estoque' : 'Cancelar a produção da peça avulsa'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', estoque
+        ? 'A peça sai da produção e entra no estoque no ponto escolhido; o resto da rota volta à matéria-prima. O que já foi feito nela é pago pelo Fechar competência — confirme lá antes.'
+        : 'A peça deixa de existir no ponto em que está; o resto da rota volta à matéria-prima. O que já foi feito nela continua pago.'));
+      const rotuloPonto = criar('label', 'ctl-rotulo text-white', estoque ? 'Em que ponto ela entra no estoque?' : 'Em que ponto ela está?');
+      const ponto = criar('select', 'w-full ctl-campo input-glass text-white');
+      // "Por começar" não vai ao estoque: não há peça nenhuma para guardar.
+      for (const e of (opcoes?.etapas || []).filter(x => !estoque || Number(x.ordem) > 0)) {
+        const o = criar('option', null, e.rotulo);
+        o.value = String(e.ordem);
+        if (Number(e.ordem) === Number(opcoes.atual)) o.selected = true;
+        ponto.appendChild(o);
+      }
+      rotuloPonto.appendChild(ponto);
+      const rotuloMotivo = criar('label', 'ctl-rotulo text-white', 'Motivo');
+      const motivo = criar('textarea', 'w-full ctl-campo input-glass text-white placeholder-white/50');
+      motivo.rows = 3;
+      motivo.maxLength = 500;
+      motivo.placeholder = `Por quê (ao menos ${minimo} letras)`;
+      rotuloMotivo.appendChild(motivo);
+      caixa.append(rotuloPonto, rotuloMotivo);
+      const erroEl = criar('p', 'hidden text-sm');
+      erroEl.style.color = 'var(--color-red)';
+      erroEl.setAttribute('role', 'alert');
+      caixa.appendChild(erroEl);
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-neutral ctl-botao text-white', 'Voltar');
+      const ok = criar('button', `${estoque ? 'btn-primary' : 'btn-danger'} ctl-botao text-white`, estoque ? 'Devolver ao estoque' : 'Cancelar a produção');
+      voltar.type = 'button';
+      ok.type = 'button';
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+      const erro = texto => { erroEl.textContent = texto; erroEl.classList.toggle('hidden', !texto); };
+      caixa.addEventListener('input', () => erro(''));
+      const sair = r => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(r);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', async () => {
+        const texto = motivo.value.trim();
+        if (texto.replace(/[^\p{L}]/gu, '').length < minimo) { erro(`Diga o motivo (ao menos ${minimo} letras).`); motivo.focus(); return; }
+        ok.disabled = true;
+        voltar.disabled = true;
+        try {
+          sair(await enviar({ tipo, ordem: Number(ponto.value), motivo: texto }));
+        } catch (e) {
+          erro(textoDoErro(e, 'Você não tem permissão para encerrar a peça avulsa.'));
+          ok.disabled = false;
+          voltar.disabled = false;
+        }
+      });
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      motivo.focus();
+    });
+  }
+
   const nomeDaPeca = item => (item ? ([item.codigo, item.nome].filter(Boolean).join(' — ') || `item ${item.id}`) : '—');
 
   // ------------------------------------------ relatórios: busca e exportação
@@ -2323,10 +2407,10 @@
       const valor = lerMoeda(valorCampo.value) || 0;
       const quem = quemTexto();
       const atual = mes && quem
-        ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null })
+        ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null, colaboradorId: colaboradorSel.value || null })
         : null;
       el('finAjusteQuadroTitulo').textContent = quem
-        ? `${AREAS_AJUSTE[a]} de ${quem} em ${rotuloCompetenciaCurto(comp)}${a === 'producao' && colaboradorSel.value ? ' (a conta é do processo)' : ''}`
+        ? `${AREAS_AJUSTE[a]} de ${quem} em ${rotuloCompetenciaCurto(comp)}`
         : 'Valor da pessoa no mês';
       const completo = atual !== null && tipo && valor > 0;
       const i = impactoDoAjustePessoa({ atual: atual ?? 0, valor: completo ? valor : 0, sinal: tipo?.sinal ?? 1 });
@@ -2434,7 +2518,7 @@
       if (erro) { mostrarMensagem('finAjusteMensagem', erro); return; }
       const fechada = avisoDeFechada(a, comp);
       if (fechada) { mostrarMensagem('finAjusteMensagem', fechada); return; }
-      const atual = mes ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null }) : null;
+      const atual = mes ? valorDaPessoaNoMes(mes.totais, { area: a, beneficiario: pessoa(), setorId: processoSel.value || null, colaboradorId: colaboradorSel.value || null }) : null;
       const i = impactoDoAjustePessoa({ atual: atual ?? 0, valor, sinal: tipo.sinal });
       const confirmado = await window.DialogPadrao?.confirm?.({
         title: 'Registrar o ajuste?',
@@ -3105,13 +3189,73 @@
       return bloco;
     }
 
+    /**
+     * As peças avulsas do pedido cancelado: cada uma pode voltar ao estoque,
+     * ter a produção cancelada ou substituir a peça de um pedido (troca).
+     */
+    function blocoDasAvulsas(pedido) {
+      const bloco = criar('div', 'space-y-2');
+      bloco.appendChild(criar('p', 'text-xs text-gray-400 uppercase tracking-wider', 'Peças avulsas'));
+      for (const a of pedido.avulsas || []) {
+        const peca = (pedido.pecas || []).find(p => String(p.pedido_item_id) === String(a.pedido_item_id));
+        const linha = criar('div', 'flex flex-wrap items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2');
+        linha.dataset.avulsa = String(a.id);
+        linha.appendChild(criar('span', 'text-sm text-white truncate', `${peca ? (peca.codigo || peca.nome) : `Peça ${a.pedido_item_id}`} · avulsa ${a.id}${a.estado_inicio ? ` · ficou avulsa em ${a.estado_inicio}` : ''}`));
+        const acoes = criar('div', 'flex flex-wrap gap-2');
+        const botao = (rotulo, classe, tipo) => {
+          const b = criar('button', `${classe} ctl-botao ctl-botao--pequeno`, rotulo);
+          b.type = 'button';
+          acionar(b, () => encerrarAvulsa(a, tipo));
+          return b;
+        };
+        acoes.append(botao('Devolver ao estoque', 'btn-secondary text-white', 'estoque'), botao('Cancelar a produção', 'btn-danger text-white', 'descarte'));
+        linha.appendChild(acoes);
+        bloco.appendChild(linha);
+      }
+      const trocar = criar('button', 'btn-primary ctl-botao ctl-botao--pequeno text-white');
+      trocar.type = 'button';
+      trocar.dataset.perm = 'ped.trocar_pecas';
+      trocar.title = 'A avulsa entra no lugar da peça de um pedido em produção, e a de lá vira a avulsa';
+      trocar.append(Object.assign(document.createElement('i'), { className: 'fas fa-exchange-alt' }), document.createTextNode(' Substituir a peça de um pedido'));
+      acionar(trocar, () => {
+        window.trocarPecasContext = { pedidoId: pedido.pedido_id };
+        abrirModalDePedido('modals/pedidos/trocar-pecas.html', '../js/modals/pedido-trocar-pecas.js', 'trocarPecas', {
+          aoFechar: () => carregar({ silencioso: true })
+        });
+      });
+      const pe = criar('div', 'ctl-acoes justify-end');
+      pe.appendChild(trocar);
+      bloco.appendChild(pe);
+      return bloco;
+    }
+
+    async function encerrarAvulsa(avulsa, tipo) {
+      let opcoes;
+      try {
+        opcoes = await fetchApi(`/api/pecas-avulsas/${encodeURIComponent(avulsa.id)}/opcoes`);
+      } catch (e) {
+        window.showToast?.(textoDoErro(e, 'Você não tem permissão para encerrar a peça avulsa.'), 'error');
+        return;
+      }
+      const feito = await pedirEncerrarAvulsa({
+        tipo, opcoes,
+        enviar: corpo => fetchApi(`/api/pecas-avulsas/${encodeURIComponent(avulsa.id)}/encerrar`, { method: 'POST', body: JSON.stringify(corpo) })
+      });
+      if (!feito) return;
+      window.showToast?.(tipo === 'estoque' ? `Peça avulsa devolvida ao estoque (${feito.avulsa.rotulo}).` : 'Produção da peça avulsa cancelada.', 'success');
+      await carregar({ silencioso: true });
+    }
+
     function cardDoPedido(pedido, pecasVisiveis = pedido.pecas) {
       const card = criar('div', 'glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4');
       card.dataset.pedidoCard = String(pedido.pedido_id);
       const topo = criar('div', 'flex items-start justify-between gap-3');
       const titulo = criar('div', 'min-w-0');
-      titulo.appendChild(criar('p', 'text-white font-semibold truncate', `Pedido ${pedido.numero}`));
-      titulo.appendChild(criar('p', 'text-xs text-gray-400 truncate', [pedido.cliente, pedido.situacao].filter(Boolean).join(' • ')));
+      // Pedido cancelado com peça que continua em produção (09/10/2026).
+      titulo.appendChild(criar('p', 'text-white font-semibold truncate', pedido.avulsa ? `Peças avulsas — ${pedido.numero} (cancelado)` : `Pedido ${pedido.numero}`));
+      titulo.appendChild(criar('p', 'text-xs text-gray-400 truncate', pedido.avulsa
+        ? 'Seguem em produção fora de pedido; terminadas, entram no estoque prontas.'
+        : [pedido.cliente, pedido.situacao].filter(Boolean).join(' • ')));
       topo.append(titulo, pedido.confirmado
         ? tagG('Confirmado', 'badge-success', pedido.confirmado_em
           ? `Tudo confirmado em ${instanteCurto(pedido.confirmado_em)}`
@@ -3145,6 +3289,7 @@
         botaoDoPedido('Nada pronto', 'btn-danger text-white', 'Nada deste pedido ficou pronto: tudo fica pendente para o mês seguinte', () => marcarPedidoInteiro(pedido, 'nada'))
       );
       card.appendChild(etiquetas);
+      if (pedido.avulsa) card.appendChild(blocoDasAvulsas(pedido));
 
       // O filtro deixou só parte das peças: diz isso, para ninguém achar que o
       // pedido tem só estas (os botões do pedido continuam valendo para todas).
@@ -3249,11 +3394,13 @@
 
     async function enviarDecisoes(pedido, decisoes, mensagem, extra = {}, { ancora = null } = {}) {
       try {
-        await fetchApi('/api/financeiro/producao/confirmar', {
+        const resposta = await fetchApi('/api/financeiro/producao/confirmar', {
           method: 'POST',
           body: JSON.stringify({ competencia: compSel.value, pedido_id: pedido.pedido_id, decisoes, ...extra })
         });
         window.showToast?.(mensagem, 'success');
+        // Peça avulsa que terminou: entrou no estoque (ou o porquê de não ter entrado).
+        for (const recado of resposta?.avisos || []) window.showToast?.(recado, 'info');
         avisarAlteracao();
         await carregar({ silencioso: true, ancora });
       } catch (e) {
@@ -5403,10 +5550,14 @@
       pintarSituacao(el('finRateioSituacao'), estado.fechado ? 'Fechada' : (estado.pendentes ? 'Falta distribuir' : 'Em aberto'));
 
       const porPessoa = el('finRateioPorPessoaLista');
+      // Com os ajustes e o restante de cada um (09/10/2026): quem fica
+      // negativo não recebe neste mês e leva a diferença para o seguinte.
       porPessoa.replaceChildren(...(estado.resumo || []).map(r => {
         const li = criar('li', 'flex items-center justify-between gap-3');
-        li.append(criar('span', 'text-white truncate', r.colaborador),
-          criar('span', 'text-gray-300 flex-shrink-0', `${formatarMoeda(r.valor)} · ${r.processos === 1 ? '1 processo' : `${r.processos} processos`}`));
+        const negativo = Number(r.valor) < 0;
+        const valor = criar('span', 'text-gray-300 flex-shrink-0', `${formatarMoeda(r.valor)} · ${r.processos === 1 ? '1 processo' : `${r.processos} processos`}${negativo ? ' · fica para o próximo mês' : ''}`);
+        if (negativo) valor.style.color = 'var(--color-red)';
+        li.append(criar('span', 'text-white truncate', r.colaborador), valor);
         return li;
       }));
       el('finRateioPorPessoa').classList.toggle('hidden', !(estado.resumo || []).length);

@@ -83,7 +83,9 @@ const PADRONIZADOS = [
     arquivos: ['html/pedidos.html', ...[
       'visualizar', 'pagamento', 'emitir-nfe', 'relatorio-producao', 'converter-orcamentos',
       'cancelar', 'cancelar-nfe', 'carta-correcao-nfe', 'enviar-nfe-email',
-      'gerar-boletos', 'boleto-detalhe', 'devolucao', 'dados-externos'
+      'gerar-boletos', 'boleto-detalhe', 'devolucao', 'dados-externos',
+      // 09/10/2026: o ícone de troca da linha (e o Fechar competência, para a avulsa).
+      'trocar-pecas'
     ].map(m => `html/modals/pedidos/${m}.html`)]
   },
   {
@@ -333,7 +335,8 @@ const JS_PADRONIZADOS = [
       'js/modals/pedido-carta-correcao-nfe.js',
       'js/modals/pedido-devolucao.js',
       'js/modals/pedido-gerar-boletos.js',
-      'js/modals/pedido-dados-externos.js'
+      'js/modals/pedido-dados-externos.js',
+      'js/modals/pedido-trocar-pecas.js'
     ],
     // "Detalhes" e "PDF" dentro das linhas da tabela de boletos: ação de
     // linha (20 px), como os ícones das linhas — fica fora do padrão.

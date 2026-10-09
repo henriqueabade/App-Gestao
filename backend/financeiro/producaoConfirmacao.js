@@ -28,6 +28,7 @@ const producao = require('./producao');
 const unidades = require('./producaoUnidades');
 const auditoria = require('./auditoria');
 const base = require('./base');
+const mudancasUnidades = require('./mudancasUnidades');
 
 const TABELA = 'producao_confirmacoes';
 const SQL_CONFIRMACAO = 'Falta rodar sql/fechamento_producao_e_pagamentos.sql no banco e reiniciar a API.';
@@ -97,6 +98,22 @@ function diaDaCompetencia(competencia, hoje) {
  * Tudo que a tela do fechamento precisa: um card por pedido com peças,
  * processos, saldo pendente, valor e a decisão já tomada nesta competência.
  */
+/**
+ * Decisão SELADA (09/10/2026): tomada antes de uma troca ou de uma peça
+ * avulsa daquela peça naquele processo. Ela continua valendo — o registro
+ * dela é trabalho feito (e pago) na unidade que estava lá —, mas não é a
+ * decisão da unidade que está lá agora: esta aparece "a decidir" e, quando
+ * confirmada, ganha registro próprio, sem estornar o antigo. (A tabela só
+ * guarda uma decisão por competência, peça e processo: a linha passa a ser a
+ * da unidade nova; a anterior fica na auditoria e no registro dela.)
+ */
+function decisaoSelada(decisao, mudancas = []) {
+  if (!decisao) return false;
+  const quando = String(decisao.atualizado_em || decisao.criado_em || '');
+  // No empate, a decisão é de antes (a do cancelamento vem logo antes da avulsa).
+  return mudancas.some(m => String(m.em ?? '') >= quando);
+}
+
 async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
   const comp = c.competenciaValida(competencia) ? competencia : c.competenciaDe(hoje);
   const [pedidosTodos, tudo, eventos, confirmacoes, precos] = await Promise.all([
@@ -106,35 +123,44 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
     lerConfirmacoes(api, comp),
     producao.precosDaTabela(api)
   ]);
+  // O pedido cancelado com peça avulsa em produção também entra (09/10/2026):
+  // o card dele é o das "Peças avulsas".
+  const avulsasVivas = await mudancasUnidades.lerTabela(api, mudancasUnidades.TABELA_AVULSAS, { status: 'em_producao' }).catch(() => null) || [];
+  const comAvulsa = new Set(avulsasVivas.map(a => String(a.pedido_id)));
   // Um pedido só (envio, cancelamento): nem lê a rota dos outros.
   const pedidos = pedidosTodos
-    .filter(producao.podeProduzir)
+    .filter(p => producao.podeProduzir(p) || comAvulsa.has(String(p.id)))
     .filter(p => pedidoId === null || String(p.id) === String(pedidoId));
   const itens = await producao.itensDe(api, pedidos.map(p => p.id));
   const etapasPor = new Map(tudo.etapas.map(e => [String(e.id), e]));
-  const { filaDe, gruposPor } = await producao.montarFilas(api, { itens, etapasPor });
+  const { filaDe, gruposPor, mudancasDe } = await producao.montarFilas(api, { itens, etapasPor });
   const nomes = await base.nomesDosClientes(api, pedidos.map(p => p.cliente_id));
   const comEtapa = eventos.map(e => ({ ...e, etapa_id: producao.etapaDoEvento(e, { etapas: tudo.etapas, setores: tudo.setores }) }));
   const decisaoPor = new Map(confirmacoes.map(x => [chave(x.pedido_item_id, x.etapa_id), x]));
   const ativas = tudo.etapas.filter(e => e.producao_ativa);
 
   const cards = pedidos.map(p => {
+    const deAvulsas = !producao.podeProduzir(p) && comAvulsa.has(String(p.id));
     const doPedido = itens.filter(i => String(i.pedido_id) === String(p.id));
     const pecas = doPedido.map(i => {
       const preco = precos.get(String(i.produto_id)) ?? null;
       const grupos = gruposPor.get(String(i.id)) || [];
       const processos = ativas.map(e => {
         const fila = filaDe(i.id, e.id);
-        if (!fila.length) return null;
+        // As trocas e as avulsas do item (09/10/2026) mudam o que ainda se deve.
+        const mudancas = mudancasDe(i.id, e.id);
+        if (!fila.length && !mudancas.length) return null;
         const doProcesso = comEtapa.filter(x => String(x.pedido_item_id) === String(i.id) && String(x.etapa_id) === String(e.id));
-        const alocado = unidades.alocar({ fila, eventos: doProcesso });
+        const alocado = unidades.alocarComMudancas({ fila, eventos: doProcesso, mudancas });
         const regra = unidades.regraDaPeca(tudo.valores, i.produto_id, e.id);
         const valorPeca = unidades.valorDaPecaInteira(regra, preco);
-        const d = decisaoPor.get(chave(i.id, e.id)) || null;
+        const registrada = decisaoPor.get(chave(i.id, e.id)) || null;
+        const selada = decisaoSelada(registrada, mudancas);
+        const d = selada ? null : registrada;
         // A fila como estava ANTES da decisão desta competência: é dela que a
         // decisão (e a reconfirmação, enquanto não fecha) parte.
         const antes = d?.producao_evento_id
-          ? unidades.alocar({ fila, eventos: doProcesso.filter(x => String(x.id) !== String(d.producao_evento_id)) })
+          ? unidades.alocarComMudancas({ fila, eventos: doProcesso.filter(x => String(x.id) !== String(d.producao_evento_id)), mudancas })
           : alocado;
         // Em unidades, podendo ser quebradas: 0,5 = metade de uma unidade em aberto.
         const saldo = quatro(soma(alocado.cotas));
@@ -143,7 +169,7 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
         const plano = d ? unidades.planoDaDecisao(antes, prontas) : null;
         return {
           etapa_id: e.id, nome: e.nome,
-          pedida: fila.length, finalizada: alocado.usadas, saldo,
+          pedida: alocado.pedida, finalizada: alocado.usadas, saldo,
           // Quanto cabe na decisão desta competência (o saldo mais o que ela já confirmou).
           disponivel: quatro(soma(antes.cotas)),
           // A primeira unidade em aberto já veio com parte feita (decisão quebrada de um mês anterior).
@@ -160,14 +186,19 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
             origem: d.origem || 'fechamento', rotulo: ORIGENS[d.origem] || ORIGENS.fechamento,
             // Quando a decisão foi tomada: a tela mostra no hover da etiqueta.
             em: d.criado_em || null
-          } : null
+          } : null,
+          // Decidido antes da troca/avulsa: a confirmação nova não estorna o registro antigo.
+          decisao_selada: selada
         };
       }).filter(Boolean);
       if (!processos.length) return null;
       const datas = processos.map(e => e.decidido?.em).filter(Boolean).sort();
       return {
         pedido_item_id: i.id, produto_id: i.produto_id ?? null, codigo: i.codigo || null, nome: i.nome || null,
-        quantidade: Number(i.quantidade) || 0,
+        // No card das avulsas, a peça conta só as unidades que seguem em produção.
+        quantidade: deAvulsas
+          ? avulsasVivas.filter(a => String(a.pedido_item_id) === String(i.id)).reduce((s, a) => s + (Number(a.quantidade) || 0), 0)
+          : Number(i.quantidade) || 0,
         do_estoque: grupos.filter(g => g.origem === 'estoque').reduce((s, g) => s + g.quantidade, 0),
         preco_tabela: preco,
         processos,
@@ -181,6 +212,9 @@ async function lerPendencias(api, { competencia, hoje, pedidoId = null }) {
     return {
       pedido_id: p.id, numero: p.numero ?? String(p.id), situacao: p.situacao,
       cliente: nomes.get(String(p.cliente_id)) || null,
+      // Pedido cancelado com peça que continua sendo produzida: card de "Peças avulsas".
+      avulsa: deAvulsas,
+      avulsas: avulsasVivas.filter(a => String(a.pedido_id) === String(p.id)).map(a => ({ id: a.id, pedido_item_id: a.pedido_item_id, estado_inicio: mudancasUnidades.estadoDe(a.estado_inicio)?.rotulo || null })),
       pecas,
       unidades_pendentes: quatro(todos.reduce((s, e) => s + e.saldo, 0)),
       valor_pendente: c.centavos(todos.reduce((s, e) => s + (e.valor_pendente || 0), 0)),
@@ -259,9 +293,10 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
   for (const d of decisoes) {
     // "Tudo pronto"/"Nada pronto" do pedido decidem só o que falta: uma
     // decisão já tomada (até numa tela desatualizada, em outra aba) fica.
-    if (somentePendentes && decisaoPor.has(chave(d.pedido_item_id, d.etapa_id))) continue;
     const peca = card.pecas.find(p => String(p.pedido_item_id) === String(d.pedido_item_id));
     const processo = peca?.processos.find(e => String(e.etapa_id) === String(d.etapa_id));
+    // A decisão selada (antes de uma troca/avulsa) não conta como tomada.
+    if (somentePendentes && (processo ? processo.decidido : decisaoPor.has(chave(d.pedido_item_id, d.etapa_id)))) continue;
     if (!processo) throw c.erro('Uma das peças/processos não está mais pendente. Atualize a tela.', 409);
     const nomeDaPeca = peca.codigo || peca.nome || 'A peça';
     const prontas = unidadesDe(d.prontas);
@@ -270,9 +305,11 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
     if (prontas > disponivel + QUASE_ZERO) throw c.erro(`${nomeDaPeca} em ${processo.nome}: ${lerUnidades(prontas)} passa das ${lerUnidades(disponivel)} unidades que faltam.`, 409);
 
     const atual = decisaoPor.get(chave(d.pedido_item_id, d.etapa_id)) || null;
-    const mudou = !atual || Math.abs(quatro(atual.quantidade_pronta) - prontas) > QUASE_ZERO;
+    // Selada: o registro dela é de outra unidade (antes da troca/avulsa) e fica.
+    const selada = processo.decisao_selada === true;
+    const mudou = selada || !atual || Math.abs(quatro(atual.quantidade_pronta) - prontas) > QUASE_ZERO;
     // Mudou de ideia antes de fechar: o registro anterior sai e entra o novo.
-    if (atual?.producao_evento_id && mudou) {
+    if (atual?.producao_evento_id && mudou && !selada) {
       await producao.estornar({ api, id: atual.producao_evento_id, motivo: 'Decisão do fechamento refeita', usuarioId, hoje }).catch(() => {});
     }
     let evento = null;
@@ -298,7 +335,7 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
         campos: {
           competencia: comp, pedido_id: card.pedido_id, pedido_item_id: d.pedido_item_id, etapa_id: d.etapa_id,
           quantidade_pronta: prontas, quantidade_pendente: pendentes, origem,
-          producao_evento_id: evento?.id ?? (prontas > 0 ? atual?.producao_evento_id ?? null : null)
+          producao_evento_id: evento?.id ?? (prontas > 0 && !selada ? atual?.producao_evento_id ?? null : null)
         }
       });
     } catch (e) {
@@ -320,11 +357,27 @@ async function confirmar({ api, competencia, pedidoId, decisoes = [], origem = '
       + `${unidadesNoTexto(prontasTotais, 'unidade pronta', 'unidades prontas')}, ${unidadesNoTexto(pendentesTotais, 'unidade fica', 'unidades ficam')} para o mês seguinte.`
   });
 
-  const depois = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
+  let depois = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
+  // Peça avulsa que terminou todos os processos vai para o estoque, pronta (09/10/2026).
+  let avisos = [];
+  if (card.avulsa) {
+    const cardDepois = depois.pedidos.find(p => String(p.pedido_id) === String(pedidoId)) || null;
+    const faltaNoItem = itemId => {
+      const peca = cardDepois?.pecas.find(x => String(x.pedido_item_id) === String(itemId));
+      return peca ? peca.processos.reduce((s, e) => s + (Number(e.saldo) || 0), 0) : 0;
+    };
+    const r = await require('../pecasAvulsas').conferirProntas(api, { pendentesDoItem: async itemId => faltaNoItem(itemId), usuarioId }).catch(e => ({ prontas: [], avisos: [e?.message || String(e)] }));
+    avisos = [
+      ...(r.prontas?.length ? [`${r.prontas.length === 1 ? 'A peça avulsa ficou pronta e entrou' : `${r.prontas.length} peças avulsas ficaram prontas e entraram`} no estoque.`] : []),
+      ...(r.avisos || [])
+    ];
+    if (r.prontas?.length) depois = await lerPendencias(api, { competencia: comp, hoje, pedidoId });
+  }
   return {
     competencia: comp,
     pedido: depois.pedidos.find(p => String(p.pedido_id) === String(pedidoId)) || null,
-    decisoes: feitas
+    decisoes: feitas,
+    avisos
   };
 }
 
@@ -372,8 +425,11 @@ function avancoNoProcesso(rota, processo, origem, destino) {
  * somando os registros ativos. É o que impede pagar duas vezes o mesmo
  * trecho: o cancelamento só lança a diferença.
  */
-function fracaoJaPaga({ fila, eventos }) {
+function fracaoJaPaga({ fila, eventos, mudancas = [] }) {
   const vivos = eventos.filter(e => e?.status === 'ativo' && !e.estornado_em && !e.estorno_de && Number(e.quantidade) > 0);
+  // Com troca ou avulsa no item (09/10/2026), conta o que foi feito nas
+  // unidades que ESTÃO no pedido: a que saiu por troca levou o dela.
+  if ((mudancas || []).length) return unidades.alocarComMudancas({ fila, eventos: vivos, mudancas }).feito;
   const alocado = unidades.alocar({ fila, eventos: vivos });
   return vivos.reduce((s, e) => {
     const manual = e.fracao_paga === null || e.fracao_paga === undefined ? null : Number(e.fracao_paga);
@@ -402,11 +458,16 @@ async function lerDestinacoes(api, pedidoId) {
  *
  * Silencioso como o envio: falha aqui não derruba o cancelamento (vira aviso).
  */
-async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = null, hoje }) {
+async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = null, hoje, avulsas = [] }) {
   const dia = c.dataValida(data) ? data : hoje;
   const comp = c.competenciaDe(dia);
   const avisos = [];
-  const destinacoes = await lerDestinacoes(api, pedidoId);
+  // A peça avulsa ("Continuar produzindo", 09/10/2026) também paga o trecho
+  // que andou até aqui; o resto ela paga na produção, depois.
+  const destinacoes = [
+    ...await lerDestinacoes(api, pedidoId),
+    ...(avulsas || []).map(a => ({ pedido_item_id: a.pedidoItemId, quantidade: a.quantidade, ordem_origem: a.ordemOrigem, ordem_destino: a.ordemDestino, avulsa: true }))
+  ];
   if (!destinacoes.length) return { confirmado: false, motivo: 'sem destinações do cancelamento', avisos };
 
   const [tudo, eventos, itens, precos] = await Promise.all([
@@ -416,7 +477,7 @@ async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = n
     producao.precosDaTabela(api)
   ]);
   const etapasPor = new Map(tudo.etapas.map(e => [String(e.id), e]));
-  const { filaDe, rotaPor } = await producao.montarFilas(api, { itens, etapasPor });
+  const { filaDe, rotaPor, mudancasDe } = await producao.montarFilas(api, { itens, etapasPor });
   const comEtapa = eventos.map(e => ({ ...e, etapa_id: producao.etapaDoEvento(e, { etapas: tudo.etapas, setores: tudo.setores }) }));
   const ativas = tudo.etapas.filter(e => e.producao_ativa);
   const lancados = [];
@@ -431,7 +492,7 @@ async function confirmarCancelamento({ api, pedidoId, data = null, usuarioId = n
       const doProcesso = comEtapa.filter(e => String(e.pedido_item_id) === String(item.id) && String(e.etapa_id) === String(etapa.id));
       if (!fila.length && !doProcesso.length) continue;
       const andou = doItem.reduce((s, d) => s + inteiro(d.quantidade) * avancoNoProcesso(rota, etapa.nome, d.ordem_origem, d.ordem_destino), 0);
-      const fracao = Math.round(Math.max(0, andou - fracaoJaPaga({ fila, eventos: doProcesso })) * 10000) / 10000;
+      const fracao = Math.round(Math.max(0, andou - fracaoJaPaga({ fila, eventos: doProcesso, mudancas: mudancasDe(item.id, etapa.id) })) * 10000) / 10000;
       if (!(fracao > 0)) continue;
       const regra = unidades.regraDaPeca(tudo.valores, item.produto_id, etapa.id);
       const valorPeca = unidades.valorDaPecaInteira(regra, precos.get(String(item.produto_id)) ?? null);

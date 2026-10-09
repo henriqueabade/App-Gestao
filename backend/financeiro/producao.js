@@ -31,6 +31,8 @@ const base = require('./base');
 const unidades = require('./producaoUnidades');
 const avisos = require('../avisosEnvolvidos');
 const ajustesPessoa = require('./ajustesPessoa');
+const rateios = require('./rateios');
+const mudancasUnidades = require('./mudancasUnidades');
 const { estadoDosFechamentos, competenciaAlvo } = require('./comissoes');
 const { carregarInsumos, carregarRota, carregarRotas } = require('../cancelamentoEstorno');
 
@@ -78,7 +80,7 @@ function statusDoItem(pedida, feita) {
  * `filaDe(itemId, etapaId)` → as frações das peças do item que precisam do
  * processo, na ordem; `precoDe(produtoId)` → o preço da tabela fixa.
  */
-function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores = [] }) {
+function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores = [], mudancasDe = () => [] }) {
   const congeladoPorEvento = new Map(estado.congelados.filter(i => i.producao_evento_id).map(i => [String(i.producao_evento_id), i]));
   const etapas = [...etapasPor.values()];
   const comEtapa = (eventos || []).map(e => ({ ...e, etapa_id: etapaDoEvento(e, { etapas, setores }), setor_legado: e.etapa_id === null || e.etapa_id === undefined ? e.setor_id : null }));
@@ -93,7 +95,8 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
     const k = chaveItemSetor(itemId, etapaId);
     if (!alocacoes.has(k)) {
       const fila = etapaId === null ? [] : filaDe(itemId, etapaId);
-      alocacoes.set(k, { fila, ...unidades.alocar({ fila, eventos: porItemEtapa.get(k) || [] }) });
+      // Com as trocas e as avulsas do item (09/10/2026): o de antes vale como valia.
+      alocacoes.set(k, { fila, ...unidades.alocarComMudancas({ fila, eventos: porItemEtapa.get(k) || [], mudancas: etapaId === null ? [] : mudancasDe(itemId, etapaId) }) });
     }
     return alocacoes.get(k);
   };
@@ -148,7 +151,7 @@ function pendentes({ eventos, estado, valores, itensPor, etapasPor, pedidosPor, 
         fracao_manual: e.fracao_paga !== null && e.fracao_paga !== undefined && !e.estorno_de,
         sem_valor: total === null,
         total: total === null ? 0 : total,
-        status_item: al ? statusDoItem(al.fila.length, al.usadas) : null, observacao: e.observacao || null
+        status_item: al ? statusDoItem(al.pedida, al.usadas) : null, observacao: e.observacao || null
       };
     });
 }
@@ -174,7 +177,8 @@ function congeladas(estado, fechamentoId) {
       valor_peca: i.detalhes?.valor_peca ?? null, fracao: i.detalhes?.fracao ?? null, regra: i.detalhes?.regra ?? null,
       sem_valor: false, total: c.centavos(i.total), status_item: i.detalhes?.status_item || (i.tipo_item === 'ajuste' ? 'Ajuste' : null),
       motivo: i.detalhes?.motivo || null,
-      ajuste_pessoa_id: i.ajuste_pessoa_id ?? i.detalhes?.ajuste_pessoa_id ?? null, colaborador: i.detalhes?.colaborador || null
+      ajuste_pessoa_id: i.ajuste_pessoa_id ?? i.detalhes?.ajuste_pessoa_id ?? null, colaborador: i.detalhes?.colaborador || null,
+      colaborador_id: i.detalhes?.colaborador_id ?? null
     }));
 }
 
@@ -185,21 +189,52 @@ function congeladas(estado, fechamentoId) {
 function linhaDeRestante(s, { origem, destino, fechamentoId = null, projetado = false }) {
   const rotulo = c.rotuloCompetencia(String(origem).trim());
   const total = c.centavos(s.total);
+  // Com o rateio em uso, o restante é DE UM COLABORADOR naquele processo
+  // (decisão do dono, 09/10/2026: quem recebeu a mais é quem devolve).
+  const comColaborador = s.colaborador_id !== null && s.colaborador_id !== undefined;
+  const quem = comColaborador ? `${s.colaborador} (${s.setor})` : s.setor;
   return {
-    evento_id: null, tipo_item: 'saldo', pedido_id: null, pedido: '—', produto: `Ajuste restante de ${rotulo}`,
+    evento_id: null, tipo_item: 'saldo', pedido_id: null, pedido: '—',
+    produto: `Ajuste restante de ${rotulo}${comColaborador ? ` · ${s.colaborador}` : ''}`,
     setor_id: s.setor_id ?? null, setor: s.setor, data: null, quantidade: 0, competencia: destino, competencia_natural: String(origem).trim(),
     valor_unitario: null, sem_valor: false, total, status_item: 'Restante do mês anterior',
-    motivo: `Ajuste restante do mês anterior (${rotulo}): ${s.setor} terminou ${rotulo} com ${c.reais(total)}`,
-    fechamento_origem: fechamentoId, projetado
+    motivo: `Ajuste restante do mês anterior (${rotulo}): ${quem} terminou ${rotulo} com ${c.reais(total)}`,
+    fechamento_origem: fechamentoId, projetado,
+    colaborador_id: comColaborador ? s.colaborador_id : null, colaborador: comColaborador ? s.colaborador : null
   };
 }
 
-/** Saldo negativo de um processo no último fechamento: passa para o próximo. Pura. */
+/**
+ * Os negativos de um mês que passam para o seguinte: com as partes por
+ * colaborador (rateio em uso), cada parte negativa — mesmo num processo que
+ * fechou positivo; sem elas, o processo que terminou negativo. Pura.
+ */
+function negativosDoMes(setores, { origem, destino, fechamentoId = null, projetado = false }) {
+  const linhas = [];
+  for (const s of setores || []) {
+    if (Array.isArray(s.partes)) {
+      for (const p of s.partes) {
+        if (Number(p.total) <= -0.01) linhas.push(linhaDeRestante({ setor_id: s.setor_id, setor: s.setor, colaborador_id: p.colaborador_id, colaborador: p.colaborador, total: p.total }, { origem, destino, fechamentoId, projetado }));
+      }
+    } else if (Number(s.total) <= -0.01) {
+      linhas.push(linhaDeRestante(s, { origem, destino, fechamentoId, projetado }));
+    }
+  }
+  return linhas;
+}
+
+/** Saldo negativo do último fechamento (do processo, ou do colaborador no processo): passa para o próximo. Pura. */
 function saldosAnteriores(estado) {
   const ultimo = estado.ultimo;
   if (!ultimo) return [];
-  return (ultimo.resumo || []).filter(s => Number(s.total) < 0)
-    .map(s => linhaDeRestante(s, { origem: ultimo.competencia, destino: estado.proxima, fechamentoId: ultimo.id }));
+  return negativosDoMes(ultimo.resumo || [], { origem: ultimo.competencia, destino: estado.proxima, fechamentoId: ultimo.id });
+}
+
+/** As partes por colaborador das linhas, quando o rateio está em uso (`estado.divisao`); senão null. Pura. */
+function partesSePuder(estado, linhas) {
+  const divisao = estado?.divisao;
+  if (!divisao || !(divisao.colaboradores || []).length) return null;
+  return rateios.partesDoMes({ linhas, rateios: divisao.rateios || [], colaboradores: divisao.colaboradores });
 }
 
 /**
@@ -216,8 +251,9 @@ function restantesProjetados({ pend, estado, competencia }) {
   let mes = inicio;
   for (let voltas = 0; mes < competencia && voltas < 240; voltas++) {
     const seguinte = c.somarMeses(mes, 1);
-    const r = resumir([...linhas.filter(l => l.competencia === mes), ...levadas]);
-    levadas = r.setores.filter(s => s.total <= -0.01).map(s => linhaDeRestante(s, { origem: mes, destino: seguinte, projetado: true }));
+    const doMes = [...linhas.filter(l => l.competencia === mes), ...levadas];
+    const setores = partesSePuder(estado, doMes) || resumir(doMes).setores;
+    levadas = negativosDoMes(setores, { origem: mes, destino: seguinte, projetado: true });
     mes = seguinte;
   }
   return levadas;
@@ -299,8 +335,16 @@ function montarCompetencia({ pend, estado, competencia, propria = false }) {
     ? congeladas(estado, fechado.id)
     : [...pend.filter(cabe), ...restantesDoMes({ pend, estado, competencia, propria })];
   const r = resumir(linhas);
+  // Com o rateio em uso, o mês também sai por colaborador: paga-se cada parte
+  // positiva e a negativa fica para o mês seguinte, com o nome de quem deve
+  // (09/10/2026). Fechado, valem as partes congeladas no fechamento.
+  const partes = fechado
+    ? ((fechado.resumo || []).some(s => Array.isArray(s.partes)) ? fechado.resumo.filter(s => Array.isArray(s.partes)) : null)
+    : partesSePuder(estado, linhas);
+  if (partes && !fechado) Object.assign(r, rateios.contaDasPartes(partes));
   return {
     competencia, fechado: Boolean(fechado),
+    por_colaborador: partes,
     fechamento: fechado ? {
       id: fechado.id, fechado_em: fechado.fechado_em, pagar_ate: c.dia(fechado.pagar_ate), total: c.centavos(fechado.total),
       pagamento: fechado.pagamento || null, pagamentos: fechado.pagamentos || [],
@@ -348,7 +392,12 @@ async function precosDaTabela(api) {
  */
 async function montarFilas(api, { itens, etapasPor }) {
   const pedidoIds = itens.map(i => i.pedido_id);
-  const [ext, insumos] = await Promise.all([extDe(api, pedidoIds), carregarInsumos(api)]);
+  const [ext, insumos, mudancas] = await Promise.all([
+    extDe(api, pedidoIds), carregarInsumos(api),
+    // Trocas de peças entre pedidos e peças avulsas (09/10/2026): sem o SQL, nenhuma.
+    mudancasUnidades.lerDosItens(api, itens.map(i => i.id)).catch(() => ({ trocas: [], avulsas: [] }))
+  ]);
+  const mudancasDe = mudancasUnidades.indice(mudancas);
   const extPor = new Map();
   for (const x of ext) {
     const k = String(x.pedido_item_id);
@@ -375,32 +424,39 @@ async function montarFilas(api, { itens, etapasPor }) {
     }
     return cache.get(k);
   };
-  return { filaDe, gruposPor, rotaPor };
+  return { filaDe, gruposPor, rotaPor, mudancasDe, mudancas };
 }
 
 /** Tudo que as telas de produção precisam. */
 async function lerBase(api) {
-  const [eventos, tudo, fech, pedidos, precos, porPessoa] = await Promise.all([
+  const [eventos, tudo, fech, pedidos, precos, porPessoa, colaboradores, divisoes] = await Promise.all([
     c.ler(api, 'producao_eventos'),
     regras.lerTudo(api),
     base.lerFechamentos(api),
     api.get('/api/pedidos').then(c.lista).catch(() => []),
     precosDaTabela(api),
     // Sem o SQL dos ajustes por pessoa, nenhum (null).
-    ajustesPessoa.lerTodos(api, { area: 'producao' })
+    ajustesPessoa.lerTodos(api, { area: 'producao' }),
+    // O rateio entre colaboradores (sem o SQL dele, null: tudo por processo).
+    rateios.listarColaboradores(api).catch(() => null),
+    rateios.listarRateios(api).catch(() => null)
   ]);
   const itens = await itensDe(api, eventos.map(e => e.pedido_id));
   const estado = estadoDosFechamentos({ ...fech, tipo: 'producao' });
+  // Rateio em uso (há colaborador cadastrado): o mês sai também por
+  // colaborador, e é com ele que o negativo passa adiante (09/10/2026).
+  estado.divisao = colaboradores && colaboradores.length ? { colaboradores, rateios: divisoes || [] } : null;
   const pedidosPor = new Map(pedidos.filter(Boolean).map(p => [String(p.id), p]));
   const itensPor = new Map(itens.map(i => [String(i.id), i]));
   const etapasPor = new Map(tudo.etapas.map(e => [String(e.id), e]));
-  const { filaDe } = await montarFilas(api, { itens, etapasPor });
+  const { filaDe, mudancasDe } = await montarFilas(api, { itens, etapasPor });
   const precoDe = produtoId => precos.get(String(produtoId)) ?? null;
   const pend = [
-    ...pendentes({ eventos, estado, valores: tudo.valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores: tudo.setores }),
+    ...pendentes({ eventos, estado, valores: tudo.valores, itensPor, etapasPor, pedidosPor, filaDe, precoDe, setores: tudo.setores, mudancasDe }),
     ...ajustesPessoa.linhasDeProducao({
       ajustes: porPessoa || [], estado, competenciaAlvo,
-      processos: new Map(tudo.etapas.map(e => [String(e.id), e.nome]))
+      processos: new Map(tudo.etapas.map(e => [String(e.id), e.nome])),
+      colaboradores: new Map((colaboradores || []).map(x => [String(x.id), x.nome]))
     })
   ];
   return { eventos, regras: tudo, estado, pedidos, pedidosPor, itensPor, etapasPor, setoresPor: etapasPor, pend };
@@ -432,12 +488,14 @@ async function doPedido(api, pedidoId) {
     precosDaTabela(api)
   ]);
   const etapasPor = new Map(tudo.etapas.map(e => [String(e.id), e]));
-  const { filaDe, gruposPor } = await montarFilas(api, { itens, etapasPor });
+  const { filaDe, gruposPor, mudancasDe, mudancas } = await montarFilas(api, { itens, etapasPor });
+  // Pedido cancelado com peça avulsa em produção (09/10/2026): ela continua.
+  const comAvulsa = (mudancas?.avulsas || []).some(a => a.status === 'em_producao');
   const comEtapa = eventos.map(e => ({ ...e, etapa_id: etapaDoEvento(e, { etapas: tudo.etapas, setores: tudo.setores }) }));
   const ativas = tudo.etapas.filter(e => e.producao_ativa);
 
   return {
-    pedido: { id: pedido.id, numero: pedido.numero ?? String(pedido.id), situacao: pedido.situacao, cliente: nomes.get(String(pedido.cliente_id)) || null, pode_produzir: podeProduzir(pedido) },
+    pedido: { id: pedido.id, numero: pedido.numero ?? String(pedido.id), situacao: pedido.situacao, cliente: nomes.get(String(pedido.cliente_id)) || null, pode_produzir: podeProduzir(pedido) || comAvulsa, avulsa: comAvulsa && !podeProduzir(pedido) },
     setores: ativas.map(e => ({ id: e.id, nome: e.nome })),
     itens: itens.sort((a, b) => Number(a.id) - Number(b.id)).map(i => {
       const grupos = gruposPor.get(String(i.id)) || [];
@@ -449,19 +507,22 @@ async function doPedido(api, pedidoId) {
         preco_tabela: preco,
         setores: ativas.map(e => {
           const fila = filaDe(i.id, e.id);
-          const al = unidades.alocar({ fila, eventos: comEtapa.filter(x => String(x.pedido_item_id) === String(i.id) && String(x.etapa_id) === String(e.id)) });
-          if (!fila.length && !al.usadas) return null;
+          const mudancas = mudancasDe(i.id, e.id);
+          const al = unidades.alocarComMudancas({ fila, eventos: comEtapa.filter(x => String(x.pedido_item_id) === String(i.id) && String(x.etapa_id) === String(e.id)), mudancas });
+          if (!al.pedida && !al.usadas) return null;
           const regra = unidades.regraDaPeca(tudo.valores, i.produto_id, e.id);
           const valorPeca = unidades.valorDaPecaInteira(regra, preco);
           return {
-            setor_id: e.id, pedida: fila.length, finalizada: al.usadas, saldo: al.pendentes.length,
-            status: statusDoItem(fila.length, al.usadas),
+            setor_id: e.id, pedida: al.pedida, finalizada: al.usadas, saldo: al.pendentes.length,
+            status: statusDoItem(al.pedida, al.usadas),
             valor_unitario: valorPeca, valor_origem: regra ? regra.origem : null, regra: regra ? unidades.descreverRegra(regra) : null,
             proximas: al.pendentes.map(f => Math.round(f * 10000) / 10000),
             // Quanto falta de cada unidade em aberto (0,5 = feita pela metade num fechamento).
             cotas: al.cotas,
             // A fila inteira: é com ela que o registro confere, depois de gravar, se não passou do que faltava.
-            fila
+            fila,
+            // As trocas e as avulsas do item: a conferência usa a mesma conta.
+            mudancas
           };
         }).filter(Boolean)
       };
@@ -545,7 +606,7 @@ async function registrar({ api, entrada, usuarioId = null, hoje, fracao = null }
   // Algum registro ficou sem o que devia receber? Só conta contra ESTE se o
   // estouro não existia sem ele (dado antigo torto não trava os novos).
   const faltou = eventos => {
-    const al = unidades.alocar({ fila: doSetor.fila || [], eventos });
+    const al = unidades.alocarComMudancas({ fila: doSetor.fila || [], eventos, mudancas: doSetor.mudancas || [] });
     return eventos.some(e => {
       const r = al.porEvento.get(String(e.id));
       if (!r) return false;
@@ -616,7 +677,7 @@ async function estornar({ api, id, motivo, usuarioId = null, hoje }) {
 
 module.exports = {
   SITUACOES_QUE_PRODUZEM, podeProduzir, etapaDoEvento, acumulados, statusDoItem, pendentes, congeladas,
-  linhaDeRestante, saldosAnteriores, restantesProjetados, restantesDoMes, resumir, contarPecasEProcessos, montarCompetencia,
+  linhaDeRestante, negativosDoMes, saldosAnteriores, partesSePuder, restantesProjetados, restantesDoMes, resumir, contarPecasEProcessos, montarCompetencia,
   lerBase, pedidosParaProduzir, doPedido, valorDasProximas, registrar, estornar,
   // A confirmação da produção (producaoConfirmacao.js) monta as filas do mesmo jeito.
   itensDe, extDe, precosDaTabela, montarFilas, chaveItemSetor

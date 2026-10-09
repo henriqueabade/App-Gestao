@@ -322,7 +322,15 @@ async function doMes({ api, competencia, hoje, desde = null }) {
     totais: {
       cms: resumoC.beneficiarios.filter(b => b.tipo === 'cms').map(b => ({ beneficiario: b.beneficiario, valor: c.centavos(b.valor) })),
       royalty: resumoC.beneficiarios.filter(b => b.tipo === 'royalty').map(b => ({ beneficiario: b.beneficiario, valor: c.centavos(b.valor) })),
-      producao: resumoP.setores.map(s => ({ setor_id: s.setor_id, setor: s.setor, valor: c.centavos(s.total) }))
+      // Com o rateio em uso, cada processo traz também quanto cada colaborador
+      // tem nele: é a conta do colaborador que leva o negativo (09/10/2026).
+      producao: resumoP.setores.map(s => {
+        const partes = (resumoP.por_colaborador || []).find(x => String(x.setor_id ?? x.setor) === String(s.setor_id ?? s.setor))?.partes || null;
+        return {
+          setor_id: s.setor_id, setor: s.setor, valor: c.centavos(s.total),
+          ...(partes ? { colaboradores: partes.filter(p => p.colaborador_id !== null).map(p => ({ colaborador_id: p.colaborador_id, colaborador: p.colaborador, valor: c.centavos(p.total) })) } : {})
+        };
+      })
     },
     ajustes: doMesmo.map(a => paraTela(a, { nomes, congelados }))
   };

@@ -928,6 +928,11 @@ test('ajuste por pessoa (06/10/2026): o valor dela no mês, o antes e depois e o
     assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'cms', beneficiario: 'marcia lamounier' }), 500, 'acento e caixa não separam a pessoa');
     assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'royalty', beneficiario: 'Outra' }), 0, 'quem não tem nada no mês tem zero');
     assert.strictEqual(f.valorDaPessoaNoMes(totais, { area: 'producao', setorId: '2' }), 1000, 'na produção a conta é do processo');
+    // Com o rateio em uso, a conta é do colaborador no processo (09/10/2026: o negativo é de quem recebeu a mais).
+    const comRateio = { producao: [{ setor_id: 2, setor: 'Acabamento', valor: 1000, colaboradores: [{ colaborador_id: 7, colaborador: 'João', valor: 300 }] }] };
+    assert.strictEqual(f.valorDaPessoaNoMes(comRateio, { area: 'producao', setorId: '2', colaboradorId: '7' }), 300);
+    assert.strictEqual(f.valorDaPessoaNoMes(comRateio, { area: 'producao', setorId: '2', colaboradorId: '8' }), 0, 'colaborador sem nada no processo');
+    assert.strictEqual(f.valorDaPessoaNoMes(comRateio, { area: 'producao', setorId: '2' }), 1000, 'sem escolher o colaborador, o processo todo');
     assert.strictEqual(f.valorDaPessoaNoMes(null, { area: 'cms', beneficiario: 'X' }), null);
     assert.deepStrictEqual(plano(f.impactoDoAjustePessoa({ atual: 500, valor: 800, sinal: f.TIPOS_AJUSTE_PESSOA.adiantamento.sinal })), { antes: 500, depois: -300, a_pagar: 0, restante: -300 });
     assert.deepStrictEqual(plano(f.impactoDoAjustePessoa({ atual: 500, valor: 100, sinal: f.TIPOS_AJUSTE_PESSOA.bonificacao.sinal })), { antes: 500, depois: 600, a_pagar: 600, restante: 0 });

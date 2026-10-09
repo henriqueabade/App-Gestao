@@ -42,6 +42,8 @@ const {
   registrarEventoDoPedido,
   atualizarStatusDasReservas
 } = require('./estoqueLedger');
+// Trocas de peça entre pedidos (09/10/2026): o que o pedido tem de verdade.
+const mudancasUnidades = require('./financeiro/mudancasUnidades');
 
 const TABELA_LOTES = '/api/produtos_em_cada_ponto';
 
@@ -197,6 +199,52 @@ function montarGrupos({ extDoItem, reserva, rota, item }) {
   // a que estava mais perto disso, não a que teria de ser produzida do zero.
   grupos.sort((a, b) => b.ordem_origem - a.ordem_origem);
   return grupos;
+}
+
+/**
+ * Os grupos com as TROCAS de peça entre pedidos (09/10/2026): a unidade que
+ * saiu deixa de ser do pedido, e a que chegou entra como se viesse do estoque
+ * no ponto em que estava (0 = por começar, "produção do zero"). É esse o piso
+ * dela — ninguém desmonta a peça — e é a partir dele que o cancelamento
+ * devolve o resto da rota à matéria-prima, como faz com a peça do estoque.
+ *
+ * A unidade que saiu sai do grupo de origem mais adiantado que ainda cabe no
+ * estado dela (uma peça pronta pode ter vindo pronta do estoque ou ter sido
+ * produzida aqui; a que estava por começar só pode ser do zero). Pura.
+ */
+function gruposComTrocas(grupos, { itemId, trocas = [] } = {}) {
+  const id = String(itemId);
+  const saida = (grupos || []).map(g => ({ ...g }));
+  const doItem = (trocas || [])
+    .filter(t => String(t.pedido_item_id_a) === id || String(t.pedido_item_id_b) === id)
+    .sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)) || Number(a.id) - Number(b.id));
+  for (const t of doItem) {
+    const ehA = String(t.pedido_item_id_a) === id;
+    const deu = ehA ? t.estado_a : t.estado_b;
+    const recebeu = ehA ? t.estado_b : t.estado_a;
+    const q = paraNumero(t.quantidade);
+    let falta = q;
+    while (falta > 0) {
+      const vivos = saida.filter(g => g.quantidade > 0);
+      const cabe = vivos.filter(g => g.ordem_origem <= paraNumero(deu?.ordem)).sort((a, b) => b.ordem_origem - a.ordem_origem)[0]
+        || vivos.sort((a, b) => a.ordem_origem - b.ordem_origem)[0];
+      if (!cabe) break;
+      const tira = Math.min(cabe.quantidade, falta);
+      cabe.quantidade = arredondar(cabe.quantidade - tira);
+      cabe.restante = cabe.quantidade;
+      falta = arredondar(falta - tira);
+    }
+    const ordem = paraNumero(recebeu?.ordem);
+    const origem = ordem > 0 ? 'estoque' : 'producao';
+    const igual = saida.find(g => g.origem === origem && g.ordem_origem === ordem && (g.lote_id ?? null) === null);
+    if (igual) {
+      igual.quantidade = arredondar(igual.quantidade + q);
+      igual.restante = igual.quantidade;
+    } else {
+      saida.push({ origem, ordem_origem: ordem, lote_id: null, quantidade: q, restante: q, por_troca: true });
+    }
+  }
+  return saida.filter(g => g.quantidade > 0).sort((a, b) => b.ordem_origem - a.ordem_origem);
 }
 
 /**
@@ -980,6 +1028,8 @@ async function estornarCancelamento(api, {
      */
     tiposDeInsumo: 0,
     reservasRetornadas: 0,
+    /** Seguem em produção como peça avulsa ("Continuar produzindo", 09/10/2026). */
+    pecasAvulsas: 0,
     /** Soma do que fisicamente entrou em lote, para conferência rápida. */
     get pecasDevolvidas() {
       return arredondar(this.pecasAoEstoque + this.pecasRestauradasNoLote);
@@ -996,6 +1046,8 @@ async function estornarCancelamento(api, {
     // nasce completo, em vez de entrar no estoque sem etapa.
     carregarInsumos(api)
   ]);
+  // As trocas de peça com outros pedidos (09/10/2026) mudam o que o pedido tem.
+  const { trocas } = await mudancasUnidades.lerDosItens(api, (Array.isArray(itens) ? itens : []).map(i => i.id)).catch(() => ({ trocas: [] }));
 
   const listaItens = (Array.isArray(itens) ? itens : [])
     .filter(i => String(i?.pedido_id) === String(pedidoId));
@@ -1033,6 +1085,9 @@ async function estornarCancelamento(api, {
   const tiposQueVoltaram = new Set();
   /** Uma entrada por decisão executada, para o histórico do pedido cancelado. */
   const destinacoesDoResumo = [];
+  // "Continuar produzindo" (09/10/2026): quem chama grava as avulsas DEPOIS de
+  // apurar a produção do cancelamento (pecasAvulsas.criarDoCancelamento).
+  const avulsas = [];
   /** pedido de destino -> o que ele recebeu, linha a linha, para o histórico dele. */
   const linhasPorDestino = new Map();
 
@@ -1064,12 +1119,12 @@ async function estornarCancelamento(api, {
       rota,
       produtoId: Number(item.produto_id),
       ordemFinal: rota.length ? rota[rota.length - 1].ordem : 0,
-      grupos: montarGrupos({
+      grupos: gruposComTrocas(montarGrupos({
         extDoItem: extPorItem.get(chave) || [],
         reserva: reservaPorItem.get(chave),
         rota,
         item
-      })
+      }), { itemId: item.id, trocas })
     });
   }
 
@@ -1138,6 +1193,34 @@ async function estornarCancelamento(api, {
         // --------------------------------------------------------------
         const passoDaOrigem = rota.find(p => p.ordem === grupo.ordem_origem) || null;
         const nomeDaPeca = item.nome || item.codigo || `peça ${item.id}`;
+
+        // --------------------------------------------------------------
+        // PEÇA AVULSA (pedido do dono, 09/10/2026): "Continuar produzindo".
+        //
+        // A peça fica onde está, no ponto escolhido, e segue sendo produzida
+        // fora de pedido (backend/pecasAvulsas.js). Não volta ao estoque e
+        // nenhum insumo volta — ela ainda vai usar o resto da rota. A produção
+        // paga o trecho que ela andou até aqui (confirmarCancelamento) e
+        // continua no Fechar competência, no card "Peças avulsas".
+        // --------------------------------------------------------------
+        // Peça que já estava pronta não tem o que continuar: vai ao estoque.
+        const jaPronta = ordemFinal > 0 && ordemDestino >= ordemFinal;
+        if (decisao.acao === 'avulsa' && jaPronta) {
+          avisos.push(`${nomeDaPeca} já estava pronta: entrou no estoque em vez de continuar produzindo.`);
+        }
+        if (decisao.acao === 'avulsa' && !jaPronta) {
+          const passoAtual = rota.find(p => p.ordem === ordemDestino) || null;
+          avulsas.push({
+            pedidoItemId: item.id, produtoId, quantidade: unidades,
+            ordemOrigem: grupo.ordem_origem, ordemDestino, passoId: passoAtual?.passo_id ?? null
+          });
+          resumo.pecasAvulsas = arredondar(resumo.pecasAvulsas + unidades);
+          destinacoesDoResumo.push({
+            texto: `${nomeDaPeca} segue em produção como peça avulsa (${rotuloDoEstagio(rota, ordemDestino)})`,
+            unidades
+          });
+          continue;
+        }
         const destinacaoBase = {
           pedidoId,
           pedidoItemId: item.id,
@@ -1517,7 +1600,7 @@ async function estornarCancelamento(api, {
   resumo.detalhes = Array.from(porTexto.entries())
     .map(([texto, unidades]) => `${unidades} × ${texto}`);
 
-  return { resumo, avisos };
+  return { resumo, avisos, avulsas };
 }
 
 /**
@@ -1546,16 +1629,17 @@ async function opcoesDeEstorno(api, pedidoId) {
   const cacheRotas = new Map();
   const saida = [];
   await carregarRotas(api, (Array.isArray(itens) ? itens : []).map(i => i.produto_id), cacheRotas, insumos);
+  const { trocas } = await mudancasUnidades.lerDosItens(api, (Array.isArray(itens) ? itens : []).map(i => i.id)).catch(() => ({ trocas: [] }));
 
   for (const item of (Array.isArray(itens) ? itens : [])) {
     const chave = String(item.id);
     const rota = await carregarRota(api, item.produto_id, cacheRotas, insumos);
-    const grupos = montarGrupos({
+    const grupos = gruposComTrocas(montarGrupos({
       extDoItem: extPorItem.get(chave) || [],
       reserva: reservaPorItem.get(chave),
       rota,
       item
-    });
+    }), { itemId: item.id, trocas });
 
     saida.push({
       pedido_item_id: item.id,
@@ -1583,7 +1667,9 @@ async function opcoesDeEstorno(api, pedidoId) {
 }
 
 module.exports = {
-  estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos,
+  estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos, gruposComTrocas,
   // A devolução (backend/devolucoes/estoque.js) devolve peça pronta ao estoque pelo mesmo caminho.
-  carregarInsumos, carregarRota, carregarRotas, rotaDasLinhas, lotePara, TABELA_LOTES
+  carregarInsumos, carregarRota, carregarRotas, rotaDasLinhas, lotePara, TABELA_LOTES,
+  // A peça avulsa (backend/pecasAvulsas.js) devolve o resto da rota pelo mesmo caminho.
+  devolverInsumos, rotuloDoEstagio
 };

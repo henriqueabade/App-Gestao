@@ -1,0 +1,160 @@
+/* ---------------------------------------------------------------------------
+   "Trocar peças entre pedidos" (src/js/modals/pedido-trocar-pecas.js,
+   09/10/2026). Global: o modal abre da lista de Pedidos e, para a peça
+   avulsa, do Financeiro. O vidro, as cores dos botões e os tamanhos são os do
+   padrão (docs/padroes-de-interface.md); aqui só o que é do modal.
+   --------------------------------------------------------------------------- */
+
+.trocar-pecas__aviso {
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(251, 191, 36, 0.12);
+    color: #fde68a;
+    font-size: 0.875rem;
+}
+
+.trocar-pecas__explica {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.trocar-pecas__explica > i {
+    color: var(--color-primary, #b6a03e);
+    margin-top: 0.2rem;
+}
+
+.trocar-pecas__explica p { margin: 0; }
+
+/* Uma peça (deste pedido ou de outro): o nome à esquerda, os estados à direita. */
+.trocar-pecas__peca {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem 1.25rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.trocar-pecas__peca--escolhida {
+    border-color: rgba(182, 160, 62, 0.6);
+    background: rgba(182, 160, 62, 0.08);
+}
+
+.trocar-pecas__nome {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.trocar-pecas__titulo {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trocar-pecas__sub {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trocar-pecas__estados {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Um estado = um grupo de unidades iguais ("2 · Por começar"). Clicar escolhe. */
+.trocar-pecas__estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.trocar-pecas__estado:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+
+.trocar-pecas__estado[aria-pressed="true"] {
+    border-color: var(--color-primary, #b6a03e);
+    background: rgba(182, 160, 62, 0.22);
+    color: var(--color-primary-light, #e6d27a);
+}
+
+.trocar-pecas__estado:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.trocar-pecas__estado--pronta { border-color: rgba(162, 255, 166, 0.35); }
+
+.trocar-pecas__qtd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.3);
+    font-size: 0.72rem;
+}
+
+.trocar-pecas__grade {
+    display: grid;
+    grid-template-columns: 10rem minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.trocar-pecas__resumo {
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+    line-height: 1.55;
+}
+
+.trocar-pecas__resumo ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.trocar-pecas__tabela td {
+    color: rgba(255, 255, 255, 0.85);
+    vertical-align: top;
+}
+
+@media (max-width: 760px) {
+    .trocar-pecas__peca { grid-template-columns: minmax(0, 1fr); }
+    .trocar-pecas__estados { justify-content: flex-start; }
+    .trocar-pecas__grade { grid-template-columns: minmax(0, 1fr); }
+}

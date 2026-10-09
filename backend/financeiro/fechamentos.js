@@ -183,6 +183,8 @@ const linhaItemProducao = (fechamentoId, l) => comAjustePessoa({
     valor_peca: l.valor_peca ?? null, fracao: l.fracao ?? null, regra: l.regra ?? null,
     fechamento_origem: l.fechamento_origem ?? null,
     ...(l.ajuste_pessoa_id ? { ajuste_pessoa_id: l.ajuste_pessoa_id, ajuste_pessoa: l.ajuste_pessoa || null, colaborador: l.colaborador || null } : {}),
+    // O colaborador do ajuste e do restante: é por ele que a conta do mês fechado se refaz.
+    ...(l.colaborador_id !== null && l.colaborador_id !== undefined ? { colaborador_id: l.colaborador_id, colaborador: l.colaborador || null } : {}),
     ...(l.tipo_item === 'saldo' ? { origem: l.competencia_natural || null } : {})
   }),
   criado_em: c.agora()
@@ -204,9 +206,16 @@ async function fechar({ api, tipo, competencia, hoje, desde, usuarioId = null })
 
   const comissao = tipo === 'comissao';
   const congelar = comissao ? p.itens : p.linhas;
+  // Produção com o rateio em uso: cada processo guarda também as partes por
+  // colaborador — é delas que o negativo de cada um passa para o mês
+  // seguinte (09/10/2026). Sem rateio, o resumo é o de sempre.
+  const partesDo = new Map((p.por_colaborador || []).map(s => [String(s.setor_id ?? s.setor), s.partes]));
   const resumoJson = comissao
     ? p.beneficiarios.map(b => ({ tipo: b.tipo, beneficiario: b.beneficiario, valor: b.valor }))
-    : p.setores.map(s => ({ setor_id: s.setor_id, setor: s.setor, pecas: s.pecas, total: s.total }));
+    : p.setores.map(s => {
+      const partes = partesDo.get(String(s.setor_id ?? s.setor));
+      return { setor_id: s.setor_id, setor: s.setor, pecas: s.pecas, total: s.total, ...(partes ? { partes } : {}) };
+    });
   let cabecalho;
   try {
     cabecalho = await c.inserir(api, 'financeiro_fechamentos', {

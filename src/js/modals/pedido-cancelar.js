@@ -631,7 +631,7 @@
   }
 
   function recalcRemaining(state) {
-    const assigned = normalizeQuantity(state.stock) + normalizeQuantity(state.discard) + sumReallocations(state);
+    const assigned = normalizeQuantity(state.stock) + normalizeQuantity(state.discard) + normalizeQuantity(state.avulsa) + sumReallocations(state);
     const remaining = normalizeQuantity(Math.max(0, toNumber(state.total) - assigned));
     state.remaining = remaining;
     return remaining;
@@ -664,6 +664,15 @@
         label: 'Retornar ao estoque',
         quantity: state.stock,
         colorClass: 'text-amber-300'
+      });
+    }
+    if (normalizeQuantity(state.avulsa) > 0) {
+      chips.push({
+        action: 'avulsa',
+        icon: 'fa-industry',
+        label: 'Continuar produzindo',
+        quantity: state.avulsa,
+        colorClass: 'text-purple-300'
       });
     }
     if (normalizeQuantity(state.discard) > 0) {
@@ -717,7 +726,7 @@
           <span class="font-semibold text-white">${formatUnitsLabel(chip.quantity)}</span>
         </div>
       `;
-      if (chip.action === 'stock' || chip.action === 'discard') {
+      if (chip.action === 'stock' || chip.action === 'discard' || chip.action === 'avulsa') {
         button.title = 'Clique para ajustar a quantidade.';
         button.addEventListener('click', () => handleSimpleAction(key, chip.action));
       } else if (chip.action === 'reallocate' && chip.orderId) {
@@ -988,7 +997,12 @@
   function resetAllDestinations() {
     destinationState.forEach((state, key) => {
       state.stock = 0;
+      // A lista por ponto da rota é o que vai no envio: zerar só o total
+      // deixava as escolhas antigas valendo (09/10/2026).
+      state.stockPorEtapa = [];
       state.discard = 0;
+      state.avulsa = 0;
+      state.avulsaPorEtapa = [];
       state.reallocations = [];
       state.remaining = normalizeQuantity(state.total);
       updateItemDestinationsUI(key);
@@ -1003,10 +1017,11 @@
       const assignedStock = normalizeQuantity(state.stock);
       const assignedDiscard = normalizeQuantity(state.discard);
       const assignedReallocate = sumReallocations(state);
-      if (assignedStock > 0 || assignedDiscard > 0 || assignedReallocate > 0) {
+      const assignedAvulsa = normalizeQuantity(state.avulsa);
+      if (assignedStock > 0 || assignedDiscard > 0 || assignedReallocate > 0 || assignedAvulsa > 0) {
         hasAssignments = true;
       }
-      const remaining = Math.max(0, toNumber(state.total) - (assignedStock + assignedDiscard + assignedReallocate));
+      const remaining = Math.max(0, toNumber(state.total) - (assignedStock + assignedDiscard + assignedReallocate + assignedAvulsa));
       pendingUnits += remaining;
     });
     pendingUnits = normalizeQuantity(pendingUnits);
@@ -1300,6 +1315,7 @@
     const reallocationMap = new Map();
     const stockEntries = [];
     const discardEntries = [];
+    const avulsaEntries = [];
 
     destinationState.forEach((state, key) => {
       const info = itemInfo.get(key);
@@ -1314,6 +1330,11 @@
         const qty = normalizeQuantity(entrada.quantidade);
         if (qty <= 0) return;
         stockEntries.push({ key, indice, name: info.name, quantity: qty });
+      });
+      (state.avulsaPorEtapa || []).forEach((entrada, indice) => {
+        const qty = normalizeQuantity(entrada.quantidade);
+        if (qty <= 0) return;
+        avulsaEntries.push({ key, indice, name: info.name, quantity: qty, ordem: entrada.ordem });
       });
       if (discardQty > 0) {
         // O descarte devolve a peça ao ponto de ORIGEM — é esse o rótulo que
@@ -1342,7 +1363,7 @@
       });
     });
 
-    const hasData = reallocationMap.size || stockEntries.length || discardEntries.length;
+    const hasData = reallocationMap.size || stockEntries.length || discardEntries.length || avulsaEntries.length;
     if (!hasData) {
       summarySection.classList.add('hidden');
       summaryList.innerHTML = '';
@@ -1479,6 +1500,46 @@
       wrapper.appendChild(list);
       summaryList.appendChild(wrapper);
     }
+
+    // "Continuar produzindo" (09/10/2026): seguem em produção como peça avulsa.
+    if (avulsaEntries.length) {
+      const heading = document.createElement('p');
+      heading.className = 'text-xs uppercase tracking-wide text-purple-300 font-semibold mt-4';
+      heading.textContent = 'Continuar produzindo (peça avulsa)';
+      summaryList.appendChild(heading);
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'bg-surface/40 rounded-xl border border-white/10 p-4 space-y-2';
+      const total = normalizeQuantity(avulsaEntries.reduce((sum, item) => sum + item.quantity, 0));
+      wrapper.innerHTML = `
+        <div class="flex items-center justify-between">
+          <p class="text-white text-sm font-semibold">Total</p>
+          <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(total)}</span>
+        </div>
+        <p class="text-[11px] text-gray-300">Ficam no Fechar competência — produção, no card "Peças avulsas"; terminadas, entram no estoque prontas.</p>
+      `;
+      const list = document.createElement('div');
+      list.className = 'space-y-2 pt-2 border-t border-white/5';
+      avulsaEntries.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+        const info = itemInfo.get(String(item.key));
+        const dados = estornoPorItem.get(String(info?.item?.id ?? item.key));
+        const ponto = dados?.rota?.length ? (Number(item.ordem) > 0 ? rotuloDoPonto(dados, Number(item.ordem)) : 'Por começar') : '';
+        btn.innerHTML = `
+          <span class="flex flex-col">
+            <span>${item.name}</span>
+            ${ponto ? `<span class="text-[11px] text-purple-300">segue de ${ponto}</span>` : ''}
+          </span>
+          <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
+        `;
+        btn.addEventListener('click', () => handleSimpleAction(item.key, 'avulsa', item.indice));
+        list.appendChild(btn);
+      });
+      wrapper.appendChild(list);
+      summaryList.appendChild(wrapper);
+    }
   }
 
   function refreshOrdersUI() {
@@ -1540,9 +1601,12 @@
     // isso a segunda escolha podia repetir unidades já destinadas: um grupo de
     // 4 aceitava 4 num ponto e mais 4 em outro, devolvendo 8 peças que não
     // existiam. Editando uma entrada, o teto inclui a quantidade dela.
-    const entradas = action === 'stock' ? (state.stockPorEtapa || []) : [];
+    // Retorno ao estoque e "Continuar produzindo" têm uma entrada por PONTO da rota.
+    const listaDe = { stock: 'stockPorEtapa', avulsa: 'avulsaPorEtapa' };
+    const lista = listaDe[action] || null;
+    const entradas = lista ? (state[lista] || []) : [];
     const emEdicao = indiceEdicao >= 0 ? entradas[indiceEdicao] : null;
-    const currentValue = action === 'stock'
+    const currentValue = lista
       ? normalizeQuantity(emEdicao?.quantidade || 0)
       : normalizeQuantity(state[action] || 0);
     const max = normalizeQuantity(state.remaining + currentValue);
@@ -1558,16 +1622,25 @@
 
     const titles = {
       stock: 'Retorno ao estoque',
-      discard: 'Descartar item'
+      discard: 'Descartar item',
+      avulsa: 'Continuar produzindo'
     };
     const descriptions = {
       stock: `Informe a quantidade de ${info?.name || 'itens'} que retornará ao estoque.`,
-      discard: `Informe a quantidade de ${info?.name || 'itens'} que será descartada.`
+      discard: `Informe a quantidade de ${info?.name || 'itens'} que será descartada.`,
+      avulsa: `Quantas ${info?.name || 'peças'} seguem em produção como peça avulsa, fora de pedido. Terminadas, elas entram no estoque como peças prontas.`
     };
 
     // Só o retorno ao estoque pergunta o ponto da rota. Descarte é sempre
     // "voltar como estava": a peça não avança, ela some do pedido.
-    const etapas = action === 'stock' ? etapasDisponiveis(key, indiceEdicao) : [];
+    const etapas = lista ? etapasDisponiveis(key, indiceEdicao, action) : [];
+    // Sem ponto antes do fim da rota, não há o que continuar produzindo.
+    if (action === 'avulsa' && !etapas.length) {
+      const message = 'Esta peça já está pronta (ou não tem rota de produção): não há o que continuar produzindo. Use "Retorno ao estoque".';
+      if (typeof showToast === 'function') showToast(message, 'info');
+      else if (typeof window.alert === 'function') window.alert(message);
+      return;
+    }
 
     const resposta = await openQuantityDialog({
       title: titles[action] || 'Definir quantidade',
@@ -1575,7 +1648,11 @@
       max,
       initial: currentValue,
       confirmLabel: 'Salvar',
-      etapas
+      etapas,
+      ...(action === 'avulsa' ? {
+        etapaLabel: 'Em que ponto a peça está?',
+        etapaAjuda: 'Ela segue em produção a partir desse ponto: nada volta ao estoque nem à matéria-prima, e o trecho que já andou é pago agora.'
+      } : {})
     });
 
     if (resposta === null) return;
@@ -1583,28 +1660,28 @@
     const quantidade = typeof resposta === 'object' ? resposta.quantidade : resposta;
     const ordem = typeof resposta === 'object' ? resposta.ordem : null;
 
-    if (action === 'stock') {
+    if (lista) {
       // Uma entrada POR PONTO da rota: o mesmo grupo pode voltar em pedaços —
       // duas acabadas, duas paradas no meio — até cobrir a quantidade dele.
-      const lista = state.stockPorEtapa || [];
+      const pontos = state[lista] || [];
 
       if (emEdicao) {
         if (quantidade > 0) {
           emEdicao.quantidade = normalizeQuantity(quantidade);
           emEdicao.ordem = ordem;
         } else {
-          lista.splice(indiceEdicao, 1);
+          pontos.splice(indiceEdicao, 1);
         }
       } else if (quantidade > 0) {
         // Escolher o mesmo ponto duas vezes SOMA, em vez de criar uma linha
         // repetida no resumo.
-        const mesmoPonto = lista.find(e => e.ordem === ordem);
+        const mesmoPonto = pontos.find(e => e.ordem === ordem);
         if (mesmoPonto) mesmoPonto.quantidade = normalizeQuantity(mesmoPonto.quantidade + quantidade);
-        else lista.push({ ordem, quantidade: normalizeQuantity(quantidade) });
+        else pontos.push({ ordem, quantidade: normalizeQuantity(quantidade) });
       }
 
-      state.stockPorEtapa = lista.filter(e => normalizeQuantity(e.quantidade) > 0);
-      state.stock = state.stockPorEtapa.reduce((s, e) => s + normalizeQuantity(e.quantidade), 0);
+      state[lista] = pontos.filter(e => normalizeQuantity(e.quantidade) > 0);
+      state[action] = state[lista].reduce((s, e) => s + normalizeQuantity(e.quantidade), 0);
     } else {
       state[action] = normalizeQuantity(quantidade);
     }
@@ -1621,7 +1698,7 @@
    * produzidas do zero: elas nunca existiram, então podem simplesmente não
    * voltar, devolvendo só o material.
    */
-  function etapasDisponiveis(key, indiceEdicao = -1) {
+  function etapasDisponiveis(key, indiceEdicao = -1, acao = 'stock') {
     const info = itemInfo.get(String(key));
     const dados = estornoPorItem.get(String(info?.item?.id ?? key));
     if (!dados?.rota?.length) return [];
@@ -1634,25 +1711,32 @@
     const state = destinationState.get(String(key));
     // Editando um destino, o ponto dele vem marcado. Criando um novo, nada
     // vem marcado e o padrão é o fim da rota.
+    const avulsa = acao === 'avulsa';
     const jaEscolhido = indiceEdicao >= 0
-      ? (state?.stockPorEtapa || [])[indiceEdicao]?.ordem
+      ? (state?.[avulsa ? 'avulsaPorEtapa' : 'stockPorEtapa'] || [])[indiceEdicao]?.ordem
       : undefined;
 
     const opcoes = [];
     if (piso === 0) {
       opcoes.push({
         ordem: 0,
-        rotulo: 'Não devolver a peça — estornar todo o material',
-        selecionada: jaEscolhido === 0
+        // Na avulsa, o ponto 0 é a peça por começar (ela será produzida inteira).
+        rotulo: avulsa ? 'Por começar — nada feito ainda' : 'Não devolver a peça — estornar todo o material',
+        selecionada: jaEscolhido === 0 || (avulsa && jaEscolhido === undefined)
       });
     }
     for (const passo of dados.rota) {
       if (passo.ordem < piso) continue;
+      // A peça PRONTA não continua em produção: ela vai ao estoque.
+      if (avulsa && passo.ordem >= total) continue;
       opcoes.push({
         ordem: passo.ordem,
         rotulo: `${passo.ordem}/${total} — ${passo.insumo_nome}${passo.processo ? ` (${passo.processo})` : ''}`,
-        // O fim da rota é o padrão: peça acabada é o caso mais comum.
-        selecionada: jaEscolhido === undefined ? passo.ordem === total : jaEscolhido === passo.ordem
+        // O fim da rota é o padrão do estoque (peça acabada é o caso mais
+        // comum); na avulsa, o ponto em que ela entrou.
+        selecionada: jaEscolhido === undefined
+          ? (avulsa ? piso > 0 && passo.ordem === piso : passo.ordem === total)
+          : jaEscolhido === passo.ordem
       });
     }
     return opcoes;
@@ -1914,8 +1998,10 @@
       const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'), '', 'text-emerald-300');
       const reallocateBtn = createActionButton('fa-exchange-alt', 'Realocar em outro pedido', () => handleReallocateClick(key), '', 'text-sky-300');
       const discardBtn = createActionButton('fa-trash', 'Descartar peça', () => handleSimpleAction(key, 'discard'), '', 'text-red-400');
+      // A peça segue em produção fora de pedido (09/10/2026).
+      const avulsaBtn = createActionButton('fa-industry', 'Continuar produzindo (peça avulsa)', () => handleSimpleAction(key, 'avulsa'), '', 'text-purple-300');
 
-      buttonsRow.append(stockBtn, reallocateBtn, discardBtn);
+      buttonsRow.append(stockBtn, reallocateBtn, avulsaBtn, discardBtn);
 
       const assignmentsContainer = document.createElement('div');
       assignmentsContainer.className = 'w-full flex flex-col items-center gap-2 mt-1';
@@ -2079,6 +2165,10 @@
           quantidade: normalizeQuantity(entrada.quantidade)
         })),
         discard: normalizeQuantity(state.discard),
+        avulsaPorEtapa: (state.avulsaPorEtapa || []).map(entrada => ({
+          ordem: entrada.ordem ?? null,
+          quantidade: normalizeQuantity(entrada.quantidade)
+        })),
         reallocations: (state.reallocations || []).map(entry => ({
           orderId: entry.orderId,
           quantity: normalizeQuantity(entry.quantity),
@@ -2120,6 +2210,10 @@
           ? state.stockPorEtapa.reduce((soma, entrada) => soma + entrada.quantidade, 0)
           : normalizeQuantity(destino.stock);
         state.discard = normalizeQuantity(destino.discard);
+        state.avulsaPorEtapa = (destino.avulsaPorEtapa || [])
+          .map(entrada => ({ ordem: entrada.ordem ?? null, quantidade: normalizeQuantity(entrada.quantidade) }))
+          .filter(entrada => entrada.quantidade > 0);
+        state.avulsa = state.avulsaPorEtapa.reduce((soma, entrada) => soma + entrada.quantidade, 0);
         state.reallocations = (destino.reallocations || []).filter(entry => {
           const existe = !pedidosValidos.size || pedidosValidos.has(String(entry.orderId));
           if (!existe) realocacoesDescartadas += 1;
@@ -2166,6 +2260,7 @@
     let totalReallocate = 0;
     let totalStock = 0;
     let totalDiscard = 0;
+    let totalAvulsa = 0;
 
     destinationState.forEach((state, key) => {
       const info = itemInfo.get(key);
@@ -2205,6 +2300,14 @@
         totalDiscard += discardQty;
       }
 
+      // "Continuar produzindo": uma ação por ponto em que as peças estão.
+      (state.avulsaPorEtapa || []).forEach(entrada => {
+        const qty = normalizeQuantity(entrada.quantidade);
+        if (qty <= 0) return;
+        actions.push({ ...base, action: 'avulsa', quantity: qty, ordem: entrada.ordem ?? 0 });
+        totalAvulsa += qty;
+      });
+
       (state.reallocations || []).forEach(entry => {
         const qty = normalizeQuantity(entry.quantity);
         if (qty <= 0) return;
@@ -2226,6 +2329,7 @@
     if (totalReallocate > 0) linhas.push(`${formatUnitsLabel(totalReallocate)} serão realocadas para outros pedidos.`);
     if (totalStock > 0) linhas.push(`${formatUnitsLabel(totalStock)} retornarão ao estoque.`);
     if (totalDiscard > 0) linhas.push(`${formatUnitsLabel(totalDiscard)} serão descartadas.`);
+    if (totalAvulsa > 0) linhas.push(`${formatUnitsLabel(totalAvulsa)} seguem em produção como peças avulsas (Fechar competência — produção).`);
 
     // `window.confirm` é a caixa do sistema operacional: fundo branco, botões
     // em inglês, nada a ver com o resto do app — e num Electron ela ainda

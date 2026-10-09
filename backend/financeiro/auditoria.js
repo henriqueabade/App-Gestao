@@ -26,7 +26,9 @@ const TIPOS = {
   configuracao_alterada: 'Prazos alterados',
   devolucao_registrada: 'Devolução registrada',
   reembolso_confirmado: 'Reembolso confirmado',
-  desconto_parcela: 'Desconto na parcela'
+  desconto_parcela: 'Desconto na parcela',
+  troca_pecas: 'Troca de peças entre pedidos',
+  peca_avulsa: 'Peça avulsa'
 };
 
 async function registrar(api, { tipo, descricao, pedidoId = null, numeroParcela = null, referenciaId = null, valor = null, dados = null, usuarioId = null }) {

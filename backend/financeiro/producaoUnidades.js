@@ -134,6 +134,113 @@ function alocar({ fila = [], eventos = [] }) {
 }
 
 /**
+ * `alocar` com as MUDANÇAS de unidade do item (09/10/2026): a troca de peças
+ * entre pedidos e a peça avulsa de um pedido cancelado.
+ *
+ * Cada mudança tem hora (`em`) e diz, neste processo, o restante de cada
+ * unidade que SAI (`sai`: a fração que faltava nela quando saiu — 0 se o
+ * processo já estava feito) e o que falta em cada unidade que ENTRA
+ * (`entra`). `zerar` (cancelamento) tira todas as unidades antes de entrar.
+ *
+ * O que foi registrado ANTES da mudança consome a fila como era — o valor
+ * de cada registro não muda por causa de uma troca feita depois. O que é
+ * registrado depois consome a fila nova: a unidade que saiu deixou de ser
+ * pendência daqui, e a que entrou deve só o que falta nela (quem a recebeu
+ * pronta não paga de novo). O registro cai no trecho pela hora em que foi
+ * GRAVADO (`criado_em`); sem hora, conta como antes de tudo.
+ *
+ * Devolve o mesmo que `alocar` e mais `pedida`: quantas unidades precisam do
+ * processo agora (a `fila.length` de sempre, depois das mudanças) — e `feito`:
+ * quanto do processo já foi feito nas unidades que estão no item.
+ */
+function alocarComMudancas({ fila = [], eventos = [], mudancas = [] }) {
+  const lista = (mudancas || []).filter(Boolean);
+  if (!lista.length) {
+    const r = alocar({ fila, eventos });
+    const soma = v => v.reduce((s, x) => s + numero(x), 0);
+    return { ...r, pedida: fila.length, feito: quatroCasas(soma(fila) - soma(r.pendentes)) };
+  }
+  const ordem = [...lista].sort((a, b) => String(a.em ?? '').localeCompare(String(b.em ?? '')));
+  const unidadesDaFila = fila.map(f => ({ total: numero(f), resta: numero(f), viva: true }));
+  const porEvento = new Map();
+  let i = 0;
+  const pular = () => {
+    while (i < unidadesDaFila.length && (!unidadesDaFila[i].viva || unidadesDaFila[i].resta <= QUASE_ZERO)) {
+      if (unidadesDaFila[i].viva) unidadesDaFila[i].resta = 0;
+      i += 1;
+    }
+  };
+  const consumir = e => {
+    pular();
+    const fracoes = [];
+    const manual = fracaoDoRegistro(e);
+    if (manual === null) {
+      for (let q = Math.trunc(numero(e.quantidade)); q > 0 && i < unidadesDaFila.length; q -= 1) {
+        fracoes.push(unidadesDaFila[i].resta);
+        unidadesDaFila[i].resta = 0;
+        i += 1;
+        pular();
+      }
+    } else {
+      let f = manual;
+      while (f > QUASE_ZERO && i < unidadesDaFila.length) {
+        const parte = Math.min(f, unidadesDaFila[i].resta);
+        fracoes.push(parte);
+        unidadesDaFila[i].resta -= parte;
+        f -= parte;
+        pular();
+      }
+    }
+    porEvento.set(String(e.id), { fracoes, fracao: fracoes.reduce((s, x) => s + x, 0) });
+  };
+  // A unidade que sai: a viva de restante mais parecido com o dela (as do
+  // mesmo processo são iguais entre si; o que as distingue é quanto falta).
+  const tirar = restante => {
+    const r = numero(restante);
+    let melhor = -1;
+    let distancia = Infinity;
+    unidadesDaFila.forEach((u, k) => {
+      if (!u.viva) return;
+      const d = Math.abs(u.resta - r);
+      if (d < distancia - QUASE_ZERO) { melhor = k; distancia = d; }
+    });
+    if (melhor >= 0) unidadesDaFila[melhor].viva = false;
+  };
+  const aplicar = m => {
+    // Cancelamento: toda unidade do pedido ganhou um destino (estoque,
+    // descarte, outro pedido, avulsa) — sai tudo; só as avulsas voltam a entrar.
+    if (m.zerar) unidadesDaFila.forEach(u => { u.viva = false; });
+    for (const r of m.sai || []) tirar(r);
+    for (const r of m.entra || []) {
+      const f = numero(r);
+      if (f > QUASE_ZERO) unidadesDaFila.push({ total: f, resta: f, viva: true });
+    }
+    i = 0;
+    pular();
+  };
+
+  const vivos = eventos.filter(consome).sort(ordemDoEvento);
+  // No empate (mesmo instante), o registro conta como ANTES da mudança: é o
+  // caso do trecho pago no cancelamento logo antes de a avulsa nascer.
+  const trecho = e => ordem.filter(m => String(e.criado_em ?? '') !== '' && String(e.criado_em) > String(m.em ?? '')).length;
+  for (let k = 0; k <= ordem.length; k += 1) {
+    for (const e of vivos.filter(x => trecho(x) === k)) consumir(e);
+    if (k < ordem.length) aplicar(ordem[k]);
+  }
+  pular();
+  const abertas = unidadesDaFila.filter(u => u.viva && u.resta > QUASE_ZERO);
+  return {
+    porEvento,
+    usadas: unidadesDaFila.filter(u => u.viva && u.resta <= QUASE_ZERO).length,
+    pendentes: abertas.map(u => quatroCasas(u.resta)),
+    cotas: abertas.map(u => (u.total > 0 ? quatroCasas(u.resta / u.total) : 0)),
+    pedida: unidadesDaFila.filter(u => u.viva).length,
+    // O que já foi feito nas unidades que ESTÃO no item (a que saiu levou o dela).
+    feito: quatroCasas(unidadesDaFila.filter(u => u.viva).reduce((s, u) => s + (u.total - u.resta), 0))
+  };
+}
+
+/**
  * O que uma decisão de `unidades` (pode ser quebrada: 0,5 = metade de uma
  * unidade) consome da fila em aberto, na ordem — pura.
  * `pendentes`/`cotas` são os de `alocar`. Devolve a fração de peça paga, as
@@ -212,6 +319,6 @@ function pendenciasDaPeca({ processos = [], etapas = [], valores = [], produtoId
 }
 
 module.exports = {
-  semAcento, passosDoProcesso, fracao, unidadesDoItem, filaDoProcesso, alocar, planoDaDecisao, fracaoDoRegistro,
+  semAcento, passosDoProcesso, fracao, unidadesDoItem, filaDoProcesso, alocar, alocarComMudancas, planoDaDecisao, fracaoDoRegistro,
   regraDaPeca, valorDaPecaInteira, descreverRegra, pendenciasDaPeca
 };

@@ -109,7 +109,8 @@ test('"Tudo"/"Nada" nunca sobrescrevem o que já foi decidido (tela e backend)',
 
   // Backend: com somente_pendentes, a decisão já tomada fica (até numa tela velha).
   const back = fs.readFileSync(path.join(__dirname, 'producaoConfirmacao.js'), 'utf8');
-  assert.match(back, /if \(somentePendentes && decisaoPor\.has\(chave\(d\.pedido_item_id, d\.etapa_id\)\)\) continue;/);
+  // (09/10/2026: a decisão SELADA — de antes de uma troca/avulsa — não conta como tomada.)
+  assert.match(back, /if \(somentePendentes && \(processo \? processo\.decidido : decisaoPor\.has\(chave\(d\.pedido_item_id, d\.etapa_id\)\)\)\) continue;/);
   const rota = fs.readFileSync(path.join(__dirname, '..', 'financeiroController.js'), 'utf8');
   assert.match(rota, /somentePendentes: req\.body\?\.somente_pendentes === true/);
 });

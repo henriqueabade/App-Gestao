@@ -97,6 +97,10 @@ app.use('/api/pedidos', pedidosRouter);
 // Filtro avançado de Produtos, Orçamentos e Pedidos: que peça está em que
 // documento (08/10/2026). Antes do proxy genérico: "vinculos-pecas" não é tabela.
 app.use('/api/vinculos-pecas', require('./vinculosDasPecas'));
+// Troca de peças entre pedidos (09/10/2026). Antes do proxy genérico.
+app.use('/api/trocas-pecas', require('./trocasPecas'));
+// Peças avulsas do pedido cancelado ("Continuar produzindo"). Antes do proxy genérico.
+app.use('/api/pecas-avulsas', require('./pecasAvulsas'));
 app.use('/api/prospeccoes', prospeccoesRouter);
 // Histórico social de Prospecções e Clientes (curtidas, comentários, anexos)
 // e os avisos do sino. Tabelas em sql/historico_social.sql.

@@ -1,0 +1,83 @@
+<!--
+  Trocar peças entre pedidos (pedido do dono, 09/10/2026). A peça deste pedido
+  vai para outro pedido no estado em que está, e a peça do mesmo produto que
+  estava lá vem no lugar — sem mexer na matéria-prima. Quem fica com a peça
+  menos adiantada volta a dever a produção dela; quem recebe a peça pronta não
+  paga de novo. Dados: GET /api/trocas-pecas/pedido/:id; grava em
+  POST /api/trocas-pecas (permissão ped.trocar_pecas).
+  Script: src/js/modals/pedido-trocar-pecas.js.
+-->
+<div id="trocarPecasOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div role="dialog" aria-modal="true" aria-labelledby="trocarPecasTitulo" tabindex="0" class="w-full max-w-6xl h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarTrocarPecas" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="trocarPecasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-exchange-alt mr-2" aria-hidden="true"></i>Trocar peças entre pedidos</h2>
+        <p id="trocarPecasSubtitulo" class="text-sm text-gray-300 truncate"></p>
+      </div>
+      <button id="fecharTrocarPecas" type="button" class="btn-danger ctl-botao text-white justify-self-end">Fechar</button>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p id="trocarPecasCarregando" class="text-sm text-gray-300">Carregando as peças...</p>
+        <div id="trocarPecasAviso" class="hidden trocar-pecas__aviso" role="alert"></div>
+
+        <div id="trocarPecasConteudo" class="hidden space-y-6">
+          <div class="trocar-pecas__explica">
+            <i class="fas fa-circle-info" aria-hidden="true"></i>
+            <p>Escolha a peça deste pedido que vai sair e, entre as peças iguais de outros pedidos, a que vem no lugar. Cada uma vai no estado em que está. Nada sai da matéria-prima: quem fica com a peça menos adiantada volta a dever a produção dela, e quem recebe a peça pronta não paga a produção de novo.</p>
+          </div>
+
+          <div>
+            <p class="ctl-rotulo text-white">1. A peça que sai deste pedido</p>
+            <div id="trocarPecasItens" class="space-y-3"></div>
+          </div>
+
+          <div id="trocarPecasPasso2" class="hidden">
+            <p class="ctl-rotulo text-white">2. A peça que vem no lugar (do mesmo produto, de outro pedido)</p>
+            <div id="trocarPecasCandidatos" class="space-y-3"></div>
+            <p id="trocarPecasSemCandidato" class="hidden text-sm text-gray-300">Nenhum outro pedido Aprovado ou em Produção tem esta peça para trocar.</p>
+          </div>
+
+          <div id="trocarPecasPasso3" class="hidden space-y-4">
+            <p class="ctl-rotulo text-white">3. Confirme a troca</p>
+            <div class="trocar-pecas__grade">
+              <label class="ctl-rotulo text-white">Quantas peças
+                <input id="trocarPecasQuantidade" type="number" min="1" step="1" value="1" class="ctl-campo input-glass text-white w-full">
+              </label>
+              <label class="ctl-rotulo text-white trocar-pecas__motivo">Motivo
+                <textarea id="trocarPecasMotivo" rows="2" maxlength="500" class="ctl-campo input-glass text-white w-full placeholder-white/50" placeholder="Por que a peça muda de pedido (ao menos 10 letras)"></textarea>
+              </label>
+            </div>
+            <div id="trocarPecasResumo" class="trocar-pecas__resumo"></div>
+            <div id="trocarPecasMensagem" class="hidden text-sm" role="alert"></div>
+            <div class="ctl-acoes justify-end">
+              <button id="trocarPecasLimpar" type="button" class="btn-neutral ctl-botao text-white">Escolher de novo</button>
+              <button id="trocarPecasConfirmar" type="button" data-perm="ped.trocar_pecas" class="btn-primary ctl-botao text-white"><i class="fas fa-exchange-alt" aria-hidden="true"></i> Trocar peças</button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="ctl-rotulo text-white">Trocas deste pedido</p>
+            <div class="trocar-pecas__tabela glass-surface rounded-xl border border-white/10">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs">Data</th>
+                    <th class="px-4 py-3 text-left text-xs">Peça</th>
+                    <th class="px-4 py-3 text-left text-xs">Saiu daqui</th>
+                    <th class="px-4 py-3 text-left text-xs">Entrou aqui</th>
+                    <th class="px-4 py-3 text-left text-xs">Com o pedido</th>
+                    <th class="px-4 py-3 text-left text-xs">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody id="trocarPecasHistorico" class="divide-y divide-white/10"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

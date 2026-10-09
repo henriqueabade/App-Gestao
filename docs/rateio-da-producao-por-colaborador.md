@@ -122,3 +122,35 @@ guarda quem cadastrou, editou e tirou.
 - Tela: `src/html/modals/financeiro/rateio-producao.html` e
   `montarRateioProducao` em `src/js/modals/financeiro-modais.js`; teste em
   `src/js/__tests__/rateioProducao.test.js`.
+
+## O negativo é de quem recebeu a mais (09/10/2026)
+
+Decisão do dono: **quem recebeu a mais é quem devolve**. Antes o saldo
+negativo do mês (uma decisão refeita, um estorno, um ajuste) ficava no
+**processo** e era descontado de quem trabalhasse nele no mês seguinte, mesmo
+que fosse outra pessoa.
+
+Agora, com o rateio em uso (há colaborador cadastrado):
+
+- O mês é dividido **por colaborador dentro de cada processo**: as linhas de
+  produção somam por peça + processo e se dividem pelo rateio daquela peça
+  (o centavo do arredondamento vai para a maior parte quando a divisão fecha
+  100%). Ajuste e saldo que já nascem com dono (`colaborador_id`) vão inteiros
+  para ele.
+- **A pagar** = a soma das partes **positivas**. Uma parte negativa não
+  desconta da parte dos outros: ela vira o **"Ajuste restante de {mês} ·
+  Fulano"** do mês seguinte, com `colaborador_id`, e só desconta do que o
+  próprio Fulano tiver a receber.
+- O fechamento guarda as partes no `por_setor` (`partes` de cada processo) e
+  cada linha de produção leva `colaborador_id`/`colaborador` nos detalhes; o
+  repasse do mês aberto e o "Registrar ajuste" por pessoa usam a mesma conta.
+- Na tela do rateio, a lista **por pessoa** mostra o negativo em vermelho com
+  "· fica para o próximo mês". No "Registrar ajuste", o valor da pessoa no mês
+  é o da parte dela, não o do processo inteiro.
+
+Sem colaborador cadastrado nada muda: o negativo continua no processo.
+
+Código: `partesDoMes`, `contaDasPartes` e `totaisDasPartes` em
+`backend/financeiro/rateios.js`; `negativosDoMes` e `partesSePuder` em
+`backend/financeiro/producao.js`. Teste em
+`backend/financeiro/producaoPorColaborador.test.js`.

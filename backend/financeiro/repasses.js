@@ -148,6 +148,10 @@ function deProducao({ estado, pend, configuracao, feriados = [], referencia }) {
         ...producao.restantesDoMes({ pend: linhasPend, estado, competencia, propria: true })
       ];
       const r = producao.resumir(linhas);
+      // Com o rateio em uso, o que se paga é a soma das partes positivas de
+      // cada colaborador (o negativo de um não abate o de outro, 09/10/2026).
+      const partes = producao.partesSePuder(estado, linhas);
+      if (partes) Object.assign(r, require('./rateios').contaDasPartes(partes));
       if (!(r.a_pagar > 0)) continue;
       linha = {
         situacao: 'nao_fechada', valor: r.a_pagar, total: r.a_pagar, pago: 0,

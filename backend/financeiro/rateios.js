@@ -222,6 +222,120 @@ function contagem(estado) {
   return { pecas, processos, unidades: (estado || []).reduce((s, p) => s + p.processos.reduce((t, x) => t + (Number(x.quantidade) || 0), 0), 0) };
 }
 
+/**
+ * O mês da produção POR COLABORADOR, processo a processo (decisão do dono,
+ * 09/10/2026: "quem recebeu a mais é quem devolve").
+ *
+ *   - a produção de uma peça vai para quem tem o rateio dela, na proporção
+ *     (o que não foi distribuído fica sem colaborador);
+ *   - o ajuste por pessoa e o "Ajuste restante do mês anterior" que têm
+ *     colaborador vão inteiros para ele;
+ *   - o resto (ajuste sem colaborador, processo sem rateio) fica no processo,
+ *     sem colaborador.
+ *
+ * Devolve [{ setor_id, setor, total, partes: [{ colaborador_id, colaborador,
+ * total }] }] — `colaborador_id: null` é a parte sem colaborador. É com as
+ * partes que o fechamento sabe o que pagar e quem leva o negativo. Pura.
+ */
+function partesDoMes({ linhas = [], rateios = [], colaboradores = [] }) {
+  const nomeDo = new Map((colaboradores || []).filter(Boolean).map(x => [String(x.id), x.nome]));
+  const divisaoDo = new Map();
+  for (const r of (rateios || []).filter(x => x && ativo(x.ativo))) {
+    const k = chaveDoProcesso(r.pedido_item_id, r.setor_id);
+    if (!divisaoDo.has(k)) divisaoDo.set(k, []);
+    divisaoDo.get(k).push({ colaborador_id: r.colaborador_id, percentual: arredondar(Number(r.percentual) || 0) });
+  }
+  const setores = new Map();
+  const somar = (setorId, setor, colaboradorId, colaborador, valor) => {
+    const ks = String(setorId ?? setor);
+    const s = setores.get(ks) || { setor_id: setorId ?? null, setor, total: 0, partes: new Map() };
+    const kc = colaboradorId === null || colaboradorId === undefined ? '' : String(colaboradorId);
+    const p = s.partes.get(kc) || {
+      colaborador_id: kc ? colaboradorId : null,
+      colaborador: kc ? (nomeDo.get(kc) || colaborador || `colaborador ${colaboradorId}`) : null,
+      total: 0
+    };
+    p.total = c.centavos(p.total + valor);
+    s.partes.set(kc, p);
+    s.total = c.centavos(s.total + valor);
+    setores.set(ks, s);
+  };
+
+  // A produção de cada peça é somada por processo ANTES de dividir (a mesma
+  // conta do estado do rateio: várias linhas do processo viram uma).
+  const porProcesso = new Map();
+  for (const l of (linhas || []).filter(Boolean)) {
+    const valor = Number(l.total) || 0;
+    if (l.colaborador_id !== null && l.colaborador_id !== undefined) {
+      somar(l.setor_id, l.setor, l.colaborador_id, l.colaborador, valor);
+    } else if (l.tipo_item === 'producao' && l.pedido_item_id !== null && l.pedido_item_id !== undefined && l.setor_id !== null && l.setor_id !== undefined) {
+      const k = chaveDoProcesso(l.pedido_item_id, l.setor_id);
+      const atual = porProcesso.get(k) || { setor_id: l.setor_id, setor: l.setor, valor: 0 };
+      atual.valor = c.centavos(atual.valor + valor);
+      porProcesso.set(k, atual);
+    } else {
+      somar(l.setor_id, l.setor, null, null, valor);
+    }
+  }
+  for (const [k, p] of porProcesso) {
+    const divisao = (divisaoDo.get(k) || []).filter(d => d.percentual > 0)
+      .sort((a, b) => b.percentual - a.percentual || Number(a.colaborador_id) - Number(b.colaborador_id));
+    let distribuido = 0;
+    const partes = divisao.map(d => {
+      const parte = c.centavos(p.valor * d.percentual / TOTAL);
+      distribuido = c.centavos(distribuido + parte);
+      return { ...d, parte };
+    });
+    // O centavo do arredondamento fica com quem tem a maior parte quando o
+    // processo está 100% distribuído; distribuído pela metade, o que sobra é
+    // do processo (sem colaborador).
+    const sobra = c.centavos(p.valor - distribuido);
+    const completo = Math.abs(somaDosPercentuais(divisao) - TOTAL) <= TOLERANCIA;
+    if (completo && partes.length && Math.abs(sobra) < 0.05) partes[0].parte = c.centavos(partes[0].parte + sobra);
+    for (const d of partes) somar(p.setor_id, p.setor, d.colaborador_id, null, d.parte);
+    if (!(completo && partes.length) && Math.abs(sobra) >= 0.01) somar(p.setor_id, p.setor, null, null, sobra);
+  }
+  return [...setores.values()]
+    .map(s => ({
+      setor_id: s.setor_id, setor: s.setor, total: s.total,
+      partes: [...s.partes.values()].sort((a, b) => (a.colaborador_id === null) - (b.colaborador_id === null) || String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR'))
+    }))
+    .sort((a, b) => String(a.setor).localeCompare(String(b.setor), 'pt-BR'));
+}
+
+/**
+ * O que se paga e o que fica para o mês seguinte, pelas partes: cada parte
+ * positiva se paga; cada negativa não se paga e passa adiante, com o
+ * colaborador dela. Pura.
+ */
+function contaDasPartes(partes = []) {
+  let aPagar = 0;
+  let aCompensar = 0;
+  for (const s of partes || []) {
+    for (const p of s.partes || []) {
+      if (p.total > 0) aPagar = c.centavos(aPagar + p.total);
+      else if (p.total < 0) aCompensar = c.centavos(aCompensar + p.total);
+    }
+  }
+  return { a_pagar: aPagar, a_compensar: aCompensar };
+}
+
+/** Quanto cada colaborador tem no mês, somando os processos (as partes de `partesDoMes`). Pura. */
+function totaisDasPartes(partes = []) {
+  const mapa = new Map();
+  for (const s of partes || []) {
+    for (const p of s.partes || []) {
+      if (p.colaborador_id === null || p.colaborador_id === undefined) continue;
+      const k = String(p.colaborador_id);
+      const atual = mapa.get(k) || { colaborador_id: p.colaborador_id, colaborador: p.colaborador, valor: 0, processos: 0 };
+      atual.valor = c.centavos(atual.valor + p.total);
+      atual.processos += 1;
+      mapa.set(k, atual);
+    }
+  }
+  return [...mapa.values()].sort((a, b) => b.valor - a.valor || String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR'));
+}
+
 /** O que cada colaborador tem a receber, somando todos os processos. Pura. */
 function resumoPorColaborador(estado) {
   const mapa = new Map();
@@ -312,11 +426,15 @@ async function lerVisao({ api, linhas = [] }) {
     };
   }
   const estado = estadoDasPecas({ pecas: pecasDaCompetencia(linhas), rateios, colaboradores });
+  // Quem recebe quanto no mês: a produção das peças, os ajustes por pessoa e
+  // o restante do mês anterior de cada um (09/10/2026). Antes só a produção.
+  const partes = partesDoMes({ linhas, rateios, colaboradores });
   return {
     sql_pendente: false,
     colaboradores,
     pecas: estado,
-    resumo: resumoPorColaborador(estado),
+    resumo: totaisDasPartes(partes),
+    partes,
     pendentes: processosPendentes(estado).length,
     contagem: contagem(estado),
     total: c.centavos(estado.reduce((s, p) => s + (Number(p.valor) || 0), 0)),
@@ -473,7 +591,7 @@ module.exports = {
   SQL_ARQUIVO, SQL_FALTANDO, TABELAS, TOTAL, TOLERANCIA, chaveDoProcesso,
   lerPercentual, formatarPercentual, somaDosPercentuais, restanteDoRateio, rateioCompleto,
   problemaDaLinha, distribuirValor, pecasDaCompetencia, estadoDasPecas, processosPendentes,
-  contagem, resumoPorColaborador, bloqueioDoFechamento,
+  contagem, resumoPorColaborador, partesDoMes, contaDasPartes, totaisDasPartes, bloqueioDoFechamento,
   tabelaAusente, lerVisao, listarColaboradores, listarRateios,
   salvarColaborador, removerColaborador, salvarLinha, aplicarNaPeca, removerLinha
 };

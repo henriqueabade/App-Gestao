@@ -808,6 +808,12 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_stock_restore_on_cancel",
         "label": "Realocar estoque ao cancelar",
         "desc": "Coluna \"Destinações\" e botão \"Reiniciar Destinação\""
+      },
+      {
+        "key": "ped.trocar_pecas",
+        "column": "acao_trocar_pecas",
+        "label": "Trocar peças entre pedidos",
+        "desc": "Ícone de troca na lista de pedidos — a peça vai para outro pedido no estado em que está e a do mesmo produto vem no lugar (sem mexer na matéria-prima); também a peça avulsa do pedido cancelado"
       }
     ],
     "columns": [

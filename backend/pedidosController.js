@@ -32,6 +32,9 @@ const etiquetasProduto = require('./etiquetasProduto');
 const MAX_PEDIDOS_NO_AGRUPAMENTO = 60;
 const { getMaxId, inserirLinhaComId } = require('./idsSequenciais');
 const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
+// Peças avulsas ("Continuar produzindo" no cancelamento, 09/10/2026).
+const pecasAvulsas = require('./pecasAvulsas');
+const mudancasUnidades = require('./financeiro/mudancasUnidades');
 const { registrarEntrada, registrarSaida } = require('./materiaPrima');
 const {
   alteracoesRecebidas,
@@ -232,6 +235,9 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
 
     const avisos = [];
     let estorno = null;
+    // "Continuar produzindo" no cancelamento (09/10/2026): gravadas DEPOIS de
+    // apurar a produção do cancelamento (backend/pecasAvulsas.js).
+    let avulsasDoCancelamento = [];
 
     // Sem a leitura, a regra do faturamento não tem com o que comparar. O
     // pedido é enviado do mesmo jeito (o dia do embarque é gravado), mas o
@@ -258,6 +264,12 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     // deu certo.
     // ------------------------------------------------------------------
     if (status === 'Cancelado') {
+      // Peça avulsa sem a tabela dela: recusa ANTES de mexer em qualquer coisa
+      // (sem a tabela, a peça não iria nem para o estoque nem para a produção).
+      const pedeAvulsa = (Array.isArray(req.body?.acoes) ? req.body.acoes : []).some(a => (a?.action || a?.acao) === 'avulsa');
+      if (pedeAvulsa && !(await pecasAvulsas.tabelaPronta(api))) {
+        return res.status(409).json({ error: `"Continuar produzindo" precisa do SQL novo: ${mudancasUnidades.SQL_FALTANDO}`, code: 'SQL_PENDENTE', sql_pendente: true });
+      }
       try {
         const resultado = await estornarCancelamento(api, {
           pedidoId: id,
@@ -272,6 +284,7 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         });
         estorno = resultado.resumo;
         avisos.push(...resultado.avisos);
+        avulsasDoCancelamento = resultado.avulsas || [];
       } catch (err) {
         console.error('Falha ao estornar o cancelamento:', err);
         // Decisão que não fecha com o pedido: nada foi gravado e o pedido NÃO é
@@ -329,7 +342,7 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       try {
         const dia = hojeEmSaoPaulo();
         const r = await confirmacaoDaProducao.confirmarCancelamento({
-          api, pedidoId: id, data: dia, hoje: dia, usuarioId: idDoUsuarioDaRequisicao(req)
+          api, pedidoId: id, data: dia, hoje: dia, usuarioId: idDoUsuarioDaRequisicao(req), avulsas: avulsasDoCancelamento
         });
         avisos.push(...(r.avisos || []));
         if (r.confirmado) {
@@ -337,6 +350,16 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         }
       } catch (err) {
         avisos.push(`O pedido foi cancelado, mas a produção não foi apurada: ${err?.message || err}`);
+      }
+      // As peças avulsas entram na produção agora, depois do trecho pago.
+      if (avulsasDoCancelamento.length) {
+        try {
+          const r = await pecasAvulsas.criarDoCancelamento(api, { pedidoId: id, avulsas: avulsasDoCancelamento, usuarioId: idDoUsuarioDaRequisicao(req) });
+          avisos.push(...(r.avisos || []));
+          if (r.criadas.length) avisos.push(`${r.criadas.length} peça(s) seguem em produção como avulsas (Fechar competência — produção).`);
+        } catch (err) {
+          avisos.push(`As peças avulsas não foram gravadas: ${err?.message || err}. Confira as peças deste pedido.`);
+        }
       }
     }
 
