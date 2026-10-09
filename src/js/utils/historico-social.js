@@ -476,6 +476,8 @@
       return caixa;
     }
 
+    const anexoEhPdf = a => /pdf/i.test(String(a?.tipo || '')) || /\.pdf$/i.test(String(a?.nome || ''));
+
     function linhaDeAnexos(anexos = []) {
       const lista = criar('div', 'hs-anexos');
       for (const a of anexos) {
@@ -494,6 +496,21 @@
     }
 
     async function baixarAnexo(anexo, { abrir }) {
+      // Visualizador de PDF (Fase 6): o anexo em PDF abre no "Visualizar
+      // documento", com os bytes guardados; os outros tipos continuam no
+      // programa do Windows.
+      if (abrir && anexoEhPdf(anexo) && window.VisualizadorPdf) {
+        window.VisualizadorPdf.abrir({
+          titulo: anexo.nome || 'Anexo',
+          nomeArquivo: String(anexo.nome || 'anexo').replace(/\.pdf$/i, ''),
+          tituloSalvar: 'Salvar anexo',
+          gerar: async () => {
+            const arquivo = await chamar(`/anexos/${anexo.id}`);
+            return { base64: arquivo.base64 };
+          }
+        });
+        return;
+      }
       try {
         window.showToast?.(`Baixando ${anexo.nome}…`, 'info');
         const arquivo = await chamar(`/anexos/${anexo.id}`);

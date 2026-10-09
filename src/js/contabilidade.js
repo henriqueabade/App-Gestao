@@ -817,12 +817,25 @@ async function ctbAbrirObjeto(objeto, { doModal = false } = {}) {
 // Contatos também cita documentos e contas (o "'" da ficha) e abre por aqui.
 window.ContabilidadeAbrirObjeto = (objeto, opcoes) => ctbAbrirObjeto(objeto, opcoes);
 
-/** O arquivo guardado na Contabilidade, aberto no programa do computador. */
+/**
+ * O arquivo guardado na Contabilidade: o PDF no "Visualizar documento"
+ * (Visualizador de PDF, Fase 6), os outros tipos no programa do computador.
+ */
 async function ctbAbrirArquivo(id) {
     window.showToast?.('Abrindo o arquivo…', 'info');
     const { corpo, erro } = await ctbChamarApi(`/api/contabilidade/arquivos/${encodeURIComponent(id)}`);
     if (erro || !corpo?.base64) {
         window.showToast?.(erro?.status === 404 ? 'O arquivo não existe mais.' : (erro?.message || 'Não foi possível abrir o arquivo.'), 'error');
+        return;
+    }
+    const ehPdf = /pdf/i.test(String(corpo.tipo || '')) || /\.pdf$/i.test(String(corpo.nome || ''));
+    if (ehPdf && window.VisualizadorPdf) {
+        window.VisualizadorPdf.abrir({
+            titulo: corpo.nome || 'Documento',
+            nomeArquivo: String(corpo.nome || 'documento').replace(/\.pdf$/i, ''),
+            tituloSalvar: 'Salvar arquivo',
+            gerar: async () => ({ base64: corpo.base64 })
+        });
         return;
     }
     const r = await window.electronAPI?.salvarArquivoBinario?.({ base64: corpo.base64, nomeSugerido: corpo.nome, abrir: true, titulo: 'Abrir arquivo' });

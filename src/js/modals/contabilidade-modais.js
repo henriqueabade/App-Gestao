@@ -397,11 +397,25 @@
     return Promise.resolve();
   }
 
+  const arquivoEhPdf = a => /pdf/i.test(String(a?.tipo || '')) || /\.pdf$/i.test(String(a?.nome || ''));
+
   /** Baixa (ou abre) um arquivo que a rota devolve como { nome, base64 }. */
   async function baixarArquivo(caminho, { abrir = false } = {}) {
     try {
       window.showToast?.('Baixando o arquivo…', 'info');
       const r = await fetchApi(caminho);
+      // Visualizador de PDF (Fase 6): o "Abrir" de um PDF vai para o
+      // "Visualizar documento", com os bytes que vieram; os outros tipos
+      // continuam no programa do Windows.
+      if (abrir && window.VisualizadorPdf && arquivoEhPdf(r)) {
+        window.VisualizadorPdf.abrir({
+          titulo: r.nome || 'Documento',
+          nomeArquivo: String(r.nome || 'documento').replace(/\.pdf$/i, ''),
+          tituloSalvar: 'Salvar arquivo',
+          gerar: async () => ({ base64: r.base64 })
+        });
+        return;
+      }
       if (window.electronAPI?.salvarArquivoBinario) {
         const s = await window.electronAPI.salvarArquivoBinario({ base64: r.base64, nomeSugerido: r.nome, abrir, titulo: 'Salvar arquivo' });
         if (s && !s.success && !s.canceled) window.showToast?.(s.message || 'Não foi possível salvar o arquivo.', 'error');

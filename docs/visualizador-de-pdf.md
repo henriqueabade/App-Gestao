@@ -61,12 +61,12 @@ Os geradores prontos:
 | 5 | Contabilidade › DDA › Espelho | deHtml (paisagem) |
 | 5 | Contabilidade › Comprovantes (PDF) e Terceiros (Comprovante); Aplicações (PDF original) | os bytes guardados, sem refazer (`verPdfGuardado`) |
 
+| 6 | Anexos em PDF do histórico social (clicar no nome do anexo) | os bytes guardados |
+| 6 | Contabilidade › arquivos das fichas, Evidências e o "Abrir" do módulo | os bytes guardados |
+
 O pacote da contabilidade continua gerando o PDF do relatório por dentro, sem
-mostrar.
-
-Fica para a próxima fase:
-
-- **Fase 6:** anexos em PDF (histórico social, arquivos da Contabilidade).
+mostrar. Nos anexos, só o PDF abre no visualizador: os outros tipos
+continuam no programa do Windows, e o "Salvar como…" continua salvando.
 
 O que **não** muda: a planilha de etiquetas de produto (Excel), os XML e o
 DANFE anexado ao e-mail, que é gerado sem mostrar.

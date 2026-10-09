@@ -150,6 +150,20 @@ test('Fase 5: Contabilidade — relatório mensal, Espelho DDA, comprovantes e a
     assert.match(ler('src/html/modals/contabilidade/relatorio.html'), /id="ctbRelPdf"[^>]*>Ver PDF<\/button>/);
 });
 
+test('Fase 6: anexos em PDF (histórico social e arquivos da Contabilidade) no visualizador; os outros tipos no Windows', () => {
+    const hs = ler('src/js/utils/historico-social.js');
+    assert.ok(hs.includes("const anexoEhPdf = a => /pdf/i.test(String(a?.tipo || '')) || /\\.pdf$/i.test(String(a?.nome || ''));"));
+    const baixar = hs.slice(hs.indexOf('async function baixarAnexo'), hs.indexOf('function textoRico'));
+    assert.ok(baixar.indexOf('if (abrir && anexoEhPdf(anexo) && window.VisualizadorPdf)') < baixar.indexOf('salvarArquivoBinario'), 'PDF antes do programa do Windows');
+    assert.ok(baixar.includes("abrir, titulo: 'Salvar anexo'"), 'o resto continua abrindo no Windows, e o "Salvar como…" continua salvando');
+    const ctb = ler('src/js/modals/contabilidade-modais.js');
+    const arquivo = ctb.slice(ctb.indexOf('async function baixarArquivo'), ctb.indexOf('const iconeDoArquivo'));
+    assert.ok(arquivo.indexOf('if (abrir && window.VisualizadorPdf && arquivoEhPdf(r))') < arquivo.indexOf('salvarArquivoBinario'));
+    const modulo = ler('src/js/contabilidade.js');
+    const abrir = modulo.slice(modulo.indexOf('async function ctbAbrirArquivo'), modulo.indexOf('function ctbOpcoesMensagens'));
+    assert.ok(abrir.indexOf('if (ehPdf && window.VisualizadorPdf)') < abrir.indexOf('salvarArquivoBinario'));
+});
+
 test('Fase 3: relatórios do Financeiro, ficha e movimentações de Produtos, auditoria da Matéria-prima', () => {
     const fin = ler('src/js/modals/financeiro-modais.js');
     const exportar = fin.slice(fin.indexOf('async function exportarRelatorio'), fin.indexOf('function montarAjuste'));
