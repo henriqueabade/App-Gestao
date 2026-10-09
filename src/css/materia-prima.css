@@ -411,9 +411,12 @@ body {
 .toast-error { background-color: #dc2626; }
 .toast-info { background-color: #2563eb; }
 
+/* O "0 Estoque" fica no lugar dele, depois das etiquetas dos Totais. A margem
+   negativa de −4,5vw que havia aqui o puxava para cima da última etiqueta
+   ("Acabando") — dono, 09/10/2026. A etiqueta que não cabe desce para a
+   linha escondida de `.tags-uma-linha` (utilitarios.css): a barra não cresce. */
 #zeroStockbt {
-    margin-left: -4.5vw; /* Evita sobreposição do toggle com a barra lateral */
-    flex-shrink: 1; /* Permite que o toggle encolha se necessário */
+    flex-shrink: 0;
 }
 /* Limit table height to avoid page scroll */
 .table-scroll {

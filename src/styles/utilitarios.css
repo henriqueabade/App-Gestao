@@ -56,6 +56,14 @@
 
 /* texto */
 .break-all { word-break: break-all; }
+/* Célula que nunca quebra a linha (listas de Pedidos e Orçamentos, dono
+   09/10/2026: código, data, valor e status sempre numa linha só). A
+   `.table-scroll` do scroll.css deixa toda célula quebrar — no meio da
+   palavra ("PE D12 0") quando a coluna aperta — e vence o
+   `whitespace-nowrap` do Tailwind; daí o seletor mais forte. */
+.sem-quebra,
+.table-scroll th.sem-quebra,
+.table-scroll td.sem-quebra { white-space: nowrap; word-break: normal; hyphens: none; }
 .select-all { user-select: all; }
 
 @media (min-width: 640px) {

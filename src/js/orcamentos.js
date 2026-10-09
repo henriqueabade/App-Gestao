@@ -327,13 +327,13 @@ async function carregarOrcamentos() {
                 : 'Converter em pedido';
             const convertClass = convertBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
-                <td data-perm-col="col_orc_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
+                <td data-perm-col="col_orc_num" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
                 <td data-perm-col="col_orc_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterDestinatario(o)}</td>
-                <td data-perm-col="col_orc_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
-                <td data-perm-col="col_orc_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
-                <td data-perm-col="col_orc_cond_pagto" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td data-perm-col="col_orc_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">
+                <td data-perm-col="col_orc_data" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
+                <td data-perm-col="col_orc_total" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
+                <td data-perm-col="col_orc_cond_pagto" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
+                <td data-perm-col="col_orc_status" class="sem-quebra px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
+                <td class="sem-quebra px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
                         <i data-perm="orc.convert" class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="${convertTitle}"></i>
                         <i data-perm="orc.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
@@ -509,7 +509,7 @@ function filtroAvancadoNaLinha(row, termos) {
         pecas: pecasDosOrcamentos.pecas(row.dataset.id)
     });
     if (resultado.casa && resultado.pecas.length && celula) {
-        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.rotuloDaPeca)));
+        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.etiquetaCurtaDaPeca)));
     }
     return resultado.casa;
 }

@@ -174,3 +174,49 @@ test('menu lateral: rola quando passa da altura, sem mudar largura (barra reserv
     assert.ok(!/#sidebar > nav::-webkit-scrollbar/.test(css));
     assert.match(ler('styles/scroll.css'), /:where\(\*\)::-webkit-scrollbar \{\s*\n\s*width: 6px;/);
 });
+
+// Correções de 09/10/2026 (prints do dono).
+test('Pedidos e Orçamentos: etiqueta só com código e quantidade, o nome no balão do mouse', () => {
+    const { FiltrosAvancados } = carregarUtil('js/utils/filtros-avancados.js');
+    const peca = { codigo: 'AVSØ 0114 MUI', nome: 'Apaga Velas Silvia - 1 (Ø50 × 14h) - Muiracatiara', quantidade: 1 };
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(FiltrosAvancados.etiquetaCurtaDaPeca(peca))),
+        { texto: 'AVSØ 0114 MUI (1)', titulo: 'Apaga Velas Silvia - 1 (Ø50 × 14h) - Muiracatiara' });
+    const html = FiltrosAvancados.achadosHtml([FiltrosAvancados.etiquetaCurtaDaPeca(peca)]);
+    assert.ok(html.includes('title="Apaga Velas Silvia - 1 (Ø50 × 14h) - Muiracatiara">AVSØ 0114 MUI (1)</span>'), html);
+    // Texto solto continua valendo (o +N junta o resto no balão).
+    assert.ok(FiltrosAvancados.achadosHtml(['a', 'b', 'c', { texto: 'X (2)', titulo: 'Peça X' }]).includes('title="X (2) — Peça X">+1<'));
+    for (const arquivo of ['js/orcamentos.js', 'js/pedidos.js']) {
+        assert.ok(ler(arquivo).includes('achadosHtml(resultado.pecas.map(window.FiltrosAvancados.etiquetaCurtaDaPeca))'), arquivo);
+    }
+});
+
+test('Pedidos e Orçamentos: "Cód.", "Valor Tot." e código, data, valor e status sem quebrar a linha', () => {
+    for (const [html, js, pre, cond] of [['html/pedidos.html', 'js/pedidos.js', 'ped', 'condicao'], ['html/orcamentos.html', 'js/orcamentos.js', 'orc', 'cond_pagto']]) {
+        const pagina = ler(html);
+        const cabecalhos = pagina.match(/<th[^>]*>[^<]*<\/th>/g);
+        assert.strictEqual(cabecalhos.length, 7, html);
+        cabecalhos.forEach(th => assert.ok(th.includes('class="sem-quebra '), `${html}: ${th}`));
+        assert.match(pagina, new RegExp(`col_${pre}_num"[^>]*>Cód\\.</th>`));
+        assert.match(pagina, new RegExp(`col_${pre}_total"[^>]*>Valor Tot\\.</th>`));
+        const linha = ler(js);
+        for (const col of ['num', 'data', 'total', cond, 'status']) {
+            assert.ok(linha.includes(`<td data-perm-col="col_${pre}_${col}" class="sem-quebra `), `${js}: ${col}`);
+        }
+        assert.ok(!linha.includes(`<td data-perm-col="col_${pre}_cliente" class="sem-quebra`), `${js}: o cliente quebra, para as etiquetas descerem`);
+    }
+    // Mais forte que a `.table-scroll td` do scroll.css, que deixa quebrar no meio da palavra.
+    assert.match(ler('styles/utilitarios.css'), /\.table-scroll td\.sem-quebra \{ white-space: nowrap; word-break: normal;/);
+});
+
+test('Matéria-prima: o "0 Estoque" não puxa mais para cima das etiquetas', () => {
+    const css = ler('css/materia-prima.css');
+    const bloco = css.slice(css.indexOf('#zeroStockbt {'), css.indexOf('}', css.indexOf('#zeroStockbt {')));
+    assert.ok(!/margin-left:\s*-/.test(bloco), 'a margem negativa punha o botão por cima do "Acabando"');
+    assert.ok(bloco.includes('flex-shrink: 0'));
+});
+
+test('"Abater a matéria-prima?": a explicação quebra dentro do botão de escolha', () => {
+    const js = ler('utils/insumosDaPeca.js');
+    assert.strictEqual((js.match(/class="botao-escolha w-full btn-(primary|neutral) /g) || []).length, 2);
+    assert.match(ler('css/menu.css'), /\.botao-escolha\[class\*="btn-"\] \{\s*\n\s*white-space: normal;/);
+});

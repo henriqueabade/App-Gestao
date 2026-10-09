@@ -561,13 +561,13 @@ async function carregarPedidos() {
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
                 : 'ped.status.confirm';
             tr.innerHTML = `
-                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)], notasForaPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>
+                <td data-perm-col="col_ped_num" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}${tagNota(p, notasPorPedido[String(p.id)], notasForaPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>
                 <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
-                <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
-                <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
-                <td data-perm-col="col_ped_condicao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}" data-devolucao="${dataDevolucao}">${naLista.rotulo}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">
+                <td data-perm-col="col_ped_data" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
+                <td data-perm-col="col_ped_total" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
+                <td data-perm-col="col_ped_condicao" class="sem-quebra px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
+                <td data-perm-col="col_ped_status" class="sem-quebra px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-previsao-embarque="${dataPrevisaoEmbarque}" data-embarque="${dataEmbarque}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}" data-devolucao="${dataDevolucao}">${naLista.rotulo}</span></td>
+                <td class="sem-quebra px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
                         <i data-perm="${calendario.perm}" data-modo="${calendario.modo || ''}" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-calendario ${calendario.modo ? '' : 'icon-disabled'}" style="color: var(--color-primary)" title="${calendario.titulo}"></i>
                         <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
@@ -810,7 +810,7 @@ function filtroAvancadoNaLinha(row, termos) {
         pecas: pecasDosPedidos.pecas(row.dataset.id)
     });
     if (resultado.casa && resultado.pecas.length && celula) {
-        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.rotuloDaPeca)));
+        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.etiquetaCurtaDaPeca)));
     }
     return resultado.casa;
 }

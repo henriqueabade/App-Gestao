@@ -14,7 +14,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const RAIZ = path.join(__dirname, '..', '..');
-const ler = relativo => fs.readFileSync(path.join(RAIZ, relativo), 'utf8');
+// Sem o \r do Windows: com core.autocrlf a cópia de trabalho vem em CRLF e os
+// trechos procurados aqui têm \n puro.
+const ler = relativo => fs.readFileSync(path.join(RAIZ, relativo), 'utf8').replace(/\r\n/g, '\n');
 const FONTE = ler('js/modals/pedido-importar-boletos.js');
 const HTML = ler('html/modals/pedidos/importar-boletos.html');
 const VISUALIZAR = ler('js/modals/pedido-visualizar.js');

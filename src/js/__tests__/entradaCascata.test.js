@@ -21,7 +21,9 @@ const vm = require('node:vm');
 const { criarAmbiente } = require('./apoio/domMinimo');
 
 const SRC = path.join(__dirname, '..', '..');
-const ler = rel => fs.readFileSync(path.join(SRC, rel), 'utf8');
+// Sem o \r do Windows: com core.autocrlf a cópia de trabalho vem em CRLF e os
+// trechos procurados aqui têm \n puro.
+const ler = rel => fs.readFileSync(path.join(SRC, rel), 'utf8').replace(/\r\n/g, '\n');
 const UTIL = ler('js/utils/entrada-cascata.js');
 
 function montar(html) {

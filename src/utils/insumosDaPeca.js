@@ -62,13 +62,13 @@
               <p>${rotulo}${ponto ? ` · ${ponto}` : ''}</p>
             </div>
             <div class="space-y-2">
-              <button type="button" data-acao="sim" class="w-full btn-primary px-4 py-2 rounded-lg text-white font-medium text-left">
+              <button type="button" data-acao="sim" class="botao-escolha w-full btn-primary px-4 py-2 rounded-lg text-white font-medium text-left">
                 ${t.sim}
-                <span class="block text-[11px] font-normal opacity-80">${t.explicacaoSim}</span>
+                <span class="block text-[11px] font-normal opacity-80 mt-0.5">${t.explicacaoSim}</span>
               </button>
-              <button type="button" data-acao="nao" class="w-full btn-neutral px-4 py-2 rounded-lg text-white font-medium text-left">
+              <button type="button" data-acao="nao" class="botao-escolha w-full btn-neutral px-4 py-2 rounded-lg text-white font-medium text-left">
                 ${t.nao}
-                <span class="block text-[11px] font-normal opacity-80">${t.explicacaoNao}</span>
+                <span class="block text-[11px] font-normal opacity-80 mt-0.5">${t.explicacaoNao}</span>
               </button>
             </div>
             <div class="flex justify-end pt-1">

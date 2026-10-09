@@ -111,13 +111,17 @@
 
   const escapar = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-  /** As etiquetas do que o filtro achou ("BBRO 3015 (2)", "+3"), para pôr na linha. */
+  /**
+   * As etiquetas do que o filtro achou ("BBRO 3015 (2)", "+3"), para pôr na
+   * linha. Cada rótulo é um texto ou `{ texto, titulo }` — o título é o balão
+   * do mouse (o nome da peça, em Pedidos e Orçamentos).
+   */
   function achadosHtml(rotulos = [], { maximo = 3 } = {}) {
-    const lista = rotulos.filter(Boolean);
+    const lista = rotulos.filter(Boolean).map(r => (typeof r === 'object' ? { texto: r.texto, titulo: r.titulo || r.texto } : { texto: r, titulo: r }));
     if (!lista.length) return '';
-    const itens = lista.slice(0, maximo).map(r => `<span class="filtro-avancado-achados__item" title="${escapar(r)}">${escapar(r)}</span>`);
+    const itens = lista.slice(0, maximo).map(r => `<span class="filtro-avancado-achados__item" title="${escapar(r.titulo)}">${escapar(r.texto)}</span>`);
     if (lista.length > maximo) {
-      itens.push(`<span class="filtro-avancado-achados__item" title="${escapar(lista.slice(maximo).join('\n'))}">+${lista.length - maximo}</span>`);
+      itens.push(`<span class="filtro-avancado-achados__item" title="${escapar(lista.slice(maximo).map(r => (r.titulo === r.texto ? r.texto : `${r.texto} — ${r.titulo}`)).join('\n'))}">+${lista.length - maximo}</span>`);
     }
     return `<div class="filtro-avancado-achados" data-filtro-achados>${itens.join('')}</div>`;
   }
@@ -127,6 +131,18 @@
     const nome = [p?.codigo, p?.nome].filter(Boolean).join(' — ');
     const qtd = Number(p?.quantidade);
     return Number.isFinite(qtd) && qtd > 0 ? `${nome} (${Number.isInteger(qtd) ? qtd : qtd.toLocaleString('pt-BR')})` : nome;
+  }
+
+  /**
+   * A etiqueta CURTA da linha de Pedidos e Orçamentos (dono, 09/10/2026): só
+   * o código e a quantidade, "AVSØ 0114 MUI (1)"; o nome vai no balão do
+   * mouse. Com o nome inteiro a coluna do cliente espremia as outras.
+   */
+  function etiquetaCurtaDaPeca(p) {
+    const qtd = Number(p?.quantidade);
+    const codigo = String(p?.codigo || '').trim() || String(p?.nome || '').trim();
+    const texto = Number.isFinite(qtd) && qtd > 0 ? `${codigo} (${Number.isInteger(qtd) ? qtd : qtd.toLocaleString('pt-BR')})` : codigo;
+    return { texto, titulo: String(p?.nome || '').trim() || texto };
   }
 
   /** Lê `/api/vinculos-pecas/<tipo>` (as peças de cada documento) uma vez por carga. */
@@ -161,5 +177,5 @@
     };
   }
 
-  window.FiltrosAvancados = { ligar, documentoCasa, achadosHtml, rotuloDaPeca, leitorDePecas };
+  window.FiltrosAvancados = { ligar, documentoCasa, achadosHtml, rotuloDaPeca, etiquetaCurtaDaPeca, leitorDePecas };
 })();
