@@ -43,6 +43,9 @@ const jsonPadrao = express.json({ limit: '3mb' });
 const jsonGrande = express.json({ limit: '30mb' });
 const CORPO_GRANDE = /^\/api\/(historico-social\/|(clientes|prospeccoes|contatos)\/csv\/|contabilidade\/(arquivos|documentos|pacote|comprovantes\/importar|aplicacoes\/importar|cartao\/importar|parcelas\/\d+\/pagar|extrato\/(previa|importar)))/;
 app.use((req, res, next) => (CORPO_GRANDE.test(req.path) ? jsonGrande : jsonPadrao)(req, res, next));
+// A rota em curso, para as chamadas à API dizerem de onde vêm (registro de
+// permissões da API, backend/contextoDaRota.js).
+app.use(require('./contextoDaRota').middleware);
 
 if (isDev) {
   app.use((req, res, next) => {

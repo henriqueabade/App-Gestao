@@ -406,7 +406,11 @@ test('lista de usuários: nunca o hash da senha; sem o módulo, só o que o sele
   try {
     const r = await semModulo.pedir('GET', '/lista');
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(Object.keys(r.corpo[0]).sort(), ['email', 'id', 'nome', 'perfil', 'status']);
+    // Sem o e-mail dos outros (decisão do dono, 09/10/2026); o próprio (7) continua.
+    const outro = r.corpo.find(u => u.id !== 7);
+    assert.deepStrictEqual(Object.keys(outro).sort(), ['id', 'nome', 'perfil', 'status']);
+    const proprio = r.corpo.find(u => u.id === 7);
+    if (proprio) assert.ok('email' in proprio, 'o próprio e-mail continua');
     assert.ok(!JSON.stringify(r.corpo).includes('hashd'), 'nada de senha');
     assert.ok(!JSON.stringify(r.corpo).includes('ultimo_login'), 'nem a atividade dos colegas');
   } finally { await semModulo.fechar(); }

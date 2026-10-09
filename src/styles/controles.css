@@ -156,6 +156,13 @@
 .ctl-campo--prefixo { padding-left: 2.5rem; }
 .ctl-campo--sufixo { padding-right: 4rem; }
 
+/* Campo com erro (aria-invalid="true"; 09/10/2026, o nome repetido do
+   cadastro): só a borda fica vermelha — a medida é a mesma. */
+.ctl-campo[aria-invalid="true"] {
+    border-color: var(--color-red, #f87171) !important;
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.3);
+}
+
 /* A altura sai das linhas (`rows`). O espaço de cima é o `top-3` do rótulo
    flutuante: rótulo e primeira linha ficam na mesma altura. */
 textarea.ctl-campo {

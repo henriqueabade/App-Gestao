@@ -81,9 +81,9 @@
       </div>
       <form id="loginForm" class="space-y-4">
         <div class="relative">
-          <label for="email" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail ou usuário</label>
+          <label for="email" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail ou nome completo</label>
           <div class="email-input-wrapper">
-            <input type="text" id="email" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required aria-expanded="false" />
+            <input type="text" id="email" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required aria-expanded="false" autocomplete="username" title="O e-mail ou o nome completo (nome e sobrenome) do cadastro" />
             <button type="button" id="changeUserButton" class="change-user-button hidden" aria-label="Trocar usuário" title="Trocar usuário">
               <i data-feather="refresh-cw" aria-hidden="true"></i>
             </button>
@@ -110,9 +110,20 @@
         <button type="submit" class="btn-primary w-full py-2 px-4 rounded-md text-white font-medium">Entrar</button>
       </form>
       <form id="registerForm" class="space-y-4 hidden">
+        <!-- Nome e sobrenome (09/10/2026): os dois obrigatórios, gravados juntos
+             (src/js/utils/nome-completo.js); o nome não repete, porque dá para entrar por ele. -->
         <div>
-          <label for="registerName" class="block text-sm font-medium text-[#b6a03e] mb-1">Nome completo</label>
-          <input type="text" id="registerName" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="registerName" class="block text-sm font-medium text-[#b6a03e] mb-1">Nome</label>
+              <input type="text" id="registerName" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" autocomplete="given-name" required />
+            </div>
+            <div>
+              <label for="registerSobrenome" class="block text-sm font-medium text-[#b6a03e] mb-1">Sobrenome</label>
+              <input type="text" id="registerSobrenome" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" autocomplete="family-name" required />
+            </div>
+          </div>
+          <p id="registerNomeErro" class="cadastro-campo-erro hidden" role="alert"></p>
         </div>
         <div>
           <label for="registerEmail" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail</label>
@@ -220,6 +231,7 @@
   <script src="../utils/botaoAcao.js"></script>
   <!-- Regra da senha forte (a mesma que o backend confere antes de gravar) -->
   <script src="../js/utils/senha-forte.js"></script>
+  <script src="../js/utils/nome-completo.js"></script>
   <!-- Texto dos Termos de Uso e da Política de Privacidade e as caixas de aceite do cadastro -->
   <script src="../js/utils/termos-documentos.js"></script>
   <script src="../js/utils/termos-aceite.js"></script>

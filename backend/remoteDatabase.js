@@ -107,6 +107,8 @@ async function request(method, path, options = {}) {
   const url = `${API_BASE_URL}${normalizedPath}${qs}`;
   const headers = {
     'Content-Type': 'application/json',
+    // De que rota do programa veio a chamada (só para o registro de permissões da API).
+    ...require('./contextoDaRota').cabecalhos(),
     ...(options.headers || {}),
     Authorization: `Bearer ${token}`
   };

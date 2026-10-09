@@ -904,6 +904,17 @@ function initUsuarios() {
             btnModelosPermissao.classList.add('hidden');
         }
     }
+    // Segurança da API (09/10/2026): o registro do que a API negou/negaria.
+    const btnSegurancaApi = document.getElementById('btnSegurancaApi');
+    if (btnSegurancaApi) {
+        const veSeguranca = isSupAdmin || Boolean(window.Permissoes?.supAdmin);
+        btnSegurancaApi.classList.toggle('hidden', !veSeguranca);
+        if (veSeguranca) {
+            btnSegurancaApi.addEventListener('click', () => {
+                openModalWithSpinner('modals/usuarios/seguranca.html', '../js/modals/usuario-seguranca.js', 'segurancaApi');
+            });
+        }
+    }
     // A entrada em cascata é só do CSS (`animate-fade-in-up`, um bloco depois do
     // outro, como no Financeiro). Não ponha opacity/transform inline aqui: o
     // fadeInUp parte do valor que o bloco já tem, e com opacity 1 a animação

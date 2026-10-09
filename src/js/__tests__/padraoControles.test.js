@@ -133,7 +133,8 @@ const PADRONIZADOS = [
   },
   {
     modulo: 'usuarios',
-    arquivos: ['html/usuarios.html', ...['novo', 'editar', 'transferir', 'permissoes'].map(m => `html/modals/usuarios/${m}.html`)]
+    // (09/10/2026: + Segurança da API, só do Sup Admin)
+    arquivos: ['html/usuarios.html', ...['novo', 'editar', 'transferir', 'permissoes', 'seguranca'].map(m => `html/modals/usuarios/${m}.html`)]
   },
   {
     // Tela de referência (só o cabeçalho encostou no padrão) e os 20 modais.
@@ -372,7 +373,7 @@ const JS_PADRONIZADOS = [
   },
   {
     modulo: 'usuarios',
-    arquivos: ['js/usuarios.js', 'js/modals/usuario-novo.js', 'js/modals/usuario-editar.js', 'js/modals/usuario-permissoes.js', 'js/modals/usuario-transferir.js'],
+    arquivos: ['js/usuarios.js', 'js/modals/usuario-novo.js', 'js/modals/usuario-editar.js', 'js/modals/usuario-permissoes.js', 'js/modals/usuario-transferir.js', 'js/modals/usuario-seguranca.js'],
     ignorar: []
   },
   {

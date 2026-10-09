@@ -41,6 +41,16 @@ function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
+/**
+ * O que se digita no "E-mail ou nome completo" do login (09/10/2026): o
+ * e-mail vai em minúsculas; o nome, só sem os espaços sobrando — quem compara
+ * sem maiúscula e sem acento é a API (acesso/nomes.js).
+ */
+function normalizarLogin(identificador) {
+  const NomeCompleto = require('../src/js/utils/nome-completo');
+  return NomeCompleto.ehEmail(identificador) ? normalizeEmail(identificador) : NomeCompleto.limpar(identificador);
+}
+
 /** O aviso amarelo de quem acerta a senha mas não está com o acesso ativo. */
 const MENSAGEM_LOGIN_BLOQUEADO = 'Login bloqueado. Contate o administrador.';
 
@@ -73,6 +83,9 @@ async function registrarUsuario(nome, email, senha, versoesAceitas, { urlBase = 
   // (src/js/utils/senha-forte.js); a tela confere antes, aqui se confere de novo.
   const senhaFraca = require('../src/js/utils/senha-forte').mensagem(senha);
   if (senhaFraca) throw new Error(senhaFraca);
+  // Nome E sobrenome (a tela junta os dois campos); quem confere a repetição é a API.
+  const nomeIncompleto = require('../src/js/utils/nome-completo').mensagem(nome);
+  if (nomeIncompleto) throw Object.assign(new Error(nomeIncompleto), { campo: 'nome' });
 
   let aceites;
   try {
@@ -86,10 +99,12 @@ async function registrarUsuario(nome, email, senha, versoesAceitas, { urlBase = 
   let versaoApp = null;
   try { versaoApp = require('../package.json').version; } catch (_) {}
   const corpo = { nome, email: normalizeEmail(email), senha, aceites, computador, versaoApp };
+  // O erro leva o código e o campo (o nome repetido marca os campos do nome).
+  const erroDaResposta = (dados, padrao) => Object.assign(new Error(dados?.error || padrao), { code: dados?.code || null, campo: dados?.campo || null });
 
   if (isDev) {
     const resposta = await require('./cadastroLocal').cadastrar(corpo, { urlBase });
-    if (resposta.status >= 400) throw new Error(resposta.corpo?.error || 'Erro ao cadastrar usuário');
+    if (resposta.status >= 400) throw erroDaResposta(resposta.corpo, 'Erro ao cadastrar usuário');
     return resposta.corpo;
   }
 
@@ -102,10 +117,8 @@ async function registrarUsuario(nome, email, senha, versoesAceitas, { urlBase = 
   try { data = await response.json(); } catch (_) {}
   if (!response.ok) {
     // API antiga, ainda sem a rota: o aviso tem de dizer o que fazer.
-    const mensagem = response.status === 404
-      ? 'O cadastro ainda não está disponível no servidor. Avise o administrador.'
-      : data?.error || 'Não foi possível concluir o cadastro agora. Tente de novo em instantes.';
-    throw new Error(mensagem);
+    if (response.status === 404) throw new Error('O cadastro ainda não está disponível no servidor. Avise o administrador.');
+    throw erroDaResposta(data, 'Não foi possível concluir o cadastro agora. Tente de novo em instantes.');
   }
   return data || {};
 }
@@ -141,7 +154,8 @@ function normalizarStatusAcesso(valor) {
 }
 
 async function loginUsuario(email, senha) {
-  const normalizedEmail = normalizeEmail(email);
+  // E-mail OU nome completo: o campo continua se chamando `email` na API.
+  const normalizedEmail = normalizarLogin(email);
   try {
     const response = isDev ? null : await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
@@ -159,6 +173,12 @@ async function loginUsuario(email, senha) {
       if (response.status === 403 && ['inactive-user', 'unconfirmed-user'].includes(data?.code)) {
         const error = new Error(MENSAGEM_LOGIN_BLOQUEADO);
         error.code = data.code;
+        throw error;
+      }
+      // Nome completo de dois cadastros (de antes da regra) com a mesma senha.
+      if (response.status === 409 && data?.code === 'NOME_AMBIGUO') {
+        const error = new Error(data.error || 'Há mais de um cadastro com esse nome. Entre com o e-mail.');
+        error.code = 'nome-ambiguo';
         throw error;
       }
       const error = new Error(data?.message || 'Falha ao autenticar.');
