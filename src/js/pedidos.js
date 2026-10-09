@@ -172,7 +172,7 @@ function indexarNotasDevolucao(notas) {
  */
 function tagNota(p, nota, notaDeFora = null) {
     if (nota && nota.status_fiscal === 'autorizada') {
-        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para gerar o DANFE`;
+        const titulo = `NF-e série ${nota.serie} nº ${nota.numero} autorizada${nota.ambiente === 'homologacao' ? ' (homologação)' : ''} — clique para ver o DANFE`;
         return `${tagCartaCorrecao(nota)} <span class="badge-success tag-danfe ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-nota-id="${Number(nota.id)}" role="button" title="${titulo}" aria-label="${titulo}">DANFE</span>`;
     }
     if (nota && nota.status_fiscal === 'cancelada') {
@@ -577,10 +577,11 @@ async function carregarPedidos() {
                         <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
-            // A tag verde "DANFE" gera o PDF da nota; o clique não abre a linha.
+            // A tag verde "DANFE" abre o DANFE no "Visualizar documento" (ver,
+            // imprimir ou salvar, 09/10/2026); o clique não abre a linha.
             tr.querySelector('.tag-danfe')?.addEventListener('click', e => {
                 e.stopPropagation();
-                window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId));
+                window.NfeDocumentos?.verDanfe(Number(e.currentTarget.dataset.notaId));
             });
             // A amarela "CC-e" gera o PDF da última carta de correção.
             tr.querySelector('.tag-cce')?.addEventListener('click', e => {

@@ -5596,6 +5596,77 @@ ipcMain.handle('salvar-arquivo-binario', async (_event, { base64, nomeSugerido, 
   }
 });
 
+// ---------------------------------------------------------------------------
+// Visualizar documento (src/js/utils/visualizador-pdf.js, 09/10/2026).
+//
+// O modal mostra o PDF sem salvar. Os bytes mostrados são os mesmos que estes
+// dois comandos recebem: "Salvar PDF" grava exatamente o que está na tela, e a
+// impressão de reserva imprime exatamente o que está na tela. Nada é refeito.
+// ---------------------------------------------------------------------------
+
+/** O nome do arquivo como o "Salvar" de sempre sugere (sem acento nem símbolo). */
+function nomeSeguroDoPdf(nome, padrao = 'documento') {
+  return String(nome || padrao)
+    .replace(/\.pdf$/i, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || padrao;
+}
+
+/** "Salvar PDF" do visualizador: grava os bytes mostrados, na pasta Documentos. */
+ipcMain.handle('salvar-pdf', async (_event, { base64, nomeSugerido, titulo } = {}) => {
+  if (typeof base64 !== 'string' || !base64) return { success: false, message: 'Nada para salvar.' };
+  try {
+    const dono = getPrimaryMonitorWindow();
+    const opcoes = {
+      title: titulo || 'Salvar PDF',
+      defaultPath: path.join(app.getPath('documents'), `${nomeSeguroDoPdf(nomeSugerido)}.pdf`),
+      filters: [{ name: 'Arquivos PDF', extensions: ['pdf'] }]
+    };
+    const { canceled, filePath } = dono ? await dialog.showSaveDialog(dono, opcoes) : await dialog.showSaveDialog(opcoes);
+    if (canceled || !filePath) return { success: false, canceled: true };
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Erro ao salvar o PDF do visualizador:', err);
+    return { success: false, message: err?.message || 'Não foi possível salvar o PDF.' };
+  }
+});
+
+/**
+ * Impressão de RESERVA do visualizador. O caminho principal imprime o PDF de
+ * dentro do próprio modal (o quadro do PDF); este só entra se aquele não der:
+ * abre os mesmos bytes numa janela escondida e chama a janela de impressão do
+ * Windows (impressora, cópias, folhas).
+ */
+ipcMain.handle('imprimir-pdf', async (_event, { base64 } = {}) => {
+  if (typeof base64 !== 'string' || !base64) return { success: false, message: 'Nada para imprimir.' };
+  const arquivoTemp = path.join(app.getPath('temp'), `sd-imprimir-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`);
+  let janela = null;
+  try {
+    await fs.promises.writeFile(arquivoTemp, Buffer.from(base64, 'base64'));
+    janela = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+    await janela.loadFile(arquivoTemp).catch(() => null);
+    // O visor do PDF termina de montar depois do load.
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const resultado = await new Promise(resolve => {
+      janela.webContents.print({ silent: false, printBackground: true }, (success, motivo) => resolve({ success, motivo }));
+    });
+    if (resultado.success) return { success: true };
+    if (/cancel/i.test(String(resultado.motivo || ''))) return { success: false, canceled: true };
+    return { success: false, message: resultado.motivo || 'Não foi possível imprimir.' };
+  } catch (err) {
+    console.error('Erro ao imprimir o PDF do visualizador:', err);
+    return { success: false, message: err?.message || 'Não foi possível imprimir.' };
+  } finally {
+    if (janela && !janela.isDestroyed()) janela.close();
+    fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
 ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const prefix = `[pdf:${requestId}]`;

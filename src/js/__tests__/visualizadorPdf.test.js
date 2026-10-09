@@ -1,0 +1,86 @@
+/**
+ * "Visualizar documento" (src/js/utils/visualizador-pdf.js, pedido do dono em
+ * 09/10/2026): todo PDF abre num modal padrão — ver, imprimir direto ou salvar
+ * —, sem precisar salvar antes. O espelho é 100%: os bytes mostrados são os que
+ * o "Salvar PDF" grava e os que o "Imprimir" imprime.
+ */
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const RAIZ = path.join(__dirname, '..', '..', '..');
+const ler = rel => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
+
+function carregarUtil() {
+    const contexto = { window: {}, console, atob, btoa, Uint8Array, ArrayBuffer };
+    vm.createContext(contexto);
+    vm.runInContext(ler('src/js/utils/visualizador-pdf.js'), contexto);
+    return contexto.window.VisualizadorPdf;
+}
+
+test('o visualizador entra no menu, e a página deixa o quadro do PDF (blob:) aparecer', () => {
+    const menu = ler('src/html/menu.html');
+    assert.ok(menu.includes('src="../js/utils/visualizador-pdf.js"'));
+    assert.ok(menu.includes('href="../styles/visualizador-pdf.css"'));
+    assert.ok(menu.indexOf('visualizador-pdf.css') < menu.indexOf('controles.css'), 'controles.css continua por último');
+    assert.match(menu, /frame-src 'self' blob:;/);
+});
+
+test('paraBytes e contarFolhas: base64, ArrayBuffer e a mesma conta de folhas do backend', () => {
+    const V = carregarUtil();
+    const pdf = '%PDF-1.4\n1 0 obj <</Type /Pages /Count 2>>\n2 0 obj <</Type /Page>>\n3 0 obj <</Type/Page>>\n%%EOF';
+    const base64 = Buffer.from(pdf, 'latin1').toString('base64');
+    const bytes = V.paraBytes({ base64 });
+    assert.strictEqual(bytes.length, pdf.length);
+    assert.strictEqual(V.contarFolhas(bytes), 2, '/Pages não conta; /Page e /Page sem espaço contam');
+    assert.strictEqual(V.paraBytes(base64).length, pdf.length);
+    assert.strictEqual(V.paraBytes(new Uint8Array([1, 2, 3]).buffer).length, 3);
+    assert.strictEqual(V.paraBytes(null), null);
+});
+
+test('o modal: vidro padrão, à frente de tudo, Voltar/Salvar PDF/Fechar/Imprimir e o PDF sem a barra do visor', () => {
+    const js = ler('src/js/utils/visualizador-pdf.js');
+    assert.match(js, /'app-message-overlay visualizador-pdf fixed inset-0 bg-black\/50/, 'top layer (DialogTopLayer) sobre o véu padrão');
+    assert.match(js, /glass-surface backdrop-blur-xl rounded-3xl border border-white\/10 ring-1 ring-white\/5 shadow-2xl/, 'o vidro padrão');
+    assert.match(js, /botao\('Voltar', 'btn-neutral/);
+    assert.match(js, /botao\('Salvar PDF', 'btn-secondary/);
+    assert.match(js, /botao\('Fechar', 'btn-danger/);
+    assert.match(js, /botao\('Imprimir', 'btn-primary/);
+    assert.match(js, /#toolbar=0&navpanes=0&view=FitH/);
+    // Clicar fora não fecha (padrão do programa): nada de clique no véu.
+    assert.ok(!/overlay\.addEventListener\('click'/.test(js));
+});
+
+test('o espelho é 100%: salvar e imprimir usam os MESMOS bytes mostrados', () => {
+    const js = ler('src/js/utils/visualizador-pdf.js');
+    // Os bytes do quadro são os gerados uma vez...
+    assert.match(js, /url = URL\.createObjectURL\(new Blob\(\[bytes\], \{ type: 'application\/pdf' \}\)\);/);
+    // ...e são eles que vão para o "Salvar PDF" e para a impressão de reserva.
+    assert.match(js, /api\(\{ base64: paraBase64\(bytes\), nomeSugerido: nomeAtual, titulo: tituloSalvar \}\)/);
+    assert.match(js, /api\(\{ base64: paraBase64\(bytes\) \}\)/);
+    // A impressão principal é a do próprio quadro do PDF.
+    assert.match(js, /const janela = quadro\.contentWindow;[\s\S]*janela\.print\(\);/);
+    // O deHtml gera pelo mesmo caminho do Salvar de antes (gerar-pdf-de-html).
+    assert.match(js, /window\.electronAPI\?\.gerarPdfDeHtml/);
+});
+
+test('o processo principal salva e imprime os bytes que recebe, sem gerar de novo', () => {
+    const main = ler('main.js');
+    const salvar = main.slice(main.indexOf("ipcMain.handle('salvar-pdf'"), main.indexOf("ipcMain.handle('imprimir-pdf'"));
+    assert.match(salvar, /writeFile\(filePath, Buffer\.from\(base64, 'base64'\)\)/);
+    assert.match(salvar, /app\.getPath\('documents'\)/, 'a mesma pasta do Salvar de sempre');
+    const imprimir = main.slice(main.indexOf("ipcMain.handle('imprimir-pdf'"), main.indexOf("ipcMain.handle('open-pdf'"));
+    assert.match(imprimir, /print\(\{ silent: false, printBackground: true \}/, 'janela de impressão do Windows (nunca silenciosa)');
+    const preload = ler('preload.js');
+    assert.match(preload, /salvarPdf: \(payload\) => ipcRenderer\.invoke\('salvar-pdf', payload\)/);
+    assert.match(preload, /imprimirPdf: \(payload\) => ipcRenderer\.invoke\('imprimir-pdf', payload\)/);
+});
+
+test('Fase 1: o DANFE da lista de Pedidos abre no visualizador', () => {
+    const pedidos = ler('src/js/pedidos.js');
+    assert.match(pedidos, /tr\.querySelector\('\.tag-danfe'\)\?\.addEventListener\('click', e => \{\s*\n\s*e\.stopPropagation\(\);\s*\n\s*window\.NfeDocumentos\?\.verDanfe\(/);
+    const nfe = ler('src/js/utils/nfe-documentos.js');
+    assert.match(nfe, /window\.VisualizadorPdf\.deHtml\(corpo\.html, \{ retrato: true \}\)/, 'o mesmo HTML e a mesma orientação do Salvar');
+});
