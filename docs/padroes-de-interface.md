@@ -426,6 +426,50 @@ Animar a própria margem (`transition-all` no `<main>`, como era) recalcula o
 módulo inteiro a cada quadro e travava as telas de lista longa. **Não ponha
 `transition` de margem, largura ou `all` no `#mainContent`.**
 
+### Menu lateral: rola sem mudar de largura
+
+Quando os itens passam da altura da tela, `#sidebar > nav` rola, com a barra
+global (3d, acima). A barra só aparece com o mouse sobre o menu: o
+`overflow-y` troca entre `hidden` e `auto`, que repinta sempre (a cor da
+barra pelo `:hover` do pai, não). O lugar da barra fica reservado
+(`scrollbar-gutter: stable`) e sai do recuo da direita (2 px + 6 px = os
+8 px de antes): **a largura dos itens não muda**, aberto ou recolhido.
+**Não mexa no recuo da direita do menu sem refazer essa conta**
+(`filtrosAoDigitar.test.js`).
+
+### Filtros: buscam enquanto se digita
+
+**Toda caixa de texto de filtro** filtra a cada tecla, sem precisar de
+"Filtrar" (dono, 08/10/2026). O caminho é
+`window.BuscaAoDigitar.ligar(campo, aplicar, { espera })`
+(`src/js/utils/busca-ao-digitar.js`):
+
+- espera uma pausa curta na digitação (150 ms por padrão);
+- o Enter e o "x" do campo de busca aplicam na hora;
+- ligar duas vezes o mesmo campo não duplica nada.
+
+Busca no servidor (o pedido do "Importar boletos") usa a mesma ligação e
+descarta a resposta de uma busca velha. O "Filtrar" continua onde está.
+**Campo de filtro novo: ligue pelo BuscaAoDigitar.**
+
+### Filtros avançados retráteis
+
+O "Filtros avançados" de Prospecções é o padrão
+(`src/js/utils/filtros-avancados.js` + `src/styles/filtros-avancados.css`).
+Produtos, Orçamentos e Pedidos usam desde 08/10/2026:
+
+- um botão `btn-neutral ctl-botao botao-filtros-avancados` com a setinha
+  (`botao-filtros-avancados__seta`) no fim da barra;
+- o painel `.filtros-avancados`, dentro do card de filtros, que nasce
+  **fechado** e cresce para baixo (max-height medido na hora);
+- aberto, a página volta a rolar nos módulos em que só a tabela rola;
+- fechado e filtrando, o botão ganha um ponto dourado
+  (`controle.sinalizar(true)`).
+
+Em modal, o equivalente é a seção retrátil (`SecaoRetratil`). Numa barra de
+filtro, use `data-secao-resumo="valores"`: fechada, ela diz o que está
+filtrando.
+
 ### O vidro dos modais e das caixas
 
 Todo modal e toda caixa de diálogo usam **o mesmo vidro**: o da caixa

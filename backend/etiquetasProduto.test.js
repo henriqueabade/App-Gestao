@@ -6,6 +6,7 @@ const assert = require('node:assert');
 const ExcelJS = require('exceljs');
 const {
   dividirNome,
+  prontasDoEstoque,
   unidadesDoItem,
   linhasDasEtiquetas,
   nomeDoArquivo,
@@ -64,6 +65,22 @@ test('quantidade inválida ou negativa não gera etiqueta', () => {
     assert.strictEqual(unidadesDoItem({ quantidade }), 0, String(quantidade));
   }
   assert.strictEqual(unidadesDoItem({ quantidade: '1,00'.replace(',', '.') }), 1);
+});
+
+test('peça que saiu pronta do estoque não gera etiqueta (dono, 08/10/2026)', () => {
+  const linhas = linhasDasEtiquetas([
+    // 3 pedidas, 2 prontas do estoque: só 1 etiqueta.
+    { id: 1, nome: 'Platter Pietra - M (25 x 50 x 3h) - Quartzito Nacarado', quantidade: 3, qtd_usar_pronta: 2, qtd_a_produzir: 1 },
+    // Toda do estoque: nenhuma.
+    { id: 2, nome: 'Bandeja (30 x 20) - Ônix', quantidade: '2.00', qtd_usar_pronta: '2.00', qtd_a_produzir: 0 },
+    // Pela metade do estoque conta como produção (qtd_usar_pronta = 0): etiqueta.
+    { id: 3, nome: 'Porta-joias - G (20 x 10) - Mármore Carrara', quantidade: 1, qtd_usar_pronta: 0, qtd_a_produzir: 1 }
+  ]);
+  assert.deepStrictEqual(linhas.map(l => l.nome), ['Platter Pietra - M', 'Porta-joias - G']);
+  // A coluna pode guardar o estoque que havia (maior que o pedido): teto na quantidade.
+  assert.strictEqual(prontasDoEstoque({ quantidade: 2, qtd_usar_pronta: 3 }), 2);
+  assert.strictEqual(unidadesDoItem({ quantidade: 2, qtd_usar_pronta: 3 }), 0);
+  assert.strictEqual(unidadesDoItem({ quantidade: 5, qtd_usar_pronta: null }), 5);
 });
 
 test('o arquivo leva o número do pedido e o cliente separados por "_"', () => {

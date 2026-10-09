@@ -201,6 +201,20 @@ estão em
 [financeiro-competencia-cartoes-e-secao-fiscal.md](financeiro-competencia-cartoes-e-secao-fiscal.md)
 (sem SQL novo).
 
+## Filtrar pedidos e a tela parada (08/10/2026)
+
+- **"Filtrar pedidos":** uma barra retraída acima dos cards. Aceita número do
+  pedido, cliente, nome ou código da peça, e filtra enquanto se digita.
+  - Casou pelo pedido ou pelo cliente: o card vem inteiro.
+  - Casou só por peça: o card vem só com as peças que casaram, com um aviso.
+- **Confirmar uma peça** recolhe os campos dela sem a tela pular.
+  - A releitura é silenciosa: o "Carregando" não aparece em cima dos cards.
+  - O cabeçalho da peça volta ao mesmo ponto da tela. O mesmo vale para
+    "Tudo"/"Nada" e "Tudo pronto"/"Nada pronto".
+  - O código é `marcarAncora`/`voltarAncora` em `montarFecharProducao`.
+
+Detalhes em `docs/filtros-relatorios-producao-tarefas.md` (§4).
+
 ## Depois de puxar o código
 
 1. Rodar **`sql/fechamento_producao_e_pagamentos.sql`** no banco.

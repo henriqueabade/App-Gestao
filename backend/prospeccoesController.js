@@ -617,12 +617,12 @@ async function rejeitarOrcamentosDaProspeccao(api, prospeccaoId, motivo, eventos
     for (const orc of Array.isArray(lista) ? lista : []) {
       if (ENCERRADOS.has(String(orc.situacao || '').trim())) continue;
 
-      await api.put(`/api/orcamentos/${orc.id}`, {
-        ...orc,
-        situacao: 'Rejeitado',
-        data_aprovacao: new Date().toISOString()
-      });
+      const rejeitado = { ...orc, situacao: 'Rejeitado', data_aprovacao: new Date().toISOString() };
+      await api.put(`/api/orcamentos/${orc.id}`, rejeitado);
       total += 1;
+      // Este caminho grava direto na API, sem passar pela rota do orçamento:
+      // o follow-up automático dele precisa ser fechado aqui (fim natural, 08/10/2026).
+      await tarefas.encerrarTarefasDoRegistro(api, { tipo: 'orcamento', id: orc.id, registro: rejeitado });
 
       eventos.push({
         tipo: 'orcamento', acao: 'alterou',

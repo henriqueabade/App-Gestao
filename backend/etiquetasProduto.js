@@ -35,15 +35,35 @@ function dividirNome(nomeCompleto) {
   };
 }
 
-/** Quantas etiquetas o item pede: a quantidade inteira, nunca negativa. */
-function unidadesDoItem(item) {
-  const n = Math.round(Number(item?.quantidade));
+const inteiroPositivo = valor => {
+  const n = Math.round(Number(valor));
   return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+/**
+ * Quantas unidades do item saíram PRONTAS do estoque (`qtd_usar_pronta`, com
+ * teto na quantidade pedida — a coluna pode guardar o estoque que havia, maior
+ * que o pedido; ver backend/agrupamentoPedidos.js). Essas peças já têm
+ * etiqueta: foram etiquetadas quando ficaram prontas (dono, 08/10/2026).
+ * Peça que saiu do estoque PELA METADE ainda passa pela produção e continua
+ * pedindo etiqueta.
+ */
+function prontasDoEstoque(item) {
+  return Math.min(inteiroPositivo(item?.qtd_usar_pronta), inteiroPositivo(item?.quantidade));
+}
+
+/**
+ * Quantas etiquetas o item pede: a quantidade inteira menos o que saiu pronto
+ * do estoque, nunca negativa.
+ */
+function unidadesDoItem(item) {
+  return Math.max(0, inteiroPositivo(item?.quantidade) - prontasDoEstoque(item));
 }
 
 /**
  * As linhas da planilha, na ordem dos itens do pedido (pelo id, porque o
- * upstream devolve na ordem de inserção e não honra `order`).
+ * upstream devolve na ordem de inserção e não honra `order`). Peça pronta do
+ * estoque não entra (ver `prontasDoEstoque`).
  */
 function linhasDasEtiquetas(itens = []) {
   const ordenados = (Array.isArray(itens) ? itens : [])
@@ -89,6 +109,7 @@ async function gerarPlanilha(linhas = []) {
 
 module.exports = {
   dividirNome,
+  prontasDoEstoque,
   unidadesDoItem,
   linhasDasEtiquetas,
   nomeDoArquivo,

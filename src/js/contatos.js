@@ -226,7 +226,8 @@ function initContatos() {
 
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
-    document.getElementById('filtroBusca')?.addEventListener('keydown', e => { if (e.key === 'Enter') aplicarFiltros(); });
+    // A busca filtra enquanto digita (08/10/2026), como em todos os módulos; Enter não espera.
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroBusca'), aplicarFiltros);
     document.getElementById('btnNovoContato')?.addEventListener('click', () => {
         openModalWithSpinner('modals/contatos/novo.html', '../js/modals/contato-novo.js', 'novoContato');
     });

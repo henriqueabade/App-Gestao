@@ -72,6 +72,81 @@ const REGRAS = [
 const PORCHAVE = new Map(REGRAS.map(r => [r.chave, r]));
 
 /**
+ * FIM NATURAL DA TAREFA AUTOMÁTICA (pedido do dono, 08/10/2026).
+ *
+ * A tarefa automática nasce de um fato ("orçamento enviado") e cobra o passo
+ * seguinte ("cobrar a resposta"). Quando o REGISTRO dela se encerra por outro
+ * caminho, a tarefa perde o sentido — e ficava aberta, com a data antiga, até
+ * alguém lembrar de fechá-la. A regra geral:
+ *
+ *   - o registro chegou ao fim que a tarefa esperava (o orçamento foi
+ *     aprovado, rejeitado ou expirou): a tarefa é CONCLUÍDA, e o dia dela
+ *     passa a ser o do fechamento do registro;
+ *   - o registro deixou de existir (excluído): a tarefa é CANCELADA — não foi
+ *     feita, e "concluída" mentiria.
+ *
+ * Quem tem esse problema, regra a regra:
+ *   - orcamento_enviado (follow-up): aprovado / rejeitado / expirado conclui;
+ *     excluído cancela.
+ *   - pedido_entregue (pós-venda): o pedido já foi entregue e não "fecha"
+ *     depois disso; só a exclusão do pedido cancela.
+ *   - prospeccao_convertida (boas-vindas ao cliente): só a exclusão do
+ *     cliente cancela.
+ *   - comissoes_fechadas, producao_fechada e nota_de_fechamento já têm o fim
+ *     ligado à AÇÃO de pagar (backend/tarefasAcoes.js e a nota da
+ *     Contabilidade): concluem sozinhas quando o pagamento acontece. O que
+ *     faltava nelas era o dia: agora também vão para o dia em que foram
+ *     concluídas (tarefasServico.concluirTarefa).
+ *
+ * `registro` é o campo de vínculo da tarefa que aponta para o registro.
+ */
+const ENCERRAMENTOS = {
+  orcamento_enviado: { registro: 'orcamento', campo: 'orcamento_id' },
+  pedido_entregue: { registro: 'pedido', campo: 'pedido_id' },
+  prospeccao_convertida: { registro: 'cliente', campo: 'cliente_id' }
+};
+
+const FECHAMENTO_DO_ORCAMENTO = {
+  Aprovado: 'foi aprovado (virou pedido)',
+  Rejeitado: 'foi rejeitado',
+  Expirado: 'expirou'
+};
+
+const EXCLUIDO = {
+  orcamento: 'O orçamento foi excluído',
+  pedido: 'O pedido foi excluído',
+  cliente: 'O cliente foi excluído'
+};
+
+/** A regra de uma tarefa automática, pelo `chave_origem` ("regra:id"). */
+function regraDaTarefa(tarefa) {
+  const chave = String(tarefa?.chave_origem || '').split(':')[0];
+  return chave || null;
+}
+
+/**
+ * O que fazer com a tarefa automática diante do registro dela. Pura.
+ * `registro`: o registro lido; `null` = não existe mais; `undefined` = não
+ * foi conferido (nada a fazer).
+ * Devolve null ou { acao: 'concluir'|'cancelar', quando, motivo }.
+ */
+function encerramentoDaTarefa(tarefa, registro) {
+  const fim = ENCERRAMENTOS[regraDaTarefa(tarefa)];
+  if (!fim || registro === undefined) return null;
+  if (registro === null) return { acao: 'cancelar', quando: null, motivo: EXCLUIDO[fim.registro] };
+  if (fim.registro !== 'orcamento') return null;
+  const frase = FECHAMENTO_DO_ORCAMENTO[texto(registro.situacao)];
+  if (!frase) return null;
+  return {
+    acao: 'concluir',
+    // O dia do fechamento é o da aprovação/rejeição (data_aprovacao é gravada
+    // nas três situações finais); sem ela, agora.
+    quando: registro.data_aprovacao || null,
+    motivo: `O orçamento ${texto(registro.numero)} ${frase}`.replace(/\s{2,}/g, ' ')
+  };
+}
+
+/**
  * A regra do catálogo. Regra que existe no banco e não aqui (criada à mão)
  * não tem permissão própria: vale só a de ver Tarefas.
  */
@@ -147,6 +222,7 @@ function paraTela(linhas, { pode, preferencias = new Map(), podeConfigurar = fal
 }
 
 module.exports = {
-  REGRAS, PERMISSAO_TAREFAS, DICA_DO_AVISO,
-  regraDoCatalogo, podeReceber, dataDaTarefa, mensagemDoAviso, mapaDePreferencias, paraTela
+  REGRAS, PERMISSAO_TAREFAS, DICA_DO_AVISO, ENCERRAMENTOS,
+  regraDoCatalogo, podeReceber, dataDaTarefa, mensagemDoAviso, mapaDePreferencias, paraTela,
+  regraDaTarefa, encerramentoDaTarefa
 };

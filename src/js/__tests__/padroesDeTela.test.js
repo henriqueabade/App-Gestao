@@ -83,7 +83,8 @@ test('Fechar e Cancelar dos modais são vermelhos (btn-danger)', () => {
   assert.deepStrictEqual(foraDoPadrao, []);
   // Os que não estão em html/modals mas são diálogos.
   assert.match(ler('html/relatorios.html'), /id="relatoriosCancelSaveTemplate" class="btn-danger /);
-  assert.match(ler('html/relatorios.html'), /id="relatoriosCancelSchedule" class="btn-danger /);
+  // "Agendar" saiu dos Relatórios (08/10/2026): era um desenho sem envio de verdade.
+  assert.ok(!ler('html/relatorios.html').includes('relatoriosScheduleModal'));
   assert.match(ler('js/modals/pedido-cancelar.js'), /data-action="cancel" class="btn-danger /);
 });
 

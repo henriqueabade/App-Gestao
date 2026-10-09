@@ -10,6 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const {
+  transportadoraDefinida,
   chaveDaPeca,
   agruparPecas,
   detalharPedidos,
@@ -413,6 +414,23 @@ test('seleção grande demais é recusada com motivo', async () => {
   } finally {
     await ctx.encerrar();
   }
+});
+
+test('o detalhamento leva a previsão de embarque e a transportadora de verdade (dono, 08/10/2026)', () => {
+  const [com, sem, naoDefinida] = detalharPedidos([
+    { id: 1, numero: 'PED1', embarcar_previsao: '2026-10-20', transportadora: 'Braspress', itens: [] },
+    { id: 2, numero: 'PED2', itens: [] },
+    { id: 3, numero: 'PED3', transportadora: 'Não Definida', itens: [] }
+  ]);
+  assert.strictEqual(com.embarcar_previsao, '2026-10-20');
+  assert.strictEqual(com.transportadora, 'Braspress');
+  assert.strictEqual(sem.embarcar_previsao, null);
+  assert.strictEqual(sem.transportadora, '');
+  // "Não Definida" é de quem ainda não escolheu: o documento não reserva caixas.
+  assert.strictEqual(naoDefinida.transportadora, '');
+  assert.strictEqual(transportadoraDefinida('  nao definida '), '');
+  assert.strictEqual(transportadoraDefinida('—'), '');
+  assert.strictEqual(transportadoraDefinida('Jamef'), 'Jamef');
 });
 
 test('sem permissão de detalhe o agrupamento é barrado', async () => {

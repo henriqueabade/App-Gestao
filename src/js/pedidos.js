@@ -532,6 +532,10 @@ async function carregarPedidos() {
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.dono = p.dono || '';
             tr.dataset.id = p.id;
+            // Os filtros leem daqui: a célula do cliente pode ganhar as peças
+            // achadas pelo filtro avançado, e aí o texto dela já não é o nome.
+            tr.dataset.cliente = obterNomeCliente(p.cliente_id);
+            tr.dataset.numero = p.numero || '';
             owners.add(p.dono);
             const condicao = p.parcelas > 1 ? `${p.parcelas}x` : 'À vista';
             // A devolução vence a situação na etiqueta (e no filtro, que lê o texto dela).
@@ -727,7 +731,7 @@ async function carregarPedidos() {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
                 const tr = e.currentTarget.closest('tr');
-                abrirRelatorioProducao(tr?.dataset.id, tr?.cells?.[1]?.innerText?.trim() || '');
+                abrirRelatorioProducao(tr?.dataset.id, tr?.dataset.cliente || tr?.cells?.[1]?.innerText?.trim() || '');
             });
         });
 
@@ -771,10 +775,12 @@ async function carregarPedidos() {
         });
         await popularClientes();
         updateEmptyStatePedidos(data.length > 0);
-        const periodSelect = document.getElementById('filterPeriod');
-        if (periodSelect?.dataset.customActive === 'true' && window.customPeriodPedidos?.start && window.customPeriodPedidos?.end) {
-            aplicarFiltro();
-        }
+        // A lista foi refeita: os filtros que estão na tela voltam a valer (antes
+        // só o período personalizado era reaplicado, e o resto ficava marcado
+        // sem efeito depois de mexer num pedido). As peças são relidas na
+        // próxima busca avançada.
+        pecasDosPedidos?.limpar();
+        aplicarFiltro();
     } catch (err) {
         console.error('Erro ao carregar pedidos', err);
     }
@@ -787,16 +793,43 @@ async function carregarPedidos() {
 // o usuário trocar de tela.
 window.carregarPedidos = carregarPedidos;
 
+// Filtro avançado (dono, 08/10/2026): as peças de cada pedido, lidas só
+// quando alguém usa o filtro (FiltrosAvancados.leitorDePecas).
+const pecasDosPedidos = window.FiltrosAvancados?.leitorDePecas('pedidos') || null;
+let controleFiltrosAvancados = null;
+
+/** O filtro avançado na linha: casa? E, se casou pela peça, mostra quais. */
+function filtroAvancadoNaLinha(row, termos) {
+    const celula = row.cells[1];
+    celula?.querySelector('[data-filtro-achados]')?.remove();
+    if (!termos.length || !pecasDosPedidos?.pronto()) return true;
+    const resultado = window.FiltrosAvancados.documentoCasa(termos, {
+        numero: row.dataset.numero,
+        cliente: row.dataset.cliente,
+        pecas: pecasDosPedidos.pecas(row.dataset.id)
+    });
+    if (resultado.casa && resultado.pecas.length && celula) {
+        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.rotuloDaPeca)));
+    }
+    return resultado.casa;
+}
+
 function aplicarFiltro() {
     const status = document.getElementById('filterStatus')?.value || '';
     const periodo = document.getElementById('filterPeriod')?.value || '';
     const dono = document.getElementById('filterOwner')?.value || '';
     const cliente = document.getElementById('filterClient')?.value.toLowerCase() || '';
+    const termos = window.BuscaAoDigitar?.termos(document.getElementById('filtroAvancadoPedidos')?.value || '') || [];
+    controleFiltrosAvancados?.sinalizar(termos.length > 0);
+    // Primeira busca avançada: lê as peças e refaz o filtro quando chegarem.
+    if (termos.length && pecasDosPedidos && !pecasDosPedidos.pronto()) {
+        pecasDosPedidos.ler().then(aplicarFiltro);
+    }
     const now = new Date();
     const customPeriod = window.customPeriodPedidos;
     document.querySelectorAll('#pedidosTabela tr').forEach(row => {
         const rowStatus = row.cells[5]?.innerText.trim() || '';
-        const rowCliente = row.cells[1]?.innerText.trim().toLowerCase() || '';
+        const rowCliente = (row.dataset.cliente ?? row.cells[1]?.innerText ?? '').trim().toLowerCase();
         const rowDono = (row.dataset.dono || '').toLowerCase();
         const dateText = row.cells[2]?.innerText.trim();
         let show = true;
@@ -822,6 +855,8 @@ function aplicarFiltro() {
                 else if (periodo === 'Ano') show &&= diff <= 365;
             }
         }
+        // Por último: só as linhas que passaram nos outros ganham as etiquetas.
+        show = filtroAvancadoNaLinha(row, show ? termos : []) && show;
 
         row.style.display = show ? '' : 'none';
     });
@@ -834,6 +869,8 @@ function limparFiltros() {
     pedidosDateRangeController?.clear();
     document.getElementById('filterOwner').value = '';
     document.getElementById('filterClient').value = '';
+    const avancado = document.getElementById('filtroAvancadoPedidos');
+    if (avancado) avancado.value = '';
     window.customPeriodPedidos = null;
     aplicarFiltro();
 }
@@ -856,6 +893,17 @@ function initPedidos() {
     const limpar = document.getElementById('btnLimpar');
     if (filtrar) filtrar.addEventListener('click', aplicarFiltro);
     if (limpar) limpar.addEventListener('click', limparFiltros);
+
+    // Filtros avançados: retraídos, crescem para baixo; filtram enquanto digita.
+    controleFiltrosAvancados = window.FiltrosAvancados?.ligar({
+        botao: document.getElementById('btnFiltrosAvancadosPedidos'),
+        painel: document.getElementById('pedidosFiltrosAvancados'),
+        aoAbrir: () => {
+            pecasDosPedidos?.ler();
+            setTimeout(() => document.getElementById('filtroAvancadoPedidos')?.focus(), 50);
+        }
+    }) || null;
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroAvancadoPedidos'), aplicarFiltro);
 
     const periodSelect = document.getElementById('filterPeriod');
     if (periodSelect && window.DateRangeFilter?.initDateRangeFilter) {

@@ -72,7 +72,8 @@ test('tela: a frase da trava sai limpa — do backend ou do meio do erro do banc
 
   // A caixa é a padrão (DialogPadrao), na confirmação e no "Fechar competência".
   assert.match(fonte, /title: 'Mês anterior em aberto', tom: 'aviso', icone: 'fa-lock'/);
-  assert.match(fonte, /if \(await avisarMesAnteriorAberto\(e\)\) \{ aviso\(''\); await carregar\(\); return; \}/);
+  // A releitura depois da trava é silenciosa e mantém a peça no lugar (08/10/2026).
+  assert.match(fonte, /if \(await avisarMesAnteriorAberto\(e\)\) \{ aviso\(''\); await carregar\([^)]*\); return; \}/);
   assert.match(fonte, /if \(doMesAnterior && await avisarMesAnteriorAberto\(doMesAnterior\)\) return;/);
 });
 
@@ -101,7 +102,8 @@ test('"Tudo"/"Nada" nunca sobrescrevem o que já foi decidido (tela e backend)',
 
   // Os dois botões do pedido usam só o que falta e avisam o backend.
   assert.strictEqual((tela.match(/const alvo = semDecisaoNoPedido\(pedido\);/g) || []).length, 2);
-  assert.strictEqual((tela.match(/\{ somente_pendentes: true \}\);/g) || []).length, 2);
+  // (com a âncora que deixa a tela parada depois de confirmar, 08/10/2026)
+  assert.strictEqual((tela.match(/\{ somente_pendentes: true \}(?:, \{ ancora \})?\);/g) || []).length, 2);
   // O "Tudo"/"Nada" da peça pula o processo já decidido.
   assert.match(tela, /if \(!processo\.saldo \|\| processo\.decidido\) continue;/);
 

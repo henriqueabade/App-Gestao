@@ -903,6 +903,9 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
 // furos: quem podia editar disparava a conversao sem ter permissao para isso, e
 // quem tinha `orc.convert` mudava qualquer status (Rejeitado, Expirado) sem ter
 // `orc.status.change`. Agora cada rota pede exatamente o que vai executar.
+/** As situações em que o orçamento se encerra (e o follow-up dele também). */
+const SITUACOES_QUE_FECHAM = new Set(['Aprovado', 'Rejeitado', 'Expirado']);
+
 function permissoesDeStatus(req) {
   const chaves = ['orc.status.change'];
   if (String(req.body?.situacao || '').trim() === 'Aprovado') chaves.push('orc.convert');
@@ -1039,6 +1042,13 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     // `numero` volta porque a conversão de um OCRP RENUMERA o orçamento: sem
     // isto o aviso de sucesso citaria o código antigo, que já não existe.
     const depois = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+    // Orçamento fechado (aprovado, rejeitado, expirado): o follow-up automático
+    // dele conclui no dia do fechamento (fim natural, 08/10/2026).
+    if (SITUACOES_QUE_FECHAM.has(body.situacao)) {
+      await tarefas.encerrarTarefasDoRegistro(api, {
+        tipo: 'orcamento', id, registro: depois && !depois.error ? depois : undefined, usuarioId: idDoUsuarioDaRequisicao(req)
+      });
+    }
     res.json({
       success: true, convertido, convertErro, pedido, estoque: estoqueResumo,
       numero: depois?.numero ?? null
@@ -1120,6 +1130,12 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
     // `numero` volta porque a conversão de um OCRP RENUMERA o orçamento: sem
     // isto o aviso de sucesso citaria o código antigo, que já não existe.
     const depois = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+    // Fim natural do follow-up automático (ver o PUT acima).
+    if (SITUACOES_QUE_FECHAM.has(situacao)) {
+      await tarefas.encerrarTarefasDoRegistro(api, {
+        tipo: 'orcamento', id, registro: depois && !depois.error ? depois : undefined, usuarioId: idDoUsuarioDaRequisicao(req)
+      });
+    }
     res.json({
       success: true, convertido, convertErro, pedido, estoque: estoqueResumo,
       numero: depois?.numero ?? null
@@ -1204,6 +1220,8 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
     const antes = await api.get(`/api/orcamentos/${id}`).catch(() => null);
 
     const { removidos, avisos } = await excluirOrcamentoEmCascata(api, id);
+    // O follow-up automático de um orçamento que não existe mais é cancelado.
+    await tarefas.encerrarTarefasDoRegistro(api, { tipo: 'orcamento', id, registro: null, usuarioId: idDoUsuarioDaRequisicao(req) });
 
     await anotarNaProspeccao(api, req, antes, {
       tipo: 'orcamento',

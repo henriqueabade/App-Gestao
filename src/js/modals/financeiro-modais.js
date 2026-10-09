@@ -2803,6 +2803,42 @@
     const nomeDaPecaCurto = peca => [peca.codigo, peca.nome].filter(Boolean).join(' — ') || `peça ${peca.pedido_item_id}`;
     const faltamNaPeca = peca => peca.processos.filter(p => limite(p) > 0 && escolhido(peca, p) === null).length;
 
+    // ------------------------------------------------------------ filtro
+    // A barra "Filtrar pedidos" (dono, 08/10/2026): número do pedido, cliente,
+    // nome ou código da peça. Todos os termos têm de casar ("jackie banco").
+    // Casou pelo pedido/cliente: o card vem inteiro. Casou só por peça: o card
+    // vem só com as peças que casaram.
+    const filtroCampo = el('finFecharProducaoFiltro');
+    const termosDoFiltro = () => window.BuscaAoDigitar?.termos(filtroCampo?.value || '') || [];
+    function visivelNoFiltro(pedido, termos) {
+      if (!termos.length || !window.BuscaAoDigitar) return pedido.pecas;
+      const casa = window.BuscaAoDigitar.casa;
+      const cabeca = [pedido.numero, pedido.cliente];
+      if (casa(termos, cabeca)) return pedido.pecas;
+      const pecas = pedido.pecas.filter(peca => casa(termos, cabeca, peca.codigo, peca.nome));
+      return pecas.length ? pecas : null;
+    }
+
+    // ------------------------------------------------------------ a tela parada
+    // Confirmar uma peça recolhe os campos dela e relê a competência. Antes, a
+    // lista era refeita e a tela pulava (o "Carregando" aparecia em cima dos
+    // cards e a rolagem voltava): agora o bloco que a pessoa usou fica no mesmo
+    // ponto da tela (dono, 08/10/2026).
+    const rolagem = () => caixaCards.closest('.modal-scroll');
+    function marcarAncora(seletor) {
+      const alvo = seletor ? caixaCards.querySelector(seletor) : null;
+      return { seletor, topo: alvo ? alvo.getBoundingClientRect().top : null, scroll: rolagem()?.scrollTop ?? 0 };
+    }
+    function voltarAncora(ancora) {
+      const caixa = rolagem();
+      if (!ancora || !caixa) return;
+      const alvo = ancora.seletor ? caixaCards.querySelector(ancora.seletor) : null;
+      if (alvo && ancora.topo !== null) caixa.scrollTop += alvo.getBoundingClientRect().top - ancora.topo;
+      else caixa.scrollTop = ancora.scroll;
+    }
+    const seletorDaPeca = (pedido, peca) => `[data-peca="${chaveDaPeca(pedido, peca)}"]`;
+    const seletorDoPedido = pedido => `[data-pedido-card="${pedido.pedido_id}"]`;
+
     // ------------------------------------------------------------ desenho
     function linhaDoProcesso(pedido, peca, processo) {
       const linha = criar('div', 'flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-lg border border-white/10');
@@ -2914,7 +2950,9 @@
           if (!processo.saldo || processo.decidido) continue;
           escolhas.set(chaveDoProcesso(peca, processo), valor === 'tudo' ? limite(processo) : 0);
         }
+        const ancora = marcarAncora(seletorDaPeca(pedido, peca));
         pintar();
+        voltarAncora(ancora);
       };
       const botaoDaPeca = (rotulo, classe, titulo, valor) => {
         const b = criar('button', `${classe} ctl-botao ctl-botao--pequeno`, rotulo);
@@ -2963,8 +3001,9 @@
       return bloco;
     }
 
-    function cardDoPedido(pedido) {
+    function cardDoPedido(pedido, pecasVisiveis = pedido.pecas) {
       const card = criar('div', 'glass-surface rounded-xl border border-white/10 px-5 py-5 space-y-4');
+      card.dataset.pedidoCard = String(pedido.pedido_id);
       const topo = criar('div', 'flex items-start justify-between gap-3');
       const titulo = criar('div', 'min-w-0');
       titulo.appendChild(criar('p', 'text-white font-semibold truncate', `Pedido ${pedido.numero}`));
@@ -3003,7 +3042,13 @@
       );
       card.appendChild(etiquetas);
 
-      for (const peca of pedido.pecas) card.appendChild(blocoDaPeca(pedido, peca));
+      // O filtro deixou só parte das peças: diz isso, para ninguém achar que o
+      // pedido tem só estas (os botões do pedido continuam valendo para todas).
+      if (pecasVisiveis.length < pedido.pecas.length) {
+        card.appendChild(criar('p', 'text-xs text-gray-400',
+          `Mostrando ${pecasVisiveis.length} de ${pedido.pecas.length} peças (filtro). "Tudo pronto" e "Nada pronto" valem para o pedido inteiro.`));
+      }
+      for (const peca of pecasVisiveis) card.appendChild(blocoDaPeca(pedido, peca));
       return card;
     }
 
@@ -3016,9 +3061,24 @@
       pintarSituacao(el('finFecharProducaoSituacao'), !previa ? '—' : (previa.fechamento?.pagamento ? 'Paga' : (previa.fechado ? 'Fechada' : 'Em aberto')));
 
       caixaCards.replaceChildren();
-      for (const pedido of dados?.pedidos || []) caixaCards.appendChild(cardDoPedido(pedido));
+      const termos = termosDoFiltro();
+      let mostrados = 0;
+      for (const pedido of dados?.pedidos || []) {
+        const pecas = visivelNoFiltro(pedido, termos);
+        if (!pecas) continue;
+        mostrados += 1;
+        caixaCards.appendChild(cardDoPedido(pedido, pecas));
+      }
       for (const pedido of dados?.pedidos || []) for (const peca of pedido.pecas) pintarCabecaDaPeca(pedido, peca);
       el('finFecharProducaoVazio').classList.toggle('hidden', Boolean(dados?.pedidos?.length) || !dados);
+      const totalDePedidos = dados?.pedidos?.length || 0;
+      el('finFecharProducaoFiltroVazio')?.classList.toggle('hidden', !(termos.length && totalDePedidos && !mostrados));
+      const resumoDoFiltro = el('finFecharProducaoFiltroResumo');
+      if (resumoDoFiltro) {
+        resumoDoFiltro.textContent = termos.length
+          ? `Mostrando ${mostrados} de ${totalDePedidos} pedido(s).`
+          : 'Vários termos juntos valem: “jackie banco”.';
+      }
 
       // Peças e processos são coisas diferentes: 2 peças × 4 processos = 8
       // linhas de pagamento, mas 2 peças (defeito pego pelo dono em 24/09).
@@ -3048,10 +3108,15 @@
     }
 
     // ------------------------------------------------------------ dados
-    async function carregar() {
+    /**
+     * `silencioso` (depois de confirmar): sem o "Carregando os pedidos..." em
+     * cima dos cards — ele empurrava tudo para baixo e a tela pulava. `ancora`:
+     * o bloco que volta ao mesmo ponto da tela depois de redesenhar.
+     */
+    async function carregar({ silencioso = false, ancora = null } = {}) {
       const minha = ++leitura;
       aviso('');
-      el('finFecharProducaoCarregando').classList.remove('hidden');
+      if (!silencioso) el('finFecharProducaoCarregando').classList.remove('hidden');
       try {
         const [pend, prev] = await Promise.all([
           fetchApi(`/api/financeiro/producao/pendencias?competencia=${encodeURIComponent(compSel.value)}`),
@@ -3073,10 +3138,12 @@
       } finally {
         if (minha === leitura) el('finFecharProducaoCarregando').classList.add('hidden');
       }
+      if (minha !== leitura) return;
       pintar();
+      voltarAncora(ancora);
     }
 
-    async function enviarDecisoes(pedido, decisoes, mensagem, extra = {}) {
+    async function enviarDecisoes(pedido, decisoes, mensagem, extra = {}, { ancora = null } = {}) {
       try {
         await fetchApi('/api/financeiro/producao/confirmar', {
           method: 'POST',
@@ -3084,9 +3151,9 @@
         });
         window.showToast?.(mensagem, 'success');
         avisarAlteracao();
-        await carregar();
+        await carregar({ silencioso: true, ancora });
       } catch (e) {
-        if (await avisarMesAnteriorAberto(e)) { aviso(''); await carregar(); return; }
+        if (await avisarMesAnteriorAberto(e)) { aviso(''); await carregar({ silencioso: true, ancora }); return; }
         aviso(textoDoErro(e, 'Você não tem permissão para registrar produção.'));
       }
     }
@@ -3104,8 +3171,11 @@
         decisoes.push({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: valor });
       }
       if (!decisoes.length) return;
+      // O cabeçalho da peça fica onde está na tela: os campos recolhem e o
+      // que vem abaixo sobe, sem a tela pular.
+      const ancora = marcarAncora(seletorDaPeca(pedido, peca));
       abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`);
+      await enviarDecisoes(pedido, decisoes, `${nomeDaPecaCurto(peca)} confirmada no pedido ${pedido.numero}.`, {}, { ancora });
     }
 
     /**
@@ -3139,8 +3209,9 @@
       });
       if (!confirmado) return;
       const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: limite(processo) }));
+      const ancora = marcarAncora(seletorDoPedido(pedido));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`, { somente_pendentes: true });
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero} confirmado por inteiro.`, { somente_pendentes: true }, { ancora });
     }
 
     /**
@@ -3161,8 +3232,9 @@
       });
       if (!confirmado) return;
       const decisoes = alvo.map(({ peca, processo }) => ({ pedido_item_id: peca.pedido_item_id, etapa_id: processo.etapa_id, prontas: 0 }));
+      const ancora = marcarAncora(seletorDoPedido(pedido));
       for (const peca of pedido.pecas) abertas.delete(chaveDaPeca(pedido, peca));
-      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`, { somente_pendentes: true });
+      await enviarDecisoes(pedido, decisoes, `Pedido ${pedido.numero}: nada ficou pronto nesta competência.`, { somente_pendentes: true }, { ancora });
     }
 
     async function fecharCompetencia() {
@@ -3216,6 +3288,23 @@
 
     compSel.addEventListener('change', () => { escolhas.clear(); abertas.clear(); carregar(); });
     acionar(confirmarBtn, fecharCompetencia);
+
+    // A barra "Filtrar pedidos": nasce retraída (seção retrátil), filtra
+    // enquanto digita, sem reler nada — só redesenha os cards.
+    const secaoDoFiltro = el('finFecharProducaoFiltroSecao');
+    if (secaoDoFiltro) {
+      window.SecaoRetratil?.ligar(secaoDoFiltro.parentElement || document);
+      el('finFecharProducaoFiltroBarra')?.addEventListener('click', () => {
+        setTimeout(() => { if (window.SecaoRetratil?.estaAberta(secaoDoFiltro)) filtroCampo?.focus(); }, 0);
+      });
+    }
+    window.BuscaAoDigitar?.ligar(filtroCampo, pintar);
+    el('finFecharProducaoFiltroLimpar')?.addEventListener('click', () => {
+      if (filtroCampo) filtroCampo.value = '';
+      if (secaoDoFiltro) window.SecaoRetratil?.resumir(secaoDoFiltro);
+      pintar();
+      filtroCampo?.focus();
+    });
     return carregar();
   }
 
