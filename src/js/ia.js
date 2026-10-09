@@ -476,11 +476,11 @@ function initIA() {
     document.getElementById('btnLimparIA')?.addEventListener('click', limparFiltros);
     document.getElementById('iaTentarNovamente')?.addEventListener('click', () => carregarLeituras(true));
 
-    // Enter no campo de busca filtra; digitar não, para não refazer a grade a
-    // cada tecla numa lista que pode ter centenas de linhas.
-    document.getElementById('filtroBuscaIA')?.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); aplicarFiltros(); }
-    });
+    // A busca filtra enquanto digita, como em todos os módulos (08/10/2026).
+    // A espera um pouco maior que a padrão é por a lista poder ter centenas de
+    // linhas: a grade é refeita quando a digitação para, não a cada tecla.
+    // Enter continua aplicando na hora.
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroBuscaIA'), aplicarFiltros, { espera: 250 });
     document.getElementById('filtroDestinoIA')?.addEventListener('change', aplicarFiltros);
     document.getElementById('filtroStatusIA')?.addEventListener('change', aplicarFiltros);
 

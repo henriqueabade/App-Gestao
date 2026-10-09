@@ -59,12 +59,36 @@
 
             <!-- Action Buttons -->
             <div id="bt-actions" class="ctl-acoes flex-shrink-0">
+                <button id="btnFiltrosAvancadosPedidos" type="button" data-perm="ped.search" aria-expanded="false" aria-controls="pedidosFiltrosAvancados"
+                        class="btn-neutral ctl-botao text-white botao-filtros-avancados">
+                    <i class="fas fa-sliders mr-2"></i>Filtros avançados
+                    <i class="fas fa-chevron-down ml-2 text-xs botao-filtros-avancados__seta"></i>
+                </button>
                 <button id="btnFiltrar" data-perm="ped.search" class="btn-secondary ctl-botao text-white">
                     Filtrar
                 </button>
                 <button id="btnLimpar" data-perm="ped.search" class="btn-warning ctl-botao text-white">
                     Limpar
                 </button>
+            </div>
+        </div>
+
+        <!--
+          Filtros avançados (dono, 08/10/2026): nascem RETRAÍDOS e crescem para
+          baixo, no padrão de Prospecções. Aqui: os pedidos que têm uma peça
+          (ou de um cliente). Filtra enquanto digita.
+        -->
+        <div id="pedidosFiltrosAvancados" class="filtros-avancados" aria-hidden="true">
+            <div>
+                <div class="pt-4 mt-4 border-t border-white/10 filtros-avancados-grade">
+                    <div class="linha-inteira">
+                        <label for="filtroAvancadoPedidos" class="ctl-rotulo text-white">Cliente, peça ou código</label>
+                        <input id="filtroAvancadoPedidos" type="search" autocomplete="off" data-perm="ped.search"
+                               placeholder="Nome do cliente, nome da peça ou código"
+                               class="ctl-campo input-glass text-white w-full placeholder-white/50">
+                        <p class="filtros-avancados__dica">Mostra só os pedidos desse cliente ou que têm essa peça. Vários termos juntos: “jackie pietra”.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

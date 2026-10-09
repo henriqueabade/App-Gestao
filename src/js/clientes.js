@@ -241,6 +241,8 @@ function initClientes() {
 
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+    // A busca filtra enquanto digita (08/10/2026), como em todos os módulos.
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroBusca'), aplicarFiltros);
     document.getElementById('btnNovoCliente')?.addEventListener('click', () => {
         openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
     });

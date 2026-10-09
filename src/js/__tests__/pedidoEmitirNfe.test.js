@@ -104,7 +104,8 @@ test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/N
   const danfe = tagNota({ numero: 'PED1' }, { id: 2, serie: 1, numero: 2, status_fiscal: 'autorizada', ambiente: 'homologacao' });
   assert.match(danfe, /badge-success tag-danfe/);
   assert.match(danfe, /data-nota-id="2"/);
-  assert.match(danfe, /title="NF-e série 1 nº 2 autorizada \(homologação\) — clique para gerar o DANFE"/);
+  // Desde 09/10/2026 o DANFE abre no "Visualizar documento" (ver, imprimir ou salvar).
+  assert.match(danfe, /title="NF-e série 1 nº 2 autorizada \(homologação\) — clique para ver o DANFE"/);
   assert.match(danfe, />DANFE<\/span>/);
   const cancelada = tagNota({ numero: 'PED1', nfe_dispensada: true }, { id: 3, serie: 1, numero: 3, status_fiscal: 'cancelada', cancelada_em: '2026-09-15T16:00:00-03:00' });
   assert.match(cancelada, /badge-danger/);
@@ -115,7 +116,7 @@ test('lista de pedidos: DANFE verde (clicável), X/NF vermelha (cancelada) e S/N
   assert.strictEqual(tagNota({}, null), '');
   assert.ok(PEDIDOS.includes('${p.numero}${tagNota(p, notasPorPedido[String(p.id)], notasForaPorPedido[String(p.id)])}${tagNotaDevolucao(notasDevPorPedido[String(p.id)])}</td>'));
   assert.ok(PEDIDOS.includes("fetchApi('/api/fiscal/notas').catch(() => null)"), 'as notas entram junto com os pedidos');
-  assert.ok(PEDIDOS.includes("tr.querySelector('.tag-danfe')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.gerarDanfe(Number(e.currentTarget.dataset.notaId))'));
+  assert.ok(PEDIDOS.includes("tr.querySelector('.tag-danfe')?.addEventListener('click'") && PEDIDOS.includes('window.NfeDocumentos?.verDanfe(Number(e.currentTarget.dataset.notaId))'));
 
   // Carta de correção: tag amarela "CC-e" NA FRENTE da DANFE; o clique gera o PDF da última carta.
   const comCarta = tagNota({}, { id: 2, serie: 1, numero: 2, status_fiscal: 'autorizada', ambiente: 'producao', cartas_correcao: 2, ultima_carta_seq: 2 });

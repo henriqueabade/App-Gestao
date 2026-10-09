@@ -130,6 +130,17 @@ function agruparPecas(pedidos = []) {
 }
 
 /**
+ * A transportadora do pedido, ou '' quando não há uma de verdade ("Não
+ * Definida" é a resposta de quem ainda não escolheu — src/js/utils/transportadoras.js).
+ */
+function transportadoraDefinida(valor) {
+  const nome = texto(valor);
+  const chave = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (!chave || chave === 'nao definida' || chave === 'nao definido' || chave === '-' || chave === '—') return '';
+  return nome;
+}
+
+/**
  * Detalhamento por pedido: o que a expedição usa para separar o que é de quem.
  * Mantém as peças na ordem em que estão no pedido, sem consolidar.
  */
@@ -153,6 +164,13 @@ function detalharPedidos(pedidos = []) {
       cliente: texto(pedido?.cliente_nome) || texto(pedido?.cliente),
       situacao: texto(pedido?.situacao),
       data_emissao: pedido?.data_emissao ?? null,
+      // A data prevista de entrega (previsão de embarque) vai na linha do
+      // cliente, à direita (dono, 08/10/2026).
+      embarcar_previsao: pedido?.embarcar_previsao ?? null,
+      // Com transportadora, o documento reserva "Descrição caixas" (peso e
+      // medidas de até 4 caixas) no bloco do cliente. "Não Definida" é o
+      // valor de quem ainda não escolheu — não é transportadora.
+      transportadora: transportadoraDefinida(pedido?.transportadora),
       valor_final: num(pedido?.valor_final),
       itens
     };
@@ -184,6 +202,7 @@ function montarAgrupamento(pedidos = []) {
 }
 
 module.exports = {
+  transportadoraDefinida,
   chaveDaPeca,
   agruparPecas,
   detalharPedidos,

@@ -514,6 +514,75 @@ test('produção: o pedido entra pendente sozinho, a confirmação é peça a pe
   }
 });
 
+test('produção quebrada (dono, 07/10/2026): 0,5 paga a metade e o resto fica para o mês seguinte, até fechar o valor cheio', async () => {
+  const hoje = hojeBR();
+  const ant = mesesAntes(hoje.slice(0, 7), 1);
+  const atual = hoje.slice(0, 7);
+  const t = await montar({ ...tabelasBase(ant), ...tabelasG() });
+  const confirmar = (competencia, decisoes) => t.chamar('POST', '/api/financeiro/producao/confirmar', { competencia, pedido_id: 55, decisoes });
+  const processo = (corpo, nome) => corpo.pedido.pecas[0].processos.find(p => p.nome === nome);
+  try {
+    t.permitir('financeiro.comissao.view', 'financeiro.producao.registrar', 'financeiro.regras.editar', 'financeiro.competencia.fechar');
+    // Marcenaria R$ 100 a peça (4 unidades) e Acabamento R$ 25 (5 unidades; a do estoque já tinha metade dele).
+    await t.chamar('POST', '/api/financeiro/valores', { etapa_id: 1, produto_id: null, tipo: 'percentual', valor: 10 });
+    await t.chamar('POST', '/api/financeiro/valores', { etapa_id: 2, produto_id: null, tipo: 'valor', valor: 25 });
+
+    // Mês 1: marcenaria 1,5 (uma inteira e metade da segunda); acabamento 0,5 da primeira (a do estoque: metade da metade).
+    const m1 = await confirmar(ant, [{ pedido_item_id: 501, etapa_id: 1, prontas: 1.5 }, { pedido_item_id: 501, etapa_id: 2, prontas: '0,5' }]);
+    assert.equal(m1.status, 200, JSON.stringify(m1.corpo));
+    const marc1 = processo(m1.corpo, 'Marcenaria');
+    assert.deepEqual([marc1.saldo, marc1.decidido.prontas, marc1.decidido.pendentes, marc1.decidido.valor], [2.5, 1.5, 2.5, 150]);
+    const acab1 = processo(m1.corpo, 'Acabamento');
+    assert.deepEqual([acab1.saldo, acab1.decidido.prontas, acab1.decidido.valor], [4.5, 0.5, 6.25]);
+    assert.equal(m1.corpo.pedido.confirmado, true, 'decisão quebrada também é decisão');
+    const eventos = t.tabelas.producao_eventos.filter(e => e.status === 'ativo');
+    assert.deepEqual(eventos.map(e => [e.etapa_id, e.quantidade, Number(e.fracao_paga)]), [[1, 2, 1.5], [2, 1, 0.25]],
+      'o registro guarda as unidades tocadas e a fração paga');
+    assert.equal((await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${ant}`)).corpo.a_pagar, 156.25);
+
+    // Refazer antes de fechar, ainda quebrado: 2,5 da marcenaria.
+    const refeita = await confirmar(ant, [{ pedido_item_id: 501, etapa_id: 1, prontas: 2.5 }]);
+    assert.equal(refeita.status, 200, JSON.stringify(refeita.corpo));
+    const previa1 = await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${ant}`);
+    assert.equal(previa1.corpo.a_pagar, 256.25);
+    // "Marcenaria (2,5 peças)": a contagem por processo é a do que foi feito, não as 3 unidades tocadas.
+    assert.equal(previa1.corpo.setores.find(s => s.setor === 'Marcenaria').pecas, 2.5);
+
+    // Passar do que falta é recusado (com decimais na mensagem); texto que não é número também.
+    const demais = await confirmar(ant, [{ pedido_item_id: 501, etapa_id: 1, prontas: 4.5 }]);
+    assert.equal(demais.status, 409);
+    assert.match(demais.corpo.error, /4,5 passa das 4 unidades/);
+    assert.equal((await confirmar(ant, [{ pedido_item_id: 501, etapa_id: 1, prontas: 'metade' }])).status, 422);
+
+    assert.equal((await t.chamar('POST', '/api/financeiro/fechamentos', { tipo: 'producao', competencia: ant })).status, 200);
+
+    // Mês 2: o que ficou pela metade volta para decidir — e o que já foi feito aparece.
+    const pend = await t.chamar('GET', `/api/financeiro/producao/pendencias?competencia=${atual}`);
+    assert.equal(pend.status, 200, JSON.stringify(pend.corpo));
+    const peca = pend.corpo.pedidos[0].pecas[0];
+    const marc2 = peca.processos.find(p => p.nome === 'Marcenaria');
+    assert.deepEqual([marc2.saldo, marc2.disponivel, marc2.ja_feito, marc2.proximas], [1.5, 1.5, 0.5, [0.5, 1]]);
+    assert.equal(marc2.valor_pendente, 150, 'falta meia marcenaria + uma inteira');
+    const acab2 = peca.processos.find(p => p.nome === 'Acabamento');
+    assert.deepEqual([acab2.saldo, acab2.ja_feito], [4.5, 0.5]);
+    assert.equal(pend.corpo.pedidos[0].confirmado, false, 'o herdado precisa de decisão no mês novo');
+
+    // Termina tudo: paga só o que faltava — no total, o valor cheio dos dois processos.
+    const m2 = await confirmar(atual, [{ pedido_item_id: 501, etapa_id: 1, prontas: 1.5 }, { pedido_item_id: 501, etapa_id: 2, prontas: 4.5 }]);
+    assert.equal(m2.status, 200, JSON.stringify(m2.corpo));
+    assert.equal(processo(m2.corpo, 'Marcenaria').decidido.valor, 150);
+    assert.equal(processo(m2.corpo, 'Acabamento').decidido.valor, 106.25);
+    assert.equal(processo(m2.corpo, 'Marcenaria').saldo, 0);
+    assert.equal(processo(m2.corpo, 'Acabamento').saldo, 0);
+    // Os dois meses somam o valor cheio do pedido (o mesmo de pagar tudo de uma vez: 512,50).
+    const previa2 = await t.chamar('GET', `/api/financeiro/fechamentos/previa?tipo=producao&competencia=${atual}`);
+    assert.equal(previa2.corpo.a_pagar, 256.25, 'mês 2: 150 da marcenaria + 106,25 do acabamento');
+    assert.equal(256.25 + previa2.corpo.a_pagar, 512.5);
+  } finally {
+    await t.fechar();
+  }
+});
+
 test('pagamento por beneficiário: dá para pagar só a CMS, só uma pessoa, e o resto fica pendente', async () => {
   const hoje = hojeBR();
   const ant = mesesAntes(hoje.slice(0, 7), 1);

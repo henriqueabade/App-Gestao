@@ -157,8 +157,44 @@ test('a loja é o cabeçalho de cada bloco do detalhamento', () => {
     const html = carregarModulo().gerar(documento(), { incluirDetalhe: true });
 
     // É pela loja que quem separa acha o pedido na bancada, não pelo número.
-    assert.match(html, /<h3>Loja Central &middot; PED1<\/h3>/);
-    assert.match(html, /<h3>Decorações Silvia &middot; PED2<\/h3>/);
+    assert.match(html, /<h3><span class="loja">Loja Central &middot; PED1<\/span>/);
+    assert.match(html, /<h3><span class="loja">Decorações Silvia &middot; PED2<\/span>/);
+});
+
+test('a data prevista de entrega vai na linha do cliente, à direita (dono, 08/10/2026)', () => {
+    const doc = documento();
+    doc.pedidos[0].embarcar_previsao = '2026-10-20';
+    doc.pedidos[1].embarcar_previsao = null;
+    const html = carregarModulo().gerar(doc, { incluirDetalhe: true });
+
+    // A data é DATE: sai o dia gravado, sem o fuso puxar para o dia anterior.
+    assert.match(html, /<h3><span class="loja">Loja Central &middot; PED1<\/span><span class="previsao">Previsão de embarque: <strong>20\/10\/2026<\/strong><\/span><\/h3>/);
+    assert.match(html, /PED2<\/span><span class="previsao">Sem previsão de embarque<\/span><\/h3>/);
+    assert.ok(html.includes('justify-content: space-between'), 'cliente à esquerda, data à direita');
+});
+
+test('com transportadora, o bloco do cliente traz "Descrição caixas" com 4 linhas em branco (dono, 08/10/2026)', () => {
+    const doc = documento();
+    doc.pedidos[0].transportadora = 'Braspress';
+    doc.pedidos[1].transportadora = '';
+    const html = carregarModulo().gerar(doc, { incluirDetalhe: true });
+
+    const bloco1 = html.slice(html.indexOf('Loja Central &middot; PED1'), html.indexOf('</article>', html.indexOf('Loja Central &middot; PED1')));
+    assert.ok(bloco1.includes('Descrição caixas'), 'colado no bloco do cliente, dentro do mesmo <article>');
+    assert.ok(bloco1.includes('Transportadora: Braspress'));
+    for (const coluna of ['Peso (kg)', 'Altura (cm)', 'Largura (cm)', 'Comprimento (cm)']) assert.ok(bloco1.includes(coluna), coluna);
+    assert.strictEqual((bloco1.match(/<tr><td class="caixa-n">\d<\/td><td><\/td><td><\/td><td><\/td><td><\/td><\/tr>/g) || []).length, 4);
+
+    const bloco2 = html.slice(html.indexOf('Decorações Silvia &middot; PED2'));
+    assert.ok(!bloco2.slice(0, bloco2.indexOf('</article>')).includes('Descrição caixas'), 'sem transportadora, sem caixas');
+    // O bloco inteiro (peças + caixas) não se parte entre folhas.
+    assert.ok(/\.pedido \{[^}]*break-inside: avoid/.test(html));
+});
+
+test('o total do agrupamento sai uma vez só, no fim da tabela — não no pé de cada folha (dono, 08/10/2026)', () => {
+    const html = carregarModulo().gerar(documento(), { incluirDetalhe: true });
+    assert.ok(html.includes('<tfoot>'), 'a linha de total continua');
+    assert.ok(html.includes('tfoot { display: table-row-group; }'), 'como grupo comum, o Chromium não a repete em cada folha');
 });
 
 test('o detalhamento mostra código, nome e quantidade de cada peça', () => {

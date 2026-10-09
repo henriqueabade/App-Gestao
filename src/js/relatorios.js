@@ -347,12 +347,27 @@ function precoDeVendaProduto(produto) {
     return window.PrecoTabela?.precoDeVenda(produto) ?? null;
 }
 
+/**
+ * O DIA de uma coluna de data, sem passar por fuso: "2026-10-08" (DATE) e
+ * "2026-10-08T00:00:00.000Z" (a mesma data como a API às vezes a entrega).
+ * Lidas com `new Date`, as duas viravam 07/10 em Brasília — a coluna "Data"
+ * dos Relatórios mostrava o dia anterior ao da tela de Pedidos (que já lê
+ * em UTC). Hora de verdade (não meia-noite UTC) devolve null.
+ */
+function diaSemFuso(valor) {
+    if (typeof valor !== 'string') return null;
+    const m = valor.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ]00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)?)?$/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+}
+
 function formatDate(value) {
     if (!value) return '—';
     if (typeof value === 'string') {
         const trimmed = value.trim();
         if (!trimmed) return '—';
         if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+        const dia = diaSemFuso(trimmed);
+        if (dia) return dia.split('-').reverse().join('/');
         const parsed = new Date(trimmed);
         if (!Number.isNaN(parsed.getTime())) {
             return parsed.toLocaleDateString('pt-BR');
@@ -1385,10 +1400,28 @@ function createAgrupamentoPrintHtml(doc, { incluirDetalhe = false, titulo = 'Agr
         // bancada, não pelo número.
         const loja = escapeHtml(pedido.cliente || 'Cliente não informado');
         const numero = pedido.numero ? ' &middot; ' + escapeHtml(pedido.numero) : '';
-        return '<article class="pedido"><h3>' + loja + numero + '</h3>'
+        // A data prevista de entrega, na MESMA linha do cliente, à direita
+        // (dono, 08/10/2026). É a "Previsão de embarque" do pedido.
+        const previsao = pedido.embarcar_previsao ? formatDate(pedido.embarcar_previsao) : '';
+        const ladoDireito = '<span class="previsao">'
+            + (previsao && previsao !== '—' ? 'Previsão de embarque: <strong>' + escapeHtml(previsao) + '</strong>' : 'Sem previsão de embarque')
+            + '</span>';
+        // Com transportadora, o espaço para anotar peso e medidas das caixas,
+        // colado no bloco do cliente — o bloco inteiro não se parte entre
+        // folhas (dono, 08/10/2026).
+        const transportadora = String(pedido.transportadora || '').trim();
+        const caixas = transportadora
+            ? '<div class="caixas"><div class="caixas-titulo"><span>Descrição caixas</span>'
+              + '<span class="caixas-transportadora">Transportadora: ' + escapeHtml(transportadora) + '</span></div>'
+              + '<table class="tabela-caixas"><thead><tr><th class="caixa-n">Caixa</th><th>Peso (kg)</th>'
+              + '<th>Altura (cm)</th><th>Largura (cm)</th><th>Comprimento (cm)</th></tr></thead><tbody>'
+              + [1, 2, 3, 4].map(n => '<tr><td class="caixa-n">' + n + '</td><td></td><td></td><td></td><td></td></tr>').join('')
+              + '</tbody></table></div>'
+            : '';
+        return '<article class="pedido"><h3><span class="loja">' + loja + numero + '</span>' + ladoDireito + '</h3>'
              + '<table class="tabela-detalhe"><thead><tr><th>Código</th><th>Nome</th>'
              + '<th style="text-align:right">Qtd.</th></tr></thead><tbody>'
-             + linhas + '</tbody></table></article>';
+             + linhas + '</tbody></table>' + caixas + '</article>';
     }).join('');
 
     const detalhe = incluirDetalhe && pedidos.length
@@ -1417,15 +1450,31 @@ function createAgrupamentoPrintHtml(doc, { incluirDetalhe = false, titulo = 'Agr
         'th, td { border: 1px solid #444; padding: 4px 6px; }',
         'th { background: #f3f4f6; }',
         'tfoot td { background: #f8f8f8; }',
+        // O TOTAL SÓ NO FIM DE VERDADE DA TABELA (dono, 08/10/2026). Como
+        // `table-footer-group` (o padrão do <tfoot>), o Chromium repete a linha
+        // de total no pé de CADA folha — e quem lê acha que a tabela acabou ali.
+        // Como grupo comum, ela sai uma vez só, depois da última peça.
+        'tfoot { display: table-row-group; }',
+        'tr { break-inside: avoid; page-break-inside: avoid; }',
         '.vazio { text-align: center; padding: 12px 0; }',
         '.detalhe { margin-top: 16px; }',
         '.detalhe h2 { font-size: 12pt; margin: 0 0 8px; border-bottom: 1px solid #444; padding-bottom: 3px; }',
         // Fluxo contínuo: um pedido começa logo abaixo do anterior. Sem isto,
         // dez pedidos curtos gastariam dez folhas quase vazias.
         '.pedido { margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }',
-        '.pedido h3 { font-size: 10pt; margin: 0 0 3px; background: #eef0f3; padding: 3px 6px; border: 1px solid #444; border-bottom: none; }',
+        '.pedido h3 { font-size: 10pt; margin: 0 0 3px; background: #eef0f3; padding: 3px 6px; border: 1px solid #444; border-bottom: none; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }',
+        '.pedido h3 .loja { min-width: 0; }',
+        '.pedido h3 .previsao { flex-shrink: 0; font-size: 8.5pt; font-weight: normal; color: #333; white-space: nowrap; }',
         '.tabela-detalhe { font-size: 9pt; }',
         '.tabela-detalhe th, .tabela-detalhe td { padding: 2px 6px; }',
+        // "Descrição caixas": colada embaixo das peças do cliente, 4 linhas em branco.
+        '.caixas { margin-top: 4px; }',
+        '.caixas-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 9pt; font-weight: bold; padding: 2px 6px; background: #eef0f3; border: 1px solid #444; border-bottom: none; }',
+        '.caixas-transportadora { font-weight: normal; font-size: 8.5pt; color: #333; }',
+        '.tabela-caixas { font-size: 9pt; table-layout: fixed; }',
+        '.tabela-caixas th { font-weight: normal; font-size: 8.5pt; padding: 2px 6px; }',
+        '.tabela-caixas td { height: 7mm; padding: 0 6px; }',
+        '.tabela-caixas .caixa-n { width: 14mm; text-align: center; }',
         // Cabeçalho da tabela repete quando o consolidado atravessa páginas.
         'thead { display: table-header-group; }'
     ].join('\n        ');
@@ -2066,6 +2115,66 @@ function buildNormalizedCandidates(values) {
         .filter(Boolean);
 }
 
+/**
+ * Seletor de filtro: a opção escolhida tem de ser EXATAMENTE um dos valores
+ * do registro (sem acento e sem caixa). O filtro comparava por "contém", e a
+ * coleção "Mármore" trazia também "Mármore Branco"; "2 parcelas", também as
+ * de "12 parcelas" (revisão dos filtros, 08/10/2026).
+ */
+function igualNormalizado(valores, escolhido) {
+    if (!escolhido) return true;
+    return flattenFilterCandidates(Array.isArray(valores) ? valores : [valores])
+        .some(valor => normalizeText(valor) === escolhido);
+}
+
+/** 'AAAA-MM-DD' de um valor de data (DATE puro, ISO com hora ou dd/mm/aaaa), no dia local. */
+function diaDoRegistro(valor) {
+    if (valor === null || valor === undefined || valor === '') return null;
+    if (typeof valor === 'string') {
+        const texto = valor.trim();
+        // DATE (ou meia-noite UTC): é o dia, sem fuso (new Date daria o dia
+        // anterior em Brasília) — ver diaSemFuso.
+        const semFuso = diaSemFuso(texto);
+        if (semFuso) return semFuso;
+        const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    }
+    const data = valor instanceof Date ? valor : new Date(valor);
+    if (Number.isNaN(data.getTime())) return null;
+    const dois = n => String(n).padStart(2, '0');
+    return `${data.getFullYear()}-${dois(data.getMonth() + 1)}-${dois(data.getDate())}`;
+}
+
+const DIAS_DO_PERIODO = { 'Última semana': 7, 'Último mês': 30, 'Último trimestre': 90 };
+const FAIXA_PERSONALIZADA_DO_RELATORIO = { orcamentos: 'relatorios-orcamentos', pedidos: 'relatorios-pedidos' };
+
+/**
+ * O "Período" de Orçamentos e Pedidos. O seletor existia, mas nenhum filtro o
+ * lia: escolher "Último mês" não mudava nada (revisão de 08/10/2026). Conta
+ * pela data de emissão. "Personalizado" usa o intervalo escolhido no balão;
+ * sem intervalo, não filtra.
+ */
+function dentroDoPeriodo(valor, periodo, faixa = null, agora = new Date()) {
+    if (!periodo) return true;
+    const dia = diaDoRegistro(valor);
+    if (periodo === 'Personalizado') {
+        if (!faixa?.start || !faixa?.end) return true;
+        return Boolean(dia) && dia >= faixa.start && dia <= faixa.end;
+    }
+    const dias = DIAS_DO_PERIODO[periodo];
+    if (!dias) return true;
+    if (!dia) return false;
+    const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - dias);
+    return dia >= diaDoRegistro(limite);
+}
+
+/** O intervalo do "Personalizado" de um relatório (src/js/utils/date-range-filter.js). */
+function faixaPersonalizadaDe(key) {
+    const chave = FAIXA_PERSONALIZADA_DO_RELATORIO[key];
+    if (!chave || typeof window === 'undefined') return null;
+    return window.__relatoriosDateRanges?.[chave] || null;
+}
+
 const REPORT_FILTERS = {
     'materia-prima': (data, filters = {}) => {
         const list = Array.isArray(data) ? data : [];
@@ -2099,8 +2208,8 @@ const REPORT_FILTERS = {
             searchValues.push(item?.quantidade, item?.preco_unitario ?? item?.precoUnitario);
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
-            if (processo && !includesNormalized(item?.processo, processo)) return false;
-            if (categoria && !includesNormalized(item?.categoria, categoria)) return false;
+            if (processo && !igualNormalizado(item?.processo, processo)) return false;
+            if (categoria && !igualNormalizado(item?.categoria, categoria)) return false;
 
             const quantidade = safeNumber(item?.quantidade);
             if (semEstoque && quantidade > 0) return false;
@@ -2149,12 +2258,9 @@ const REPORT_FILTERS = {
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
-            if (colecao) {
-                const colecaoProduto = normalizeText(produto?.categoria ?? produto?.colecao ?? produto?.linha ?? '');
-                if (!colecaoProduto.includes(colecao)) return false;
-            }
+            if (colecao && !igualNormalizado([produto?.categoria, produto?.colecao, produto?.linha], colecao)) return false;
 
-            if (status && !includesNormalized(produto?.status, status)) return false;
+            if (status && !igualNormalizado(produto?.status, status)) return false;
 
             const quantidade = safeNumber(produto?.quantidade_total);
             if (semEstoque && quantidade > 0) return false;
@@ -2208,8 +2314,8 @@ const REPORT_FILTERS = {
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
-            if (owner && !includesNormalized(cliente?.dono_cliente ?? cliente?.dono, owner)) return false;
-            if (status && !includesNormalized(cliente?.status_cliente, status)) return false;
+            if (owner && !igualNormalizado([cliente?.dono_cliente, cliente?.dono], owner)) return false;
+            if (status && !igualNormalizado(cliente?.status_cliente, status)) return false;
 
             const countryCandidates = hasCountryFilter || hasStateFilter
                 ? buildNormalizedCandidates([
@@ -2282,7 +2388,7 @@ const REPORT_FILTERS = {
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
-            if (tipo && !matchesSearchTerm(tipo, [contato?.tipo, contato?.cargo])) return false;
+            if (tipo && !igualNormalizado([contato?.tipo, contato?.cargo], tipo)) return false;
             if (empresaFiltro && !includesNormalized(contato?.cliente ?? contato?.empresa, empresaFiltro)) return false;
 
             if (celularFiltro) {
@@ -2305,6 +2411,11 @@ const REPORT_FILTERS = {
         const responsavel = normalizeText(filters.responsavel);
         const origem = normalizeText(filters.origem);
         const cidade = normalizeText(filters.cidade);
+        const estado = normalizeText(filters.estado);
+        // "Data de criação (início/fim)": os campos estavam na tela sem ligação
+        // nenhuma com o filtro (revisão de 08/10/2026).
+        const criadoDe = diaDoRegistro(filters.criadoDe);
+        const criadoAte = diaDoRegistro(filters.criadoAte);
         const valorMin = parseFilterNumber(filters.valorMin);
         const valorMax = parseFilterNumber(filters.valorMax);
         const condicaoFiltro = normalizeText(filters.condicao);
@@ -2326,15 +2437,22 @@ const REPORT_FILTERS = {
             ];
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
-            if (status && !includesNormalized(prospeccao?.status, status)) return false;
-            if (responsavel && !includesNormalized(prospeccao?.responsavel, responsavel)) return false;
-            if (origem && !includesNormalized(prospeccao?.origem, origem)) return false;
+            if (status && !igualNormalizado(prospeccao?.status, status)) return false;
+            if (responsavel && !igualNormalizado(prospeccao?.responsavel, responsavel)) return false;
+            if (origem && !igualNormalizado(prospeccao?.origem, origem)) return false;
             if (cidade && !matchesSearchTerm(cidade, [
                 prospeccao?.cidade,
                 prospeccao?.municipio,
                 prospeccao?.cidade_cliente,
                 prospeccao?.localidade
             ])) return false;
+            if (estado && !matchesSearchTerm(estado, [prospeccao?.estado, prospeccao?.uf])) return false;
+            if (criadoDe || criadoAte) {
+                const criado = diaDoRegistro(prospeccao?.criado_em);
+                if (!criado) return false;
+                if (criadoDe && criado < criadoDe) return false;
+                if (criadoAte && criado > criadoAte) return false;
+            }
 
             const valor = [
                 prospeccao?.valor_estimado,
@@ -2349,30 +2467,41 @@ const REPORT_FILTERS = {
             if (Number.isFinite(valorMin) && (!Number.isFinite(valor) || valor < valorMin)) return false;
             if (Number.isFinite(valorMax) && (!Number.isFinite(valor) || valor > valorMax)) return false;
 
-            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(prospeccao))) return false;
+            if (condicaoFiltro && !igualNormalizado(getPaymentConditionLabels(prospeccao), condicaoFiltro)) return false;
 
             return true;
         });
     },
+    /*
+     * Orçamentos e Pedidos (revisão de 08/10/2026). Antes:
+     *   - "Cliente" comparava com `cliente`, campo que a lista não tem (o nome
+     *     vem em `cliente_nome`): escolher um cliente esvaziava a tabela;
+     *   - "Dono" e "Período" estavam na tela e nenhum filtro os lia;
+     *   - status e condição comparavam por "contém".
+     */
     orcamentos: (data, filters = {}) => {
         const list = Array.isArray(data) ? data : [];
         const status = normalizeText(filters.status);
+        const dono = normalizeText(filters.dono);
         const cliente = normalizeText(filters.cliente);
         const codigo = normalizeText(filters.codigo);
         const valorMin = parseFilterNumber(filters.valorMin);
         const valorMax = parseFilterNumber(filters.valorMax);
         const condicaoFiltro = normalizeText(filters.condicao);
+        const faixa = faixaPersonalizadaDe('orcamentos');
 
         return list.filter(orcamento => {
-            if (status && !includesNormalized(orcamento?.situacao, status)) return false;
-            if (cliente && !includesNormalized(orcamento?.cliente, cliente)) return false;
+            if (status && !igualNormalizado(orcamento?.situacao, status)) return false;
+            if (dono && !igualNormalizado([orcamento?.dono, orcamento?.responsavel], dono)) return false;
+            if (cliente && !igualNormalizado(nomeDoClienteDoDocumento(orcamento), cliente)) return false;
             if (codigo && !includesNormalized(orcamento?.numero, codigo)) return false;
+            if (!dentroDoPeriodo(orcamento?.data_emissao, filters.periodo, faixa)) return false;
 
             const valor = safeNumber(orcamento?.valor_final);
             if (Number.isFinite(valorMin) && valor < valorMin) return false;
             if (Number.isFinite(valorMax) && valor > valorMax) return false;
 
-            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(orcamento))) return false;
+            if (condicaoFiltro && !igualNormalizado(getPaymentConditionLabels(orcamento), condicaoFiltro)) return false;
 
             return true;
         });
@@ -2380,22 +2509,26 @@ const REPORT_FILTERS = {
     pedidos: (data, filters = {}) => {
         const list = Array.isArray(data) ? data : [];
         const status = normalizeText(filters.status);
+        const dono = normalizeText(filters.dono);
         const cliente = normalizeText(filters.cliente);
         const codigo = normalizeText(filters.codigo);
         const valorMin = parseFilterNumber(filters.valorMin);
         const valorMax = parseFilterNumber(filters.valorMax);
         const condicaoFiltro = normalizeText(filters.condicao);
+        const faixa = faixaPersonalizadaDe('pedidos');
 
         return list.filter(pedido => {
-            if (status && !includesNormalized(situacaoDoPedidoNoRelatorio(pedido), status)) return false;
-            if (cliente && !includesNormalized(pedido?.cliente, cliente)) return false;
+            if (status && !igualNormalizado(situacaoDoPedidoNoRelatorio(pedido), status)) return false;
+            if (dono && !igualNormalizado([pedido?.responsavel, pedido?.dono], dono)) return false;
+            if (cliente && !igualNormalizado(nomeDoClienteDoDocumento(pedido), cliente)) return false;
             if (codigo && !includesNormalized(pedido?.numero, codigo)) return false;
+            if (!dentroDoPeriodo(pedido?.data_emissao, filters.periodo, faixa)) return false;
 
             const valor = safeNumber(pedido?.valor_final);
             if (Number.isFinite(valorMin) && valor < valorMin) return false;
             if (Number.isFinite(valorMax) && valor > valorMax) return false;
 
-            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(pedido))) return false;
+            if (condicaoFiltro && !igualNormalizado(getPaymentConditionLabels(pedido), condicaoFiltro)) return false;
 
             return true;
         });
@@ -2561,6 +2694,15 @@ function setupSliderIndicator(slider) {
 function resetFiltersForKey(key, root, { triggerRender = false } = {}) {
     if (!key || !root) return;
 
+    const faixaDoRelatorio = FAIXA_PERSONALIZADA_DO_RELATORIO[key];
+    if (faixaDoRelatorio && typeof window !== 'undefined') {
+        try {
+            window.__relatoriosDateRangeControllers?.[faixaDoRelatorio]?.clear();
+        } catch (error) {
+            console.warn('Não foi possível limpar o período personalizado.', error);
+        }
+    }
+
     const defaultsForKey = filterDefaults.get(key) || [];
     defaultsForKey.forEach(({ element, value }) => {
         if (!element) return;
@@ -2634,6 +2776,22 @@ function setupFilterInteractions(root) {
                 render();
             }
         };
+
+        // Filtra na hora (dono, 08/10/2026): as caixas de texto enquanto se
+        // digita (com uma pausa curta, e Enter sem esperar); seletores, datas
+        // e marcadores ao mudar. O "Filtrar" continua, para quem prefere.
+        inputs.forEach(element => {
+            const tipo = String(element.type || '').toLowerCase();
+            if (['text', 'search', 'number', 'tel', 'email'].includes(tipo) || element.tagName === 'TEXTAREA') {
+                if (typeof window !== 'undefined' && window.BuscaAoDigitar?.ligar) {
+                    window.BuscaAoDigitar.ligar(element, update, { espera: 200 });
+                } else {
+                    element.addEventListener('input', update);
+                }
+            } else if (tipo !== 'hidden') {
+                element.addEventListener('change', update);
+            }
+        });
 
         const applyBtn = section.querySelector(`[data-relatorios-apply="${key}"]`);
         if (applyBtn) {
@@ -3708,6 +3866,7 @@ function createMasterDetailManager(root, options = {}) {
         const summary = normalizeSummary(key, item);
         const article = document.createElement('article');
         article.className = 'relatorios-master-item';
+        article.dataset.mdId = id;
         if (selected) {
             article.classList.add('relatorios-master-item--selected');
         }
@@ -3773,6 +3932,23 @@ function createMasterDetailManager(root, options = {}) {
         return article;
     };
 
+    /** "3 selecionados" ao lado do título da lista. */
+    const pintarContagem = key => {
+        const contagem = root.querySelector('[data-relatorios-master-contagem]');
+        if (!contagem) return;
+        const quantos = state.activeTab === key ? (state.selection.get(key)?.size || 0) : 0;
+        contagem.textContent = quantos ? `${quantos} selecionado${quantos === 1 ? '' : 's'}` : '';
+        contagem.classList.toggle('hidden', !quantos);
+    };
+
+    /**
+     * A LISTA NÃO MUDA DE ORDEM AO SELECIONAR (dono, 08/10/2026). Antes, marcar
+     * um card o levava para o topo (selecionados primeiro) e a lista inteira
+     * era redesenhada a cada clique — o card "fugia" de debaixo do mouse. Agora
+     * a ordem é sempre a do relatório; marcar ou clicar só troca as classes e a
+     * caixinha do card, sem refazer a lista. A ordem de seleção continua
+     * guardada: é nela que o Agrupamento e o PDF montam os documentos.
+     */
     const renderList = key => {
         if (!listRoot || state.activeTab !== key) return;
         const items = state.itemMap.get(key);
@@ -3781,25 +3957,24 @@ function createMasterDetailManager(root, options = {}) {
             listRoot.innerHTML = '<p class="relatorios-master-empty">Nenhum registro disponível.</p>';
             state.preview.set(key, null);
             renderDetail(key, null);
+            pintarContagem(key);
             return;
         }
 
         const selection = state.selection.get(key) || new Set();
         const selectionOrder = state.selectionOrder.get(key) || [];
         const selectedIds = selectionOrder.filter(id => selection.has(id) && items.has(id));
-        const unselectedIds = baseOrder.filter(id => !selection.has(id));
-        const ordered = selection.size ? [...selectedIds, ...unselectedIds] : baseOrder.slice();
 
         let activeId = state.preview.get(key);
         if (!activeId || !items.has(activeId)) {
-            activeId = selection.size ? selectedIds[0] : ordered[0];
+            activeId = selectedIds[0] || baseOrder[0];
             state.preview.set(key, activeId ?? null);
         }
 
         const previousScroll = listRoot.scrollTop;
         listRoot.innerHTML = '';
 
-        ordered.forEach(id => {
+        baseOrder.forEach(id => {
             const item = items.get(id);
             if (!item) return;
             listRoot.appendChild(buildCard(key, id, item, {
@@ -3810,6 +3985,27 @@ function createMasterDetailManager(root, options = {}) {
 
         listRoot.scrollTop = previousScroll;
         renderDetail(key, activeId);
+        pintarContagem(key);
+    };
+
+    /** Atualiza os cards que já estão na tela; devolve false se for preciso desenhar. */
+    const atualizarCards = key => {
+        if (!listRoot || state.activeTab !== key) return true;
+        const cards = Array.from(listRoot.querySelectorAll('.relatorios-master-item[data-md-id]'));
+        if (!cards.length) return false;
+        const selection = state.selection.get(key) || new Set();
+        const activeId = state.preview.get(key);
+        cards.forEach(card => {
+            const id = card.dataset.mdId;
+            const selecionado = selection.has(id);
+            card.classList.toggle('relatorios-master-item--selected', selecionado);
+            card.classList.toggle('relatorios-master-item--active', id === activeId);
+            const caixa = card.querySelector('.relatorios-master-checkbox');
+            if (caixa && caixa.checked !== selecionado) caixa.checked = selecionado;
+        });
+        renderDetail(key, activeId);
+        pintarContagem(key);
+        return true;
     };
 
     const setPreview = (key, id) => {
@@ -3817,7 +4013,7 @@ function createMasterDetailManager(root, options = {}) {
         const items = state.itemMap.get(key);
         if (!items || !items.has(id)) return;
         state.preview.set(key, id);
-        if (state.activeTab === key) {
+        if (state.activeTab === key && !atualizarCards(key)) {
             renderList(key);
         }
     };
@@ -3846,14 +4042,11 @@ function createMasterDetailManager(root, options = {}) {
         state.selection.set(key, selection);
         state.selectionOrder.set(key, order);
 
-        if (!selection.size) {
-            const base = getAvailableIds(key);
-            state.preview.set(key, base[0] || null);
-        } else if (!selection.has(state.preview.get(key))) {
-            state.preview.set(key, order[0] || Array.from(selection)[0] || null);
-        }
+        // Marcou: o detalhe mostra o card marcado. Desmarcou: o detalhe fica
+        // onde estava — nada pula.
+        if (shouldSelect) state.preview.set(key, id);
 
-        if (state.activeTab === key) {
+        if (state.activeTab === key && !atualizarCards(key)) {
             renderList(key);
         }
     };
@@ -3886,10 +4079,9 @@ function createMasterDetailManager(root, options = {}) {
         state.selection.set(key, nextSelection);
         state.selectionOrder.set(key, nextOrder);
 
-        if (!nextSelection.size) {
-            state.preview.set(key, order[0] || null);
-        } else if (!nextSelection.has(state.preview.get(key))) {
-            state.preview.set(key, nextOrder[0] || Array.from(nextSelection)[0] || null);
+        // O card em foco continua em foco enquanto o filtro o mantiver na lista.
+        if (!available.has(state.preview.get(key))) {
+            state.preview.set(key, nextOrder[0] || order[0] || null);
         }
 
         if (state.activeTab === key) {
@@ -5260,6 +5452,12 @@ function initRelatoriosModule() {
     setupGeoFilters(container);
     setupFilterInteractions(container);
     setupDateRangeFilters(container);
+    ligarFiltrosDeFora(container);
+    setupModelos(container, {
+        abaAtiva: () => tabController?.getActiveTab?.() || initialTabKey,
+        ativarAba: key => tabController?.activateTab?.(key),
+        colunas: columnControl
+    });
 
     const activeTabKey = tabController?.getActiveTab?.() || initialTabKey;
     if (columnControl && activeTabKey) {
@@ -6252,6 +6450,246 @@ async function setupGeoFilters(root) {
     }
 }
 
+// ===========================================================================
+// MODELOS DE RELATÓRIO (08/10/2026)
+//
+// "Carregar Modelo" mostrava três nomes de exemplo que não faziam nada, e o
+// "Salvar" do modal não salvava. Agora um modelo guarda a aba, os filtros, o
+// período e (se marcado) as colunas visíveis — neste computador
+// (localStorage), porque não há onde guardá-lo para a equipe.
+// ===========================================================================
+
+const MODELOS_STORAGE_KEY = 'relatorios-modelos:v1';
+const ROTULO_DA_ABA = {
+    'materia-prima': 'Matéria Prima', produtos: 'Produtos', clientes: 'Clientes', contatos: 'Contatos',
+    prospeccoes: 'Prospecções', orcamentos: 'Orçamentos', pedidos: 'Pedidos', usuarios: 'Usuários'
+};
+
+function lerModelos() {
+    try {
+        const bruto = typeof localStorage !== 'undefined' ? localStorage.getItem(MODELOS_STORAGE_KEY) : null;
+        const lista = bruto ? JSON.parse(bruto) : [];
+        return Array.isArray(lista) ? lista.filter(m => m && m.id && m.nome && m.aba) : [];
+    } catch (error) {
+        console.warn('Não foi possível ler os modelos de relatório.', error);
+        return [];
+    }
+}
+
+function gravarModelos(lista) {
+    try {
+        localStorage.setItem(MODELOS_STORAGE_KEY, JSON.stringify(lista));
+        return true;
+    } catch (error) {
+        console.warn('Não foi possível gravar os modelos de relatório.', error);
+        return false;
+    }
+}
+
+/** O que está na tela agora, no formato do modelo. Pura o bastante para testar. */
+function montarModelo({ nome, descricao = '', aba, filtros = {}, incluirPeriodo = true, incluirFiltros = true, colunas = null, faixa = null, agora = new Date() }) {
+    const guardados = {};
+    for (const [campo, valor] of Object.entries(filtros || {})) {
+        if (campo === 'periodo') {
+            if (incluirPeriodo && valor) guardados.periodo = valor;
+            continue;
+        }
+        if (!incluirFiltros) continue;
+        if (valor === '' || valor === false || valor === null || valor === undefined) continue;
+        // País/Estado (seleção geográfica) não entram: dependem do seletor carregado.
+        if (typeof valor === 'object') continue;
+        guardados[campo] = valor;
+    }
+    return {
+        id: `m${agora.getTime().toString(36)}`,
+        nome: String(nome || '').trim().slice(0, 80),
+        descricao: String(descricao || '').trim().slice(0, 300),
+        aba,
+        filtros: guardados,
+        faixa: incluirPeriodo && guardados.periodo === 'Personalizado' && faixa?.start && faixa?.end ? { start: faixa.start, end: faixa.end } : null,
+        colunas: Array.isArray(colunas) && colunas.length ? colunas.slice() : null,
+        criadoEm: agora.toISOString()
+    };
+}
+
+function setupModelos(root, { abaAtiva, ativarAba, colunas: controleColunas } = {}) {
+    if (!root || typeof document === 'undefined') return;
+    const lista = root.querySelector('[data-relatorios-modelos]');
+    const modal = root.querySelector('#relatoriosSaveTemplateModal');
+    const salvarBtn = root.querySelector('#relatoriosSalvarModelo');
+    const nomeEl = root.querySelector('#relatoriosModeloNome');
+    const descricaoEl = root.querySelector('#relatoriosModeloDescricao');
+    const erroEl = root.querySelector('#relatoriosModeloErro');
+    const abaEl = root.querySelector('[data-relatorios-modelo-aba]');
+    const dropdown = root.querySelector('#relatoriosTemplateDropdown');
+
+    const pintarLista = () => {
+        if (!lista) return;
+        const modelos = lerModelos();
+        if (!modelos.length) {
+            lista.innerHTML = '<p class="px-4 py-2 text-sm text-white/60">Nenhum modelo salvo ainda. Monte os filtros e use “Salvar Modelo”.</p>';
+            return;
+        }
+        lista.innerHTML = modelos.map(m => `
+            <div class="relatorios-modelo-item" data-modelo-id="${escapeHtml(m.id)}">
+                <a href="#" class="relatorios-dropdown-item relatorios-modelo-item__abrir" data-modelo-abrir title="${escapeHtml(m.descricao || m.nome)}">
+                    <span class="relatorios-modelo-item__nome">${escapeHtml(m.nome)}</span>
+                    <span class="relatorios-modelo-item__aba">${escapeHtml(ROTULO_DA_ABA[m.aba] || m.aba)}</span>
+                </a>
+                <button type="button" class="relatorios-modelo-item__excluir" data-modelo-excluir aria-label="Excluir o modelo ${escapeHtml(m.nome)}" title="Excluir o modelo">
+                    <i class="fas fa-trash" aria-hidden="true"></i>
+                </button>
+            </div>`).join('');
+    };
+
+    const aplicarModelo = async modelo => {
+        const key = modelo.aba;
+        const config = REPORT_CONFIGS[key];
+        if (!config) {
+            showRelatoriosToast('A aba deste modelo não existe mais.', 'warning');
+            return;
+        }
+        if (typeof ativarAba === 'function') ativarAba(key);
+        try {
+            // As opções dos seletores só existem depois que a aba carrega.
+            const dados = await getReportData(key, config);
+            syncFilterOptions(key, dados, root);
+        } catch (error) {
+            console.warn('Modelo aplicado sem os dados da aba.', error);
+        }
+        resetFiltersForKey(key, root);
+        const elementos = Array.from(root.querySelectorAll(`[data-relatorios-filter="${key}"]`));
+        for (const [campo, valor] of Object.entries(modelo.filtros || {})) {
+            const el = elementos.find(e => e.dataset.filterKey === campo);
+            if (!el) continue;
+            if (el.type === 'checkbox') el.checked = Boolean(valor);
+            else el.value = String(valor);
+            if (el.type === 'range') el.dispatchEvent(new Event('input'));
+        }
+        const chaveFaixa = FAIXA_PERSONALIZADA_DO_RELATORIO[key];
+        if (chaveFaixa && modelo.filtros?.periodo === 'Personalizado' && modelo.faixa) {
+            window.__relatoriosDateRanges = window.__relatoriosDateRanges || {};
+            window.__relatoriosDateRanges[chaveFaixa] = { ...modelo.faixa };
+        }
+        if (Array.isArray(modelo.colunas) && modelo.colunas.length) {
+            setVisibleColumns(key, modelo.colunas);
+            controleColunas?.refresh?.();
+        }
+        setTimeout(() => {
+            const render = reportTableRenderers.get(key);
+            if (typeof render === 'function') render();
+            const tabela = root.querySelector('#relatoriosTableContainer [data-relatorios-table-root]');
+            if (tabela) applyColumnVisibilityToTable(key, tabela);
+        }, 0);
+        showRelatoriosToast(`Modelo “${modelo.nome}” aplicado.`, 'success');
+    };
+
+    lista?.addEventListener('click', event => {
+        const item = event.target.closest('[data-modelo-id]');
+        if (!item) return;
+        event.preventDefault();
+        const modelos = lerModelos();
+        const modelo = modelos.find(m => m.id === item.dataset.modeloId);
+        if (!modelo) return;
+        if (event.target.closest('[data-modelo-excluir]')) {
+            const excluir = () => {
+                gravarModelos(lerModelos().filter(m => m.id !== modelo.id));
+                pintarLista();
+                showRelatoriosToast(`Modelo “${modelo.nome}” excluído.`, 'info');
+            };
+            const dialogo = window.DialogPadrao?.confirm;
+            if (typeof dialogo === 'function') {
+                Promise.resolve(dialogo({ title: 'Excluir modelo', message: `Excluir o modelo “${modelo.nome}”?`, confirmText: 'Excluir' }))
+                    .then(ok => { if (ok) excluir(); });
+            } else {
+                excluir();
+            }
+            return;
+        }
+        dropdown?.classList.remove('visible');
+        aplicarModelo(modelo);
+    });
+
+    // Abrir o modal de salvar: limpa o que ficou e diz de qual aba é o modelo.
+    root.querySelector('#relatoriosSaveTemplateBtn')?.addEventListener('click', () => {
+        const key = typeof abaAtiva === 'function' ? abaAtiva() : null;
+        if (nomeEl) nomeEl.value = '';
+        if (descricaoEl) descricaoEl.value = '';
+        erroEl?.classList.add('hidden');
+        if (abaEl) {
+            abaEl.textContent = `Guarda a aba ${ROTULO_DA_ABA[key] || key || ''}, os filtros e as colunas de agora, neste computador.`;
+        }
+        setTimeout(() => nomeEl?.focus(), 50);
+    });
+
+    salvarBtn?.addEventListener('click', () => {
+        const key = typeof abaAtiva === 'function' ? abaAtiva() : null;
+        const nome = String(nomeEl?.value || '').trim();
+        const erro = texto => {
+            if (!erroEl) return;
+            erroEl.textContent = texto;
+            erroEl.classList.remove('hidden');
+        };
+        if (!key || !REPORT_CONFIGS[key]) { erro('Escolha uma aba de relatório antes de salvar.'); return; }
+        if (!nome) { erro('Dê um nome ao modelo.'); nomeEl?.focus(); return; }
+        const modelos = lerModelos();
+        const modelo = montarModelo({
+            nome,
+            descricao: descricaoEl?.value,
+            aba: key,
+            filtros: getFilterValues(key, root),
+            incluirPeriodo: root.querySelector('#relatoriosModeloPeriodo')?.checked !== false,
+            incluirFiltros: root.querySelector('#relatoriosModeloFiltros')?.checked !== false,
+            colunas: root.querySelector('#relatoriosModeloColunas')?.checked ? getVisibleColumnKeys(key) : null,
+            faixa: faixaPersonalizadaDe(key)
+        });
+        // Mesmo nome na mesma aba: substitui (é o "salvar de novo").
+        const semRepetido = modelos.filter(m => !(m.aba === key && normalizeText(m.nome) === normalizeText(nome)));
+        if (!gravarModelos([...semRepetido, modelo])) { erro('Não foi possível salvar o modelo neste computador.'); return; }
+        pintarLista();
+        modal?.classList.add('hidden');
+        if (!root.querySelector('.relatorios-modal:not(.hidden)')) document.body.style.overflow = '';
+        showRelatoriosToast(`Modelo “${nome}” salvo.`, 'success');
+    });
+
+    nomeEl?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); salvarBtn?.click(); }
+    });
+
+    pintarLista();
+}
+
+/**
+ * País/Estado (Clientes) e o "Personalizado" do Período avisam por evento — e
+ * ninguém escutava: escolher um país ou um intervalo não mudava a tabela
+ * (revisão de 08/10/2026). Um ouvinte por vez: o módulo é montado de novo a
+ * cada visita, e o anterior sai.
+ */
+function ligarFiltrosDeFora(root) {
+    if (typeof document === 'undefined' || !root) return;
+    const redesenhar = key => {
+        const render = key ? reportTableRenderers.get(key) : null;
+        if (typeof render === 'function') render();
+    };
+    const aoMudarGeo = evento => {
+        const mapeamentos = root.__relatoriosGeoMappings instanceof Map ? root.__relatoriosGeoMappings : null;
+        redesenhar(mapeamentos?.get(evento?.detail?.key)?.filterGroup || 'clientes');
+    };
+    const aoMudarPeriodo = evento => {
+        const chave = evento?.detail?.key || '';
+        const key = Object.keys(FAIXA_PERSONALIZADA_DO_RELATORIO).find(k => FAIXA_PERSONALIZADA_DO_RELATORIO[k] === chave);
+        redesenhar(key);
+    };
+    const anteriores = window.__relatoriosOuvintesDeFiltro;
+    if (anteriores) {
+        document.removeEventListener('relatorios:geo-filter-change', anteriores.geo);
+        document.removeEventListener('relatorios:periodo-personalizado', anteriores.periodo);
+    }
+    document.addEventListener('relatorios:geo-filter-change', aoMudarGeo);
+    document.addEventListener('relatorios:periodo-personalizado', aoMudarPeriodo);
+    window.__relatoriosOuvintesDeFiltro = { geo: aoMudarGeo, periodo: aoMudarPeriodo };
+}
+
 function setupDateRangeFilters(root) {
     if (!root || !window.DateRangeFilter?.initDateRangeFilter) return;
 
@@ -6284,6 +6722,9 @@ function setupDateRangeFilters(root) {
         });
         if (controller) {
             select.dataset.dateRangeInitialized = 'true';
+            // "Limpar" também desliga o intervalo personalizado (resetFiltersForKey).
+            window.__relatoriosDateRangeControllers = window.__relatoriosDateRangeControllers || {};
+            window.__relatoriosDateRangeControllers[storageKey] = controller;
         }
     });
 }

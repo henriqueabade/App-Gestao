@@ -1,0 +1,125 @@
+/* ---------------------------------------------------------------------------
+   "Visualizar documento" (src/js/utils/visualizador-pdf.js, 09/10/2026): o
+   modal padrão de todo PDF do programa. O vidro, o véu e as cores dos botões
+   são os do padrão (docs/padroes-de-interface.md); aqui só o que é dele.
+   --------------------------------------------------------------------------- */
+
+.visualizador-pdf__cartao {
+    height: 92vh;
+    max-height: 92vh;
+}
+
+.visualizador-pdf__cabecalho {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.visualizador-pdf__titulos {
+    min-width: 0;
+    text-align: center;
+}
+
+.visualizador-pdf__titulo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.visualizador-pdf__subtitulo {
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.65);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-height: 1em;
+}
+
+.visualizador-pdf__acoes {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+}
+
+/* O miolo: as folhas do PDF, no fundo cinza do visor. */
+.visualizador-pdf__corpo {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.visualizador-pdf__quadro {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #525659;
+}
+
+.visualizador-pdf__quadro.hidden {
+    display: none;
+}
+
+.visualizador-pdf__estado {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+}
+
+.visualizador-pdf__estado.hidden {
+    display: none;
+}
+
+.visualizador-pdf__mensagem {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.visualizador-pdf__giro {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: var(--color-primary, #b6a03e);
+    animation: visualizadorPdfGiro 0.9s linear infinite;
+}
+
+.visualizador-pdf__icone-erro {
+    font-size: 2rem;
+    color: var(--color-red, #b34b4b);
+}
+
+@keyframes visualizadorPdfGiro {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .visualizador-pdf__giro { animation-duration: 2.5s; }
+}
+
+/* Janela estreita: o título vai para a linha de cima, inteiro. */
+@media (max-width: 900px) {
+    .visualizador-pdf__cabecalho {
+        grid-template-columns: auto 1fr;
+    }
+    .visualizador-pdf__titulos {
+        grid-column: 1 / -1;
+        grid-row: 1;
+    }
+    .visualizador-pdf__acoes {
+        grid-column: 2;
+    }
+}

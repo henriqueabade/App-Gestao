@@ -857,6 +857,19 @@ body {
     box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
 }
 
+/* "3 selecionados" ao lado de "Registros": a lista não muda de ordem ao
+   selecionar (08/10/2026), então a contagem diz quantos estão marcados. */
+.relatorios-module .relatorios-master-contagem {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-primary-light, #e6d27a);
+    background: rgba(182, 160, 62, 0.16);
+    vertical-align: middle;
+}
+
 .relatorios-module .relatorios-master-checkbox {
     width: 1rem;
     height: 1rem;
@@ -938,6 +951,51 @@ body {
 }
 
 .relatorios-module .relatorios-dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Modelos salvos (Carregar Modelo, 08/10/2026): nome, a aba e a lixeira. */
+.relatorios-module .relatorios-modelos-lista {
+    min-width: 18rem;
+    max-height: 22rem;
+    overflow-y: auto;
+}
+
+.relatorios-module .relatorios-modelo-item {
+    display: flex;
+    align-items: stretch;
+}
+
+.relatorios-module .relatorios-modelo-item__abrir {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.relatorios-module .relatorios-modelo-item__nome {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.relatorios-module .relatorios-modelo-item__aba {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.relatorios-module .relatorios-modelo-item__excluir {
+    flex-shrink: 0;
+    padding: 0 0.85rem;
+    color: var(--color-red, #b34b4b);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.relatorios-module .relatorios-modelo-item__excluir:hover {
     background: rgba(255, 255, 255, 0.12);
 }
 

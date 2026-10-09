@@ -64,10 +64,19 @@
     secao?.classList.toggle('secao-retratil--atencao', Boolean(atencao));
   }
 
-  /** Fechada, a barra diz o que há dentro: "3 de 7 preenchidos". */
-  function resumir(secao, { vazio = 'nada preenchido — usa o padrão' } = {}) {
+  /**
+   * Fechada, a barra diz o que há dentro: "3 de 7 preenchidos". Numa barra de
+   * FILTRO (`data-secao-resumo="valores"`), diz o que está filtrando; o texto
+   * de vazio pode vir de `data-secao-vazio` ("nenhum filtro").
+   */
+  function resumir(secao, { vazio = secao?.dataset?.secaoVazio || 'nada preenchido — usa o padrão' } = {}) {
     const lista = campos(secao).filter(c => !c.disabled && c.type !== 'hidden');
     const preenchidos = lista.filter(c => String(c.value ?? '').trim() !== '').length;
+    if (secao?.dataset?.secaoResumo === 'valores') {
+      const valores = lista.map(c => String(c.value ?? '').trim()).filter(Boolean);
+      avisar(secao, valores.length ? `filtrando por “${valores.join('”, “')}”` : vazio, false);
+      return { preenchidos, total: lista.length, faltando: [] };
+    }
     const faltando = lista.filter(c => c.required && String(c.value ?? '').trim() === '');
     if (faltando.length) {
       avisar(secao, `falta ${faltando.length === 1 ? 'preencher 1 campo' : `preencher ${faltando.length} campos`}`, true);
@@ -93,6 +102,8 @@
       resumir(secao);
       for (const campo of campos(secao)) {
         campo.addEventListener('change', () => resumir(secao));
+        // A barra de filtro acompanha a digitação.
+        if (secao.dataset.secaoResumo === 'valores') campo.addEventListener('input', () => resumir(secao));
       }
       // O navegador recusa focar campo escondido: a seção abre antes disso.
       const form = secao.closest('form');

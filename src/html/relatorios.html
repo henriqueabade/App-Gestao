@@ -13,21 +13,17 @@
                     Carregar Modelo
                     <i class="fas fa-chevron-down text-xs"></i>
                 </button>
-                <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
-                    <div class="py-2">
-                        <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
-                        <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
-                        <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
-                        <hr class="my-2 border-white/10">
-                        <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
+                <!-- Os modelos salvos neste computador (relatorios.js › setupModelos).
+                     Antes eram três nomes de exemplo que não faziam nada (08/10/2026). -->
+                <div id="relatoriosTemplateDropdown" class="relatorios-dropdown relatorios-modelos-lista">
+                    <div class="py-2" data-relatorios-modelos>
+                        <p class="px-4 py-2 text-sm text-white/60">Nenhum modelo salvo ainda.</p>
                     </div>
                 </div>
             </div>
-
-            <button id="relatoriosScheduleBtn" data-perm="rel.share.send" class="btn-warning ctl-botao">
-                <i class="fas fa-clock"></i>
-                Agendar
-            </button>
+            <!-- "Agendar" saiu (08/10/2026): era só o desenho de um envio por
+                 e-mail que nunca existiu — os destinatários eram de exemplo e o
+                 botão não agendava nada. -->
         </div>
     </div>
 
@@ -374,24 +370,24 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Estado</label>
-                                <input type="text" class="ctl-campo input-glass text-white w-full" placeholder="UF">
+                                <input type="text" class="ctl-campo input-glass text-white w-full" placeholder="UF" data-relatorios-filter="prospeccoes" data-filter-key="estado">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Data de criação (início)</label>
-                                <input type="date" class="ctl-campo input-glass text-white w-full">
+                                <input type="date" class="ctl-campo input-glass text-white w-full" data-relatorios-filter="prospeccoes" data-filter-key="criadoDe">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Data de criação (fim)</label>
-                                <input type="date" class="ctl-campo input-glass text-white w-full">
+                                <input type="date" class="ctl-campo input-glass text-white w-full" data-relatorios-filter="prospeccoes" data-filter-key="criadoAte">
                             </div>
 
                             <div id="bt-actions" class="ctl-acoes flex-shrink-0">
-                                <button id="btnFiltrar" data-perm="rel.search" class="btn-secondary ctl-botao text-white">
+                                <button type="button" class="btn-secondary ctl-botao text-white" data-perm="rel.search" data-relatorios-apply="prospeccoes">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" data-perm="rel.search" class="btn-warning ctl-botao text-white">
+                                <button type="button" class="btn-warning ctl-botao text-white" data-perm="rel.search" data-relatorios-reset="prospeccoes">
                                     Limpar
                                 </button>
                             </div>
@@ -876,7 +872,7 @@
                 <div id="relatoriosDetailView" class="relatorios-result-content hidden">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <section class="lg:col-span-1">
-                            <h3 class="chart-title">Registros</h3>
+                            <h3 class="chart-title">Registros <span class="relatorios-master-contagem hidden" data-relatorios-master-contagem></span></h3>
                             <div class="space-y-2 max-h-96 overflow-y-auto" data-relatorios-master-list></div>
                         </section>
 
@@ -895,52 +891,48 @@
         <div class="relatorios-modal-backdrop"></div>
         <div class="relatorios-modal-dialog">
             <div class="p-6">
-                <h3 class="ctl-modal-titulo text-white mb-4">Salvar Modelo de Relatório</h3>
+                <h3 class="ctl-modal-titulo text-white mb-1">Salvar Modelo de Relatório</h3>
+                <!-- Salvo neste computador (relatorios.js › setupModelos): a
+                     "Visibilidade" de equipe/público saiu, porque não havia onde
+                     guardar um modelo para outras pessoas (08/10/2026). -->
+                <p class="text-xs text-gray-400 mb-4" data-relatorios-modelo-aba>Guarda a aba, os filtros e as colunas de agora, neste computador.</p>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="ctl-rotulo text-white">Nome do modelo</label>
-                        <input type="text" class="ctl-campo input-glass text-white w-full" placeholder="Informe um nome" />
+                        <label for="relatoriosModeloNome" class="ctl-rotulo text-white">Nome do modelo</label>
+                        <input id="relatoriosModeloNome" type="text" maxlength="80" class="ctl-campo input-glass text-white w-full" placeholder="Informe um nome" />
                     </div>
 
                     <div>
-                        <label class="ctl-rotulo text-white">Visibilidade</label>
-                        <select class="ctl-campo input-glass text-white w-full">
-                            <option value="personal">Pessoal</option>
-                            <option value="team">Equipe</option>
-                            <option value="public">Público</option>
-                        </select>
+                        <label for="relatoriosModeloDescricao" class="ctl-rotulo text-white">Descrição (opcional)</label>
+                        <textarea id="relatoriosModeloDescricao" rows="3" maxlength="300" class="ctl-campo input-glass text-white w-full resize-none" placeholder="Detalhes adicionais"></textarea>
                     </div>
 
                     <div>
-                        <label class="ctl-rotulo text-white">Descrição (opcional)</label>
-                        <textarea rows="3" class="ctl-campo input-glass text-white w-full resize-none" placeholder="Detalhes adicionais"></textarea>
-                    </div>
-
-                    <div>
-                        <p class="text-sm text-gray-400 mb-2">Filtros incluídos:</p>
+                        <p class="text-sm text-gray-400 mb-2">O que entra no modelo:</p>
                         <div class="space-y-2">
                             <label class="flex items-center gap-2 text-sm text-white">
-                                <input type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent" checked>
+                                <input id="relatoriosModeloPeriodo" type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent" checked>
                                 <span>Período selecionado</span>
                             </label>
                             <label class="flex items-center gap-2 text-sm text-white">
-                                <input type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent" checked>
+                                <input id="relatoriosModeloFiltros" type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent" checked>
                                 <span>Filtros específicos</span>
                             </label>
                             <label class="flex items-center gap-2 text-sm text-white">
-                                <input type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent">
+                                <input id="relatoriosModeloColunas" type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent">
                                 <span>Configuração de colunas</span>
                             </label>
                         </div>
                     </div>
+                    <p id="relatoriosModeloErro" class="hidden text-sm" style="color: var(--color-red)" role="alert"></p>
                 </div>
 
                 <div class="ctl-acoes mt-6">
-                    <button class="btn-primary ctl-botao flex-1">
+                    <button id="relatoriosSalvarModelo" type="button" class="btn-primary ctl-botao flex-1">
                         Salvar
                     </button>
-                    <button id="relatoriosCancelSaveTemplate" class="btn-danger ctl-botao flex-1">
+                    <button id="relatoriosCancelSaveTemplate" class="btn-danger ctl-botao flex-1" type="button">
                         Cancelar
                     </button>
                 </div>
@@ -948,63 +940,4 @@
         </div>
     </div>
 
-    <!-- Schedule Modal -->
-    <div id="relatoriosScheduleModal" class="relatorios-modal hidden">
-        <div class="relatorios-modal-backdrop"></div>
-        <div class="relatorios-modal-dialog">
-            <div class="p-6">
-                <h3 class="ctl-modal-titulo text-white mb-4">Agendar Relatório</h3>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="ctl-rotulo text-white">Frequência</label>
-                        <select class="ctl-campo input-glass text-white w-full">
-                            <option value="daily">Diário</option>
-                            <option value="weekly">Semanal</option>
-                            <option value="monthly">Mensal</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="ctl-rotulo text-white">Horário</label>
-                        <input type="time" class="ctl-campo input-glass text-white w-full">
-                    </div>
-
-                    <div>
-                        <label class="ctl-rotulo text-white">Formato</label>
-                        <select class="ctl-campo input-glass text-white w-full">
-                            <option value="pdf">PDF</option>
-                            <option value="excel">Excel</option>
-                            <option value="csv">CSV</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="ctl-rotulo text-white">Destinatários (separados por vírgula)</label>
-                        <input type="email" class="ctl-campo input-glass text-white w-full" placeholder="emails@empresa.com">
-                    </div>
-
-                    <div class="flex flex-wrap gap-2">
-                        <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
-                            joao@empresa.com
-                            <button class="text-white/70 hover:text-white transition" type="button" aria-label="Remover joao@empresa.com">×</button>
-                        </span>
-                        <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
-                            maria@empresa.com
-                            <button class="text-white/70 hover:text-white transition" type="button" aria-label="Remover maria@empresa.com">×</button>
-                        </span>
-                    </div>
-                </div>
-
-                <div class="ctl-acoes mt-6">
-                    <button class="btn-primary ctl-botao flex-1">
-                        Agendar
-                    </button>
-                    <button id="relatoriosCancelSchedule" class="btn-danger ctl-botao flex-1">
-                        Cancelar
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>

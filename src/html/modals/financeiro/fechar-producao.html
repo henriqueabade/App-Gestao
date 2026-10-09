@@ -60,6 +60,30 @@
           </div>
         </div>
 
+        <!--
+          Filtro dos pedidos (dono, 08/10/2026): barra RETRAÍDA que abre ao
+          clicar (a seção retrátil dos modais). Número do pedido, cliente, nome
+          ou código da peça — ficam só os que casam, enquanto digita.
+        -->
+        <section id="finFecharProducaoFiltroSecao" class="secao-retratil" data-secao-retratil data-secao-resumo="valores" data-secao-vazio="nenhum filtro — todos os pedidos">
+          <button type="button" id="finFecharProducaoFiltroBarra" data-secao-barra class="secao-retratil__barra" aria-expanded="false" aria-controls="finFecharProducaoFiltroCorpo">
+            <span class="secao-retratil__titulo"><i class="fas fa-filter" aria-hidden="true"></i>Filtrar pedidos</span>
+            <span class="secao-retratil__nota text-gray-400" data-secao-nota></span>
+            <i class="fas fa-chevron-down secao-retratil__seta text-gray-400" aria-hidden="true"></i>
+          </button>
+          <div id="finFecharProducaoFiltroCorpo" data-secao-corpo class="secao-retratil__corpo" role="region" aria-labelledby="finFecharProducaoFiltroBarra" hidden>
+            <div class="pt-4">
+              <label for="finFecharProducaoFiltro" class="ctl-rotulo text-gray-300">Pedido, cliente ou peça</label>
+              <div class="flex items-center gap-3">
+                <input id="finFecharProducaoFiltro" type="search" autocomplete="off" placeholder="Número do pedido, nome do cliente, nome ou código da peça"
+                       class="flex-1 min-w-0 ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <button id="finFecharProducaoFiltroLimpar" type="button" class="btn-warning ctl-botao text-white">Limpar</button>
+              </div>
+              <p id="finFecharProducaoFiltroResumo" class="text-xs text-gray-400 mt-2">Vários termos juntos valem: “jackie banco”.</p>
+            </div>
+          </div>
+        </section>
+
         <p id="finFecharProducaoCarregando" class="hidden fin-vazio">Carregando os pedidos...</p>
         <div id="finFecharProducaoSemSql" class="hidden fin-aviso" role="alert">
           <i class="fas fa-database" aria-hidden="true"></i>
@@ -70,6 +94,7 @@
         <!-- Um card por pedido -->
         <div id="finFecharProducaoCards" class="grid grid-cols-1 xl:grid-cols-2 gap-6"></div>
         <p id="finFecharProducaoVazio" class="hidden fin-vazio">Nenhum pedido com produção pendente nesta competência.</p>
+        <p id="finFecharProducaoFiltroVazio" class="hidden fin-vazio">Nenhum pedido com este filtro.</p>
 
         <div id="finFecharProducaoBloqueios" class="hidden fin-aviso" role="alert">
           <i class="fas fa-ban" aria-hidden="true"></i>

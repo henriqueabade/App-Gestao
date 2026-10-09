@@ -301,6 +301,10 @@ async function carregarOrcamentos() {
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.id = o.id;
             tr.dataset.dono = o.dono || o.vendedor || '';
+            // Os filtros leem daqui: a célula do cliente pode ganhar as peças
+            // achadas pelo filtro avançado, e aí o texto dela já não é o nome.
+            tr.dataset.cliente = obterDestinatario(o);
+            tr.dataset.numero = o.numero || '';
             // Guardada na linha para o botão Converter checá-la ANTES de abrir a
             // revisão de peças — o handler dele fica fora deste laço.
             tr.dataset.transportadora = (o.transportadora || '').trim();
@@ -477,26 +481,55 @@ Abrir o orçamento para preencher agora?`,
         });
         await popularClientes();
         updateEmptyStateOrcamentos(data.length > 0);
-        const periodSelect = document.getElementById('filterPeriod');
-        if (periodSelect?.dataset.customActive === 'true' && window.customPeriodOrcamentos?.start && window.customPeriodOrcamentos?.end) {
-            aplicarFiltro();
-        }
+        // A lista foi refeita: os filtros que estão na tela voltam a valer (antes
+        // só o período personalizado era reaplicado, e o resto ficava marcado
+        // sem efeito depois de salvar um orçamento). As peças são relidas na
+        // próxima busca avançada.
+        pecasDosOrcamentos?.limpar();
+        aplicarFiltro();
     } catch (err) {
         console.error('Erro ao carregar orçamentos', err);
     }
 }
 window.reloadOrcamentos = carregarOrcamentos;
 
+// Filtro avançado (dono, 08/10/2026): as peças de cada orçamento, lidas só
+// quando alguém usa o filtro (FiltrosAvancados.leitorDePecas).
+const pecasDosOrcamentos = window.FiltrosAvancados?.leitorDePecas('orcamentos') || null;
+let controleFiltrosAvancados = null;
+
+/** O filtro avançado na linha: casa? E, se casou pela peça, mostra quais. */
+function filtroAvancadoNaLinha(row, termos) {
+    const celula = row.cells[1];
+    celula?.querySelector('[data-filtro-achados]')?.remove();
+    if (!termos.length || !pecasDosOrcamentos?.pronto()) return true;
+    const resultado = window.FiltrosAvancados.documentoCasa(termos, {
+        numero: row.dataset.numero,
+        cliente: row.dataset.cliente,
+        pecas: pecasDosOrcamentos.pecas(row.dataset.id)
+    });
+    if (resultado.casa && resultado.pecas.length && celula) {
+        celula.insertAdjacentHTML('beforeend', window.FiltrosAvancados.achadosHtml(resultado.pecas.map(window.FiltrosAvancados.rotuloDaPeca)));
+    }
+    return resultado.casa;
+}
+
 function aplicarFiltro() {
     const status = document.getElementById('filterStatus')?.value || '';
     const periodo = document.getElementById('filterPeriod')?.value || '';
     const dono = document.getElementById('filterOwner')?.value || '';
     const cliente = document.getElementById('filterClient')?.value.toLowerCase() || '';
+    const termos = window.BuscaAoDigitar?.termos(document.getElementById('filtroAvancadoOrcamentos')?.value || '') || [];
+    controleFiltrosAvancados?.sinalizar(termos.length > 0);
+    // Primeira busca avançada: lê as peças e refaz o filtro quando chegarem.
+    if (termos.length && pecasDosOrcamentos && !pecasDosOrcamentos.pronto()) {
+        pecasDosOrcamentos.ler().then(aplicarFiltro);
+    }
     const now = new Date();
     const customPeriod = window.customPeriodOrcamentos;
     document.querySelectorAll('#orcamentosTabela tr').forEach(row => {
         const rowStatus = row.cells[5]?.innerText.trim() || '';
-        const rowCliente = row.cells[1]?.innerText.trim().toLowerCase() || '';
+        const rowCliente = (row.dataset.cliente ?? row.cells[1]?.innerText ?? '').trim().toLowerCase();
         const rowDono = (row.dataset.dono || '').toLowerCase();
         const dateText = row.cells[2]?.innerText.trim();
         let show = true;
@@ -522,6 +555,8 @@ function aplicarFiltro() {
                 else if (periodo === 'Ano') show &&= diff <= 365;
             }
         }
+        // Por último: só as linhas que passaram nos outros ganham as etiquetas.
+        show = filtroAvancadoNaLinha(row, show ? termos : []) && show;
 
         row.style.display = show ? '' : 'none';
     });
@@ -534,6 +569,8 @@ function limparFiltros() {
     orcamentosDateRangeController?.clear();
     document.getElementById('filterOwner').value = '';
     document.getElementById('filterClient').value = '';
+    const avancado = document.getElementById('filtroAvancadoOrcamentos');
+    if (avancado) avancado.value = '';
     window.customPeriodOrcamentos = null;
     aplicarFiltro();
 }
@@ -569,6 +606,17 @@ function initOrcamentos() {
     const limpar = document.getElementById('btnLimpar');
     if (filtrar) filtrar.addEventListener('click', aplicarFiltro);
     if (limpar) limpar.addEventListener('click', limparFiltros);
+
+    // Filtros avançados: retraídos, crescem para baixo; filtram enquanto digita.
+    controleFiltrosAvancados = window.FiltrosAvancados?.ligar({
+        botao: document.getElementById('btnFiltrosAvancadosOrcamentos'),
+        painel: document.getElementById('orcamentosFiltrosAvancados'),
+        aoAbrir: () => {
+            pecasDosOrcamentos?.ler();
+            setTimeout(() => document.getElementById('filtroAvancadoOrcamentos')?.focus(), 50);
+        }
+    }) || null;
+    window.BuscaAoDigitar?.ligar(document.getElementById('filtroAvancadoOrcamentos'), aplicarFiltro);
 
     const periodSelect = document.getElementById('filterPeriod');
     if (periodSelect && window.DateRangeFilter?.initDateRangeFilter) {

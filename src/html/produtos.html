@@ -74,12 +74,44 @@
 
                 <!-- Action Buttons -->
                 <div id="bt-actions" class="ctl-acoes flex-shrink-0">
+                    <button id="btnFiltrosAvancadosProdutos" type="button" data-perm="prod.search" aria-expanded="false" aria-controls="produtosFiltrosAvancados"
+                            class="btn-neutral ctl-botao text-white botao-filtros-avancados">
+                        <i class="fas fa-sliders mr-2"></i>Filtros avançados
+                        <i class="fas fa-chevron-down ml-2 text-xs botao-filtros-avancados__seta"></i>
+                    </button>
                     <button id="btnFiltrar" data-perm="prod.search" class="btn-secondary ctl-botao text-white">
                         Filtrar
                     </button>
                     <button id="btnLimpar" data-perm="prod.search" class="btn-warning ctl-botao text-white">
                         Limpar
                     </button>
+                </div>
+            </div>
+
+            <!--
+              Filtros avançados (dono, 08/10/2026): nascem RETRAÍDOS e crescem
+              para baixo, no padrão de Prospecções. Aqui: as peças de um cliente
+              ou de um pedido. Filtra enquanto digita.
+            -->
+            <div id="produtosFiltrosAvancados" class="filtros-avancados" aria-hidden="true">
+                <div>
+                    <div class="pt-4 mt-4 border-t border-white/10 filtros-avancados-grade">
+                        <div>
+                            <label for="filtroVinculoProdutos" class="ctl-rotulo text-white">Cliente ou pedido</label>
+                            <input id="filtroVinculoProdutos" type="search" autocomplete="off" data-perm="prod.search"
+                                   placeholder="Nome do cliente ou número do pedido"
+                                   class="ctl-campo input-glass text-white w-full placeholder-white/50">
+                            <p id="filtroVinculoProdutosDica" class="filtros-avancados__dica">Mostra só as peças que estão nos pedidos e orçamentos desse cliente ou desse número.</p>
+                        </div>
+                        <div>
+                            <label for="filtroVinculoOndeProdutos" class="ctl-rotulo text-white">Procurar em</label>
+                            <select id="filtroVinculoOndeProdutos" data-perm="prod.search" class="ctl-campo input-glass text-white w-full">
+                                <option value="">Pedidos e orçamentos</option>
+                                <option value="pedido">Só pedidos</option>
+                                <option value="orcamento">Só orçamentos</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

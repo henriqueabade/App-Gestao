@@ -94,6 +94,9 @@ app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
+// Filtro avançado de Produtos, Orçamentos e Pedidos: que peça está em que
+// documento (08/10/2026). Antes do proxy genérico: "vinculos-pecas" não é tabela.
+app.use('/api/vinculos-pecas', require('./vinculosDasPecas'));
 app.use('/api/prospeccoes', prospeccoesRouter);
 // Histórico social de Prospecções e Clientes (curtidas, comentários, anexos)
 // e os avisos do sino. Tabelas em sql/historico_social.sql.

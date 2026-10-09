@@ -75,21 +75,85 @@ function filaDoProcesso({ grupos, rota, processo }) {
 
 const consome = e => e && e.status === 'ativo' && !e.estornado_em && !e.estorno_de && numero(e.quantidade) > 0;
 const ordemDoEvento = (a, b) => String(a.data_finalizacao ?? '').localeCompare(String(b.data_finalizacao ?? '')) || numero(a.id) - numero(b.id);
+const QUASE_ZERO = 1e-6;
+const quatroCasas = v => Math.round((Number(v) || 0) * 10000) / 10000;
+
+/** A fração de peça que o registro pagou à mão (`fracao_paga`), ou null. */
+function fracaoDoRegistro(e) {
+  if (e?.fracao_paga === null || e?.fracao_paga === undefined || e.fracao_paga === '') return null;
+  const f = Number(e.fracao_paga);
+  return Number.isFinite(f) && f > 0 ? f : null;
+}
 
 /**
  * Distribui a fila entre os registros (na ordem em que foram feitos).
- * Devolve { porEvento: Map(id → { fracoes, fracao }), usadas, pendentes }.
+ *
+ * Registro comum (`quantidade` peças): cada peça leva o que faltava dela.
+ * Registro com `fracao_paga` (o cancelamento e a decisão QUEBRADA do
+ * fechamento — "0,5 da Marcenaria ficou pronta", 07/10/2026): consome
+ * exatamente essa fração, e pode parar no MEIO de uma unidade — o que falta
+ * dela continua pendente para o mês seguinte.
+ *
+ * Devolve { porEvento: Map(id → { fracoes, fracao }), usadas, pendentes, cotas }:
+ * `usadas` são as unidades terminadas; `pendentes`, a fração de peça que
+ * falta em cada unidade em aberto (a primeira pode estar pela metade); e
+ * `cotas`, quanto de cada uma ainda falta (1 = a unidade inteira, 0,5 =
+ * metade dela).
  */
 function alocar({ fila = [], eventos = [] }) {
+  const resta = fila.map(numero);
   const porEvento = new Map();
-  let usadas = 0;
+  let i = 0;
+  const pular = () => { while (i < resta.length && resta[i] <= QUASE_ZERO) { resta[i] = 0; i += 1; } };
   for (const e of eventos.filter(consome).sort(ordemDoEvento)) {
-    const q = Math.trunc(numero(e.quantidade));
-    const fracoes = fila.slice(usadas, usadas + q);
-    usadas += q;
-    porEvento.set(String(e.id), { fracoes, fracao: fracoes.reduce((s, f) => s + f, 0) });
+    pular();
+    const fracoes = [];
+    const manual = fracaoDoRegistro(e);
+    if (manual === null) {
+      for (let q = Math.trunc(numero(e.quantidade)); q > 0 && i < resta.length; q -= 1) {
+        fracoes.push(resta[i]);
+        resta[i] = 0;
+        i += 1;
+      }
+    } else {
+      let f = manual;
+      while (f > QUASE_ZERO && i < resta.length) {
+        const parte = Math.min(f, resta[i]);
+        fracoes.push(parte);
+        resta[i] -= parte;
+        f -= parte;
+        pular();
+      }
+    }
+    porEvento.set(String(e.id), { fracoes, fracao: fracoes.reduce((s, x) => s + x, 0) });
   }
-  return { porEvento, usadas: Math.min(usadas, fila.length), pendentes: fila.slice(usadas) };
+  pular();
+  const pendentes = resta.slice(i).map(quatroCasas);
+  const cotas = pendentes.map((r, k) => (numero(fila[i + k]) > 0 ? quatroCasas(r / numero(fila[i + k])) : 0));
+  return { porEvento, usadas: i, pendentes, cotas };
+}
+
+/**
+ * O que uma decisão de `unidades` (pode ser quebrada: 0,5 = metade de uma
+ * unidade) consome da fila em aberto, na ordem — pura.
+ * `pendentes`/`cotas` são os de `alocar`. Devolve a fração de peça paga, as
+ * unidades tocadas e se a decisão parou no meio de uma unidade (`parcial`).
+ */
+function planoDaDecisao({ pendentes = [], cotas = [] }, unidades) {
+  let resta = Math.max(0, numero(unidades));
+  let fracaoPaga = 0;
+  let tocadas = 0;
+  let parcial = false;
+  for (let k = 0; k < cotas.length && resta > QUASE_ZERO; k += 1) {
+    const cota = numero(cotas[k]);
+    if (!(cota > 0)) continue;
+    const parte = Math.min(resta, cota);
+    fracaoPaga += numero(pendentes[k]) * (parte / cota);
+    tocadas += 1;
+    if (cota - parte > QUASE_ZERO) parcial = true;
+    resta -= parte;
+  }
+  return { fracao: quatroCasas(fracaoPaga), tocadas, parcial };
 }
 
 /**
@@ -148,6 +212,6 @@ function pendenciasDaPeca({ processos = [], etapas = [], valores = [], produtoId
 }
 
 module.exports = {
-  semAcento, passosDoProcesso, fracao, unidadesDoItem, filaDoProcesso, alocar,
+  semAcento, passosDoProcesso, fracao, unidadesDoItem, filaDoProcesso, alocar, planoDaDecisao, fracaoDoRegistro,
   regraDaPeca, valorDaPecaInteira, descreverRegra, pendenciasDaPeca
 };

@@ -605,7 +605,11 @@
         const salvar = window.electronAPI?.salvarArquivoBinario;
         if (typeof salvar !== 'function') { window.showToast?.('Salvar arquivo indisponível nesta janela.', 'error'); return; }
         const r = await salvar({ base64: corpo.base64, nomeSugerido: corpo.nome, titulo: 'Salvar etiquetas de produto (Excel)' });
-        if (r?.success) window.showToast?.(`Planilha salva: ${corpo.linhas} etiqueta${corpo.linhas === 1 ? '' : 's'}.`, 'success');
+        // Peça pronta do estoque já tem etiqueta e não entra na planilha.
+        const fora = Number(corpo.do_estoque) > 0
+          ? ` ${corpo.do_estoque} peça${corpo.do_estoque === 1 ? '' : 's'} pronta${corpo.do_estoque === 1 ? '' : 's'} do estoque ficou${corpo.do_estoque === 1 ? '' : 'ram'} de fora.`
+          : '';
+        if (r?.success) window.showToast?.(`Planilha salva: ${corpo.linhas} etiqueta${corpo.linhas === 1 ? '' : 's'}.${fora}`, 'success');
         else if (!r?.canceled) window.showToast?.(r?.message || 'Não foi possível salvar a planilha.', 'error');
       } catch (_) {
         window.showToast?.('Não foi possível falar com o servidor.', 'error');

@@ -935,8 +935,11 @@ function initProspeccoes() {
     ['filtroEtapa', 'filtroOrigem', 'filtroResponsavel', 'filtroProximoPasso'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', aplicarFiltros);
     });
+    // Os valores mínimo e máximo também filtram enquanto digita (08/10/2026).
     ['filtroValorMin', 'filtroValorMax'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', aplicarFiltros);
+        const campo = document.getElementById(id);
+        if (window.BuscaAoDigitar) window.BuscaAoDigitar.ligar(campo, aplicarFiltros, { espera: 300 });
+        campo?.addEventListener('change', aplicarFiltros);
     });
 
     // Incluir arquivadas muda o QUE o servidor manda, então recarrega.
