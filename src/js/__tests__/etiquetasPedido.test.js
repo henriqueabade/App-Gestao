@@ -19,6 +19,8 @@ test('o botão bordô "Etiquetas": escondido de saída, aparece no pedido que sa
   assert.match(MENU_CSS, /\.btn-etiquetas \{\s*background: #6a152c;/, 'bordô, e global (o Visualizar também abre por cima do Financeiro)');
   assert.ok(VISUALIZAR.includes('if (!botao || !pedidoJaSaiu(pedido)) return;'), 'só no pedido enviado ou entregue');
   assert.ok(VISUALIZAR.includes('fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/etiquetas`)'));
-  assert.ok(VISUALIZAR.includes("window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar etiquetas em PDF' })"), 'o usuário escolhe onde salvar o PDF');
+  // Visualizador de PDF (Fase 2): abre no "Visualizar documento"; o Salvar de lá grava o mesmo PDF.
+  assert.ok(VISUALIZAR.includes('const pdf = await window.VisualizadorPdf.deHtml(corpo.html)();'), 'o mesmo PDF de antes (paisagem, com as páginas do CSS)');
+  assert.ok(VISUALIZAR.includes("tituloSalvar: 'Salvar etiquetas em PDF'"));
   assert.ok(VISUALIZAR.includes('ligarEtiquetas(data);'));
 });

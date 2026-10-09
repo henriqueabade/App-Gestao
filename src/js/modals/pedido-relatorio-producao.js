@@ -401,52 +401,28 @@
 </html>`;
   }
 
-  function mostrarProgresso(ligado, texto) {
-    if (!btnImprimir) return;
-    btnImprimir.innerHTML = ligado
-      ? `<i class="fas fa-circle-notch fa-spin"></i> ${escapar(texto || 'Gerando PDF...')}`
-      : '<i class="fas fa-print"></i> Imprimir';
-    const aviso = document.getElementById('relatorioProducaoAviso');
-    if (aviso) {
-      aviso.textContent = ligado ? (texto || 'Gerando o PDF do relatório...') : '';
-      aviso.classList.toggle('hidden', !ligado);
-    }
-  }
-
+  // Visualizador de PDF (Fase 2): "Imprimir" abre o PDF no "Visualizar
+  // documento" — o mesmo que antes ia direto para a janela de salvar —, e de
+  // lá se imprime ou se salva.
   async function gerarPdf() {
     if (!corpo?.innerHTML?.trim()) return;
-
-    mostrarProgresso(true, 'Gerando o PDF do relatório...');
-    try {
-      if (!window.electronAPI?.salvarHtmlComoPdf) {
-        throw new Error('Geração de PDF indisponível neste ambiente.');
-      }
-      const numero = subtitulo?.textContent?.replace(/^Pedido\s*/i, '').trim() || pedidoId;
-      // O botão imprime o que está na tela; o nome do arquivo tem de acompanhar,
-      // senão a lista de peças sai salva como "relatório de produção".
-      const resultado = await window.electronAPI.salvarHtmlComoPdf({
-        html: montarDocumentoParaPdf(numero),
-        nomeSugerido: mostrandoPecas ? `pecas-${numero}` : `relatorio-producao-${numero}`,
-        titulo: mostrandoPecas ? 'Salvar Peças do Pedido em PDF' : 'Salvar Relatório de Produção em PDF'
-      });
-
-      if (resultado?.canceled) {
-        window.showToast?.('Geração cancelada.', 'info');
-      } else if (resultado?.success) {
-        window.showToast?.(resultado.message || 'Relatório salvo em PDF.', 'success');
-      } else {
-        throw new Error(resultado?.message || 'Não foi possível gerar o PDF.');
-      }
-    } catch (err) {
-      console.error('Erro ao gerar o PDF do relatório de produção', err);
-      window.showToast?.(err?.message || 'Erro ao gerar o PDF.', 'error');
-    } finally {
-      mostrarProgresso(false);
+    if (!window.VisualizadorPdf) {
+      window.showToast?.('Visualizador de documentos indisponível nesta janela.', 'error');
+      return;
     }
+    const numero = subtitulo?.textContent?.replace(/^Pedido\s*/i, '').trim() || pedidoId;
+    // O botão imprime o que está na tela; o nome do arquivo tem de acompanhar,
+    // senão a lista de peças sai salva como "relatório de produção".
+    window.VisualizadorPdf.abrir({
+      titulo: mostrandoPecas ? `Peças do pedido ${numero}` : `Relatório de produção — ${numero}`,
+      nomeArquivo: mostrandoPecas ? `pecas-${numero}` : `relatorio-producao-${numero}`,
+      tituloSalvar: mostrandoPecas ? 'Salvar Peças do Pedido em PDF' : 'Salvar Relatório de Produção em PDF',
+      gerar: window.VisualizadorPdf.deHtml(montarDocumentoParaPdf(numero))
+    });
   }
 
-  // `BotaoAcao.bind` dá a trava de duplo clique; o texto de progresso é nosso,
-  // porque o spinner padrão esconderia o rótulo e não diria o que está havendo.
+  // `BotaoAcao.bind` dá a trava de duplo clique; o "Montando o documento…" é
+  // do visualizador.
   if (window.BotaoAcao?.bind) {
     window.BotaoAcao.bind(btnImprimir, gerarPdf, { visual: false });
   } else {

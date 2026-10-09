@@ -274,5 +274,20 @@
     };
   }
 
-  window.VisualizadorPdf = { abrir, deHtml, paraBytes, contarFolhas };
+  /**
+   * O `gerar` do PDF do orçamento ou do pedido (a página /pdf impressa pelo
+   * Electron, em paisagem): o mesmo arquivo que o ícone salvava, agora em
+   * bytes. A permissão de exportar é conferida no processo principal.
+   */
+  function doDocumento(id, tipo) {
+    return async () => {
+      const api = window.electronAPI?.gerarPdfDocumento;
+      if (typeof api !== 'function') throw new Error('A geração de PDF só funciona dentro do aplicativo.');
+      const r = await api(id, tipo);
+      if (!r?.success) throw new Error(r?.message || 'Não foi possível gerar o PDF.');
+      return { base64: r.base64, nomeArquivo: r.nome };
+    };
+  }
+
+  window.VisualizadorPdf = { abrir, deHtml, doDocumento, paraBytes, contarFolhas };
 })();

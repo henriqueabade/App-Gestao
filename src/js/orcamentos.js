@@ -314,7 +314,7 @@ async function carregarOrcamentos() {
             const valor = Number(o.valor_final || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             const isDraft = o.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
-            const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
+            const downloadTitle = isDraft ? 'PDF indisponível' : 'Ver PDF';
             const editBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
             const editClass = editBlocked ? 'icon-disabled' : '';
             const convertBlocked = ['Aprovado','Expirado','Rejeitado','Rascunho'].includes(o.situacao);
@@ -419,27 +419,21 @@ async function carregarOrcamentos() {
                     return;
                 }
 
-                if (!window.electronAPI?.openPdf) {
+                if (!window.electronAPI?.gerarPdfDocumento || !window.VisualizadorPdf) {
                     window.notifyDesktopOnlyPdf?.(id);
                     return;
                 }
 
-                window.notifyPdfGeneration?.();
-                try {
-                    const result = await window.electronAPI.openPdf(id, 'orcamento');
-                    if (result?.success) {
-                        window.showToast?.('PDF salvo com sucesso!', 'success');
-                    } else if (result?.canceled) {
-                        window.showToast?.('Geração de PDF cancelada.', 'info');
-                    } else {
-                        const message = result?.message || 'Não foi possível gerar o PDF.';
-                        window.showToast?.(message, 'error');
-                    }
-                } catch (err) {
-                    console.error('Erro ao gerar PDF de orçamento', err);
-                    const message = err?.message || 'Erro inesperado ao gerar PDF.';
-                    window.showToast?.(`Erro ao gerar PDF: ${message}`, 'error');
-                }
+                // Visualizador de PDF (Fase 2): o mesmo PDF de antes, aberto no
+                // "Visualizar documento" para ver, imprimir ou salvar dali.
+                const numero = tr.dataset.numero || '';
+                window.VisualizadorPdf.abrir({
+                    titulo: numero ? `Orçamento ${numero}` : 'Orçamento',
+                    subtitulo: tr.dataset.cliente || '',
+                    nomeArquivo: `orcamento-${numero || id}`,
+                    tituloSalvar: 'Salvar Orçamento em PDF',
+                    gerar: window.VisualizadorPdf.doDocumento(id, 'orcamento')
+                });
             });
         });
         tbody.querySelectorAll('.fa-money-bill-wave').forEach(icon => {

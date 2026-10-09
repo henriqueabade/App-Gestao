@@ -5667,7 +5667,9 @@ ipcMain.handle('imprimir-pdf', async (_event, { base64 } = {}) => {
   }
 });
 
-ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
+// `somenteBytes` (Visualizador de PDF, Fase 2): o mesmo PDF, devolvido em
+// base64 para o "Visualizar documento" em vez da janela de salvar.
+ipcMain.handle('open-pdf', async (_event, { id, tipo, somenteBytes = false }) => {
   const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const prefix = `[pdf:${requestId}]`;
   const logInfo = (...args) => console.info(prefix, ...args);
@@ -5833,6 +5835,11 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       landscape: true,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
+
+    if (somenteBytes) {
+      logInfo('PDF gerado em memória. Devolvendo os bytes para o visualizador.');
+      return { success: true, base64: Buffer.from(pdfData).toString('base64'), nome: sanitizedBaseName, tipo: docType, numero: docNumber };
+    }
 
     logInfo('PDF gerado em memória. Exibindo diálogo de salvamento padrão.', {
       suggestedName: `${sanitizedBaseName}.pdf`

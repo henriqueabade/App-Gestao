@@ -1,10 +1,13 @@
 /**
- * Documentos da NF-e no renderer: DANFE em PDF e XML salvo em arquivo.
+ * Documentos da NF-e no renderer: DANFE e carta de correção em PDF, XML salvo
+ * em arquivo.
  *
  * Um lugar só porque a mesma ação sai de mais de uma tela (a tag "DANFE" na
  * lista de pedidos e os botões do Visualizar pedido). O HTML do DANFE vem do
- * backend (GET /api/fiscal/notas/:id/danfe) e vira PDF pelo Electron, em
- * retrato; o XML vai para um .xml escolhido pelo usuário.
+ * backend (GET /api/fiscal/notas/:id/danfe), vira PDF pelo Electron, em
+ * retrato, e abre no "Visualizar documento" (Visualizador de PDF, Fases 1 e
+ * 2) — de lá se imprime ou se salva; o XML vai para um .xml escolhido pelo
+ * usuário.
  *
  * As notas emitidas FORA do sistema têm os mesmos documentos, pelas rotas
  * `/api/fiscal/pedidos/:id/nfe-externa/*` — desde que o XML da nota esteja
@@ -26,15 +29,6 @@
   }
 
   const avisar = (texto, tipo) => window.showToast?.(texto, tipo || 'info');
-
-  /** Manda o HTML do backend para o PDF do Electron, em retrato. */
-  async function paraPdf(corpo, { titulo, ok, erro }) {
-    const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo, retrato: true });
-    if (!r) { avisar('Geração de PDF indisponível nesta janela.', 'error'); return false; }
-    if (r.success) { avisar(r.opened ? `${ok} e aberto.` : (r.message || `${ok}.`), 'success'); return true; }
-    if (!r.canceled) avisar(r.message || erro, 'error');
-    return false;
-  }
 
   /**
    * Abre o documento no "Visualizar documento" (src/js/utils/visualizador-pdf.js,
@@ -69,16 +63,12 @@
 
   // ------------------------------------------------------- notas daqui
 
-  /** Gera e abre o DANFE da nota. Devolve true quando o PDF foi salvo. */
+  /**
+   * O DANFE da nota no visualizador (Fase 2; antes salvava). O nome antigo
+   * continua: os botões do Visualizar pedido chamam este.
+   */
   async function gerarDanfe(notaId) {
-    if (!notaId) return false;
-    try {
-      const corpo = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(notaId)}/danfe`);
-      return await paraPdf(corpo, { titulo: 'Salvar DANFE em PDF', ok: 'DANFE salvo', erro: 'Não foi possível gerar o DANFE.' });
-    } catch (e) {
-      avisar(e.message || 'Não foi possível montar o DANFE.', 'error');
-      return false;
-    }
+    return verDanfe(notaId);
   }
 
   /** Salva o XML de distribuição e, se houver, o do cancelamento. */
@@ -101,16 +91,11 @@
     }
   }
 
-  /** Segunda via da carta de correção (sequência `seq`) em PDF. */
+  /** Segunda via da carta de correção (sequência `seq`), no visualizador. */
   async function gerarCartaCorrecaoPdf(notaId, seq) {
     if (!notaId || !seq) return false;
-    try {
-      const corpo = await fetchApi(`/api/fiscal/notas/${encodeURIComponent(notaId)}/cartas-correcao/${encodeURIComponent(seq)}/documento`);
-      return await paraPdf(corpo, { titulo: 'Salvar carta de correção em PDF', ok: 'Carta de correção salva', erro: 'Não foi possível gerar o PDF da carta.' });
-    } catch (e) {
-      avisar(e.message || 'Não foi possível montar a carta de correção.', 'error');
-      return false;
-    }
+    return paraVisualizador(`/api/fiscal/notas/${encodeURIComponent(notaId)}/cartas-correcao/${encodeURIComponent(seq)}/documento`,
+      { titulo: `Carta de correção ${seq}`, tituloSalvar: 'Salvar carta de correção em PDF' });
   }
 
   async function salvarXmlCartaCorrecao(notaId, seq) {
@@ -148,13 +133,7 @@
 
   async function gerarDanfeExterna(pedidoId) {
     if (!pedidoId) return false;
-    try {
-      const corpo = await fetchApi(`${externa(pedidoId)}/danfe`);
-      return await paraPdf(corpo, { titulo: 'Salvar DANFE em PDF', ok: 'DANFE salvo', erro: 'Não foi possível gerar o DANFE.' });
-    } catch (e) {
-      avisar(e.message || 'Não foi possível montar o DANFE.', 'error');
-      return false;
-    }
+    return paraVisualizador(`${externa(pedidoId)}/danfe`, { titulo: 'DANFE da NF-e', tituloSalvar: 'Salvar DANFE em PDF' });
   }
 
   async function salvarXmlExterna(pedidoId) {
@@ -174,13 +153,8 @@
 
   async function gerarCartaExternaPdf(pedidoId, seq) {
     if (!pedidoId || !seq) return false;
-    try {
-      const corpo = await fetchApi(`${externa(pedidoId)}/cartas/${encodeURIComponent(seq)}/documento`);
-      return await paraPdf(corpo, { titulo: 'Salvar carta de correção em PDF', ok: 'Carta de correção salva', erro: 'Não foi possível gerar o PDF da carta.' });
-    } catch (e) {
-      avisar(e.message || 'Não foi possível montar a carta de correção.', 'error');
-      return false;
-    }
+    return paraVisualizador(`${externa(pedidoId)}/cartas/${encodeURIComponent(seq)}/documento`,
+      { titulo: `Carta de correção ${seq}`, tituloSalvar: 'Salvar carta de correção em PDF' });
   }
 
   async function salvarXmlCartaExterna(pedidoId, seq) {

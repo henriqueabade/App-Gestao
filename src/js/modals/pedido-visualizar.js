@@ -108,7 +108,7 @@
         classe,
         texto: `NF-e ${nota.serie}/${nota.numero} · ${rotulo}${Number.isFinite(valor) && valor > 0 ? ` · ${brl(valor)}` : ''}${nota.ambiente === 'homologacao' ? ' · homologação' : ''}`,
         acao: temDanfe ? 'danfe' : null,
-        titulo: temDanfe ? 'Clique para gerar o DANFE desta nota' : ''
+        titulo: temDanfe ? 'Clique para ver o DANFE desta nota' : ''
       });
     } else if (notaExterna) {
       // A NF-e emitida fora e informada: vence o "Sem nota fiscal". Com o XML
@@ -119,7 +119,7 @@
         classe: 'badge-info',
         texto: `NF-e ${Number(notaExterna.serie) || 0}/${Number(notaExterna.numero) || 0} · de fora${Number.isFinite(valorDeFora) && valorDeFora > 0 ? ` · ${brl(valorDeFora)}` : ''}`,
         acao: notaExterna.tem_xml ? 'danfe-fora' : null,
-        titulo: notaExterna.tem_xml ? 'Clique para gerar o DANFE desta nota' : 'Anexe o XML da nota em "NF-e e boletos de fora" para gerar o DANFE'
+        titulo: notaExterna.tem_xml ? 'Clique para ver o DANFE desta nota' : 'Anexe o XML da nota em "NF-e e boletos de fora" para gerar o DANFE'
       });
     } else if (p.nfe_dispensada === true || p.nfe_dispensada === 'true') {
       tags.push({ classe: 'badge-neutral', texto: 'Sem nota fiscal' });
@@ -404,7 +404,7 @@
       if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, fn);
       else botao.addEventListener('click', fn);
     };
-    ligar(overlay.querySelector('#visualizarPedidoDanfe'), () => window.NfeDocumentos?.gerarDanfeExterna?.(id), 'Gerar o DANFE da NF-e emitida fora');
+    ligar(overlay.querySelector('#visualizarPedidoDanfe'), () => window.NfeDocumentos?.gerarDanfeExterna?.(id), 'Ver o DANFE da NF-e emitida fora');
     ligar(overlay.querySelector('#visualizarPedidoXml'), () => window.NfeDocumentos?.salvarXmlExterna?.(id), 'Salvar o XML da NF-e emitida fora');
   }
 
@@ -566,18 +566,26 @@
   function ligarEtiquetas(pedido) {
     const botao = overlay.querySelector('#visualizarPedidoEtiquetas');
     if (!botao || !pedidoJaSaiu(pedido)) return;
-    const gerar = async () => {
-      try {
-        const resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/etiquetas`);
-        const corpo = await resp.json().catch(() => null);
-        if (!resp.ok) { window.showToast?.(corpo?.error || 'Não foi possível montar as etiquetas.', 'error'); return; }
-        const r = await window.electronAPI?.salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo: 'Salvar etiquetas em PDF' });
-        if (!r) { window.showToast?.('Geração de PDF indisponível nesta janela.', 'error'); return; }
-        if (r.success) window.showToast?.(r.opened ? 'Etiquetas salvas e abertas.' : (r.message || 'Etiquetas salvas.'), 'success');
-        else if (!r.canceled) window.showToast?.(r.message || 'Não foi possível gerar as etiquetas.', 'error');
-      } catch (_) {
-        window.showToast?.('Não foi possível falar com o servidor.', 'error');
-      }
+    // Visualizador de PDF (Fase 2): o mesmo PDF de antes — as páginas nomeadas
+    // do CSS misturam paisagem e retrato —, aberto para ver, imprimir ou salvar.
+    const gerar = () => {
+      if (!window.VisualizadorPdf) { window.showToast?.('Visualizador de documentos indisponível nesta janela.', 'error'); return; }
+      window.VisualizadorPdf.abrir({
+        titulo: `Etiquetas das caixas — ${pedido?.numero || 'pedido'}`,
+        tituloSalvar: 'Salvar etiquetas em PDF',
+        gerar: async () => {
+          let resp;
+          try {
+            resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/etiquetas`);
+          } catch (_) {
+            throw new Error('Não foi possível falar com o servidor.');
+          }
+          const corpo = await resp.json().catch(() => null);
+          if (!resp.ok) throw new Error(corpo?.error || 'Não foi possível montar as etiquetas.');
+          const pdf = await window.VisualizadorPdf.deHtml(corpo.html)();
+          return { ...pdf, nomeArquivo: corpo.nome, subtitulo: corpo.nome };
+        }
+      });
     };
     botao.classList.remove('hidden');
     if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, gerar);

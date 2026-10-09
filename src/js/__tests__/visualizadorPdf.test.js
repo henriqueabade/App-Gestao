@@ -84,3 +84,40 @@ test('Fase 1: o DANFE da lista de Pedidos abre no visualizador', () => {
     const nfe = ler('src/js/utils/nfe-documentos.js');
     assert.match(nfe, /window\.VisualizadorPdf\.deHtml\(corpo\.html, \{ retrato: true \}\)/, 'o mesmo HTML e a mesma orientação do Salvar');
 });
+
+test('Fase 2: o PDF do orçamento e do pedido é o mesmo de antes, em bytes, sem a janela de salvar', () => {
+    const main = ler('main.js');
+    const openPdf = main.slice(main.indexOf("ipcMain.handle('open-pdf'"), main.indexOf("ipcMain.handle('open-external'"));
+    assert.match(openPdf, /async \(_event, \{ id, tipo, somenteBytes = false \}\)/);
+    assert.ok(openPdf.indexOf('if (somenteBytes)') > openPdf.indexOf('const pdfData = await webContents.printToPDF('), 'o mesmo printToPDF (paisagem, A4, sem margem)');
+    assert.ok(openPdf.indexOf('if (somenteBytes)') < openPdf.indexOf('dialog.showSaveDialog'), 'antes da janela de salvar');
+    assert.ok(openPdf.indexOf('const permissaoExport') < openPdf.indexOf('if (somenteBytes)'), 'a permissão de exportar vale para os dois');
+    assert.match(ler('preload.js'), /gerarPdfDocumento: \(id, tipo\) => ipcRenderer\.invoke\('open-pdf', \{ id, tipo, somenteBytes: true \}\)/);
+    const util = ler('src/js/utils/visualizador-pdf.js');
+    assert.ok(util.includes('function doDocumento(id, tipo)'));
+    assert.ok(util.includes('window.VisualizadorPdf = { abrir, deHtml, doDocumento, paraBytes, contarFolhas };'));
+    for (const [arquivo, tipo, rotulo] of [['src/js/pedidos.js', 'pedido', 'Salvar Pedido em PDF'], ['src/js/orcamentos.js', 'orcamento', 'Salvar Orçamento em PDF']]) {
+        const js = ler(arquivo);
+        assert.ok(js.includes(`gerar: window.VisualizadorPdf.doDocumento(id, '${tipo}')`), arquivo);
+        assert.ok(js.includes(`tituloSalvar: '${rotulo}'`), arquivo);
+        assert.ok(!js.includes('electronAPI.openPdf('), `${arquivo}: nada mais vai direto para a janela de salvar`);
+        assert.ok(js.includes("'PDF indisponível' : 'Ver PDF'"), `${arquivo}: o balão do ícone`);
+    }
+});
+
+test('Fase 2: DANFE, cartas de correção, boletos, etiquetas e relatório de produção abrem no visualizador', () => {
+    const nfe = ler('src/js/utils/nfe-documentos.js');
+    for (const fn of ['gerarCartaCorrecaoPdf', 'gerarDanfeExterna', 'gerarCartaExternaPdf']) {
+        const inicio = nfe.indexOf(`async function ${fn}(`);
+        assert.ok(nfe.slice(inicio, nfe.indexOf('\n  }', inicio)).includes('return paraVisualizador('), fn);
+    }
+    assert.match(nfe, /async function gerarDanfe\(notaId\) \{\s*\n\s*return verDanfe\(notaId\);/);
+    const boleto = ler('src/js/utils/boleto-documentos.js');
+    assert.ok(boleto.includes('window.VisualizadorPdf.abrir({') && boleto.includes("'Boletos do pedido', 'Salvar boletos em PDF'"));
+    const vis = ler('src/js/modals/pedido-visualizar.js');
+    const etiquetas = vis.slice(vis.indexOf('function ligarEtiquetas'), vis.indexOf('function ligarEtiquetaProduto'));
+    assert.ok(etiquetas.includes('window.VisualizadorPdf.abrir({') && !etiquetas.includes('salvarHtmlComoPdf'));
+    const producao = ler('src/js/modals/pedido-relatorio-producao.js');
+    assert.ok(producao.includes('gerar: window.VisualizadorPdf.deHtml(montarDocumentoParaPdf(numero))'), 'o mesmo documento, em paisagem');
+    assert.ok(!producao.includes('salvarHtmlComoPdf'));
+});

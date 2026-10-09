@@ -6213,7 +6213,7 @@
         // no "NF-e e boletos de fora" do pedido, aberto por cima. Não se
         // cancela nem se envia por e-mail daqui: ela foi emitida em outro sistema.
         if (n.tem_xml) {
-          botao('DANFE', () => window.NfeDocumentos?.gerarDanfeExterna(n.pedido_id), { titulo: 'Gerar o DANFE em PDF (do XML anexado)' });
+          botao('DANFE', () => window.NfeDocumentos?.gerarDanfeExterna(n.pedido_id), { titulo: 'Ver o DANFE (do XML anexado)' });
           botao('XML', () => window.NfeDocumentos?.salvarXmlExterna(n.pedido_id), { titulo: 'Salvar o XML da nota' });
         } else {
           botao('Anexar XML', () => abrirDeFora(n), { perm: 'financeiro.nfe.emit', titulo: 'Sem o XML não há DANFE nem carta de correção em PDF: anexe no pedido' });
@@ -6222,7 +6222,7 @@
       }
       const documentos = !n.de_fora && ['autorizada', 'cancelada'].includes(n.status_fiscal) && n.tem_xml_autorizado;
       if (documentos) {
-        botao('DANFE', () => window.NfeDocumentos?.gerarDanfe(n.id), { titulo: 'Gerar o DANFE em PDF' });
+        botao('DANFE', () => window.NfeDocumentos?.gerarDanfe(n.id), { titulo: 'Ver o DANFE' });
         botao('XML', () => window.NfeDocumentos?.salvarXml(n.id), { titulo: 'Salvar o XML da nota' });
         botao('E-mail', () => abrirDaNota(n, 'modals/pedidos/enviar-nfe-email.html', '../js/modals/pedido-enviar-nfe-email.js', 'enviarNfeEmail', 'emailNfeContext'), { perm: 'financeiro.nfe.emit', titulo: 'Enviar DANFE e XML por e-mail' });
       }

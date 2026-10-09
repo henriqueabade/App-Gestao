@@ -167,7 +167,9 @@ test('utilitário BoletoDocumentos: PDF de um boleto e de todos do pedido, em re
   const MENU = fs.readFileSync(path.join(RAIZ, 'html', 'menu.html'), 'utf8');
   assert.ok(UTIL.includes('/api/cobranca/boletos/${encodeURIComponent(boletoId)}/documento'));
   assert.ok(UTIL.includes('/api/cobranca/pedidos/${encodeURIComponent(pedidoId)}/boletos/documento'));
-  assert.ok(UTIL.includes('salvarHtmlComoPdf?.({ html: corpo.html, nomeSugerido: corpo.nome, titulo, retrato: true })'));
+  // Visualizador de PDF (Fase 2): o mesmo PDF em retrato, aberto no "Visualizar documento".
+  assert.ok(UTIL.includes('const pdf = await window.VisualizadorPdf.deHtml(corpo.html, { retrato: true })();'));
+  assert.ok(!UTIL.includes('salvarHtmlComoPdf'), 'o boleto não vai mais direto para a janela de salvar');
   assert.ok(UTIL.includes('window.BoletoDocumentos = { gerarBoletoPdf, gerarBoletosDoPedidoPdf };'));
   assert.ok(!/innerHTML|insertAdjacentHTML/.test(UTIL));
   assert.ok(MENU.indexOf('js/utils/boleto-documentos.js') > MENU.indexOf('js/utils/nfe-documentos.js'), 'o menu carrega o utilitário');

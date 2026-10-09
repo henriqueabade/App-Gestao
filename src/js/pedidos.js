@@ -217,7 +217,7 @@ function tagNotaDeFora(nota) {
         const titulo = `NF-e série ${serie} nº ${numero} emitida fora do sistema (dados informados) — anexe o XML da nota para gerar o DANFE`;
         return `${tagCartaCorrecaoDeFora(nota)} <span class="badge-info ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
     }
-    const titulo = `NF-e série ${serie} nº ${numero} emitida fora do sistema — clique para gerar o DANFE`;
+    const titulo = `NF-e série ${serie} nº ${numero} emitida fora do sistema — clique para ver o DANFE`;
     return `${tagCartaCorrecaoDeFora(nota)} <span class="badge-info tag-danfe-fora ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold align-middle cursor-pointer" data-pedido-id="${Number(nota.pedido_id)}" role="button" title="${titulo}" aria-label="${titulo}">NF fora</span>`;
 }
 
@@ -545,7 +545,7 @@ async function carregarPedidos() {
             const valor = Number(p.valor_final || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const isDraft = p.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
-            const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
+            const downloadTitle = isDraft ? 'PDF indisponível' : 'Ver PDF';
             const dataFormatada = formatarDataLocal(p.data_emissao);
             const dataFormatada2 = formatarDataLocal(p.data_aprovacao);
             // Colunas DATE: cortadas como texto (ver formatarDiaDate).
@@ -747,27 +747,21 @@ async function carregarPedidos() {
                     return;
                 }
 
-                if (!window.electronAPI?.openPdf) {
+                if (!window.electronAPI?.gerarPdfDocumento || !window.VisualizadorPdf) {
                     window.notifyDesktopOnlyPdf?.(id);
                     return;
                 }
 
-                window.notifyPdfGeneration?.();
-                try {
-                    const result = await window.electronAPI.openPdf(id, 'pedido');
-                    if (result?.success) {
-                        window.showToast?.('PDF salvo com sucesso!', 'success');
-                    } else if (result?.canceled) {
-                        window.showToast?.('Geração de PDF cancelada.', 'info');
-                    } else {
-                        const message = result?.message || 'Não foi possível gerar o PDF.';
-                        window.showToast?.(message, 'error');
-                    }
-                } catch (err) {
-                    console.error('Erro ao gerar PDF de pedido', err);
-                    const message = err?.message || 'Erro inesperado ao gerar PDF.';
-                    window.showToast?.(`Erro ao gerar PDF: ${message}`, 'error');
-                }
+                // Visualizador de PDF (Fase 2): o mesmo PDF de antes, aberto no
+                // "Visualizar documento" para ver, imprimir ou salvar dali.
+                const numero = tr.dataset.numero || '';
+                window.VisualizadorPdf.abrir({
+                    titulo: numero ? `Pedido ${numero}` : 'Pedido',
+                    subtitulo: tr.dataset.cliente || '',
+                    nomeArquivo: `pedido-${numero || id}`,
+                    tituloSalvar: 'Salvar Pedido em PDF',
+                    gerar: window.VisualizadorPdf.doDocumento(id, 'pedido')
+                });
             });
         });
         tbody.querySelectorAll('.status-badge').forEach(badge => {

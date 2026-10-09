@@ -194,7 +194,7 @@ test('lista de pedidos: a tag "NF fora" gera o DANFE e a "CC-e" gera a carta, qu
   assert.match(comXml, /badge-info tag-danfe-fora/);
   assert.match(comXml, /data-pedido-id="58"/);
   assert.match(comXml, /role="button"/);
-  assert.match(comXml, /clique para gerar o DANFE/);
+  assert.match(comXml, /clique para ver o DANFE/);
 
   const comCarta = tagNotaDeFora({ pedido_id: 58, serie: 2, numero: 700, tem_xml: true, cartas_correcao: 2, ultima_carta_seq: 2 });
   assert.match(comCarta, /badge-warning tag-cce-fora/);

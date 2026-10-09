@@ -498,6 +498,8 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   // os mesmos bytes que o modal mostra.
   salvarPdf: (payload) => ipcRenderer.invoke('salvar-pdf', payload),
   imprimirPdf: (payload) => ipcRenderer.invoke('imprimir-pdf', payload),
+  // O PDF do orçamento/pedido em bytes, sem a janela de salvar (Fase 2).
+  gerarPdfDocumento: (id, tipo) => ipcRenderer.invoke('open-pdf', { id, tipo, somenteBytes: true }),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openExternalHtml: (html) => ipcRenderer.invoke('open-external-html', html),
   recordActivity: (info) => {
