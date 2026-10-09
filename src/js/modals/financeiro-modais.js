@@ -2046,6 +2046,101 @@
     });
   }
 
+  /**
+   * "Desconto na parcela" (dono, 09/10/2026): o valor e a justificativa, com
+   * o antes e depois da parcela, da comissão e do total do pedido. `enviar`
+   * grava; se ele falhar, a caixa fica aberta com o recado da API.
+   */
+  function pedirDescontoNaParcela({ rotulo, valor, liquido, pctComissao, enviar }) {
+    const MINIMO = 10;
+    return new Promise(resolver => {
+      const fundo = criar('div', 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4');
+      const caixa = criar('div', 'w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 p-6 space-y-4 ctl-padrao');
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+      caixa.dataset.descontoParcela = 'true';
+      caixa.appendChild(criar('h3', 'ctl-modal-titulo text-white', 'Desconto na parcela'));
+      caixa.appendChild(criar('p', 'text-sm text-gray-300', `${rotulo}: a parcela e o total do pedido ficam menores, e a comissão sai sobre o valor novo.`));
+
+      const rotuloValor = criar('label', 'ctl-rotulo text-white', 'Valor do desconto');
+      const campoValor = criar('input', 'w-full ctl-campo input-glass text-white placeholder-white/50');
+      campoValor.type = 'text';
+      campoValor.inputMode = 'decimal';
+      campoValor.placeholder = 'R$ 0,00';
+      rotuloValor.appendChild(campoValor);
+      const rotuloJust = criar('label', 'ctl-rotulo text-white', 'Justificativa');
+      const campoJust = criar('textarea', 'w-full ctl-campo input-glass text-white placeholder-white/50');
+      campoJust.rows = 3;
+      campoJust.maxLength = 500;
+      campoJust.placeholder = `Por que o desconto (ao menos ${MINIMO} letras)`;
+      rotuloJust.appendChild(campoJust);
+      caixa.append(rotuloValor, rotuloJust);
+
+      const quadro = criar('dl', 'fin-dl');
+      caixa.appendChild(quadro);
+      const erroEl = criar('p', 'hidden text-sm');
+      erroEl.style.color = 'var(--color-red)';
+      erroEl.setAttribute('role', 'alert');
+      caixa.appendChild(erroEl);
+
+      const rodape = criar('div', 'ctl-acoes justify-end');
+      const voltar = criar('button', 'btn-neutral ctl-botao text-white', 'Voltar');
+      const ok = criar('button', 'btn-primary ctl-botao text-white', 'Dar desconto');
+      voltar.type = 'button';
+      ok.type = 'button';
+      rodape.append(voltar, ok);
+      caixa.appendChild(rodape);
+      fundo.appendChild(caixa);
+
+      const pct = Number(pctComissao) || 0;
+      function pintarQuadro() {
+        const d = centavos(lerMoeda(campoValor.value) || 0);
+        const depois = centavos(Math.max(0, Number(valor) - d));
+        const liquidoDepois = centavos(Math.max(0, Number(liquido) - d));
+        montarDl(quadro, [
+          ['Parcela', `${formatarMoeda(valor)} → ${formatarMoeda(depois)}`, true],
+          [`Comissão (${percentualTexto(pct)})`, `${formatarMoeda(centavos(Number(liquido) * pct / 100))} → ${formatarMoeda(centavos(liquidoDepois * pct / 100))}`],
+          ['Total do pedido', d > 0 ? `cai ${formatarMoeda(d)} (vira "Desconto" no pedido)` : '—']
+        ]);
+      }
+      pintarQuadro();
+      campoValor.addEventListener('input', pintarQuadro);
+
+      const erro = texto => { erroEl.textContent = texto; erroEl.classList.toggle('hidden', !texto); };
+      caixa.addEventListener('input', () => erro(''));
+      const sair = resultado => {
+        document.removeEventListener('keydown', aoTecla, true);
+        filhoAberto = false;
+        fundo.remove();
+        resolver(resultado);
+      };
+      const aoTecla = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sair(null); } };
+      voltar.addEventListener('click', () => sair(null));
+      ok.addEventListener('click', async () => {
+        const d = centavos(lerMoeda(campoValor.value) || 0);
+        const justificativa = campoJust.value.trim();
+        if (!(d > 0)) { erro('Informe o valor do desconto.'); campoValor.focus(); return; }
+        if (d >= Number(valor)) { erro(`O desconto precisa ser menor que a parcela (${formatarMoeda(valor)}).`); campoValor.focus(); return; }
+        if (justificativa.length < MINIMO) { erro(`Escreva a justificativa (ao menos ${MINIMO} letras).`); campoJust.focus(); return; }
+        erro('');
+        ok.disabled = true;
+        voltar.disabled = true;
+        try {
+          const resposta = await enviar({ valor: d, justificativa });
+          sair(resposta);
+        } catch (e) {
+          erro(textoDoErro(e, 'Você não tem permissão para dar desconto na parcela.'));
+          ok.disabled = false;
+          voltar.disabled = false;
+        }
+      });
+      document.addEventListener('keydown', aoTecla, true);
+      filhoAberto = true;
+      document.body.appendChild(fundo);
+      campoValor.focus();
+    });
+  }
+
   const nomeDaPeca = item => (item ? ([item.codigo, item.nome].filter(Boolean).join(' — ') || `item ${item.id}`) : '—');
 
   // ------------------------------------------ relatórios: busca e exportação
@@ -3881,6 +3976,7 @@
     const alvo = contexto.parcela || {};
     ligarAbas();
     const registrarBtn = el('finParcelaRegistrarAjuste');
+    const descontoBtn = el('finParcelaDesconto');
     let dados = null;
     const carregamento = criarCarregamento({ tbody: el('finParcelaBeneficiarios'), colunas: 4, linhas: 3, aviso: el('finParcelaCarregando') });
 
@@ -3963,6 +4059,13 @@
 
       montarLinhaDoTempo(el('finParcelaHistorico'), (d.historico || []).map(h => ({ quando: h.quando, titulo: h.titulo, detalhe: h.detalhe })));
       registrarBtn.classList.toggle('hidden', d.situacao === 'nao_realizada');
+      // Desconto na parcela: aceso só na parcela em aberto e livre; apagado, o
+      // clique diz por quê (boleto, ordem, já paga…).
+      const desconto = d.desconto_na_parcela || null;
+      descontoBtn.classList.toggle('hidden', !desconto || d.situacao === 'nao_realizada');
+      descontoBtn.setAttribute('aria-disabled', desconto?.pode ? 'false' : 'true');
+      descontoBtn.style.opacity = desconto?.pode ? '' : '0.55';
+      descontoBtn.title = desconto?.pode ? 'Dar um desconto ao cliente nesta parcela: muda o valor dela e o total do pedido' : (desconto?.motivo || '');
     }
 
     async function carregar() {
@@ -3970,6 +4073,7 @@
         el('finParcelaCarregando').classList.add('hidden');
         mostrarMensagem('finParcelaMensagem', 'Parcela não informada.');
         registrarBtn.classList.add('hidden');
+        descontoBtn.classList.add('hidden');
         return;
       }
       mostrarMensagem('finParcelaMensagem', '');
@@ -4010,6 +4114,26 @@
     acionar(registrarBtn, () => abrirOutro('registrar-ajuste', {
       parcela: { pedido_id: alvo.pedido_id, numero_parcela: alvo.numero_parcela, pedido: dados?.pedido, beneficiarios: dados?.potencial?.beneficiarios || [] }
     }));
+    // Desconto na parcela (09/10/2026): muda o valor da parcela e o total do pedido.
+    acionar(descontoBtn, async () => {
+      const permitido = dados?.desconto_na_parcela;
+      if (!permitido?.pode) {
+        mostrarMensagem('finParcelaMensagem', permitido?.motivo || 'Esta parcela não aceita desconto.');
+        return;
+      }
+      const caminho = `/api/financeiro/parcelas/${encodeURIComponent(alvo.pedido_id)}/${encodeURIComponent(alvo.numero_parcela)}/desconto`;
+      const feito = await pedirDescontoNaParcela({
+        rotulo: `Pedido ${dados.pedido} • Parcela ${dados.parcela}`,
+        valor: dados.valor_parcela_pedido ?? dados.valor_original,
+        liquido: dados.liquido,
+        pctComissao: (Number(dados.taxas?.pct_cms) || 0) + (Number(dados.taxas?.pct_royalty) || 0),
+        enviar: corpo => fetchApi(caminho, { method: 'POST', body: JSON.stringify(corpo) })
+      });
+      if (!feito) return;
+      mostrarMensagem('finParcelaMensagem', '');
+      window.showToast?.(`Desconto dado: a parcela foi de ${formatarMoeda(feito.parcela.antes)} para ${formatarMoeda(feito.parcela.depois)}.`, 'success');
+      avisarAlteracao();
+    });
     return carregar();
   }
 

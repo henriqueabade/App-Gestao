@@ -25,7 +25,8 @@ const TIPOS = {
   feriado_alterado: 'Calendário alterado',
   configuracao_alterada: 'Prazos alterados',
   devolucao_registrada: 'Devolução registrada',
-  reembolso_confirmado: 'Reembolso confirmado'
+  reembolso_confirmado: 'Reembolso confirmado',
+  desconto_parcela: 'Desconto na parcela'
 };
 
 async function registrar(api, { tipo, descricao, pedidoId = null, numeroParcela = null, referenciaId = null, valor = null, dados = null, usuarioId = null }) {

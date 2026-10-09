@@ -87,8 +87,24 @@ async function parcela({ api, pedidoId, numero, hoje, desde }) {
     pendentes: p.pendentes.map(i => ({ tipo_item: i.tipo_item, competencia: i.competencia, total: i.total, cms: i.cms, royalty: i.royalty, motivo: i.motivo })),
     fechamentos: fechs,
     ajustes: p.ajustes.map(a => ({ id: a.id, data: a.data_ajuste, tipo: a.tipo, rotulo: a.rotulo, motivo: a.motivo, observacao: a.observacao || null, valor: a.valor, status: a.status, no_fechamento: a.no_fechamento, usuario: usuarios.get(String(a.criado_por)) || null, motivo_cancelamento: a.motivo_cancelamento || null })),
-    historico: tempo
+    historico: tempo,
+    base_origem: p.base_origem || null, valor_parcela_pedido: p.valor_parcela_pedido ?? null,
+    desconto_na_parcela: descontoNaParcela(p)
   };
+}
+
+/**
+ * O botão "Desconto na parcela" (09/10/2026): só na parcela em aberto e
+ * livre (sem boleto, ordem ou pagamento). A rota confere de novo, com o
+ * boleto de fora (descontoParcela.js). Pura.
+ */
+function descontoNaParcela(p) {
+  if (p.situacao === 'nao_realizada' || p.estado_parcela === 'cancelada') return { pode: false, motivo: 'A parcela foi cancelada.' };
+  if (p.recebimento) return { pode: false, motivo: 'A parcela já foi paga: dinheiro devolvido ao cliente é a Devolução do pedido.' };
+  if (p.situacao === 'a_lancar') return { pode: false, motivo: 'O boleto já foi pago no banco e falta lançar o recebimento.' };
+  if (p.base_origem === 'boleto') return { pode: false, motivo: 'A parcela tem boleto: o desconto vai no próprio boleto, como abatimento (Detalhes do boleto).' };
+  if (p.base_origem === 'ordem') return { pode: false, motivo: 'A parcela tem ordem de pagamento aberta: cancele a ordem antes de dar o desconto.' };
+  return { pode: true, motivo: null };
 }
 
 async function pedido({ api, pedidoId, hoje, desde }) {
@@ -152,4 +168,4 @@ async function pedido({ api, pedidoId, hoje, desde }) {
   };
 }
 
-module.exports = { ROTULO_SITUACAO, fechamentosDaParcela, parcela, pedido, nomesDosUsuarios };
+module.exports = { ROTULO_SITUACAO, fechamentosDaParcela, parcela, pedido, nomesDosUsuarios, descontoNaParcela };

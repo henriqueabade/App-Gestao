@@ -17,6 +17,7 @@
  *   GET    /parcelas?visao=atrasadas|previstas|ajustaveis[&competencia=]  (com a competência: as do mês, que passam para os seguintes até serem pagas)
  *   GET    /parcelas/:pedidoId/:numero          detalhes da parcela (valores, ajustes, histórico)
  *   POST   /ajustes, POST /ajustes/:id/cancelar   ajuste na PARCELA (a devolução usa; a tela não abre mais)
+ *   POST   /parcelas/:pedidoId/:numero/desconto { valor, justificativa } — Desconto na parcela (o valor da parcela livre e o total do pedido)
  *   GET    /ajustes-pessoa/opcoes               quem recebe em cada área, tipos, competências abertas
  *   GET    /ajustes-pessoa?competencia=         os ajustes por pessoa do mês e quanto cada um tem no mês
  *   POST   /ajustes-pessoa                      { area: cms|royalty|producao, beneficiario | setor_id+colaborador_id, tipo, valor, data_ajuste, competencia, referencia, motivo, observacao }
@@ -46,6 +47,8 @@ const c = require('./financeiro/comum');
 const regras = require('./financeiro/regras');
 const comissoes = require('./financeiro/comissoes');
 const ajustes = require('./financeiro/ajustes');
+// Desconto na parcela, nos Detalhes da parcela (09/10/2026).
+const descontoParcela = require('./financeiro/descontoParcela');
 // Ajustes por pessoa na CMS, no Royalty e na Produção (06/10/2026).
 const ajustesPessoa = require('./financeiro/ajustesPessoa');
 const producao = require('./financeiro/producao');
@@ -318,6 +321,8 @@ function criarRouter() {
   }));
   router.get('/parcelas/:pedidoId/:numero', exigirPermissao(VER), rota('GET /api/financeiro/parcelas/:pedidoId/:numero', ({ api, req, hoje, desde }) =>
     detalhes.parcela({ api, pedidoId: Number(req.params.pedidoId), numero: Number(req.params.numero), hoje, desde })));
+  router.post('/parcelas/:pedidoId/:numero/desconto', exigirPermissao(REGISTRAR_AJUSTE), rota('POST /api/financeiro/parcelas/:pedidoId/:numero/desconto', ({ api, req, usuarioId }) =>
+    descontoParcela.aplicar({ api, pedidoId: req.params.pedidoId, numero: req.params.numero, entrada: req.body, usuarioId })));
 
   // ------------------------------------------------------------- ajustes
   router.post('/ajustes', exigirPermissao(REGISTRAR_AJUSTE), rota('POST /api/financeiro/ajustes', ({ api, req, usuarioId, hoje, desde }) =>
