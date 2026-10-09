@@ -15,6 +15,13 @@
  */
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
+const { exigirAlgumaPermissao } = require('./permissionsController');
+
+// Criar e apagar transportadora: quem cadastra cliente ou orçamento (as telas
+// que têm o botão) e a IA que aplica neles. Antes qualquer logado gravava
+// (Segurança, 09/10/2026). Ler continua livre: Pedidos, Orçamentos e Clientes
+// mostram a transportadora do cliente.
+const PODE_GRAVAR = ['cli.create', 'cli.edit', 'orc.create', 'orc.edit', 'ia.apply.orc', 'ia.apply.cli'];
 
 const router = express.Router();
 
@@ -76,7 +83,7 @@ router.get('/:clienteId', async (req, res) => {
  * seletor, e pedir a lista de novo logo depois seria uma segunda ida ao
  * servidor para saber o que esta resposta já sabe.
  */
-router.post('/', async (req, res) => {
+router.post('/', exigirAlgumaPermissao(PODE_GRAVAR), async (req, res) => {
   try {
     const api = createApiClient(req);
 
@@ -121,7 +128,7 @@ router.post('/', async (req, res) => {
  * transportadora de outra empresa — e o erro só apareceria quando alguém de lá
  * fosse montar um pedido.
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', exigirAlgumaPermissao(PODE_GRAVAR), async (req, res) => {
   try {
     const api = createApiClient(req);
 

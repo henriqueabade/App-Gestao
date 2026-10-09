@@ -162,7 +162,9 @@ test('recusa e-mail já cadastrado com mensagem clara', async () => {
 
 test('valida os campos obrigatórios antes de tocar no banco', async () => {
   const casos = [
-    [{ ...VALIDO, nome: 'Jo' }, /nome completo/i],
+    // Nome E sobrenome (09/10/2026).
+    [{ ...VALIDO, nome: 'Jo' }, /^Informe o nome e o sobrenome\.$/],
+    [{ ...VALIDO, nome: 'Maria' }, /^Informe o nome e o sobrenome\.$/],
     [{ ...VALIDO, email: 'sem-arroba' }, /e-mail válido/i],
     [{ ...VALIDO, senha: '123' }, /pelo menos 8 caracteres/i],
     // A regra da senha forte (src/js/utils/senha-forte.js): 8+, maiúscula, número e especial.
@@ -182,6 +184,30 @@ test('valida os campos obrigatórios antes de tocar no banco', async () => {
     } finally {
       await ctx.encerrar();
     }
+  }
+});
+
+test('nome e sobrenome à parte viram um só; o nome repetido (sem acento/maiúscula) é recusado com o campo', async () => {
+  const ctx = await montar();
+  try {
+    const resposta = await cadastrar(ctx.porta, { ...VALIDO, nome: ' Ana ', sobrenome: ' Paula   Lima ' });
+    assert.strictEqual(resposta.status, 201);
+    assert.strictEqual(ctx.recebidos.find(r => r.metodo === 'POST').corpo.nome, 'Ana Paula Lima');
+  } finally {
+    await ctx.encerrar();
+  }
+
+  const repetido = await montar({ existentes: [{ id: 5, nome: 'MÁRIA  souza', email: 'outra@empresa.com' }] });
+  try {
+    const resposta = await cadastrar(repetido.porta, VALIDO);
+    assert.strictEqual(resposta.status, 409);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.code, 'NOME_JA_CADASTRADO');
+    assert.strictEqual(corpo.campo, 'nome');
+    assert.match(corpo.error, /já está cadastrado/);
+    assert.ok(!repetido.recebidos.some(r => r.metodo === 'POST'), 'não criou nada');
+  } finally {
+    await repetido.encerrar();
   }
 });
 

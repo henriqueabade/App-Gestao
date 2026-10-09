@@ -33,6 +33,8 @@ const { createApiClient } = require('./backend/apiHttpClient');
 const { getToken } = require('./backend/tokenStore');
 const fs = require('fs');
 const net = require('net');
+// Login pelo e-mail OU pelo nome completo (09/10/2026).
+const NomeCompleto = require('./src/js/utils/nome-completo');
 const {
   listarMaterias,
   adicionarMateria,
@@ -3970,7 +3972,8 @@ ipcMain.handle('registrar-usuario', async (_event, dados) => {
         : 'Cadastro recebido, mas o e-mail de confirmação não saiu. Procure o administrador para liberar o seu acesso.'
     };
   } catch (err) {
-    return { success: false, message: err.message || 'Erro ao cadastrar usuário' };
+    // `campo`: a tela marca o campo do problema (o nome repetido, 09/10/2026).
+    return { success: false, message: err.message || 'Erro ao cadastrar usuário', code: err.code || null, campo: err.campo || null };
   }
 });
 
@@ -4044,7 +4047,9 @@ function salvarTentativas() {
 }
 
 function chaveTentativa(email) {
-  return String(email || '').trim().toLowerCase();
+  // Entrar pelo nome completo (09/10/2026): "João Silva" e "joao  silva" são
+  // a mesma conta, então contam juntas.
+  return NomeCompleto.ehEmail(email) ? String(email || '').trim().toLowerCase() : NomeCompleto.chave(email);
 }
 
 function lerTentativas(email) {
@@ -4096,6 +4101,8 @@ require('./backend/passwordResetRoutes').eventos.on('senha-redefinida', limparTe
  *   saía. O usuário ficava esperando uma mensagem que nunca chegaria.
  */
 async function enviarRedefinicaoPorBloqueio(email) {
+  // Entrou pelo nome completo: o código só sai para um e-mail digitado.
+  if (!NomeCompleto.ehEmail(email)) return { enviado: false, motivo: 'login pelo nome', semEmail: true };
   try {
     const base = getLocalApiBaseUrl();
     const resp = await fetch(`${base}/password-reset-request`, {
@@ -4133,6 +4140,7 @@ function mensagemDeBloqueio(email, envio) {
     ? ` Tente novamente em ${minutos} minuto(s).`
     : '';
   if (!envio) return `Número máximo de tentativas de login atingido.${tempo}`;
+  if (envio.semEmail) return `Número máximo de tentativas de login atingido.${tempo} Para trocar a senha, use "Esqueceu a senha?" com o seu e-mail.`;
   return envio.enviado
     ? `Número máximo de tentativas de login atingido.${tempo}`
       + ' Enviamos um código para o e-mail cadastrado.'
@@ -4661,6 +4669,8 @@ ipcMain.handle('adicionar-colecao', async (_e, nome) => {
   }
 });
 ipcMain.handle('remover-categoria', async (_e, nome) => {
+  // A tela só mostra o botão com mp.category.delete; o IPC não conferia (09/10/2026).
+  if (!(await verificarPermissaoIpc('mp.category.delete'))) return negadoIpc('mp.category.delete');
   try {
     return await removerCategoria(nome);
   } catch (err) {
@@ -4669,6 +4679,8 @@ ipcMain.handle('remover-categoria', async (_e, nome) => {
   }
 });
 ipcMain.handle('remover-unidade', async (_e, nome) => {
+  // A tela só mostra o botão com mp.unit.delete; o IPC não conferia (09/10/2026).
+  if (!(await verificarPermissaoIpc('mp.unit.delete'))) return negadoIpc('mp.unit.delete');
   try {
     return await removerUnidade(nome);
   } catch (err) {

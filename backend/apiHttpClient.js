@@ -250,7 +250,9 @@ function criarCliente(req) {
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${bearer}`
+      Authorization: `Bearer ${bearer}`,
+      // De que rota daqui veio a chamada (só para o registro de permissões da API).
+      ...require('./contextoDaRota').cabecalhos(req)
     };
 
     const response = await fetch(url, {

@@ -21,6 +21,7 @@
 
   const inputs = {
     nome: document.getElementById('novoUsuarioNome'),
+    sobrenome: document.getElementById('novoUsuarioSobrenome'),
     email: document.getElementById('novoUsuarioEmail'),
     telefone: document.getElementById('novoUsuarioTelefone'),
     perfil: document.getElementById('novoUsuarioPerfil'),
@@ -104,12 +105,27 @@
       removerFotoBtn?.classList.remove('hidden');
     } else {
       avatarEl.classList.remove('has-image');
-      avatarEl.textContent = iniciaisDe(inputs.nome?.value);
+      avatarEl.textContent = iniciaisDe(nomeCompleto());
       removerFotoBtn?.classList.add('hidden');
     }
   }
 
-  inputs.nome?.addEventListener('input', () => { if (!fotoPreviewUrl) pintarAvatar(); });
+  /** Nome + sobrenome, como vão para a coluna única. */
+  function nomeCompleto() {
+    return window.NomeCompleto
+      ? window.NomeCompleto.juntar(inputs.nome?.value, inputs.sobrenome?.value)
+      : `${inputs.nome?.value || ''} ${inputs.sobrenome?.value || ''}`.trim();
+  }
+
+  /** Marca (ou desmarca) os dois campos do nome — o nome repetido, o sobrenome faltando. */
+  function marcarErroNoNome(com) {
+    [inputs.nome, inputs.sobrenome].forEach(c => c?.setAttribute('aria-invalid', com ? 'true' : 'false'));
+  }
+
+  [inputs.nome, inputs.sobrenome].forEach(c => c?.addEventListener('input', () => {
+    marcarErroNoNome(false);
+    if (!fotoPreviewUrl) pintarAvatar();
+  }));
 
   fotoInput?.addEventListener('change', () => {
     const arquivo = fotoInput.files?.[0];
@@ -176,7 +192,9 @@
   function coletar() {
     const opcao = inputs.perfil?.selectedOptions?.[0];
     return {
-      nome: inputs.nome?.value.trim() || '',
+      nome: nomeCompleto(),
+      primeiroNome: inputs.nome?.value || '',
+      sobrenome: inputs.sobrenome?.value || '',
       email: inputs.email?.value.trim().toLowerCase() || '',
       telefone: inputs.telefone?.value.trim() || '',
       perfil: inputs.perfil?.value || '',
@@ -188,7 +206,13 @@
   }
 
   function validar(dados) {
-    if (dados.nome.length < 3) return 'Informe o nome completo do usuário.';
+    const nomeIncompleto = window.NomeCompleto
+      ? window.NomeCompleto.mensagemDasPartes(dados.primeiroNome, dados.sobrenome)
+      : (dados.nome.split(' ').length < 2 ? 'Informe o nome e o sobrenome.' : '');
+    if (nomeIncompleto) {
+      marcarErroNoNome(true);
+      return nomeIncompleto;
+    }
     if (!RE_EMAIL.test(dados.email)) return 'Informe um e-mail válido.';
     if (!dados.perfil) return 'Selecione o perfil do usuário.';
     const senhaFraca = window.SenhaForte?.mensagem(dados.senha);
@@ -217,6 +241,8 @@
     try { corpo = await resp.json(); } catch (_) {}
 
     if (!resp.ok) {
+      // O nome repetido marca os campos do nome (a mensagem diz o porquê).
+      if (corpo?.campo === 'nome') marcarErroNoNome(true);
       throw new Error(corpo?.error || 'Não foi possível cadastrar o usuário.');
     }
     return corpo;
@@ -348,6 +374,7 @@
     capturar: () => ({
       campos: {
         nome: inputs.nome?.value || '',
+        sobrenome: inputs.sobrenome?.value || '',
         email: inputs.email?.value || '',
         telefone: inputs.telefone?.value || '',
         observacoes: inputs.observacoes?.value || ''

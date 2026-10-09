@@ -1276,11 +1276,36 @@ if (intro) {
   });
 
   // === 7) Envio do formulário de Cadastro ===
+  // Nome e sobrenome (09/10/2026): obrigatórios, vão juntos; o nome repetido
+  // (a API confere) marca os dois campos e diz o porquê embaixo deles.
+  const campoNome = document.getElementById('registerName');
+  const campoSobrenome = document.getElementById('registerSobrenome');
+  const erroDoNome = document.getElementById('registerNomeErro');
+  function marcarErroNoNome(mensagem) {
+    [campoNome, campoSobrenome].forEach(c => {
+      c?.classList.toggle('campo-com-erro', Boolean(mensagem));
+      c?.setAttribute('aria-invalid', mensagem ? 'true' : 'false');
+    });
+    if (erroDoNome) {
+      erroDoNome.textContent = mensagem || '';
+      erroDoNome.classList.toggle('hidden', !mensagem);
+    }
+  }
+  [campoNome, campoSobrenome].forEach(c => c?.addEventListener('input', () => marcarErroNoNome('')));
+
   registerForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!registerForm.reportValidity()) return;
 
-    const name            = document.getElementById('registerName').value;
+    const problemaNoNome = window.NomeCompleto?.mensagemDasPartes(campoNome?.value, campoSobrenome?.value);
+    if (problemaNoNome) {
+      marcarErroNoNome(problemaNoNome);
+      (window.NomeCompleto.limpar(campoNome?.value) ? campoSobrenome : campoNome)?.focus();
+      return;
+    }
+    const name            = window.NomeCompleto
+      ? window.NomeCompleto.juntar(campoNome?.value, campoSobrenome?.value)
+      : `${campoNome?.value || ''} ${campoSobrenome?.value || ''}`.trim();
     const emailReg        = document.getElementById('registerEmail').value;
     const passwordReg     = document.getElementById('registerPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
@@ -1309,10 +1334,15 @@ if (intro) {
         aceites
       );
       if (!result.success) {
+        if (result.campo === 'nome') {
+          marcarErroNoNome(result.message);
+          campoNome?.focus();
+        }
         showToast(result.message || 'Erro ao cadastrar usuário', 'error', 6000);
         return;
       }
 
+      marcarErroNoNome('');
       registerForm.reset();
       aceitesDoCadastro?.limpar();
       listaCadastro?.atualizar();

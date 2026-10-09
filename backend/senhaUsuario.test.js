@@ -99,7 +99,8 @@ test('Configurações: a senha nova vai em hash bcrypt (nunca crua) e o hash nã
   try {
     const r = await ctx.put('/me', { nome: 'Maria', senha: SENHA_BOA });
     assert.strictEqual(r.status, 200);
-    const enviada = ctx.recebidos[0].corpo.senha;
+    // (09/10/2026: com o nome no corpo, o /me lê o cadastro antes — o nome não repete.)
+    const enviada = ctx.recebidos.find(x => x.metodo === 'PUT').corpo.senha;
     assert.notStrictEqual(enviada, SENHA_BOA);
     assert.match(enviada, /^\$2[aby]\$12\$/);
     assert.ok(await bcrypt.compare(SENHA_BOA, enviada), 'o login precisa conferir com o hash');

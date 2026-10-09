@@ -366,6 +366,7 @@
     status: document.getElementById('usuarioStatus'),
     observacoes: document.getElementById('usuarioObservacoes'),
   };
+  inputs.nome?.addEventListener('input', () => inputs.nome.setAttribute('aria-invalid', 'false'));
 
   if (!podeEditarDados) {
     Object.values(inputs).forEach((input) => {
@@ -649,8 +650,13 @@
           body: JSON.stringify(payloadDados),
         });
         if (!respDados.ok) {
+          // A mensagem do backend, não o JSON cru; o nome repetido (ou sem
+          // sobrenome) marca o campo do nome (09/10/2026).
           const texto = await respDados.text();
-          throw new Error(texto || 'Não foi possível salvar os dados pessoais.');
+          let corpo = null;
+          try { corpo = JSON.parse(texto); } catch (_) { /* não era JSON */ }
+          if (corpo?.campo === 'nome') inputs.nome?.setAttribute('aria-invalid', 'true');
+          throw new Error(corpo?.error || texto || 'Não foi possível salvar os dados pessoais.');
         }
         respostas.push(await respDados.json());
       }

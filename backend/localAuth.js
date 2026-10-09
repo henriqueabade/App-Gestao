@@ -29,12 +29,28 @@ function verifyToken(raw) {
     return data;
   } catch (_) { throw authError(); }
 }
-async function login(email, senha) {
+// E-mail OU nome completo (09/10/2026), a mesma regra da API (acesso/login.js).
+async function login(identificador, senha) {
   if (typeof senha !== 'string' || !senha) throw authError();
-  const { rows } = await db.query('SELECT * FROM "public"."usuarios" WHERE lower(email) = $1 LIMIT 1', [email]);
-  const user = rows[0];
-  if (!user || typeof user.senha !== 'string' || !(await bcrypt.compare(senha, user.senha))) throw authError();
-  return { token: signToken(user.id), usuario: sanitizarSaida(user) };
+  const NomeCompleto = require('../src/js/utils/nome-completo');
+  let candidatos;
+  if (NomeCompleto.ehEmail(identificador)) {
+    ({ rows: candidatos } = await db.query('SELECT * FROM "public"."usuarios" WHERE lower(email) = $1 LIMIT 1', [String(identificador).trim().toLowerCase()]));
+  } else {
+    const { rows } = await db.query('SELECT * FROM "public"."usuarios" WHERE nome IS NOT NULL');
+    candidatos = rows.filter(u => NomeCompleto.mesmoNome(u.nome, identificador));
+  }
+  const certos = [];
+  for (const u of candidatos) {
+    if (typeof u.senha === 'string' && (await bcrypt.compare(senha, u.senha))) certos.push(u);
+  }
+  if (!certos.length) throw authError();
+  if (certos.length > 1) {
+    const error = new Error('Há mais de um cadastro com esse nome. Entre com o e-mail.');
+    error.code = 'nome-ambiguo';
+    throw error;
+  }
+  return { token: signToken(certos[0].id), usuario: sanitizarSaida(certos[0]) };
 }
 async function register(nome, email, senha) {
   if (!nome || !email) throw new Error('Informe nome, e-mail e senha.');

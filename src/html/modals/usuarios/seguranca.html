@@ -1,0 +1,60 @@
+<!--
+  Segurança da API (09/10/2026) — só o Sup Admin. A API confere, na rota
+  genérica, quem pode ler e gravar cada tabela (as mesmas permissões das
+  telas). No modo OBSERVAR ela deixa passar e anota o que negaria; no modo
+  BLOQUEAR ela nega. Esta tela mostra o modo e o registro, para conferir
+  antes de travar. Dados: GET /api/usuarios/seguranca/registro.
+  Script: src/js/modals/usuario-seguranca.js.
+-->
+<div id="segurancaApiOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div role="dialog" aria-modal="true" aria-labelledby="segurancaApiTitulo" class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+    <header class="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <h2 id="segurancaApiTitulo" class="ctl-modal-titulo text-white"><i class="fas fa-shield-halved mr-2" aria-hidden="true"></i>Segurança da API</h2>
+        <p class="text-sm text-gray-300">Quem tentou ler ou gravar uma tabela sem a permissão da tela.</p>
+      </div>
+      <div id="segurancaApiModo" class="flex flex-wrap items-center gap-2"></div>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll p-6 space-y-5">
+      <div id="segurancaApiExplica" class="bg-black/20 border border-white/10 rounded-2xl px-5 py-4 text-sm text-gray-200 space-y-2"></div>
+      <div id="segurancaApiAviso" class="hidden text-sm" role="alert"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label class="ctl-rotulo text-gray-300">Decisão
+          <select id="segurancaApiDecisao" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <option value="">Todas</option>
+            <option value="seria_negado">Seria negado (modo observar)</option>
+            <option value="negado">Negado</option>
+          </select>
+        </label>
+        <label class="ctl-rotulo text-gray-300 md:col-span-2">Buscar
+          <input id="segurancaApiBusca" type="search" autocomplete="off" placeholder="Usuário, tabela ou tela" class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </label>
+      </div>
+
+      <p id="segurancaApiTotal" class="text-sm text-gray-300"></p>
+      <div class="table-scroll">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="px-4 py-3 text-left">Última vez</th>
+              <th class="px-4 py-3 text-left">Usuário</th>
+              <th class="px-4 py-3 text-left">Tabela</th>
+              <th class="px-4 py-3 text-left">Operação</th>
+              <th class="px-4 py-3 text-left">Decisão</th>
+              <th class="px-4 py-3 text-left">Tela do programa</th>
+              <th class="px-4 py-3 text-right">Vezes</th>
+            </tr>
+          </thead>
+          <tbody id="segurancaApiLinhas" class="divide-y divide-white/10"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="px-6 py-4 border-t border-white/10 ctl-acoes justify-end">
+      <button type="button" id="segurancaApiAtualizar" class="btn-secondary ctl-botao text-white"><i class="fas fa-rotate mr-1" aria-hidden="true"></i>Atualizar</button>
+      <button type="button" id="segurancaApiFechar" class="btn-danger ctl-botao text-white">Fechar</button>
+    </footer>
+  </div>
+</div>

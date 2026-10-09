@@ -48,6 +48,8 @@ function carregar(discoInicial = {}) {
     Map,
     path: { join: (...partes) => partes.join('/') },
     app: { getPath: () => 'C:/fake/userData' },
+    // O login pelo nome completo (09/10/2026): o main.js usa o utilitário do topo.
+    NomeCompleto: require('../utils/nome-completo'),
     fs: {
       readFileSync(caminho) {
         if (!(caminho in disco)) {
@@ -115,6 +117,14 @@ test('e-mail é comparado sem diferenciar maiúsculas nem espaços', () => {
   app.registrarFalhaLogin('  A@B.com ');
   app.registrarFalhaLogin('a@b.COM');
   assert.equal(app.lerTentativas('a@b.com'), 2, 'trocar a caixa não zera a contagem');
+});
+
+test('nome completo é comparado sem maiúscula, acento nem espaço repetido (é a mesma conta)', () => {
+  const app = carregar();
+  app.registrarFalhaLogin('João da Silva');
+  app.registrarFalhaLogin('  joao   DA silva ');
+  assert.equal(app.lerTentativas('Joao da Silva'), 2, 'escrever o nome de outro jeito não zera a contagem');
+  assert.equal(app.lerTentativas('joao@loja.com'), 0, 'o e-mail conta à parte');
 });
 
 test('login certo limpa a contagem, no disco também', () => {

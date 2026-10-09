@@ -199,6 +199,8 @@ function exigirPermissao(chaveOuFn) {
     // orcamento que, ao aprovar, tambem convertem em pedido e abatem estoque.
     // Nessas, exigir apenas uma das duas deixava passar quem nao tinha a outra.
     const chaves = Array.isArray(bruto) ? bruto.filter(Boolean) : [bruto];
+    // O que a rota exige vai junto nas chamadas à API (só para o registro dela).
+    req.permissoesExigidas = chaves;
     try {
       const permissoes = await obterPermissoesEfetivas(req);
       const negada = chaves.find(c => !permissoesRepo.can(permissoes, c));
@@ -224,6 +226,7 @@ function exigirPermissao(chaveOuFn) {
  * coisa entre o usuário e o dado apagado.
  */
 function exigirSupAdmin(req, res, next) {
+  req.permissoesExigidas = ['supadmin'];
   carregarUsuarioAtual(req)
     .then(usuario => {
       if (permissoesRepo.isSupAdmin(usuario)) return next();
@@ -263,6 +266,7 @@ async function ehSupAdmin(req) {
 function exigirAlgumaPermissao(chaves) {
   const lista = (Array.isArray(chaves) ? chaves : [chaves]).filter(Boolean);
   return async (req, res, next) => {
+    req.permissoesExigidas = lista;
     try {
       const permissoes = await obterPermissoesEfetivas(req);
       if (lista.some(c => permissoesRepo.can(permissoes, c))) return next();

@@ -6,6 +6,7 @@ const { createApiClient } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
 const permissoesRepo = require('./permissionsRepository');
 const SenhaForte = require('../src/js/utils/senha-forte');
+const NomeCompleto = require('../src/js/utils/nome-completo');
 
 const router = express.Router();
 
@@ -303,7 +304,8 @@ router.get('/', async (req, res) => {
     // qualquer perfil pode usar. O que era grave era o vazamento dos campos.
     // Sem o módulo Usuários vai só o que o seletor precisa (como em /lista).
     const limpos = sanitizarSaida(Array.isArray(usuarios) ? usuarios : []);
-    res.json((await podeVerUsuarios(req)) ? limpos : limpos.map(paraSeletor));
+    const eu = resolverUsuarioAtual(req);
+    res.json((await podeVerUsuarios(req)) ? limpos : limpos.map(u => paraSeletor(u, eu)));
   } catch (err) {
     console.error('Erro ao listar usuários:', err);
     res
@@ -351,13 +353,18 @@ async function podeVerUsuarios(req) {
   }
 }
 
-/** O que os seletores de dono/responsável dos outros módulos precisam, e só. Pura. */
+/**
+ * O que os seletores de dono/responsável dos outros módulos precisam, e só.
+ * Sem o e-mail dos OUTROS (decisão do dono, 09/10/2026: e-mail e telefone só
+ * para quem tem o módulo Usuários ou os Relatórios); o próprio continua. Pura.
+ */
 const CAMPOS_DO_SELETOR = [
-  'id', 'nome', 'email', 'perfil', 'status',
+  'id', 'nome', 'perfil', 'status',
   'foto_usuario', 'avatar', 'avatarUrl', 'avatar_url', 'foto', 'fotoUrl', 'avatarVersion', 'avatar_version'
 ];
-function paraSeletor(usuario = {}) {
-  return Object.fromEntries(CAMPOS_DO_SELETOR.filter(c => usuario[c] !== undefined).map(c => [c, usuario[c]]));
+function paraSeletor(usuario = {}, euId = null) {
+  const campos = euId !== null && euId !== undefined && String(usuario.id) === String(euId) ? [...CAMPOS_DO_SELETOR, 'email'] : CAMPOS_DO_SELETOR;
+  return Object.fromEntries(campos.filter(c => usuario[c] !== undefined).map(c => [c, usuario[c]]));
 }
 
 /**
@@ -429,7 +436,8 @@ router.get('/lista', async (req, res) => {
     // seletores de dono/responsável: para eles vai só o necessário — datas de
     // acesso e atividade dos colegas não saem do backend sem permissão.
     if (!(await podeVerUsuarios(req))) {
-      res.status(200).json(completos.map(paraSeletor));
+      const eu = resolverUsuarioAtual(req);
+      res.status(200).json(completos.map(u => paraSeletor(u, eu)));
       return;
     }
 
@@ -826,6 +834,53 @@ router.post('/:id/computadores/:computadorId/cancelar', exigirSupAdminUsuarios, 
   }
 });
 
+/**
+ * GET /usuarios/seguranca/registro — Segurança da API (09/10/2026).
+ *
+ * O que a API negou (ou negaria, no modo observar) na rota genérica, com quem,
+ * que tabela, que operação, de que tela e quantas vezes — para o Sup Admin
+ * conferir antes de passar a API para o modo bloquear. A situação diz o modo
+ * em que ela está e se o registro está gravando (sql/seguranca_registro_api.sql).
+ */
+router.get('/seguranca/registro', exigirSupAdminUsuarios, async (_req, res) => {
+  const api = createInternalApiClient();
+  let situacao = null;
+  try {
+    situacao = require('./dataConfig').isDev ? { modo: 'dev', registro: false } : await api.get('/seguranca/situacao');
+  } catch (err) {
+    // API antiga (sem a trava): a tela diz isso.
+    situacao = { modo: null, registro: false, erro: err?.status === 404 ? 'A API ainda não tem a permissão por tabela (publique a versão nova).' : (err?.message || 'Sem resposta da API.') };
+  }
+  let linhas = [];
+  if (situacao?.registro) {
+    try {
+      const brutas = await api.get('/api/api_acessos_registro');
+      linhas = Array.isArray(brutas) ? brutas : [];
+    } catch (err) {
+      situacao.erro = err?.message || 'Não foi possível ler o registro.';
+    }
+  }
+  const nomes = await require('./historicoSocial').nomesDosUsuarios(api).catch(() => new Map());
+  const ordenadas = linhas
+    .map(l => ({
+      id: l.id,
+      usuario_id: l.usuario_id,
+      usuario: nomes.get(Number(l.usuario_id)) || (l.usuario_id ? `#${l.usuario_id}` : '—'),
+      tabela: l.tabela,
+      operacao: l.operacao,
+      decisao: l.decisao,
+      motivo: l.motivo || '',
+      rota: l.rota || '',
+      permissoes_rota: l.permissoes_rota || '',
+      vezes: Number(l.vezes) || 0,
+      primeiro_em: l.primeiro_em,
+      ultimo_em: l.ultimo_em
+    }))
+    .sort((a, b) => String(b.ultimo_em || '').localeCompare(String(a.ultimo_em || '')))
+    .slice(0, 1000);
+  res.json({ situacao, linhas: ordenadas });
+});
+
 /** PUT /usuarios/:id/permissoes — vincula um perfil ao usuário */
 router.put('/:id/permissoes', exigirSupAdminUsuarios, async (req, res) => {
   const { id } = req.params;
@@ -1135,6 +1190,9 @@ router.put('/:id/dados', exigirPermissaoUsuarios('usuarios.edit'), async (req, r
     const antes = await api.get(`/api/usuarios/${id}`).catch(() => null);
     const recusa = await recusaPorPerfilSupAdmin(req, api, antes, payload.perfil);
     if (recusa) return res.status(403).json({ error: recusa, code: 'FORBIDDEN_SUP_ADMIN' });
+    if (payload.nome !== undefined) {
+      payload.nome = await conferirNomeDoUsuario(api, payload.nome, { excetoId: id, antes });
+    }
     await api.put(`/api/usuarios/${id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
     await avisarDaConta(api, req, id, antes, payload);
@@ -1150,7 +1208,7 @@ router.put('/:id/dados', exigirPermissaoUsuarios('usuarios.edit'), async (req, r
     });
   } catch (err) {
     console.error('Erro ao salvar dados do usuário:', err);
-    res.status(err.status || 500).json({ error: 'Erro ao salvar dados do usuário' });
+    res.status(err.status || 500).json(corpoDoErro(err, 'Erro ao salvar dados do usuário'));
   }
 });
 
@@ -1332,21 +1390,53 @@ const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** Mesmo custo usado na redefinição de senha, para todo hash sair igual. */
 const CUSTO_BCRYPT = 12;
 
+/**
+ * O nome do usuário (09/10/2026): nome E sobrenome, e sem repetir o de
+ * outro usuário — dá para entrar pelo nome completo (src/js/utils/nome-completo.js;
+ * a API confere de novo em toda gravação). Na edição, o nome que não mudou
+ * passa (um repetido antigo não trava a edição de outro dado).
+ * Devolve o nome limpo; recusa com 400 (incompleto) ou 409 (repetido).
+ */
+async function conferirNomeDoUsuario(api, nomeBruto, { excetoId = null, antes = null } = {}) {
+  const nome = NomeCompleto.limpar(nomeBruto);
+  if (antes && NomeCompleto.mesmoNome(antes.nome, nome)) return nome;
+  const recusar = (mensagem, status, code) => {
+    throw Object.assign(new Error(mensagem), { status, code, campo: 'nome' });
+  };
+  const incompleto = NomeCompleto.mensagem(nome);
+  if (incompleto) recusar(incompleto, 400, 'NOME_INCOMPLETO');
+  const todos = await api.get('/api/usuarios', { query: { select: 'id,nome' } }).catch(() => []);
+  const lista = Array.isArray(todos) ? todos : todos ? [todos] : [];
+  const dono = lista.find(u => NomeCompleto.mesmoNome(u?.nome, nome) && String(u?.id) !== String(excetoId ?? ''));
+  if (dono) recusar(NomeCompleto.recadoDeRepetido(nome), 409, 'NOME_JA_CADASTRADO');
+  return nome;
+}
+
+/** A resposta de erro das rotas de usuário: a mensagem (com código e campo) quando é do usuário. */
+function corpoDoErro(err, padrao, statusQueMostram = [400, 409]) {
+  return statusQueMostram.includes(err?.status)
+    ? { error: err.message, ...(err.code ? { code: err.code } : {}), ...(err.campo ? { campo: err.campo } : {}) }
+    : { error: padrao };
+}
+
 /** Valida o formulário de cadastro interno e devolve os dados já normalizados. */
 function validarNovoUsuario(body = {}) {
-  const recusar = (mensagem, status = 400) => {
+  const recusar = (mensagem, status = 400, campo = null) => {
     const erro = new Error(mensagem);
     erro.status = status;
+    if (campo) erro.campo = campo;
     throw erro;
   };
   const texto = valor => (typeof valor === 'string' ? valor.trim() : '');
 
-  const nome = texto(body.nome);
+  // Nome e sobrenome à parte (o modal novo) ou já juntos em `nome`.
+  const nome = NomeCompleto.juntar(body.nome, body.sobrenome);
   const email = texto(body.email).toLowerCase();
   const senha = typeof body.senha === 'string' ? body.senha : '';
   const perfil = texto(body.perfil);
 
-  if (nome.length < 3) recusar('Informe o nome completo do usuário.');
+  const nomeIncompleto = NomeCompleto.mensagem(nome);
+  if (nomeIncompleto) recusar(nomeIncompleto, 400, 'nome');
   if (!RE_EMAIL.test(email)) recusar('Informe um e-mail válido.');
   // A regra da senha forte (src/js/utils/senha-forte.js), a mesma da tela.
   const senhaFraca = SenhaForte.mensagem(senha);
@@ -1388,8 +1478,9 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
       .catch(() => []);
     const lista = Array.isArray(existentes) ? existentes : existentes ? [existentes] : [];
     if (lista.some(u => String(u?.email || '').trim().toLowerCase() === dados.email)) {
-      return res.status(409).json({ error: 'Já existe um usuário cadastrado com esse e-mail.' });
+      return res.status(409).json({ error: 'Já existe um usuário cadastrado com esse e-mail.', campo: 'email' });
     }
+    dados.nome = await conferirNomeDoUsuario(api, dados.nome);
 
     const agora = new Date().toISOString();
     const payload = {
@@ -1440,7 +1531,7 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
     console.error('Erro ao criar usuário:', err);
     res
       .status(err.status || 500)
-      .json({ error: err.status ? err.message : 'Erro ao criar usuário' });
+      .json(err.status ? corpoDoErro(err, 'Erro ao criar usuário', [err.status]) : { error: 'Erro ao criar usuário' });
   }
 });
 
@@ -1485,6 +1576,10 @@ router.put('/me', async (req, res) => {
     const userId = extractUserIdFromToken(tokenFromRequest);
     const targetPath = userId ? `/api/usuarios/${userId}` : '/api/usuarios/me';
 
+    if (payload.nome !== undefined) {
+      const antes = await api.get(targetPath).catch(() => null);
+      payload.nome = await conferirNomeDoUsuario(api, payload.nome, { excetoId: userId ?? antes?.id ?? null, antes });
+    }
     const updated = await api.put(targetPath, payload);
     // Sem o hash da senha na resposta: a tela guarda este objeto no navegador.
     res.json(sanitizarSaida(normalizeAvatar(updated || {})));
@@ -1492,7 +1587,7 @@ router.put('/me', async (req, res) => {
     console.error('Erro ao atualizar usuário autenticado:', err);
     res
       .status(err.status || 500)
-      .json({ error: err.status === 400 ? err.message : 'Erro ao atualizar usuário autenticado' });
+      .json(corpoDoErro(err, 'Erro ao atualizar usuário autenticado'));
   }
 });
 
@@ -1512,6 +1607,9 @@ router.put('/:id', exigirPermissaoUsuarios('usuarios.edit'), async (req, res) =>
       if (!st) return res.status(400).json({ error: `Status inválido: ${payload.status}` });
       payload.status = st;
     }
+    if (payload.nome !== undefined) {
+      payload.nome = await conferirNomeDoUsuario(api, payload.nome, { excetoId: req.params.id, antes });
+    }
     await api.put(`/api/usuarios/${req.params.id}`, payload);
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
     await avisarDaConta(api, req, req.params.id, antes, payload);
@@ -1521,7 +1619,7 @@ router.put('/:id', exigirPermissaoUsuarios('usuarios.edit'), async (req, res) =>
     console.error('Erro ao atualizar usuário:', err);
     res
       .status(err.status || 500)
-      .json({ error: err.status === 400 ? err.message : 'Erro ao atualizar usuário' });
+      .json(corpoDoErro(err, 'Erro ao atualizar usuário'));
   }
 });
 
@@ -1551,3 +1649,5 @@ module.exports.comSinalDoPrograma = comSinalDoPrograma;
 module.exports.SINAL_VALE_MS = SINAL_VALE_MS;
 module.exports.paraSeletor = paraSeletor;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;
+module.exports.conferirNomeDoUsuario = conferirNomeDoUsuario;
+module.exports.validarNovoUsuario = validarNovoUsuario;

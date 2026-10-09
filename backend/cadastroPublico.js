@@ -36,6 +36,21 @@ function normalizarEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
 }
 
+/**
+ * Nome completo (09/10/2026): a tela pede NOME e SOBRENOME e eles vão juntos
+ * para a coluna única; o nome não repete, porque dá para entrar por ele. A
+ * mesma regra de acesso/nomes.js (API) e src/js/utils/nome-completo.js (app).
+ */
+function chaveDoNome(nome) {
+  return texto(nome).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function mensagemDoNome(nome) {
+  if (!nome) return "Informe o nome e o sobrenome.";
+  if (nome.split(" ").length < 2 || nome.replace(/[^\p{L}]/gu, "").length < 3) return "Informe o nome e o sobrenome.";
+  return "";
+}
+
 function sha256(valor) {
   return crypto.createHash("sha256").update(String(valor), "utf8").digest("hex");
 }
@@ -164,11 +179,13 @@ function criarCadastro({ pool, bcrypt, mensagemDaSenha, colunasDe, enviar, agora
 
   /** POST /cadastro { nome, email, senha, aceites: [{documento, versao, titulo, texto, aceito}], computador, versaoApp } */
   async function cadastrar(corpo = {}, { ip = null, urlBase = "" } = {}) {
-    const nome = texto(corpo.nome, 200);
+    // `sobrenome` à parte (a tela nova) ou já junto em `nome` (a tela antiga).
+    const nome = texto([corpo.nome, corpo.sobrenome].filter(v => typeof v === "string" && v.trim()).join(" "), 200);
     const email = normalizarEmail(corpo.email);
     const senha = typeof corpo.senha === "string" ? corpo.senha : "";
 
-    if (nome.length < 3) return { status: 400, corpo: { error: "Informe o seu nome completo." } };
+    const problemaNoNome = mensagemDoNome(nome);
+    if (problemaNoNome) return { status: 400, corpo: { error: problemaNoNome, campo: "nome" } };
     if (!RE_EMAIL.test(email)) return { status: 400, corpo: { error: "Informe um e-mail válido." } };
     const fraca = mensagemDaSenha(senha);
     if (fraca) return { status: 400, corpo: { error: fraca } };
@@ -201,6 +218,10 @@ function criarCadastro({ pool, bcrypt, mensagemDaSenha, colunasDe, enviar, agora
     const existente = await pool.query("SELECT id FROM usuarios WHERE lower(trim(email)) = $1 LIMIT 1", [email]);
     if (existente.rows[0]) {
       return { status: 409, corpo: { error: "Já existe um cadastro com esse e-mail. Se você ainda não confirmou, procure o e-mail de confirmação ou fale com o administrador." } };
+    }
+    const { rows: todos } = await pool.query("SELECT id, nome, email, perfil, status FROM usuarios");
+    if (todos.some(u => chaveDoNome(u.nome) && chaveDoNome(u.nome) === chaveDoNome(nome))) {
+      return { status: 409, corpo: { error: `O nome "${nome}" já está cadastrado. Diferencie (por exemplo, com outro sobrenome).`, code: "NOME_JA_CADASTRADO", campo: "nome" } };
     }
 
     ultimoPorEmail.set(email, agoraMs);

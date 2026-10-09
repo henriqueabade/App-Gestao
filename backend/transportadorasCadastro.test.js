@@ -69,6 +69,13 @@ async function montar(linhas = []) {
   process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
 
   for (const m of MODULOS) delete require.cache[require.resolve(m)];
+  // Gravar exige cliente/orçamento (09/10/2026); aqui quem chama pode.
+  const caminhoPermissoes = require.resolve('./permissionsController');
+  delete require.cache[caminhoPermissoes];
+  require.cache[caminhoPermissoes] = {
+    id: caminhoPermissoes, filename: caminhoPermissoes, loaded: true,
+    exports: { exigirAlgumaPermissao: () => (_req, _res, next) => next(), exigirPermissao: () => (_req, _res, next) => next() }
+  };
 
   const app = express();
   app.use(express.json());
