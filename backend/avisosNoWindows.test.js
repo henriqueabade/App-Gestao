@@ -212,6 +212,77 @@ test('DEV: a cópia do módulo da API contra o banco local, com o assinador dest
   assert.throws(() => assinador.verificar('x.y'), 'assinatura de outra execução não vale');
 });
 
+test('chat interno na janela do canto (12/10/2026): um cartão por conversa; a 1ª volta só marca; nada com o programa na frente ou ao vivo', async () => {
+  let conversas = [{ conversa_id: 5, tipo: 'direta', nome: null, autor: 'Carla', texto: 'oi', ultima_id: 40, quantas: 1, mencao: false, criado_em: '2026-10-12T10:00:00Z' }];
+  let ocupado = false;
+  const rede = redeFalsa({
+    'POST /avisos/dispositivo': { status: 200, corpo: { token: 'tok-aparelho' } },
+    'GET /avisos/meus': { status: 200, corpo: { itens: [] } },
+    'GET /avisos/tarefas': { status: 200, corpo: { tarefas: [] } },
+    'GET /avisos/chat': () => ({ status: 200, corpo: { ocupado, conversas } })
+  });
+  const arquivo = arquivoNovo();
+  const s = W.criarAvisosNoWindows({ arquivo, cofre, apiBase: 'https://api.teste', fetch: rede.fetch });
+  await s.lembrarUsuario({ id: 2 }, 'tok-sessao');
+  let r = await s.ciclo();
+  assert.deepStrictEqual(r.chat, [], '1ª vez: só marca o que já havia');
+  assert.deepStrictEqual(r.chatNaoLidas, [5]);
+  assert.ok(rede.chamadas.filter(c => c.caminho === '/avisos/chat').every(c => c.auth === 'Bearer tok-aparelho'), 'com o token do aparelho');
+
+  conversas = [{ ...conversas[0], texto: 'tem um minuto?', ultima_id: 41, quantas: 2, mencao: true }, { conversa_id: 8, tipo: 'canal', nome: 'producao', autor: 'Bruno', texto: 'estufa ok', ultima_id: 42, quantas: 1 }];
+  r = await s.ciclo();
+  assert.deepStrictEqual(r.chat.map(a => [a.id, a.tipo, a.titulo, a.mensagem, a.notas[0]]), [
+    ['chat:5', 'chat_mencao', 'Carla', 'tem um minuto?', '2 mensagens novas · mencionaram você'],
+    ['chat:8', 'chat_mensagem', 'Bruno em #producao', 'estufa ok', undefined]
+  ]);
+  assert.ok(r.chat.every(a => a.origem === 'chat' && a.lida === true), 'o sino não tem o que marcar');
+
+  conversas = [{ ...conversas[1], ultima_id: 43 }];
+  assert.deepStrictEqual((await s.ciclo({ emFoco: true })).chat, [], 'programa na frente: o chat do programa avisa');
+  conversas = [{ ...conversas[0], ultima_id: 44 }];
+  r = await s.ciclo({ chatAoVivo: true });
+  assert.deepStrictEqual(r.chat, [], 'chat ao vivo no programa: ele mesmo manda para o canto');
+  assert.deepStrictEqual(r.chatNaoLidas, [8], 'mas diz o que ainda está por ler (o resto sai do canto)');
+  assert.deepStrictEqual((await s.ciclo()).chat, [], 'e o que já foi visto não volta');
+
+  ocupado = true;
+  conversas = [];
+  assert.deepStrictEqual((await s.ciclo()).chatNaoLidas, [], 'Ocupado: nada');
+
+  // Outro serviço (o programa reiniciou) lê do disco o que já foi visto.
+  ocupado = false;
+  conversas = [{ conversa_id: 8, tipo: 'canal', nome: 'producao', autor: 'Bruno', texto: 'nova', ultima_id: 45, quantas: 1 }];
+  const outro = W.criarAvisosNoWindows({ arquivo, cofre, apiBase: 'https://api.teste', fetch: rede.fetch });
+  assert.deepStrictEqual((await outro.ciclo()).chat.map(a => a.id), ['chat:8']);
+});
+
+test('chat: API sem /avisos/chat (404) pergunta de novo só depois de 30 min; sem o token do aparelho, não pergunta', async () => {
+  let agora = new Date('2026-10-12T10:00:00Z');
+  const rede = redeFalsa({
+    'POST /avisos/dispositivo': { status: 200, corpo: { token: 'tok-aparelho' } },
+    'GET /avisos/meus': { status: 200, corpo: { itens: [] } },
+    'GET /avisos/tarefas': { status: 200, corpo: { tarefas: [] } }
+  });
+  const s = W.criarAvisosNoWindows({ arquivo: arquivoNovo(), cofre, apiBase: 'https://api.teste', fetch: rede.fetch, agora: () => agora });
+  await s.lembrarUsuario({ id: 2 }, 'tok-sessao');
+  await s.ciclo();
+  await s.ciclo();
+  assert.strictEqual(rede.chamadas.filter(c => c.caminho === '/avisos/chat').length, 1, 'uma vez só');
+  agora = new Date('2026-10-12T10:31:00Z');
+  await s.ciclo();
+  assert.strictEqual(rede.chamadas.filter(c => c.caminho === '/avisos/chat').length, 2, 'meia hora depois, de novo');
+  const semToken = W.criarAvisosNoWindows({ arquivo: arquivoNovo(), apiBase: 'https://api.teste', fetch: rede.fetch });
+  assert.strictEqual(await semToken.buscarChat(), null);
+});
+
+test('avisoDoChat: o que vem do programa ou da API vira cartão limpo (id da conversa, textos cortados)', () => {
+  assert.strictEqual(W.avisoDoChat(null), null);
+  assert.strictEqual(W.avisoDoChat({ conversa_id: 'abc' }), null);
+  assert.strictEqual(W.avisoDoChat({ conversa_id: -3 }), null);
+  const a = W.avisoDoChat({ conversa_id: '7', tipo: 'grupo', nome: 'Entrega', autor: { x: 1 }, texto: 'x'.repeat(500), quantas: 'muitas', mencao: 'sim', criado_em: 'ontem' });
+  assert.deepStrictEqual([a.id, a.titulo, a.mensagem.length, a.notas, a.tipo, a.criado_em, a.registro_id], ['chat:7', 'Alguém em Entrega', 300, [], 'chat_mensagem', null, 7]);
+});
+
 test('a cópia do app é o módulo da API, com o mesmo corpo', () => {
   const daApi = path.join(__dirname, '..', '..', 'Santissimo-db-API', 'avisos', 'dispositivo.js');
   if (!fs.existsSync(daApi)) return; // a API não está ao lado nesta máquina

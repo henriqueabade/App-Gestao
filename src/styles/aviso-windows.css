@@ -139,6 +139,9 @@ html, body {
 .aw-aviso--responsavel_saiu .aw-aviso__icone { background: #d97706; }
 .aw-aviso--convite_tarefa .aw-aviso__icone,
 .aw-aviso--conta_alterada .aw-aviso__icone { background: #2563eb; }
+/* Chat interno (12/10/2026): o vinho do botão do chat; a menção, em vermelho. */
+.aw-aviso--chat_mensagem .aw-aviso__icone { background: #6a152c; color: #d4c169; }
+.aw-aviso--chat_mencao .aw-aviso__icone { background: #dc2626; }
 .aw-aviso__corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .aw-aviso__titulo { font-size: 0.875rem; font-weight: 600; color: var(--aw-texto-forte); }
 /* Texto inteiro, sem "…": com a rolagem, nada precisa ser cortado. */

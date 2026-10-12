@@ -33,6 +33,86 @@ const TIPOS_DE_REFERENCIA = ["tarefa", "cliente", "prospeccao", "contato", "pedi
 const REACOES = ["👍", "❤️", "😂", "😮", "😢", "🙏", "✅", "👀", "🎉", "🔥", "👏", "💯"];
 
 const SQL_FALTANDO = "O chat ainda não está no banco: rode sql/chat_interno.sql e reinicie a API.";
+const SQL_ANEXOS_FALTANDO = "Os arquivos do chat ainda não estão no banco: rode sql/chat_anexos.sql e reinicie a API.";
+
+// ------------------------------------------------------------ arquivos
+// Fase 2 (12/10/2026): arquivo e imagem na mensagem (sql/chat_anexos.sql).
+const MAXIMO_ANEXO_BYTES = 20 * 1024 * 1024;
+const MAXIMO_ANEXOS_POR_MENSAGEM = 10;
+const LADO_DA_MINIATURA = 480;
+// Programas e scripts não entram: no programa, "Abrir" passa o arquivo ao
+// Windows, e um clique rodaria o que alguém mandou.
+const EXTENSOES_BLOQUEADAS = new Set([
+  "exe", "msi", "msp", "bat", "cmd", "com", "scr", "pif", "cpl", "msc", "dll", "sys", "inf", "reg", "lnk", "url", "scf",
+  "vb", "vbs", "vbe", "js", "jse", "mjs", "ws", "wsf", "wsh", "ps1", "psm1", "psd1", "hta", "jar", "application", "gadget", "appx", "msix"
+]);
+// Imagens que aparecem na própria conversa (SVG não: pode levar script).
+const TIPOS_DE_IMAGEM = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
+const TIPO_PELA_EXTENSAO = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml",
+  pdf: "application/pdf", txt: "text/plain", csv: "text/csv", xml: "application/xml", json: "application/json",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odt: "application/vnd.oasis.opendocument.text", ods: "application/vnd.oasis.opendocument.spreadsheet",
+  zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed",
+  mp3: "audio/mpeg", wav: "audio/wav", mp4: "video/mp4", mov: "video/quicktime",
+  dwg: "image/vnd.dwg", dxf: "image/vnd.dxf", cdr: "application/vnd.corel-draw", psd: "image/vnd.adobe.photoshop", ai: "application/postscript"
+};
+
+/** O nome do arquivo sem caminho nem caractere que o Windows recusa. Pura. */
+function nomeDeArquivo(bruto) {
+  const nome = String(bruto ?? "")
+    .normalize("NFC")
+    .split(/[\\/]/)
+    .pop()
+    .replace(/[\u0000-\u001f<>:"|?*]/g, "_")
+    .replace(/^\.+/, "")
+    .trim()
+    .slice(0, 180);
+  return nome || "arquivo";
+}
+
+/** A extensão, em minúsculas ("" sem ela). Pura. */
+const extensaoDe = nome => {
+  const m = /\.([a-z0-9]{1,12})$/i.exec(String(nome || ""));
+  return m ? m[1].toLowerCase() : "";
+};
+
+/** Programa ou script (não pode ser enviado)? Pura. */
+const arquivoBloqueado = nome => EXTENSOES_BLOQUEADAS.has(extensaoDe(nome));
+
+/**
+ * O tipo guardado: o informado pelo programa se tiver cara de tipo; senão,
+ * pela extensão. Imagem só vale como imagem se a extensão também for de
+ * imagem (um ".exe" dizendo "image/png" não passa por foto). Pura.
+ */
+function tipoDoArquivo(nome, informado) {
+  const pelaExtensao = TIPO_PELA_EXTENSAO[extensaoDe(nome)] || null;
+  const dito = String(informado || "").trim().toLowerCase();
+  const valido = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(dito) ? dito : null;
+  if (valido && TIPOS_DE_IMAGEM.has(valido) && !TIPOS_DE_IMAGEM.has(pelaExtensao)) return pelaExtensao || "application/octet-stream";
+  if (valido === "image/svg+xml") return valido;
+  return valido || pelaExtensao || "application/octet-stream";
+}
+
+const ehImagem = tipo => TIPOS_DE_IMAGEM.has(String(tipo || ""));
+
+/** O texto da busca: sem acento, minúsculo, um espaço só. Pura. */
+function normalizarBusca(texto) {
+  return String(texto ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+// Para comparar sem acento também no banco (translate + lower), seja qual for
+// o "locale" dele: as duas listas têm o mesmo tamanho, letra por letra.
+const COM_ACENTO = "áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ";
+const SEM_ACENTO = "aaaaaaeeeeiiiiooooouuuucnyAAAAAAEEEEIIIIOOOOOUUUUCNY";
 
 function erro(status, mensagem, extra = {}) {
   const e = new Error(mensagem);
@@ -121,13 +201,20 @@ const jsonDe = v => {
  * @param {{query: Function, connect?: Function}} deps.pool
  * @param {() => Date} [deps.agora]
  */
+/** A tabela do chat ainda não existe no banco? Vira o aviso de qual SQL rodar. */
+function semTabelaDoChat(err) {
+  const texto = String(err?.message || "");
+  if (/relation "chat_anexos"/.test(texto)) return erro(503, SQL_ANEXOS_FALTANDO, { code: "CHAT_ANEXOS_SQL" });
+  if (/relation "chat_/.test(texto)) return erro(503, SQL_FALTANDO, { code: "CHAT_SQL" });
+  return null;
+}
+
 function criarChat({ pool, agora = () => new Date() }) {
   async function q(sql, params = []) {
     try {
       return await pool.query(sql, params);
     } catch (err) {
-      if (/relation "chat_/.test(String(err?.message || ""))) throw erro(503, SQL_FALTANDO, { code: "CHAT_SQL" });
-      throw err;
+      throw semTabelaDoChat(err) || err;
     }
   }
 
@@ -141,8 +228,7 @@ function criarChat({ pool, agora = () => new Date() }) {
       return r;
     } catch (err) {
       try { await cliente.query("ROLLBACK"); } catch (_) { /* a conexão caiu */ }
-      if (/relation "chat_/.test(String(err?.message || ""))) throw erro(503, SQL_FALTANDO, { code: "CHAT_SQL" });
-      throw err;
+      throw semTabelaDoChat(err) || err;
     } finally {
       cliente.release();
     }
@@ -248,18 +334,24 @@ function criarChat({ pool, agora = () => new Date() }) {
         ORDER BY p.fixada DESC, COALESCE(c.ultima_mensagem_em, c.criado_em) DESC`,
       [usuarioId]
     );
-    return rows.map(r => ({
-      id: r.id, tipo: r.tipo, nome: r.nome || null, descricao: r.descricao || null, criado_por: r.criado_por,
-      papel: r.papel, silenciada: Boolean(r.silenciada), fixada: Boolean(r.fixada),
-      lida_ate_id: r.lida_ate_id, nao_lidas: r.nao_lidas, mencoes: r.mencoes, membros: r.membros,
-      outro_id: r.tipo === "direta" ? r.outro_id : null,
-      outro_lida_ate_id: r.tipo === "direta" ? r.outro_lida_ate_id : null,
-      ultima: r.ult_id ? {
-        id: r.ult_id, autor_id: r.ult_autor, tipo: r.ult_tipo, em: r.ult_em,
-        texto: r.ult_apagada ? "" : String(r.ult_texto || "").slice(0, 160), apagada: Boolean(r.ult_apagada)
-      } : null,
-      atualizada_em: r.ultima_mensagem_em || r.criado_em
-    }));
+    // A última mensagem só com arquivo: a lista mostra "📎 nome".
+    const arquivosDasUltimas = await anexosDasMensagens(rows.filter(r => r.ult_id && !r.ult_apagada).map(r => r.ult_id));
+    return rows.map(r => {
+      const arquivos = arquivosDasUltimas.get(r.ult_id) || [];
+      return {
+        id: r.id, tipo: r.tipo, nome: r.nome || null, descricao: r.descricao || null, criado_por: r.criado_por,
+        papel: r.papel, silenciada: Boolean(r.silenciada), fixada: Boolean(r.fixada),
+        lida_ate_id: r.lida_ate_id, nao_lidas: r.nao_lidas, mencoes: r.mencoes, membros: r.membros,
+        outro_id: r.tipo === "direta" ? r.outro_id : null,
+        outro_lida_ate_id: r.tipo === "direta" ? r.outro_lida_ate_id : null,
+        ultima: r.ult_id ? {
+          id: r.ult_id, autor_id: r.ult_autor, tipo: r.ult_tipo, em: r.ult_em,
+          texto: r.ult_apagada ? "" : String(r.ult_texto || "").slice(0, 160), apagada: Boolean(r.ult_apagada),
+          anexos: arquivos.length, anexo_nome: arquivos[0]?.nome || null
+        } : null,
+        atualizada_em: r.ultima_mensagem_em || r.criado_em
+      };
+    });
   }
 
   /** Os canais abertos (para descobrir e entrar), dizendo se já está neles. */
@@ -466,7 +558,7 @@ function criarChat({ pool, agora = () => new Date() }) {
 
   // ----------------------------------------------------------- mensagens
 
-  function paraMensagem(m, reacoes = [], resposta = null) {
+  function paraMensagem(m, reacoes = [], resposta = null, anexos = []) {
     const apagada = Boolean(m.apagada_em);
     return {
       id: m.id, conversa_id: m.conversa_id, autor_id: m.autor_id, tipo: m.tipo,
@@ -476,13 +568,16 @@ function criarChat({ pool, agora = () => new Date() }) {
       mencoes: apagada ? [] : jsonDe(m.mencoes),
       referencias: apagada ? [] : jsonDe(m.referencias),
       criado_em: m.criado_em, editada_em: m.editada_em || null, apagada,
-      reacoes
+      reacoes,
+      // Da mensagem apagada, nem o nome do arquivo.
+      anexos: apagada ? [] : anexos
     };
   }
 
   async function completar(linhas) {
     if (!linhas.length) return [];
     const ids = linhas.map(m => m.id);
+    const anexos = await anexosDasMensagens(ids);
     const { rows: reacoes } = await q(
       "SELECT mensagem_id, emoji, array_agg(usuario_id ORDER BY criado_em) AS usuarios FROM chat_reacoes WHERE mensagem_id = ANY($1) GROUP BY mensagem_id, emoji",
       [ids]
@@ -496,15 +591,36 @@ function criarChat({ pool, agora = () => new Date() }) {
     const respostas = new Map();
     if (idsResposta.length) {
       const { rows } = await q("SELECT id, autor_id, texto, apagada_em FROM chat_mensagens WHERE id = ANY($1)", [idsResposta]);
-      for (const r of rows) respostas.set(r.id, { id: r.id, autor_id: r.autor_id, texto: r.apagada_em ? "" : String(r.texto || "").slice(0, 200), apagada: Boolean(r.apagada_em) });
+      const anexosDasRespondidas = await anexosDasMensagens(idsResposta);
+      for (const r of rows) {
+        respostas.set(r.id, {
+          id: r.id, autor_id: r.autor_id, texto: r.apagada_em ? "" : String(r.texto || "").slice(0, 200), apagada: Boolean(r.apagada_em),
+          anexos: r.apagada_em ? 0 : (anexosDasRespondidas.get(r.id) || []).length
+        });
+      }
     }
-    return linhas.map(m => paraMensagem(m, porMensagem.get(m.id) || [], m.resposta_de ? respostas.get(m.resposta_de) || null : null));
+    return linhas.map(m => paraMensagem(m, porMensagem.get(m.id) || [], m.resposta_de ? respostas.get(m.resposta_de) || null : null, anexos.get(m.id) || []));
   }
 
-  /** As mensagens (as mais novas por último). `antes`/`depois` = ids, para rolar e para buscar o que chegou. */
-  async function mensagens(usuarioId, conversaId, { antes, depois, limite } = {}) {
+  /**
+   * As mensagens (as mais novas por último). `antes`/`depois` = ids, para
+   * rolar e para buscar o que chegou; `ao_redor` = a mensagem achada na busca,
+   * com as vizinhas dos dois lados (`mais_antigas` / `mais_novas` dizem se há
+   * mais de cada lado).
+   */
+  async function mensagens(usuarioId, conversaId, { antes, depois, limite, ao_redor: aoRedor } = {}) {
     const c = await exigirParticipante(usuarioId, conversaId);
     const n = Math.min(LIMITE_MAXIMO, inteiro(limite) || LIMITE_PADRAO);
+    if (inteiro(aoRedor)) {
+      const alvo = inteiro(aoRedor);
+      const metade = Math.max(1, Math.floor(n / 2));
+      const { rows: ate } = await q("SELECT * FROM chat_mensagens WHERE conversa_id = $1 AND id <= $2 ORDER BY id DESC LIMIT $3", [c.id, alvo, metade + 1]);
+      if (!ate.length || ate[0].id !== alvo) throw erro(404, "Mensagem não encontrada nesta conversa.");
+      const { rows: depoisDela } = await q("SELECT * FROM chat_mensagens WHERE conversa_id = $1 AND id > $2 ORDER BY id ASC LIMIT $3", [c.id, alvo, n - metade + 1]);
+      const antigas = ate.slice(0, metade).reverse();
+      const novas = depoisDela.slice(0, n - metade);
+      return { mensagens: await completar([...antigas, ...novas]), mais_antigas: ate.length > metade, mais_novas: depoisDela.length > n - metade };
+    }
     const params = [c.id];
     let filtro = "";
     if (inteiro(antes)) { params.push(inteiro(antes)); filtro += ` AND id < $${params.length}`; }
@@ -515,7 +631,11 @@ function criarChat({ pool, agora = () => new Date() }) {
     const mais = rows.length > n;
     const lista = rows.slice(0, n);
     if (ordem === "DESC") lista.reverse();
-    return { mensagens: await completar(lista), mais_antigas: ordem === "DESC" ? mais : undefined };
+    return {
+      mensagens: await completar(lista),
+      mais_antigas: ordem === "DESC" ? mais : undefined,
+      mais_novas: ordem === "ASC" ? mais : undefined
+    };
   }
 
   async function mensagemPorId(id) {
@@ -523,11 +643,17 @@ function criarChat({ pool, agora = () => new Date() }) {
     return rows[0] ? (await completar([rows[0]]))[0] : null;
   }
 
-  /** Escrever. Devolve a mensagem e quem está na conversa (para avisar). */
-  async function enviar(usuarioId, conversaId, { texto, resposta_de } = {}) {
+  /**
+   * Escrever. `anexos`: os ids dos arquivos já enviados (soltos, desta pessoa
+   * e desta conversa) — com eles, o texto pode ficar vazio. Devolve a
+   * mensagem e quem está na conversa (para avisar).
+   */
+  async function enviar(usuarioId, conversaId, { texto, resposta_de, anexos } = {}) {
     const c = await exigirParticipante(usuarioId, conversaId);
     const corpo = limpo(texto, MAXIMO_TEXTO + 1);
-    if (!corpo) throw erro(400, "Escreva a mensagem.");
+    const idsAnexos = idsDasMencoes(anexos);
+    if (idsAnexos.length > MAXIMO_ANEXOS_POR_MENSAGEM) throw erro(400, `No máximo ${MAXIMO_ANEXOS_POR_MENSAGEM} arquivos por mensagem.`);
+    if (!corpo && !idsAnexos.length) throw erro(400, "Escreva a mensagem.");
     if (corpo.length > MAXIMO_TEXTO) throw erro(400, `A mensagem passa de ${MAXIMO_TEXTO} letras.`);
     let resposta = null;
     if (resposta_de !== undefined && resposta_de !== null && resposta_de !== "") {
@@ -548,6 +674,14 @@ function criarChat({ pool, agora = () => new Date() }) {
         [c.id, usuarioId, corpo, resposta, JSON.stringify(citados), JSON.stringify(refs), quando]
       );
       const m = rows[0];
+      if (idsAnexos.length) {
+        // Na ordem em que a pessoa escolheu (os menores terminam de subir antes).
+        const { rows: presos } = await banco.query(
+          "UPDATE chat_anexos SET mensagem_id = $1, ordem = array_position($2::int[], id) WHERE id = ANY($2::int[]) AND autor_id = $3 AND conversa_id = $4 AND mensagem_id IS NULL RETURNING id",
+          [m.id, idsAnexos, usuarioId, c.id]
+        );
+        if (presos.length !== idsAnexos.length) throw erro(409, "Um dos arquivos não vale mais (já foi enviado ou passou de 1 dia): escolha de novo.");
+      }
       await banco.query("UPDATE chat_conversas SET ultima_mensagem_id = $1, ultima_mensagem_em = $2 WHERE id = $3", [m.id, m.criado_em, c.id]);
       // O que a própria pessoa escreveu ela já leu.
       await banco.query("UPDATE chat_participantes SET lida_ate_id = GREATEST(lida_ate_id, $1) WHERE conversa_id = $2 AND usuario_id = $3", [m.id, c.id, usuarioId]);
@@ -571,7 +705,8 @@ function criarChat({ pool, agora = () => new Date() }) {
     if (String(m.autor_id) !== String(usuarioId) || m.tipo !== "texto") throw erro(403, "Só quem escreveu edita a mensagem.");
     if (m.apagada_em) throw erro(409, "Esta mensagem foi apagada.");
     const corpo = limpo(texto, MAXIMO_TEXTO + 1);
-    if (!corpo) throw erro(400, "Escreva a mensagem.");
+    // Com arquivo, o texto pode ficar vazio (como ao enviar).
+    if (!corpo && !((await anexosDasMensagens([m.id])).get(m.id) || []).length) throw erro(400, "Escreva a mensagem.");
     if (corpo.length > MAXIMO_TEXTO) throw erro(400, `A mensagem passa de ${MAXIMO_TEXTO} letras.`);
     if (corpo === m.texto) return { mensagem: await mensagemPorId(m.id), participantes: await participantesAtivos(c.id) };
     const dentro = new Set((await participantesAtivos(c.id)).map(String));
@@ -635,6 +770,211 @@ function criarChat({ pool, agora = () => new Date() }) {
     return rows[0]?.total || 0;
   }
 
+  // ------------------------------------------------------------ arquivos
+
+  // Sem a tabela dos arquivos (sql/chat_anexos.sql ainda não rodado) o chat
+  // continua funcionando, só sem arquivos; procura de novo a cada 10 minutos.
+  let semTabelaDeAnexosDesde = 0;
+  async function anexosDasMensagens(ids) {
+    const mapa = new Map();
+    const lista = [...new Set((ids || []).filter(Boolean))];
+    if (!lista.length) return mapa;
+    if (semTabelaDeAnexosDesde && agora().getTime() - semTabelaDeAnexosDesde < 10 * 60 * 1000) return mapa;
+    let rows;
+    try {
+      ({ rows } = await pool.query(
+        "SELECT id, mensagem_id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura FROM chat_anexos WHERE mensagem_id = ANY($1) ORDER BY ordem NULLS LAST, id",
+        [lista]
+      ));
+      semTabelaDeAnexosDesde = 0;
+    } catch (err) {
+      if (!/relation "chat_anexos"/.test(String(err?.message || ""))) throw err;
+      semTabelaDeAnexosDesde = agora().getTime();
+      return mapa;
+    }
+    for (const a of rows) {
+      if (!mapa.has(a.mensagem_id)) mapa.set(a.mensagem_id, []);
+      mapa.get(a.mensagem_id).push(paraAnexo(a));
+    }
+    return mapa;
+  }
+
+  let sharp;
+  /** A miniatura (webp, até 480 px) e as medidas da imagem. Sem o sharp (o programa no DEV), sem miniatura. */
+  async function miniaturaDe(buffer, tipo) {
+    const nada = { miniatura: null, largura: null, altura: null };
+    if (!ehImagem(tipo)) return nada;
+    if (sharp === undefined) {
+      try { sharp = require("sharp"); } catch (_) { sharp = null; }
+    }
+    if (!sharp) return nada;
+    try {
+      const meta = await sharp(buffer, { failOn: "none" }).metadata();
+      const girada = Number(meta.orientation) >= 5;
+      const miniatura = await sharp(buffer, { failOn: "none" })
+        .rotate()
+        .resize({ width: LADO_DA_MINIATURA, height: LADO_DA_MINIATURA, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
+      return { miniatura, largura: (girada ? meta.height : meta.width) || null, altura: (girada ? meta.width : meta.height) || null };
+    } catch (_) {
+      return nada; // imagem estragada: vai sem miniatura
+    }
+  }
+
+  /**
+   * Guardar um arquivo escolhido na conversa. Fica "solto" até a mensagem
+   * que o leva ser enviada (`enviar` com `anexos`). `dados`: os bytes.
+   */
+  async function guardarAnexo(usuarioId, conversaId, { nome, tipo, dados } = {}) {
+    const c = await exigirParticipante(usuarioId, conversaId);
+    const buffer = Buffer.isBuffer(dados) ? dados : Buffer.alloc(0);
+    if (!buffer.length) throw erro(400, "O arquivo está vazio.");
+    if (buffer.length > MAXIMO_ANEXO_BYTES) throw erro(413, `O arquivo passa de ${MAXIMO_ANEXO_BYTES / 1024 / 1024} MB.`);
+    const nomeLimpo = nomeDeArquivo(nome);
+    if (arquivoBloqueado(nomeLimpo)) throw erro(415, `Arquivo .${extensaoDe(nomeLimpo)} não pode ser enviado: programas e scripts abririam no Windows de quem recebe.`);
+    const tipoFinal = tipoDoArquivo(nomeLimpo, tipo);
+    const { miniatura, largura, altura } = await miniaturaDe(buffer, tipoFinal);
+    // Os esquecidos (escolhidos e nunca enviados) saem depois de 1 dia.
+    await q("DELETE FROM chat_anexos WHERE mensagem_id IS NULL AND criado_em < $1", [new Date(agora().getTime() - 24 * 60 * 60 * 1000).toISOString()]);
+    const { rows } = await q(
+      `INSERT INTO chat_anexos (conversa_id, autor_id, nome, tipo_mime, tamanho, largura, altura, dados, miniatura, criado_em)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura`,
+      [c.id, usuarioId, nomeLimpo, tipoFinal, buffer.length, largura, altura, buffer, miniatura, agora().toISOString()]
+    );
+    return paraAnexo(rows[0]);
+  }
+
+  /** Tirar um arquivo escolhido e ainda não enviado (só quem o escolheu). */
+  async function descartarAnexo(usuarioId, anexoId) {
+    const id = inteiro(anexoId);
+    const { rows } = id
+      ? await q("DELETE FROM chat_anexos WHERE id = $1 AND autor_id = $2 AND mensagem_id IS NULL RETURNING id", [id, usuarioId])
+      : { rows: [] };
+    if (!rows[0]) throw erro(404, "Arquivo não encontrado (ou já enviado).");
+    return { id };
+  }
+
+  /**
+   * O arquivo (ou a miniatura, se for imagem): só para quem está na conversa;
+   * o solto, só para quem o escolheu; o de mensagem apagada, para ninguém.
+   */
+  async function lerAnexo(usuarioId, anexoId, { miniatura = false } = {}) {
+    const id = inteiro(anexoId);
+    const { rows } = id
+      ? await q(
+        `SELECT a.id, a.conversa_id, a.mensagem_id, a.autor_id, a.nome, a.tipo_mime,
+                ${miniatura ? "COALESCE(a.miniatura, a.dados)" : "a.dados"} AS dados,
+                ${miniatura ? "(a.miniatura IS NOT NULL)" : "FALSE"} AS e_miniatura, m.apagada_em
+           FROM chat_anexos a LEFT JOIN chat_mensagens m ON m.id = a.mensagem_id
+          WHERE a.id = $1`,
+        [id]
+      )
+      : { rows: [] };
+    const a = rows[0];
+    if (!a) throw erro(404, "Arquivo não encontrado.");
+    await exigirParticipante(usuarioId, a.conversa_id).catch(() => { throw erro(404, "Arquivo não encontrado."); });
+    if (!a.mensagem_id && String(a.autor_id) !== String(usuarioId)) throw erro(404, "Arquivo não encontrado.");
+    if (a.apagada_em) throw erro(410, "A mensagem deste arquivo foi apagada.");
+    return { id: a.id, nome: a.nome, tipo: a.e_miniatura ? "image/webp" : a.tipo_mime, imagem: ehImagem(a.tipo_mime), dados: a.dados };
+  }
+
+  // ------------------------------------------------------------ busca
+
+  /**
+   * Buscar nas mensagens das conversas em que a pessoa está (ou numa só,
+   * `conversa`): no texto (sem acento e sem as marcas), no nome dos arquivos
+   * e nas menções a quem tem esse nome. As mais novas primeiro; `antes` =
+   * id, para trazer mais.
+   */
+  async function buscar(usuarioId, { q: termo, conversa, antes, limite } = {}) {
+    const t = normalizarBusca(termo);
+    if (t.length < 2) return { resultados: [], mais: false };
+    const n = Math.min(50, inteiro(limite) || 30);
+    const padrao = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+    const pessoas = (await usuariosAtivos()).filter(u => normalizarBusca(u.nome).includes(t)).map(u => String(u.id));
+    const comArquivos = !(semTabelaDeAnexosDesde && agora().getTime() - semTabelaDeAnexosDesde < 10 * 60 * 1000);
+    const params = [usuarioId, padrao, pessoas, COM_ACENTO, SEM_ACENTO, "\\[\\[[^\\]]*\\]\\]"];
+    const semAcento = coluna => `lower(translate(${coluna}, $4, $5))`;
+    let filtro = "";
+    if (inteiro(conversa)) { params.push(inteiro(conversa)); filtro += ` AND m.conversa_id = $${params.length}`; }
+    if (inteiro(antes)) { params.push(inteiro(antes)); filtro += ` AND m.id < $${params.length}`; }
+    params.push(n + 1);
+    const consulta = arquivos => q(
+      `SELECT m.* FROM chat_mensagens m
+         JOIN chat_participantes p ON p.conversa_id = m.conversa_id AND p.usuario_id = $1 AND p.saiu_em IS NULL
+         JOIN chat_conversas c ON c.id = m.conversa_id AND c.arquivada_em IS NULL
+        WHERE m.apagada_em IS NULL AND m.tipo = 'texto'${filtro}
+          AND (${semAcento("regexp_replace(m.texto, $6, ' ', 'g')")} LIKE $2
+               OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(m.mencoes) e WHERE e = ANY($3::text[]))
+               ${arquivos ? `OR EXISTS (SELECT 1 FROM chat_anexos a WHERE a.mensagem_id = m.id AND ${semAcento("a.nome")} LIKE $2)` : ""})
+        ORDER BY m.id DESC LIMIT $${params.length}`,
+      params
+    );
+    let rows;
+    try {
+      ({ rows } = await consulta(comArquivos));
+    } catch (err) {
+      if (err?.code !== "CHAT_ANEXOS_SQL") throw err;
+      semTabelaDeAnexosDesde = agora().getTime();
+      ({ rows } = await consulta(false));
+    }
+    const mais = rows.length > n;
+    const achadas = await completar(rows.slice(0, n));
+    const conversas = new Map((await conversasDo(usuarioId)).map(c => [c.id, c]));
+    return {
+      resultados: achadas.map(m => {
+        const c = conversas.get(m.conversa_id) || { id: m.conversa_id, tipo: "grupo", nome: null };
+        return { mensagem: m, conversa: { id: c.id, tipo: c.tipo, nome: c.nome, outro_id: c.outro_id ?? null } };
+      }),
+      mais
+    };
+  }
+
+  // ------------------------------------------------- janela do canto (Windows)
+
+  /**
+   * As mensagens ainda não lidas, agrupadas por conversa, para a janela de
+   * avisos do canto da tela (avisos/dispositivo.js, com o programa fechado ou
+   * atrás). Conversa silenciada só entra com menção; "Ocupado" não recebe
+   * nada. O texto vai como no sino: @Nome, e #cliente sem o nome do registro.
+   */
+  async function paraOsAvisos(usuarioId, { limite = 40 } = {}) {
+    const meu = (await statusDe([usuarioId])).get(String(usuarioId));
+    if (meu?.status === "ocupado") return { ocupado: true, conversas: [] };
+    const { rows } = await q(
+      `SELECT m.id, m.conversa_id, m.autor_id, m.texto, m.mencoes, m.criado_em, c.tipo, c.nome
+         FROM chat_mensagens m
+         JOIN chat_participantes p ON p.conversa_id = m.conversa_id AND p.usuario_id = $1 AND p.saiu_em IS NULL
+         JOIN chat_conversas c ON c.id = m.conversa_id AND c.arquivada_em IS NULL
+        WHERE m.id > p.lida_ate_id AND m.apagada_em IS NULL AND m.tipo = 'texto' AND m.autor_id IS DISTINCT FROM $1
+          AND (p.silenciada = FALSE OR m.mencoes @> to_jsonb($1::int))
+        ORDER BY m.id DESC LIMIT $2`,
+      [usuarioId, Math.min(100, inteiro(limite) || 40)]
+    );
+    const nomes = new Map((await usuariosAtivos()).map(u => [String(u.id), u.nome]));
+    const anexos = await anexosDasMensagens(rows.map(r => r.id));
+    const porConversa = new Map();
+    for (const r of rows) {
+      const mencao = jsonDe(r.mencoes).map(String).includes(String(usuarioId));
+      const atual = porConversa.get(r.conversa_id);
+      if (atual) {
+        atual.quantas += 1;
+        atual.mencao = atual.mencao || mencao;
+        continue;
+      }
+      const arquivos = anexos.get(r.id) || [];
+      const texto = textoSimples(r.texto, nomes) || (arquivos.length === 1 ? `📎 ${arquivos[0].nome}` : arquivos.length ? `📎 ${arquivos.length} arquivos` : "");
+      porConversa.set(r.conversa_id, {
+        conversa_id: r.conversa_id, tipo: r.tipo, nome: r.nome || null,
+        autor_id: r.autor_id, autor: nomes.get(String(r.autor_id)) || "Alguém",
+        texto: texto.slice(0, 240), ultima_id: r.id, criado_em: r.criado_em, quantas: 1, mencao
+      });
+    }
+    return { ocupado: false, conversas: [...porConversa.values()] };
+  }
+
   /** Para o "digitando": é participante? (sem erro, só sim/não) */
   async function estaNaConversa(usuarioId, conversaId) {
     try {
@@ -649,11 +989,22 @@ function criarChat({ pool, agora = () => new Date() }) {
     usuariosAtivos, usuario, comProgramaRodando, statusDe, gravarStatus,
     conversasDo, canaisAbertos, abrirDireta, criarConversa, entrarNoCanal, sair, adicionarMembros,
     alterarConversa, arquivar, preferencias, membros, participantesAtivos, estaNaConversa,
-    mensagens, mensagemPorId, enviar, editar, apagar, reagir, marcarLida, totalNaoLidas
+    mensagens, mensagemPorId, enviar, editar, apagar, reagir, marcarLida, totalNaoLidas,
+    guardarAnexo, descartarAnexo, lerAnexo, anexosDasMensagens, buscar, paraOsAvisos
+  };
+}
+
+/** O arquivo como a tela recebe (sem os bytes). */
+function paraAnexo(a) {
+  return {
+    id: a.id, nome: a.nome, tipo: a.tipo_mime, tamanho: Number(a.tamanho) || 0, imagem: ehImagem(a.tipo_mime),
+    largura: a.largura || null, altura: a.altura || null, miniatura: Boolean(a.tem_miniatura)
   };
 }
 
 module.exports = {
   criarChat, erro, ehSupAdmin, idsDasMencoes, referenciasValidas, extrairMarcas, textoSimples,
-  TIPOS, STATUS, REACOES, TIPOS_DE_REFERENCIA, MAXIMO_TEXTO, MAXIMO_NOME, SQL_FALTANDO
+  nomeDeArquivo, extensaoDe, arquivoBloqueado, tipoDoArquivo, ehImagem, normalizarBusca, paraAnexo, semTabelaDoChat,
+  TIPOS, STATUS, REACOES, TIPOS_DE_REFERENCIA, MAXIMO_TEXTO, MAXIMO_NOME, SQL_FALTANDO, SQL_ANEXOS_FALTANDO,
+  MAXIMO_ANEXO_BYTES, MAXIMO_ANEXOS_POR_MENSAGEM, LADO_DA_MINIATURA, EXTENSOES_BLOQUEADAS, COM_ACENTO, SEM_ACENTO
 };

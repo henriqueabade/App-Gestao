@@ -40,7 +40,16 @@ function destinoPermitido(url) {
   }
 }
 
-/** Repassa para a API /chat — o /eventos em fluxo (Server-Sent Events). */
+// Os cabeçalhos do arquivo que voltam da API junto com os bytes.
+const CABECALHOS_DO_ARQUIVO = ['content-type', 'content-disposition', 'cache-control', 'x-content-type-options', 'content-security-policy'];
+// O arquivo enviado (fase 2): até 20 MB, em bytes, sem passar pelo JSON.
+const LIMITE_DO_ARQUIVO = 20 * 1024 * 1024 + 1024;
+
+/**
+ * Repassa para a API /chat — o /eventos em fluxo (Server-Sent Events); o
+ * arquivo enviado em bytes (com o nome e o tipo nos cabeçalhos); o arquivo
+ * baixado em bytes, com o tipo e o nome que a API mandou.
+ */
 async function repassar(req, res) {
   const destino = `${API_ORIGEM}/chat${req.url}`;
   if (!destinoPermitido(destino)) return res.status(599).json({ error: `[chat] BLOQUEADO em teste: ${destino}` });
@@ -49,11 +58,16 @@ async function repassar(req, res) {
   res.on('close', () => controle.abort());
   const headers = {
     Authorization: req.headers.authorization || '',
-    Accept: eventos ? 'text/event-stream' : 'application/json',
+    Accept: eventos ? 'text/event-stream' : 'application/json, */*',
     ...require('./contextoDaRota').cabecalhos(req)
   };
   let body;
-  if (!['GET', 'HEAD', 'DELETE'].includes(req.method)) {
+  if (Buffer.isBuffer(req.body)) {
+    headers['Content-Type'] = 'application/octet-stream';
+    headers['X-Nome-Arquivo'] = String(req.get('x-nome-arquivo') || '');
+    headers['X-Tipo-Arquivo'] = String(req.get('x-tipo-arquivo') || '');
+    body = req.body;
+  } else if (!['GET', 'HEAD', 'DELETE'].includes(req.method)) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(req.body || {});
   }
@@ -70,6 +84,19 @@ async function repassar(req, res) {
         res.write(Buffer.from(value));
       }
       res.end();
+      return;
+    }
+    const tipo = resposta.headers.get('content-type') || '';
+    if (resposta.ok && tipo && !/json/i.test(tipo)) {
+      // Um arquivo do chat: os bytes como vieram (o fetch já tirou o gzip).
+      const bytes = Buffer.from(await resposta.arrayBuffer());
+      res.status(resposta.status);
+      for (const nome of CABECALHOS_DO_ARQUIVO) {
+        const valor = resposta.headers.get(nome);
+        if (valor) res.set(nome, valor);
+      }
+      res.set('Content-Length', String(bytes.length));
+      res.end(bytes);
       return;
     }
     const texto = await resposta.text();
@@ -95,6 +122,13 @@ if (isDev) {
   };
   router.use(require('./chat/rotas').criarRotasDoChat({ pool: require('./localDatabase'), autenticar }));
 } else {
+  // O arquivo chega em bytes (o JSON do programa não o lê); vai igual para a API.
+  const arquivoCru = express.raw({ type: () => true, limit: LIMITE_DO_ARQUIVO });
+  router.post('/conversas/:id/anexos', (req, res, next) => arquivoCru(req, res, err => {
+    if (!err) return next();
+    const grande = err.status === 413 || err.type === 'entity.too.large';
+    res.status(grande ? 413 : 400).json({ error: grande ? 'O arquivo passa de 20 MB.' : 'Arquivo inválido.' });
+  }), repassar);
   router.use(repassar);
 }
 

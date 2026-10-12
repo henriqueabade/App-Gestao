@@ -27,7 +27,9 @@
     registro_excluido: 'fa-trash-can', registro_cancelado: 'fa-ban', item_alterado: 'fa-pen-to-square',
     item_excluido: 'fa-eraser', removido_historico: 'fa-comment-slash', participante_removido: 'fa-user-xmark',
     conta_alterada: 'fa-user-shield', pagamento_feito: 'fa-money-bill-wave',
-    cadastro_aguardando: 'fa-user-clock', cadastro_nao_reconhecido: 'fa-user-slash', termos_recusados: 'fa-file-signature'
+    cadastro_aguardando: 'fa-user-clock', cadastro_nao_reconhecido: 'fa-user-slash', termos_recusados: 'fa-file-signature',
+    // Chat interno (12/10/2026): um cartão por conversa, com a última mensagem.
+    chat_mensagem: 'fa-comments', chat_mencao: 'fa-at'
   };
 
   const $ = id => document.getElementById(id);

@@ -33,18 +33,31 @@ let tocarSom = false;
 let somArquivo = null;
 let recolhida = false;
 
-/** Junta os avisos novos aos que já estão na janela: mais novos primeiro, sem repetir. Pura. */
+// Quando o aviso aconteceu (os do chat têm id "chat:<conversa>", 12/10/2026).
+const momento = a => Date.parse(a?.criado_em || '') || 0;
+const numero = a => (Number.isFinite(Number(a?.id)) ? Number(a.id) : 0);
+
+/**
+ * Junta os avisos novos aos que já estão na janela: mais novos primeiro, sem
+ * repetir (o mesmo id substitui — a conversa do chat fica num cartão só). Pura.
+ */
 function juntar(atual = [], novos = [], max = MAX_NA_FILA) {
   const porId = new Map();
-  for (const a of [...atual, ...novos]) if (a && a.id !== undefined) porId.set(Number(a.id), a);
-  return [...porId.values()].sort((a, b) => Number(b.id) - Number(a.id)).slice(0, max);
+  for (const a of [...atual, ...novos]) if (a && a.id !== undefined && a.id !== null) porId.set(String(a.id), a);
+  return [...porId.values()].sort((a, b) => momento(b) - momento(a) || numero(b) - numero(a)).slice(0, max);
 }
 
 /** Tira da lista os avisos destes ids (`todas`: tira todos). Pura. */
 function semOsLidos(atual = [], { ids = [], todas = false } = {}) {
   if (todas) return [];
-  const fora = new Set((Array.isArray(ids) ? ids : [ids]).map(Number).filter(Number.isFinite));
-  return atual.filter(a => !fora.has(Number(a.id)));
+  const fora = new Set((Array.isArray(ids) ? ids : [ids]).filter(i => i !== undefined && i !== null && i !== '').map(String));
+  return atual.filter(a => !fora.has(String(a.id)));
+}
+
+/** Os cartões do chat cujas conversas já não têm nada por ler (lidas em outro lugar). Pura. */
+function chatJaLido(atual = [], conversasNaoLidas = []) {
+  const abertas = new Set((conversasNaoLidas || []).map(id => `chat:${id}`));
+  return atual.filter(a => String(a?.id || '').startsWith('chat:') && !abertas.has(String(a.id))).map(a => a.id);
 }
 
 /**
@@ -146,6 +159,6 @@ function fechar() {
 }
 
 module.exports = {
-  LARGURA, MARGEM, ALTURA_MINIMA, ALTURA_MAXIMA, MAX_NA_FILA, juntar, semOsLidos, posicao, mostrar, pronto, ajustarAltura,
-  retirar, recolher, voltar, fechar, estaAberta: viva, estaRecolhida: () => recolhida
+  LARGURA, MARGEM, ALTURA_MINIMA, ALTURA_MAXIMA, MAX_NA_FILA, juntar, semOsLidos, chatJaLido, posicao, mostrar, pronto, ajustarAltura,
+  retirar, recolher, voltar, fechar, estaAberta: viva, estaRecolhida: () => recolhida, fila: () => [...fila]
 };

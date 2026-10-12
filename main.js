@@ -86,7 +86,7 @@ const apiServer = require('./backend/server');
 const preferenciasWindows = require('./backend/preferenciasWindows');
 const janelaDeAviso = require('./backend/janelaDeAviso');
 const CategoriasAviso = require('./src/js/utils/categorias-aviso');
-const { criarAvisosNoWindows, criarAssinadorLocal, INTERVALO_MS: INTERVALO_DOS_AVISOS } = require('./backend/avisosNoWindows');
+const { criarAvisosNoWindows, criarAssinadorLocal, avisoDoChat, INTERVALO_MS: INTERVALO_DOS_AVISOS } = require('./backend/avisosNoWindows');
 // Aberto pelo Windows ao ligar a máquina (setLoginItemSettings): sem janela.
 const iniciouEmSegundoPlano = process.argv.includes('--segundo-plano');
 
@@ -3481,6 +3481,7 @@ function createDashboardWindow(show = true) {
   dashboardWindow.loadFile(path.join(__dirname, 'src/html/menu.html'));
   dashboardWindow.on('closed', () => {
     dashboardWindow = null;
+    chatAoVivoNoPrograma = false;
     janelaDeAviso.voltar();
   });
 }
@@ -3507,6 +3508,9 @@ let servicoDeAvisos = null;
 let relogioDosAvisos = null;
 let avisoPendente = null;
 let somDoDono;
+// O chat interno do menu está recebendo ao vivo (12/10/2026): aí é ele quem
+// manda a mensagem nova para a janela do canto (na hora); o serviço só marca.
+let chatAoVivoNoPrograma = false;
 // As categorias do sino (Configurações › Notificações): a janela do canto
 // mostra só o que o sino mostraria (preferenciasWindows.lerCategorias).
 let categoriasDoSino = preferenciasWindows.lerCategorias(null);
@@ -3640,8 +3644,13 @@ function criarServicoDeAvisos() {
   let local = null;
   if (useLocalDatabase) {
     // DEV: a cópia do módulo da API, contra o banco local (o token vale só nesta execução).
+    const poolLocal = require('./backend/localDatabase');
     local = {
-      modulo: require('./backend/avisosDoDispositivo').criarAvisosDoDispositivo({ pool: require('./backend/localDatabase'), ...criarAssinadorLocal() }),
+      modulo: require('./backend/avisosDoDispositivo').criarAvisosDoDispositivo({
+        pool: poolLocal, ...criarAssinadorLocal(),
+        // O chat interno na janela do canto (a cópia do chat da API, backend/chat/).
+        chat: require('./backend/chat/chat').criarChat({ pool: poolLocal })
+      }),
       verificarSessao: token => require('./backend/localAuth').verifyToken(token)
     };
   }
@@ -3660,8 +3669,14 @@ function criarServicoDeAvisos() {
 async function voltaDosAvisos() {
   if (!preferencias.avisosNoWindows || !servicoDeAvisos) return;
   try {
-    const { novos } = await servicoDeAvisos.ciclo({ emFoco: programaNaFrente() });
+    const { novos, chat = [], chatNaoLidas = null } = await servicoDeAvisos.ciclo({ emFoco: programaNaFrente(), chatAoVivo: chatAoVivoNoPrograma });
+    // As conversas do chat já lidas (no programa ou em outro computador) saem do canto.
+    if (Array.isArray(chatNaoLidas)) {
+      const lidas = janelaDeAviso.chatJaLido(janelaDeAviso.fila(), chatNaoLidas);
+      if (lidas.length) janelaDeAviso.retirar({ ids: lidas });
+    }
     const visiveis = novos.filter(aviso => CategoriasAviso.aparece(aviso, categoriasDoSino));
+    visiveis.push(...chat.filter(aviso => CategoriasAviso.aparece(aviso, categoriasDoSino)));
     if (visiveis.length && preferencias.avisosNoWindows && !programaNaFrente()) {
       janelaDeAviso.mostrar(visiveis, { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });
     }
@@ -5328,6 +5343,22 @@ ipcMain.handle('avisos-windows:categorias', (_event, escolha) => {
 ipcMain.handle('avisos-windows:lidos', (_event, lidos) => janelaDeAviso.retirar({
   ids: Array.isArray(lidos?.ids) ? lidos.ids : [], todas: lidos?.todas === true
 }));
+// Chat interno (12/10/2026): o menu diz se está recebendo ao vivo…
+ipcMain.handle('avisos-windows:chat-ao-vivo', (event, ligado) => {
+  if (dashboardWindow && !dashboardWindow.isDestroyed() && event.sender === dashboardWindow.webContents) chatAoVivoNoPrograma = Boolean(ligado);
+  return chatAoVivoNoPrograma;
+});
+// …e manda a mensagem nova para a janela do canto, com o programa atrás.
+// Devolve false quando a janela do canto está desligada (o menu usa a
+// notificação do Windows).
+ipcMain.handle('avisos-windows:chat', (_event, item) => {
+  if (!preferencias.avisosNoWindows) return false;
+  const aviso = avisoDoChat(item && typeof item === 'object' ? item : null);
+  if (!aviso) return false;
+  if (programaNaFrente() || !CategoriasAviso.aparece(aviso, categoriasDoSino)) return true;
+  janelaDeAviso.mostrar([aviso], { som: preferencias.som, raiz: __dirname, arquivoDoSom: arquivoDoSomDoDono() });
+  return true;
+});
 // O sino pergunta, ao abrir, se há um aviso da janela do canto esperando o login.
 ipcMain.handle('avisos-windows:pendente', () => {
   const aviso = avisoPendente;

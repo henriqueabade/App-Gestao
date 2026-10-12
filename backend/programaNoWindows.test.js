@@ -52,6 +52,27 @@ test('janela do canto: mais novos primeiro e sem repetir; canto inferior direito
   assert.strictEqual(J.semOsLidos(lista, {}).length, 3);
 });
 
+test('janela do canto com o chat (12/10/2026): um cartão por conversa (o novo substitui), pela hora; lidas saem', () => {
+  const sino = { id: 30, criado_em: '2026-10-12T10:00:00Z' };
+  const chatVelho = { id: 'chat:5', titulo: 'velho', criado_em: '2026-10-12T09:00:00Z' };
+  const chatNovo = { id: 'chat:5', titulo: 'novo', criado_em: '2026-10-12T11:00:00Z' };
+  const fila = J.juntar([sino, chatVelho], [chatNovo, { id: 'chat:8', criado_em: '2026-10-12T09:30:00Z' }]);
+  assert.deepStrictEqual(fila.map(a => a.id), ['chat:5', 30, 'chat:8'], 'mais novo primeiro, pela hora');
+  assert.strictEqual(fila[0].titulo, 'novo', 'a conversa fica num cartão só');
+  assert.deepStrictEqual(J.semOsLidos(fila, { ids: ['chat:5'] }).map(a => a.id), [30, 'chat:8']);
+  assert.deepStrictEqual(J.chatJaLido(fila, [8]), ['chat:5'], 'a conversa 5 já não tem nada por ler');
+  assert.deepStrictEqual(J.chatJaLido(fila, [5, 8]), []);
+  assert.deepStrictEqual(J.chatJaLido([sino], []), [], 'aviso do sino não é do chat');
+  for (const canal of ['avisos-windows:chat', 'avisos-windows:chat-ao-vivo']) {
+    assert.ok(MAIN.includes(`ipcMain.handle('${canal}'`), `main: ${canal}`);
+    assert.ok(PRELOAD.includes(`'${canal}'`), `preload: ${canal}`);
+  }
+  assert.ok(MAIN.includes('chatAoVivo: chatAoVivoNoPrograma'), 'o serviço sabe quando o programa já avisa ao vivo');
+  assert.ok(MAIN.includes("chat: require('./backend/chat/chat').criarChat({ pool: poolLocal })"), 'DEV: o chat local na janela do canto');
+  const AVISO = fs.readFileSync(path.join(raiz, 'src', 'js', 'aviso-windows.js'), 'utf8');
+  assert.match(AVISO, /chat_mensagem: 'fa-comments', chat_mencao: 'fa-at'/);
+});
+
 test('categorias do sino guardadas na máquina para a janela do canto: sem arquivo = tudo ligado; grava normalizado', () => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'cat-sino-'));
   try {

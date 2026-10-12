@@ -546,7 +546,10 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     avisoPendente: () => ipcRenderer.invoke('avisos-windows:pendente'),
     lidos: (lidos) => ipcRenderer.invoke('avisos-windows:lidos', lidos || {}),
     // as categorias do sino (Configurações › Notificações) valem para a janela do canto
-    categorias: (preferencias) => ipcRenderer.invoke('avisos-windows:categorias', preferencias || {})
+    categorias: (preferencias) => ipcRenderer.invoke('avisos-windows:categorias', preferencias || {}),
+    // o chat interno (12/10/2026): ao vivo ligado e a mensagem nova para a janela do canto
+    chatAoVivo: (ligado) => ipcRenderer.invoke('avisos-windows:chat-ao-vivo', Boolean(ligado)),
+    chat: (item) => ipcRenderer.invoke('avisos-windows:chat', item || null)
   }
   }));
 

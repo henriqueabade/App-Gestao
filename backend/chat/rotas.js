@@ -21,13 +21,38 @@
 //   GET    /status        PUT /status {status, mensagem}
 //   POST   /presenca {ativo}            mexendo (true) ou parado (false)
 //
+// Fase 2 (12/10/2026):
+//   POST   /conversas/:id/anexos        o arquivo em bytes (application/octet-stream),
+//                                        nome em X-Nome-Arquivo e tipo em X-Tipo-Arquivo
+//                                        (codificados); devolve {anexo}. A mensagem o
+//                                        leva em POST /conversas/:id/mensagens {anexos: [id]}
+//   GET    /anexos/:id                  o arquivo        GET /anexos/:id/miniatura
+//   DELETE /anexos/:id                  tira o escolhido e ainda não enviado
+//   GET    /busca?q=&conversa=&antes=   buscar nas mensagens
+//   GET    /conversas/:id/mensagens?ao_redor=ID   a achada na busca e as vizinhas
+//
 // `autenticar` põe req.user ({ id }): na API é o authMiddleware; no programa
 // com BANCO=DEV, a sessão local. O MESMO arquivo existe no App-Gestão
 // (backend/chat/rotas.js).
 // ------------------------------------------------------------------
 
 const express = require("express");
-const { criarChat, REACOES, TIPOS_DE_REFERENCIA, textoSimples } = require("./chat");
+const { criarChat, REACOES, TIPOS_DE_REFERENCIA, textoSimples, MAXIMO_ANEXO_BYTES } = require("./chat");
+
+/** O cabeçalho que veio codificado (encodeURIComponent); torto, vazio. */
+function decodificar(valor) {
+  try {
+    return decodeURIComponent(String(valor || ""));
+  } catch (_) {
+    return "";
+  }
+}
+
+/** Content-Disposition com o nome em UTF-8 e uma reserva sem acento. */
+function disposicao(nome, emLinha) {
+  const reserva = String(nome || "arquivo").normalize("NFD").replace(/[^\x20-\x7e]/g, "").replace(/["\\]/g, "_") || "arquivo";
+  return `${emLinha ? "inline" : "attachment"}; filename="${reserva}"; filename*=UTF-8''${encodeURIComponent(nome || "arquivo")}`;
+}
 const { criarPresenca } = require("./presenca");
 const { criarEventos } = require("./eventos");
 
@@ -213,7 +238,7 @@ function criarRotasDoChat({ pool, autenticar, agora = () => new Date(), log = co
   // ----------------------------------------------------------- mensagens
 
   router.post("/conversas/:id/mensagens", autenticar, rota(async (req, res) => {
-    const r = await chat.enviar(eu(req), req.params.id, { texto: req.body?.texto, resposta_de: req.body?.resposta_de });
+    const r = await chat.enviar(eu(req), req.params.id, { texto: req.body?.texto, resposta_de: req.body?.resposta_de, anexos: req.body?.anexos });
     eventos.enviar(r.participantes, "mensagem", { conversa_id: r.conversa.id, mensagem: r.mensagem });
     await avisarMencoes(eu(req), r.conversa, r.mensagem, r.mensagem.mencoes);
     res.status(201);
@@ -250,6 +275,52 @@ function criarRotasDoChat({ pool, autenticar, agora = () => new Date(), log = co
     eventos.enviar(outros, "digitando", { conversa_id: id, usuario_id: eu(req) });
     return { ok: true };
   }));
+
+  // ------------------------------------------------------------ arquivos
+
+  // Os bytes do arquivo, crus: até 20 MB (o JSON geral da API para em 1 MB).
+  const corpoDoArquivo = express.raw({ type: () => true, limit: MAXIMO_ANEXO_BYTES + 1024 });
+  const lerCorpo = (req, res, next) => corpoDoArquivo(req, res, err => {
+    if (!err) return next();
+    const grande = err.status === 413 || err.type === "entity.too.large";
+    res.status(grande ? 413 : 400).json({ error: grande ? `O arquivo passa de ${MAXIMO_ANEXO_BYTES / 1024 / 1024} MB.` : "Arquivo inválido." });
+  });
+
+  router.post("/conversas/:id/anexos", autenticar, lerCorpo, rota(async (req, res) => {
+    const anexo = await chat.guardarAnexo(eu(req), req.params.id, {
+      nome: decodificar(req.get("x-nome-arquivo")),
+      tipo: decodificar(req.get("x-tipo-arquivo")),
+      dados: Buffer.isBuffer(req.body) ? req.body : null
+    });
+    res.status(201);
+    return { anexo };
+  }));
+
+  /** Manda os bytes, sem deixar o navegador "adivinhar" o tipo nem rodar nada. */
+  const mandarArquivo = miniatura => async (req, res) => {
+    try {
+      const a = await chat.lerAnexo(eu(req), req.params.id, { miniatura });
+      res.status(200).set({
+        "Content-Type": a.tipo,
+        "Content-Length": String(a.dados.length),
+        "Content-Disposition": disposicao(a.nome, a.imagem || a.tipo === "application/pdf"),
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+        "Cache-Control": "private, max-age=86400"
+      });
+      res.end(a.dados);
+    } catch (err) {
+      if (!err?.status) log.error("[chat] falha ao ler o arquivo:", err?.message || err);
+      if (!res.headersSent) res.status(err?.status || 500).json({ error: err?.status ? err.message : "Não foi possível agora. Tente de novo.", code: err?.code || null });
+    }
+  };
+  router.get("/anexos/:id", autenticar, mandarArquivo(false));
+  router.get("/anexos/:id/miniatura", autenticar, mandarArquivo(true));
+  router.delete("/anexos/:id", autenticar, rota(async req => chat.descartarAnexo(eu(req), req.params.id)));
+
+  // --------------------------------------------------------------- busca
+
+  router.get("/busca", autenticar, rota(async req => chat.buscar(eu(req), req.query || {})));
 
   // -------------------------------------------------------------- status
 

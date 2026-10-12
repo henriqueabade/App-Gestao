@@ -299,11 +299,87 @@
     return `${lista.slice(0, 2).join(', ')} e mais ${lista.length - 2}`;
   }
 
+  // ------------------------------------------------------------ arquivos (fase 2)
+
+  const MAXIMO_ARQUIVO = 20 * 1024 * 1024;
+  const MAXIMO_ARQUIVOS = 10;
+  // A mesma lista da API (chat/chat.js): programas e scripts não vão.
+  const EXTENSOES_BLOQUEADAS = new Set([
+    'exe', 'msi', 'msp', 'bat', 'cmd', 'com', 'scr', 'pif', 'cpl', 'msc', 'dll', 'sys', 'inf', 'reg', 'lnk', 'url', 'scf',
+    'vb', 'vbs', 'vbe', 'js', 'jse', 'mjs', 'ws', 'wsf', 'wsh', 'ps1', 'psm1', 'psd1', 'hta', 'jar', 'application', 'gadget', 'appx', 'msix'
+  ]);
+  const extensaoDe = nome => {
+    const m = /\.([a-z0-9]{1,12})$/i.exec(String(nome || ''));
+    return m ? m[1].toLowerCase() : '';
+  };
+  const arquivoBloqueado = nome => EXTENSOES_BLOQUEADAS.has(extensaoDe(nome));
+
+  /** "512 B", "1,5 KB", "20,0 MB". */
+  function tamanhoLegivel(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1).replace('.', ',')} KB`;
+    return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+  }
+
+  /** O ícone (Font Awesome) de cada tipo de arquivo. */
+  function iconeDoArquivo(nome, tipo) {
+    const ext = extensaoDe(nome);
+    const t = String(tipo || '');
+    if (t.startsWith('image/')) return 'fa-file-image';
+    if (ext === 'pdf' || t === 'application/pdf') return 'fa-file-pdf';
+    if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return 'fa-file-excel';
+    if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return 'fa-file-word';
+    if (['ppt', 'pptx', 'odp'].includes(ext)) return 'fa-file-powerpoint';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'fa-file-archive';
+    if (t.startsWith('audio/')) return 'fa-file-audio';
+    if (t.startsWith('video/')) return 'fa-file-video';
+    if (['txt', 'xml', 'json', 'log'].includes(ext)) return 'fa-file-alt';
+    return 'fa-file';
+  }
+
+  /** O que a lista e os avisos dizem de uma mensagem só com arquivo: "📎 foto.png", "📎 3 arquivos". */
+  function resumoDosArquivos(quantos, primeiroNome) {
+    const n = Number(quantos) || 0;
+    if (!n) return '';
+    return n === 1 ? `📎 ${primeiroNome || 'arquivo'}` : `📎 ${n} arquivos`;
+  }
+
+  /**
+   * O trecho achado na busca, com o termo destacado (<mark>), sem acento na
+   * comparação e com o texto escapado. Sem o termo no texto (achada pelo nome
+   * do arquivo ou pela menção), o começo do texto.
+   */
+  function trechoComDestaque(texto, termo, ctx = {}) {
+    const plano = textoCurto(texto, ctx);
+    if (!plano) return '';
+    const alvo = comparavel(termo);
+    // O texto sem acento, guardando de onde veio cada letra.
+    let normal = '';
+    const origem = [];
+    let i = 0;
+    for (const letra of plano) {
+      const n = letra.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      for (let k = 0; k < n.length; k += 1) origem.push(i);
+      normal += n;
+      i += letra.length;
+    }
+    origem.push(plano.length);
+    const achou = alvo ? normal.indexOf(alvo) : -1;
+    if (achou < 0) return escapar(plano.length > 140 ? `${plano.slice(0, 139)}…` : plano);
+    const ini = origem[achou];
+    const fim = origem[achou + alvo.length];
+    const de = Math.max(0, ini - 40);
+    const ate = Math.min(plano.length, fim + 90);
+    return `${de > 0 ? '…' : ''}${escapar(plano.slice(de, ini))}<mark class="chat-marca">${escapar(plano.slice(ini, fim))}</mark>${escapar(plano.slice(fim, ate))}${ate < plano.length ? '…' : ''}`;
+  }
+
   const Puro = {
-    TIPOS_REF, ROTULO_REF, PRESENCA, MEU_STATUS, EMOJIS,
+    TIPOS_REF, ROTULO_REF, PRESENCA, MEU_STATUS, EMOJIS, MAXIMO_ARQUIVO, MAXIMO_ARQUIVOS, EXTENSOES_BLOQUEADAS,
     escapar, comparavel, iniciais, corDoAvatar, rotuloDaRef, textoParaHtml, textoCurto,
     paraMarcas, deMarcas, gatilho, rotuloDoDia, horaDe, dataCompleta, quandoCurto, vistoHa,
-    agrupar, ordenarPessoas, ordenarConversas, contarNaoLidas, nomeDaConversa, quemDigita, quemReagiu
+    agrupar, ordenarPessoas, ordenarConversas, contarNaoLidas, nomeDaConversa, quemDigita, quemReagiu,
+    extensaoDe, arquivoBloqueado, tamanhoLegivel, iconeDoArquivo, resumoDosArquivos, trechoComDestaque
   };
 
   // Nos testes (sem document) só as partes puras.
@@ -353,7 +429,12 @@
     ultimaAtividade: Date.now(),
     som: { ligado: true, arquivo: null },
     ultimoSom: 0,
-    ultimoDigitando: 0
+    ultimoDigitando: 0,
+    // Fase 2 (12/10/2026)
+    pendentes: new Map(),     // conversaId → [{ chave, nome, tamanho, tipo, previa, progresso, anexo, erro, xhr }]
+    achados: { termo: '', conversa: null, resultados: [], mais: false, carregando: false, falhou: false },
+    alvo: null,               // a mensagem achada na busca, para rolar até ela
+    visor: null               // { anexo, lista } a imagem aberta em tamanho grande
   };
 
   let raiz = null;
@@ -458,6 +539,7 @@
           <div class="chat-principal" data-chat="principal"></div>
         </div>
         <div class="chat-flutuante hidden" data-chat="flutuante"></div>
+        <div class="chat-visor hidden" data-chat="visor" tabindex="-1" role="dialog" aria-label="Imagem"></div>
       </section>
       <button type="button" class="chat-botao hidden" data-chat="botao" data-acao="alternar" data-sem-loading="true" aria-label="Abrir o chat" title="Chat">
         <i class="fas fa-comments" aria-hidden="true"></i>
@@ -473,7 +555,42 @@
     // Foto que não carrega: fica a inicial (o erro de <img> não borbulha).
     raiz.addEventListener('error', e => {
       if (e.target?.classList?.contains('chat-foto')) e.target.remove();
+      // Imagem de mensagem que não veio (apagada, sem acesso, sem rede): o quadro avisa.
+      else if (e.target?.parentElement?.classList?.contains('chat-imagem')) e.target.parentElement.classList.add('chat-imagem--quebrada');
     }, true);
+    // Arquivos: o clipe, colar uma imagem e arrastar para a conversa (fase 2).
+    raiz.addEventListener('change', e => {
+      if (e.target?.dataset?.chat !== 'arquivo') return;
+      escolherArquivos(e.target.files);
+      e.target.value = '';
+    });
+    raiz.addEventListener('paste', e => {
+      if (e.target?.dataset?.chat !== 'texto') return;
+      const arquivos = [...(e.clipboardData?.files || [])];
+      // Com texto junto (copiado de um documento), cola o texto, como sempre.
+      if (!arquivos.length || e.clipboardData.getData('text/plain')) return;
+      e.preventDefault();
+      escolherArquivos(arquivos);
+    });
+    const comArquivos = e => [...(e.dataTransfer?.types || [])].includes('Files');
+    raiz.addEventListener('dragover', e => {
+      const alvo = e.target.closest?.('.chat-conversa');
+      if (!alvo || !comArquivos(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      alvo.classList.add('chat-conversa--soltar');
+    });
+    raiz.addEventListener('dragleave', e => {
+      const alvo = e.target.closest?.('.chat-conversa');
+      if (alvo && !alvo.contains(e.relatedTarget)) alvo.classList.remove('chat-conversa--soltar');
+    });
+    raiz.addEventListener('drop', e => {
+      const alvo = e.target.closest?.('.chat-conversa');
+      if (!alvo || !comArquivos(e)) return;
+      e.preventDefault();
+      alvo.classList.remove('chat-conversa--soltar');
+      escolherArquivos(e.dataTransfer.files);
+    });
   }
 
   function mostrarBotao() {
@@ -565,7 +682,7 @@
     const u = c.ultima;
     if (!u) return c.tipo === 'canal' && c.descricao ? escapar(c.descricao) : '<em>Sem mensagens</em>';
     if (u.apagada) return '<em>Mensagem apagada</em>';
-    const texto = textoCurto(u.texto, contexto());
+    const texto = textoCurto(u.texto, contexto()) || resumoDosArquivos(u.anexos, u.anexo_nome);
     if (u.tipo === 'sistema') return `<em>${escapar(texto)}</em>`;
     const quem = ehEu(u.autor_id) ? 'Você' : c.tipo === 'direta' ? '' : nomeDe(u.autor_id).split(' ')[0];
     return `${quem ? `<span class="chat-previa-autor">${escapar(quem)}:</span> ` : ''}${escapar(texto)}`;
@@ -640,19 +757,29 @@
     const pessoas = ordenarPessoas([...estado.pessoas.values()].filter(p => !ehEu(p.id) && bate(p.nome)));
     const online = pessoas.filter(p => p.estado !== 'offline').length;
     const scroll = listas.scrollTop;
+    const achados = htmlDosAchados();
+    // Buscando só numa conversa: só os achados.
+    if (estado.achados.conversa && conversa(estado.achados.conversa)) {
+      listas.innerHTML = achados;
+      listas.scrollTop = scroll;
+      return;
+    }
+    // Buscando: as seções sem nada com esse nome saem do caminho.
+    const comAlgo = (lista, html) => (termo && !lista.length ? '' : html);
     listas.innerHTML = [
-      secao('canais', 'Canais', canais.map(itemDeConversa).join(''), {
+      achados,
+      termo && !canais.length ? '' : secao('canais', 'Canais', canais.map(itemDeConversa).join(''), {
         acoes: `<button type="button" class="chat-icone chat-icone--pequeno" data-acao="explorar-canais" title="Explorar canais"><i class="fas fa-compass"></i></button>
                 <button type="button" class="chat-icone chat-icone--pequeno" data-acao="nova" data-tipo="canal" title="Criar canal"><i class="fas fa-plus"></i></button>`,
         vazio: termo ? 'Nenhum canal com esse nome.' : '<button type="button" class="chat-link-botao" data-acao="explorar-canais">Explorar canais</button>'
       }),
-      secao('diretas', 'Mensagens diretas', diretas.map(itemDeConversa).join(''), {
+      comAlgo(diretas, secao('diretas', 'Mensagens diretas', diretas.map(itemDeConversa).join(''), {
         acoes: '<button type="button" class="chat-icone chat-icone--pequeno" data-acao="nova" data-tipo="direta" title="Nova mensagem"><i class="fas fa-pen-to-square"></i></button>',
-        vazio: termo ? 'Nenhuma conversa com esse nome.' : 'Clique numa pessoa abaixo para conversar.'
-      }),
-      secao('pessoas', `Pessoas <span class="chat-secao-numero">${online} de ${pessoas.length} no programa</span>`, pessoas.map(itemDePessoa).join(''), {
-        vazio: termo ? 'Ninguém com esse nome.' : 'Ninguém mais por aqui ainda.'
-      })
+        vazio: 'Clique numa pessoa abaixo para conversar.'
+      })),
+      comAlgo(pessoas, secao('pessoas', `Pessoas <span class="chat-secao-numero">${online} de ${pessoas.length} no programa</span>`, pessoas.map(itemDePessoa).join(''), {
+        vazio: 'Ninguém mais por aqui ainda.'
+      }))
     ].join('');
     listas.scrollTop = scroll;
   }
@@ -671,6 +798,7 @@
       pintarMensagens({ paraOFim: true });
       pintarContexto();
       restaurarRascunho();
+      pintarPendentes();
       return;
     }
     if (estado.visao === 'novo') principal.innerHTML = htmlNovo();
@@ -717,12 +845,16 @@
           <button type="button" class="chat-ir-fim hidden" data-chat="ir-fim" data-acao="ir-fim"><i class="fas fa-arrow-down"></i> Novas mensagens</button>
         </div>
         <div class="chat-digitando" data-chat="digitando"></div>
+        <div class="chat-soltar" aria-hidden="true"><i class="fas fa-cloud-upload-alt"></i><span>Solte para enviar nesta conversa</span></div>
         <footer class="chat-compositor">
           <div class="chat-contexto hidden" data-chat="contexto"></div>
           <div class="chat-escolha hidden" data-chat="escolha"></div>
+          <div class="chat-pendentes hidden" data-chat="pendentes"></div>
           <div class="chat-caixa">
             <textarea class="chat-texto" data-chat="texto" rows="1" maxlength="4000" placeholder="${escapar(textoDoPlaceholder())}"></textarea>
             <div class="chat-ferramentas">
+              <input type="file" multiple hidden data-chat="arquivo">
+              <button type="button" class="chat-icone chat-icone--pequeno" data-acao="anexar" title="Arquivo ou imagem (até 20 MB; também dá para colar ou arrastar)"><i class="fas fa-paperclip"></i></button>
               <button type="button" class="chat-icone chat-icone--pequeno" data-acao="inserir-mencao" title="Mencionar alguém (@)"><i class="fas fa-at"></i></button>
               <button type="button" class="chat-icone chat-icone--pequeno" data-acao="inserir-referencia" title="Citar tarefa, cliente, prospecção, contato, pedido, orçamento ou produto (#)"><i class="fas fa-hashtag"></i></button>
               <button type="button" class="chat-icone chat-icone--pequeno" data-acao="emojis" title="Emoji"><i class="far fa-smile"></i></button>
@@ -769,6 +901,7 @@
         </div>
       </div>
       <div class="chat-cab-acoes">
+        <button type="button" class="chat-icone${String(estado.achados.conversa) === String(c.id) ? ' chat-icone--ligado' : ''}" data-acao="buscar-aqui" title="Buscar nesta conversa"><i class="fas fa-search"></i></button>
         <button type="button" class="chat-icone${c.fixada ? ' chat-icone--ligado' : ''}" data-acao="fixar" title="${c.fixada ? 'Desafixar' : 'Fixar no topo da lista'}"><i class="fas fa-thumbtack"></i></button>
         <button type="button" class="chat-icone${c.silenciada ? ' chat-icone--ligado' : ''}" data-acao="silenciar" title="${c.silenciada ? 'Voltar a avisar' : 'Silenciar (sem som nem aviso; menções continuam no sino)'}"><i class="fas ${c.silenciada ? 'fa-bell-slash' : 'fa-bell'}"></i></button>
         <button type="button" class="chat-icone" data-acao="detalhes" title="${c.tipo === 'direta' ? 'Sobre a pessoa' : 'Membros e configurações'}"><i class="fas ${c.tipo === 'direta' ? 'fa-info-circle' : 'fa-users-cog'}"></i></button>
@@ -804,11 +937,15 @@
       <button type="button" class="chat-citacao" data-acao="ir-para" data-id="${m.resposta.id}" title="Ir para a mensagem respondida">
         <i class="fas fa-reply" aria-hidden="true"></i>
         <strong>${escapar(nomeDe(m.resposta.autor_id))}</strong>
-        <span>${m.resposta.apagada ? '<em>Mensagem apagada</em>' : escapar(textoCurto(m.resposta.texto, ctx).slice(0, 140))}</span>
+        <span>${m.resposta.apagada ? '<em>Mensagem apagada</em>' : escapar((textoCurto(m.resposta.texto, ctx) || resumoDosArquivos(m.resposta.anexos)).slice(0, 140))}</span>
       </button>` : '';
-    const texto = m.apagada
-      ? '<div class="chat-msg-texto chat-msg-texto--apagada"><i class="fas fa-ban" aria-hidden="true"></i> Mensagem apagada</div>'
-      : `<div class="chat-msg-texto">${textoParaHtml(m.texto, ctx)}${m.editada_em ? ` <span class="chat-editada" title="Editada em ${escapar(dataCompleta(m.editada_em))}">(editada)</span>` : ''}</div>`;
+    const comTexto = Boolean(String(m.texto || '').trim());
+    const editada = m.editada_em ? ` <span class="chat-editada" title="Editada em ${escapar(dataCompleta(m.editada_em))}">(editada)</span>` : '';
+    let texto = '';
+    if (m.apagada) texto = '<div class="chat-msg-texto chat-msg-texto--apagada"><i class="fas fa-ban" aria-hidden="true"></i> Mensagem apagada</div>';
+    else if (comTexto) texto = `<div class="chat-msg-texto">${textoParaHtml(m.texto, ctx)}${editada}</div>`;
+    else if (editada) texto = `<div class="chat-msg-texto">${editada.trim()}</div>`;
+    const arquivos = !m.apagada && m.anexos?.length ? htmlDosAnexos(m.anexos) : '';
     const reacoes = !m.apagada && m.reacoes?.length ? `
       <div class="chat-reacoes">
         ${m.reacoes.map(r => {
@@ -828,9 +965,49 @@
     return `
       <div class="${classes}" data-msg="${m.id}">
         <div class="chat-msg-lado">${lado}</div>
-        <div class="chat-msg-corpo">${topo}${citacao}${texto}${reacoes}</div>
+        <div class="chat-msg-corpo">${topo}${citacao}${texto}${arquivos}${reacoes}</div>
         ${acoes}
       </div>`;
+  }
+
+  /** A mensagem como a lista de conversas a guarda (a prévia). */
+  function ultimaDe(m) {
+    const arquivos = m.apagada ? [] : m.anexos || [];
+    return {
+      id: m.id, autor_id: m.autor_id, tipo: m.tipo, em: m.criado_em, texto: m.apagada ? '' : m.texto, apagada: Boolean(m.apagada),
+      anexos: arquivos.length, anexo_nome: arquivos[0]?.nome || null
+    };
+  }
+
+  /** O endereço do arquivo (ou da miniatura) no servidor interno do programa. */
+  function urlDoAnexo(id, miniatura = false) {
+    return `${String(estado.base || '').replace(/\/+$/, '')}/api/chat/anexos/${encodeURIComponent(id)}${miniatura ? '/miniatura' : ''}`;
+  }
+
+  /** As fotos (miniaturas, clicáveis) e os outros arquivos (abrir e salvar) de uma mensagem. */
+  function htmlDosAnexos(anexos) {
+    const imagens = anexos.filter(a => a.imagem);
+    const outros = anexos.filter(a => !a.imagem);
+    const fotos = imagens.length ? `
+      <div class="chat-fotos chat-fotos--${Math.min(imagens.length, 3)}">
+        ${imagens.map(a => {
+          const proporcao = a.largura && a.altura ? `aspect-ratio:${Number(a.largura)}/${Number(a.altura)}` : '';
+          return `<button type="button" class="chat-imagem" data-acao="ver-imagem" data-id="${a.id}" title="${escapar(`${a.nome} — ${tamanhoLegivel(a.tamanho)}`)}"><img src="${escapar(urlDoAnexo(a.id, true))}" alt="${escapar(a.nome)}" loading="lazy" style="${proporcao}"></button>`;
+        }).join('')}
+      </div>` : '';
+    const arquivos = outros.map(a => {
+      const pdf = a.tipo === 'application/pdf';
+      return `
+        <div class="chat-arquivo">
+          <span class="chat-arquivo-icone"><i class="fas ${iconeDoArquivo(a.nome, a.tipo)}" aria-hidden="true"></i></span>
+          <button type="button" class="chat-arquivo-textos" data-acao="abrir-arquivo" data-id="${a.id}" title="${pdf ? 'Ver' : 'Abrir no programa do Windows'}: ${escapar(a.nome)}">
+            <strong>${escapar(a.nome)}</strong><small>${tamanhoLegivel(a.tamanho)}</small>
+          </button>
+          <button type="button" class="chat-icone chat-icone--pequeno" data-acao="abrir-arquivo" data-id="${a.id}" title="${pdf ? 'Ver' : 'Abrir no programa do Windows'}"><i class="fas ${pdf ? 'fa-eye' : 'fa-external-link-alt'}"></i></button>
+          <button type="button" class="chat-icone chat-icone--pequeno" data-acao="salvar-arquivo" data-id="${a.id}" title="Salvar como…"><i class="fas fa-download"></i></button>
+        </div>`;
+    }).join('');
+    return `<div class="chat-anexos">${fotos}${arquivos}</div>`;
   }
 
   function pertoDoFim(el = parte('mensagens')) {
@@ -843,12 +1020,13 @@
    * que já estivesse no fim (ou `paraOFim`); ao carregar as anteriores,
    * segura o ponto de leitura (`manterDoFim`).
    */
-  function pintarMensagens({ paraOFim = false, manterDoFim = null } = {}) {
+  function pintarMensagens({ paraOFim = false, manterDoFim = null, manterTopo = false } = {}) {
     const el = parte('mensagens');
     const c = conversa(estado.aberta);
     if (!el || !c) return;
     const cache = estado.mensagens.get(c.id) || { lista: [], carregando: true };
-    const estavaNoFim = pertoDoFim(el);
+    // Chegou pela busca, no meio da conversa: o "fim" da tela não é o fim dela.
+    const estavaNoFim = pertoDoFim(el) && !cache.maisNovas && !manterTopo;
     const topoAntes = el.scrollTop;
     const ctx = contexto();
     const partes = [];
@@ -886,11 +1064,17 @@
         partes.push(`<div class="chat-visto${visto ? ' chat-visto--sim' : ''}"><i class="fas ${visto ? 'fa-check-double' : 'fa-check'}"></i> ${visto ? 'Visto' : 'Enviada'}</div>`);
       }
     }
+    if (cache.maisNovas) {
+      partes.push(`<div class="chat-mais-antigas">${cache.carregandoNovas ? '<span class="chat-spinner"></span>' : '<button type="button" class="chat-link-botao" data-acao="mais-novas">Carregar mensagens mais novas</button>'}</div>`);
+    }
     el.innerHTML = partes.join('');
     if (manterDoFim != null) el.scrollTop = el.scrollHeight - manterDoFim;
-    else if (paraOFim || estavaNoFim) el.scrollTop = el.scrollHeight;
+    else if ((paraOFim || estavaNoFim) && !manterTopo) el.scrollTop = el.scrollHeight;
     else el.scrollTop = topoAntes;
-    if (pertoDoFim(el)) parte('ir-fim')?.classList.add('hidden');
+    if (pertoDoFim(el) && !cache.maisNovas) parte('ir-fim')?.classList.add('hidden');
+    // Chegou pela busca: o botão leva às mais recentes (não são "novas").
+    const irFim = parte('ir-fim');
+    if (irFim) irFim.innerHTML = cache.maisNovas ? '<i class="fas fa-arrow-down"></i> Ir para as mais recentes' : '<i class="fas fa-arrow-down"></i> Novas mensagens';
     pintarDigitando();
   }
 
@@ -915,7 +1099,7 @@
       el.classList.remove('hidden');
     } else if (estado.resposta) {
       const m = estado.resposta;
-      el.innerHTML = `<i class="fas fa-reply"></i><span>Respondendo a <strong>${escapar(nomeDe(m.autor_id))}</strong>: ${escapar(textoCurto(m.texto, contexto()).slice(0, 90))}</span><button type="button" class="chat-icone chat-icone--pequeno" data-acao="cancelar-contexto" title="Cancelar"><i class="fas fa-times"></i></button>`;
+      el.innerHTML = `<i class="fas fa-reply"></i><span>Respondendo a <strong>${escapar(nomeDe(m.autor_id))}</strong>: ${escapar((textoCurto(m.texto, contexto()) || resumoDosArquivos(m.anexos?.length, m.anexos?.[0]?.nome)).slice(0, 90))}</span><button type="button" class="chat-icone chat-icone--pequeno" data-acao="cancelar-contexto" title="Cancelar"><i class="fas fa-times"></i></button>`;
       el.classList.remove('hidden');
     } else {
       el.innerHTML = '';
@@ -1225,6 +1409,11 @@
     const id = Number(conversaId);
     const cache = estado.mensagens.get(id) || { lista: [], maisAntigas: false, carregando: false, carregada: false };
     estado.mensagens.set(id, cache);
+    // Veio da busca: a mensagem achada e as vizinhas (se não estiverem já aqui).
+    if (estado.alvo && !cache.lista.some(m => Number(m.id) === Number(estado.alvo))) {
+      await carregarAoRedor(id, estado.alvo);
+      return;
+    }
     if (cache.carregada && cache.lista.length) {
       // Já tinha: pede só o que chegou depois (caso o ao vivo tenha caído).
       await buscarNovas(id);
@@ -1251,10 +1440,100 @@
     }
   }
 
+  /** A mensagem achada na busca e as vizinhas dos dois lados (a tela fica no meio da conversa). */
+  async function carregarAoRedor(conversaId, alvo) {
+    const id = Number(conversaId);
+    const cache = { lista: [], maisAntigas: false, maisNovas: false, carregando: true, carregada: false };
+    estado.mensagens.set(id, cache);
+    estado.marcoNaoLida = null;
+    if (String(estado.aberta) === String(id)) pintar({ mensagens: true });
+    try {
+      const r = await api(`/conversas/${id}/mensagens?ao_redor=${Number(alvo)}&limite=50`);
+      cache.lista = (r.mensagens || []).sort((a, b) => a.id - b.id);
+      cache.maisAntigas = Boolean(r.mais_antigas);
+      cache.maisNovas = Boolean(r.mais_novas);
+      cache.carregada = true;
+      resolverRefsDe(cache.lista);
+    } catch (err) {
+      // Não achou (apagada, de antes de a pessoa entrar…): abre no fim, como sempre.
+      toast(err.message || 'Não foi possível achar a mensagem.', 'info');
+      estado.alvo = null;
+      estado.mensagens.delete(id);
+      await carregarMensagens(id);
+      return;
+    } finally {
+      cache.carregando = false;
+    }
+    if (String(estado.aberta) === String(id) && estado.visao === 'conversa') {
+      pintarMensagens({ paraOFim: true });
+      if (!cache.maisNovas) marcarComoLida();
+      else parte('ir-fim')?.classList.remove('hidden');
+    }
+  }
+
+  /** Chegou pela busca e rolou para baixo: as mensagens seguintes. */
+  async function carregarPosteriores() {
+    const c = conversa(estado.aberta);
+    const cache = c && estado.mensagens.get(c.id);
+    if (!cache?.maisNovas || cache.carregandoNovas || !cache.lista.length) return;
+    cache.carregandoNovas = true;
+    pintarMensagens({ manterTopo: true });
+    try {
+      const r = await api(`/conversas/${c.id}/mensagens?depois=${cache.lista[cache.lista.length - 1].id}&limite=50`);
+      const vistas = new Set(cache.lista.map(m => m.id));
+      const novas = (r.mensagens || []).filter(m => !vistas.has(m.id));
+      cache.lista = [...cache.lista, ...novas].sort((a, b) => a.id - b.id);
+      cache.maisNovas = Boolean(r.mais_novas);
+      resolverRefsDe(novas);
+    } catch (err) {
+      toast(err.message || 'Não foi possível carregar as mensagens seguintes.');
+    } finally {
+      cache.carregandoNovas = false;
+    }
+    if (String(estado.aberta) === String(c.id)) {
+      pintarMensagens({ manterTopo: true });
+      if (!cache.maisNovas) {
+        parte('ir-fim')?.classList.add('hidden');
+        marcarComoLida();
+      }
+    }
+  }
+
+  /** Volta ao fim da conversa (saindo do meio, onde a busca deixou). */
+  async function voltarAoFim() {
+    const c = conversa(estado.aberta);
+    if (!c) return;
+    const cache = estado.mensagens.get(c.id);
+    if (cache?.maisNovas) {
+      estado.mensagens.delete(c.id);
+      await carregarMensagens(c.id);
+    }
+    const el = parte('mensagens');
+    if (el) el.scrollTop = el.scrollHeight;
+    parte('ir-fim')?.classList.add('hidden');
+    marcarComoLida();
+  }
+
+  /** Vai até a mensagem achada na busca (abre a conversa, carrega em volta dela, destaca). */
+  async function irParaMensagem(conversaId, mensagemId) {
+    const id = Number(conversaId);
+    const alvo = Number(mensagemId);
+    if (!conversa(id)) await recarregarConversas();
+    if (!conversa(id)) return toast('Esta conversa não está mais disponível para você.', 'info');
+    if (String(estado.aberta) !== String(id) || estado.visao !== 'conversa') {
+      estado.alvo = alvo;
+      await abrirConversa(id);
+    } else if (!(estado.mensagens.get(id)?.lista || []).some(m => Number(m.id) === alvo)) {
+      await carregarAoRedor(id, alvo);
+    }
+    estado.alvo = null;
+    setTimeout(() => irPara(alvo), 60);
+  }
+
   async function buscarNovas(conversaId) {
     const id = Number(conversaId);
     const cache = estado.mensagens.get(id);
-    if (!cache?.carregada) return;
+    if (!cache?.carregada || cache.maisNovas) return;
     const ultimo = cache.lista.length ? cache.lista[cache.lista.length - 1].id : 0;
     try {
       const r = await api(`/conversas/${id}/mensagens?depois=${ultimo}&limite=200`);
@@ -1476,12 +1755,19 @@
     if (!ta || !c) return;
     if (estado.escolha?.itens?.length) return;
     const texto = paraMarcas(ta.value, estado.tokens).trim();
-    if (!texto) return;
+    const editando = estado.editando;
+    // Os arquivos escolhidos: só vão depois de terminar de subir.
+    const pendentes = editando ? [] : estado.pendentes.get(c.id) || [];
+    if (pendentes.some(p => !p.anexo && !p.erro)) {
+      toast('Espere os arquivos terminarem de subir.', 'info');
+      return;
+    }
+    const anexos = pendentes.filter(p => p.anexo).map(p => p.anexo.id);
+    if (!texto && !anexos.length && !(editando && editando.anexos?.length)) return;
     if (texto.length > 4000) {
       toast('A mensagem passa de 4.000 letras. Divida em duas.');
       return;
     }
-    const editando = estado.editando;
     const resposta = estado.resposta;
     const tokens = estado.tokens;
     const original = ta.value;
@@ -1497,7 +1783,14 @@
         const r = await api(`/mensagens/${editando.id}`, { method: 'PUT', body: { texto } });
         trocarMensagem(r.mensagem);
       } else {
-        const r = await api(`/conversas/${c.id}/mensagens`, { method: 'POST', body: { texto, resposta_de: resposta?.id ?? null } });
+        const r = await api(`/conversas/${c.id}/mensagens`, { method: 'POST', body: { texto, resposta_de: resposta?.id ?? null, anexos } });
+        limparPendentes(c.id);
+        if (estado.mensagens.get(c.id)?.maisNovas) {
+          // Estava no meio da conversa (pela busca): volta ao fim, onde a mensagem está.
+          estado.mensagens.delete(c.id);
+          estado.marcoNaoLida = null;
+          await carregarMensagens(c.id);
+        }
         receberMinha(c, r.mensagem);
       }
     } catch (err) {
@@ -1518,7 +1811,7 @@
     if (!m) return;
     const cache = estado.mensagens.get(c.id);
     if (cache && !cache.lista.some(x => x.id === m.id)) cache.lista.push(m);
-    c.ultima = { id: m.id, autor_id: m.autor_id, tipo: m.tipo, em: m.criado_em, texto: m.texto, apagada: false };
+    c.ultima = ultimaDe(m);
     c.atualizada_em = m.criado_em;
     c.lida_ate_id = Math.max(Number(c.lida_ate_id) || 0, m.id);
     estado.marcoNaoLida = null;
@@ -1537,7 +1830,7 @@
     }
     const c = conversa(m.conversa_id);
     if (c?.ultima && c.ultima.id === m.id) {
-      c.ultima = { ...c.ultima, texto: m.texto, apagada: Boolean(m.apagada) };
+      c.ultima = { ...ultimaDe(m), em: c.ultima.em };
       pintar({ lateral: true });
     }
     resolverRefsDe([m]);
@@ -1867,6 +2160,344 @@
     }
   }
 
+  // ================================================================ arquivos (fase 2)
+
+  const pendentesDa = conversaId => {
+    const id = Number(conversaId);
+    if (!estado.pendentes.has(id)) estado.pendentes.set(id, []);
+    return estado.pendentes.get(id);
+  };
+
+  /** Os arquivos escolhidos (clipe, colar ou arrastar): conferidos aqui e já mandados para o servidor. */
+  function escolherArquivos(arquivos) {
+    const c = conversa(estado.aberta);
+    const lista = [...(arquivos || [])];
+    if (!c || !lista.length) return;
+    if (estado.editando) return toast('Termine a edição antes de mandar arquivos.', 'info');
+    const fila = pendentesDa(c.id);
+    const recusados = [];
+    for (const f of lista) {
+      const nome = String(f.name || '').trim() || `imagem-${Date.now()}.png`;
+      if (fila.length >= MAXIMO_ARQUIVOS) { recusados.push(`${nome}: no máximo ${MAXIMO_ARQUIVOS} por mensagem`); continue; }
+      if (!f.size) { recusados.push(`${nome}: está vazio`); continue; }
+      if (f.size > MAXIMO_ARQUIVO) { recusados.push(`${nome}: passa de 20 MB`); continue; }
+      if (arquivoBloqueado(nome)) { recusados.push(`${nome}: programa ou script não pode ser enviado`); continue; }
+      const p = {
+        chave: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, conversaId: c.id,
+        nome, tamanho: f.size, tipo: f.type || '', progresso: 0, anexo: null, erro: null, xhr: null,
+        previa: /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(f.type || '') && typeof URL?.createObjectURL === 'function' ? URL.createObjectURL(f) : null
+      };
+      fila.push(p);
+      subirArquivo(p, f);
+    }
+    if (recusados.length) toast(`Não foi: ${recusados.join(' · ')}`);
+    pintarPendentes();
+    parte('texto')?.focus();
+  }
+
+  /** Sobe o arquivo em bytes, mostrando o quanto já foi. */
+  async function subirArquivo(p, arquivo) {
+    const base = await baseDaApi();
+    if (!base) {
+      p.erro = 'Sem o endereço do servidor.';
+      return pintarPendentes();
+    }
+    const xhr = new XMLHttpRequest();
+    p.xhr = xhr;
+    xhr.open('POST', new URL(`/api/chat/conversas/${p.conversaId}/anexos`, base).toString());
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('X-Nome-Arquivo', encodeURIComponent(p.nome));
+    xhr.setRequestHeader('X-Tipo-Arquivo', encodeURIComponent(p.tipo || ''));
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      p.progresso = Math.min(99, Math.round((e.loaded / e.total) * 100));
+      pintarProgresso(p);
+    };
+    xhr.onload = () => {
+      p.xhr = null;
+      let dados = null;
+      try { dados = JSON.parse(xhr.responseText || 'null'); } catch (_) { dados = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && dados?.anexo) {
+        p.anexo = dados.anexo;
+        p.progresso = 100;
+      } else {
+        p.erro = dados?.error || 'Não subiu. Tire e tente de novo.';
+      }
+      pintarPendentes();
+    };
+    xhr.onerror = () => {
+      p.xhr = null;
+      p.erro = 'Sem conexão: o arquivo não subiu.';
+      pintarPendentes();
+    };
+    xhr.send(arquivo);
+  }
+
+  function pintarPendentes() {
+    const el = parte('pendentes');
+    if (!el) return;
+    const lista = estado.pendentes.get(Number(estado.aberta)) || [];
+    el.classList.toggle('hidden', !lista.length);
+    el.innerHTML = lista.map(p => `
+      <div class="chat-pendente${p.erro ? ' chat-pendente--erro' : ''}${p.anexo ? ' chat-pendente--pronto' : ''}" data-chave="${p.chave}" title="${escapar(p.erro || `${p.nome} — ${tamanhoLegivel(p.tamanho)}`)}">
+        ${p.previa ? `<img class="chat-pendente-previa" src="${escapar(p.previa)}" alt="">` : `<span class="chat-pendente-icone"><i class="fas ${iconeDoArquivo(p.nome, p.tipo)}"></i></span>`}
+        <span class="chat-pendente-textos">
+          <strong>${escapar(p.nome)}</strong>
+          <small data-chat-progresso>${p.erro ? escapar(p.erro) : p.anexo ? tamanhoLegivel(p.tamanho) : `Subindo… ${p.progresso}%`}</small>
+          ${!p.anexo && !p.erro ? `<span class="chat-pendente-barra"><i style="width:${p.progresso}%"></i></span>` : ''}
+        </span>
+        <button type="button" class="chat-icone chat-icone--pequeno" data-acao="tirar-arquivo" data-chave="${p.chave}" title="Tirar"><i class="fas fa-times"></i></button>
+      </div>`).join('');
+  }
+
+  /** Só a barra e o número (sem redesenhar a fila inteira a cada pedaço). */
+  function pintarProgresso(p) {
+    const cartao = $(`.chat-pendente[data-chave="${p.chave}"]`);
+    if (!cartao) return;
+    const texto = cartao.querySelector('[data-chat-progresso]');
+    if (texto) texto.textContent = `Subindo… ${p.progresso}%`;
+    const barra = cartao.querySelector('.chat-pendente-barra > i');
+    if (barra) barra.style.width = `${p.progresso}%`;
+  }
+
+  function tirarArquivo(chave) {
+    for (const [id, lista] of estado.pendentes) {
+      const i = lista.findIndex(p => p.chave === chave);
+      if (i < 0) continue;
+      const [p] = lista.splice(i, 1);
+      if (p.xhr) try { p.xhr.abort(); } catch (_) { /* já foi */ }
+      if (p.anexo) api(`/anexos/${p.anexo.id}`, { method: 'DELETE' }).catch(() => {});
+      if (p.previa) try { URL.revokeObjectURL(p.previa); } catch (_) { /* segue */ }
+      if (!lista.length) estado.pendentes.delete(id);
+      break;
+    }
+    pintarPendentes();
+  }
+
+  /** Mandados com a mensagem: saem da fila (os que deram erro também). */
+  function limparPendentes(conversaId) {
+    for (const p of estado.pendentes.get(Number(conversaId)) || []) {
+      if (p.xhr) try { p.xhr.abort(); } catch (_) { /* já foi */ }
+      if (p.previa) try { URL.revokeObjectURL(p.previa); } catch (_) { /* segue */ }
+    }
+    estado.pendentes.delete(Number(conversaId));
+    if (String(estado.aberta) === String(conversaId)) pintarPendentes();
+  }
+
+  /** O arquivo de uma mensagem já carregada (e a mensagem). */
+  function anexoPorId(id) {
+    for (const cache of estado.mensagens.values()) {
+      for (const m of cache.lista || []) {
+        for (const a of m.anexos || []) if (String(a.id) === String(id)) return { anexo: a, mensagem: m };
+      }
+    }
+    for (const r of estado.achados.resultados) {
+      for (const a of r.mensagem?.anexos || []) if (String(a.id) === String(id)) return { anexo: a, mensagem: r.mensagem };
+    }
+    return null;
+  }
+
+  async function bytesDoAnexo(id) {
+    await baseDaApi();
+    const resposta = await fetch(urlDoAnexo(id), { credentials: 'include' });
+    if (!resposta.ok) {
+      let mensagem = null;
+      try { mensagem = (await resposta.json())?.error; } catch (_) { mensagem = null; }
+      throw new Error(mensagem || 'Não foi possível baixar o arquivo.');
+    }
+    return new Uint8Array(await resposta.arrayBuffer());
+  }
+
+  function paraBase64(bytes) {
+    let binario = '';
+    const passo = 0x8000;
+    for (let i = 0; i < bytes.length; i += passo) binario += String.fromCharCode.apply(null, bytes.subarray(i, i + passo));
+    return btoa(binario);
+  }
+
+  /**
+   * Abrir (PDF no "Visualizar documento"; o resto no programa do Windows) ou
+   * salvar onde a pessoa escolher — o mesmo caminho dos anexos do histórico.
+   */
+  async function abrirArquivo(id, { salvar = false } = {}) {
+    const a = anexoPorId(id)?.anexo || { id, nome: 'arquivo', tipo: '' };
+    if (!salvar && a.tipo === 'application/pdf' && window.VisualizadorPdf?.abrir) {
+      window.VisualizadorPdf.abrir({
+        titulo: a.nome,
+        nomeArquivo: String(a.nome || 'arquivo').replace(/\.pdf$/i, ''),
+        tituloSalvar: 'Salvar arquivo do chat',
+        gerar: async () => ({ base64: paraBase64(await bytesDoAnexo(id)) })
+      });
+      return;
+    }
+    if (!window.electronAPI?.salvarArquivoBinario) return toast('Abrir arquivo só funciona no programa instalado.', 'info');
+    try {
+      toast(`${salvar ? 'Baixando' : 'Abrindo'} ${a.nome}…`, 'info');
+      const base64 = paraBase64(await bytesDoAnexo(id));
+      const r = await window.electronAPI.salvarArquivoBinario({ base64, nomeSugerido: a.nome, abrir: !salvar, titulo: 'Salvar arquivo do chat' });
+      if (r && !r.success && !r.canceled) toast(r.message || 'Não foi possível abrir o arquivo.');
+      else if (r?.success && salvar) toast('Arquivo salvo.', 'success');
+    } catch (err) {
+      toast(err.message || 'Não foi possível baixar o arquivo.');
+    }
+  }
+
+  // ------------------------------------------------------------ visor das imagens
+
+  /** A imagem em tamanho grande, com as outras imagens da conversa (← →). */
+  function abrirVisor(id) {
+    const achado = anexoPorId(id);
+    if (!achado) return;
+    const cache = estado.mensagens.get(Number(achado.mensagem.conversa_id));
+    const lista = (cache?.lista || [achado.mensagem])
+      .filter(m => !m.apagada)
+      .flatMap(m => (m.anexos || []).filter(a => a.imagem).map(a => ({ ...a, autor_id: m.autor_id, criado_em: m.criado_em })));
+    if (!lista.length) return;
+    estado.visor = { lista, indice: Math.max(0, lista.findIndex(a => String(a.id) === String(id))) };
+    fecharFlutuante();
+    pintarVisor();
+    parte('visor')?.focus();
+  }
+
+  function pintarVisor() {
+    const el = parte('visor');
+    if (!el) return;
+    const v = estado.visor;
+    if (!v || !v.lista.length) {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      return;
+    }
+    const a = v.lista[v.indice];
+    const varias = v.lista.length > 1;
+    el.innerHTML = `
+      <div class="chat-visor-topo">
+        <div class="chat-visor-textos">
+          <strong title="${escapar(a.nome)}">${escapar(a.nome)}</strong>
+          <small>${escapar(nomeDe(a.autor_id))} · ${escapar(dataCompleta(a.criado_em))} · ${tamanhoLegivel(a.tamanho)}${varias ? ` · ${v.indice + 1} de ${v.lista.length}` : ''}</small>
+        </div>
+        <div class="chat-visor-acoes">
+          <button type="button" class="chat-icone" data-acao="abrir-arquivo" data-id="${a.id}" title="Abrir no programa do Windows"><i class="fas fa-external-link-alt"></i></button>
+          <button type="button" class="chat-icone" data-acao="salvar-arquivo" data-id="${a.id}" title="Salvar como…"><i class="fas fa-download"></i></button>
+          <button type="button" class="chat-icone" data-acao="fechar-visor" title="Fechar (Esc)"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div class="chat-visor-imagem">
+        ${varias ? '<button type="button" class="chat-visor-seta chat-visor-seta--antes" data-acao="visor-antes" title="Anterior (←)"><i class="fas fa-chevron-left"></i></button>' : ''}
+        <img src="${escapar(urlDoAnexo(a.id))}" alt="${escapar(a.nome)}">
+        ${varias ? '<button type="button" class="chat-visor-seta chat-visor-seta--depois" data-acao="visor-depois" title="Próxima (→)"><i class="fas fa-chevron-right"></i></button>' : ''}
+      </div>`;
+    el.classList.remove('hidden');
+  }
+
+  function andarNoVisor(passo) {
+    const v = estado.visor;
+    if (!v || v.lista.length < 2) return;
+    v.indice = (v.indice + passo + v.lista.length) % v.lista.length;
+    pintarVisor();
+  }
+
+  function fecharVisor() {
+    estado.visor = null;
+    pintarVisor();
+    parte('texto')?.focus();
+  }
+
+  // ------------------------------------------------------------ busca nas mensagens
+
+  let relogioDosAchados = null;
+  let buscaDosAchados = 0;
+  /** Depois de parar de digitar, busca nas mensagens (2 letras ou mais). */
+  function agendarBuscaNasMensagens() {
+    clearTimeout(relogioDosAchados);
+    const termo = String(estado.busca || '').trim();
+    const a = estado.achados;
+    if (comparavel(termo).length < 2) {
+      Object.assign(a, { termo: '', resultados: [], mais: false, carregando: false, falhou: false });
+      pintarLateral();
+      return;
+    }
+    a.carregando = true;
+    relogioDosAchados = setTimeout(() => buscarNasMensagens({ termo }), 350);
+  }
+
+  async function buscarNasMensagens({ termo = estado.achados.termo, mais = false } = {}) {
+    const a = estado.achados;
+    const minha = ++buscaDosAchados;
+    const params = new URLSearchParams({ q: termo });
+    if (a.conversa) params.set('conversa', String(a.conversa));
+    if (mais && a.resultados.length) params.set('antes', String(a.resultados[a.resultados.length - 1].mensagem.id));
+    a.carregando = true;
+    pintarLateral();
+    try {
+      const r = await api(`/busca?${params.toString()}`);
+      if (minha !== buscaDosAchados) return;
+      a.termo = termo;
+      a.resultados = mais ? [...a.resultados, ...(r.resultados || [])] : r.resultados || [];
+      a.mais = Boolean(r.mais);
+      a.falhou = false;
+      resolverRefsDe(a.resultados.map(x => x.mensagem));
+    } catch (_) {
+      if (minha !== buscaDosAchados) return;
+      a.falhou = true;
+      if (!mais) a.resultados = [];
+    } finally {
+      if (minha === buscaDosAchados) a.carregando = false;
+    }
+    pintarLateral();
+  }
+
+  /** "Buscar nesta conversa": a busca do alto passa a olhar só esta conversa. */
+  function buscarAqui() {
+    const c = conversa(estado.aberta);
+    if (!c) return;
+    estado.achados.conversa = String(estado.achados.conversa) === String(c.id) ? null : c.id;
+    pintar({ cabecalho: true });
+    const campo = parte('busca');
+    if (campo) {
+      campo.focus();
+      campo.select();
+    }
+    if (comparavel(estado.busca).length >= 2) buscarNasMensagens({ termo: String(estado.busca).trim() });
+    else pintarLateral();
+  }
+
+  function htmlDosAchados() {
+    const a = estado.achados;
+    const termo = String(estado.busca || '').trim();
+    const escopo = a.conversa ? conversa(a.conversa) : null;
+    const chip = escopo ? `
+      <div class="chat-escopo">
+        <i class="fas fa-search"></i><span>Só em ${escopo.tipo === 'canal' ? '#' : ''}${escapar(nomeDaConversa(escopo, nomes()))}</span>
+        <button type="button" class="chat-icone chat-icone--pequeno" data-acao="tirar-escopo" title="Buscar em todas as conversas"><i class="fas fa-times"></i></button>
+      </div>` : '';
+    if (comparavel(termo).length < 2) {
+      return escopo ? `${chip}<p class="chat-vazio-linha">Digite ao menos 2 letras para buscar nesta conversa.</p>` : '';
+    }
+    const ctx = contexto();
+    const mapa = nomes();
+    const itens = a.resultados.map(r => {
+      const c = conversa(r.conversa.id) || r.conversa;
+      const m = r.mensagem;
+      const trecho = trechoComDestaque(m.texto, termo, ctx) || escapar(resumoDosArquivos(m.anexos?.length, m.anexos?.[0]?.nome));
+      return `
+        <button type="button" class="chat-achado" data-acao="ir-achado" data-conversa="${r.conversa.id}" data-id="${m.id}">
+          <span class="chat-achado-linha">
+            <span class="chat-achado-onde">${c.tipo === 'canal' ? '#' : ''}${escapar(nomeDaConversa(c, mapa))}</span>
+            <span class="chat-item-hora">${escapar(quandoCurto(m.criado_em))}</span>
+          </span>
+          <span class="chat-achado-texto"><strong>${escapar(ehEu(m.autor_id) ? 'Você' : nomeDe(m.autor_id).split(' ')[0])}:</strong> ${trecho}${m.anexos?.length ? ' <i class="fas fa-paperclip" title="Com arquivo"></i>' : ''}</span>
+        </button>`;
+    }).join('');
+    let rodape = '';
+    if (a.carregando) rodape = '<div class="chat-carregando"><span class="chat-spinner"></span> Buscando…</div>';
+    else if (a.falhou) rodape = '<p class="chat-vazio-linha">Não foi possível buscar agora.</p>';
+    else if (!a.resultados.length) rodape = `<p class="chat-vazio-linha">Nenhuma mensagem com "${escapar(termo)}".</p>`;
+    else if (a.mais) rodape = '<button type="button" class="chat-link-botao chat-achados-mais" data-acao="achados-mais">Mostrar mais</button>';
+    const titulo = `Nas mensagens${a.resultados.length ? ` <span class="chat-secao-numero">${a.resultados.length}${a.mais ? '+' : ''}</span>` : ''}`;
+    return `${chip}${secao('achados', titulo, itens + rodape)}`;
+  }
+
   // ================================================================ ações
 
   async function criarConversa() {
@@ -2102,12 +2733,29 @@
       case 'sair': return sairDaConversa();
       case 'arquivar': return arquivar();
       case 'mais-antigas': return carregarAnteriores();
-      case 'ir-fim': {
-        const el = parte('mensagens');
-        if (el) el.scrollTop = el.scrollHeight;
-        alvo.classList.add('hidden');
-        return marcarComoLida();
+      case 'mais-novas': return carregarPosteriores();
+      case 'ir-fim': return voltarAoFim();
+      // Arquivos (fase 2)
+      case 'anexar': {
+        if (estado.editando) return toast('Termine a edição antes de mandar arquivos.', 'info');
+        return parte('arquivo')?.click();
       }
+      case 'tirar-arquivo': return tirarArquivo(alvo.dataset.chave);
+      case 'ver-imagem': return abrirVisor(id);
+      case 'abrir-arquivo': return abrirArquivo(id);
+      case 'salvar-arquivo': return abrirArquivo(id, { salvar: true });
+      case 'fechar-visor': return fecharVisor();
+      case 'visor-antes': return andarNoVisor(-1);
+      case 'visor-depois': return andarNoVisor(1);
+      // Busca nas mensagens (fase 2)
+      case 'buscar-aqui': return buscarAqui();
+      case 'tirar-escopo':
+        estado.achados.conversa = null;
+        pintar({ cabecalho: true });
+        if (comparavel(estado.busca).length >= 2) return buscarNasMensagens({ termo: String(estado.busca).trim() });
+        return pintarLateral();
+      case 'ir-achado': return irParaMensagem(alvo.dataset.conversa, id);
+      case 'achados-mais': return buscarNasMensagens({ mais: true });
       case 'ir-para': return irPara(id);
       case 'responder': return comecarResposta(id);
       case 'editar': return comecarEdicao(id);
@@ -2174,6 +2822,7 @@
     if (!nome) return;
     if (nome === 'busca') {
       estado.busca = e.target.value;
+      agendarBuscaNasMensagens();
       pintarLateral();
     } else if (nome === 'texto') {
       aoMudarTexto();
@@ -2200,6 +2849,12 @@
   }
 
   function aoTeclar(e) {
+    // O visor da imagem por cima: Esc fecha, ← → andam.
+    if (estado.visor) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return fecharVisor(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); return andarNoVisor(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); return andarNoVisor(1); }
+    }
     const ta = parte('texto');
     if (e.target === ta) {
       const lista = estado.escolha?.itens || [];
@@ -2275,6 +2930,7 @@
     if (!el?.matches?.('[data-chat="mensagens"]')) return;
     if (el.scrollTop < 60) carregarAnteriores();
     if (pertoDoFim(el)) {
+      if (estado.mensagens.get(Number(estado.aberta))?.maisNovas) return carregarPosteriores();
       parte('ir-fim')?.classList.add('hidden');
       marcarComoLida();
     }
@@ -2288,7 +2944,10 @@
     if (!c || !estado.painelAberto || estado.visao !== 'conversa') return;
     if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) return;
     if (!pertoDoFim()) return;
-    const lista = estado.mensagens.get(c.id)?.lista || [];
+    const cache = estado.mensagens.get(c.id);
+    // No meio da conversa (pela busca), o fim ainda não foi visto.
+    if (cache?.maisNovas) return;
+    const lista = cache?.lista || [];
     const ultimo = lista.length ? lista[lista.length - 1].id : 0;
     const mudouContagem = Number(c.nao_lidas) || Number(c.mencoes);
     c.nao_lidas = 0;
@@ -2296,6 +2955,8 @@
     if (mudouContagem) {
       atualizarContador();
       pintar({ lateral: true });
+      // Lida aqui: sai também da janela do canto do Windows.
+      Promise.resolve(window.electronAPI?.avisosWindows?.lidos?.({ ids: [`chat:${c.id}`] })).catch(() => {});
     }
     if (!ultimo || ultimo <= (Number(c.lida_ate_id) || 0) || ultimo === ultimaLidaEnviada) return;
     c.lida_ate_id = ultimo;
@@ -2342,13 +3003,30 @@
     const mencionou = (m.mencoes || []).map(String).includes(String(estado.eu.id));
     if (estado.eu.status === 'ocupado') return;
     if (c.silenciada && !mencionou) return;
-    const texto = textoCurto(m.texto, contexto()).slice(0, 180);
+    const texto = (textoCurto(m.texto, contexto()) || resumoDosArquivos(m.anexos?.length, m.anexos?.[0]?.nome)).slice(0, 180);
     const naFrente = !document.hidden && (typeof document.hasFocus !== 'function' || document.hasFocus());
     if (naFrente) {
       if (!(estado.painelAberto && String(estado.aberta) === String(c.id) && estado.visao === 'conversa')) mostrarAviso(c, m, texto, mencionou);
       tocarSom();
       return;
     }
+    // Programa atrás: a janela do canto (a mesma dos avisos do sino); com ela
+    // desligada, a notificação do Windows.
+    const canto = window.electronAPI?.avisosWindows;
+    if (canto?.chat) {
+      const item = {
+        conversa_id: c.id, tipo: c.tipo, nome: c.tipo === 'direta' ? null : c.nome, autor: nomeDe(m.autor_id),
+        texto, quantas: Math.max(1, Number(c.nao_lidas) || 1), mencao: mencionou, criado_em: m.criado_em
+      };
+      Promise.resolve(canto.chat(item))
+        .then(mostrou => { if (!mostrou) notificacaoDoWindows(c, m, texto, mencionou); })
+        .catch(() => notificacaoDoWindows(c, m, texto, mencionou));
+      return;
+    }
+    notificacaoDoWindows(c, m, texto, mencionou);
+  }
+
+  function notificacaoDoWindows(c, m, texto, mencionou) {
     if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
     try {
       const n = new Notification(tituloDoAviso(c, m), { body: (mencionou ? 'Mencionou você: ' : '') + texto, tag: `sd-chat-${c.id}` });
@@ -2397,7 +3075,9 @@
     const id = Number(conversaId);
     const minha = ehEu(m.autor_id);
     const cache = estado.mensagens.get(id);
-    if (cache?.carregada && !cache.lista.some(x => x.id === m.id)) {
+    // No meio da conversa (pela busca) a nova não entra: há um buraco até ela.
+    const noMeio = Boolean(cache?.maisNovas);
+    if (cache?.carregada && !noMeio && !cache.lista.some(x => x.id === m.id)) {
       cache.lista.push(m);
       cache.lista.sort((a, b) => a.id - b.id);
     }
@@ -2416,12 +3096,12 @@
       });
       return;
     }
-    c.ultima = { id: m.id, autor_id: m.autor_id, tipo: m.tipo, em: m.criado_em, texto: m.texto, apagada: false };
+    c.ultima = ultimaDe(m);
     c.atualizada_em = m.criado_em;
     estado.conversas = ordenarConversas(estado.conversas);
     if (minha) {
       c.lida_ate_id = Math.max(Number(c.lida_ate_id) || 0, m.id);
-    } else if (estouVendo(id) && pertoDoFim()) {
+    } else if (estouVendo(id) && pertoDoFim() && !noMeio) {
       // Na tela: lido na hora.
     } else {
       c.nao_lidas = (Number(c.nao_lidas) || 0) + 1;
@@ -2450,6 +3130,7 @@
       if (c.ultima && Number(ate) >= c.ultima.id) {
         c.nao_lidas = 0;
         c.mencoes = 0;
+        Promise.resolve(window.electronAPI?.avisosWindows?.lidos?.({ ids: [`chat:${c.id}`] })).catch(() => {});
       }
       atualizarContador();
       pintar({ lateral: true });
@@ -2538,6 +3219,8 @@
       estado.jaConectou = true;
       estado.tentativas = 0;
       mostrarConexao();
+      // O programa avisa as mensagens novas na hora: a janela do canto não pergunta de novo.
+      Promise.resolve(window.electronAPI?.avisosWindows?.chatAoVivo?.(true)).catch(() => {});
       // Parado há mais de 5 min quando a conexão voltou: continua Ausente.
       if (!estado.ativo) avisarAtividade(false);
       if (reconectou) {
@@ -2556,6 +3239,7 @@
     fonte.onerror = () => {
       estado.conectado = false;
       mostrarConexao();
+      Promise.resolve(window.electronAPI?.avisosWindows?.chatAoVivo?.(false)).catch(() => {});
       // Fechou de vez (resposta de erro, não uma queda): tenta de novo mais tarde.
       if (fonte.readyState === 2) {
         fonte.close();
@@ -2572,6 +3256,7 @@
     if (estado.fonte) estado.fonte.close();
     estado.fonte = null;
     estado.conectado = false;
+    Promise.resolve(window.electronAPI?.avisosWindows?.chatAoVivo?.(false)).catch(() => {});
   }
 
   /** De 20 em 20 s: sem o ao vivo, pergunta; com ele, só confere o "visto há" e a sessão. */
@@ -2658,6 +3343,8 @@
 
   /** Abre o painel (e a conversa, se vier) — usado pelo sino e pelos avisos. */
   async function abrir({ conversaId } = {}) {
+    // Aberto pelo sino ou pela janela do canto logo depois do login: o chat pode não ter começado.
+    if (!raiz) await iniciar();
     if (!estado.painelAberto) await abrirPainel();
     if (!conversaId) return;
     if (!conversa(conversaId)) await recarregarConversas();

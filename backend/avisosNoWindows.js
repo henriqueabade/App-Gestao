@@ -53,6 +53,30 @@ function novosParaMostrar(avisos = [], ultimoVisto = 0) {
   return lista(avisos).filter(a => a && !a.lida && a.id > Number(ultimoVisto || 0)).sort((a, b) => a.id - b.id);
 }
 
+/**
+ * A conversa do chat com mensagem nova → o cartão da janela do canto (um por
+ * conversa: id "chat:<conversa>"; o novo substitui o anterior). `lida: true`:
+ * não é aviso do sino, o sino não tem o que marcar. Pura.
+ */
+function avisoDoChat(c) {
+  const conversa = Number(c?.conversa_id);
+  if (!Number.isInteger(conversa) || conversa <= 0) return null;
+  const texto = v => (typeof v === 'string' ? v : '');
+  const nome = texto(c.nome);
+  const onde = c.tipo === 'canal' ? ` em #${nome || 'canal'}` : c.tipo === 'grupo' ? ` em ${nome || 'grupo'}` : '';
+  const quantas = Math.min(999, Math.max(1, Math.trunc(Number(c.quantas)) || 1));
+  const mencao = c.mencao === true;
+  const quando = Date.parse(texto(c.criado_em)) ? new Date(c.criado_em).toISOString() : null;
+  return {
+    id: `chat:${conversa}`, tipo: mencao ? 'chat_mencao' : 'chat_mensagem',
+    titulo: `${texto(c.autor) || 'Alguém'}${onde}`.slice(0, 160),
+    mensagem: texto(c.texto).slice(0, 300),
+    mudancas: [], notas: quantas > 1 ? [`${quantas} mensagens novas${mencao ? ' · mencionaram você' : ''}`] : mencao ? ['Mencionaram você'] : [],
+    origem: 'chat', registro_id: conversa, item_id: null, comentario_id: null,
+    autor: texto(c.autor) || null, lida: true, criado_em: quando, chat: true
+  };
+}
+
 /** DEV: um assinador que vale só nesta execução (como o login local). */
 function criarAssinadorLocal() {
   const segredo = crypto.randomBytes(32);
@@ -98,6 +122,8 @@ function criarAvisosNoWindows({
   let estado = lerEstado();
   let tokenEmMemoria = null;
   let semRotaNaApi = false;
+  // A API ainda sem /avisos/chat (chat interno, 12/10/2026): pergunta de novo em 30 min.
+  let semChatNaApiDesde = 0;
   let ultimaTentativa = 0;
   let volta = 0;
 
@@ -109,10 +135,12 @@ function criarAvisosNoWindows({
       const e = JSON.parse(fs.readFileSync(arquivo, 'utf8'));
       return {
         usuario: e.usuario || null, token: e.token || null, cancelado: Boolean(e.cancelado),
-        vistos: e.vistos && typeof e.vistos === 'object' ? e.vistos : {}
+        vistos: e.vistos && typeof e.vistos === 'object' ? e.vistos : {},
+        // Do chat: por usuário, a maior mensagem já mostrada no canto.
+        vistosChat: e.vistosChat && typeof e.vistosChat === 'object' ? e.vistosChat : {}
       };
     } catch (_) {
-      return { usuario: null, token: null, cancelado: false, vistos: {} };
+      return { usuario: null, token: null, cancelado: false, vistos: {}, vistosChat: {} };
     }
   }
 
@@ -158,9 +186,10 @@ function criarAvisosNoWindows({
     if (emDev) {
       if (acao === 'listar') return local.modulo.listar(token);
       if (acao === 'tarefas') return local.modulo.tarefas(token);
+      if (acao === 'chat') return local.modulo.mensagensDoChat ? local.modulo.mensagensDoChat(token) : { status: 404, corpo: null };
       return local.modulo.lembretes(token, corpo);
     }
-    const rota = { listar: ['GET', '/avisos/meus'], tarefas: ['GET', '/avisos/tarefas'], lembretes: ['POST', '/avisos/lembretes'] }[acao];
+    const rota = { listar: ['GET', '/avisos/meus'], tarefas: ['GET', '/avisos/tarefas'], lembretes: ['POST', '/avisos/lembretes'], chat: ['GET', '/avisos/chat'] }[acao];
     return naApi(rota[0], rota[1], token, corpo);
   }
 
@@ -200,7 +229,7 @@ function criarAvisosNoWindows({
 
   /** Desligar os avisos do Windows: o aparelho esquece o usuário e o token. */
   function esquecer() {
-    estado = { usuario: null, token: null, cancelado: false, vistos: estado.vistos };
+    estado = { usuario: null, token: null, cancelado: false, vistos: estado.vistos, vistosChat: estado.vistosChat };
     tokenEmMemoria = null;
     gravarEstado();
   }
@@ -279,15 +308,59 @@ function criarAvisosNoWindows({
   }
 
   /**
+   * As mensagens do chat interno ainda não lidas, por conversa (só com o
+   * token do aparelho: GET /avisos/chat). null quando não há como perguntar.
+   */
+  async function buscarChat() {
+    if (!estado.usuario?.id || estado.cancelado || semRotaNaApi) return null;
+    if (semChatNaApiDesde && agora().getTime() - semChatNaApiDesde < TENTAR_DE_NOVO_MS) return null;
+    const token = tokenDoAparelho();
+    if (!token) return null;
+    try {
+      const r = await noAparelho('chat', token);
+      if (r.status === 200) {
+        semChatNaApiDesde = 0;
+        if (r.corpo?.token_novo) guardarToken(r.corpo.token_novo);
+        return { ocupado: Boolean(r.corpo?.ocupado), conversas: lista(r.corpo?.conversas) };
+      }
+      if (r.corpo?.cancelado) marcarCancelado();
+      else if (r.status === 404) semChatNaApiDesde = agora().getTime();
+    } catch (_) { /* sem resposta: tenta na próxima volta */ }
+    return null;
+  }
+
+  /** O que é novo do chat desde a última volta (a 1ª vez de cada usuário só marca). */
+  function novosDoChat(chat) {
+    const chave = String(estado.usuario.id);
+    const visto = estado.vistosChat[chave];
+    const maior = chat.conversas.reduce((m, c) => Math.max(m, Number(c.ultima_id) || 0), 0);
+    const novos = visto === undefined ? [] : chat.conversas.filter(c => Number(c.ultima_id) > Number(visto)).map(avisoDoChat).filter(Boolean);
+    if (visto === undefined || maior > Number(visto)) {
+      estado.vistosChat[chave] = Math.max(maior, Number(visto || 0));
+      gravarEstado();
+    }
+    return novos;
+  }
+
+  /**
    * Uma volta (a cada 20 s): os lembretes (a cada 3 voltas), os avisos e o
    * que é novo. `emFoco`: o programa está na frente — aí quem avisa é o sino
-   * (com o som), e a janela do canto fica quieta.
+   * (com o som), e a janela do canto fica quieta. Do chat (12/10/2026):
+   * `chat` = os cartões novos, `chatNaoLidas` = as conversas que ainda têm o
+   * que ler (as outras saem da janela). `chatAoVivo`: o programa aberto já
+   * recebe o chat ao vivo e manda ele mesmo para a janela — aqui só marca.
    */
-  async function ciclo({ emFoco = false } = {}) {
+  async function ciclo({ emFoco = false, chatAoVivo = false } = {}) {
     volta += 1;
     if (volta % VOLTAS_PARA_LEMBRETES === 1) await gerarLembretes();
     const avisos = await buscar();
-    if (!avisos || !estado.usuario) return { novos: [], naoLidos: null };
+    const chat = estado.usuario ? await buscarChat() : null;
+    const chatNovos = chat && estado.usuario ? novosDoChat(chat) : [];
+    const doChat = {
+      chat: emFoco || chatAoVivo || chat?.ocupado ? [] : chatNovos,
+      chatNaoLidas: chat ? chat.conversas.map(c => c.conversa_id) : null
+    };
+    if (!avisos || !estado.usuario) return { novos: [], naoLidos: null, ...doChat };
     const chave = String(estado.usuario.id);
     const ultimo = estado.vistos[chave];
     const maior = avisos.reduce((m, a) => Math.max(m, a.id), 0);
@@ -296,15 +369,15 @@ function criarAvisosNoWindows({
       estado.vistos[chave] = Math.max(maior, Number(ultimo || 0));
       gravarEstado();
     }
-    return { novos: emFoco ? [] : novos, naoLidos: avisos.filter(a => !a.lida).length };
+    return { novos: emFoco ? [] : novos, naoLidos: avisos.filter(a => !a.lida).length, ...doChat };
   }
 
   return {
-    lembrarUsuario, esquecer, buscar, gerarLembretes, ciclo, emitir,
+    lembrarUsuario, esquecer, buscar, buscarChat, gerarLembretes, ciclo, emitir,
     usuario: () => estado.usuario,
     temTokenDoAparelho: () => Boolean(tokenDoAparelho()),
     cancelado: () => Boolean(estado.cancelado)
   };
 }
 
-module.exports = { INTERVALO_MS, VOLTAS_PARA_LEMBRETES, normalizarAviso, novosParaMostrar, criarAssinadorLocal, esteComputador, criarAvisosNoWindows };
+module.exports = { INTERVALO_MS, VOLTAS_PARA_LEMBRETES, normalizarAviso, novosParaMostrar, avisoDoChat, criarAssinadorLocal, esteComputador, criarAvisosNoWindows };

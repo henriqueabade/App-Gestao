@@ -178,6 +178,42 @@ test('os quatro status que cada um escolhe e os quatro estados que os outros vee
   assert.deepStrictEqual(daqui(C.TIPOS_REF), JSON.parse(servidor));
 });
 
+test('arquivos (fase 2): tamanho legível, ícone, resumo "📎" e a mesma lista de bloqueados da API', () => {
+  assert.strictEqual(C.tamanhoLegivel(512), '512 B');
+  assert.strictEqual(C.tamanhoLegivel(1536), '1,5 KB');
+  assert.strictEqual(C.tamanhoLegivel(20 * 1024 * 1024), '20,0 MB');
+  assert.strictEqual(C.iconeDoArquivo('foto.png', 'image/png'), 'fa-file-image');
+  assert.strictEqual(C.iconeDoArquivo('pedido.PDF', ''), 'fa-file-pdf');
+  assert.strictEqual(C.iconeDoArquivo('custos.xlsx', ''), 'fa-file-excel');
+  assert.strictEqual(C.iconeDoArquivo('contrato.docx', ''), 'fa-file-word');
+  assert.strictEqual(C.iconeDoArquivo('fotos.zip', ''), 'fa-file-archive');
+  assert.strictEqual(C.iconeDoArquivo('desenho.dwg', ''), 'fa-file');
+  assert.strictEqual(C.resumoDosArquivos(0), '');
+  assert.strictEqual(C.resumoDosArquivos(1, 'foto.png'), '📎 foto.png');
+  assert.strictEqual(C.resumoDosArquivos(3, 'a.png'), '📎 3 arquivos');
+  assert.strictEqual(C.arquivoBloqueado('setup.EXE'), true);
+  assert.strictEqual(C.arquivoBloqueado('pedido.pdf'), false);
+  assert.strictEqual(C.MAXIMO_ARQUIVO, 20 * 1024 * 1024);
+  assert.strictEqual(C.MAXIMO_ARQUIVOS, 10);
+  // A tela recusa antes de subir o mesmo que a API recusaria.
+  const daApi = ler('backend/chat/chat.js').match(/EXTENSOES_BLOQUEADAS = new Set\(\[([\s\S]*?)\]\)/)[1];
+  const listaApi = [...daApi.matchAll(/"([a-z0-9]+)"/g)].map(m => m[1]).sort();
+  assert.deepStrictEqual(daqui([...C.EXTENSOES_BLOQUEADAS].sort()), listaApi);
+});
+
+test('busca (fase 2): o trecho com o termo destacado, sem acento, escapado', () => {
+  const refs = new Map([['cliente:12', { tipo: 'cliente', id: 12, rotulo: 'Loja <X>' }]]);
+  assert.strictEqual(C.trechoComDestaque('Orçamento da CADEIRA <b>Luís</b>', 'cadeira'), 'Orçamento da <mark class="chat-marca">CADEIRA</mark> &lt;b&gt;Luís&lt;/b&gt;');
+  assert.strictEqual(C.trechoComDestaque('Orçamento aprovado', 'orcamento'), '<mark class="chat-marca">Orçamento</mark> aprovado', 'sem acento acha com acento');
+  assert.strictEqual(C.trechoComDestaque('veja [[#cliente:12]] hoje', 'loja', { refs }), 'veja #<mark class="chat-marca">Loja</mark> &lt;X&gt; hoje', 'a citação já com o nome');
+  assert.strictEqual(C.trechoComDestaque('[[@5]] confere', 'ana', { nomes }), '@<mark class="chat-marca">Ana</mark> Lima confere');
+  const longo = `${'a'.repeat(100)} termo ${'b'.repeat(200)}`;
+  const trecho = C.trechoComDestaque(longo, 'termo');
+  assert.ok(trecho.startsWith('…') && trecho.endsWith('…') && trecho.includes('<mark class="chat-marca">termo</mark>'), 'corta em volta, com reticências');
+  assert.strictEqual(C.trechoComDestaque('sem o termo aqui', 'relatorio'), 'sem o termo aqui', 'achada pelo arquivo: o começo do texto');
+  assert.strictEqual(C.trechoComDestaque('', 'x'), '');
+});
+
 test('menu.html carrega o chat; o sino abre o chat na menção; a menção sempre aparece', () => {
   const menu = ler('src/html/menu.html');
   const posChat = menu.indexOf('href="../styles/chat.css"');

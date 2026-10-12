@@ -42,8 +42,10 @@ const curto = v => String(v ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(
  * @param {(dados: object, segundos: number) => string} deps.assinar — gera o token
  * @param {(token: string) => object} deps.verificar — devolve os dados do token ou lança
  * @param {() => Date} [deps.agora]
+ * @param {{paraOsAvisos: Function}} [deps.chat] — o chat interno (chat/chat.js): as
+ *        mensagens não lidas para a janela do canto (12/10/2026). Sem ele, 404.
  */
-function criarAvisosDoDispositivo({ pool, assinar, verificar, agora = () => new Date() }) {
+function criarAvisosDoDispositivo({ pool, assinar, verificar, agora = () => new Date(), chat = null }) {
   async function usuarioAtivo(id) {
     const { rows } = await pool.query("SELECT id, nome, status FROM usuarios WHERE id = $1", [id]);
     const u = rows[0] || null;
@@ -205,7 +207,18 @@ function criarAvisosDoDispositivo({ pool, assinar, verificar, agora = () => new 
     });
   }
 
-  return { emitir, dono, listar, tarefas, lembretes };
+  /**
+   * GET /avisos/chat — as mensagens do chat interno ainda não lidas, uma
+   * linha por conversa (quem escreveu por último, o texto, quantas), para a
+   * janela do canto quando o programa está fechado ou atrás (12/10/2026).
+   * Conversa silenciada só com menção; em "Ocupado", nada.
+   */
+  async function mensagensDoChat(token) {
+    if (!chat || typeof chat.paraOsAvisos !== "function") return { status: 404, corpo: { error: "Sem o chat interno nesta API." } };
+    return comDono(token, async u => ({ status: 200, corpo: await chat.paraOsAvisos(u.id) }));
+  }
+
+  return { emitir, dono, listar, tarefas, lembretes, mensagensDoChat };
 }
 
 /** Express: chama a ação com o token do cabeçalho e devolve { status, corpo }. */

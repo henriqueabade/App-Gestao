@@ -17,14 +17,19 @@ const assert = require('node:assert');
 const http = require('node:http');
 const express = require('express');
 
+// Bytes que não são texto (um PNG de verdade começa assim): passam intactos?
+const BYTES_DA_FOTO = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe, 0x80, 0x7f, 0x00, 0x10]);
+
 function criarApiFalsa() {
   const recebidas = [];
   const fluxo = { fechou: false, resolverFechou: null };
   fluxo.esperarFechar = new Promise(r => { fluxo.resolverFechou = r; });
   const servidor = http.createServer((req, res) => {
-    let corpo = '';
-    req.on('data', p => { corpo += p; });
+    const pedacos = [];
+    req.on('data', p => { pedacos.push(p); });
     req.on('end', () => {
+      const corpoBruto = Buffer.concat(pedacos);
+      const corpo = /json/.test(req.headers['content-type'] || '') ? corpoBruto.toString('utf8') : '';
       recebidas.push({ metodo: req.method, caminho: req.url, auth: req.headers.authorization, rota: req.headers['x-rota'], corpo: corpo ? JSON.parse(corpo) : null });
       if (req.url === '/chat/eventos') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
@@ -44,6 +49,14 @@ function criarApiFalsa() {
         res.end(JSON.stringify(dados));
       };
       if (req.url === '/chat/resumo') return json(200, { eu: { id: 5 }, conversas: [], usuarios: [] });
+      // Fase 2: o arquivo sobe em bytes e desce em bytes.
+      if (req.url === '/chat/conversas/1/anexos' && req.method === 'POST') {
+        return json(201, { anexo: { id: 9, recebidos: Buffer.from(corpoBruto).toString('base64'), tipo: req.headers['content-type'], nome: req.headers['x-nome-arquivo'], tipoDito: req.headers['x-tipo-arquivo'] } });
+      }
+      if (req.url === '/chat/anexos/9') {
+        res.writeHead(200, { 'content-type': 'image/png', 'content-disposition': "inline; filename=\"foto.png\"; filename*=UTF-8''foto.png", 'x-content-type-options': 'nosniff' });
+        return res.end(BYTES_DA_FOTO);
+      }
       if (req.url === '/chat/conversas/1/mensagens' && req.method === 'POST') return json(201, { mensagem: { id: 77, texto: JSON.parse(corpo).texto } });
       if (req.url === '/chat/conversas/2/mensagens') return json(403, { error: 'Você não está nesta conversa.' });
       return json(404, { error: 'Rota não encontrada' });
@@ -128,6 +141,39 @@ test('o ao vivo passa em fluxo e fechar a tela fecha a conexão com a API', asyn
     assert.strictEqual(ctx.api.fluxo.fechou, true);
   } finally {
     controle.abort();
+    await ctx.encerrar();
+  }
+});
+
+test('arquivos (fase 2): sobem em bytes com o nome e o tipo; descem em bytes com o tipo e o nome da API', async () => {
+  const ctx = await montar();
+  try {
+    const enviado = await fetch(`${ctx.base}/api/chat/conversas/1/anexos`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer abc', 'Content-Type': 'application/octet-stream', 'X-Nome-Arquivo': encodeURIComponent('relatório.png'), 'X-Tipo-Arquivo': 'image%2Fpng' },
+      body: BYTES_DA_FOTO
+    });
+    assert.strictEqual(enviado.status, 201);
+    const { anexo } = await enviado.json();
+    assert.ok(Buffer.from(anexo.recebidos, 'base64').equals(BYTES_DA_FOTO), 'a API recebeu os mesmos bytes');
+    assert.strictEqual(anexo.tipo, 'application/octet-stream');
+    assert.strictEqual(decodeURIComponent(anexo.nome), 'relatório.png');
+    assert.strictEqual(anexo.tipoDito, 'image%2Fpng');
+
+    const baixado = await fetch(`${ctx.base}/api/chat/anexos/9`, { headers: { Authorization: 'Bearer abc' } });
+    assert.strictEqual(baixado.status, 200);
+    assert.strictEqual(baixado.headers.get('content-type'), 'image/png');
+    assert.match(baixado.headers.get('content-disposition'), /^inline; filename="foto\.png"/);
+    assert.strictEqual(baixado.headers.get('x-content-type-options'), 'nosniff');
+    assert.ok(Buffer.from(await baixado.arrayBuffer()).equals(BYTES_DA_FOTO), 'o programa recebe os mesmos bytes');
+
+    const grande = await fetch(`${ctx.base}/api/chat/conversas/1/anexos`, {
+      method: 'POST', headers: { Authorization: 'Bearer abc', 'Content-Type': 'application/octet-stream' }, body: Buffer.alloc(21 * 1024 * 1024)
+    });
+    assert.strictEqual(grande.status, 413, 'mais de 20 MB nem sai do programa');
+    const subidas = ctx.api.recebidas.filter(r => r.metodo === 'POST' && r.caminho === '/chat/conversas/1/anexos');
+    assert.strictEqual(subidas.length, 1, 'o grande não chegou à API');
+  } finally {
     await ctx.encerrar();
   }
 });

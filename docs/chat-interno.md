@@ -41,12 +41,91 @@ qualquer tela. Tudo é restrito ao que o perfil de cada pessoa pode ver.
 - **Silenciar** e **fixar** cada conversa. A conversa silenciada não toca nem
   avisa, e conta no botão só as menções.
 - **Avisos**: com o programa na frente, aparece um cartão acima do botão,
-  com som. Com o programa atrás, aparece a notificação do Windows. Em
-  "Ocupado", nada toca.
+  com som. Com o programa atrás, minimizado, na bandeja ou fechado, a
+  mensagem vai para a **janela do canto do Windows** (a mesma dos avisos do
+  sino; ver "Fase 2"). Com a janela do canto desligada, vai a notificação do
+  Windows. Em "Ocupado", nada toca.
 - **Não lidas**: o número vermelho do botão é o total. A linha "Novas
   mensagens" marca onde parou a leitura. Quem cria, entra ou chama alguém já
   leu o aviso da própria ação. Quem chega a um grupo ou canal vê o que havia
   antes, sem isso virar "não lida".
+
+## Fase 2 (12/10/2026): arquivos, janela do canto e busca
+
+### Arquivos e imagens
+
+- **Como mandar:** pelo clipe, colando uma imagem (Ctrl+V) ou arrastando
+  arquivos para a conversa. Os arquivos sobem na hora, com barra de
+  progresso, e vão junto com a próxima mensagem. O texto pode ficar vazio.
+- **Limites:** até 20 MB por arquivo e 10 por mensagem. Programas e scripts
+  (`.exe`, `.bat`, `.ps1`, `.js`, `.lnk`…) são recusados antes de subir, e a
+  API recusa de novo. A lista é a mesma nos dois lados, e o teste confere.
+- **Ordem:** a mensagem mostra os arquivos na ordem em que a pessoa escolheu,
+  e não na ordem em que terminaram de subir.
+- **Imagens:** aparecem na conversa como miniatura (a API gera um webp de até
+  480 px). Uma imagem fica inteira; duas ou mais viram quadrados.
+  - Clicar abre o **visor**: a imagem grande, ← e → para as outras da
+    conversa, "Abrir no Windows", "Salvar" e Esc para fechar.
+  - SVG não aparece como imagem, porque pode levar script; vai como arquivo.
+- **Outros arquivos:** aparecem como cartão com ícone, nome, tamanho, "Abrir"
+  e "Salvar como…".
+  - PDF abre no "Visualizar documento" do programa.
+  - Os outros abrem no programa padrão do Windows (o mesmo caminho dos anexos
+    do histórico).
+- **Quem baixa:** só quem está na conversa.
+  - O arquivo escolhido e ainda não enviado, só quem o escolheu.
+  - O de mensagem apagada, ninguém; nem o nome dele aparece.
+  - O Sup Admin fora da conversa também não.
+  - A rota genérica não abre a tabela.
+- **Guardados no banco** (`chat_anexos`):
+  - o arquivo de mensagem enviada não se apaga nem muda (gatilho);
+  - o escolhido e nunca enviado sai depois de 1 dia;
+  - a API manda os arquivos com `nosniff` e CSP `sandbox`.
+- **Sem o `sql/chat_anexos.sql`**, o chat continua funcionando, só sem
+  arquivos. Subir um arquivo diz qual SQL rodar.
+
+### Janela do canto do Windows
+
+As mensagens do chat aparecem na mesma janela do canto dos avisos do sino,
+com um cartão por conversa. O cartão mostra:
+- quem escreveu por último e onde ("Thiago Rocha em #produção");
+- o texto;
+- "3 mensagens novas · mencionaram você";
+- o ícone vermelho de @ quando há menção.
+
+Clicar abre o programa já na conversa. Ela entra na janela de dois jeitos:
+
+- **Programa aberto** (atrás, minimizado ou na bandeja): o próprio chat
+  manda a mensagem para a janela na hora.
+- **Programa sem sessão** (saiu, a sessão venceu ou ligou com o Windows): o
+  serviço da janela pergunta a cada 20 s pela rota `GET /avisos/chat`, com o
+  token do aparelho (o mesmo dos avisos do sino). Da primeira vez, só marca o
+  que já havia, sem despejar o histórico.
+
+Seguem as mesmas regras do chat: conversa silenciada só com menção, e nada em
+"Ocupado". A conversa lida (no programa ou em outro computador) sai da
+janela.
+
+### Busca nas mensagens
+
+- **Onde:** o campo "Buscar pessoas e conversas", no alto da lista. Com 2
+  letras ou mais, aparece primeiro **"Nas mensagens"**, com o trecho e o
+  termo destacado.
+- **O que acha:**
+  - o texto, sem acento e sem diferença de maiúscula ("orcamento" acha
+    "Orçamento");
+  - o nome dos arquivos;
+  - as menções a quem tem esse nome.
+- **O que não acha:** as marcas internas, e nada das conversas em que a
+  pessoa não está.
+- **Só nesta conversa:** a lupa no topo da conversa limita a busca a ela. O
+  "×" do selo volta a buscar em todas.
+- **Clicar num achado** abre a conversa já na mensagem, destacada, mesmo que
+  seja antiga: carrega as vizinhas dos dois lados.
+  - Rolar para baixo carrega as seguintes.
+  - "Ir para as mais recentes" volta ao fim.
+  - Enquanto a tela está no meio da conversa, a conversa não é marcada como
+    lida, e a mensagem nova que chega não se mistura.
 
 ## Teclas
 
@@ -57,6 +136,8 @@ qualquer tela. Tudo é restrito ao que o perfil de cada pessoa pode ver.
 | ↑ (caixa vazia) | Edita a sua última mensagem |
 | Esc | Fecha a lista do @/#, cancela a resposta ou edição, ou fecha o painel |
 | ↑ ↓ e Enter/Tab | Escolhem na lista do @ e do # |
+| Ctrl+V | Cola uma imagem como arquivo |
+| ← → / Esc (visor) | Imagem anterior ou próxima / fecha o visor |
 
 ## Onde mora
 
@@ -83,6 +164,15 @@ qualquer tela. Tudo é restrito ao que o perfil de cada pessoa pode ver.
 - `sql/chat_interno.sql`: as tabelas. As mensagens não se apagam de verdade
   (um gatilho bloqueia; fica `apagada_em`), e o histórico de edições não se
   altera.
+- **Fase 2:**
+  - `sql/chat_anexos.sql`: os arquivos.
+  - API: `avisos/dispositivo.js` (`mensagensDoChat`, rota `/avisos/chat`).
+  - Programa:
+    - `backend/avisosDoDispositivo.js` (a mesma cópia);
+    - `backend/avisosNoWindows.js` (o serviço pergunta pelo chat);
+    - `backend/janelaDeAviso.js` (um cartão por conversa);
+    - `main.js` (canais `avisos-windows:chat` e `avisos-windows:chat-ao-vivo`);
+    - `src/js/aviso-windows.js` (os ícones).
 
 ## Para pôr no ar
 
@@ -93,17 +183,30 @@ qualquer tela. Tudo é restrito ao que o perfil de cada pessoa pode ver.
    então o `proxy_read_timeout` padrão (60 s) basta.
 4. Publicar o programa.
 
+**Fase 2:**
+1. Rodar `sql/chat_anexos.sql`.
+2. Publicar a API e reiniciar. A API precisa do `sharp`, que já está no
+   `package.json` dela.
+3. Publicar o programa.
+4. Se houver nginx, o `client_max_body_size` tem de aceitar ao menos 21 MB
+   no `/chat/`.
+
 Enquanto o SQL ou a API nova não chegarem, o botão fica escondido para
 todos. O Sup Admin vê o botão com o aviso do que falta e um "Tentar de novo".
 O programa tenta sozinho a cada 2 minutos.
 
 ## Testes
 
-- API: `node --test chat/chat.test.js` (marcas, presença, ao vivo).
+- API:
+  - `node --test chat/chat.test.js` (marcas, presença, ao vivo);
+  - `node --test chat/arquivos.test.js` (nome, bloqueados, tipo, busca);
+  - `node --test avisos/dispositivo.test.js` (`/avisos/chat`).
 - Programa:
   - `backend/chatCopia.test.js`
   - `backend/chatReferencias.test.js` (permissões das citações)
-  - `backend/chatProxy.test.js` (repasse e ao vivo em fluxo)
+  - `backend/chatProxy.test.js` (repasse, ao vivo em fluxo, arquivos em bytes)
+  - `backend/avisosNoWindows.test.js` e `backend/programaNoWindows.test.js`
+    (o chat na janela do canto)
   - `src/js/__tests__/chatInterno.test.js` (partes puras da tela)
 - Integração e tela: roteiros no scratchpad da sessão de 12/10/2026, com a
   API de verdade contra um Postgres descartável e o programa no Electron sem
@@ -111,6 +214,6 @@ O programa tenta sozinho a cada 2 minutos.
 
 ## Para depois
 
-- Anexos (arquivo e imagem) nas mensagens.
-- Aviso do chat na janela do canto do Windows (programa fechado, só na bandeja).
-- Busca dentro das mensagens.
+- Respostas em fio (thread), como no ClickUp.
+- Mensagem fixada no topo da conversa.
+- Gravar áudio.
