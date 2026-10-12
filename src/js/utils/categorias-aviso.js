@@ -9,7 +9,9 @@
  *   finance  Financeiro: Financeiro, Cobrança e Contabilidade
  *   sales    Vendas e pedidos: prospecções, clientes, contatos, orçamentos,
  *            pedidos, comentários e menções do histórico
- *   conta    o seu próprio cadastro (acesso, senha, perfil): SEMPRE aparece
+ *   conta    o seu próprio cadastro (acesso, senha, perfil) e, desde
+ *            12/10/2026, as menções do chat interno (alguém chamou você
+ *            pelo nome): SEMPRE aparece
  *
  * "Atualizações do sistema" não tem aviso no sino. O interruptor geral
  * (Ativar notificações) desligado esconde tudo.
@@ -31,7 +33,7 @@
   function categoriaDoAviso(aviso = {}) {
     const tipo = String(aviso?.tipo || '');
     const origem = String(aviso?.origem || '');
-    if (tipo === 'conta_alterada' || origem === 'usuario') return 'conta';
+    if (tipo === 'conta_alterada' || origem === 'usuario' || origem === 'chat') return 'conta';
     if (origem === 'tarefa' || tipo.startsWith('tarefa_') || TIPOS_DE_TAREFA.has(tipo)) return 'tasks';
     if (ORIGENS_FINANCEIRAS.has(origem)) return 'finance';
     return 'sales';

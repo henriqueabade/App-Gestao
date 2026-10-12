@@ -423,6 +423,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const ORIGEM = {
     prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade',
     orcamento: 'Orçamento', pedido: 'Pedido', usuario: 'Usuários', financeiro: 'Financeiro', contabil: 'Contabilidade',
+    chat: 'Chat',
   };
   // Avisos de "algo seu" do Financeiro e da Contabilidade: abrem só o módulo.
   const SO_O_MODULO = { financeiro: 'financeiro', contabil: 'contabilidade' };
@@ -641,6 +642,11 @@ window.addEventListener('DOMContentLoaded', () => {
       naoLidas = Math.max(0, naoLidas - 1);
       updateIcon();
       marcarLidas({ ids: [aviso.id] });
+    }
+    // Menção no chat interno (12/10/2026): o painel do chat, já na conversa.
+    if (aviso.origem === 'chat') {
+      if (window.ChatInterno?.abrir) window.ChatInterno.abrir({ conversaId: aviso.registro_id });
+      return;
     }
     // Cadastro esperando liberação, cadastro não reconhecido e termos recusados: Usuários.
     if (ABRE_USUARIOS.has(aviso.tipo)) {

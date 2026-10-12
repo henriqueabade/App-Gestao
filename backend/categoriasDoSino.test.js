@@ -26,6 +26,8 @@ test('cada aviso na sua categoria', () => {
     [{ tipo: 'registro_cancelado', origem: 'contabil' }, 'finance'],
     [{ tipo: 'mencao', origem: 'contabilidade' }, 'finance'],
     [{ tipo: 'conta_alterada', origem: 'usuario' }, 'conta'],
+    // Menção no chat interno (12/10/2026): alguém chamou você — sempre aparece.
+    [{ tipo: 'mencao', origem: 'chat' }, 'conta'],
     [{}, 'sales']
   ];
   for (const [aviso, esperada] of casos) assert.strictEqual(C.categoriaDoAviso(aviso), esperada, JSON.stringify(aviso));

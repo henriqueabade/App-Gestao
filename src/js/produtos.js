@@ -965,6 +965,12 @@ function abrirVisualizarProduto(prod) {
     openModalWithSpinner('modals/produtos/visualizar.html', '../js/modals/produto-visualizar.js', 'visualizarProduto');
 }
 
+// Abrir a peça de fora do módulo (a citação "#produto" do chat interno,
+// 12/10/2026): o Visualizar só precisa do id — os dados vêm do banco.
+window.ProdutosModulo = {
+    abrirVisualizar: id => abrirVisualizarProduto(listaProdutos.find(p => String(p?.id) === String(id)) || { id: Number(id) })
+};
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initProdutos);
 } else {

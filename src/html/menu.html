@@ -56,6 +56,10 @@
     <!-- A caixa de aceite dos Termos de Uso e da Política de Privacidade (a mesma da tela de login). -->
     <link rel="stylesheet" href="../styles/termos-aceite.css">
 
+    <!-- Chat interno (botão no canto inferior direito, src/js/utils/chat.js):
+         as regras valem só dentro de .chat-raiz. -->
+    <link rel="stylesheet" href="../styles/chat.css">
+
     <!-- Padrão de tamanho dos botões, campos e letras (docs/padrao-visual-controles.md).
          Por ÚLTIMO entre as globais: vence as classes de tamanho do Tailwind e
          as medidas de tabela do scroll.css nas telas já padronizadas. -->
@@ -425,6 +429,8 @@
     <!-- A categoria de cada aviso (Configurações › Notificações filtra por ela). -->
     <script src="../js/utils/categorias-aviso.js"></script>
     <script src="../js/notifications.js"></script>
+    <!-- Chat interno: conversas ao vivo, presença, @ e # (docs/chat-interno.md). -->
+    <script src="../js/utils/chat.js"></script>
     <!-- Regra de "posso restaurar este trabalho?" — precisa vir ANTES de
          estado-trabalho.js, que a consulta ao coletar e ao repor. -->
     <script src="../js/utils/restauracao.js"></script>
