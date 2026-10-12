@@ -124,6 +124,9 @@ app.use('/api/contabilidade', require('./contabilidadeController'));
 app.use('/api/devolucoes', require('./devolucoesController'));
 // Desenhistas das peças (o royalty vai para o desenhista de cada peça do pedido).
 app.use('/api/desenhistas', require('./desenhistasController'));
+// Chat interno (12/10/2026): repassa para a API /chat (e as citações com #
+// aqui, com as permissões de quem pede) — backend/chatController.js.
+app.use('/api/chat', require('./chatController'));
 // Endereço pelo CEP (clientes e prospecções). Antes do proxy genérico: "cep"
 // não é tabela.
 app.use('/api/cep', require('./cepController'));
