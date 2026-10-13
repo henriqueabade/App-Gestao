@@ -34,8 +34,11 @@ if (require.main === module) {
     process.exit(1);
   }
   fs.mkdirSync(DESTINO, { recursive: true });
-  for (const a of ARQUIVOS) fs.writeFileSync(path.join(DESTINO, a), ler(path.join(ORIGEM, a)));
-  console.log(`Copiado para ${DESTINO}: ${ARQUIVOS.join(', ')}`);
+  // Só o que mudou de verdade: regravar o igual trocaria o fim de linha
+  // (CRLF do checkout por LF) e o git mostraria o arquivo como mudado.
+  const copiados = diferentes();
+  for (const a of copiados) fs.writeFileSync(path.join(DESTINO, a), ler(path.join(ORIGEM, a)));
+  console.log(copiados.length ? `Copiado para ${DESTINO}: ${copiados.join(', ')}` : 'Nada a copiar: já está igual à API.');
 }
 
 module.exports = { ORIGEM, DESTINO, ARQUIVOS, diferentes };

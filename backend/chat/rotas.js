@@ -58,6 +58,10 @@ const { criarEventos } = require("./eventos");
 
 // Caiu a conexão (a tela recarregou): espera isto antes de dizer "Offline".
 const GRACA_MS = 15 * 1000;
+// A limpeza dos arquivos com mais de 1 ano (fase 2): 2 min depois de subir e
+// depois de 6 em 6 horas.
+const PRIMEIRA_LIMPEZA_MS = 2 * 60 * 1000;
+const LIMPEZA_A_CADA_MS = 6 * 60 * 60 * 1000;
 
 function criarRotasDoChat({ pool, autenticar, agora = () => new Date(), log = console } = {}) {
   const chat = criarChat({ pool, agora });
@@ -331,10 +335,32 @@ function criarRotasDoChat({ pool, autenticar, agora = () => new Date(), log = co
     return r;
   }));
 
+  // ------------------------------------------------- validade dos arquivos
+
+  async function limparArquivosVencidos() {
+    try {
+      const apagados = await chat.expirarAnexos();
+      if (apagados) log.log?.(`[chat] ${apagados} arquivo(s) com mais de 1 ano apagado(s).`);
+    } catch (err) {
+      log.error("[chat] limpeza dos arquivos falhou:", err?.message || err);
+    }
+  }
+  // unref: a limpeza não segura o processo (testes, desligar a API).
+  const primeiraLimpeza = setTimeout(limparArquivosVencidos, PRIMEIRA_LIMPEZA_MS);
+  const limpezas = setInterval(limparArquivosVencidos, LIMPEZA_A_CADA_MS);
+  primeiraLimpeza.unref?.();
+  limpezas.unref?.();
+
   router.chat = chat;
   router.presenca = presenca;
   router.eventos = eventos;
+  router.limparArquivosVencidos = limparArquivosVencidos;
+  router.parar = () => {
+    clearTimeout(primeiraLimpeza);
+    clearInterval(limpezas);
+    eventos.parar();
+  };
   return router;
 }
 
-module.exports = { criarRotasDoChat, GRACA_MS };
+module.exports = { criarRotasDoChat, GRACA_MS, LIMPEZA_A_CADA_MS };

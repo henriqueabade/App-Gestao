@@ -201,6 +201,33 @@ test('arquivos (fase 2): tamanho legível, ícone, resumo "📎" e a mesma lista
   assert.deepStrictEqual(daqui([...C.EXTENSOES_BLOQUEADAS].sort()), listaApi);
 });
 
+test('validade dos arquivos (1 ano, pedido do dono): a linha pequena debaixo da mensagem', () => {
+  const agora = new Date(2026, 9, 12, 12, 0);
+  const daqui = dias => new Date(agora.getTime() + dias * 86400000).toISOString();
+  assert.strictEqual(C.avisoDaValidade([], agora), null);
+  const um = C.avisoDaValidade([{ expira_em: new Date(2027, 9, 12, 12, 0).toISOString() }], agora);
+  assert.strictEqual(um.texto, 'Arquivo guardado até 12/10/2027: o chat apaga os arquivos depois de 1 ano, para não ocupar espaço. Salve o que precisar manter.');
+  assert.strictEqual(um.perto, false);
+  assert.match(C.avisoDaValidade([{ expira_em: daqui(200) }, { expira_em: daqui(200) }], agora).texto, /^Arquivos guardados até /);
+  const perto = C.avisoDaValidade([{ expira_em: daqui(10) }], agora);
+  assert.ok(perto.perto && /^Será apagado em 10 dias \(22\/10\/2026\)/.test(perto.texto), perto.texto);
+  assert.match(C.avisoDaValidade([{ expira_em: daqui(0.5) }, { expira_em: daqui(0.5) }], agora).texto, /^Serão apagados amanhã/);
+  assert.match(C.avisoDaValidade([{ expira_em: daqui(0.1) }], agora).texto, /^Será apagado hoje/);
+  const apagado = C.avisoDaValidade([{ expirado: true }], agora);
+  assert.ok(apagado.apagado && apagado.texto.startsWith('Arquivo apagado: o chat guarda os arquivos por 1 ano'));
+  assert.match(C.avisoDaValidade([{ id: 1 }], agora).texto, /ficam guardados por 1 ano/, 'sem a data (SQL da validade ainda não rodou): o aviso geral');
+});
+
+test('mensagens diretas: só aparecem com mensagem trocada (ou a aberta, para escrever a primeira)', () => {
+  assert.strictEqual(C.aparecerNaLista({ id: 4, tipo: 'direta', ultima: null }), false, 'abriu e não escreveu: some');
+  assert.strictEqual(C.aparecerNaLista({ id: 4, tipo: 'direta', ultima: null }, 4), true, 'a aberta fica, para escrever');
+  assert.strictEqual(C.aparecerNaLista({ id: 4, tipo: 'direta', ultima: null }, '4'), true);
+  assert.strictEqual(C.aparecerNaLista({ id: 4, tipo: 'direta', ultima: null }, 9), false);
+  assert.strictEqual(C.aparecerNaLista({ id: 4, tipo: 'direta', ultima: { id: 1 } }), true);
+  assert.strictEqual(C.aparecerNaLista({ id: 5, tipo: 'grupo', ultima: null }), true, 'grupo e canal sempre');
+  assert.strictEqual(C.aparecerNaLista(null), false);
+});
+
 test('busca (fase 2): o trecho com o termo destacado, sem acento, escapado', () => {
   const refs = new Map([['cliente:12', { tipo: 'cliente', id: 12, rotulo: 'Loja <X>' }]]);
   assert.strictEqual(C.trechoComDestaque('Orçamento da CADEIRA <b>Luís</b>', 'cadeira'), 'Orçamento da <mark class="chat-marca">CADEIRA</mark> &lt;b&gt;Luís&lt;/b&gt;');

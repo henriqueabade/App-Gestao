@@ -83,6 +83,32 @@ qualquer tela. Tudo é restrito ao que o perfil de cada pessoa pode ver.
   - a API manda os arquivos com `nosniff` e CSP `sandbox`.
 - **Sem o `sql/chat_anexos.sql`**, o chat continua funcionando, só sem
   arquivos. Subir um arquivo diz qual SQL rodar.
+- **Validade de 1 ano** (pedido do dono, 12/10/2026; `sql/chat_anexos_validade.sql`):
+  - **O que acontece:** 1 ano depois de subir, a API apaga o arquivo e a
+    miniatura do banco, para não ocupar espaço. Ficam o nome e o tamanho.
+  - **Quando a API limpa:** 2 minutos depois de ligar e depois de 6 em 6
+    horas. O espaço volta a ser usado pelo banco (autovacuum).
+  - **Antes da limpeza:** o vencido já não abre (a API responde "apagado").
+  - **A linha debaixo da mensagem com arquivo:**
+    - normal: "Arquivo guardado até 12/10/2027: o chat apaga os arquivos
+      depois de 1 ano…";
+    - faltando 30 dias ou menos, em amarelo: "Será apagado em 10 dias…";
+    - depois: "Arquivo apagado: o chat guarda os arquivos por 1 ano…", e o
+      arquivo aparece riscado ("Apagado · passou de 1 ano"), sem abrir nem
+      salvar.
+  - **Ao escolher arquivos:** a fila também avisa que eles ficam 1 ano.
+  - **Trava do banco:** o gatilho só deixa um arquivo enviado perder os bytes
+    depois da validade; nada mais muda nele.
+  - **Sem esse SQL:** os arquivos funcionam sem validade, e a linha diz só
+    que ficam 1 ano.
+
+### Mensagens diretas na lista
+
+A conversa direta só aparece em "Mensagens diretas" quando já tem mensagem
+(pedido do dono, 12/10/2026). Clicar numa pessoa abre a conversa, que fica
+na lista enquanto estiver aberta, para escrever a primeira. Saiu sem
+escrever, ela some. A pessoa continua em "Pessoas", e do outro lado também
+não aparece nada. Grupos e canais aparecem sempre.
 
 ### Janela do canto do Windows
 
@@ -184,7 +210,7 @@ janela.
 4. Publicar o programa.
 
 **Fase 2:**
-1. Rodar `sql/chat_anexos.sql`.
+1. Rodar `sql/chat_anexos.sql` e depois `sql/chat_anexos_validade.sql`.
 2. Publicar a API e reiniciar. A API precisa do `sharp`, que já está no
    `package.json` dela.
 3. Publicar o programa.

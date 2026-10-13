@@ -40,6 +40,11 @@ const SQL_ANEXOS_FALTANDO = "Os arquivos do chat ainda não estão no banco: rod
 const MAXIMO_ANEXO_BYTES = 20 * 1024 * 1024;
 const MAXIMO_ANEXOS_POR_MENSAGEM = 10;
 const LADO_DA_MINIATURA = 480;
+// Os arquivos valem 1 ano (pedido do dono, 12/10/2026): depois, a API apaga os
+// bytes para não ocupar espaço e fica só o nome (sql/chat_anexos_validade.sql).
+const VALIDADE_DOS_ARQUIVOS_DIAS = 365;
+const DIA_MS = 24 * 60 * 60 * 1000;
+const ARQUIVO_EXPIRADO = "Este arquivo foi apagado: o chat guarda os arquivos por 1 ano.";
 // Programas e scripts não entram: no programa, "Abrir" passa o arquivo ao
 // Windows, e um clique rodaria o que alguém mandou.
 const EXTENSOES_BLOQUEADAS = new Set([
@@ -775,6 +780,27 @@ function criarChat({ pool, agora = () => new Date() }) {
   // Sem a tabela dos arquivos (sql/chat_anexos.sql ainda não rodado) o chat
   // continua funcionando, só sem arquivos; procura de novo a cada 10 minutos.
   let semTabelaDeAnexosDesde = 0;
+
+  // A validade (sql/chat_anexos_validade.sql) já está no banco? Achada, fica
+  // achada; sem ela, os arquivos funcionam sem validade e procura de novo a
+  // cada 10 minutos.
+  let comValidade = null;
+  let validadeConferidaEm = 0;
+  async function temValidade() {
+    if (comValidade === true) return true;
+    if (comValidade === false && agora().getTime() - validadeConferidaEm < 10 * 60 * 1000) return false;
+    validadeConferidaEm = agora().getTime();
+    try {
+      await pool.query("SELECT expira_em, expirado_em FROM chat_anexos LIMIT 0");
+      comValidade = true;
+    } catch (err) {
+      if (!/column|relation "chat_anexos"/.test(String(err?.message || ""))) throw err;
+      comValidade = false;
+    }
+    return comValidade;
+  }
+  const colunasDaValidade = async (prefixo = "") => ((await temValidade()) ? `, ${prefixo}expira_em, ${prefixo}expirado_em` : "");
+
   async function anexosDasMensagens(ids) {
     const mapa = new Map();
     const lista = [...new Set((ids || []).filter(Boolean))];
@@ -783,7 +809,8 @@ function criarChat({ pool, agora = () => new Date() }) {
     let rows;
     try {
       ({ rows } = await pool.query(
-        "SELECT id, mensagem_id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura FROM chat_anexos WHERE mensagem_id = ANY($1) ORDER BY ordem NULLS LAST, id",
+        `SELECT id, mensagem_id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura${await colunasDaValidade()}
+           FROM chat_anexos WHERE mensagem_id = ANY($1) ORDER BY ordem NULLS LAST, id`,
         [lista]
       ));
       semTabelaDeAnexosDesde = 0;
@@ -794,9 +821,33 @@ function criarChat({ pool, agora = () => new Date() }) {
     }
     for (const a of rows) {
       if (!mapa.has(a.mensagem_id)) mapa.set(a.mensagem_id, []);
-      mapa.get(a.mensagem_id).push(paraAnexo(a));
+      mapa.get(a.mensagem_id).push(paraAnexo(a, agora()));
     }
     return mapa;
+  }
+
+  /**
+   * A limpeza da validade (a API chama de 6 em 6 horas): os arquivos com mais
+   * de 1 ano perdem os bytes e a miniatura (fica o nome); os escolhidos e
+   * nunca enviados saem depois de 1 dia. Devolve quantos apagou.
+   */
+  async function expirarAnexos({ limite = 200 } = {}) {
+    if (!(await temValidade())) return 0;
+    const quando = agora().toISOString();
+    await pool.query("DELETE FROM chat_anexos WHERE mensagem_id IS NULL AND criado_em < $1", [new Date(agora().getTime() - DIA_MS).toISOString()]);
+    let total = 0;
+    // Aos poucos: um lote grande de bytes de uma vez pesaria no banco.
+    for (let volta = 0; volta < 50; volta += 1) {
+      const { rows } = await pool.query(
+        `UPDATE chat_anexos SET dados = NULL, miniatura = NULL, expirado_em = $1
+          WHERE id IN (SELECT id FROM chat_anexos WHERE expirado_em IS NULL AND mensagem_id IS NOT NULL AND expira_em <= $1 ORDER BY id LIMIT $2)
+          RETURNING id`,
+        [quando, limite]
+      );
+      total += rows.length;
+      if (rows.length < limite) break;
+    }
+    return total;
   }
 
   let sharp;
@@ -836,14 +887,22 @@ function criarChat({ pool, agora = () => new Date() }) {
     const tipoFinal = tipoDoArquivo(nomeLimpo, tipo);
     const { miniatura, largura, altura } = await miniaturaDe(buffer, tipoFinal);
     // Os esquecidos (escolhidos e nunca enviados) saem depois de 1 dia.
-    await q("DELETE FROM chat_anexos WHERE mensagem_id IS NULL AND criado_em < $1", [new Date(agora().getTime() - 24 * 60 * 60 * 1000).toISOString()]);
+    await q("DELETE FROM chat_anexos WHERE mensagem_id IS NULL AND criado_em < $1", [new Date(agora().getTime() - DIA_MS).toISOString()]);
+    const validade = await temValidade();
+    const quando = agora();
+    const colunas = ["conversa_id", "autor_id", "nome", "tipo_mime", "tamanho", "largura", "altura", "dados", "miniatura", "criado_em"];
+    const valores = [c.id, usuarioId, nomeLimpo, tipoFinal, buffer.length, largura, altura, buffer, miniatura, quando.toISOString()];
+    if (validade) {
+      // Vale 1 ano a partir de agora.
+      colunas.push("expira_em");
+      valores.push(new Date(quando.getTime() + VALIDADE_DOS_ARQUIVOS_DIAS * DIA_MS).toISOString());
+    }
     const { rows } = await q(
-      `INSERT INTO chat_anexos (conversa_id, autor_id, nome, tipo_mime, tamanho, largura, altura, dados, miniatura, criado_em)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura`,
-      [c.id, usuarioId, nomeLimpo, tipoFinal, buffer.length, largura, altura, buffer, miniatura, agora().toISOString()]
+      `INSERT INTO chat_anexos (${colunas.join(", ")}) VALUES (${valores.map((_, i) => `$${i + 1}`).join(", ")})
+       RETURNING id, nome, tipo_mime, tamanho, largura, altura, (miniatura IS NOT NULL) AS tem_miniatura${validade ? ", expira_em, expirado_em" : ""}`,
+      valores
     );
-    return paraAnexo(rows[0]);
+    return paraAnexo(rows[0], agora());
   }
 
   /** Tirar um arquivo escolhido e ainda não enviado (só quem o escolheu). */
@@ -866,7 +925,7 @@ function criarChat({ pool, agora = () => new Date() }) {
       ? await q(
         `SELECT a.id, a.conversa_id, a.mensagem_id, a.autor_id, a.nome, a.tipo_mime,
                 ${miniatura ? "COALESCE(a.miniatura, a.dados)" : "a.dados"} AS dados,
-                ${miniatura ? "(a.miniatura IS NOT NULL)" : "FALSE"} AS e_miniatura, m.apagada_em
+                ${miniatura ? "(a.miniatura IS NOT NULL)" : "FALSE"} AS e_miniatura, m.apagada_em${await colunasDaValidade("a.")}
            FROM chat_anexos a LEFT JOIN chat_mensagens m ON m.id = a.mensagem_id
           WHERE a.id = $1`,
         [id]
@@ -877,6 +936,8 @@ function criarChat({ pool, agora = () => new Date() }) {
     await exigirParticipante(usuarioId, a.conversa_id).catch(() => { throw erro(404, "Arquivo não encontrado."); });
     if (!a.mensagem_id && String(a.autor_id) !== String(usuarioId)) throw erro(404, "Arquivo não encontrado.");
     if (a.apagada_em) throw erro(410, "A mensagem deste arquivo foi apagada.");
+    // Passou de 1 ano: apagado (ou esperando a limpeza, que é de 6 em 6 horas).
+    if (arquivoExpirado(a, agora()) || !a.dados) throw erro(410, ARQUIVO_EXPIRADO, { code: "ARQUIVO_EXPIRADO" });
     return { id: a.id, nome: a.nome, tipo: a.e_miniatura ? "image/webp" : a.tipo_mime, imagem: ehImagem(a.tipo_mime), dados: a.dados };
   }
 
@@ -990,21 +1051,30 @@ function criarChat({ pool, agora = () => new Date() }) {
     conversasDo, canaisAbertos, abrirDireta, criarConversa, entrarNoCanal, sair, adicionarMembros,
     alterarConversa, arquivar, preferencias, membros, participantesAtivos, estaNaConversa,
     mensagens, mensagemPorId, enviar, editar, apagar, reagir, marcarLida, totalNaoLidas,
-    guardarAnexo, descartarAnexo, lerAnexo, anexosDasMensagens, buscar, paraOsAvisos
+    guardarAnexo, descartarAnexo, lerAnexo, anexosDasMensagens, expirarAnexos, buscar, paraOsAvisos
   };
 }
 
-/** O arquivo como a tela recebe (sem os bytes). */
-function paraAnexo(a) {
+/** Já passou da validade (apagado ou só esperando a limpeza)? Pura. */
+function arquivoExpirado(a, agora = new Date()) {
+  if (a?.expirado_em) return true;
+  return Boolean(a?.expira_em) && new Date(a.expira_em).getTime() <= agora.getTime();
+}
+
+/** O arquivo como a tela recebe (sem os bytes), com a validade. */
+function paraAnexo(a, agora = new Date()) {
+  const expirado = arquivoExpirado(a, agora);
   return {
-    id: a.id, nome: a.nome, tipo: a.tipo_mime, tamanho: Number(a.tamanho) || 0, imagem: ehImagem(a.tipo_mime),
-    largura: a.largura || null, altura: a.altura || null, miniatura: Boolean(a.tem_miniatura)
+    id: a.id, nome: a.nome, tipo: a.tipo_mime, tamanho: Number(a.tamanho) || 0, imagem: ehImagem(a.tipo_mime) && !expirado,
+    largura: a.largura || null, altura: a.altura || null, miniatura: Boolean(a.tem_miniatura) && !expirado,
+    expira_em: a.expira_em ? new Date(a.expira_em).toISOString() : null, expirado
   };
 }
 
 module.exports = {
   criarChat, erro, ehSupAdmin, idsDasMencoes, referenciasValidas, extrairMarcas, textoSimples,
-  nomeDeArquivo, extensaoDe, arquivoBloqueado, tipoDoArquivo, ehImagem, normalizarBusca, paraAnexo, semTabelaDoChat,
+  nomeDeArquivo, extensaoDe, arquivoBloqueado, tipoDoArquivo, ehImagem, normalizarBusca, paraAnexo, arquivoExpirado, semTabelaDoChat,
   TIPOS, STATUS, REACOES, TIPOS_DE_REFERENCIA, MAXIMO_TEXTO, MAXIMO_NOME, SQL_FALTANDO, SQL_ANEXOS_FALTANDO,
-  MAXIMO_ANEXO_BYTES, MAXIMO_ANEXOS_POR_MENSAGEM, LADO_DA_MINIATURA, EXTENSOES_BLOQUEADAS, COM_ACENTO, SEM_ACENTO
+  MAXIMO_ANEXO_BYTES, MAXIMO_ANEXOS_POR_MENSAGEM, LADO_DA_MINIATURA, EXTENSOES_BLOQUEADAS, COM_ACENTO, SEM_ACENTO,
+  VALIDADE_DOS_ARQUIVOS_DIAS, ARQUIVO_EXPIRADO
 };

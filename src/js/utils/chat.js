@@ -374,8 +374,47 @@
     return `${de > 0 ? '…' : ''}${escapar(plano.slice(de, ini))}<mark class="chat-marca">${escapar(plano.slice(ini, fim))}</mark>${escapar(plano.slice(fim, ate))}${ate < plano.length ? '…' : ''}`;
   }
 
+  /**
+   * A linha pequena debaixo da mensagem com arquivo (pedido do dono, 12/10/2026):
+   * os arquivos do chat valem 1 ano e depois são apagados para não ocupar
+   * espaço. { texto, perto (faltam 30 dias ou menos), apagado }. Pura.
+   */
+  function avisoDaValidade(anexos, agora = new Date()) {
+    const lista = anexos || [];
+    if (!lista.length) return null;
+    const vivos = lista.filter(a => !a.expirado);
+    if (!vivos.length) {
+      return { texto: `${lista.length > 1 ? 'Arquivos apagados' : 'Arquivo apagado'}: o chat guarda os arquivos por 1 ano, para não ocupar espaço.`, perto: false, apagado: true };
+    }
+    const datas = vivos.map(a => new Date(a.expira_em || '')).filter(d => !Number.isNaN(d.getTime()));
+    if (!datas.length) return { texto: 'Os arquivos do chat ficam guardados por 1 ano; depois são apagados para não ocupar espaço.', perto: false, apagado: false };
+    const quando = new Date(Math.min(...datas.map(d => d.getTime())));
+    const dia = `${pad(quando.getDate())}/${pad(quando.getMonth() + 1)}/${quando.getFullYear()}`;
+    // Em dias do calendário: "hoje", "amanhã", "em 10 dias".
+    const meiaNoite = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const faltam = Math.round((meiaNoite(quando) - meiaNoite(agora)) / (24 * 60 * 60 * 1000));
+    const varios = vivos.length > 1;
+    if (faltam <= 30) {
+      const prazo = faltam <= 0 ? 'hoje' : faltam === 1 ? 'amanhã' : `em ${faltam} dias`;
+      return { texto: `${varios ? 'Serão apagados' : 'Será apagado'} ${prazo} (${dia}): o chat guarda os arquivos por 1 ano. Salve se precisar manter.`, perto: true, apagado: false };
+    }
+    return { texto: `${varios ? 'Arquivos guardados' : 'Arquivo guardado'} até ${dia}: o chat apaga os arquivos depois de 1 ano, para não ocupar espaço. Salve o que precisar manter.`, perto: false, apagado: false };
+  }
+
+  /**
+   * A conversa direta só aparece na lista quando já tem mensagem (pedido do
+   * dono, 12/10/2026) — ou quando é a que está aberta, para escrever a
+   * primeira. Grupos e canais aparecem sempre. Pura.
+   */
+  function aparecerNaLista(c, abertaId = null) {
+    if (!c) return false;
+    if (c.tipo !== 'direta') return true;
+    return Boolean(c.ultima) || (abertaId != null && String(c.id) === String(abertaId));
+  }
+
   const Puro = {
     TIPOS_REF, ROTULO_REF, PRESENCA, MEU_STATUS, EMOJIS, MAXIMO_ARQUIVO, MAXIMO_ARQUIVOS, EXTENSOES_BLOQUEADAS,
+    avisoDaValidade, aparecerNaLista,
     escapar, comparavel, iniciais, corDoAvatar, rotuloDaRef, textoParaHtml, textoCurto,
     paraMarcas, deMarcas, gatilho, rotuloDoDia, horaDe, dataCompleta, quandoCurto, vistoHa,
     agrupar, ordenarPessoas, ordenarConversas, contarNaoLidas, nomeDaConversa, quemDigita, quemReagiu,
@@ -557,6 +596,13 @@
       if (e.target?.classList?.contains('chat-foto')) e.target.remove();
       // Imagem de mensagem que não veio (apagada, sem acesso, sem rede): o quadro avisa.
       else if (e.target?.parentElement?.classList?.contains('chat-imagem')) e.target.parentElement.classList.add('chat-imagem--quebrada');
+      // No visor, o mesmo aviso no lugar da imagem.
+      else if (e.target?.parentElement?.classList?.contains('chat-visor-imagem')) {
+        const aviso = document.createElement('p');
+        aviso.className = 'chat-visor-sem-imagem';
+        aviso.textContent = 'Imagem indisponível: apagada (o chat guarda os arquivos por 1 ano) ou sem conexão.';
+        e.target.replaceWith(aviso);
+      }
     }, true);
     // Arquivos: o clipe, colar uma imagem e arrastar para a conversa (fase 2).
     raiz.addEventListener('change', e => {
@@ -753,7 +799,9 @@
     const bate = texto => !termo || comparavel(texto).includes(termo);
     const mapa = nomes();
     const canais = estado.conversas.filter(c => c.tipo === 'canal' && bate(c.nome));
-    const diretas = estado.conversas.filter(c => c.tipo !== 'canal' && bate(nomeDaConversa(c, mapa)));
+    // Direta sem nenhuma mensagem não fica na lista (só a aberta, para escrever a primeira).
+    const aberta = ['conversa', 'detalhes'].includes(estado.visao) ? estado.aberta : null;
+    const diretas = estado.conversas.filter(c => c.tipo !== 'canal' && aparecerNaLista(c, aberta) && bate(nomeDaConversa(c, mapa)));
     const pessoas = ordenarPessoas([...estado.pessoas.values()].filter(p => !ehEu(p.id) && bate(p.nome)));
     const online = pessoas.filter(p => p.estado !== 'offline').length;
     const scroll = listas.scrollTop;
@@ -986,8 +1034,10 @@
 
   /** As fotos (miniaturas, clicáveis) e os outros arquivos (abrir e salvar) de uma mensagem. */
   function htmlDosAnexos(anexos) {
-    const imagens = anexos.filter(a => a.imagem);
-    const outros = anexos.filter(a => !a.imagem);
+    const imagens = anexos.filter(a => a.imagem && !a.expirado);
+    const apagados = anexos.filter(a => a.expirado);
+    const outros = anexos.filter(a => !a.imagem && !a.expirado);
+    const validade = avisoDaValidade(anexos);
     const fotos = imagens.length ? `
       <div class="chat-fotos chat-fotos--${Math.min(imagens.length, 3)}">
         ${imagens.map(a => {
@@ -1007,7 +1057,17 @@
           <button type="button" class="chat-icone chat-icone--pequeno" data-acao="salvar-arquivo" data-id="${a.id}" title="Salvar como…"><i class="fas fa-download"></i></button>
         </div>`;
     }).join('');
-    return `<div class="chat-anexos">${fotos}${arquivos}</div>`;
+    // Passou de 1 ano: fica só o nome.
+    const sumidos = apagados.map(a => `
+      <div class="chat-arquivo chat-arquivo--apagado" title="Apagado: o chat guarda os arquivos por 1 ano">
+        <span class="chat-arquivo-icone"><i class="fas ${a.tipo?.startsWith('image/') ? 'fa-image' : 'fa-file'}" aria-hidden="true"></i></span>
+        <span class="chat-arquivo-textos"><strong>${escapar(a.nome)}</strong><small>Apagado · passou de 1 ano</small></span>
+      </div>`).join('');
+    const linha = validade ? `
+      <div class="chat-validade${validade.perto ? ' chat-validade--perto' : ''}${validade.apagado ? ' chat-validade--apagado' : ''}">
+        <i class="fas ${validade.apagado ? 'fa-trash-alt' : 'fa-hourglass-half'}" aria-hidden="true"></i><span>${escapar(validade.texto)}</span>
+      </div>` : '';
+    return `<div class="chat-anexos">${fotos}${arquivos}${sumidos}${linha}</div>`;
   }
 
   function pertoDoFim(el = parte('mensagens')) {
@@ -1658,6 +1718,10 @@
     estado.painelAberto = false;
     fecharFlutuante();
     fecharEscolha();
+    if (estado.visor) {
+      estado.visor = null;
+      pintarVisor();
+    }
     parte('painel')?.classList.add('hidden');
     parte('botao')?.classList.remove('chat-botao--aberto');
     parte('botao')?.setAttribute('aria-expanded', 'false');
@@ -2247,7 +2311,7 @@
           ${!p.anexo && !p.erro ? `<span class="chat-pendente-barra"><i style="width:${p.progresso}%"></i></span>` : ''}
         </span>
         <button type="button" class="chat-icone chat-icone--pequeno" data-acao="tirar-arquivo" data-chave="${p.chave}" title="Tirar"><i class="fas fa-times"></i></button>
-      </div>`).join('');
+      </div>`).join('') + (lista.length ? '<p class="chat-pendentes-dica"><i class="fas fa-hourglass-half" aria-hidden="true"></i> Os arquivos do chat ficam guardados por 1 ano; depois são apagados para não ocupar espaço.</p>' : '');
   }
 
   /** Só a barra e o número (sem redesenhar a fila inteira a cada pedaço). */
@@ -2301,9 +2365,17 @@
     await baseDaApi();
     const resposta = await fetch(urlDoAnexo(id), { credentials: 'include' });
     if (!resposta.ok) {
-      let mensagem = null;
-      try { mensagem = (await resposta.json())?.error; } catch (_) { mensagem = null; }
-      throw new Error(mensagem || 'Não foi possível baixar o arquivo.');
+      let dados = null;
+      try { dados = await resposta.json(); } catch (_) { dados = null; }
+      // Venceu enquanto a tela estava aberta: passa a aparecer como apagado.
+      if (resposta.status === 410 && dados?.code === 'ARQUIVO_EXPIRADO') {
+        const achado = anexoPorId(id);
+        if (achado) {
+          Object.assign(achado.anexo, { expirado: true, imagem: false, miniatura: false });
+          pintar({ mensagens: estado.visao === 'conversa' });
+        }
+      }
+      throw new Error(dados?.error || 'Não foi possível baixar o arquivo.');
     }
     return new Uint8Array(await resposta.arrayBuffer());
   }
@@ -2321,6 +2393,7 @@
    */
   async function abrirArquivo(id, { salvar = false } = {}) {
     const a = anexoPorId(id)?.anexo || { id, nome: 'arquivo', tipo: '' };
+    if (a.expirado) return toast('Este arquivo foi apagado: o chat guarda os arquivos por 1 ano.', 'info');
     if (!salvar && a.tipo === 'application/pdf' && window.VisualizadorPdf?.abrir) {
       window.VisualizadorPdf.abrir({
         titulo: a.nome,
