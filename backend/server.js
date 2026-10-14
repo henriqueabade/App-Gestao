@@ -127,6 +127,10 @@ app.use('/api/desenhistas', require('./desenhistasController'));
 // Chat interno (12/10/2026): repassa para a API /chat (e as citações com #
 // aqui, com as permissões de quem pede) — backend/chatController.js.
 app.use('/api/chat', require('./chatController'));
+// Vincular ao Santíssimo Mail (14/10/2026): o código e os vínculos do próprio
+// usuário, repassados à API central — backend/smailVinculosController.js.
+// Antes do proxy genérico: "integracoes" não é tabela.
+app.use('/api/integracoes/smail/v1', require('./smailVinculosController'));
 // Endereço pelo CEP (clientes e prospecções). Antes do proxy genérico: "cep"
 // não é tabela.
 app.use('/api/cep', require('./cepController'));

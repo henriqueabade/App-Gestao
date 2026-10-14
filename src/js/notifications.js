@@ -408,6 +408,8 @@ window.addEventListener('DOMContentLoaded', () => {
     cadastro_aguardando: 'fa-user-clock',
     cadastro_nao_reconhecido: 'fa-user-slash',
     termos_recusados: 'fa-file-signature',
+    // Santíssimo Mail (14/10/2026): o Sup Admin autorizou uma caixa a entrar sem código.
+    smail_preautorizacao: 'fa-user-shield',
   };
   // O texto pequeno, abaixo da mensagem, de cada tipo de aviso que tem um.
   // Tarefa automática: onde desligar (decisão do dono, 24/09/2026).
@@ -416,6 +418,7 @@ window.addEventListener('DOMContentLoaded', () => {
     cadastro_aguardando: 'Em Usuários: defina o perfil em Editar e ative o acesso pela tomada.',
     cadastro_nao_reconhecido: 'Confira em Usuários (filtro Não confirmado) e exclua se for o caso.',
     termos_recusados: 'Para a pessoa voltar, reative o acesso em Usuários: ela verá os termos ao entrar.',
+    smail_preautorizacao: 'Aviso de segurança. Se não foi combinado com você, encerre em Santíssimo Mail › Meus vínculos e avise o administrador.',
   };
   // Avisos para o Sup Admin que levam à tela de Usuários (os outros avisos de
   // cadastro — "seu cadastro foi alterado" — ficam só no sino).
@@ -424,6 +427,7 @@ window.addEventListener('DOMContentLoaded', () => {
     prospeccao: 'Prospecção', cliente: 'Cliente', contato: 'Contato', tarefa: 'Tarefa', contabilidade: 'Contabilidade',
     orcamento: 'Orçamento', pedido: 'Pedido', usuario: 'Usuários', financeiro: 'Financeiro', contabil: 'Contabilidade',
     chat: 'Chat',
+    smail: 'Santíssimo Mail',
   };
   // Avisos de "algo seu" do Financeiro e da Contabilidade: abrem só o módulo.
   const SO_O_MODULO = { financeiro: 'financeiro', contabil: 'contabilidade' };
@@ -578,6 +582,24 @@ window.addEventListener('DOMContentLoaded', () => {
       avisos.forEach((aviso) => lista.appendChild(linhaDoAviso(aviso)));
     }
     painel.appendChild(lista);
+
+    // Rodapé: vincular ao Santíssimo Mail (14/10/2026, src/js/utils/smail-vinculo.js).
+    // O título é o que o Mail manda escolher no sino (AppGestaoPanel do Mail).
+    if (window.SmailVinculo?.abrir) {
+      const mail = criar('button', 'sino-rodape');
+      mail.type = 'button';
+      mail.dataset.semLoading = 'true';
+      const iconeMail = criar('span', 'sino-rodape__icone');
+      iconeMail.appendChild(icone('fa-envelope-open-text'));
+      const textos = criar('span', 'sino-rodape__textos');
+      textos.append(criar('strong', null, 'Gerar código para o Santíssimo Mail'), criar('small', null, 'Vincular a sua caixa · ver e encerrar vínculos'));
+      mail.append(iconeMail, textos, icone('fa-chevron-right'));
+      mail.addEventListener('click', () => {
+        fecharPainel();
+        window.SmailVinculo.abrir();
+      });
+      painel.appendChild(mail);
+    }
   }
 
   function posicionarPainel() {
@@ -642,6 +664,11 @@ window.addEventListener('DOMContentLoaded', () => {
       naoLidas = Math.max(0, naoLidas - 1);
       updateIcon();
       marcarLidas({ ids: [aviso.id] });
+    }
+    // Santíssimo Mail (14/10/2026): a janela dos vínculos (encerrar, se não foi combinado).
+    if (aviso.origem === 'smail') {
+      window.SmailVinculo?.abrir?.();
+      return;
     }
     // Menção no chat interno (12/10/2026): o painel do chat, já na conversa.
     if (aviso.origem === 'chat') {
