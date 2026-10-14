@@ -6,7 +6,8 @@
  * pelo número. A SEFAZ falsa responde por serviço. O que se prende: a nota
  * autorizada fica completa no banco (chave, protocolo, nfeProc, itens,
  * eventos) e a numeração avança; pendência bloqueia antes de gastar número;
- * rejeição reaproveita o número; colisão pega o seguinte; estouro de tempo
+ * rejeição reaproveita o número, menos quando a SEFAZ diz que ele já está
+ * ocupado lá (539 e cia.); colisão pega o seguinte; estouro de tempo
  * deixa "processando" e a consulta pela chave resolve; recibo assíncrono.
  */
 const test = require('node:test');
@@ -191,13 +192,13 @@ test('rejeição da SEFAZ: nota "rejeitada" com o motivo; a próxima emissão do
   const t = montar({
     respostas: {
       NFeAutorizacao4: corpo => (++vez === 1
-        ? retEnvi('104', 'Lote processado', protocolo(chaveDoLote(corpo), '539', 'Rejeicao: Duplicidade de NF-e com diferenca na Chave de Acesso', ''))
+        ? retEnvi('104', 'Lote processado', protocolo(chaveDoLote(corpo), '778', 'Rejeicao: Informado NCM inexistente', ''))
         : AUTORIZA(corpo))
     }
   });
-  await assert.rejects(t.emitir(), e => e.status === 422 && e.message === 'SEFAZ 539: Rejeicao: Duplicidade de NF-e com diferenca na Chave de Acesso' && e.extra.nota.status_fiscal === 'rejeitada' && e.extra.sefaz.cStat === '539');
+  await assert.rejects(t.emitir(), e => e.status === 422 && e.message === 'SEFAZ 778: Rejeicao: Informado NCM inexistente' && e.extra.nota.status_fiscal === 'rejeitada' && e.extra.sefaz.cStat === '778' && e.extra.numero_ocupado === false);
   assert.equal(t.api.dados.notas_fiscais.length, 1);
-  assert.equal(t.api.dados.notas_fiscais[0].codigo_status_sefaz, '539');
+  assert.equal(t.api.dados.notas_fiscais[0].codigo_status_sefaz, '778');
   assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 2);
 
   const r = await t.emitir();
@@ -208,6 +209,79 @@ test('rejeição da SEFAZ: nota "rejeitada" com o motivo; a próxima emissão do
   assert.equal(t.api.dados.notas_fiscais_itens.length, 1, 'os itens foram trocados, não duplicados');
   assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 2, 'numeração não avança de novo');
   assert.deepEqual(t.api.dados.notas_fiscais_eventos.map(e => e.tipo), ['criada', 'enviada', 'rejeitada', 'enviada', 'autorizada']);
+});
+
+test('539 (número já ocupado na SEFAZ): o número fica para trás e a próxima emissão pega um número novo', async () => {
+  let vez = 0;
+  const t = montar({
+    respostas: {
+      NFeAutorizacao4: corpo => (++vez === 1
+        ? retEnvi('104', 'Lote processado', protocolo(chaveDoLote(corpo), '539', 'Rejeicao: Duplicidade de NF-e, com diferenca na Chave de Acesso[chNFe: 31260944039257000122550010000000011005205079]', ''))
+        : AUTORIZA(corpo))
+    }
+  });
+  await assert.rejects(t.emitir(), e => e.status === 422 && e.extra.sefaz.cStat === '539' && e.extra.numero_ocupado === true && e.extra.nota.numero === 1);
+  const recusada = t.api.dados.notas_fiscais[0];
+  assert.equal(recusada.status_fiscal, 'rejeitada');
+  assert.equal(emissao.notaReutilizavel(t.api.dados.notas_fiscais, 'homologacao', 1), null, 'a nota do 539 não é reaproveitada');
+  assert.deepEqual(t.api.dados.notas_fiscais_eventos.find(e => e.tipo === 'rejeitada').detalhe, { numero_ocupado: true });
+
+  const r = await t.emitir();
+  assert.equal(r.autorizada, true);
+  assert.equal(r.nota.numero, 2, 'número novo');
+  assert.equal(t.api.dados.notas_fiscais.length, 2, 'a recusada fica como registro');
+  assert.equal(recusada.status_fiscal, 'rejeitada');
+  assert.equal(recusada.numero, 1);
+  assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 3);
+  assert.equal(t.sefaz.chamadas.filter(c => c.servico === 'NFeAutorizacao4').length, 2);
+});
+
+test('o caso do PED105 (14/10/2026): nota 364 recusada com 539 e a numeração corrigida para 367 — sai a 367, não a 364 de novo', async () => {
+  const tabelas = tabelasBase();
+  tabelas.configuracao_fiscal[0].proximo_numero_homologacao = 367;
+  tabelas.notas_fiscais = [{
+    id: 9, pedido_id: 55, ambiente: 'homologacao', modelo: '55', serie: 1, numero: 364, status_fiscal: 'rejeitada',
+    codigo_status_sefaz: '539', motivo_sefaz: 'Rejeicao: Duplicidade de NF-e, com diferenca na Chave de Acesso[chNFe: 31260944039257000122550010000003641005205079]',
+    chave_idempotencia: 'homologacao:1:364:pedido-55'
+  }];
+  const t = montar({ tabelas });
+  const r = await t.emitir();
+  assert.equal(r.autorizada, true);
+  assert.equal(r.nota.numero, 367);
+  assert.ok(t.api.dados.notas_fiscais.find(n => n.numero === 367).chave_acesso.includes('0010000003671'), 'série 001, número 000000367 na chave');
+  assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 368);
+  assert.equal(t.api.dados.notas_fiscais.find(n => n.id === 9).status_fiscal, 'rejeitada', 'a 364 continua como estava');
+});
+
+test('539 citando uma chave que a própria nota já mandou: ela foi autorizada antes — nada de número novo (seria a 2ª NF-e do pedido)', async () => {
+  const JA_AUTORIZADA = '31260944039257000122550010000003641005205079';
+  const tabelas = tabelasBase();
+  tabelas.configuracao_fiscal[0].proximo_numero_homologacao = 367;
+  tabelas.notas_fiscais = [{ id: 9, pedido_id: 55, ambiente: 'homologacao', modelo: '55', serie: 1, numero: 364, status_fiscal: 'erro_tecnico', chave_idempotencia: 'homologacao:1:364:pedido-55' }];
+  // Um envio anterior desta nota, com a chave que a SEFAZ vai citar (a resposta dele se perdeu).
+  tabelas.notas_fiscais_eventos = [{ id: 1, nota_fiscal_id: 9, tipo: 'enviada', mensagem: `Enviada à SEFAZ-MG (homologação): chave ${JA_AUTORIZADA}.` }];
+  const t = montar({
+    tabelas,
+    respostas: { NFeAutorizacao4: corpo => retEnvi('104', 'Lote processado', protocolo(chaveDoLote(corpo), '539', `Rejeicao: Duplicidade de NF-e, com diferenca na Chave de Acesso[chNFe: ${JA_AUTORIZADA}]`, '')) }
+  });
+  await assert.rejects(t.emitir(), e => e.status === 409 && /NÃO emita de novo/.test(e.message) && e.extra.ja_autorizada.chave === JA_AUTORIZADA && e.extra.numero_ocupado === false);
+  const nota = t.api.dados.notas_fiscais.find(n => n.id === 9);
+  assert.equal(nota.status_fiscal, 'erro_tecnico', 'não vira "rejeitada 539": o número não é liberado');
+  assert.equal(t.api.dados.notas_fiscais.length, 1, 'nenhum número novo reservado');
+  assert.equal(t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao, 367, 'a numeração não andou');
+  assert.equal(emissao.notaReutilizavel(t.api.dados.notas_fiscais, 'homologacao', 1).id, 9, 'a próxima tentativa volta a esta nota (e a trava pega de novo)');
+  assert.equal(emissao.chaveCitada('Rejeicao: Duplicidade [chNFe: 31260944039257000122550010000003641005205079]'), JA_AUTORIZADA);
+  assert.equal(emissao.chaveCitada('Rejeicao: sem chave'), null);
+});
+
+test('quais rejeições ocupam o número: 539, 206, 205 e 218; as outras e o erro técnico continuam reaproveitáveis', () => {
+  const nota = (id, status_fiscal, codigo_status_sefaz) => ({ id, pedido_id: 55, ambiente: 'homologacao', serie: 1, numero: id, status_fiscal, codigo_status_sefaz });
+  for (const c of ['539', '206', '205', '218', ' 539 ']) assert.equal(emissao.numeroOcupadoNaSefaz(nota(1, 'rejeitada', c)), true, c);
+  for (const c of ['778', '225', '204', null, undefined]) assert.equal(emissao.numeroOcupadoNaSefaz(nota(1, 'rejeitada', c)), false, String(c));
+  assert.equal(emissao.numeroOcupadoNaSefaz(nota(1, 'erro_tecnico', '539')), false, 'só a rejeitada');
+  assert.equal(emissao.numeroOcupadoNaSefaz(null), false);
+  assert.equal(emissao.notaReutilizavel([nota(1, 'rejeitada', '778'), nota(2, 'rejeitada', '539')], 'homologacao', 1).id, 1, 'pula a do 539, fica a reaproveitável');
+  assert.equal(emissao.notaReutilizavel([nota(2, 'erro_tecnico', null)], 'homologacao', 1).id, 2);
 });
 
 test('número já usado por outra máquina: pega o seguinte e a numeração vai para depois dele', async () => {

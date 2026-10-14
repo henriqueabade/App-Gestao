@@ -237,6 +237,12 @@
     if (status === 403) return contexto === 'enviar' ? 'Você não tem permissão para marcar o pedido como enviado.' : 'Você não tem permissão para emitir NF-e.';
     if (status === 404) return 'Pedido não encontrado. Ele pode ter sido excluído.';
     if (corpo?.code === 'JA_ENVIADO') return 'O pedido já estava enviado (outra aba ou outro usuário).';
+    // Número já ocupado na SEFAZ (539 e cia., 14/10/2026): ele fica para trás e a próxima emissão pega outro.
+    if (status === 422 && corpo?.sefaz?.cStat && corpo?.numero_ocupado) {
+      const nota = corpo.nota || {};
+      const n = nota.numero ? ` ${nota.serie ? `${nota.serie}/` : ''}${nota.numero}` : '';
+      return `A SEFAZ rejeitou a nota (${corpo.sefaz.cStat}): ${corpo.sefaz.xMotivo || corpo.error}. O número${n} já está ocupado na SEFAZ e fica para trás: emita de novo e a nota sai com o próximo número da Configuração fiscal.`;
+    }
     if (status === 422 && corpo?.sefaz?.cStat) return `A SEFAZ rejeitou a nota (${corpo.sefaz.cStat}): ${corpo.sefaz.xMotivo || corpo.error}. Corrija e emita de novo — o número será reaproveitado.`;
     if (status === 504) return corpo?.error || 'A SEFAZ demorou a responder. A nota ficou em processamento: use "Consultar na SEFAZ".';
     return corpo?.error || (contexto === 'enviar' ? 'Não foi possível marcar o pedido como enviado.' : 'Não foi possível emitir a NF-e.');

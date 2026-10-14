@@ -5,7 +5,9 @@
  *   2. avalia a prontidão (prontidao.js) e resolve o código IBGE que faltar;
  *   3. reserva o número (UNIQUE ambiente/série/número no banco decide quem
  *      ganha a corrida; quem perde pega o próximo) ou reaproveita a nota
- *      rejeitada anterior do pedido (rejeição não consome numeração);
+ *      rejeitada anterior do pedido (rejeição não consome numeração) —
+ *      MENOS quando a SEFAZ disse que o número já está ocupado lá (539 e
+ *      cia., 14/10/2026): aí ele fica para trás e entra um número novo;
  *   4. monta (xmlNfe.js) e assina (assinatura.js) o XML;
  *   5. grava a nota como "enviando" ANTES de sair para a SEFAZ — se a luz
  *      cair no meio, a consulta pela chave resolve depois (sincronizar);
@@ -24,6 +26,23 @@ const sefaz = require('./sefazCliente');
 
 const STATUS_REUTILIZAVEIS = new Set(['rascunho', 'rejeitada', 'erro_tecnico']);
 const TENTATIVAS_NUMERO = 30;
+
+/**
+ * Rejeições que dizem que o NÚMERO (série + número) já está ocupado na SEFAZ:
+ * reenviar com ele dá a mesma recusa para sempre (o caso do PED105, em
+ * 14/10/2026: 539 em laço, porque a nota rejeitada devolvia o mesmo número).
+ *   539  duplicidade de NF-e com diferença na chave (outra nota tem o número)
+ *   206  número inutilizado
+ *   205  nota denegada (o número foi consumido)
+ *   218  nota cancelada (o número foi consumido)
+ */
+const REJEICOES_NUMERO_OCUPADO = new Set(['205', '206', '218', '539']);
+
+/** A SEFAZ disse que o número desta nota já está ocupado lá? Pura. */
+function numeroOcupadoNaSefaz(nota) {
+  return Boolean(nota) && String(nota.status_fiscal) === 'rejeitada'
+    && REJEICOES_NUMERO_OCUPADO.has(String(nota.codigo_status_sefaz ?? '').trim());
+}
 
 const lista = r => (Array.isArray(r) ? r : (r && typeof r === 'object' && !r.error ? [r] : []));
 const digitos = v => String(v ?? '').replace(/\D/g, '');
@@ -250,11 +269,39 @@ async function gravarTransporteNoPedido(api, pedido, transporte) {
   }
 }
 
-/** Nota do pedido que não chegou a existir para a SEFAZ: rejeitada, rascunho ou erro técnico. */
+/**
+ * Nota do pedido que não chegou a existir para a SEFAZ: rejeitada, rascunho ou
+ * erro técnico. A rejeitada porque o número já está ocupado lá não serve: o
+ * pedido ganha um número novo da Configuração fiscal.
+ */
 function notaReutilizavel(notas, ambiente, serie) {
   return (notas || [])
-    .filter(n => n && n.ambiente === ambiente && Number(n.serie) === Number(serie) && STATUS_REUTILIZAVEIS.has(String(n.status_fiscal)))
+    .filter(n => n && n.ambiente === ambiente && Number(n.serie) === Number(serie)
+      && STATUS_REUTILIZAVEIS.has(String(n.status_fiscal)) && !numeroOcupadoNaSefaz(n))
     .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+}
+
+/** A chave que a SEFAZ cita na recusa 539 (a da NF-e que já tem o número). Pura. */
+function chaveCitada(xMotivo) {
+  const m = /(\d{44})/.exec(String(xMotivo || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * A chave citada saiu de um envio anterior DESTA nota? Então aquele envio foi
+ * autorizado e a resposta se perdeu: o pedido já tem NF-e, e um número novo
+ * faria uma segunda nota para o mesmo pedido. Cada envio grava a chave no
+ * evento "enviada".
+ */
+async function chaveJaEnviadaPorEstaNota(api, nota, chave) {
+  if (!chave || !nota?.id) return false;
+  const eventos = await api.get('/api/notas_fiscais_eventos', { query: { nota_fiscal_id: nota.id } }).then(lista).catch(() => []);
+  return eventos.some(e => e && e.tipo === 'enviada' && String(e.mensagem || '').includes(chave));
+}
+
+/** O que a tela recebe junto da recusa: a nota, o cStat e se o número ficou para trás. */
+function extraDaRecusa(nota, sefazInfo, avisos) {
+  return { nota: semXml(nota), sefaz: sefazInfo, ...(avisos ? { avisos } : {}), numero_ocupado: numeroOcupadoNaSefaz(nota) };
 }
 
 // ------------------------------------------------------------- resultado
@@ -291,10 +338,23 @@ async function concluirComProtocolo({ api, nota, protocolo, xmlAssinado, usuario
     return { nota: semXml(atual), sefaz: sefazInfo, autorizada: false, avisos };
   }
 
+  // 539 citando uma chave que esta nota já mandou: ela FOI autorizada antes.
+  // Nada de número novo (seria a segunda NF-e do pedido): fica "erro técnico",
+  // que não libera o número, e a tela manda não emitir de novo.
+  if (p.situacao !== 'denegada' && String(p.cStat) === '539') {
+    const citada = chaveCitada(p.xMotivo);
+    if (citada && await chaveJaEnviadaPorEstaNota(api, nota, citada)) {
+      const atual = await atualizarNota(api, nota, { status_fiscal: 'erro_tecnico', codigo_status_sefaz: p.cStat, motivo_sefaz: p.xMotivo });
+      await registrarEvento(api, nota.id, { tipo: 'erro', status_anterior: anterior, status_novo: 'erro_tecnico', codigo_sefaz: p.cStat, mensagem: `A SEFAZ já tem esta NF-e autorizada, de um envio anterior: chave ${citada}.`, detalhe: { chave_ja_autorizada: citada }, usuario_id: usuarioId });
+      throw erro(`A SEFAZ já tem a NF-e ${nota.serie}/${nota.numero} deste pedido autorizada, de um envio anterior (chave ${citada}). NÃO emita de novo: a nota existe e falta só trazê-la para o programa.`, 409,
+        { nota: semXml(atual), sefaz: sefazInfo, numero_ocupado: false, ja_autorizada: { chave: citada } });
+    }
+  }
+
   const status = p.situacao === 'denegada' ? 'denegada' : 'rejeitada';
   const atual = await atualizarNota(api, nota, { status_fiscal: status, codigo_status_sefaz: p.cStat, motivo_sefaz: p.xMotivo, ...(p.nProt ? { protocolo: p.nProt } : {}) });
-  await registrarEvento(api, nota.id, { tipo: status, status_anterior: anterior, status_novo: status, codigo_sefaz: p.cStat, mensagem: p.xMotivo, usuario_id: usuarioId });
-  throw erro(`SEFAZ ${p.cStat}: ${p.xMotivo}`, 422, { nota: semXml(atual), sefaz: sefazInfo, avisos });
+  await registrarEvento(api, nota.id, { tipo: status, status_anterior: anterior, status_novo: status, codigo_sefaz: p.cStat, mensagem: p.xMotivo, detalhe: numeroOcupadoNaSefaz(atual) ? { numero_ocupado: true } : null, usuario_id: usuarioId });
+  throw erro(`SEFAZ ${p.cStat}: ${p.xMotivo}`, 422, extraDaRecusa(atual, sefazInfo, avisos));
 }
 
 /** Lote sem protocolo: recibo (assíncrono), rejeição do lote ou serviço parado. */
@@ -313,7 +373,7 @@ async function aplicarRetornoDoEnvio({ api, nota, retorno, xmlAssinado, usuarioI
       if (!r.emProcessamento) {
         atual = await atualizarNota(api, atual, { status_fiscal: 'rejeitada', codigo_status_sefaz: r.cStat, motivo_sefaz: r.xMotivo });
         await registrarEvento(api, nota.id, { tipo: 'rejeitada', status_anterior: 'processando', status_novo: 'rejeitada', codigo_sefaz: r.cStat, mensagem: r.xMotivo, usuario_id: usuarioId });
-        throw erro(`SEFAZ ${r.cStat}: ${r.xMotivo}`, 422, { nota: semXml(atual), sefaz: { cStat: r.cStat, xMotivo: r.xMotivo } });
+        throw erro(`SEFAZ ${r.cStat}: ${r.xMotivo}`, 422, extraDaRecusa(atual, { cStat: r.cStat, xMotivo: r.xMotivo }));
       }
     } catch (e) {
       if (e.status === 422) throw e;
@@ -329,8 +389,8 @@ async function aplicarRetornoDoEnvio({ api, nota, retorno, xmlAssinado, usuarioI
 
   const status = ['108', '109'].includes(String(cStat)) ? 'erro_tecnico' : 'rejeitada';
   const atual = await atualizarNota(api, nota, { status_fiscal: status, codigo_status_sefaz: cStat, motivo_sefaz: xMotivo });
-  await registrarEvento(api, nota.id, { tipo: status === 'rejeitada' ? 'rejeitada' : 'erro', status_anterior: 'enviando', status_novo: status, codigo_sefaz: cStat, mensagem: xMotivo, usuario_id: usuarioId });
-  throw erro(`SEFAZ ${cStat}: ${xMotivo}`, 422, { nota: semXml(atual), sefaz: { cStat, xMotivo }, avisos });
+  await registrarEvento(api, nota.id, { tipo: status === 'rejeitada' ? 'rejeitada' : 'erro', status_anterior: 'enviando', status_novo: status, codigo_sefaz: cStat, mensagem: xMotivo, detalhe: numeroOcupadoNaSefaz(atual) ? { numero_ocupado: true } : null, usuario_id: usuarioId });
+  throw erro(`SEFAZ ${cStat}: ${xMotivo}`, 422, extraDaRecusa(atual, { cStat, xMotivo }, avisos));
 }
 
 // --------------------------------------------------------------- emissão
@@ -485,7 +545,7 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
     if (r.emProcessamento) return { nota: semXml(nota), sefaz: { cStat: r.cStat, xMotivo: r.xMotivo, recibo: nota.recibo }, autorizada: false, processando: true };
     const atual = await atualizarNota(api, nota, { status_fiscal: 'rejeitada', codigo_status_sefaz: r.cStat, motivo_sefaz: r.xMotivo });
     await registrarEvento(api, nota.id, { tipo: 'rejeitada', status_anterior: 'processando', status_novo: 'rejeitada', codigo_sefaz: r.cStat, mensagem: r.xMotivo, usuario_id: usuarioId });
-    throw erro(`SEFAZ ${r.cStat}: ${r.xMotivo}`, 422, { nota: semXml(atual), sefaz: { cStat: r.cStat, xMotivo: r.xMotivo } });
+    throw erro(`SEFAZ ${r.cStat}: ${r.xMotivo}`, 422, extraDaRecusa(atual, { cStat: r.cStat, xMotivo: r.xMotivo }));
   }
 
   if (!nota.chave_acesso) throw erro('A nota não tem chave de acesso nem recibo para consultar.', 409);
@@ -503,7 +563,7 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
 }
 
 module.exports = {
-  STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO,
-  semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel,
+  STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO, REJEICOES_NUMERO_OCUPADO,
+  semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel, numeroOcupadoNaSefaz, chaveCitada,
   volumesDetalhados, camposTransporteDoPedido, gravarTransporteNoPedido, emitir, sincronizar
 };

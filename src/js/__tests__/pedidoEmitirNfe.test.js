@@ -225,6 +225,12 @@ test('acaoPrincipal, classificarPendencias, rotuloAmbiente e mensagemDeErro', ()
   assert.match(f.mensagemDeErro(409, { code: 'JA_ENVIADO' }, 'enviar'), /já estava enviado/);
   assert.strictEqual(f.mensagemDeErro(422, { error: 'SEFAZ 778: x', sefaz: { cStat: '778', xMotivo: 'NCM inexistente' } }),
     'A SEFAZ rejeitou a nota (778): NCM inexistente. Corrija e emita de novo — o número será reaproveitado.');
+  // 539 (14/10/2026, PED105): o número está ocupado na SEFAZ — nunca dizer que será reaproveitado.
+  const ocupado = f.mensagemDeErro(422, { error: 'SEFAZ 539: x', numero_ocupado: true, nota: { serie: 1, numero: 364 }, sefaz: { cStat: '539', xMotivo: 'Rejeicao: Duplicidade de NF-e, com diferenca na Chave de Acesso' } });
+  assert.match(ocupado, /^A SEFAZ rejeitou a nota \(539\)/);
+  assert.match(ocupado, /O número 1\/364 já está ocupado na SEFAZ e fica para trás/);
+  assert.match(ocupado, /próximo número da Configuração fiscal/);
+  assert.doesNotMatch(ocupado, /reaproveitado/);
   assert.strictEqual(f.mensagemDeErro(422, { error: 'O pedido ainda não pode ser faturado.' }), 'O pedido ainda não pode ser faturado.');
   assert.match(f.mensagemDeErro(504, null), /Consultar na SEFAZ/);
   assert.strictEqual(f.mensagemDeErro(500, null), 'Não foi possível emitir a NF-e.');
