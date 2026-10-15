@@ -31,6 +31,89 @@
   }
 
   const reais = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const percentual = v => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+  const centavos = v => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+
+  function precoDaTabela(produto) {
+    if (produto?.preco_tabela === null || produto?.preco_tabela === undefined) return null;
+    let texto = String(produto.preco_tabela).trim();
+    if (!texto || /^-/.test(texto)) return null;
+    texto = texto.replace(/[^\d.,]/g, '');
+    if (!texto) return null;
+    const virgula = texto.lastIndexOf(',');
+    const ponto = texto.lastIndexOf('.');
+    if (virgula !== -1 && ponto !== -1) texto = virgula > ponto ? texto.replace(/\./g, '').replace(',', '.') : texto.replace(/,/g, '');
+    else if (virgula !== -1) texto = texto.replace(/,/g, '.');
+    const partes = texto.split('.');
+    if (partes.length > 2) texto = `${partes.slice(0, -1).join('')}.${partes[partes.length - 1]}`;
+    const valor = Math.round(Number(texto) * 10000) / 10000;
+    return Number.isFinite(valor) && valor > 0 ? valor : null;
+  }
+
+  /** Espelha valoresDaLinha do backend; a revisão do servidor confirma os valores. */
+  function precoDaLinha(item, produto, quantidade, condicao, alterada = true) {
+    const tabela = precoDaTabela(produto);
+    const temTabela = tabela !== null;
+    const unitario = alterada && temTabela ? tabela : Number(item?.valor_unitario) || 0;
+    const padrao = q => (Number(q) > 1 ? 5 : 0) + (condicao === 'vista' ? 5 : 0);
+    const descontoAntes = item?.desconto_prc ?? ((Number(item?.desconto_pagamento_prc) || 0) + (Number(item?.desconto_especial_prc) || 0));
+    const especial = item ? Math.max(descontoAntes - padrao(item.quantidade), 0) : 0;
+    const desconto = alterada ? padrao(quantidade) + especial : Number(descontoAntes) || 0;
+    const pagamento = alterada ? padrao(quantidade) : Number(item?.desconto_pagamento_prc ?? Math.min(padrao(quantidade), desconto));
+    const porQuantidade = Math.min(quantidade > 1 ? 5 : 0, pagamento);
+    // Mesma ordem de operações de descontos.calcularItem, inclusive nos meios centavos.
+    const liquido = unitario - (unitario * (pagamento / 100) + unitario * ((alterada ? especial : Number(item?.desconto_especial_prc) || 0) / 100));
+    return {
+      quantidade, valor_unitario: unitario, desconto_prc: desconto,
+      desconto_quantidade_prc: porQuantidade,
+      desconto_vista_prc: condicao === 'vista' ? Math.min(5, Math.max(pagamento - porQuantidade, 0)) : 0,
+      desconto_especial_prc: alterada ? especial : Number(item?.desconto_especial_prc) || 0,
+      valor_unitario_desc: alterada ? liquido : Number(item?.valor_unitario_desc ?? liquido),
+      valor_total: quantidade > 0 ? centavos(alterada ? liquido * quantidade : Number(item?.valor_total) || 0) : 0,
+      sem_preco: alterada && !temTabela && !item,
+      tabela: alterada && temTabela
+    };
+  }
+
+  /** Quantidades finais por linha, incluindo inclusões na peça que já existe. */
+  function precosDaEdicao(dados, edicao) {
+    const linhas = dados?.linhas || [];
+    const quantidades = new Map(linhas.filter(l => edicao.linhas[String(l.item_id)]?.juntar_em === null)
+      .map(l => [String(l.item_id), Number(edicao.linhas[String(l.item_id)].quantidade) || 0]));
+    const destinos = new Map();
+    for (const n of edicao.novas || []) {
+      // Mesma escolha do planejar(): primeira linha original viva, não juntada.
+      const alvo = linhas.find(l => String(l.produto_id) === String(n.produto_id) && Number(l.quantidade) > 0 && quantidades.has(String(l.item_id)));
+      if (!alvo) continue;
+      const id = String(alvo.item_id);
+      quantidades.set(id, quantidades.get(id) + Number(n.quantidade));
+      destinos.set(String(n.uid), alvo);
+    }
+    const precos = new Map();
+    for (const l of linhas) {
+      const id = String(l.item_id);
+      const quantidade = quantidades.get(id) || 0;
+      const recebeu = linhas.some(x => String(edicao.linhas[String(x.item_id)]?.juntar_em) === id);
+      precos.set(id, precoDaLinha(l, l, quantidade, dados.pedido?.condicao, quantidade !== Number(l.quantidade) || recebeu));
+    }
+    return { linhas: precos, destinos };
+  }
+
+  /** Texto usado tanto nos cards quanto na revisão do servidor. */
+  function textoDoPreco(p) {
+    if (p.sem_preco) return 'Sem preço na tabela fixa: cadastre o preço antes de incluir esta peça.';
+    return `${p.quantidade} un. · ${reais(p.valor_unitario)} a unidade${p.tabela ? ' (tabela fixa)' : ''}`
+      + ` · ${percentual(p.desconto_prc)}% de desconto · Total: ${reais(p.valor_total)}`;
+  }
+
+  function textoDosDescontos(p) {
+    const partes = [];
+    if (p.desconto_quantidade_prc) partes.push(`${percentual(p.desconto_quantidade_prc)}% por quantidade`);
+    if (p.desconto_vista_prc) partes.push(`${percentual(p.desconto_vista_prc)}% à vista`);
+    if (p.desconto_especial_prc) partes.push(`${percentual(p.desconto_especial_prc)}% especial`);
+    if (p.desconto_prc) partes.push(`${reais(p.valor_unitario_desc)} por unidade com desconto`);
+    return partes.join(' + ').replace(' + R$', ' · R$');
+  }
 
   /** O estado inicial da edição: cada linha como está. Pura. */
   function edicaoInicial(dados) {
@@ -229,20 +312,28 @@
     el('editarPecasRevisao').classList.add('hidden');
   }
 
-  function linhaDaTela(l) {
+  function linhaDaTela(l, preco) {
     const e = edicao.linhas[String(l.item_id)];
     const juntada = e.juntar_em !== null;
     const q = Number(e.quantidade);
     const classes = ['editar-pecas__linha'];
     if (l.travado) classes.push('editar-pecas__linha--travada');
-    else if (juntada || q === 0) classes.push('editar-pecas__linha--sai');
-    else if (q !== Number(l.quantidade)) classes.push('editar-pecas__linha--mudou');
+    else if (juntada || preco.quantidade === 0) classes.push('editar-pecas__linha--sai');
+    else if (preco.quantidade !== Number(l.quantidade)) classes.push('editar-pecas__linha--mudou');
     const card = criar('div', classes.join(' '));
 
     const nome = criar('div', 'editar-pecas__nome');
     const titulo = criar('span', 'editar-pecas__titulo', nomeDaPeca(l));
     titulo.title = nomeDaPeca(l);
-    nome.append(titulo, criar('span', 'editar-pecas__sub', `${l.quantidade} no pedido · ${reais(l.valor_unitario)} a unidade${l.desconto_prc ? ` · ${String(l.desconto_prc).replace('.', ',')}% de desconto` : ''} · ${reais(l.valor_total)}`));
+    nome.appendChild(titulo);
+    if (juntada || preco.quantidade === 0) {
+      nome.appendChild(criar('span', 'editar-pecas__sub', juntada ? 'Valores incluídos na linha que recebe as peças.' : 'Linha retirada · Total após a edição: R$ 0,00'));
+    } else {
+      nome.appendChild(criar('span', 'editar-pecas__sub', textoDoPreco(preco)));
+      const detalhes = textoDosDescontos(preco);
+      if (detalhes) nome.appendChild(criar('span', 'editar-pecas__descontos', detalhes));
+      if (preco.quantidade !== Number(l.quantidade)) nome.appendChild(criar('span', 'editar-pecas__sub', `${l.quantidade} no pedido → ${preco.quantidade} após a edição`));
+    }
     const unidades = criar('div', 'editar-pecas__unidades');
     for (const u of l.unidades || []) {
       const chip = criar('span', `editar-pecas__unidade${/estoque/.test(u.origem) ? ' editar-pecas__unidade--estoque' : ''}`);
@@ -259,9 +350,8 @@
       desfazer.type = 'button';
       desfazer.addEventListener('click', () => {
         const a = edicao.linhas[String(e.juntar_em)];
-        a.quantidade = Math.max(0, Number(a.quantidade) - Number(l.quantidade));
+        a.quantidade = Math.max(0, Number(a.quantidade) - Number(e.quantidade));
         e.juntar_em = null;
-        e.quantidade = Number(l.quantidade);
         esquecerPrevia();
         pintar();
       });
@@ -308,10 +398,19 @@
     return card;
   }
 
-  function linhaNovaDaTela(n) {
+  function linhaNovaDaTela(n, destino, precos) {
     const card = criar('div', 'editar-pecas__linha editar-pecas__linha--nova');
     const nome = criar('div', 'editar-pecas__nome');
-    nome.append(criar('span', 'editar-pecas__titulo', nomeDaPeca(n)), criar('span', 'editar-pecas__sub', `Peça nova${n.preco_tabela ? ` · ${reais(n.preco_tabela)} a unidade (tabela)` : ''}`));
+    nome.appendChild(criar('span', 'editar-pecas__titulo', nomeDaPeca(n)));
+    if (destino) {
+      nome.appendChild(criar('span', 'editar-pecas__sub', `${n.quantidade} nova(s) · Incluídas na quantidade e no total da linha de ${nomeDaPeca(destino)}.`));
+      nome.appendChild(criar('span', 'editar-pecas__descontos', textoDosDescontos(precos.get(String(destino.item_id)))));
+    } else {
+      const preco = precoDaLinha(null, n, Number(n.quantidade), dados.pedido.condicao);
+      nome.appendChild(criar('span', 'editar-pecas__sub', `Peça nova · ${textoDoPreco(preco)}`));
+      const detalhes = textoDosDescontos(preco);
+      if (detalhes && !preco.sem_preco) nome.appendChild(criar('span', 'editar-pecas__descontos', detalhes));
+    }
     const controles = criar('div', 'editar-pecas__controles');
     const campo = criar('input', 'ctl-campo input-glass text-white editar-pecas__qtd');
     campo.type = 'number';
@@ -331,8 +430,14 @@
   function pintar() {
     const lista = el('editarPecasLinhas');
     lista.replaceChildren();
-    for (const l of dados.linhas) lista.appendChild(linhaDaTela(l));
-    for (const n of edicao.novas) lista.appendChild(linhaNovaDaTela(n));
+    const precos = precosDaEdicao(dados, edicao);
+    for (const l of dados.linhas) lista.appendChild(linhaDaTela(l, precos.linhas.get(String(l.item_id))));
+    for (const n of edicao.novas) lista.appendChild(linhaNovaDaTela(n, precos.destinos.get(String(n.uid)), precos.linhas));
+    const regra = el('editarPecasRegraDesconto');
+    regra.textContent = dados.pedido.condicao === 'vista'
+      ? 'Pagamento à vista mantido: 5% em cada linha + 5% nas linhas com mais de uma unidade.'
+      : 'Pagamento a prazo mantido: 5% nas linhas com mais de uma unidade.';
+    if (dados.pedido.ajuste) regra.textContent += ` ${dados.pedido.ajuste > 0 ? 'Adicional' : 'Desconto'} do pagamento de ${reais(Math.abs(dados.pedido.ajuste))} mantido no total do pedido.`;
     const bloqueado = !dados.pode_editar || dados.sql_pendente;
     ['editarPecasRevisar', 'editarPecasAdicionar', 'editarPecasBusca', 'editarPecasNovaQtd', 'editarPecasMotivo'].forEach(id => { el(id).disabled = bloqueado; });
   }
@@ -353,8 +458,15 @@
     const mudadas = previa.linhas.filter(l => l.alterada);
     bloco('As peças', mudadas.map(l => {
       if (l.tipo === 'juntada') return `${l.peca}: juntada à outra linha da mesma peça (${l.quantidade_antes} un.).`;
-      if (l.tipo === 'nova') return `${l.peca}: peça nova, ${l.quantidade_depois} un. — ${reais(l.valor_total)}.`;
-      return `${l.peca}: ${l.quantidade_antes} → ${l.quantidade_depois} un.${l.novas ? ` (${l.novas} nova${l.novas > 1 ? 's' : ''})` : ''}${l.saem ? ` (${l.saem} sai${l.saem > 1 ? 'em' : ''})` : ''} — ${reais(l.valor_total)}.`;
+      if (l.quantidade_depois === 0) return `${l.peca}: ${l.quantidade_antes} → 0 un. · Linha retirada · Total: ${reais(0)}.`;
+      const valores = textoDoPreco({ ...l, quantidade: l.quantidade_depois });
+      const descontos = l.quantidade_depois > 0 ? textoDosDescontos({
+        ...l,
+        desconto_quantidade_prc: l.quantidade_depois > 1 ? 5 : 0,
+        desconto_vista_prc: dados.pedido.condicao === 'vista' ? 5 : 0
+      }) : '';
+      if (l.tipo === 'nova') return `${l.peca}: peça nova · ${valores}${descontos ? ` (${descontos})` : ''}.`;
+      return `${l.peca}: ${l.quantidade_antes} → ${l.quantidade_depois} un.${l.novas ? ` (${l.novas} nova${l.novas > 1 ? 's' : ''})` : ''}${l.saem ? ` (${l.saem} sai${l.saem > 1 ? 'em' : ''})` : ''} · ${valores}${descontos ? ` (${descontos})` : ''}.`;
     }));
     bloco('O que sai do pedido', previa.saem.map(s => `${s.quantidade} × ${s.peca} (${s.origem}): ${s.destino}.`));
     bloco('As peças novas', previa.novas.map(n => {
@@ -374,6 +486,13 @@
     valores.append(criar('span', 'editar-pecas__antes', reais(previa.valores.antes.valor_final)), criar('strong', null, reais(previa.valores.depois.valor_final)));
     if (previa.valores.depois.ajuste) valores.appendChild(criar('span', 'editar-pecas__sub', `(com o ${previa.valores.depois.ajuste > 0 ? 'Adicional' : 'Desconto'} de ${reais(Math.abs(previa.valores.depois.ajuste))} do pagamento, mantido)`));
     total.appendChild(valores);
+    const decomposicao = criar('ul');
+    for (const [rotulo, valor] of [
+      ['Subtotal das peças', previa.valores.depois.subtotal],
+      ['Desconto padrão (quantidade e pagamento)', previa.valores.depois.desconto_pagamento],
+      ['Desconto especial', previa.valores.depois.desconto_especial]
+    ]) decomposicao.appendChild(criar('li', null, `${rotulo}: ${reais(valor)}`));
+    total.appendChild(decomposicao);
     const ul = criar('ul');
     previa.parcelas.forEach(p => ul.appendChild(criar('li', null, `${p.numero_parcela}ª parcela: ${reais(p.antes)} → ${reais(p.valor)} (vencimento mantido)`)));
     total.appendChild(ul);
@@ -470,6 +589,12 @@
     if (!peca) { mensagem('Escolha a peça na lista do catálogo.'); return; }
     const q = Math.trunc(Number(el('editarPecasNovaQtd').value) || 0);
     if (!(q >= 1)) { mensagem('Informe quantas peças.'); return; }
+    const existente = dados.linhas.some(l => String(l.produto_id) === String(peca.id)
+      && Number(l.quantidade) > 0 && edicao.linhas[String(l.item_id)]?.juntar_em === null);
+    if (!existente && precoDaLinha(null, peca, q, dados.pedido.condicao).sem_preco) {
+      mensagem('Esta peça não tem preço na tabela fixa. Cadastre o preço antes de pôr a peça no pedido.');
+      return;
+    }
     const ja = edicao.novas.find(n => String(n.produto_id) === String(peca.id));
     if (ja) ja.quantidade += q;
     else edicao.novas.push({ uid: (contadorNovas += 1), produto_id: Number(peca.id), codigo: peca.codigo || '', nome: peca.nome || '', preco_tabela: peca.preco_tabela ?? null, quantidade: q });

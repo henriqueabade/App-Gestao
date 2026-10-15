@@ -73,6 +73,8 @@
 }
 
 .editar-pecas__sub { color: rgba(255, 255, 255, 0.6); font-size: 0.78rem; }
+.editar-pecas__descontos { color: #a7f3d0; font-size: 0.78rem; line-height: 1.5; }
+.editar-pecas__regra { color: rgba(255, 255, 255, 0.8); font-size: 0.8rem; line-height: 1.5; }
 
 .editar-pecas__unidades { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
