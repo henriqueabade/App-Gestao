@@ -2875,6 +2875,9 @@ async function getReportData(key, config) {
     const fetchPromise = (async () => {
         const result = await config.fetchData();
         const normalized = Array.isArray(result) ? result : [];
+        // Uma edição pode invalidar a consulta enquanto ela está em andamento.
+        // Nesse caso todos os consumidores passam a usar a leitura nova.
+        if (reportDataPromises.get(key) !== fetchPromise) return getReportData(key, config);
         reportDataCache.set(key, normalized);
         return normalized;
     })();
@@ -2885,10 +2888,10 @@ async function getReportData(key, config) {
         const data = await fetchPromise;
         return Array.isArray(data) ? data : [];
     } catch (error) {
-        reportDataCache.delete(key);
+        if (reportDataPromises.get(key) === fetchPromise) reportDataCache.delete(key);
         throw error;
     } finally {
-        reportDataPromises.delete(key);
+        if (reportDataPromises.get(key) === fetchPromise) reportDataPromises.delete(key);
     }
 }
 
@@ -5441,6 +5444,26 @@ REPORT_CONFIGS.usuarios = {
     }
 };
 
+/** Atualiza também totais e seleção Master-Detail quando o pedido é editado. */
+function ligarEdicoesDePecasNosRelatorios(root) {
+    if (typeof window.addEventListener !== 'function') return;
+    if (window.__relatoriosAoEditarPecas) {
+        window.removeEventListener('pedido:pecas-editadas', window.__relatoriosAoEditarPecas);
+    }
+    const aoEditar = async () => {
+        reportDataCache.delete('pedidos');
+        reportDataPromises.delete('pedidos');
+        reportTableRenderers.delete('pedidos');
+        if (root.isConnected === false) return;
+        const tabela = root.querySelector('#relatoriosTableContainer');
+        if (tabela?.dataset?.currentTab === 'pedidos') {
+            await populateReportTable('pedidos', tabela);
+        }
+    };
+    window.__relatoriosAoEditarPecas = aoEditar;
+    window.addEventListener('pedido:pecas-editadas', aoEditar);
+}
+
 function initRelatoriosModule() {
     const container = document.querySelector('.relatorios-module');
     if (!container) {
@@ -5497,6 +5520,7 @@ function initRelatoriosModule() {
     setupFilterInteractions(container);
     setupDateRangeFilters(container);
     ligarFiltrosDeFora(container);
+    ligarEdicoesDePecasNosRelatorios(container);
     setupModelos(container, {
         abaAtiva: () => tabController?.getActiveTab?.() || initialTabKey,
         ativarAba: key => tabController?.activateTab?.(key),

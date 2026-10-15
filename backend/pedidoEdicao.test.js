@@ -230,7 +230,135 @@ test('as unidades da linha: origem e estado na mesma ordem; o ponto atual nunca 
   assert.equal(edicao.precoDaTabela({ preco_tabela: null }), null);
 });
 
+test('peça nova usa a tabela fixa e acumula somente os descontos padrão de quantidade e pagamento', () => {
+  const produto = { preco_tabela: '1.242,42', preco_venda: 9999 };
+  const casos = [
+    { quantidade: 1, condicao: 'prazo', percentual: 0, total: 1242.42 },
+    { quantidade: 2, condicao: 'prazo', percentual: 5, total: 2360.598 },
+    { quantidade: 1, condicao: 'vista', percentual: 5, total: 1180.299 },
+    { quantidade: 2, condicao: 'vista', percentual: 10, total: 2236.356 }
+  ];
+  for (const c of casos) {
+    const valores = edicao.valoresDaLinha({ produto, ...c });
+    assert.equal(valores.valor_unitario, 1242.42, 'o preço calculado da peça não substitui a tabela fixa');
+    assert.equal(valores.desconto_pagamento_prc, c.percentual, `${c.quantidade} un. ${c.condicao}`);
+    assert.equal(valores.desconto_especial_prc, 0);
+    assert.ok(Math.abs(valores.valor_total - c.total) < 0.000001);
+  }
+});
+
+test('mudar a quantidade mantém o especial e substitui o padrão, sem acumular o desconto anterior', () => {
+  const produto = { preco_tabela: 1000 };
+  const aPrazo = linhaDoItem(501, 2, { desconto_pagamento_prc: 5, desconto_especial_prc: 3 });
+  const uma = edicao.valoresDaLinha({ item: aPrazo, produto, quantidade: 1, condicao: 'prazo' });
+  assert.deepEqual([uma.desconto_pagamento_prc, uma.desconto_especial_prc, uma.valor_total], [0, 3, 970]);
+  const duas = edicao.valoresDaLinha({ item: { ...aPrazo, ...uma, quantidade: 1 }, produto, quantidade: 2, condicao: 'prazo' });
+  assert.deepEqual([duas.desconto_pagamento_prc, duas.desconto_especial_prc, duas.valor_total], [5, 3, 1840]);
+  const tres = edicao.valoresDaLinha({ item: { ...aPrazo, ...duas }, produto, quantidade: 3, condicao: 'prazo' });
+  assert.deepEqual([tres.desconto_pagamento_prc, tres.desconto_especial_prc, tres.valor_total], [5, 3, 2760]);
+  const aVista = edicao.valoresDaLinha({ item: { ...aPrazo, desconto_pagamento_prc: 10 }, produto, quantidade: 1, condicao: 'vista' });
+  assert.deepEqual([aVista.desconto_pagamento_prc, aVista.desconto_especial_prc, aVista.valor_total], [5, 3, 920]);
+});
+
 // =================================================================== ponta a ponta
+
+test('situação e revisão levam preço atual, percentuais e unitários sem arredondar antes de multiplicar', async () => {
+  const dados = tabelas();
+  Object.assign(dados.pedidos_itens[0], { valor_unitario: 1000.1234, valor_unitario_desc: 950.11723 });
+  dados.tabela_fixa[0].vlr_prod = '1130.5678';
+  const t = montar(dados);
+  const situacao = await edicao.situacao(t.api, 55);
+  const atual = situacao.linhas.find(l => l.item_id === 501);
+  assert.equal(atual.valor_unitario, 1000.1234);
+  assert.equal(atual.valor_unitario_desc, 950.11723);
+  assert.equal(atual.valor_total, 1900, 'mantém o valor original enquanto a linha não foi alterada');
+  assert.equal(atual.preco_tabela, 1130.5678);
+  assert.deepEqual([atual.desconto_pagamento_prc, atual.desconto_especial_prc], [5, 0]);
+
+  const revisao = await t.simular({ linhas: [{ item_id: 501, quantidade: 3 }] });
+  const alterada = revisao.linhas.find(l => l.item_id === 501);
+  assert.equal(alterada.valor_unitario, 1130.5678);
+  assert.ok(Math.abs(alterada.valor_unitario_desc - 1074.03941) < 0.000001);
+  assert.equal(alterada.valor_total, 3222.12);
+  assert.equal(alterada.desconto_total, 169.59);
+  assert.deepEqual([alterada.desconto_pagamento_prc, alterada.desconto_especial_prc], [5, 0]);
+  assert.match(revisao.avisos[0], /o preço da tabela mudou/);
+});
+
+test('sem preço fixo a situação sinaliza null e a edição recusa nova peça mesmo que haja preço calculado', async () => {
+  const dados = tabelas();
+  dados.tabela_fixa = [];
+  dados.produtos[1].preco_venda = 500;
+  const t = montar(dados);
+  const situacao = await edicao.situacao(t.api, 55);
+  assert.ok(situacao.linhas.every(l => l.preco_tabela === null));
+  await assert.rejects(t.simular({ linhas: [{ produto_id: 20, quantidade: 2 }] }), /não tem preço na tabela fixa/);
+});
+
+test('trocar uma linha por duas peças a prazo mostra e grava tabela fixa com 5% de quantidade', async () => {
+  const dados = tabelas();
+  dados.tabela_fixa[1].vlr_prod = '1.242,42';
+  const t = montar(dados);
+  const entrada = {
+    linhas: [{ item_id: 502, quantidade: 0 }, { produto_id: 20, quantidade: 2 }],
+    decisoes: [{ produto_id: 20, qtd_usar_pronta: 0, qtd_a_produzir: 2 }]
+  };
+  const revisao = await t.simular(entrada);
+  const nova = revisao.linhas.find(l => l.produto_id === 20);
+  assert.deepEqual([nova.valor_unitario, nova.desconto_pagamento_prc, nova.desconto_especial_prc], [1242.42, 5, 0]);
+  assert.deepEqual([nova.desconto_total, nova.valor_total], [124.24, 2360.60]);
+  assert.equal(revisao.valores.depois.valor_final, 4260.60);
+  await t.aplicar(entrada);
+  const gravada = t.api.tabelas.pedidos_itens.find(i => i.produto_id === 20);
+  assert.equal(gravada.valor_unitario, 1242.42);
+  assert.equal(gravada.desconto_pagamento_prc, 5);
+  assert.ok(Math.abs(gravada.valor_total - 2360.598) < 0.000001);
+  assert.equal(t.api.tabelas.pedidos[0].valor_final, 4260.60);
+  assert.deepEqual(t.api.tabelas.pedido_parcelas.map(p => p.valor), [1420.20, 1420.20, 1420.20]);
+});
+
+test('adicionar e depois alterar peça à vista preserva o desconto do pagamento e aplica ajuste uma única vez', async () => {
+  const dados = tabelas();
+  Object.assign(dados.pedidos[0], { parcelas: 1, ajuste_valor: -123.45, valor_final: 3476.55, desconto_total: 400 });
+  for (const i of dados.pedidos_itens) Object.assign(i, {
+    valor_unitario_desc: 900, desconto_pagamento: 100, desconto_pagamento_prc: 10,
+    valor_desc: 100, desconto_total: 200, valor_total: 1800
+  });
+  dados.pedido_parcelas = [{ id: 1, pedido_id: 55, numero_parcela: 1, valor: 3476.55, data_vencimento: '2026-12-21' }];
+  const t = montar(dados);
+  const entrada = { linhas: [{ produto_id: 20, quantidade: 2 }], decisoes: [{ produto_id: 20, qtd_usar_pronta: 0, qtd_a_produzir: 2 }] };
+  const revisao = await t.simular(entrada);
+  const novaNaRevisao = revisao.linhas.find(l => l.produto_id === 20);
+  assert.deepEqual([novaNaRevisao.desconto_pagamento_prc, novaNaRevisao.desconto_especial_prc, novaNaRevisao.valor_total], [10, 0, 900]);
+  assert.equal(revisao.valores.depois.valor_final, 4376.55);
+  assert.equal(revisao.valores.depois.ajuste, -123.45);
+  await t.aplicar(entrada);
+  const nova = t.api.tabelas.pedidos_itens.find(i => i.produto_id === 20);
+  assert.deepEqual([nova.valor_unitario, nova.desconto_pagamento_prc, nova.valor_total], [500, 10, 900]);
+  assert.equal(t.api.tabelas.pedidos[0].ajuste_valor, -123.45);
+  assert.equal(t.api.tabelas.pedido_parcelas[0].valor, 4376.55);
+
+  await t.aplicar({ linhas: [{ item_id: nova.id, quantidade: 3 }], decisoes: [{ produto_id: 20, qtd_usar_pronta: 0, qtd_a_produzir: 1 }] });
+  assert.deepEqual([nova.quantidade, nova.desconto_pagamento_prc, nova.valor_total], [3, 10, 1350]);
+  assert.equal(t.api.tabelas.pedidos[0].valor_final, 4826.55);
+  assert.equal(t.api.tabelas.pedidos[0].ajuste_valor, -123.45);
+  assert.equal(t.api.tabelas.pedido_parcelas[0].valor, 4826.55);
+});
+
+test('juntar duas linhas unitárias aplica o desconto de quantidade na linha resultante', async () => {
+  const dados = tabelas();
+  for (const i of dados.pedidos_itens) Object.assign(i, {
+    quantidade: 1, valor_unitario_desc: 1000, desconto_pagamento: 0, desconto_pagamento_prc: 0,
+    valor_desc: 0, desconto_total: 0, valor_total: 1000
+  });
+  const t = montar(dados);
+  const entrada = { linhas: [{ item_id: 501, quantidade: 2 }, { item_id: 502, juntar_em: 501 }] };
+  const revisao = await t.simular(entrada);
+  const resultante = revisao.linhas.find(l => l.item_id === 501);
+  assert.deepEqual([resultante.quantidade_depois, resultante.desconto_pagamento_prc, resultante.valor_total], [2, 5, 1900]);
+  await t.aplicar(entrada);
+  assert.deepEqual(t.api.tabelas.pedidos_itens.map(i => [i.quantidade, i.valor_total]), [[2, 1900], [0, 0]]);
+});
 
 test('o caso do PED121: juntar as duas linhas iguais — nada mexe no estoque, a produção vê as unidades mudarem de linha', async () => {
   const t = montar();
@@ -302,6 +430,82 @@ test('tirar uma caixa: sai a do zero que já passou pela Marcenaria — volta ao
   const m = await fracaoDoRegistro(t.api, 501, 1, 1);
   assert.equal(m.fracao, 1);
   assert.equal(m.pedida, 0, 'a 501 não deve mais Marcenaria (só ficou a pronta)');
+});
+
+test('tirar a unidade do zero elimina a falta do passo já feito na parcial que fica', async () => {
+  const dados = tabelas();
+  dados.pedido_itens_ext.push({ id: 702, id_pedido: 55, pedido_item_id: 502, ultimo_insumo_id: 401, etapa_id: 802, quantidade: 1 });
+  dados.reservas_estoque.find(r => r.pedido_item_id === 502).quantidade = 1;
+  dados.pedidos_itens_faltantes = [
+    { id: 1, pedido_id: 55, pedido_item_id: 502, insumo_id: 301, quantidade: 1 },
+    { id: 2, pedido_id: 55, pedido_item_id: 502, insumo_id: 302, quantidade: 2 }
+  ];
+  const t = montar(dados);
+
+  await t.aplicar({ linhas: [{ item_id: 502, quantidade: 1 }] });
+
+  assert.deepEqual(t.api.tabelas.pedidos_itens_faltantes.map(f => [f.insumo_id, f.quantidade]), [[302, 1]],
+    'MDF não falta para a parcial; a falta de Cola cai só pela unidade retirada');
+  assert.equal(t.api.tabelas.pedido_itens_ext.find(r => r.id === 702).quantidade, 1, 'a parcial ficou no pedido');
+  assert.deepEqual(t.entradas.map(e => [e[0], e[1]]), [[301, 1], [302, 1], [303, 1], [304, 1]]);
+});
+
+test('devolver três unidades abate a falta de duas, sem deixar falta proporcional ou negativa', async () => {
+  const dados = tabelas();
+  Object.assign(dados.pedidos_itens[1], linhaDoItem(502, 10, { qtd_usar_pronta: 0, qtd_a_produzir: 10 }));
+  Object.assign(dados.reservas_estoque[1], { quantidade: 10, quantidade_original: 10 });
+  dados.pedidos[0].valor_final = 11400;
+  dados.pedidos[0].desconto_total = 600;
+  dados.pedido_parcelas.forEach(p => { p.valor = 3800; });
+  // Dez unidades consumiram o MDF; só oito estavam disponíveis na conversão.
+  dados.materia_prima.find(m => m.id === 301).quantidade = -2;
+  const t = montar(dados);
+
+  await t.aplicar({ linhas: [{ item_id: 502, quantidade: 7 }] });
+
+  assert.deepEqual(t.api.tabelas.pedidos_itens_faltantes, [], '2 - 3 tem piso zero, e não vira 2 × 7/10');
+  assert.equal(t.entradas.find(e => e[0] === 301)[1], 3, 'a devolução de matéria-prima continua a mesma');
+});
+
+test('junção com retirada abate faltas pela linha de origem uma só vez antes de transferir o saldo', async () => {
+  const dados = tabelas();
+  dados.producao_eventos = [];
+  Object.assign(dados.pedidos_itens[1], linhaDoItem(502, 3, { qtd_usar_pronta: 0, qtd_a_produzir: 3 }));
+  // A 501 tem uma pronta e uma do zero; as três da 502 já vieram após o MDF.
+  dados.pedido_itens_ext.push({ id: 702, id_pedido: 55, pedido_item_id: 502, ultimo_insumo_id: 401, etapa_id: 802, quantidade: 3 });
+  dados.reservas_estoque = [dados.reservas_estoque[0]];
+  dados.pedidos_itens_faltantes = [
+    { id: 1, pedido_id: 55, pedido_item_id: 502, insumo_id: 302, quantidade: 1 },
+    { id: 2, pedido_id: 55, pedido_item_id: 502, insumo_id: 302, quantidade: 2 },
+    { id: 3, pedido_id: 55, pedido_item_id: 501, insumo_id: 302, quantidade: 1 }
+  ];
+  dados.pedidos[0].valor_final = 4750;
+  const t = montar(dados);
+
+  // Processa a linha juntada primeiro: a falta transferida não pertence à
+  // origem 501 e não pode receber a devolução dela uma segunda vez.
+  await t.aplicar({ linhas: [{ item_id: 502, juntar_em: 501 }, { item_id: 501, quantidade: 2 }] });
+
+  assert.deepEqual(t.api.tabelas.pedidos_itens_faltantes, [
+    { id: 2, pedido_id: 55, pedido_item_id: 501, insumo_id: 302, quantidade: 1 }
+  ], 'a falta das três parciais cai em duas e a da unidade do zero some');
+  assert.equal(t.entradas.find(e => e[0] === 302)[1], 3, 'a devolução soma as duas origens sem duplicar');
+  assert.equal(t.api.tabelas.pedido_itens_ext.find(r => r.id === 702).quantidade, 1);
+  assert.equal(t.api.tabelas.pedido_itens_ext.find(r => r.id === 702).pedido_item_id, 501);
+});
+
+test('a falta de um passo já produzido não é apagada como se o material tivesse voltado', async () => {
+  const dados = tabelas();
+  dados.pedidos_itens_faltantes = [
+    { id: 1, pedido_id: 55, pedido_item_id: 501, insumo_id: 301, quantidade: 1 },
+    { id: 2, pedido_id: 55, pedido_item_id: 501, insumo_id: 304, quantidade: 1 }
+  ];
+  const t = montar(dados);
+
+  await t.aplicar({ linhas: [{ item_id: 501, quantidade: 1 }] });
+
+  assert.deepEqual(t.api.tabelas.pedidos_itens_faltantes.map(f => [f.insumo_id, f.quantidade]), [[301, 1]],
+    'o MDF foi usado; só a falta da Seladora devolvida é abatida');
 });
 
 test('pôr uma peça nova: linha nova pelo preço da tabela, reserva de produção, matéria-prima abatida e as parcelas iguais de novo', async () => {

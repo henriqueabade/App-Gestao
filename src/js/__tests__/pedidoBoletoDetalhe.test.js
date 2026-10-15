@@ -33,7 +33,7 @@ const BOLETO = {
 
 test('tag e dados da situação: motivo da baixa, abatimento, prorrogação, pagamento e última consulta', () => {
   const f = puras();
-  assert.deepStrictEqual(plano(f.rotuloDoStatus(BOLETO)), { classe: 'badge-success', texto: 'Registrado' });
+  assert.deepStrictEqual(plano(f.rotuloDoStatus(BOLETO)), { classe: 'badge-boleto-registrado', texto: 'Registrado' });
   assert.deepStrictEqual(plano(f.rotuloDoStatus({ status: 'baixado', motivo_baixa: 'cancelado' })), { classe: 'badge-neutral', texto: 'Baixado · cancelado' });
   assert.deepStrictEqual(plano(f.rotuloDoStatus({ status: 'baixado', motivo_baixa: 'banco' })), { classe: 'badge-neutral', texto: 'Baixado · baixado pelo banco' });
   assert.deepStrictEqual(plano(f.rotuloDoStatus(null)), { classe: 'badge-neutral', texto: '—' });

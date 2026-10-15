@@ -28,6 +28,12 @@ function texto(valor) {
   return valor == null ? '' : String(valor).trim();
 }
 
+/** Linhas retiradas ou juntadas ficam no banco para a auditoria da edição. */
+function itensAtuais(pedido) {
+  return (Array.isArray(pedido?.itens) ? pedido.itens : [])
+    .filter(item => num(item?.quantidade) > 0);
+}
+
 /**
  * Quanto da peça já está pronta e quanto falta produzir — SEGUNDO O PEDIDO.
  *
@@ -76,7 +82,7 @@ function agruparPecas(pedidos = []) {
   const mapa = new Map();
 
   for (const pedido of Array.isArray(pedidos) ? pedidos : []) {
-    for (const item of Array.isArray(pedido?.itens) ? pedido.itens : []) {
+    for (const item of itensAtuais(pedido)) {
       const chave = chaveDaPeca(item);
       if (!chave) continue;
 
@@ -146,7 +152,7 @@ function transportadoraDefinida(valor) {
  */
 function detalharPedidos(pedidos = []) {
   return (Array.isArray(pedidos) ? pedidos : []).map(pedido => {
-    const itens = (Array.isArray(pedido?.itens) ? pedido.itens : []).map(item => ({
+    const itens = itensAtuais(pedido).map(item => ({
       produto_id: item?.produto_id ?? null,
       codigo: texto(item?.codigo),
       nome: texto(item?.nome),

@@ -118,6 +118,24 @@ em nenhum destes lugares:
 | Histórico de cada insumo | Entrada ou saída de matéria-prima, com a nota da edição. |
 | Financeiro | Evento `edicao_pedido` com o total de antes e de depois. |
 
+## Relatórios depois de uma edição
+
+- Peças e insumos usam a composição atual: linhas retiradas ou juntadas não
+  entram nos totais, e unidades prontas/parciais não consomem novamente os
+  passos que já tinham concluído quando entraram no pedido.
+- O relatório do pedido e sua impressão/PDF incluem a auditoria de
+  `pedido_edicoes`: data, motivo, quantidades anteriores e posteriores,
+  retornos de peças e matéria-prima, valores e avisos. Novos consumos previstos
+  são identificados como previsão; não substituem as movimentações realizadas.
+- As faltas registradas são históricas, limitadas à demanda atual por
+  item/insumo. Nas próximas edições, diminuem pelo material devolvido, sem
+  proporção pelo número de peças. Não são uma consulta ao saldo de hoje.
+  Registros antigos já reduzidos proporcionalmente não têm a foto anterior
+  necessária para restaurar retroativamente seu valor exato.
+- O agrupamento e seu detalhamento usam apenas linhas vivas. Ao editar peças,
+  o módulo Relatórios descarta os dados antigos em cache antes de atualizar
+  a tabela e seus totais.
+
 ## Linhas repetidas (a origem do PED121)
 
 - **IA:** a mesma peça duas vezes no documento vira uma linha só, com as
@@ -142,6 +160,12 @@ A tabela nova entrou no mapa:
 
 O arquivo gerado fica na API (`acesso/politica-tabelas.json`) e precisa ser
 publicado com ela.
+
+Os relatórios leem `pedido_edicoes` pela permissão `ped.report`. Depois desta
+alteração, gere novamente o mapa com `node scripts/mapa-permissoes-api.js` e
+publique a política na API. Se a API negar essa leitura, o relatório mantém
+a composição atual e avisa que a auditoria está indisponível; não mostra um
+histórico vazio como se não houvesse edições.
 
 ## Para ligar
 

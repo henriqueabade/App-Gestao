@@ -261,6 +261,24 @@ test('montarAgrupamento devolve as duas visões do mesmo conjunto', () => {
   assert.strictEqual(doc.pedidos.length, 2);
 });
 
+test('edição: peças retiradas e linhas juntadas não reaparecem em nenhuma visão', () => {
+  const doc = montarAgrupamento([{
+    id: 121, numero: 'PED121', itens: [
+      { produto_id: 1, codigo: 'RETIRADA', quantidade: 0, qtd_usar_pronta: 1, valor_total: 500 },
+      { produto_id: 2, codigo: 'CRFO1530', quantidade: 2, qtd_usar_pronta: 1, valor_total: 1745.51 },
+      { produto_id: 2, codigo: 'CRFO1530', quantidade: 0, qtd_usar_pronta: 0, valor_total: 1745.51 },
+      { produto_id: 3, codigo: 'CRFO2040', quantidade: 2, qtd_usar_pronta: 1, qtd_a_produzir: 1, valor_total: 2360.60 }
+    ]
+  }]);
+
+  assert.deepStrictEqual(doc.pecas.map(p => p.codigo), ['CRFO1530', 'CRFO2040']);
+  assert.deepStrictEqual(doc.pedidos[0].itens.map(p => p.codigo), ['CRFO1530', 'CRFO2040']);
+  assert.strictEqual(doc.totais.quantidade, 4);
+  assert.strictEqual(doc.totais.pronta, 2);
+  assert.strictEqual(doc.totais.a_fazer, 2);
+  assert.strictEqual(doc.totais.valor_total, 4106.11, 'valor residual da linha zerada não entra na soma');
+});
+
 // ------------------------------------------------------------------ rota
 
 /**
@@ -368,6 +386,32 @@ test('a rota /agrupamento não é engolida por /:id', async () => {
     assert.strictEqual(doc.pedidos.length, 2);
     assert.strictEqual(doc.totais.quantidade, 6);
     assert.strictEqual(doc.pedidos[0].cliente, 'Loja Central');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a rota exporta a composição atual depois da edição, incluindo a origem das peças novas', async () => {
+  const ctx = await montarRota({
+    ...TABELAS,
+    pedidos_itens: [
+      { id: 10, pedido_id: 1, produto_id: 9, codigo: 'AV01', quantidade: 0, valor_total: 200 },
+      { id: 11, pedido_id: 1, produto_id: 7, codigo: 'BD01', nome: 'Bandeja', quantidade: 2, qtd_usar_pronta: 1, qtd_a_produzir: 1, valor_total: 570 },
+      { id: 12, pedido_id: 1, produto_id: 7, codigo: 'BD01', quantidade: 0, valor_total: 300 },
+      { id: 13, pedido_id: 1, produto_id: 8, codigo: 'CRFO2040', nome: 'Caixa Rio - G', quantidade: 2, qtd_usar_pronta: 1, qtd_a_produzir: 1, valor_total: 2360.60 }
+    ]
+  });
+  try {
+    const resposta = await buscar(ctx.porta, 'ids=1');
+    assert.strictEqual(resposta.status, 200);
+    const doc = await resposta.json();
+    assert.deepStrictEqual(doc.pecas.map(p => p.codigo), ['BD01', 'CRFO2040']);
+    assert.deepStrictEqual(doc.pedidos[0].itens.map(p => p.codigo), ['BD01', 'CRFO2040']);
+    assert.strictEqual(doc.totais.quantidade, 4);
+    assert.strictEqual(doc.totais.pronta, 2);
+    assert.strictEqual(doc.totais.a_fazer, 2);
+    assert.strictEqual(doc.totais.valor_total, 2930.60);
+    assert.strictEqual(doc.pedidos[0].itens[1].a_fazer, 1);
   } finally {
     await ctx.encerrar();
   }

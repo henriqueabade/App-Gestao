@@ -18,7 +18,7 @@
 
   // ------------------------------------------------------ funções puras
   const ROTULO_STATUS = {
-    registrado: ['badge-success', 'Registrado'], pago: ['badge-success', 'Pago'], baixado: ['badge-neutral', 'Baixado'], vencido: ['badge-warning', 'Vencido'],
+    registrado: ['badge-boleto-registrado', 'Registrado'], pago: ['badge-success', 'Pago'], baixado: ['badge-neutral', 'Baixado'], vencido: ['badge-warning', 'Vencido'],
     protestado: ['badge-danger', 'Protestado'], erro: ['badge-danger', 'Erro no BB'], reservado: ['badge-warning', 'Reservado']
   };
   const MOTIVOS = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'baixado pelo banco' };

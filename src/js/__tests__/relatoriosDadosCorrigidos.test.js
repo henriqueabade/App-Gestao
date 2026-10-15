@@ -13,7 +13,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 /** Carrega relatorios.js num contexto mínimo e expõe o que o teste precisar. */
-function carregar() {
+function carregar(janelaExtra = {}) {
     const arquivo = path.join(__dirname, '..', 'relatorios.js');
     const fonte = fs.readFileSync(arquivo, 'utf8');
 
@@ -37,7 +37,8 @@ function carregar() {
                     const numero = Number(valor);
                     return Number.isFinite(numero) ? numero : null;
                 }
-            }
+            },
+            ...janelaExtra
         },
         document: {
             querySelector: () => null,
@@ -172,4 +173,57 @@ test('o filtro novo mostra as peças sem preço de tabela', () => {
     const resultado = filtrar('produtos', produtos, raiz);
     assert.strictEqual(resultado.length, 1);
     assert.strictEqual(resultado[0].nome, 'Sem preço');
+});
+
+test('edição de peças invalida os dados e recarrega os pedidos abertos no módulo Relatórios', async () => {
+    const ouvintes = new Set();
+    const avaliarEdicao = carregar({
+        addEventListener: (evento, callback) => {
+            if (evento === 'pedido:pecas-editadas') ouvintes.add(callback);
+        },
+        removeEventListener: (evento, callback) => ouvintes.delete(callback)
+    });
+    const getData = avaliarEdicao('getReportData');
+    const config = avaliarEdicao('REPORT_CONFIGS.pedidos');
+    config.fetchData = async () => [{ id: 121, valor_final: 100 }];
+    await getData('pedidos', config);
+    const tabela = { dataset: { currentTab: 'pedidos' } };
+    const root = { isConnected: true, querySelector: () => tabela };
+    // O renderer real atualiza tabela, KPIs e a seleção Master-Detail. Aqui
+    // capturamos o novo resultado no ponto de entrada dessa atualização.
+    avaliarEdicao(`populateReportTable = async (key, container) => {
+        container.atualizados = await getReportData(key, REPORT_CONFIGS[key]);
+    }`);
+    const ligar = avaliarEdicao('ligarEdicoesDePecasNosRelatorios');
+    ligar(root);
+    ligar(root);
+    assert.strictEqual(ouvintes.size, 1, 'reinicializar o módulo não duplica o evento');
+    config.fetchData = async () => [{ id: 121, valor_final: 200 }];
+    await [...ouvintes][0]();
+    assert.strictEqual(tabela.atualizados[0].valor_final, 200);
+    assert.strictEqual((await getData('pedidos', config))[0].valor_final, 200);
+});
+
+test('resposta iniciada antes da edição não restaura os dados antigos no relatório', async () => {
+    let aoEditar;
+    const avaliarEdicao = carregar({
+        addEventListener: (evento, callback) => { aoEditar = callback; },
+        removeEventListener: () => {}
+    });
+    const getData = avaliarEdicao('getReportData');
+    let devolverAntigos;
+    let chamadas = 0;
+    const config = {
+        fetchData: () => ++chamadas === 1
+            ? new Promise(resolve => { devolverAntigos = resolve; })
+            : Promise.resolve([{ id: 121, valor_final: 200 }])
+    };
+    avaliarEdicao('ligarEdicoesDePecasNosRelatorios')({ isConnected: false });
+    const primeiraLeitura = getData('pedidos', config);
+    await aoEditar();
+    assert.strictEqual((await getData('pedidos', config))[0].valor_final, 200);
+    devolverAntigos([{ id: 121, valor_final: 100 }]);
+    assert.strictEqual((await primeiraLeitura)[0].valor_final, 200);
+    assert.strictEqual((await getData('pedidos', config))[0].valor_final, 200);
+    assert.strictEqual(chamadas, 2);
 });

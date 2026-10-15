@@ -1,10 +1,11 @@
 /**
- * As três leituras do relatório de peças de um pedido.
+ * Composição atual e auditorias do relatório de peças de um pedido.
  *
  *   | seção            | responde                                             |
  *   |------------------|------------------------------------------------------|
  *   | seleção original | o que a conversão escolheu                           |
  *   | alterações       | o que mudou depois — peças recebidas de outro pedido |
+ *   | edições          | inclusões, retiradas, junções e retornos registrados |
  *   | destinações      | o que foi feito com cada peça ao cancelar            |
  *
  * Fora do controller de propósito: aqui é regra sobre dados já lidos, e essa
@@ -22,6 +23,104 @@ function rotuloDoPasso(rota, passoId) {
   return passo.ordem_insumo >= total
     ? `Pronta ${passo.ordem_insumo}/${total}`
     : `${passo.insumo_nome} ${passo.ordem_insumo}/${total}`;
+}
+
+/** Origens atuais, com a mesma quantidade da linha viva (nunca a reserva antiga). */
+function composicaoDoItem(item, registros = [], rota = []) {
+  const quantidade = Math.max(0, Number(item?.quantidade) || 0);
+  if (!quantidade) return [];
+  const final = rota.length ? Number(rota[rota.length - 1].ordem_insumo) : 0;
+  const porPasso = new Map(rota.map(p => [String(p.passo_id), p]));
+  let restante = quantidade;
+  const linhas = [];
+  const ordenados = registros.map(r => ({ r, passo: porPasso.get(String(r.ultimo_insumo_id)) }))
+    .sort((a, b) => Number(b.passo?.ordem_insumo ?? final) - Number(a.passo?.ordem_insumo ?? final));
+  for (const { r, passo } of ordenados) {
+    const qtd = Math.min(restante, Math.max(0, Number(r.quantidade) || 0));
+    if (!qtd) continue;
+    const ordem = Number(passo?.ordem_insumo ?? final);
+    const faltam = rota.filter(p => Number(p.ordem_insumo) > ordem).length;
+    linhas.push({
+      pedido_item_id: item.id, produto_id: item.produto_id, peca: item.nome || item.codigo || `Item ${item.id}`, codigo: item.codigo || '',
+      origem: faltam ? 'Parcial do estoque' : 'Pronta do estoque', quantidade: qtd,
+      etapa: passo?.processo || (faltam ? '—' : 'Finalizada'), item_parada: passo?.insumo_nome || '—',
+      lote_id: r.etapa_id ?? null, itens_faltantes: faltam, itens_da_rota: rota.length, ordem_origem: ordem
+    });
+    restante -= qtd;
+  }
+  // Compatibilidade com conversões antigas cujo registro de estoque não foi gravado.
+  const prontas = linhas.filter(l => l.origem === 'Pronta do estoque').reduce((s, l) => s + l.quantidade, 0);
+  const semRegistro = Math.min(restante, Math.max(0, (Number(item.qtd_usar_pronta) || 0) - prontas));
+  if (semRegistro > 0) {
+    linhas.push({ pedido_item_id: item.id, produto_id: item.produto_id, peca: item.nome || item.codigo || `Item ${item.id}`, codigo: item.codigo || '',
+      origem: 'Pronta do estoque', quantidade: semRegistro, etapa: rota[rota.length - 1]?.processo || 'Finalizada', item_parada: rota[rota.length - 1]?.insumo_nome || '—',
+      lote_id: null, itens_faltantes: 0, itens_da_rota: rota.length, ordem_origem: final });
+    restante -= semRegistro;
+  }
+  if (restante > 0) linhas.push({
+    pedido_item_id: item.id, produto_id: item.produto_id, peca: item.nome || item.codigo || `Item ${item.id}`, codigo: item.codigo || '',
+    origem: 'Produzir do zero', quantidade: restante, etapa: rota[0]?.processo || '—', item_parada: '—', lote_id: null,
+    itens_faltantes: rota.length, itens_da_rota: rota.length, ordem_origem: 0
+  });
+  return linhas;
+}
+
+/** Histórico imutável das edições; funciona também para pedidos já editados. */
+async function edicoesDoPedido(api, pedidoId, rotaDoProduto, itens, materiaPorId = new Map(), avisos = []) {
+  const { lerTabela } = require('./financeiro/mudancasUnidades');
+  let brutas;
+  try {
+    brutas = await lerTabela(api, 'pedido_edicoes', { pedido_id: pedidoId });
+  } catch (err) {
+    if (err?.status !== 403) throw err;
+    avisos.push('A auditoria das edições está indisponível para este acesso. Atualize o mapa de permissões da API para permitir a leitura de pedido_edicoes com ped.report. A composição atual continua disponível.');
+    return [];
+  }
+  const json = v => {
+    if (v && typeof v === 'object') return v;
+    try { return JSON.parse(v || '{}') || {}; } catch (_) { return {}; }
+  };
+  const lista = v => Array.isArray(v) ? v : [];
+  const nome = i => [i?.codigo, i?.nome].filter(Boolean).join(' — ') || `Peça ${i?.produto_id ?? i?.id ?? ''}`;
+  const materiais = dados => lista(dados).map(([id, quantidade]) => ({
+    insumo_id: Number(id), nome: materiaPorId.get(Number(id))?.nome || `Insumo ${id}`,
+    unidade: materiaPorId.get(Number(id))?.unidade || '', quantidade: Number(quantidade) || 0
+  })).filter(m => m.quantidade > 0);
+  const saida = [];
+  for (const e of (brutas || []).sort((a, b) => String(a.criado_em || '').localeCompare(String(b.criado_em || '')) || Number(a.id) - Number(b.id))) {
+    const antes = json(e.antes), depois = json(e.depois), resumo = json(e.resumo), resultado = json(e.resultado);
+    const porId = new Map([...itens, ...lista(antes.itens)].map(i => [String(i.id), i]));
+    const linhas = lista(depois.linhas).map(l => {
+      const anterior = lista(antes.itens).find(i => String(i.id) === String(l.item_id));
+      const item = anterior || itens.find(i => String(i.produto_id) === String(l.produto_id));
+      return { item_id: l.item_id, produto_id: l.produto_id, peca: nome(item || l), tipo: l.tipo,
+        quantidade_antes: Number(anterior?.quantidade) || 0, quantidade_depois: Number(l.quantidade) || 0,
+        juntar_em: l.juntar_em ?? null, novas: Number(l.novas) || 0, decisao: l.decisao || null };
+    }).filter(l => l.tipo !== 'existente' || l.quantidade_antes !== l.quantidade_depois || l.novas > 0);
+    const saidas = [];
+    const retornos = lista(resumo.saem).flatMap(s => lista(s.pecas));
+    const totalRetorno = retornos.filter(p => Number(p.ordem_destino) > 0).reduce((s, p) => s + (Number(p.quantidade) || 0), 0);
+    const totalSemPeca = retornos.filter(p => !(Number(p.ordem_destino) > 0)).reduce((s, p) => s + (Number(p.quantidade) || 0), 0);
+    const concluida = Boolean(e.concluida_em);
+    for (const s of lista(resumo.saem)) {
+      const item = porId.get(String(s.pedido_item_id));
+      const rota = item ? await rotaDoProduto(item.produto_id) : [];
+      for (const p of lista(s.pecas)) {
+        const passo = rota.find(r => Number(r.ordem_insumo) === Number(p.ordem_destino));
+        saidas.push({ peca: s.peca || nome(item), quantidade: Number(p.quantidade) || 0,
+          confirmado: concluida && (Number(p.ordem_destino) > 0 ? Number(resultado.pecas_ao_estoque) === totalRetorno : Number(resultado.pecas_sem_volta) === totalSemPeca),
+          origem: p.origem === 'estoque' ? 'Do estoque' : 'Produzida do zero',
+          destino: Number(p.ordem_destino) > 0 ? `Estoque: ${passo?.insumo_nome || `etapa ${p.ordem_destino}`}` : 'Matéria-prima (sem peça produzida)' });
+      }
+    }
+    const devolvidos = materiais(resumo.materia_prima_volta);
+    const devolucaoConfirmada = concluida && Number(resultado.insumos_devolvidos) === devolvidos.length;
+    saida.push({ id: e.id, data: e.criado_em, motivo: e.motivo || '', valor_antes: Number(e.valor_antes ?? antes.valor_final) || 0,
+      valor_depois: Number(e.valor_depois ?? depois.totais?.valor_final) || 0, linhas, saidas,
+      materia_prima_devolvida: devolvidos.map(m => ({ ...m, confirmado: devolucaoConfirmada })), materia_prima_nova_prevista: materiais(resumo.materia_prima_sai_prevista),
+      avisos: lista(resultado.avisos), concluida });
+  }
+  return saida;
 }
 
 /**
@@ -222,6 +321,8 @@ async function destinacoesDoCancelamento(api, pedidoId, rotaDoProduto, listaIten
 }
 
 module.exports = {
+  composicaoDoItem,
+  edicoesDoPedido,
   rotuloDoPasso,
   alteracoesRecebidas,
   reconstruirSelecaoOriginal,

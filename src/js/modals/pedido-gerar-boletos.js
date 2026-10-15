@@ -20,7 +20,7 @@
 
   // ------------------------------------------------------ funções puras
   const ROTULO_STATUS = {
-    registrado: ['badge-success', 'Registrado'], pago: ['badge-success', 'Pago'], baixado: ['badge-neutral', 'Baixado'], vencido: ['badge-warning', 'Vencido'],
+    registrado: ['badge-boleto-registrado', 'Registrado'], pago: ['badge-success', 'Pago'], baixado: ['badge-neutral', 'Baixado'], vencido: ['badge-warning', 'Vencido'],
     protestado: ['badge-danger', 'Protestado'], erro: ['badge-danger', 'Erro no BB'], reservado: ['badge-warning', 'Reservado']
   };
 
@@ -300,7 +300,8 @@
 
   function exibirMensagem(tipo, texto) {
     mensagemEl.textContent = texto;
-    mensagemEl.style.color = tipo === 'erro' ? 'var(--color-red)' : (tipo === 'ok' ? 'var(--color-green)' : 'var(--color-primary-light)');
+    mensagemEl.classList.toggle('badge-boleto-registrado', tipo === 'registrado');
+    mensagemEl.style.color = tipo === 'registrado' ? '#fff' : (tipo === 'erro' ? 'var(--color-red)' : (tipo === 'ok' ? 'var(--color-green)' : 'var(--color-primary-light)'));
     mensagemEl.classList.remove('hidden');
   }
 
@@ -615,11 +616,15 @@
         return;
       }
       const r = resumoDosResultados(corpo);
-      exibirMensagem(r.tipo === 'error' ? 'erro' : (r.tipo === 'success' ? 'ok' : 'info'), r.texto);
+      exibirMensagem(r.tipo === 'error' ? 'erro' : (r.tipo === 'success' ? 'registrado' : 'info'), r.texto);
       resultadoEl.replaceChildren();
       for (const item of corpo?.resultados || []) {
         const li = document.createElement('li');
-        li.style.color = item.ok ? 'var(--color-green)' : 'var(--color-red)';
+        if (item.ok && String(item.boleto?.status || 'registrado') === 'registrado') {
+          li.className = 'badge-boleto-registrado px-3 py-1 rounded-lg';
+        } else {
+          li.style.color = item.ok ? 'var(--color-green)' : 'var(--color-red)';
+        }
         li.textContent = item.ok
           ? `Parcela ${item.numero_parcela}: ${item.ja_existia ? 'já tinha boleto' : 'registrado'} ${item.boleto?.nosso_numero ? `· ${item.boleto.nosso_numero}` : ''}${item.boleto?.linha_digitavel ? ` · ${item.boleto.linha_digitavel}` : ''}${item.aviso ? ` · ${item.aviso}` : ''}`
           : `Parcela ${item.numero_parcela}: ${item.erro}`;

@@ -667,7 +667,7 @@ function resumoDasUnidades(unidades = [], rota = []) {
 /** O que a tela abre: as linhas, de onde veio cada unidade e o que trava. */
 async function situacao(api, pedidoId) {
   const lidos = await lerPedido(api, pedidoId);
-  const comp = await composicao(api, lidos);
+  const [comp, produtosPor] = await Promise.all([composicao(api, lidos), produtosPorId(api)]);
   const bloqueios = motivosDoBloqueio({ pedido: lidos.pedido, notas: lidos.notas, externas: lidos.externas, travas: lidos.travas });
   return {
     sql_pendente: await sqlPendente(api),
@@ -681,7 +681,10 @@ async function situacao(api, pedidoId) {
     bloqueios,
     linhas: comp.linhas.filter(l => numero(l.item.quantidade) > 0).map(l => ({
       item_id: l.item.id, produto_id: l.item.produto_id ?? null, codigo: l.item.codigo || null, nome: l.item.nome || null,
-      quantidade: Math.trunc(numero(l.item.quantidade)), valor_unitario: centavos(l.item.valor_unitario), valor_total: centavos(l.item.valor_total),
+      quantidade: Math.trunc(numero(l.item.quantidade)), valor_unitario: numero(l.item.valor_unitario), valor_total: centavos(l.item.valor_total),
+      preco_tabela: precoDaTabela(produtosPor.get(String(l.item.produto_id))),
+      valor_unitario_desc: numero(l.item.valor_unitario_desc),
+      desconto_pagamento_prc: numero(l.item.desconto_pagamento_prc), desconto_especial_prc: numero(l.item.desconto_especial_prc),
       desconto_prc: numero(l.item.desconto_pagamento_prc) + numero(l.item.desconto_especial_prc),
       unidades: resumoDasUnidades(l.unidades, l.rota), travado: l.travado
     })),
@@ -771,7 +774,13 @@ function previa({ lidos, plano, voltas, materialVolta, materialSai, assinatura }
       tipo: l.tipo, item_id: l.item?.id ?? null, produto_id: l.item ? l.item.produto_id : l.produto_id, peca: nome(l),
       quantidade_antes: l.quantidade_antes, quantidade_depois: l.quantidade_depois, juntar_em: l.juntar_em ?? null,
       saem: l.removidas.length, novas: l.novas, decisao: l.decisao || null, alterada: l.alterada,
-      valor_unitario: l.valores ? centavos(l.valores.valor_unitario) : centavos(l.item?.valor_unitario),
+      // O unitário da tabela pode ter mais de duas casas: arredondá-lo antes
+      // da multiplicação faz a prévia do modal divergir do valor salvo.
+      valor_unitario: numero(l.valores ? l.valores.valor_unitario : l.item?.valor_unitario),
+      valor_unitario_desc: numero(l.valores ? l.valores.valor_unitario_desc : l.item?.valor_unitario_desc),
+      desconto_pagamento_prc: numero(l.valores ? l.valores.desconto_pagamento_prc : l.item?.desconto_pagamento_prc),
+      desconto_especial_prc: numero(l.valores ? l.valores.desconto_especial_prc : l.item?.desconto_especial_prc),
+      desconto_total: centavos(l.valores ? l.valores.desconto_total : l.item?.desconto_total),
       desconto_prc: l.valores ? numero(l.valores.desconto_pagamento_prc) + numero(l.valores.desconto_especial_prc) : numero(l.item?.desconto_pagamento_prc) + numero(l.item?.desconto_especial_prc),
       valor_total: l.valores ? centavos(l.valores.valor_total) : centavos(l.item?.valor_total)
     })),
@@ -935,16 +944,38 @@ async function aplicar(api, { pedidoId, entrada = {}, usuarioId = null, registra
       }
     }
   }
-  // O que faltava (foto da conversão): na proporção do que ainda será produzido.
+  // A falta registrada diminui só pelo material que esta edição devolve.
+  // Uma parcial e uma peça do zero não consomem os mesmos passos da rota;
+  // reduzir pela proporção de peças inventava frações de faltas já devolvidas.
+  const voltaPorItem = new Map();
+  for (const v of voltas) {
+    const itemId = String(v.item.id);
+    if (!voltaPorItem.has(itemId)) voltaPorItem.set(itemId, new Map());
+    const material = voltaPorItem.get(itemId);
+    for (const [insumoId, quantidade] of v.material) {
+      const chave = String(insumoId);
+      material.set(chave, arredondar((material.get(chave) || 0) + numero(quantidade)));
+    }
+  }
+  // Preserva a dona de cada falta antes das junções: uma transferência não
+  // faz a mesma falta receber outra devolução ao processar a linha de destino.
+  const faltantesAntes = lidos.faltantes.map(f => ({ ...f }));
   for (const l of plano.linhas.filter(x => x.item && x.alterada)) {
-    const antesProduzir = numero(l.item.qtd_a_produzir);
-    const contagem = l.tipo === 'juntada' ? { qtd_a_produzir: 0 } : contagemDeOrigem(l.ficam, null);
-    const fator = antesProduzir > 0 ? Math.min(1, contagem.qtd_a_produzir / antesProduzir) : 1;
-    for (const f of lidos.faltantes.filter(x => String(x.pedido_item_id) === String(l.item.id))) {
+    const material = voltaPorItem.get(String(l.item.id));
+    for (const f of faltantesAntes.filter(x => String(x.pedido_item_id) === String(l.item.id))) {
+      const insumoId = String(f.insumo_id);
+      const devolvido = material?.get(insumoId) || 0;
+      const abatido = Math.min(Math.max(0, numero(f.quantidade)), devolvido);
+      const restante = arredondar(Math.max(0, numero(f.quantidade) - abatido));
+      if (material) material.set(insumoId, arredondar(devolvido - abatido));
       try {
-        if (l.tipo === 'juntada') await api.put(`/api/pedidos_itens_faltantes/${f.id}`, { pedido_item_id: l.juntar_em });
-        else if (fator <= 0) await api.delete(`/api/pedidos_itens_faltantes/${f.id}`);
-        else if (fator < 1) await api.put(`/api/pedidos_itens_faltantes/${f.id}`, { quantidade: arredondar(numero(f.quantidade) * fator) });
+        if (restante <= 0) await api.delete(`/api/pedidos_itens_faltantes/${f.id}`);
+        else {
+          const campos = {};
+          if (abatido > 0) campos.quantidade = restante;
+          if (l.tipo === 'juntada') campos.pedido_item_id = l.juntar_em;
+          if (Object.keys(campos).length) await api.put(`/api/pedidos_itens_faltantes/${f.id}`, campos);
+        }
       } catch (e) {
         avisos.push(`Não foi possível atualizar o que faltava de ${nomeDaPeca(l.item)}: ${e?.message || e}`);
       }

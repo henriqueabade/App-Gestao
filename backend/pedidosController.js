@@ -39,7 +39,9 @@ const { registrarEntrada, registrarSaida } = require('./materiaPrima');
 const {
   alteracoesRecebidas,
   reconstruirSelecaoOriginal,
-  destinacoesDoCancelamento
+  destinacoesDoCancelamento,
+  composicaoDoItem,
+  edicoesDoPedido
 } = require('./relatorioPecas');
 const {
   RESERVA,
@@ -1104,10 +1106,8 @@ router.delete('/:id', exigirPermissao('ped.delete'), exigirSupAdmin, async (req,
 /**
  * GET /pedidos/:id/relatorio-producao
  *
- * Devolve a FOTO congelada na conversão, agrupada por processo — uma folha por
- * processo no relatório. Nada é recalculado aqui de propósito: o papel que vai
- * para a produção tem de dizer o que foi decidido quando o pedido foi criado,
- * não o que o estoque parece agora.
+ * Demanda da composição atual, agrupada por processo. As faltas são registros
+ * históricos limitados à demanda atual, sem consultar o saldo de estoque de hoje.
  */
 /**
  * Toda a matéria-prima, indexada por id, numa requisição só.
@@ -1157,7 +1157,7 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
 
-    const listaItens = Array.isArray(itens) ? itens : [];
+    const listaItens = pecasVivas(itens);
     const listaFaltantes = Array.isArray(faltantes) ? faltantes : [];
 
     // Nome da peça por id, para o relatório mostrar "Peça x" com o nome real.
@@ -1166,9 +1166,8 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
     // ------------------------------------------------------------------
     // O QUE CADA PEÇA CONSOME (a tabela de cima do relatório).
     //
-    // Vem da rota do produto × `qtd_a_produzir` — e `qtd_a_produzir` está
-    // congelado em pedidos_itens desde a conversão, então a quantidade não muda
-    // depois. Só as peças PRODUZIDAS entram: peça tirada pronta do estoque não
+    // Vem das origens da composição atual (após retiradas, junções e novas
+    // unidades). Só as peças PRODUZIDAS entram: peça tirada pronta do estoque não
     // vai ser fabricada, e listá-la mandaria a produção refazer o que já existe.
     // ------------------------------------------------------------------
     // Toda a matéria-prima de uma vez. Buscar insumo a insumo (`/materia_prima/:id`
@@ -1220,41 +1219,22 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       pecas.get(pecaId).itens.push(dados);
     };
 
+    const consumoPorItem = new Map();
     for (const peca of listaItens) {
-      const aProduzir = Number(peca.qtd_a_produzir) || 0;
-      if (!(aProduzir > 0)) continue;
       const rota = await rotaDoProduto(peca.produto_id);
       if (!rota.length) continue;
-
-      // O ponto de parada é lido pelo id da LINHA da rota, não pelo id do
-      // insumo: é assim que a coluna é gravada (FK para produtos_insumos).
-      // Comparar com id de insumo não encontra nada, a ordem cai para 0 e a
-      // peça meio pronta passa a ser cobrada como se fosse do zero — material a
-      // mais no papel que vai para a produção.
-      const passoFinal = rota[rota.length - 1].passo_id;
-      const ordemPorPasso = new Map(rota.map(p => [Number(p.passo_id), Number(p.ordem_insumo) || 0]));
-
-      // Peças aproveitadas pela METADE: já passaram por parte da rota. Cobrar a
-      // rota inteira delas no relatório mandaria a produção separar material
-      // para processos que essas peças já tinham passado.
-      const parciais = (extPorItem.get(Number(peca.id)) || [])
-        .filter(r => Number(r.ultimo_insumo_id) !== Number(passoFinal))
-        .map(r => ({
-          quantidade: Number(r.quantidade) || 0,
-          ordem: ordemPorPasso.get(Number(r.ultimo_insumo_id)) ?? 0
-        }))
-        .filter(p => p.quantidade > 0);
-
-      const totalParcial = parciais.reduce((acc, p) => acc + p.quantidade, 0);
-      const doZero = Math.max(0, aProduzir - totalParcial);
-
+      const origens = composicaoDoItem(peca, extPorItem.get(Number(peca.id)) || [], rota);
+      const consumo = new Map();
+      consumoPorItem.set(String(peca.id), consumo);
       for (const passo of rota) {
         const ordemDoPasso = Number(passo.ordem_insumo) || 0;
-        const unidades = doZero
-          + parciais.reduce((acc, p) => acc + (ordemDoPasso > p.ordem ? p.quantidade : 0), 0);
+        const unidades = origens.reduce((s, o) => s + (ordemDoPasso > o.ordem_origem ? o.quantidade : 0), 0);
         const quantidade = Math.round((passo.por_unidade * unidades + Number.EPSILON) * 10000) / 10000;
         if (!(quantidade > 0)) continue;
+        const chave = String(passo.insumo_id);
+        consumo.set(chave, (consumo.get(chave) || 0) + quantidade);
         registrar(passo.processo, Number(peca.id), {
+          insumo_id: passo.insumo_id,
           insumo_nome: passo.insumo_nome,
           unidade: passo.unidade,
           quantidade,
@@ -1264,19 +1244,24 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
     }
 
     // ------------------------------------------------------------------
-    // O QUE FALTOU (a tabela de baixo). Sai da foto congelada na conversão —
-    // recalcular contra o estoque de hoje daria um número diferente do que foi
-    // decidido, e é o decidido que a produção precisa ver.
+    // FALTAS REGISTRADAS (a tabela de baixo). Preserva o registro histórico,
+    // limitado ao consumo atual por item/insumo: linhas retiradas e insumos
+    // anteriores ao ponto de entrada de uma parcial deixam de contar.
     // ------------------------------------------------------------------
     const faltaPorProcesso = new Map();
     for (const f of listaFaltantes) {
+      const consumo = consumoPorItem.get(String(f.pedido_item_id));
+      const chaveInsumo = String(f.insumo_id);
+      const quantidade = Math.min(Math.max(0, Number(f.quantidade) || 0), consumo?.get(chaveInsumo) || 0);
+      if (!(quantidade > 0)) continue;
+      consumo.set(chaveInsumo, Math.max(0, consumo.get(chaveInsumo) - quantidade));
       const processo = f.processo || 'Sem processo';
       if (!faltaPorProcesso.has(processo)) faltaPorProcesso.set(processo, new Map());
       const mapa = faltaPorProcesso.get(processo);
-      const chave = `${f.insumo_nome}__${f.unidade}`;
+      const chave = chaveInsumo;
       const atual = mapa.get(chave)
-        || { insumo_nome: f.insumo_nome, unidade: f.unidade, quantidade: 0 };
-      atual.quantidade = Math.round((atual.quantidade + (Number(f.quantidade) || 0) + Number.EPSILON) * 10000) / 10000;
+        || { insumo_id: f.insumo_id, insumo_nome: f.insumo_nome, unidade: f.unidade, quantidade: 0 };
+      atual.quantidade = Math.round((atual.quantidade + quantidade + Number.EPSILON) * 10000) / 10000;
       mapa.set(chave, atual);
       // Um processo que só aparece nos faltantes ainda precisa de folha.
       if (!processos.has(processo)) processos.set(processo, new Map());
@@ -1296,9 +1281,9 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
         const totais = new Map();
         for (const peca of listaPecas) {
           for (const item of peca.itens) {
-            const chave = `${item.insumo_nome}__${item.unidade}`;
+            const chave = String(item.insumo_id);
             const atual = totais.get(chave)
-              || { insumo_nome: item.insumo_nome, unidade: item.unidade, quantidade: 0 };
+              || { insumo_id: item.insumo_id, insumo_nome: item.insumo_nome, unidade: item.unidade, quantidade: 0 };
             atual.quantidade = Math.round((atual.quantidade + item.quantidade + Number.EPSILON) * 10000) / 10000;
             totais.set(chave, atual);
           }
@@ -1324,7 +1309,12 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       && listaItens.every(i => !(Number(i.qtd_a_produzir) > 0))
       && listaItens.some(i => Number(i.qtd_usar_pronta) > 0);
 
+    const avisosAuditoria = [];
+    const edicoes = await edicoesDoPedido(api, id, rotaDoProduto, Array.isArray(itens) ? itens : [], materiaPorId, avisosAuditoria);
     res.json({
+      edicoes,
+      avisos_auditoria: avisosAuditoria,
+      houve_edicao: edicoes.length > 0 || avisosAuditoria.length > 0,
       somentePecasProntas,
       temItens,
       pedido: {
@@ -1418,63 +1408,11 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
     const linhas = [];
 
     for (const item of listaItens) {
-      const pecaNome = item.nome || item.codigo || `Item ${item.id}`;
       const rota = await rotaDoProduto(item.produto_id);
-      const totalDaRota = rota.length;
-      const doEstoque = extPorItem.get(Number(item.id)) || [];
-
-      let parciaisDoEstoque = 0;
-
-      for (const reg of doEstoque) {
-        const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
-        const ordem = passo ? passo.ordem_insumo : totalDaRota;
-        // O último passo da rota é a peça acabada: nada falta.
-        const faltam = Math.max(0, totalDaRota - ordem);
-        if (faltam > 0) parciaisDoEstoque += Number(reg.quantidade) || 0;
-        linhas.push({
-          peca: pecaNome,
-          codigo: item.codigo || '',
-          origem: faltam === 0 ? 'Pronta do estoque' : 'Parcial do estoque',
-          quantidade: Number(reg.quantidade) || 0,
-          etapa: passo?.processo || (faltam === 0 ? 'Finalizada' : '—'),
-          item_parada: passo?.insumo_nome || '—',
-          lote_id: reg.etapa_id ?? null,
-          itens_faltantes: faltam,
-          itens_da_rota: totalDaRota
-        });
-      }
-
-      // ----------------------------------------------------------------
-      // Peças produzidas DO ZERO
-      //
-      // A conta é `qtd_a_produzir` menos o que foi aproveitado pela metade — a
-      // MESMA que a conversão fez ao abater os insumos. Antes esta linha saía
-      // de `reservas_estoque`, e um pedido cuja reserva não tivesse sido
-      // gravada aparecia no relatório sem NENHUMA peça do zero, mesmo tendo
-      // consumido a rota inteira de todas elas.
-      //
-      // A reserva serve para dizer o STATUS (em produção, finalizada,
-      // retornada) — não para dizer quantas são.
-      // ----------------------------------------------------------------
-      const aProduzir = Number(item.qtd_a_produzir) || 0;
-      const doZero = Math.max(0, aProduzir - parciaisDoEstoque);
-      if (doZero > 0) {
-        const reserva = (Array.isArray(reservas) ? reservas : [])
-          .find(r => String(r.pedido_item_id) === String(item.id)) || null;
-        linhas.push({
-          peca: pecaNome,
-          codigo: item.codigo || '',
-          origem: 'Produzir do zero',
-          quantidade: doZero,
-          // Do zero é o começo da rota: nada foi feito ainda.
-          etapa: rota.length ? rota[0].processo : '—',
-          item_parada: '—',
-          lote_id: null,
-          itens_faltantes: totalDaRota,
-          itens_da_rota: totalDaRota,
-          reserva_status: reserva?.status || null
-        });
-      }
+      const origens = composicaoDoItem(item, extPorItem.get(Number(item.id)) || [], rota);
+      const reserva = (Array.isArray(reservas) ? reservas : [])
+        .find(r => String(r.pedido_item_id) === String(item.id) && r.status !== RESERVA.RETORNADA) || null;
+      linhas.push(...origens.map(l => l.origem === 'Produzir do zero' ? { ...l, reserva_status: reserva?.status || null } : l));
     }
 
     // ------------------------------------------------------------------
@@ -1486,14 +1424,17 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
     // seções abaixo são independentes: um pedido pode ter recebido peças
     // (`alteracoes`) e/ou ter sido cancelado (`destinacoes`).
     // ------------------------------------------------------------------
-    const [recebidas, destinacoes] = await Promise.all([
+    const todosItens = Array.isArray(itens) ? itens : [];
+    const avisosAuditoria = [];
+    const [recebidas, destinacoes, edicoes] = await Promise.all([
       api.get('/api/realocacoes', { query: { pedido_id_destino: id } }).catch(() => []),
-      destinacoesDoCancelamento(api, id, rotaDoProduto, listaItens)
+      destinacoesDoCancelamento(api, id, rotaDoProduto, todosItens),
+      edicoesDoPedido(api, id, rotaDoProduto, todosItens, materiaPorId, avisosAuditoria)
     ]);
-    const alteracoes = await alteracoesRecebidas(api, recebidas, rotaDoProduto, listaItens);
+    const alteracoes = await alteracoesRecebidas(api, recebidas, rotaDoProduto, todosItens);
     // A seleção ORIGINAL só faz sentido quando houve alteração — sem ela seria
     // uma segunda tabela idêntica à composição atual.
-    const selecaoOriginal = alteracoes.length
+    const selecaoOriginal = alteracoes.length && !edicoes.length && !avisosAuditoria.length
       ? await reconstruirSelecaoOriginal(linhas, recebidas, rotaDoProduto, listaItens)
       : [];
 
@@ -1501,6 +1442,9 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
       pedido: { id: pedido.id, numero: pedido.numero, data_emissao: pedido.data_emissao },
       temItens: listaItens.length > 0,
       pecas: linhas,
+      edicoes,
+      avisos_auditoria: avisosAuditoria,
+      houve_edicao: edicoes.length > 0 || avisosAuditoria.length > 0,
       selecaoOriginal,
       alteracoes,
       destinacoes

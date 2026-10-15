@@ -151,7 +151,7 @@
     const registrados = Number(boletos?.registrados) || 0;
     if (parcelas > 0 && registrados > 0) {
       const pagos = Number(boletos?.pagos) || 0;
-      tags.push({ classe: registrados === parcelas ? 'badge-success' : 'badge-warning', texto: `Boletos ${registrados}/${parcelas}${pagos ? ` · ${pagos} pago${pagos > 1 ? 's' : ''}` : ''}` });
+      tags.push({ classe: pagos === parcelas ? 'badge-success' : (registrados === parcelas ? 'badge-boleto-registrado' : 'badge-warning'), texto: `Boletos ${registrados}/${parcelas}${pagos ? ` · ${pagos} pago${pagos > 1 ? 's' : ''}` : ''}` });
     }
     // Boletos emitidos fora e informados: contados à parte (não são do BB).
     const deFora = Number(boletos?.externos) || 0;
@@ -274,7 +274,7 @@
   /** Como cada boleto aparece na coluna das parcelas: classe da tag e texto. Pura. */
   function rotuloDoBoleto(boleto) {
     if (!boleto) return { classe: 'badge-neutral', texto: 'sem boleto' };
-    const ROTULO = { registrado: ['badge-success', 'registrado'], pago: ['badge-success', 'pago'], baixado: ['badge-neutral', 'baixado'], vencido: ['badge-warning', 'vencido'], protestado: ['badge-danger', 'protestado'], erro: ['badge-danger', 'erro'], reservado: ['badge-warning', 'reservado'] };
+    const ROTULO = { registrado: ['badge-boleto-registrado', 'registrado'], pago: ['badge-success', 'pago'], baixado: ['badge-neutral', 'baixado'], vencido: ['badge-warning', 'vencido'], protestado: ['badge-danger', 'protestado'], erro: ['badge-danger', 'erro'], reservado: ['badge-warning', 'reservado'] };
     const MOTIVO = { quitado_por_fora: 'quitado por fora', cancelado: 'cancelado', reemissao: 'reemissão', banco: 'pelo banco' };
     const [classe, rotuloBase] = ROTULO[boleto.status] || ['badge-neutral', String(boleto.status || '')];
     const rotulo = boleto.status === 'baixado' && MOTIVO[boleto.motivo_baixa] ? `${rotuloBase} (${MOTIVO[boleto.motivo_baixa]})` : rotuloBase;

@@ -10,9 +10,10 @@
  *    seguinte — o que não pode é o processo B começar no que sobrou da folha do
  *    processo A.
  *
- * Os dados vêm da FOTO congelada na conversão (`pedidos_itens_faltantes`), não
- * de um recálculo: o papel que vai para a produção precisa dizer o que foi
- * decidido quando o pedido nasceu.
+ * A demanda acompanha a composição atual do pedido. As faltas são o registro
+ * histórico da conversão (`pedidos_itens_faltantes`), limitado à demanda que
+ * permanece; não representam uma consulta ao saldo atual do estoque. Edições
+ * posteriores aparecem na auditoria, inclusive os retornos e novos consumos.
  */
 (async () => {
   const overlayId = 'relatorioProducao';
@@ -94,11 +95,11 @@
       </tr>`).join('');
 
     const totais = linhas(grupo.totais);
-    // Sem faltantes o processo está coberto pelo estoque — dizer isso é melhor
-    // que uma tabela vazia, que se lê como "não calculado".
+    // A ausência de falta é histórica: não afirma que o saldo de hoje cobre
+    // o processo, nem que o estoque foi consultado novamente.
     const faltantes = grupo.faltantes?.length
       ? linhas(grupo.faltantes)
-      : '<tr><td colspan="3" class="rp-vazio">Nenhum item em falta: o estoque cobria este processo.</td></tr>';
+      : '<tr><td colspan="3" class="rp-vazio">Nenhuma falta registrada para a demanda atual deste processo.</td></tr>';
 
     return `
       <section class="rp-folha">
@@ -121,9 +122,64 @@
         </table>
 
         <table class="rp-tabela rp-tabela-falta">
-          <thead><tr class="rp-faixa-falta"><th colspan="3">Itens Fora do Estoque — Processo ${escapar(grupo.processo)}</th></tr></thead>
+          <thead><tr class="rp-faixa-falta"><th colspan="3">Faltas registradas — Processo ${escapar(grupo.processo)}</th></tr></thead>
           <tbody>${faltantes}</tbody>
         </table>
+        <p class="rp-detalhe">Faltas históricas limitadas à demanda atual; o saldo atual do estoque não foi recalculado.</p>
+      </section>`;
+  }
+
+  /** A mesma auditoria acompanha a folha de insumos e a composição das peças. */
+  function folhaDasEdicoes(edicoes, pedido, avisos = []) {
+    edicoes = Array.isArray(edicoes) ? edicoes : [];
+    avisos = Array.isArray(avisos) ? avisos : [];
+    if (!edicoes.length && !avisos.length) return '';
+    const dinheiro = valor => (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const linha = (rotulo, texto) => `<tr><th>${escapar(rotulo)}</th><td>${escapar(texto)}</td></tr>`;
+    const lista = (itens, rotulo, texto) => (Array.isArray(itens) ? itens : []).map(item => linha(rotulo, texto(item))).join('');
+    const material = m => `${m.nome || `Insumo ${m.insumo_id ?? ''}`}: ${formatarQuantidade(m.quantidade)} ${m.unidade || ''}`.trim();
+    const tabelas = edicoes.map(e => {
+      const quando = e.data ? new Date(e.data) : null;
+      const data = quando && !Number.isNaN(quando.getTime()) ? quando.toLocaleString('pt-BR') : '—';
+      const valores = e.valor_antes !== null && e.valor_antes !== undefined && e.valor_depois !== null && e.valor_depois !== undefined
+        ? linha(e.concluida === false ? 'Valor previsto do pedido' : 'Valor do pedido', `${dinheiro(e.valor_antes)} → ${dinheiro(e.valor_depois)}`) : '';
+      const pecas = lista(e.linhas, 'Peça alterada', l => {
+        const tipo = l.tipo === 'nova' ? 'Peça nova' : l.tipo === 'juntada' ? 'Linha juntada' : 'Quantidade alterada';
+        const destino = l.tipo === 'juntada' && l.juntar_em !== null && l.juntar_em !== undefined ? ` · juntada à linha ${l.juntar_em}` : '';
+        const novas = Number(l.novas) > 0 ? ` · ${formatarQuantidade(l.novas)} unidade(s) nova(s)` : '';
+        return `${l.peca || 'Peça'}: ${formatarQuantidade(l.quantidade_antes)} → ${formatarQuantidade(l.quantidade_depois)} un. · ${tipo}${destino}${novas}`;
+      });
+      return `
+        <table class="rp-tabela rp-tabela-larga">
+          <thead><tr class="rp-faixa-processo"><th colspan="2">Edição ${escapar(e.id ?? '')} · ${escapar(data)}</th></tr></thead>
+          <tbody>
+            ${linha('Motivo', e.motivo || '—')}
+            ${e.concluida === false ? linha('Conclusão', 'Conclusão não registrada; valores e mudanças são o plano da edição. Confira os avisos.') : ''}
+            ${valores}
+            ${pecas}
+            ${(e.saidas || []).map(s => linha(s.confirmado ? 'Retorno de peça' : 'Retorno de peça previsto', `${formatarQuantidade(s.quantidade)} × ${s.peca || 'Peça'}${s.origem ? ` (${s.origem})` : ''} → ${s.destino || '—'}`)).join('')}
+            ${(e.materia_prima_devolvida || []).map(m => linha(m.confirmado ? 'Matéria-prima devolvida' : 'Devolução prevista de matéria-prima', material(m))).join('')}
+            ${lista(e.materia_prima_nova_prevista, 'Novos consumos previstos', material)}
+            ${lista(e.avisos, 'Aviso', aviso => aviso)}
+          </tbody>
+        </table>`;
+    }).join('');
+    return `
+      <section class="rp-folha">
+        <header class="rp-cabecalho">
+          <div>
+            <h2>Pedido ${escapar(pedido?.numero || pedido?.id || '')}</h2>
+            <p>${escapar(contexto.cliente || '')}</p>
+          </div>
+          <div class="rp-processo-nome">Edições do pedido</div>
+        </header>
+        <p class="rp-detalhe">Histórico das edições. Os novos consumos são previstos na edição; não comprovam um consumo realizado.</p>
+        ${avisos.length ? `
+        <table class="rp-tabela rp-tabela-larga">
+          <thead><tr class="rp-faixa-processo"><th colspan="2">Consulta da auditoria</th></tr></thead>
+          <tbody>${lista(avisos, 'Aviso', aviso => aviso)}</tbody>
+        </table>` : ''}
+        ${tabelas}
       </section>`;
   }
 
@@ -252,19 +308,22 @@
     const original = Array.isArray(dados?.selecaoOriginal) ? dados.selecaoOriginal : [];
     const alteracoes = Array.isArray(dados?.alteracoes) ? dados.alteracoes : [];
     const destinacoes = Array.isArray(dados?.destinacoes) ? dados.destinacoes : [];
+    const edicoes = Array.isArray(dados?.edicoes) ? dados.edicoes : [];
+    const houveEdicao = Boolean(dados?.houve_edicao) || edicoes.length > 0;
+    const auditoria = folhaDasEdicoes(edicoes, dados.pedido, dados.avisos_auditoria);
 
     if (!linhas.length && !destinacoes.length) {
       return `
         <div class="py-16 px-6 text-center max-w-2xl mx-auto">
           <i class="fas fa-cubes text-4xl text-gray-500 mb-4"></i>
-          <p class="text-gray-300 font-medium">Este pedido não tem peças registradas na conversão.</p>
-        </div>`;
+          <p class="text-gray-300 font-medium">${houveEdicao ? 'Este pedido não tem peças na composição atual.' : 'Este pedido não tem peças registradas na conversão.'}</p>
+        </div>${auditoria}`;
     }
 
     // Três recortes, na ordem em que a história aconteceu: o que foi escolhido,
     // o que mudou depois, e como o pedido ficou. Sem alteração, a primeira e a
-    // terceira seriam a mesma tabela — então só a atual aparece, com o título
-    // de sempre.
+    // terceira seriam a mesma tabela. Após edições, a tabela sempre identifica
+    // a composição atual, mesmo sem uma seleção original preservada.
     const houveAlteracao = alteracoes.length > 0 && original.length > 0;
 
     return `
@@ -280,11 +339,11 @@
         ${houveAlteracao ? tabelaDeComposicao('Seleção original da conversão', original) : ''}
         ${tabelaDeAlteracoes(alteracoes)}
         ${tabelaDeComposicao(
-    houveAlteracao ? 'Composição atual' : 'Peças selecionadas na conversão',
+    houveEdicao || alteracoes.length > 0 ? 'Composição atual' : 'Peças selecionadas na conversão',
     linhas
   )}
         ${tabelaDeDestinacoes(destinacoes)}
-      </section>`;
+      </section>${auditoria}`;
   }
 
   async function alternarPecas() {
@@ -344,7 +403,11 @@
         // o usuário leia ausência de relatório como defeito.
         if (dados.somentePecasProntas) {
           renderizarVazio(
-            'Não há relatório de produção para este pedido.\n\n'
+            (Array.isArray(dados.edicoes) && dados.edicoes.length) || (Array.isArray(dados.avisos_auditoria) && dados.avisos_auditoria.length)
+              ? 'Não há demanda atual de fabricação neste pedido.\n\n'
+              + 'Todas as peças atuais foram atendidas com produtos prontos do estoque. '
+              + 'Consulte abaixo a auditoria das edições.'
+              : 'Não há relatório de produção para este pedido.\n\n'
             + 'Todas as peças foram atendidas com produtos prontos do estoque — '
             + 'nada precisa ser fabricado e nenhum insumo foi consumido.',
             'fa-box-open'
@@ -358,10 +421,19 @@
             + 'pedidos convertidos antes disso não têm esse registro.'
           );
         }
+        // Mesmo sem demanda de fabricação, os retornos e as mudanças do
+        // pedido precisam continuar consultáveis e imprimíveis.
+        const auditoria = folhaDasEdicoes(dados.edicoes, dados.pedido, dados.avisos_auditoria);
+        if (auditoria) {
+          htmlDoRelatorio += auditoria;
+          corpo.innerHTML = htmlDoRelatorio;
+          if (btnImprimir) btnImprimir.disabled = false;
+        }
         return;
       }
 
-      htmlDoRelatorio = dados.processos.map(g => folhaDoProcesso(g, dados.pedido || {})).join('');
+      htmlDoRelatorio = dados.processos.map(g => folhaDoProcesso(g, dados.pedido || {})).join('')
+        + folhaDasEdicoes(dados.edicoes, dados.pedido, dados.avisos_auditoria);
       corpo.innerHTML = htmlDoRelatorio;
       if (btnImprimir) btnImprimir.disabled = false;
     } catch (err) {

@@ -574,7 +574,7 @@
   function rotuloBoletoDaParcela(boleto) {
     if (!boleto) return { texto: 'Sem boleto', badge: 'badge-neutral' };
     const s = String(boleto.status || '');
-    if (s === 'registrado') return { texto: 'Boleto registrado', badge: 'badge-success' };
+    if (s === 'registrado') return { texto: 'Boleto registrado', badge: 'badge-boleto-registrado' };
     if (s === 'vencido') return { texto: 'Boleto vencido', badge: 'badge-warning' };
     if (s === 'protestado') return { texto: 'Boleto em protesto', badge: 'badge-danger' };
     if (s === 'erro') return { texto: 'Boleto recusado', badge: 'badge-danger' };

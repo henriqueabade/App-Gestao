@@ -545,7 +545,7 @@ const PARCELAS = [
 test('recebimentos (puras): tag do boleto, filtros por busca e boleto, total da visão, rótulo da parcela e resumo do registro', () => {
     const f = puro();
     assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela(null)), { texto: 'Sem boleto', badge: 'badge-neutral' });
-    assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela({ status: 'registrado' })), { texto: 'Boleto registrado', badge: 'badge-success' });
+    assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela({ status: 'registrado' })), { texto: 'Boleto registrado', badge: 'badge-boleto-registrado' });
     assert.deepStrictEqual(plano(f.rotuloBoletoDaParcela({ status: 'erro' })), { texto: 'Boleto recusado', badge: 'badge-danger' });
     assert.strictEqual(f.rotuloBoletoDaParcela({ status: 'baixado', motivo_baixa: 'quitacao_estornada' }).texto, 'Boleto baixado (quitação estornada)');
 

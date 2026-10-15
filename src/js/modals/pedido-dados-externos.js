@@ -760,7 +760,8 @@
       conteudo.append(tag, linhaTexto);
     } else if (estado.tipo === 'bb') {
       conteudo = document.createElement('span');
-      conteudo.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap';
+      const classe = linha.boleto?.status === 'registrado' ? 'badge-boleto-registrado' : 'badge-success';
+      conteudo.className = `${classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       conteudo.textContent = estado.texto;
     } else if (estado.tipo === 'paga') {
       conteudo = document.createElement('div');

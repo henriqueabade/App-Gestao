@@ -1795,6 +1795,12 @@ header.glass-surface {
     transform: none;
 }
 
+/* Boleto registrado aguarda pagamento: azul escuro; pago usa badge-success. */
+.badge-boleto-registrado {
+    background: #1e3a8a;
+    color: #fff;
+}
+
 /**
  * "Etiquetas" no rodapé do pedido enviado: bordô (pedido do dono,
  * 24/09/2026). Global porque o Visualizar pedido também abre por cima do

@@ -38,7 +38,7 @@ test('linhaDaParcela: só a parcela sem boleto vivo pode ser marcada; a tag e o 
   assert.strictEqual(registrado.boletoId, 41);
   assert.strictEqual(registrado.podeGerar, false);
   assert.strictEqual(registrado.rotulo, 'Registrado');
-  assert.strictEqual(registrado.classe, 'badge-success');
+  assert.strictEqual(registrado.classe, 'badge-boleto-registrado');
   assert.strictEqual(registrado.detalhe, '00034534810000000002-5 · 00190.00009 …');
   const erro = plano(f.linhaDaParcela({ parcela: { id: 3, numero_parcela: 3 }, tem_boleto_vivo: false, boleto: { status: 'erro', erro: 'O BB respondeu 422: Valor inválido' } }));
   assert.strictEqual(erro.podeGerar, true, 'boleto com erro pode ser gerado de novo (mesmo nosso número)');

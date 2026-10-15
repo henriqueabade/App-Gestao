@@ -366,7 +366,7 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.strictEqual(plano(f({}, [], 3)).length, 0, 'sem nota, sem tag de carta');
   // Boletos das parcelas: quantas têm boleto vivo, e os pagos; sem nenhum registrado, sem tag.
   assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 2, pagos: 0 })), [{ classe: 'badge-warning', texto: 'Boletos 2/3' }]);
-  assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 3, pagos: 1 })), [{ classe: 'badge-success', texto: 'Boletos 3/3 · 1 pago' }]);
+  assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 3, pagos: 1 })), [{ classe: 'badge-boleto-registrado', texto: 'Boletos 3/3 · 1 pago' }]);
   assert.deepStrictEqual(plano(f({}, [], 0, { parcelas: 3, registrados: 0 })), []);
   assert.deepStrictEqual(plano(f({}, [], 0, null)), []);
   assert.ok(VISUALIZAR.includes('/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos') && VISUALIZAR.includes('notaDocs ? cartas.length : cartasDeFora.length,'));
@@ -383,7 +383,7 @@ test('visualizar pedido: tags centralizadas no rodapé com NF-e (ou sem nota), f
   assert.deepStrictEqual(plano(contexto2.resumoDeBoletos({ parcelas: [{ tem_boleto_vivo: true, boleto: { status: 'pago' } }, { tem_boleto_vivo: false, boleto: { status: 'erro' } }, { tem_boleto_vivo: false, boleto: null, boleto_externo: { id: 5 } }] })), { parcelas: 3, registrados: 1, pagos: 1, com_erro: 1, externos: 1, pagos_a_mao: 0 }, 'o boleto de fora conta à parte');
   assert.deepStrictEqual(plano(contexto2.resumoDeBoletos(null)), { parcelas: 0, registrados: 0, pagos: 0, com_erro: 0, externos: 0, pagos_a_mao: 0 });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'registrado', nosso_numero: '00034534810000000393', nosso_numero_dv: '4', ambiente: 'sandbox', linha_digitavel: '001…' })),
-    { classe: 'badge-success', texto: 'registrado · 00034534810000000393-4 · homologação', detalhe: '001…' });
+    { classe: 'badge-boleto-registrado', texto: 'registrado · 00034534810000000393-4 · homologação', detalhe: '001…' });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto({ status: 'erro', erro: 'Valor inválido' })), { classe: 'badge-danger', texto: 'erro', detalhe: 'Valor inválido' });
   assert.deepStrictEqual(plano(contexto2.rotuloDoBoleto(null)), { classe: 'badge-neutral', texto: 'sem boleto' });
 });
