@@ -326,6 +326,7 @@
   const notaTexto = el('emitirNfeNotaTexto');
   const consultarBtn = el('emitirNfeConsultar');
   const confirmarBtn = el('emitirNfeConfirmar');
+  const espelhoBtn = el('emitirNfeEspelho');
   const semNfeBtn = el('enviarSemNfe');
   const rodapeAviso = el('emitirNfeRodapeAviso');
   const campos = {
@@ -338,6 +339,7 @@
   let estado = { pronto: false, pendencias: [], resumo: null, ambiente: 'homologacao', notas: [], jaEnviado: false };
   let emAndamento = false;
   let fechado = false;
+  let espelho = null;
 
   /**
    * O véu de "ação em andamento" da casa (BotaoAcao.comCarregamento), para o
@@ -353,9 +355,15 @@
     document.removeEventListener('keydown', aoEsc);
     window.removeEventListener('modalFechado', aoFecharModal);
   }
+  function fecharEspelho() {
+    const atual = espelho;
+    espelho = null;
+    atual?.fechar();
+  }
   function fechar() {
     if (fechado) return;
     fechado = true;
+    fecharEspelho();
     desligarOuvintes();
     if (window.emitirNfeContext === bruto) window.emitirNfeContext = null;
     Modal.close(overlayId);
@@ -367,7 +375,11 @@
     if (!emAndamento) fechar();
   }
   function aoFecharModal(evento) {
-    if (evento?.detail === overlayId) desligarOuvintes();
+    if (evento?.detail === overlayId) {
+      fechado = true;
+      fecharEspelho();
+      desligarOuvintes();
+    }
   }
   document.addEventListener('keydown', aoEsc);
   window.addEventListener('modalFechado', aoFecharModal);
@@ -543,6 +555,7 @@
     confirmarBtn.append(icone, document.createTextNode(acao.rotulo));
     confirmarBtn.disabled = ['aguardar', 'concluido'].includes(acao.acao) || Boolean(acao.bloqueada);
     confirmarBtn.dataset.acao = acao.acao;
+    if (espelhoBtn) espelhoBtn.disabled = acao.acao !== 'emitir' || Boolean(acao.bloqueada);
     // Com nota viva os campos de transporte já foram usados: some o que não se aplica.
     overlay.querySelectorAll('[data-emitir-nfe-campos]').forEach(sec => sec.classList.toggle('hidden', Boolean(viva)));
     // Pedido que já saiu não tem "enviar sem NF-e": ele já foi.
@@ -697,6 +710,76 @@
     return valores;
   }
 
+  /** O espelho e a emissão usam os mesmos campos e a mesma data escolhida. */
+  function dadosDaEmissao(valores) {
+    const corpo = corpoDaEmissao(valores);
+    const dataEnvio = dataDeEnvioEscolhida();
+    if (!estado.jaEnviado && dataEnvio.iso && !dataEnvio.erro) corpo.data_envio = dataEnvio.iso;
+    return corpo;
+  }
+
+  function abrirEspelho() {
+    if (emAndamento || fechado || espelho || confirmarBtn.dataset.acao !== 'emitir' || espelhoBtn?.disabled) return;
+    limparMensagem();
+    if (!window.VisualizadorPdf) {
+      exibirMensagem('erro', 'Visualizador de documentos indisponível nesta janela.');
+      return;
+    }
+    if (!estado.jaEnviado && dataDeEnvioEscolhida().erro) {
+      conferirDataDeEnvio();
+      return;
+    }
+    const valores = valoresDosCampos();
+    const erros = validarCampos(valores);
+    if (erros.length) {
+      exibirMensagem('erro', erros.join(' '));
+      return;
+    }
+    const dados = dadosDaEmissao(valores);
+    // Válida somente para esta abertura: voltar e editar exige novo espelho.
+    let revisaoDoEspelho = null;
+    espelho = window.VisualizadorPdf.abrir({
+      titulo: 'Espelho NF-e',
+      subtitulo: [ctx.numero ? `Pedido ${ctx.numero}` : '', 'Sem valor fiscal'].filter(Boolean).join(' · '),
+      nomeArquivo: `Espelho-NFe-${ctx.numero || pedidoId}`,
+      tituloSalvar: 'Salvar espelho da NF-e em PDF',
+      podeFechar: () => !emAndamento,
+      aoFechar: () => { espelho = null; },
+      aoErro: erro => {
+        fecharEspelho();
+        exibirMensagem('erro', erro?.message || 'Não foi possível montar o espelho da NF-e.');
+      },
+      gerar: async () => {
+        const resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/espelho`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
+        });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok) throw new Error(mensagemDeErro(resp.status, corpo));
+        if (!corpo?.html || !corpo.espelho || !corpo.sem_valor_fiscal || !corpo.revisao_espelho) throw new Error('O servidor não retornou um espelho válido da NF-e.');
+        const pdf = await window.VisualizadorPdf.deHtml(corpo.html, { retrato: true })();
+        revisaoDoEspelho = corpo.revisao_espelho;
+        return { ...pdf, nomeArquivo: corpo.nomeArquivo || corpo.nome || `Espelho-NFe-${ctx.numero || pedidoId}` };
+      },
+      acaoPrincipal: {
+        rotulo: 'Emitir NF-e', icone: 'fa-paper-plane', classe: 'btn-success', permissao: 'financeiro.nfe.emit',
+        aviso: 'Espelho para conferência — sem valor fiscal.',
+        executar: async () => {
+          if (emAndamento || fechado) return;
+          try {
+            // Mesma ação do botão de emissão, com leitura atual dos campos e
+            // as mesmas guardas, boletos, atualização e fechamento do pedido.
+            await principal(null, null, revisaoDoEspelho);
+          } catch (erro) {
+            console.error('Erro ao emitir a NF-e pelo espelho:', erro);
+            exibirMensagem('erro', erro?.message || 'Não foi possível emitir a NF-e. Tente de novo.');
+          } finally {
+            fecharEspelho();
+          }
+        }
+      }
+    });
+  }
+
   // ----------------------------------------------------------- ações
   /** Sinaliza o pedido como enviado sem nota (tag roxa na lista). Não trava o envio. */
   async function dispensarNfe() {
@@ -758,7 +841,7 @@
     return true;
   }
 
-  async function emitir() {
+  async function emitir(revisaoEspelho = null) {
     const valores = valoresDosCampos();
     const erros = validarCampos(valores);
     if (erros.length) {
@@ -767,8 +850,10 @@
     }
     let resp;
     try {
+      const dados = dadosDaEmissao(valores);
+      if (revisaoEspelho) dados.revisao_espelho = revisaoEspelho;
       resp = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/emitir`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpoDaEmissao(valores))
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
       });
     } catch (err) {
       console.error('Erro de rede ao emitir a NF-e:', err);
@@ -834,7 +919,7 @@
     else exibirMensagem('info', `SEFAZ ${corpo?.sefaz?.cStat || ''}: ${corpo?.sefaz?.xMotivo || 'ainda em processamento.'}`);
   }
 
-  async function principal() {
+  async function principal(_evento, _auditoria, revisaoEspelho = null) {
     if (emAndamento || fechado) return;
     limparMensagem();
     // Data de envio errada trava ANTES de emitir: a nota sairia e a situação
@@ -850,7 +935,7 @@
         // Nota já autorizada numa tentativa anterior: os boletos podem ter ficado para trás.
         await gerarBoletosSeMarcado(notaQueVale(estado.notas));
         await marcarEnviado(notaQueVale(estado.notas));
-      } else if (acao === 'emitir') await emitir();
+      } else if (acao === 'emitir') await emitir(revisaoEspelho);
     } finally {
       emAndamento = false;
     }
@@ -889,12 +974,14 @@
 
   if (typeof window.BotaoAcao?.bind === 'function') {
     window.BotaoAcao.bind(confirmarBtn, principal);
+    if (espelhoBtn) window.BotaoAcao.bind(espelhoBtn, abrirEspelho);
     window.BotaoAcao.bind(consultarBtn, consultar);
     // "Enviar sem NF-e" ficava de fora da guarda: aceitava o segundo clique e
     // não acendia carregando nenhum.
     window.BotaoAcao.bind(semNfeBtn, enviarSemNfe);
   } else {
     confirmarBtn.addEventListener('click', principal);
+    espelhoBtn?.addEventListener('click', abrirEspelho);
     consultarBtn.addEventListener('click', consultar);
     semNfeBtn.addEventListener('click', enviarSemNfe);
   }

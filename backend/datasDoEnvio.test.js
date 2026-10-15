@@ -110,7 +110,7 @@ const COLUNAS = {
   pedidos: ['id', 'numero', 'situacao', 'cliente_id', 'data_emissao', 'prazo', 'parcelas', 'devolucao',
     'embarcar_previsao', 'embarcar_real', 'inicio_faturamento', 'faturamento_regra'],
   pedido_parcelas: ['id', 'pedido_id', 'numero_parcela', 'valor', 'data_vencimento'],
-  boletos: ['id', 'pedido_id', 'numero_parcela', 'status', 'valor'],
+  boletos: ['id', 'pedido_id', 'parcela_id', 'numero_parcela', 'status', 'valor', 'origem', 'data_vencimento'],
   recebimentos: ['id', 'pedido_id', 'numero_parcela', 'status', 'valor_recebido'],
   boletos_externos: ['id', 'pedido_id', 'numero_parcela', 'valor', 'ativo'],
   ordens_pagamento: ['id', 'pedido_id', 'numero_parcela', 'status', 'valor'],
@@ -119,7 +119,7 @@ const COLUNAS = {
   pedido_historico_eventos: ['id', 'pedido_id', 'tipo_evento', 'movimento_id', 'descricao', 'created_at', 'created_by']
 };
 
-function criarUpstream(dados) {
+function criarUpstream(dados, { falharEscrita, falharLeitura } = {}) {
   const tabelas = JSON.parse(JSON.stringify(dados));
   const chamadas = [];
   const servidor = http.createServer((req, res) => {
@@ -134,6 +134,11 @@ function criarUpstream(dados) {
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(payload));
       };
+      if (req.method === 'GET') {
+        const falha = falharLeitura?.({ tabela, id });
+        if (falha === 'rede') { req.socket.destroy(); return; }
+        if (falha) return responder(falha.status, falha.body);
+      }
       if (!tabelas[tabela]) return responder(404, { error: 'Tabela não encontrada' });
       const colunas = COLUNAS[tabela] || [];
       if (req.method === 'GET' && id) {
@@ -155,9 +160,12 @@ function criarUpstream(dados) {
         return responder(201, linha);
       }
       if (req.method === 'PUT') {
+        const falha = falharEscrita?.({ tabela, id, body, chamadas });
+        if (falha === 'antes') return responder(500, { error: 'Falha simulada antes de gravar' });
         const alvo = tabelas[tabela].find(r => String(r.id) === String(id));
         if (!alvo) return responder(404, { error: 'Not found' });
         for (const c of colunas) if (body?.[c] !== undefined) alvo[c] = body[c];
+        if (falha === 'depois') return responder(500, { error: 'Falha simulada na resposta após gravar' });
         return responder(200, alvo);
       }
       return responder(405, { error: 'Método não suportado' });
@@ -168,8 +176,8 @@ function criarUpstream(dados) {
 
 const MODULOS = ['./apiHttpClient', './permissionsController', './pedidosController'];
 
-async function montar(dados, { permitir = true } = {}) {
-  const upstream = criarUpstream(dados);
+async function montar(dados, { permitir = true, supAdmin = false, falharEscrita, falharLeitura } = {}) {
+  const upstream = criarUpstream(dados, { falharEscrita, falharLeitura });
   await new Promise(r => upstream.servidor.listen(0, '127.0.0.1', r));
   process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
   for (const m of MODULOS) delete require.cache[require.resolve(m)];
@@ -182,6 +190,7 @@ async function montar(dados, { permitir = true } = {}) {
         return liberado ? next() : res.status(403).json({ error: 'Sem permissão' });
       },
       exigirSupAdmin: (req, res, next) => next(),
+      ehSupAdmin: async () => supAdmin,
       limparCachePermissoes: () => {}
     }
   };
@@ -304,5 +313,183 @@ test('PUT: sem mexer em nada responde "nada" e não escreve', async () => {
     assert.equal(ctx.chamadas.filter(c => c.metodo !== 'GET').length, 0);
   } finally {
     await ctx.encerrar();
+  }
+});
+
+test('Sup Admin corrige prazo e vencimento da parcela paga por boleto importado, sem tocar em pagamentos ou no BB', async () => {
+  const ctx = await montar(cenario({
+    // A primeira foi paga por Pix; a segunda foi importada do BB já paga.
+    recebimentos: [
+      { id: 1, pedido_id: 7, numero_parcela: 1, status: 'confirmado', valor_recebido: 500, forma: 'Pix' },
+      { id: 2, pedido_id: 7, numero_parcela: 2, status: 'confirmado', valor_recebido: 500, boleto_id: 22 }
+    ],
+    boletos: [{ id: 22, pedido_id: 7, parcela_id: 72, numero_parcela: 2, status: 'pago', origem: 'importado', valor: 500, data_vencimento: '2026-11-23' }]
+  }), { supAdmin: true });
+  try {
+    const antes = JSON.parse(JSON.stringify({ boletos: ctx.tabelas.boletos, recebimentos: ctx.tabelas.recebimentos }));
+    const carga = await (await ctx.chamar('GET')).json();
+    assert.equal(carga.parcelas[0].travada, true, 'outro boleto no pedido não libera Pix pago');
+    assert.equal(carga.parcelas[1].travada, false);
+    assert.equal(carga.parcelas[1].correcao_boleto_importado, true);
+    const r = await ctx.chamar('PUT', { ...CORRECAO, data_envio: PEDIDO.embarcar_real, prazos: [0, 65] });
+    assert.equal(r.status, 200);
+    const resposta = await r.json();
+    assert.equal(ctx.tabelas.pedidos[0].prazo, '30/65', 'o prazo da Pix paga permanece original');
+    assert.deepEqual(ctx.tabelas.pedido_parcelas.map(p => [p.id, p.valor, p.data_vencimento]), [[71, 500, '2026-10-24'], [72, 500, '2026-11-28']]);
+    assert.deepEqual({ boletos: ctx.tabelas.boletos, recebimentos: ctx.tabelas.recebimentos }, antes);
+    assert.match(resposta.mudancas.join('; '), /2ª 23\/11\/2026 → 28\/11\/2026/);
+    assert.match(ctx.tabelas.pedido_historico_eventos[0].descricao, /boleto importado; títulos no BB e pagamentos preservados/);
+    assert.deepEqual(ctx.chamadas.filter(c => c.metodo !== 'GET').map(c => c.tabela), ['pedidos', 'pedido_parcelas', 'pedido_historico_eventos']);
+  } finally { await ctx.encerrar(); }
+});
+
+test('correção excepcional exige Sup Admin no backend e origem importado em cada parcela', async () => {
+  for (const caso of [
+    { nome: 'perfil comum não libera importado', supAdmin: false, origem: 'importado', status: 'pago' },
+    { nome: 'boleto gerado no app pago permanece protegido', supAdmin: true, origem: null, status: 'pago' },
+    { nome: 'boleto gerado no app registrado permanece protegido', supAdmin: true, origem: null, status: 'registrado' },
+    { nome: 'origem alegada pela tela não é confiável', supAdmin: false, origem: 'importado', status: 'registrado' }
+  ]) {
+    const ctx = await montar(cenario({
+      boletos: [{ id: 22, pedido_id: 7, parcela_id: 72, numero_parcela: 2, status: caso.status, origem: caso.origem, valor: 500 }]
+    }), { supAdmin: caso.supAdmin });
+    try {
+      const carga = await (await ctx.chamar('GET')).json();
+      assert.equal(carga.parcelas[1].travada, true, caso.nome);
+      const r = await ctx.chamar('PUT', {
+        ...CORRECAO, data_envio: PEDIDO.embarcar_real, prazos: [30, 65],
+        supAdmin: true, origem: 'importado', correcao_boleto_importado: true
+      });
+      assert.equal(r.status, 200);
+      assert.equal((await r.json()).nada, true, caso.nome);
+      assert.equal(ctx.tabelas.pedidos[0].prazo, '30/60');
+      assert.equal(ctx.tabelas.pedido_parcelas[1].data_vencimento, '2026-11-23');
+      assert.equal(ctx.chamadas.some(c => c.metodo !== 'GET'), false);
+    } finally { await ctx.encerrar(); }
+  }
+});
+
+test('importado registrado libera somente vínculo exato; boleto baixado, externo ou ordem não liberam', () => {
+  const pedido = { id: 7 };
+  const parcela = { id: 72, pedido_id: 7, numero_parcela: 2 };
+  const boleto = { id: 22, pedido_id: 7, parcela_id: 72, numero_parcela: 2, status: 'registrado', origem: 'importado' };
+  const base = { pedido, parcela, boletos: [boleto], supAdmin: true };
+  assert.equal(envio.podeCorrigirImportado(base), true);
+  assert.equal(envio.podeCorrigirImportado({ ...base, boletos: [{ ...boleto, pedido_id: 8 }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, boletos: [{ ...boleto, parcela_id: 71 }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, boletos: [{ ...boleto, numero_parcela: 1 }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, boletos: [{ ...boleto, status: 'baixado' }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, boletos: [boleto, { ...boleto, id: 23, origem: null }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, ordens: [{ pedido_id: 7, numero_parcela: 2, status: 'aberta' }] }), false);
+  assert.equal(envio.podeCorrigirImportado({ ...base, externos: [{ pedido_id: 7, numero_parcela: 2, ativo: true }] }), false);
+});
+
+test('PUT: falha de parcela desfaz prazo/datas anteriores e não registra histórico de correção', async () => {
+  for (const momento of ['antes', 'depois']) {
+    let falhou = false;
+    const ctx = await montar(cenario(), { falharEscrita({ tabela, id }) {
+      if (!falhou && tabela === 'pedido_parcelas' && id === '72') { falhou = true; return momento; }
+      return null;
+    } });
+    try {
+      const antes = JSON.parse(JSON.stringify(ctx.tabelas));
+      // Muda pedido.prazo e as duas parcelas: a primeira já terá sido salva
+      // quando a segunda falhar. A falha "depois" simula resposta perdida.
+      const r = await ctx.chamar('PUT', { ...CORRECAO, prazos: [15, 45] });
+      assert.equal(r.status, 502);
+      const resposta = await r.json();
+      assert.equal(resposta.code, 'ENVIO_NAO_GRAVADO');
+      assert.equal(resposta.revertido, true);
+      assert.equal(resposta.revisao_necessaria, false);
+      assert.deepEqual(ctx.tabelas, antes, `reposição completa com falha ${momento} de gravar`);
+      assert.equal(ctx.chamadas.some(c => c.tabela === 'pedido_historico_eventos' && c.metodo === 'POST'), false);
+      assert.deepEqual(ctx.chamadas.filter(c => c.metodo === 'PUT').map(c => `${c.tabela}/${c.id}`), [
+        'pedidos/7', 'pedido_parcelas/71', 'pedido_parcelas/72', 'pedido_parcelas/72', 'pedido_parcelas/71', 'pedidos/7'
+      ]);
+    } finally { await ctx.encerrar(); }
+  }
+});
+
+test('PUT: falha ao salvar pedido restaura seus campos sem mexer em parcelas ou histórico', async () => {
+  for (const momento of ['antes', 'depois']) {
+    let falhou = false;
+    const ctx = await montar(cenario(), { falharEscrita({ tabela }) {
+      if (!falhou && tabela === 'pedidos') { falhou = true; return momento; }
+      return null;
+    } });
+    try {
+      const antes = JSON.parse(JSON.stringify(ctx.tabelas));
+      const r = await ctx.chamar('PUT', { ...CORRECAO, prazos: [15, 45] });
+      assert.equal(r.status, 502);
+      assert.equal((await r.json()).code, 'ENVIO_NAO_GRAVADO');
+      assert.deepEqual(ctx.tabelas, antes);
+      assert.deepEqual(ctx.chamadas.filter(c => c.metodo !== 'GET').map(c => c.tabela), ['pedidos', 'pedidos']);
+    } finally { await ctx.encerrar(); }
+  }
+});
+
+test('PUT: compensação que também falha pede revisão explícita e não apresenta correção como sucesso', async () => {
+  const ctx = await montar(cenario(), { falharEscrita({ tabela, body }) {
+    if (tabela === 'pedido_parcelas' && body.data_vencimento === '2026-10-30') return 'antes';
+    if (tabela === 'pedidos' && body.prazo === '30/60') return 'antes';
+    return null;
+  } });
+  try {
+    const r = await ctx.chamar('PUT', { ...CORRECAO, prazos: [15, 45] });
+    assert.equal(r.status, 502);
+    const resposta = await r.json();
+    assert.equal(resposta.code, 'ENVIO_REVISAO_NECESSARIA');
+    assert.equal(resposta.revertido, false);
+    assert.equal(resposta.revisao_necessaria, true);
+    assert.deepEqual(resposta.falhas_reversao, ['pedido']);
+    assert.match(resposta.error, /Reabra o pedido e confira as datas e os prazos antes de emitir a NF-e/);
+    assert.deepEqual(ctx.tabelas.pedido_historico_eventos, []);
+    assert.deepEqual(ctx.tabelas.pedido_parcelas.map(p => p.data_vencimento), ['2026-10-24', '2026-11-23']);
+  } finally { await ctx.encerrar(); }
+});
+
+test('GET/PUT: falha ao conferir travas financeiras impede a exceção de boleto importado e qualquer gravação', async () => {
+  for (const [tabela, falha] of [
+    ['boletos', { status: 403, body: { error: 'Sem permissão' } }],
+    ['recebimentos', { status: 403, body: { error: 'Sem permissão' } }],
+    ['boletos_externos', { status: 500, body: { error: 'Falha temporária' } }],
+    ['ordens_pagamento', 'rede'],
+    ['notas_fiscais', { status: 403, body: { error: 'Sem permissão' } }],
+    ['notas_fiscais_externas', { status: 200, body: { error: 'Erro da API' } }],
+    ['pedido_parcelas', { status: 200, body: { dados: [] } }],
+    ['pedido_parcelas', { status: 200, body: [null] }],
+    ['pedido_parcelas', { status: 200, body: [{ id: 71, pedido_id: 7, numero_parcela: 'inválida' }] }],
+    ['pedido_parcelas', { status: 404, body: { error: 'Tabela não encontrada' } }],
+    ['recebimentos', { status: 404, body: { error: 'Rota não encontrada' } }]
+  ]) {
+    const dados = cenario({ boletos: [{ id: 22, pedido_id: 7, parcela_id: 72, numero_parcela: 2, status: 'pago', origem: 'importado', valor: 500 }] });
+    const ctx = await montar(dados, { supAdmin: true, falharLeitura: alvo => alvo.tabela === tabela ? falha : null });
+    try {
+      for (const metodo of ['GET', 'PUT']) {
+        const r = await ctx.chamar(metodo, metodo === 'PUT' ? { ...CORRECAO, prazos: [15, 65] } : undefined);
+        assert.equal(r.status, 502, `${metodo}: ${tabela}`);
+        const resposta = await r.json();
+        assert.equal(resposta.code, 'ENVIO_BASE_INDISPONIVEL');
+        assert.match(resposta.error, /Nenhuma alteração foi salva/);
+      }
+      assert.deepEqual(ctx.tabelas, dados);
+      assert.equal(ctx.chamadas.some(c => c.metodo !== 'GET'), false, `não escreve com ${tabela} indisponível`);
+    } finally { await ctx.encerrar(); }
+  }
+});
+
+test('GET/PUT: tabela opcional comprovadamente ausente em banco legado continua compatível', async () => {
+  for (const falha of [
+    { status: 404, body: { error: 'Tabela não encontrada' } },
+    { status: 500, body: { error: 'Falha de consulta', code: '42P01', detalhe: 'relation "ordens_pagamento" does not exist' } }
+  ]) {
+    const ctx = await montar(cenario(), { falharLeitura: alvo => alvo.tabela === 'ordens_pagamento' ? falha : null });
+    try {
+      assert.equal((await ctx.chamar('GET')).status, 200);
+      const r = await ctx.chamar('PUT', CORRECAO);
+      assert.equal(r.status, 200);
+      assert.equal((await r.json()).ok, true);
+      assert.equal(ctx.tabelas.pedidos[0].embarcar_real, CORRECAO.data_envio);
+    } finally { await ctx.encerrar(); }
   }
 });

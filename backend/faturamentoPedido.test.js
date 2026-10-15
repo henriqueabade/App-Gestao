@@ -27,6 +27,7 @@ const {
   resolverDatas,
   baseDoFaturamento,
   inicioAposEmbarque,
+  projetarParcelas,
   reprogramarParcelas
 } = require('./faturamentoPedido');
 
@@ -233,7 +234,7 @@ test('o embarque compara com o início gravado, e só na regra "ao embarcar"', (
  * `delete` — se a reprogramação tentasse recriar parcelas, o teste quebraria
  * com "não é uma função".
  */
-function apiFalsa(linhas, { falharPut = [], ignorarFiltro = false, falharGet = false } = {}) {
+function apiFalsa(linhas, { falharPut = [], ignorarFiltro = false, falharGet = false, vinculos = {}, falharVinculos = {} } = {}) {
   const tabela = JSON.parse(JSON.stringify(linhas));
   const chamadas = [];
   return {
@@ -242,6 +243,8 @@ function apiFalsa(linhas, { falharPut = [], ignorarFiltro = false, falharGet = f
     async get(caminho, { query } = {}) {
       chamadas.push({ metodo: 'GET', caminho, query });
       if (falharGet) throw new Error('Falha na requisição GET /api/pedido_parcelas: 500');
+      if (falharVinculos[caminho]) throw falharVinculos[caminho];
+      if (caminho !== '/api/pedido_parcelas') return vinculos[caminho] || [];
       if (ignorarFiltro) return tabela;
       return tabela.filter(l => String(l.pedido_id) === String(query?.pedido_id));
     },
@@ -323,4 +326,61 @@ test('início inválido não toca em nada', async () => {
   assert.deepEqual(await reprogramarParcelas(api, 1, '2026-02-30', '30', avisos), []);
   assert.equal(api.chamadas.length, 0);
   assert.equal(avisos.length, 1);
+});
+
+test('projeção não escreve; envio preserva pagas, boletos importados/gerados, externos e ordens, movendo só a livre', async () => {
+  const originais = Array.from({ length: 7 }, (_, i) => ({
+    id: i + 1, pedido_id: 1, numero_parcela: i + 1, valor: 100, data_vencimento: '2026-08-20'
+  }));
+  const api = apiFalsa(originais, { vinculos: {
+    '/api/recebimentos': [{ id: 1, pedido_id: 1, numero_parcela: 1, status: 'confirmado' }],
+    '/api/boletos': [
+      { id: 1, pedido_id: 1, numero_parcela: 2, status: 'registrado', origem: 'importado' },
+      { id: 2, pedido_id: 1, numero_parcela: 3, status: 'pago', origem: 'importado' },
+      { id: 3, pedido_id: 1, numero_parcela: 4, status: 'registrado', origem: 'app' },
+      { id: 4, pedido_id: 2, numero_parcela: 7, status: 'pago', origem: 'importado' }
+    ],
+    '/api/boletos_externos': [{ id: 1, pedido_id: 1, numero_parcela: 5, ativo: true }],
+    '/api/ordens_pagamento': [{ id: 1, pedido_id: 1, numero_parcela: 6, status: 'aberta' }]
+  } });
+  const avisos = [];
+  const prevista = await projetarParcelas(api, 1, '2026-10-15', '0/30/60/90/120/150/180', avisos);
+  assert.deepEqual(prevista.map(p => p.data_vencimento), [
+    ...Array(6).fill('2026-08-20'), '2027-04-13'
+  ]);
+  assert.deepEqual(api.tabela, originais, 'a conferência não persiste nada');
+  assert.ok(api.chamadas.every(c => c.metodo === 'GET'));
+  const persistida = await reprogramarParcelas(api, 1, '2026-10-15', '0/30/60/90/120/150/180', avisos);
+  assert.deepEqual(persistida.map(p => p.data_vencimento), prevista.map(p => p.data_vencimento));
+  assert.deepEqual(api.chamadas.filter(c => c.metodo === 'PUT').map(c => c.caminho), ['/api/pedido_parcelas/7']);
+  assert.deepEqual(avisos, []);
+});
+
+test('falha ao conferir vínculos preserva todas as datas; tabela ainda inexistente permite legado', async () => {
+  const originais = [{ id: 1, pedido_id: 1, numero_parcela: 1, valor: 100, data_vencimento: '2026-08-20' }];
+  const negada = Object.assign(new Error('Acesso negado'), { status: 403 });
+  const api = apiFalsa(originais, { falharVinculos: { '/api/recebimentos': negada } });
+  const avisos = [];
+  await reprogramarParcelas(api, 1, '2026-10-15', '30', avisos);
+  assert.deepEqual(api.tabela, originais);
+  assert.ok(!api.chamadas.some(c => c.metodo === 'PUT'));
+  assert.match(avisos.join(' '), /vencimentos registrados foram preservados/);
+
+  const ausente = Object.assign(new Error('Tabela recebimentos não encontrada'), { status: 404 });
+  const legado = apiFalsa(originais, { falharVinculos: { '/api/recebimentos': ausente } });
+  assert.equal((await projetarParcelas(legado, 1, '2026-10-15', '30'))[0].data_vencimento, '2026-11-14');
+});
+
+test('resposta inesperada da API nunca vira ausência silenciosa de parcelas ou vínculos', async () => {
+  for (const inesperada of [null, { error: 'Falha de acesso' }, {}, 'indisponível']) {
+    const avisos = [];
+    const api = { get: async () => inesperada };
+    assert.deepEqual(await projetarParcelas(api, 1, '2026-10-15', '30', avisos), []);
+    assert.match(avisos.join(' '), /não devolveu uma lista válida de parcelas/);
+  }
+  const avisos = [];
+  const parcela = { id: 1, pedido_id: 1, numero_parcela: 1, valor: 100, data_vencimento: '2026-08-20' };
+  const api = { get: async caminho => caminho === '/api/pedido_parcelas' ? [parcela] : null };
+  assert.equal((await projetarParcelas(api, 1, '2026-10-15', '30', avisos))[0].data_vencimento, '2026-08-20');
+  assert.equal(avisos.length, 4);
 });

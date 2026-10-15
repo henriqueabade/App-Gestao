@@ -177,3 +177,4 @@ sql/tabelafixa.sql
 .claude/launch.json
 .env.example
 .env.example
+tools/alteracoes-corrigido.patch

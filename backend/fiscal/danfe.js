@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const { campo, bloco } = require('./sefazCliente');
+const { parcelasRegistradasDoTexto } = require('./xmlNfe');
 // "FOLHA 1/x": o total entra depois da primeira impressão (folhas.js + main.js).
 const { MARCA_TOTAL_DE_FOLHAS } = require('./folhas');
 
@@ -158,6 +159,7 @@ function lerNfe(xmlNfeProc) {
     : (numeracoes[0] || '');
   const distintos = chave2 => [...new Set(volumes.map(v => v[chave2]).filter(Boolean))].join(', ');
 
+  const infCpl = texto(bloco(inf, 'infAdic') || '', 'infCpl');
   return {
     chave, ambiente: texto(ide, 'tpAmb') === '1' ? 'producao' : 'homologacao',
     numero: texto(ide, 'nNF'), serie: texto(ide, 'serie'), tpNF: texto(ide, 'tpNF'), natureza: texto(ide, 'natOp'),
@@ -189,7 +191,8 @@ function lerNfe(xmlNfeProc) {
     fatura: cobr ? { numero: texto(bloco(cobr, 'fat') || '', 'nFat'), original: texto(bloco(cobr, 'fat') || '', 'vOrig'), liquido: texto(bloco(cobr, 'fat') || '', 'vLiq') } : null,
     duplicatas: blocos(cobr, 'dup').map(d => ({ numero: texto(d, 'nDup'), vencimento: texto(d, 'dVenc'), valor: texto(d, 'vDup') })),
     itens,
-    infCpl: texto(bloco(inf, 'infAdic') || '', 'infCpl'),
+    infCpl,
+    parcelasRegistradas: parcelasRegistradasDoTexto(infCpl),
     protocolo: { numero: texto(prot, 'nProt'), data: texto(prot, 'dhRecbto'), cStat: texto(prot, 'cStat'), xMotivo: texto(prot, 'xMotivo') }
   };
 }
@@ -252,15 +255,15 @@ function campoHtml(rotulo, valor, { span = 1, quebra = false } = {}) {
 
 /**
  * @param {string} xmlNfeProc  notas_fiscais.xml_autorizado
- * @param {object} [opcoes]    { cancelada: boolean, logo: data URI (padrão: a logo do app) }
+ * @param {object} [opcoes]    { cancelada: boolean, espelho: boolean, logo: data URI (padrão: a logo do app) }
  */
-function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
+function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo } = {}) {
   const n = lerNfe(xmlNfeProc);
   const e = n.emitente;
   const d = n.destinatario;
   const t = n.totais;
   const tr = n.transporte;
-  const marca = cancelada ? 'NF-e CANCELADA' : (n.ambiente === 'homologacao' ? 'SEM VALOR FISCAL' : '');
+  const marca = espelho ? 'ESPELHO — SEM VALOR FISCAL' : (cancelada ? 'NF-e CANCELADA' : (n.ambiente === 'homologacao' ? 'SEM VALOR FISCAL' : ''));
   const documentoDest = d.cnpj ? cnpjFmt(d.cnpj) : cpfFmt(d.cpf);
   const logoUrl = logo === undefined ? logoDataUrl() : (logo || '');
 
@@ -276,6 +279,16 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     ? `<table><tr>${n.duplicatas.map(dp => `<td class="cen"><b>${esc(n.numero)}/${esc(dp.numero)}</b><br>${dataFmt(dp.vencimento)}<br>${moeda(dp.valor)}</td>`).join('')}</tr></table>`
     : `<div class="campo"><span class="r">Fatura</span><span class="v">${n.fatura ? `Nº ${esc(n.fatura.numero)} — ${moeda(n.fatura.liquido)} à vista` : 'Sem fatura'}</span></div>`;
 
+  // Este histórico é parte do XML da própria nota. Não consulta as parcelas
+  // atuais do ERP, para que um DANFE emitido continue fiel ao XML autorizado.
+  // Datas anteriores à emissão não podem ir em dVenc (regra fiscal Y09-10).
+  const situacoesParcelas = { paga: 'Paga', parcial: 'Parcialmente paga', vencida: 'Vencida', em_aberto: 'Em aberto' };
+  const parcelasRegistradas = n.parcelasRegistradas.length
+    ? `<div class="bloco"><div class="titulo">Parcelas do pedido — vencimentos registrados</div>
+      <table><thead><tr><th>Parcela</th><th>Vencimento registrado</th><th>Valor</th><th>Situação na emissão</th><th>Saldo na emissão</th></tr></thead><tbody>${n.parcelasRegistradas.map(p =>
+        `<tr><td class="cen">${esc(p.numero)}</td><td class="cen">${dataFmt(p.vencimento)}</td><td class="dir">${moeda(p.valor)}</td><td>${esc(situacoesParcelas[p.situacao] || p.situacao)}</td><td class="dir">${moeda(p.saldo)}</td></tr>`).join('')}</tbody></table></div>`
+    : '';
+
   // Vários volumes detalhados: uma linha por volume, além do resumo.
   const volumesDetalhados = n.volumes.length > 1
     ? `<table style="margin-top: -1px"><thead><tr><th>Volume</th><th>Espécie</th><th>Marca</th><th>Numeração</th><th>Peso bruto</th><th>Peso líquido</th></tr></thead><tbody>${
@@ -283,9 +296,10 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
     }</tbody></table>`
     : '';
 
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>DANFE NF-e ${esc(n.numero)}</title><style>${CSS}</style></head><body>
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${espelho ? 'Espelho da NF-e' : `DANFE NF-e ${esc(n.numero)}`}</title><style>${CSS}${espelho ? '\n.marca { position: fixed; font-size: 32pt; z-index: 10; } .aviso-espelho { border: 2px solid #8a5700; color: #754900; padding: 2mm; margin-bottom: 3mm; text-align: center; font-weight: bold; font-size: 8pt; }' : ''}</style></head><body>
 <div class="folha">
   ${marca ? `<div class="marca">${esc(marca)}</div>` : ''}
+  ${espelho ? '<div class="aviso-espelho">ESPELHO DA NF-e — SEM VALOR FISCAL<br>Conferência prévia. Documento não transmitido à SEFAZ.<br>Numeração estimada; será confirmada somente na emissão.</div>' : ''}
 
   <div class="bloco">
   <div class="canhoto">
@@ -315,15 +329,15 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
       <div>SÉRIE ${esc(n.serie)} &nbsp; FOLHA 1/${MARCA_TOTAL_DE_FOLHAS}</div>
     </div>
     <div class="chave">
-      ${codigoDeBarrasSvg(n.chave, { largura: '100%' })}
+      ${espelho ? '<div class="cen"><b>ESPELHO DA NF-e</b><br>Sem chave de acesso autorizada.<br>Sem valor fiscal.</div>' : `${codigoDeBarrasSvg(n.chave, { largura: '100%' })}
       <div class="r">Chave de acesso</div>
       <div class="cod">${chaveFmt(n.chave)}</div>
-      <div class="consulta">Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no site da SEFAZ autorizadora</div>
+      <div class="consulta">Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no site da SEFAZ autorizadora</div>`}
     </div>
   </div>
   <div class="grade" style="grid-template-columns: 2fr 1fr">
     ${campoHtml('Natureza da operação', n.natureza)}
-    ${campoHtml('Protocolo de autorização de uso', n.protocolo.numero ? `${n.protocolo.numero} - ${dataHoraFmt(n.protocolo.data)}` : '')}
+    ${campoHtml('Protocolo de autorização de uso', espelho ? 'Não emitida — sem autorização' : (n.protocolo.numero ? `${n.protocolo.numero} - ${dataHoraFmt(n.protocolo.data)}` : ''))}
   </div>
   <div class="grade" style="grid-template-columns: 1fr 1fr 1fr">
     ${campoHtml('Inscrição estadual', e.ie)}
@@ -358,6 +372,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, logo } = {}) {
   <div class="titulo">Fatura / Duplicatas</div>
   ${duplicatas}
   </div>
+  ${parcelasRegistradas}
 
   <div class="bloco">
   <div class="titulo">Cálculo do imposto</div>

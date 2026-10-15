@@ -9,13 +9,16 @@
 <div id="emitirNfePedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw] ctl-padrao" aria-hidden="true">
   <div role="dialog" aria-modal="true" aria-labelledby="emitirNfeTitulo" class="w-full max-w-4xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
 
-    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarEmitirNfe" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
-      <div class="text-center min-w-0">
+    <header class="emitir-nfe__cabecalho px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <div class="emitir-nfe__inicio">
+        <button id="voltarEmitirNfe" type="button" class="btn-neutral ctl-botao text-white">← Voltar</button>
+        <button id="emitirNfeEspelho" type="button" data-perm="financeiro.nfe.emit" disabled class="btn-neutral ctl-botao text-white"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Espelho NF-e</button>
+      </div>
+      <div class="emitir-nfe__titulos text-center min-w-0">
         <h2 id="emitirNfeTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-file-invoice mr-2" aria-hidden="true"></i>Emitir NF-e e enviar</h2>
         <p id="emitirNfeSubtitulo" class="text-xs text-gray-300 truncate"></p>
       </div>
-      <div class="flex items-center gap-2 justify-self-end">
+      <div class="emitir-nfe__fim flex items-center gap-2 justify-self-end">
         <!-- Data de envio: o dia em que o pedido sai. Vem com hoje e pode ser
              trocada (embarque registrado depois, ou adiantado). É a data que o
              pedido grava ao virar "Enviado" — e, no pedido "ao embarcar", a que
@@ -209,3 +212,4 @@
     </footer>
   </div>
 </div>
+<link rel="stylesheet" href="../styles/pedido-emitir-nfe.css" />

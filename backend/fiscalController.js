@@ -316,7 +316,7 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   router.get('/pedidos/:id/prontidao', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {
       const api = createApiClient(req);
-      const dados = await emissao.lerPedidoFiscal(api, req.params.id);
+      const dados = await emissao.lerPedidoFiscal(api, req.params.id, { apenasAvaliacao: true });
       res.json({
         ...prontidao.avaliar({ ...dados, certificado: await resumoDoCertificado(api, dados.configuracao) }),
         // A tela de embarque precisa saber em que ambiente a nota sairá e o que já existe.
@@ -325,6 +325,22 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
       });
     } catch (err) {
       responder(res, err, 'GET /api/fiscal/pedidos/:id/prontidao');
+    }
+  });
+
+  /** Espelho para conferência: os mesmos dados da emissão, sem efeitos fiscais. */
+  router.post('/pedidos/:id/espelho', exigirPermissao('financeiro.nfe.emit'), async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const cfg = await configuracao.carregar(api, { forcar: true });
+      res.json(await emissao.espelho({
+        api, pedidoId: req.params.id, entrada: req.body || {},
+        resumoCertificado: await resumoDoCertificado(api, cfg), env,
+        opcoesMunicipios: municipiosRede ? { buscarNaRede: municipiosRede } : undefined,
+        verProc: `Santissimo ${VERSAO_APP}`
+      }));
+    } catch (err) {
+      responder(res, err, 'POST /api/fiscal/pedidos/:id/espelho');
     }
   });
 

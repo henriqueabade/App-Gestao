@@ -121,7 +121,7 @@ test('corpo do PUT: o início só vai na data específica; os prazos quando fora
 
 // ================================================================= o modal
 
-function abrirModal(resposta, { status = 200 } = {}) {
+function abrirModal(resposta, { status = 200, statusPut = 200, respostaPut = { ok: true, nada: false, avisos: [] } } = {}) {
   const amb = criarAmbiente();
   const { janela, documento } = amb;
   const wrapper = amb.montar(HTML);
@@ -136,7 +136,7 @@ function abrirModal(resposta, { status = 200 } = {}) {
   janela.fetch = async (url, opcoes) => {
     const corpo = opcoes?.body ? JSON.parse(opcoes.body) : null;
     registro.requisicoes.push({ url, metodo: opcoes?.method || 'GET', corpo });
-    if (opcoes?.method === 'PUT') return { ok: true, status: 200, json: async () => ({ ok: true, nada: false, avisos: [] }) };
+    if (opcoes?.method === 'PUT') return { ok: statusPut >= 200 && statusPut < 300, status: statusPut, json: async () => simples(respostaPut) };
     return { ok: status === 200, status, json: async () => simples(resposta) };
   };
   janela.datasEnvioContext = { pedidoId: 7, numero: 'P-7', cliente: 'Casa Bela' };
@@ -190,6 +190,24 @@ test('modal: o prazo digitado entra no corpo, com o da travada como estava', asy
   assert.deepEqual(m.registro.requisicoes.find(r => r.metodo === 'PUT').corpo.prazos, [30, 45]);
 });
 
+test('modal: parcela de boleto importado liberada pelo backend permite prazo novo mesmo paga', async () => {
+  const m = abrirModal({ ...RESPOSTA, parcelas: [
+    PARCELAS[0],
+    { ...PARCELAS[1], correcao_boleto_importado: true }
+  ] });
+  await esperarTarefas();
+  const campo = m.documento.querySelector('input[data-prazo="1"]');
+  assert.ok(campo);
+  assert.match(m.novos()[1], /Boleto importado: corrige o cadastro do pedido, sem alterar o título no BB nem o pagamento\./);
+  campo.value = '65';
+  m.disparar(campo, 'input');
+  assert.match(m.novos()[1], /28\/11\/2026/);
+  assert.match(m.novos()[0], /o vencimento não muda/);
+  m.disparar(m.$('salvarDatasEnvio'), 'click');
+  await esperarTarefas();
+  assert.deepEqual(m.registro.requisicoes.find(r => r.metodo === 'PUT').corpo.prazos, [30, 65]);
+});
+
 test('modal: pedido que não pode (NF-e do sistema) mostra o motivo e não salva', async () => {
   const m = abrirModal({ ...RESPOSTA, bloqueio: 'Pedido enviado com NF-e nº 812: a data de envio e os vencimentos seguem a nota.' });
   await esperarTarefas();
@@ -201,6 +219,33 @@ test('modal: pedido que não pode (NF-e do sistema) mostra o motivo e não salva
   m.disparar(m.$('salvarDatasEnvio'), 'click');
   await esperarTarefas();
   assert.equal(m.registro.requisicoes.filter(r => r.metodo === 'PUT').length, 0);
+});
+
+test('modal: falha de gravação ou compensação mantém aberto e mostra orientação do backend sem toast de sucesso', async () => {
+  const error = 'Não foi possível concluir a correção nem confirmar a restauração de pedido. Reabra o pedido e confira as datas e os prazos antes de emitir a NF-e.';
+  const m = abrirModal(RESPOSTA, { statusPut: 502, respostaPut: { error, code: 'ENVIO_REVISAO_NECESSARIA', revisao_necessaria: true } });
+  await esperarTarefas();
+  m.digitar('datasEnvioData', '15/09/2026');
+  m.disparar(m.$('salvarDatasEnvio'), 'click');
+  await esperarTarefas();
+  assert.equal(m.$('datasEnvioMensagem').textContent, error);
+  assert.equal(m.$('datasEnvioMensagem').classList.contains('hidden'), false);
+  assert.deepEqual(m.registro.fechados, []);
+  assert.deepEqual(m.registro.toasts, []);
+  assert.equal(m.registro.recarregou, 0);
+});
+
+test('modal: falha na leitura das travas bloqueia formulário e não permite tentativa de salvar', async () => {
+  const error = 'Não foi possível conferir os pagamentos para a correção. Nenhuma alteração foi salva. Reabra o modal e tente novamente.';
+  const m = abrirModal({ error, code: 'ENVIO_BASE_INDISPONIVEL' }, { status: 502 });
+  await esperarTarefas();
+  assert.equal(m.$('datasEnvioBloqueio').textContent, error);
+  assert.equal(m.$('salvarDatasEnvio').disabled, true);
+  assert.equal(m.$('datasEnvioData').disabled, true);
+  m.disparar(m.$('salvarDatasEnvio'), 'click');
+  await esperarTarefas();
+  assert.equal(m.registro.requisicoes.some(r => r.metodo === 'PUT'), false);
+  assert.deepEqual(m.registro.toasts, []);
 });
 
 test('markup: vidro e botões do padrão, Salvar com a guarda ped.dates.edit', () => {

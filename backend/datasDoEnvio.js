@@ -16,7 +16,10 @@
  *   - os dias de cada parcela (`pedidos.prazo`).
  *
  * Parcela paga, com boleto (do BB ou de fora) ou com ordem de pagamento fica
- * TRAVADA: o vencimento e o prazo dela não mudam. E só muda o vencimento da
+ * TRAVADA. A exceção é o Sup Admin corrigindo a parcela vinculada a boleto
+ * comprovadamente importado do BB: ele pode acertar seu prazo/vencimento no
+ * pedido, inclusive após o pagamento, sem alterar o título no banco.
+ * Só muda o vencimento da
  * parcela cujo início ou prazo mudou — o que ninguém mexeu fica como está,
  * mesmo que não bata com a conta (pedido antigo, vencimento acertado à mão).
  *
@@ -38,6 +41,34 @@ const NOTAS_QUE_TRAVAM = new Set(['autorizada', 'cancelamento_pendente', 'proces
 
 /** O prazo de uma parcela passa disto é dígito a mais, não combinado. */
 const PRAZO_MAXIMO = 3650;
+const STATUS_DO_BOLETO_QUE_TRAVA = new Set(['registrado', 'vencido', 'protestado', 'pago']);
+
+/** O vínculo é desta parcela; um boleto de outra parcela nunca a libera. */
+function pertenceAParcela(registro, parcela, pedido) {
+  if (!registro || String(registro.pedido_id) !== String(pedido?.id)) return false;
+  if (registro.parcela_id !== undefined && registro.parcela_id !== null) {
+    return String(registro.parcela_id) === String(parcela.id)
+      && (registro.numero_parcela == null || Number(registro.numero_parcela) === Number(parcela.numero_parcela));
+  }
+  return Number(registro.numero_parcela) === Number(parcela.numero_parcela);
+}
+
+/**
+ * É uma correção do cadastro, sem renegociar ou consultar o BB. Não basta o
+ * pedido ter algum boleto importado: todos os títulos vigentes desta parcela
+ * precisam ter a marca da importação. Ordem aberta e boleto externo informado
+ * manualmente continuam protegidos; origem ausente é boleto gerado no app.
+ */
+function podeCorrigirImportado({ pedido, parcela, boletos = [], externos = [], ordens = [], supAdmin = false }) {
+  if (supAdmin !== true) return false;
+  const vigentes = boletos.filter(b => pertenceAParcela(b, parcela, pedido)
+    && STATUS_DO_BOLETO_QUE_TRAVA.has(String(b.status)));
+  if (!vigentes.length || vigentes.some(b => b.origem !== 'importado')) return false;
+  const ativo = v => v === undefined || v === null || v === true || v === 'true' || v === 't' || v === 1;
+  if (externos.some(b => pertenceAParcela(b, parcela, pedido) && ativo(b.ativo))) return false;
+  if (ordens.some(o => pertenceAParcela(o, parcela, pedido) && o.status === 'aberta')) return false;
+  return true;
+}
 
 const ROTULO_DA_REGRA = {
   ao_embarcar: 'no envio',
@@ -75,7 +106,7 @@ function motivoDoBloqueio(pedido, notas = []) {
  * de hoje, o prazo (dias) de cada uma e a trava, quando há.
  * `travas` é o Map de pedidoParcelas.travasDasParcelas.
  */
-function parcelasDoPedido({ pedido, parcelas = [], travas = new Map() }) {
+function parcelasDoPedido({ pedido, parcelas = [], travas = new Map(), boletos = [], externos = [], ordens = [], supAdmin = false }) {
   const ordenadas = (Array.isArray(parcelas) ? parcelas : [])
     .filter(p => p && p.id !== undefined && p.id !== null && String(p.pedido_id) === String(pedido?.id))
     .sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0) || Number(a.id) - Number(b.id));
@@ -83,14 +114,16 @@ function parcelasDoPedido({ pedido, parcelas = [], travas = new Map() }) {
   return ordenadas.map((p, i) => {
     const numero = Number(p.numero_parcela) || i + 1;
     const trava = travas.get(numero) || null;
+    const corrigirImportado = Boolean(trava) && podeCorrigirImportado({ pedido, parcela: p, boletos, externos, ordens, supAdmin });
     return {
       id: p.id,
       numero,
       valor: Math.round((Number(p.valor) || 0) * 100) / 100,
       vencimento: diaValido(p.data_vencimento),
       prazo: prazos[i],
-      travada: Boolean(trava),
-      trava: trava ? `Tem ${ROTULO_DA_TRAVA[trava.origem] || 'pagamento'}: o vencimento não muda.` : null
+      travada: Boolean(trava) && !corrigirImportado,
+      trava: trava && !corrigirImportado ? `Tem ${ROTULO_DA_TRAVA[trava.origem] || 'pagamento'}: o vencimento não muda.` : null,
+      ...(corrigirImportado ? { correcao_boleto_importado: true } : {})
     };
   });
 }
@@ -180,6 +213,7 @@ function planejar({ pedido, parcelas = [], entrada, dataConversao }) {
       valor: p.valor,
       travada: p.travada,
       trava: p.trava,
+      ...(p.correcao_boleto_importado ? { correcao_boleto_importado: true } : {}),
       prazo_antes: p.prazo,
       prazo,
       vencimento_antes: p.vencimento,
@@ -216,6 +250,8 @@ function planejar({ pedido, parcelas = [], entrada, dataConversao }) {
   if (movidas.length) {
     mudancas.push(`vencimentos: ${movidas.map(p => `${p.numero}ª ${texto(p.vencimento_antes)} → ${texto(p.vencimento)}`).join(', ')}`);
   }
+  const importadas = planejadas.filter(p => p.correcao_boleto_importado && (p.muda || p.prazo !== p.prazo_antes));
+  if (importadas.length) mudancas.push(`correção do cadastro das parcelas ${importadas.map(p => `${p.numero}ª`).join(', ')} com boleto importado; títulos no BB e pagamentos preservados`);
 
   const nada = !Object.keys(campos).length && !movidas.length;
   return {
@@ -234,6 +270,7 @@ module.exports = {
   ROTULO_DA_REGRA,
   motivoDoBloqueio,
   parcelasDoPedido,
+  podeCorrigirImportado,
   lerEntrada,
   inicioDaRegra,
   planejar

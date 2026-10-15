@@ -92,7 +92,8 @@
 
   let aberto = null;
 
-  function abrir({ titulo = 'Visualizar documento', subtitulo = '', nomeArquivo = 'documento', tituloSalvar = 'Salvar PDF', gerar } = {}) {
+  function abrir({ titulo = 'Visualizar documento', subtitulo = '', nomeArquivo = 'documento', tituloSalvar = 'Salvar PDF', gerar,
+    acaoPrincipal = null, aoFechar = null, aoErro = null, podeFechar = null } = {}) {
     if (typeof gerar !== 'function') throw new Error('VisualizadorPdf.abrir precisa de gerar().');
     // Um visualizador por vez: abrir outro troca o documento.
     if (aberto) aberto.fechar();
@@ -100,6 +101,7 @@
     let bytes = null;
     let url = null;
     let fechado = false;
+    let acaoOcupada = false;
     // O `gerar` pode trazer o nome do arquivo e o subtítulo que só se sabem
     // depois de buscar o documento (o DANFE vem do servidor com o nome dele).
     let nomeAtual = nomeArquivo;
@@ -135,9 +137,25 @@
     quadro.title = titulo;
     corpo.append(estado, quadro);
     cartao.append(cabecalho, corpo);
+    // Opcional: por exemplo, emitir a NF-e a partir do espelho. Quem só abre
+    // um documento mantém os mesmos botões e o mesmo desenho de antes.
+    let principal = null;
+    if (typeof acaoPrincipal?.executar === 'function') {
+      const rodape = criar('footer', 'visualizador-pdf__rodape ctl-acoes');
+      if (acaoPrincipal.aviso) rodape.appendChild(criar('p', 'visualizador-pdf__aviso', acaoPrincipal.aviso));
+      principal = botao(acaoPrincipal.rotulo || 'Confirmar', acaoPrincipal.classe || 'btn-success', acaoPrincipal.icone || 'fa-check');
+      if (acaoPrincipal.permissao) principal.dataset.perm = acaoPrincipal.permissao;
+      rodape.appendChild(principal);
+      cartao.appendChild(rodape);
+    }
     overlay.appendChild(cartao);
 
-    const habilitar = sim => { for (const b of [salvar, imprimir]) { b.disabled = !sim; b.classList.toggle('opacity-50', !sim); } };
+    const habilitar = sim => {
+      for (const b of [salvar, imprimir, principal].filter(Boolean)) {
+        b.disabled = !sim || (b === principal && acaoOcupada);
+        b.classList.toggle('opacity-50', b.disabled);
+      }
+    };
 
     function mostrarCarregando() {
       estado.replaceChildren();
@@ -185,6 +203,8 @@
       } catch (err) {
         if (fechado) return;
         console.error('[VisualizadorPdf] o documento não foi montado:', err);
+        if (typeof aoErro === 'function') aoErro(err);
+        if (fechado) return;
         mostrarErro(err?.message || 'Não foi possível montar o documento.');
       }
     }
@@ -226,6 +246,26 @@
       overlay.remove();
       if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
       if (aberto && aberto.overlay === overlay) aberto = null;
+      if (typeof aoFechar === 'function') aoFechar();
+    }
+
+    function solicitarFechamento() {
+      if (typeof podeFechar === 'function' && !podeFechar()) return;
+      fecharVisualizador();
+    }
+
+    async function executarPrincipal(evento) {
+      if (fechado || !bytes || acaoOcupada) return;
+      acaoOcupada = true;
+      habilitar(true);
+      try {
+        await acaoPrincipal.executar(evento);
+      } catch (err) {
+        avisar(err?.message || 'Não foi possível concluir a ação.', 'error');
+      } finally {
+        acaoOcupada = false;
+        if (!fechado) habilitar(Boolean(bytes));
+      }
     }
 
     function aoTeclar(evento) {
@@ -234,7 +274,7 @@
       if (evento.key === 'Escape') {
         evento.preventDefault();
         evento.stopImmediatePropagation();
-        fecharVisualizador();
+        solicitarFechamento();
       } else if ((evento.ctrlKey || evento.metaKey) && String(evento.key).toLowerCase() === 'p') {
         evento.preventDefault();
         evento.stopImmediatePropagation();
@@ -248,8 +288,12 @@
     };
     ligar(salvar, acaoSalvar);
     ligar(imprimir, acaoImprimir);
-    voltar.addEventListener('click', fecharVisualizador);
-    fechar.addEventListener('click', fecharVisualizador);
+    if (principal) {
+      if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(principal, executarPrincipal);
+      else principal.addEventListener('click', executarPrincipal);
+    }
+    voltar.addEventListener('click', solicitarFechamento);
+    fechar.addEventListener('click', solicitarFechamento);
     window.addEventListener('keydown', aoTeclar, true);
     // Com o foco no quadro do PDF (a pessoa clicou para rolar), as teclas vão
     // para ele: o quadro é da mesma origem, e o Esc/Ctrl+P de lá também valem.

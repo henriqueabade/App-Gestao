@@ -11,7 +11,8 @@
  *     mudar o envio MOVE as parcelas. Nas outras escolhas o envio muda
  *     sozinho, sem mexer nelas.
  *   - Parcela paga, com boleto (do BB ou de fora) ou ordem de pagamento não
- *     muda: aparece com o cadeado e o motivo.
+ *     muda: aparece com o cadeado e o motivo. O Sup Admin pode corrigir o
+ *     cadastro da parcela vinculada a boleto importado do BB, mesmo paga.
  *   - Só muda o vencimento da parcela cujo início ou prazo mudou.
  *
  * Quem confere e grava é o backend (GET e PUT /api/pedidos/:id/envio,
@@ -157,8 +158,12 @@
   /** O conteúdo da coluna "Novo vencimento": o cadeado, a data nova ou "não muda". */
   function celulaDoNovoVencimento(linha) {
     if (linha.travada) return `<span class="text-gray-400"><i class="fas fa-lock mr-1" aria-hidden="true"></i>${linha.trava || 'Não muda.'}</span>`;
-    if (linha.muda) return `<strong style="color: var(--color-primary)">${textoDoDia(linha.vencimento) || '—'}</strong>`;
-    return '<span class="text-gray-400">não muda</span>';
+    const data = linha.muda
+      ? `<strong style="color: var(--color-primary)">${textoDoDia(linha.vencimento) || '—'}</strong>`
+      : '<span class="text-gray-400">não muda</span>';
+    return data + (linha.correcao_boleto_importado
+      ? '<span class="block text-xs text-gray-400 mt-1">Boleto importado: corrige o cadastro do pedido, sem alterar o título no BB nem o pagamento.</span>'
+      : '');
   }
 
   /** Uma linha da tabela das parcelas. */

@@ -24,12 +24,13 @@
  *   - "Hoje" e o dia da emissão são o dia de São Paulo. `toISOString()` dá o
  *     dia UTC, que das 21h à meia-noite já é amanhã.
  *
- * Só conta, sem requisição — exceto `reprogramarParcelas`, que recebe o
- * cliente da API pronto e não sabe de onde ele veio.
+ * Só conta, sem requisição — exceto a projeção/reprogramação das parcelas,
+ * que recebem o cliente da API pronto e não sabem de onde ele veio.
  */
 
 const FUSO = 'America/Sao_Paulo';
 const REGRAS_FATURAMENTO = ['ao_embarcar', 'ao_converter', 'data'];
+const { travasDasParcelas } = require('./pedidoParcelas');
 
 const formatadorDia = new Intl.DateTimeFormat('en-CA', {
   timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit'
@@ -224,18 +225,12 @@ const formatarDia = dia => {
 };
 
 /**
- * Refaz os vencimentos das parcelas do pedido a partir de `inicio`.
- *
- * NO LUGAR: um PUT por parcela, e só nas que mudaram — nunca apagar e
- * recriar, que dependeria de ids gerados à mão e deixaria o pedido sem
- * parcelas se falhasse no meio. Tudo é derivado de início + prazo, então
- * rodar de novo não estraga nada.
- *
- * Nunca lança. Cada falha vira aviso e a próxima parcela segue; o que foi
- * gravado de fato volta na lista (a parcela que falhou volta com a data
- * antiga, que é a que continua no banco).
+ * Projeta, sem escrever, os vencimentos LIVRES a partir de `inicio`.
+ * Pagamentos/boletos/ordens preservam as datas já registradas. É a mesma
+ * conta usada pelo espelho, pelo XML e pela gravação ao enviar o pedido.
+ * Erros de leitura viram avisos; desconhecer os vínculos não libera datas.
  */
-async function reprogramarParcelas(api, pedidoId, inicio, prazoTexto, avisos = []) {
+async function projetarParcelas(api, pedidoId, inicio, prazoTexto, avisos = []) {
   const base = diaValido(inicio);
   if (!base) {
     avisos.push('Início do faturamento inválido: os vencimentos das parcelas não foram recalculados.');
@@ -245,6 +240,7 @@ async function reprogramarParcelas(api, pedidoId, inicio, prazoTexto, avisos = [
   let lidas;
   try {
     lidas = await api.get('/api/pedido_parcelas', { query: { pedido_id: pedidoId } });
+    if (!Array.isArray(lidas)) throw new Error('A API não devolveu uma lista válida de parcelas.');
   } catch (err) {
     avisos.push(`Não foi possível ler as parcelas para reprogramar os vencimentos: ${err?.message || err}`);
     return [];
@@ -260,13 +256,76 @@ async function reprogramarParcelas(api, pedidoId, inicio, prazoTexto, avisos = [
     .sort((a, b) => (Number(a.numero_parcela) || 0) - (Number(b.numero_parcela) || 0)
       || (Number(a.id) || 0) - (Number(b.id) || 0));
 
+  if (!parcelas.length) return [];
+  // Ler as travas também na reprogramação automática: o embarque e a
+  // emissão não podem desfazer a data real de uma parcela paga/importada.
+  const vinculos = {};
+  let podeReprogramar = true;
+  const query = { pedido_id: pedidoId };
+  // URLs literais também permitem ao gerador de política da API reconhecer
+  // as leituras necessárias nas rotas de emissão e conferência da NF-e.
+  await Promise.all([
+    { campo: 'boletos', tabela: 'boletos', ler: () => api.get('/api/boletos', { query }) },
+    { campo: 'recebimentos', tabela: 'recebimentos', ler: () => api.get('/api/recebimentos', { query }) },
+    { campo: 'externos', tabela: 'boletos_externos', ler: () => api.get('/api/boletos_externos', { query }) },
+    { campo: 'ordens', tabela: 'ordens_pagamento', ler: () => api.get('/api/ordens_pagamento', { query }) }
+  ].map(async ({ campo, tabela, ler }) => {
+    try {
+      const resposta = await ler();
+      if (resposta?.error) throw new Error(String(resposta.error));
+      if (!Array.isArray(resposta) && (!resposta || typeof resposta !== 'object' || resposta.id === undefined)) {
+        throw new Error(`A API não devolveu uma lista válida de ${tabela}.`);
+      }
+      const lista = Array.isArray(resposta) ? resposta : (resposta?.id ? [resposta] : []);
+      vinculos[campo] = lista.filter(l => String(l?.pedido_id) === String(pedidoId));
+    } catch (err) {
+      // Tabela de uma fase ainda não instalada é legado sem vínculos;
+      // falha de permissão/rede não é prova de que a parcela está livre.
+      const texto = `${err?.message || ''} ${err?.body?.error || ''} ${err?.body?.detalhe || ''}`;
+      const ausente = err?.code === '42P01' || (err?.status === 404 && /tabela|table|não encontrada|does not exist/i.test(texto));
+      if (!ausente) {
+        podeReprogramar = false;
+        avisos.push(`Não foi possível conferir ${tabela}: os vencimentos registrados foram preservados (${err?.message || err}).`);
+      }
+      vinculos[campo] = [];
+    }
+  }));
+  const travas = travasDasParcelas({ parcelas, ...vinculos });
   const vencimentos = calcularVencimentos(base, prazosDoTexto(prazoTexto, parcelas.length));
+  return parcelas.map((parcela, i) => ({
+    ...parcela,
+    data_vencimento: !podeReprogramar || travas.has(Number(parcela.numero_parcela))
+      ? diaValido(parcela.data_vencimento) : vencimentos[i]
+  }));
+}
+
+/**
+ * Persiste a mesma projeção somente quando a operação de envio a pede.
+ * Um PUT por parcela alterada, mantendo os ids. Cada falha vira aviso, e
+ * a resposta mostra a data que continuou salva, sem fingir sucesso.
+ */
+async function reprogramarParcelas(api, pedidoId, inicio, prazoTexto, avisos = []) {
+  // A leitura inicial fica aqui para devolver a data realmente salva mesmo
+  // quando um PUT isolado falhar. A projeção nunca escreve no banco.
+  const atuais = new Map();
+  const apiComRetrato = {
+    get: async (caminho, opcoes) => {
+      const resposta = await api.get(caminho, opcoes);
+      if (caminho === '/api/pedido_parcelas') {
+        for (const p of Array.isArray(resposta) ? resposta : []) {
+          if (String(p?.pedido_id) === String(pedidoId)) atuais.set(String(p.id), diaValido(p.data_vencimento));
+        }
+      }
+      return resposta;
+    }
+  };
+  const parcelas = await projetarParcelas(apiComRetrato, pedidoId, inicio, prazoTexto, avisos);
 
   const resultado = [];
   for (let i = 0; i < parcelas.length; i++) {
     const parcela = parcelas[i];
-    const atual = diaValido(parcela.data_vencimento);
-    const novo = vencimentos[i];
+    const atual = atuais.get(String(parcela.id)) ?? null;
+    const novo = diaValido(parcela.data_vencimento);
     let gravado = atual;
     if (novo !== atual) {
       try {
@@ -302,5 +361,6 @@ module.exports = {
   resolverDatas,
   baseDoFaturamento,
   inicioAposEmbarque,
+  projetarParcelas,
   reprogramarParcelas
 };

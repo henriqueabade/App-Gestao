@@ -18,6 +18,7 @@ const configuracao = require('./configuracaoFiscal');
 const municipios = require('./municipios');
 const assinatura = require('./assinatura');
 const emissao = require('./emissao');
+const danfe = require('./danfe');
 
 const SENHA = 'segredo';
 const CERT = abrirPfx(gerarPfx({ cn: 'SANTISSIMO DECOR LTDA:44039257000122', senha: SENHA }), SENHA);
@@ -132,6 +133,190 @@ function montar({ tabelas, respostas = { NFeAutorizacao4: AUTORIZA }, env = {} }
   const sincronizar = notaId => emissao.sincronizar({ api, notaId, transporte: sefaz.transporte, usuarioId: 9 });
   return { api, sefaz, emitir, sincronizar };
 }
+
+test('espelho usa a montagem fiscal da emissão, incluindo ajustes, transporte e dados digitados, sem nenhuma escrita ou SEFAZ', async () => {
+  const tabelas = tabelasBase();
+  tabelas.configuracao_fiscal[0].ambiente = 'producao';
+  tabelas.pedidos[0].ajuste_valor = 3;
+  tabelas.pedidos[0].valor_final = 297;
+  tabelas.pedido_parcelas[1].valor = 150;
+  const t = montar({ tabelas });
+  const antes = JSON.stringify(t.api.dados);
+  const entrada = {
+    transporte: { modalidade_frete: 1, transportadora_nome: 'Transportadora do teste',
+      volumes: [{ quantidade: 2, especie: 'Caixa', peso_bruto: 8.5, peso_liquido: 8 }], volumes_marca: 'Marca da caixa' },
+    pagamento: { tPag: '15' }, informacoes_complementares: 'Referência digitada pelo usuário & pedido 2548'
+  };
+  const r = await emissao.espelho({ api: t.api, pedidoId: 55, entrada, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-09-15T15:00:00-03:00'), aleatorio: () => 0.14000305,
+    opcoesMunicipios: { buscarNaRede: IBGE_MG }, verProc: 'Santissimo 1.1.1' });
+  assert.equal(r.espelho, true);
+  assert.equal(r.sem_valor_fiscal, true);
+  assert.equal(r.ambiente, 'producao');
+  assert.match(r.html, /ESPELHO — SEM VALOR FISCAL/);
+  assert.match(r.html, /Transportadora do teste/);
+  assert.match(r.html, /Marca da caixa/);
+  assert.match(r.html, /Referência digitada pelo usuário &amp; pedido 2548/);
+  assert.match(r.html, /Numeração estimada/);
+  assert.doesNotMatch(r.html, /<svg|Signature|PRIVATE KEY/);
+  assert.equal(JSON.stringify(t.api.dados), antes, 'nem IBGE, numeração, transporte ou nota são gravados');
+  assert.ok(t.api.chamadas.every(c => c[0] === 'GET'));
+  assert.deepEqual(t.sefaz.chamadas, []);
+
+  assert.match(r.revisao_espelho, /^[a-f0-9]{64}$/);
+  const emitida = await t.emitir({ ...entrada, revisao_espelho: r.revisao_espelho });
+  const fiscal = danfe.lerNfe(t.api.dados.notas_fiscais.find(n => n.id === emitida.nota.id).xml_envio);
+  assert.equal(fiscal.totais.vNF, '297.00');
+  assert.match(r.html, /297,00/);
+  for (const dp of fiscal.duplicatas) {
+    const [ano, mes, dia] = dp.vencimento.split('-');
+    assert.ok(r.html.includes(`${dia}/${mes}/${ano}`));
+  }
+});
+
+test('emissão pelo espelho recusa alteração posterior das parcelas ou do conteúdo antes de qualquer gravação', async () => {
+  const t = montar();
+  const r = await emissao.espelho({ api: t.api, pedidoId: 55, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-09-15T15:00:00-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
+  t.api.dados.pedido_parcelas[0].data_vencimento = '2026-10-20';
+  const inicio = t.api.chamadas.length;
+  await assert.rejects(() => t.emitir({ revisao_espelho: r.revisao_espelho }),
+    e => e.status === 409 && /mudaram desde a conferência/.test(e.message));
+  assert.ok(t.api.chamadas.slice(inicio).every(c => c[0] === 'GET'));
+  assert.equal(t.api.dados.notas_fiscais.length, 0);
+  assert.deepEqual(t.sefaz.chamadas, []);
+});
+
+test('espelho vence na mudança do dia de emissão em São Paulo antes de gravar ou reservar número', async () => {
+  const t = montar();
+  const r = await emissao.espelho({ api: t.api, pedidoId: 55, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-10-15T23:59:59-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
+  const inicio = t.api.chamadas.length;
+  await assert.rejects(() => t.emitir({ revisao_espelho: r.revisao_espelho },
+    { agora: () => new Date('2026-10-16T00:00:01-03:00') }),
+  e => e.status === 409 && /mudaram desde a conferência/.test(e.message));
+  assert.ok(t.api.chamadas.slice(inicio).every(c => c[0] === 'GET'));
+  assert.equal(t.api.dados.notas_fiscais.length, 0);
+  assert.deepEqual(t.sefaz.chamadas, []);
+});
+
+test('a numeração estimada não invalida o espelho se outra nota consumir o número enquanto o usuário confere', async () => {
+  const t = montar();
+  const r = await emissao.espelho({ api: t.api, pedidoId: 55, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-09-15T15:00:00-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
+  t.api.dados.configuracao_fiscal[0].proximo_numero_homologacao = 2;
+  configuracao.limparCache();
+  const emitida = await t.emitir({ revisao_espelho: r.revisao_espelho });
+  assert.equal(emitida.autorizada, true);
+  assert.equal(emitida.nota.numero, 2);
+});
+
+test('espelho e emissão antecipam o envio somente nas parcelas livres e preservam a data da parcela paga', async () => {
+  const tabelas = tabelasBase();
+  Object.assign(tabelas.pedidos[0], { faturamento_regra: 'ao_embarcar', inicio_faturamento: '2026-09-10', prazo: '0/30' });
+  tabelas.pedido_parcelas[0].data_vencimento = '2026-08-20';
+  tabelas.pedido_parcelas[1].data_vencimento = '2026-10-10';
+  tabelas.recebimentos = [{ id: 3, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 147 }];
+  tabelas.boletos = [];
+  tabelas.boletos_externos = [];
+  tabelas.ordens_pagamento = [];
+  const t = montar({ tabelas });
+  const entrada = { data_envio: '2026-09-20' };
+  const r = await emissao.espelho({ api: t.api, pedidoId: 55, entrada, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-09-15T15:00:00-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
+  assert.match(r.html, /20\/08\/2026/);
+  assert.match(r.html, /20\/10\/2026/);
+  assert.match(r.html, /Paga/);
+  assert.equal(t.api.dados.pedido_parcelas[1].data_vencimento, '2026-10-10', 'o espelho nunca grava a projeção');
+  const emitida = await t.emitir({ ...entrada, revisao_espelho: r.revisao_espelho });
+  const n = danfe.lerNfe(t.api.dados.notas_fiscais.find(nota => nota.id === emitida.nota.id).xml_envio);
+  assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
+  assert.equal(n.parcelasRegistradas[0].vencimento, '2026-08-20');
+  assert.equal(n.parcelasRegistradas[0].situacao, 'paga');
+  assert.equal(t.api.dados.pedido_parcelas[0].data_vencimento, '2026-08-20');
+});
+
+test('espelho mantém bloqueios da emissão antes de gerar documento e não consome número', async () => {
+  const tabelas = tabelasBase();
+  tabelas.produtos[0].ncm = null;
+  tabelas.pedidos_itens[0].ncm = null;
+  const t = montar({ tabelas });
+  await assert.rejects(() => emissao.espelho({ api: t.api, pedidoId: 55, resumoCertificado: RESUMO_CERT }),
+    e => e.status === 422 && e.extra.pendencias.some(p => p.chave === 'ncm'));
+  assert.ok(t.api.chamadas.every(c => c[0] === 'GET'));
+  assert.equal(t.api.dados.notas_fiscais.length, 0);
+});
+
+test('falha ao conferir pagamentos bloqueia o espelho e a emissão; nunca transforma pagamento desconhecido em aberto', async () => {
+  const t = montar();
+  const ler = t.api.get;
+  t.api.get = async (caminho, opcoes) => {
+    if (caminho === '/api/recebimentos') { const e = new Error('Indisponível'); e.status = 503; throw e; }
+    return ler(caminho, opcoes);
+  };
+  await assert.rejects(() => emissao.espelho({ api: t.api, pedidoId: 55, resumoCertificado: RESUMO_CERT }),
+    e => e.status === 503 && /recebimentos/.test(e.message));
+  await assert.rejects(() => t.emitir(), e => e.status === 503 && /recebimentos/.test(e.message));
+  assert.equal(t.api.dados.notas_fiscais.length, 0);
+  assert.deepEqual(t.sefaz.chamadas, []);
+});
+
+test('leituras fiscais falhas ou malformadas impedem emissão e espelho antes de qualquer escrita', async t => {
+  for (const tabela of ['pedido_parcelas', 'notas_fiscais', 'recebimentos', 'boletos', 'pedidos_itens']) {
+    for (const tipo of ['transporte', 'objeto_erro', 'resposta_invalida', 'linha_invalida', '404_generico']) {
+      await t.test(`${tabela}: ${tipo}`, async () => {
+        const f = montar();
+        const ler = f.api.get;
+        f.api.get = async (caminho, opcoes) => {
+          if (caminho !== `/api/${tabela}`) return ler(caminho, opcoes);
+          if (tipo === 'objeto_erro') return { error: 'Acesso indisponível', status: 503 };
+          if (tipo === 'resposta_invalida') return { message: 'Solicitação interrompida' };
+          if (tipo === 'linha_invalida') return [null];
+          const e = new Error(tipo === '404_generico' ? 'Rota não encontrada' : 'Conexão interrompida');
+          e.status = tipo === '404_generico' ? 404 : 503;
+          throw e;
+        };
+        const conferir = e => /Não foi possível conferir/.test(e.message) && e.message.includes(tabela);
+        await assert.rejects(() => emissao.espelho({ api: f.api, pedidoId: 55, resumoCertificado: RESUMO_CERT }), conferir);
+        await assert.rejects(() => f.emitir(), conferir);
+        assert.ok(f.api.chamadas.every(c => c[0] === 'GET'));
+        assert.equal(f.api.dados.notas_fiscais.length, 0);
+        assert.deepEqual(f.sefaz.chamadas, []);
+      });
+    }
+  }
+});
+
+test('legado sem tabela de parcelas continua como pendência; ausência do histórico fiscal impede emitir', async () => {
+  for (const tabela of ['pedido_parcelas', 'notas_fiscais']) {
+    const tabelas = tabelasBase();
+    delete tabelas[tabela];
+    const f = montar({ tabelas });
+    const conferir = e => tabela === 'pedido_parcelas'
+      ? e.status === 422 && e.extra.pendencias.some(p => p.chave === 'parcelas')
+      : e.status === 409 && /tabela notas_fiscais não está disponível/.test(e.message);
+    await assert.rejects(() => emissao.espelho({ api: f.api, pedidoId: 55, resumoCertificado: RESUMO_CERT }), conferir);
+    await assert.rejects(() => f.emitir(), conferir);
+    assert.ok(f.api.chamadas.every(c => c[0] === 'GET'));
+    assert.deepEqual(f.sefaz.chamadas, []);
+  }
+});
+
+test('leituras do pedido filtram novamente o vínculo mesmo se o upstream ignorar o pedido_id', async () => {
+  const f = montar();
+  const ler = f.api.get;
+  f.api.get = async (caminho, opcoes) => {
+    const linhas = await ler(caminho, opcoes);
+    if (caminho === '/api/pedido_parcelas') return [...linhas, { id: 99, pedido_id: 999, numero_parcela: 1, valor: 9999, data_vencimento: '2026-01-01' }];
+    if (caminho === '/api/notas_fiscais') return [...linhas, { id: 99, pedido_id: 999, numero: 123, status_fiscal: 'autorizada' }];
+    return linhas;
+  };
+  const r = await emissao.espelho({ api: f.api, pedidoId: 55, resumoCertificado: RESUMO_CERT,
+    agora: () => new Date('2026-09-15T15:00:00-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
+  assert.equal(r.resumo.somaParcelas, 294);
+  assert.equal(r.resumo.parcelas, 2);
+  assert.ok(f.api.chamadas.every(c => c[0] === 'GET'));
+});
 
 test('autorizada: nota completa no banco, itens e eventos gravados, numeração avançada, IBGE resolvido e guardado no cliente', async () => {
   const t = montar();

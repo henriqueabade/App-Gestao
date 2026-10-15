@@ -128,6 +128,48 @@ test('montarDanfeHtml: página A4 retrato com os blocos, a chave formatada, o c�
   assert.ok(producao.includes('Cliente &amp; Filhos LTDA'));
 });
 
+test('espelho mantém o leiaute da nota mas não exibe chave ou protocolo autorizados e repete marca na impressão', () => {
+  const { xml } = nfeProcDeTeste({ ambiente: 'producao' });
+  const n = danfe.lerNfe(xml);
+  const html = danfe.montarDanfeHtml(xml, { espelho: true });
+  assert.match(html, /ESPELHO — SEM VALOR FISCAL/);
+  assert.match(html, /Documento não transmitido à SEFAZ/);
+  assert.match(html, /Numeração estimada/);
+  assert.match(html, /\.marca \{ position: fixed/);
+  assert.match(html, /Não emitida — sem autorização/);
+  assert.ok(!html.includes(n.chave));
+  assert.ok(!html.includes(n.protocolo.numero));
+  assert.doesNotMatch(html, /<svg/);
+  for (const quadro of ['Destinatário / Remetente', 'Fatura / Duplicatas', 'Cálculo do imposto', 'Dados dos produtos / serviços', 'Dados adicionais']) {
+    assert.ok(html.includes(quadro), quadro);
+  }
+});
+
+test('DANFE e espelho mostram datas históricas registradas no XML em seção distinta das duplicatas fiscais', () => {
+  const montada = xmlNfe.montarNfe({
+    configuracao: CONFIG, ambiente: 'producao', serie: 1, numero: 369, cNF: '14000305', dhEmi: new Date('2026-10-15T13:59:00-03:00'),
+    pedido: PEDIDO, cliente: CLIENTE, itens: ITENS, produtos: PRODUTOS,
+    parcelas: [
+      { id: 1, numero_parcela: 1, valor: 282, data_vencimento: '2026-08-20' },
+      { id: 2, numero_parcela: 2, valor: 282, data_vencimento: '2026-10-20' }
+    ],
+    recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282 }],
+    transporte: { modalidade_frete: 9 }, verProc: 'Santissimo 1.1.1'
+  });
+  const n = danfe.lerNfe(montada.xml);
+  assert.equal(n.parcelasRegistradas.length, 2);
+  assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
+  for (const espelho of [false, true]) {
+    const html = danfe.montarDanfeHtml(montada.xml, { espelho });
+    const historico = html.slice(html.indexOf('Parcelas do pedido — vencimentos registrados'), html.indexOf('Cálculo do imposto'));
+    assert.match(historico, /20\/08\/2026/);
+    assert.match(historico, /20\/10\/2026/);
+    assert.match(historico, /Paga/);
+    assert.match(historico, /Situação na emissão/);
+    assert.ok(!html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Parcelas do pedido — vencimentos registrados')).includes('20/08/2026'));
+  }
+});
+
 test('vários volumes: o resumo soma pesos e quantidades e a tabela lista um por linha', () => {
   const montada = xmlNfe.montarNfe({
     configuracao: CONFIG, ambiente: 'producao', serie: 1, numero: 363, cNF: '14000305', dhEmi: new Date('2026-09-15T15:00:00-03:00'),

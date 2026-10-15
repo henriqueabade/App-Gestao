@@ -45,6 +45,19 @@
     flex-wrap: nowrap;
 }
 
+.visualizador-pdf__rodape {
+    flex-shrink: 0;
+    justify-content: flex-end;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.visualizador-pdf__aviso {
+    margin-right: auto;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
 /* O miolo: as folhas do PDF, no fundo cinza do visor. */
 .visualizador-pdf__corpo {
     position: relative;

@@ -60,15 +60,23 @@ function criarUpstream(linhas, tabelas = {}) {
     const responder = (status, payload) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); };
     const [, tabela, id] = url.pathname.match(/^\/api\/([a-z_]+)(?:\/(\d+))?$/) || [];
     const lista = tabela && tabelas[tabela];
-    if (!lista) return responder(404, { error: 'não há' });
+    if (!lista) return responder(404, { error: `Tabela ${tabela} não existe` });
     let corpo = '';
     req.on('data', p => { corpo += p; });
     req.on('end', () => {
       const dados = corpo ? JSON.parse(corpo) : {};
       if (req.method === 'GET') {
         if (id) return responder(200, lista.find(l => String(l.id) === id) || null);
-        const filtros = [...url.searchParams.entries()];
-        return responder(200, lista.filter(l => filtros.every(([c, v]) => String(l[c]) === String(v))));
+        // `select` projeta colunas na API real; não é um filtro de igualdade.
+        const filtros = [...url.searchParams.entries()].filter(([c]) => c !== 'select');
+        const linhas = lista.filter(l => filtros.every(([c, v]) => String(l[c]) === String(v)));
+        const colunas = url.searchParams.get('select')?.split(',').map(c => c.trim()).filter(Boolean);
+        const incluir = colunas?.filter(c => !c.startsWith('-')) || [];
+        const excluir = new Set(colunas?.filter(c => c.startsWith('-')).map(c => c.slice(1)) || []);
+        return responder(200, colunas?.length && !colunas.includes('*')
+          ? linhas.map(l => Object.fromEntries(Object.entries(l).filter(([c]) =>
+            !excluir.has(c) && (!incluir.length || incluir.includes(c)))))
+          : linhas);
       }
       if (req.method === 'POST') {
         if (tabela === 'notas_fiscais' && lista.some(l => l.ambiente === dados.ambiente && Number(l.serie) === Number(dados.serie) && Number(l.numero) === Number(dados.numero))) {
@@ -424,9 +432,66 @@ function tabelasDoPedido() {
       reg_logradouro: 'Rua Diamante', reg_numero: '504', reg_bairro: 'São Joaquim', reg_cidade: 'Contagem', reg_uf: 'Minas Gerais', reg_cep: '32113000', reg_codigo_municipio: '3118601'
     }],
     produtos: [{ id: 3, codigo: 'MESA-01', ncm: '94036000', origem_mercadoria: 0 }],
-    notas_fiscais: [], notas_fiscais_itens: [], notas_fiscais_eventos: []
+    notas_fiscais: [], notas_fiscais_itens: [], notas_fiscais_eventos: [], recebimentos: [], boletos: []
   };
 }
+
+test('POST /pedidos/:id/espelho exige a permissão de emitir e devolve documento sem escrita ou contato com a SEFAZ', async () => {
+  const tabelas = tabelasDoPedido();
+  const t = await montar({ tabelas });
+  try {
+    assert.equal((await t.chamar('POST', '/api/fiscal/pedidos/55/espelho', {})).status, 403);
+    t.estado.chaves.add('financeiro.nfe.emit');
+    const antes = JSON.stringify(tabelas);
+    const r = await t.chamar('POST', '/api/fiscal/pedidos/55/espelho', {
+      transporte: { modalidade_frete: 1, transportadora_nome: 'Transporte conferido', volumes_quantidade: 3, volumes_especie: 'Caixa' },
+      informacoes_complementares: 'Conferir antes de emitir'
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.espelho, true);
+    assert.equal(r.corpo.sem_valor_fiscal, true);
+    assert.equal(r.corpo.nomeArquivo, 'Espelho-NFe-2548');
+    assert.match(r.corpo.html, /ESPELHO — SEM VALOR FISCAL/);
+    assert.match(r.corpo.html, /Transporte conferido/);
+    assert.match(r.corpo.html, /Conferir antes de emitir/);
+    assert.doesNotMatch(r.corpo.html, /BEGIN CERTIFICATE|PRIVATE KEY|<Signature/);
+    assert.equal(JSON.stringify(tabelas), antes);
+    assert.deepEqual(t.upstream.puts, []);
+    assert.deepEqual(t.chamadasSefaz, []);
+
+    tabelas.clientes[0].reg_numero = null;
+    const pendente = await t.chamar('POST', '/api/fiscal/pedidos/55/espelho', {});
+    assert.equal(pendente.status, 422);
+    assert.ok(pendente.corpo.pendencias.some(p => p.chave === 'reg_numero'));
+    assert.deepEqual(t.chamadasSefaz, []);
+  } finally {
+    await t.fechar();
+  }
+});
+
+test('prontidão diagnóstica legada mostra dados sem tabela de notas; espelho e emissão continuam bloqueados', async () => {
+  const tabelas = tabelasDoPedido();
+  delete tabelas.notas_fiscais;
+  const t = await montar({ tabelas });
+  try {
+    t.estado.chaves.add('financeiro.nfe.view');
+    t.estado.chaves.add('financeiro.nfe.emit');
+    const diagnostico = await t.chamar('GET', '/api/fiscal/pedidos/55/prontidao');
+    assert.equal(diagnostico.status, 200, JSON.stringify(diagnostico.corpo));
+    assert.equal(diagnostico.corpo.resumo.pedidoId, 55);
+    assert.deepEqual(diagnostico.corpo.notas, []);
+    for (const acao of ['espelho', 'emitir']) {
+      // O cliente não consegue habilitar o modo diagnóstico pelo payload.
+      const resposta = await t.chamar('POST', `/api/fiscal/pedidos/55/${acao}`, { apenasAvaliacao: true });
+      assert.equal(resposta.status, 409, JSON.stringify(resposta.corpo));
+      assert.match(resposta.corpo.error, /tabela notas_fiscais não está disponível/);
+    }
+    assert.deepEqual(t.upstream.puts, []);
+    assert.deepEqual(t.chamadasSefaz, []);
+  } finally {
+    await t.fechar();
+  }
+});
 
 test('POST /pedidos/:id/emitir exige financeiro.nfe.emit; emite, grava a nota e as rotas de notas devolvem sem/com XML', async () => {
   const tabelas = tabelasDoPedido();
@@ -759,17 +824,21 @@ test('cartas de correção: lista, segunda via em HTML e XML do evento', async (
 });
 
 test('GET /painel exige financeiro.nfe.view e devolve o painel fiscal da competência sem XML', async () => {
+  // A emissão usa o relógio real. A competência da fixture acompanha o
+  // mesmo dia civil em São Paulo para continuar cobrindo o pós-emissão.
+  const competencia = require('./faturamentoPedido').hojeEmSaoPaulo().slice(0, 7);
+  const caminhoPainel = `/api/fiscal/painel?competencia=${competencia}`;
   const tabelas = tabelasDoPedido();
   tabelas.pedidos[0].situacao = 'Enviado';
-  tabelas.pedidos[0].embarcar_real = '2026-09-10';
-  tabelas.pedidos.push({ id: 56, numero: '2549', situacao: 'Enviado', cliente_id: 7, valor_final: 100, embarcar_real: '2026-09-11', nfe_dispensada: true });
+  tabelas.pedidos[0].embarcar_real = `${competencia}-01`;
+  tabelas.pedidos.push({ id: 56, numero: '2549', situacao: 'Enviado', cliente_id: 7, valor_final: 100, embarcar_real: `${competencia}-02`, nfe_dispensada: true });
   const t = await montar({ tabelas });
   try {
-    assert.equal((await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09')).status, 403);
+    assert.equal((await t.chamar('GET', caminhoPainel)).status, 403);
     t.estado.chaves.add('financeiro.nfe.view');
-    const antes = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    const antes = await t.chamar('GET', caminhoPainel);
     assert.equal(antes.status, 200, JSON.stringify(antes.corpo));
-    assert.equal(antes.corpo.competencia, '2026-09');
+    assert.equal(antes.corpo.competencia, competencia);
     assert.equal(antes.corpo.ambiente, 'homologacao');
     assert.equal(antes.corpo.certificado.configurado, true);
     assert.equal(antes.corpo.aguardando_nf.quantidade, 1);
@@ -779,8 +848,9 @@ test('GET /painel exige financeiro.nfe.view e devolve o painel fiscal da compet�
     assert.deepEqual(antes.corpo.atividade, []);
 
     t.estado.chaves.add('financeiro.nfe.emit');
-    await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
-    const depois = await t.chamar('GET', '/api/fiscal/painel?competencia=2026-09');
+    const emitida = await t.chamar('POST', '/api/fiscal/pedidos/55/emitir', {});
+    assert.equal(emitida.status, 200, JSON.stringify(emitida.corpo));
+    const depois = await t.chamar('GET', caminhoPainel);
     assert.equal(depois.corpo.aguardando_nf.quantidade, 0);
     assert.equal(depois.corpo.notas.autorizadas, 1);
     assert.equal(depois.corpo.notas.valor_autorizado, 294);

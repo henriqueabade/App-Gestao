@@ -1,0 +1,52 @@
+/* Laterais com a mesma largura: o título fica no centro do modal. */
+#emitirNfePedidoOverlay .emitir-nfe__cabecalho {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 1rem;
+}
+
+#emitirNfePedidoOverlay .emitir-nfe__inicio {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+#emitirNfePedidoOverlay .emitir-nfe__titulos {
+    max-width: 18rem;
+}
+
+#emitirNfePedidoOverlay .emitir-nfe__fim {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 850px) {
+    #emitirNfePedidoOverlay .emitir-nfe__cabecalho {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    #emitirNfePedidoOverlay .emitir-nfe__titulos {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        justify-self: center;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    #emitirNfePedidoOverlay .emitir-nfe__cabecalho {
+        padding-right: 1rem;
+        padding-left: 1rem;
+    }
+
+    #emitirNfePedidoOverlay .emitir-nfe__inicio,
+    #emitirNfePedidoOverlay .emitir-nfe__fim {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+        justify-content: center;
+    }
+}

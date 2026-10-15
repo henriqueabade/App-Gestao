@@ -1,6 +1,6 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
+const { exigirPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
 const parcelaMinima = require('./cobranca/parcelaMinima');
@@ -786,16 +786,56 @@ router.put('/:id/datas', exigirPermissao('ped.dates.edit'), async (req, res) => 
  * O que o modal "Datas do envio" precisa, lido de uma vez: o pedido, as
  * parcelas com as travas (boleto, pagamento, boleto de fora, ordem), as NF-e
  * do sistema (que bloqueiam) e a NF-e de fora, cuja data de emissão a tela
- * oferece como data de envio. Tabela que falta (SQL não rodado) vira lista
- * vazia. `pedido` é null quando ele não existe.
+ * oferece como data de envio. Só uma tabela opcional comprovadamente ausente
+ * (SQL legado) vira lista vazia; falha de permissão/rede e resposta inesperada
+ * não podem esconder uma trava financeira. `pedido` é null se não existe.
  */
-async function lerBaseDoEnvio(api, id) {
-  const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+async function lerBaseDoEnvio(api, id, { supAdmin = false } = {}) {
+  const rotulos = {
+    pedido: 'o pedido', pedido_parcelas: 'as parcelas', boletos: 'os boletos', recebimentos: 'os pagamentos',
+    boletos_externos: 'os boletos de fora', ordens_pagamento: 'as ordens de pagamento',
+    notas_fiscais: 'as NF-e', notas_fiscais_externas: 'as notas emitidas fora do sistema'
+  };
+  const erroDeLeitura = tabela => Object.assign(new Error(
+    `Não foi possível conferir ${rotulos[tabela] || 'os dados'} para a correção. Nenhuma alteração foi salva. Reabra o modal e tente novamente.`
+  ), { status: 502, code: 'ENVIO_BASE_INDISPONIVEL', recurso: tabela });
+  const tabelaAusente = err => {
+    const status = Number(err?.status);
+    if (![404, 500].includes(status)) return false;
+    const detalhe = JSON.stringify(err?.body || {}).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return /\b42p01\b/.test(detalhe)
+      || (status === 404 && /\b(tabela|table|relation)\b/.test(detalhe)
+        && /nao (?:foi )?encontrad|not found|does not exist|inexistente/.test(detalhe));
+  };
+  let pedido;
+  try {
+    pedido = await api.get(`/api/pedidos/${id}`);
+  } catch (err) {
+    if (err?.status === 404) return { pedido: null };
+    throw erroDeLeitura('pedido');
+  }
   if (!pedido || pedido.error === 'Not found') return { pedido: null };
-  const lerLista = (tabela, query) => api.get(`/api/${tabela}`, { query })
-    .then(r => (Array.isArray(r) ? r : []))
-    .then(l => l.filter(x => String(x?.pedido_id) === String(id)))
-    .catch(() => []);
+  if (typeof pedido !== 'object' || Array.isArray(pedido) || pedido.error || String(pedido.id) !== String(id)) {
+    throw erroDeLeitura('pedido');
+  }
+  const lerLista = async (tabela, query) => {
+    let resposta;
+    try {
+      resposta = await api.get(`/api/${tabela}`, { query });
+    } catch (err) {
+      if (tabela !== 'pedido_parcelas' && tabelaAusente(err)) return [];
+      throw erroDeLeitura(tabela);
+    }
+    if (!Array.isArray(resposta) || resposta.some(linha => !linha || typeof linha !== 'object' || Array.isArray(linha)
+      || linha.id == null || !Object.prototype.hasOwnProperty.call(linha, 'pedido_id'))) {
+      throw erroDeLeitura(tabela);
+    }
+    const lista = resposta.filter(x => String(x.pedido_id) === String(id));
+    if (tabela === 'pedido_parcelas' && lista.some(p => !Number.isInteger(Number(p.numero_parcela)) || Number(p.numero_parcela) < 1)) {
+      throw erroDeLeitura(tabela);
+    }
+    return lista;
+  };
   const [parcelas, boletos, recebimentos, externos, ordens, notas, notasDeFora] = await Promise.all([
     lerLista('pedido_parcelas', { pedido_id: id }),
     lerLista('boletos', { pedido_id: id }),
@@ -812,7 +852,7 @@ async function lerBaseDoEnvio(api, id) {
   return {
     pedido,
     notas,
-    parcelas: datasDoEnvio.parcelasDoPedido({ pedido, parcelas, travas }),
+    parcelas: datasDoEnvio.parcelasDoPedido({ pedido, parcelas, travas, boletos, externos, ordens, supAdmin }),
     notaDeFora: deFora
       ? { numero: deFora.numero ?? null, serie: deFora.serie ?? null, data_emissao: diaValido(String(deFora.data_emissao ?? '')) }
       : null
@@ -827,7 +867,7 @@ router.get('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => 
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const base = await lerBaseDoEnvio(api, id);
+    const base = await lerBaseDoEnvio(api, id, { supAdmin: await ehSupAdmin(req) });
     if (!base.pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
     const p = base.pedido;
     res.json({
@@ -849,7 +889,9 @@ router.get('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => 
     });
   } catch (err) {
     console.error('Erro ao ler as datas do envio:', err);
-    res.status(err.status || 500).json({ error: 'Erro ao ler as datas do envio' });
+    res.status(err.status || 500).json(err.code === 'ENVIO_BASE_INDISPONIVEL'
+      ? { error: err.message, code: err.code }
+      : { error: 'Erro ao ler as datas do envio' });
   }
 });
 
@@ -858,14 +900,15 @@ router.get('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => 
  * faturamento e os prazos de um pedido enviado SEM NF-e do sistema.
  *
  * As parcelas mudam NO LUGAR, uma a uma e só as que mudam; a travada nunca.
- * Sem transação: a parcela que falhar vira aviso e fica com a data antiga.
- * A correção vai para o histórico do pedido.
+ * A API remota não oferece transação: se uma gravação falha, tenta restaurar
+ * os campos desta tentativa e responde erro, inclusive se a restauração
+ * precisar de revisão. Só grava o histórico após confirmar todas as datas.
  */
 router.put('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const base = await lerBaseDoEnvio(api, id);
+    const base = await lerBaseDoEnvio(api, id, { supAdmin: await ehSupAdmin(req) });
     if (!base.pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
 
     // A trava real: a tela apaga o calendário, mas uma tela velha ou outra
@@ -883,17 +926,52 @@ router.put('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => 
     if (plano.nada) return res.json({ ok: true, nada: true, parcelas: plano.parcelas, avisos: [] });
 
     const avisos = [];
-    if (Object.keys(plano.campos).length) await api.put(`/api/pedidos/${id}`, plano.campos);
-
-    for (const parcela of plano.parcelas) {
-      if (!parcela.muda) continue;
-      try {
-        await api.put(`/api/pedido_parcelas/${parcela.id}`, { data_vencimento: parcela.vencimento });
-      } catch (err) {
-        avisos.push(`Parcela ${parcela.numero}: o vencimento não mudou (${err?.message || err}).`);
-        parcela.vencimento = parcela.vencimento_antes;
-        parcela.muda = false;
+    const escritas = [];
+    if (Object.keys(plano.campos).length) {
+      escritas.push({
+        caminho: `/api/pedidos/${id}`,
+        recurso: 'pedido',
+        novos: plano.campos,
+        anteriores: Object.fromEntries(Object.keys(plano.campos).map(campo => [campo, base.pedido[campo] ?? null]))
+      });
+    }
+    for (const parcela of plano.parcelas.filter(p => p.muda)) {
+      escritas.push({
+        caminho: `/api/pedido_parcelas/${parcela.id}`,
+        recurso: `parcela ${parcela.numero}`,
+        novos: { data_vencimento: parcela.vencimento },
+        anteriores: { data_vencimento: parcela.vencimento_antes }
+      });
+    }
+    const tentadas = [];
+    try {
+      for (const escrita of escritas) {
+        // Inclui a gravação que falhou: a resposta pode se perder DEPOIS de
+        // o upstream salvar. Restaurar só as respostas 2xx deixaria esse caso
+        // com o vencimento novo mesmo quando a tela informa erro.
+        tentadas.push(escrita);
+        await api.put(escrita.caminho, escrita.novos);
       }
+    } catch (err) {
+      const falhasReversao = [];
+      for (const escrita of [...tentadas].reverse()) {
+        try {
+          await api.put(escrita.caminho, escrita.anteriores);
+        } catch (_) {
+          falhasReversao.push(escrita.recurso);
+        }
+      }
+      console.error('Falha ao salvar as datas do envio:', err?.message || err);
+      const revisar = falhasReversao.length > 0;
+      return res.status(502).json({
+        error: revisar
+          ? `Não foi possível concluir a correção nem confirmar a restauração de ${falhasReversao.join(', ')}. Reabra o pedido e confira as datas e os prazos antes de emitir a NF-e.`
+          : 'Não foi possível salvar as datas do envio. As alterações desta tentativa foram desfeitas. Tente novamente.',
+        code: revisar ? 'ENVIO_REVISAO_NECESSARIA' : 'ENVIO_NAO_GRAVADO',
+        revisao_necessaria: revisar,
+        revertido: !revisar,
+        falhas_reversao: falhasReversao
+      });
     }
 
     await registrarEventoDoPedido(api, {
@@ -906,7 +984,9 @@ router.put('/:id/envio', exigirPermissao('ped.dates.edit'), async (req, res) => 
     res.json({ ok: true, nada: false, campos: plano.campos, parcelas: plano.parcelas, mudancas: plano.mudancas, avisos });
   } catch (err) {
     console.error('Erro ao corrigir as datas do envio:', err);
-    res.status(err.status || 500).json({ error: 'Erro ao corrigir as datas do envio' });
+    res.status(err.status || 500).json(err.code === 'ENVIO_BASE_INDISPONIVEL'
+      ? { error: err.message, code: err.code }
+      : { error: 'Erro ao corrigir as datas do envio' });
   }
 });
 
