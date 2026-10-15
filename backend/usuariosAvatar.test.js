@@ -83,6 +83,12 @@ test('foto vazia ou inválida não esconde um alias válido; protocolos fora de 
   assert.equal(avatarToRenderableSource('imagens/perfis/7.webp'), 'imagens/perfis/7.webp');
 });
 
+test('a foto atualizada pelo perfil prevalece sobre foto_usuario legado', () => {
+  const atual = '/imagens/perfis/7-nova.webp';
+  assert.equal(normalizeAvatar({ foto_usuario: PNG_URL, foto_perfil: atual }).foto_usuario, atual);
+  assert.equal(normalizeAvatar({ foto_usuario: PNG_URL, foto_perfil_url: 'https://exemplo.test/nova.webp' }).avatarUrl, 'https://exemplo.test/nova.webp');
+});
+
 async function comLista({ podeVer }, verificar) {
   const usuario = { id: 7, nome: 'Maria Teste', email: 'maria@example.test', perfil: 'Comercial', status: 'ativo', foto_perfil: PNG_URL, ultimo_login: '2026-10-15T12:00:00Z' };
   const selects = [];
@@ -149,4 +155,72 @@ test('sem módulo Usuários o seletor conserva foto e esconde e-mail/atividade d
     assert.equal(lista.find(u => u.id === 7).email, 'maria@example.test');
     assert.ok(!('email' in lista.find(u => u.id === 8)));
   });
+});
+
+test('PROD: cliente HTTP real projeta foto_perfil do esquema remoto e entrega a imagem da topbar', async () => {
+  const chamadas = [];
+  const usuario = {
+    id: 7, nome: 'Maria Teste', email: 'maria@example.test', perfil: 'Sup Admin', status: 'ativo',
+    permissoes: {}, foto_usuario: null, avatar_version: null,
+    foto_perfil: '/imagens/perfis/7.png', ultimo_login: '2026-10-15T12:00:00Z',
+    senha: 'hash-nao-deve-sair', confirmacao_token: 'token-nao-deve-sair'
+  };
+  const remoto = express();
+  remoto.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) assert.equal(req.headers.authorization, 'Bearer avatar-fixture');
+    chamadas.push({ caminho: req.path, select: req.query.select });
+    next();
+  });
+  remoto.get('/api/tabelas', (_req, res) => res.json({ tabelas: [{ tabela: 'usuarios', colunas: Object.keys(usuario) }] }));
+  remoto.get('/api/usuarios', (req, res) => {
+    const campos = String(req.query.select || '').split(',').filter(Boolean);
+    const desconhecido = campos.find(c => !(c in usuario));
+    if (desconhecido) return res.status(400).json({ error: `Coluna inexistente: ${desconhecido}` });
+    res.json([Object.fromEntries(campos.map(c => [c, usuario[c]]))]);
+  });
+  remoto.get('/api/usuarios/7', (_req, res) => res.json(usuario));
+  remoto.get('/api/perfil', (req, res) => res.json({ usuario: {
+    ...usuario, foto_perfil_url: `http://${req.headers.host}${usuario.foto_perfil}`
+  } }));
+  remoto.get('/imagens/perfis/7.png', (_req, res) => res.type('png').send(PNG));
+  const apiServer = remoto.listen(0, '127.0.0.1');
+  await new Promise(resolve => apiServer.once('listening', resolve));
+  const base = `http://127.0.0.1:${apiServer.address().port}`;
+  const nomes = ['./apiHttpClient', './tokenStore', './dataConfig', './permissionsController', './usuariosController'];
+  const modulos = nomes.map(nome => ({ id: require.resolve(nome), antes: require.cache[require.resolve(nome)] }));
+  const envAnterior = process.env.API_BASE_URL;
+  let servidor;
+  try {
+    process.env.API_BASE_URL = base;
+    for (const { id } of modulos) delete require.cache[id];
+    const [http, token, config, permissoes] = modulos;
+    require.cache[token.id] = { id: token.id, filename: token.id, loaded: true, exports: { getToken: () => 'avatar-fixture' } };
+    require.cache[config.id] = { id: config.id, filename: config.id, loaded: true, exports: { isDev: false } };
+    require.cache[permissoes.id] = { id: permissoes.id, filename: permissoes.id, loaded: true, exports: {
+      obterPermissoesEfetivas: async () => ({ usuarios: { ativo: true, acoes: { 'usuarios.view': true } } })
+    } };
+    const cliente = require('./apiHttpClient').createApiClient();
+    assert.equal(typeof cliente.getAvailableColumns, 'undefined', 'o teste percorre o cliente PROD, não o DEV');
+    const app = express();
+    app.use('/api/usuarios', require('./usuariosController'));
+    servidor = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => servidor.once('listening', resolve));
+    const resposta = await fetch(`http://127.0.0.1:${servidor.address().port}/api/usuarios/lista`);
+    assert.equal(resposta.status, 200);
+    const lista = await resposta.json();
+    const perfil = (await cliente.get('/api/perfil')).usuario;
+    const urlDaLista = new URL(lista[0].foto_usuario, base).href;
+    assert.equal(urlDaLista, perfil.foto_perfil_url);
+    assert.ok(chamadas.find(c => c.caminho === '/api/usuarios').select.split(',').includes('foto_perfil'));
+    assert.ok(!('senha' in lista[0]) && !('confirmacao_token' in lista[0]));
+    const imagem = await fetch(urlDaLista);
+    assert.equal(imagem.status, 200);
+    assert.equal(imagem.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await imagem.arrayBuffer()), PNG);
+  } finally {
+    if (servidor) await new Promise(resolve => servidor.close(resolve));
+    await new Promise(resolve => apiServer.close(resolve));
+    if (envAnterior === undefined) delete process.env.API_BASE_URL; else process.env.API_BASE_URL = envAnterior;
+    for (const { id, antes } of modulos) { if (antes) require.cache[id] = antes; else delete require.cache[id]; }
+  }
 });

@@ -287,13 +287,14 @@ test('middleware HTTP identifica ator da sessão, ignora body.usuario_id e prese
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   t.after(() => new Promise(resolve => server.close(resolve)));
   const contexto = { origem: 'manual', acao_id: randomUUID(), tela: '/src/html/menu.html', evento: 'salvar', alvo_id: 'salvarProduto' };
+  const token = `teste.${Buffer.from(JSON.stringify({ id: 7 })).toString('base64url')}.teste`;
   const resposta = await fetch(`http://127.0.0.1:${server.address().port}/api/produtos/3`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Auditoria-Origem': 'manual', 'X-Auditoria-Acao': contexto.acao_id,
+    method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Auditoria-Origem': 'manual', 'X-Auditoria-Acao': contexto.acao_id,
       'X-Auditoria-Contexto': encodeURIComponent(JSON.stringify(contexto)) }, body: JSON.stringify({ nome: 'Nome HTTP', usuario_id: 999 }) });
   assert.equal(resposta.status, 202);
   assert.equal(resposta.headers.get('X-Auditoria-Status'), 'ok');
   assert.ok(f.eventos.every(e => e.usuario_id === 7));
-  assert.equal(f.leituras.filter(p => p === '/api/usuarios/me').length, 1);
+  assert.equal(f.leituras.filter(p => p === '/api/usuarios/7').length, 1);
   assert.equal(f.eventos[0].origem, 'manual');
   assert.equal(f.eventos[0].modulo, 'produtos');
   assert.equal(f.eventos[0].entidade_id, '3');
@@ -301,7 +302,7 @@ test('middleware HTTP identifica ator da sessão, ignora body.usuario_id e prese
   assert.ok(f.eventos.some(e => e.origem === 'automatico'));
   f.falharAuditoria();
   const pendente = await fetch(`http://127.0.0.1:${server.address().port}/api/produtos/3`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Auditoria-Origem': 'manual', 'X-Auditoria-Acao': randomUUID() },
+    method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Auditoria-Origem': 'manual', 'X-Auditoria-Acao': randomUUID() },
     body: JSON.stringify({ nome: 'Gravado com auditoria pendente' }) });
   assert.equal(pendente.status, 202);
   assert.equal(pendente.headers.get('X-Auditoria-Status'), 'pendente');
@@ -351,4 +352,35 @@ test('parâmetros iguais e id de referência não são apresentados como mudanç
   });
   assert.deepEqual(mudancas(t.eventos[0]), []);
   assert.equal(t.ultimas.length, 0);
+});
+
+test('canais anteriores à sessão não tentam auditoria com ator ou token ausentes', async () => {
+  for (const canal of ['login-usuario', 'auto-login', 'registrar-usuario', 'perfil:obter']) {
+    const t = fixture();
+    let clientes = 0;
+    const r = await captura.executarIpc({ usuarioId: null, canal, payload: { email: 'pessoa@example.test' } },
+      () => t.api.put('/usuarios/7', { nome: 'Nome confirmado pelo login' }),
+      { criarApi: () => { clientes++; throw new Error('Não criar cliente anterior ao login'); }, onAuditFailure: e => t.falhas.push(e) });
+    assert.equal(r.nome, 'Nome confirmado pelo login');
+    assert.equal(clientes, 0);
+    assert.equal(t.eventos.length, 0);
+    assert.equal(t.falhas.length, 0);
+  }
+});
+
+test('falha ou falta de confirmação em metadata não confirma última alteração manual', async () => {
+  for (const retorno of [false, null, undefined, [], { success: false }, { ok: false }, { error: 'Conteúdo privado nunca deve sair' }]) {
+    const t = fixture();
+    const api = { ...t.api, updateUserActivity: async () => retorno };
+    const falhas = [];
+    const ultimas = [];
+    await captura.executarIpc({ usuarioId: 12345, canal: 'atualizar-produto', payload: { id: 3, nome: 'Nova caixa' },
+      contexto: { origem: 'manual', acao_id: randomUUID() } }, () => api.put('/produtos/3', { nome: 'Nova caixa' }),
+    { criarApi: () => api, onManualChange: r => ultimas.push(r), onAuditFailure: r => falhas.push(r) });
+    assert.equal(t.linhas.produtos[0].nome, 'Nova caixa');
+    assert.equal(ultimas.length, 0);
+    assert.equal(falhas[0].code, 'AUDITORIA_ULTIMA_ALTERACAO_FALHOU');
+    assert.deepEqual(falhas[0].diagnosticos, [{ fase: 'atualizar-ultima-alteracao', code: 'AUDITORIA_ATIVIDADE_SEM_CONFIRMACAO' }]);
+    assert.doesNotMatch(JSON.stringify(falhas), /Conteúdo privado/);
+  }
 });

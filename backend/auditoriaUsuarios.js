@@ -12,7 +12,6 @@ const TABELA = 'usuarios_auditoria';
 const SQL_ARQUIVO = 'backend/scripts/ddl_usuarios_auditoria.sql';
 const FUSO = 'America/Sao_Paulo';
 const MAX_REGISTROS = 50000;
-const LOTE = 500;
 const ORIGENS = new Set(['manual', 'automatico', 'sistema', 'nao_confirmada']);
 const RESULTADOS = new Set(['sucesso', 'falha', 'cancelado']);
 // Não guardar corpos HTTP inteiros: só campos de negócio explicitamente conhecidos.
@@ -42,6 +41,25 @@ const RECURSOS = new Set((
 
 function erro(status, mensagem, extra = {}) {
   return Object.assign(new Error(mensagem), { status, ...extra });
+}
+/** Só metadados técnicos: nunca mensagem, URL completa, corpo, token ou stack. */
+function diagnosticoFalha(e, fase) {
+  const status = Number(e?.status_http ?? e?.status);
+  const code = typeof e?.code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(e.code) ? e.code : 'SEM_CODIGO';
+  return { fase, code, ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { status_http: status } : {}),
+    ...(e instanceof TypeError ? { tipo: 'TypeError' } : {}) };
+}
+async function identificarUsuarioDaRequisicao(req, api) {
+  // A API REST genérica recebe ids numéricos. /usuarios/me seria tratado
+  // como WHERE id = 'me' e causaria erro de conversão em produção.
+  const id = inteiroPositivo(require('./usuarioAtual').usuarioDaRequisicao(req));
+  if (!id) throw erro(401, 'Sessão não identificada.', { code: 'AUDITORIA_SEM_USUARIO' });
+  const resposta = await api.get(`/api/usuarios/${id}`);
+  const usuario = Array.isArray(resposta) ? resposta[0] : resposta;
+  if (!inteiroPositivo(usuario?.id) || id && Number(usuario.id) !== id) {
+    throw erro(401, 'Sessão não identificada.', { code: 'AUDITORIA_SEM_USUARIO' });
+  }
+  return usuario;
 }
 function inteiroPositivo(valor) {
   const n = Number(valor);
@@ -178,14 +196,14 @@ async function registrar(api, evento = {}) {
     return { ok: true, id: linha.id, criado_em: linha.criado_em || null };
   } catch (e) {
     if (tabelaAusente(e)) return { ok: false, sql_pendente: true, code: 'AUDITORIA_USUARIOS_SQL', arquivo: SQL_ARQUIVO };
-    return { ok: false, sql_pendente: false, code: e.code || 'AUDITORIA_GRAVACAO_FALHOU' };
+    return { ok: false, sql_pendente: false, code: e.code || 'AUDITORIA_GRAVACAO_FALHOU', diagnostico: diagnosticoFalha(e, 'inserir-evento') };
   }
 }
 
 /** Sem confiar em usuario_id, relógio ou ator enviados no corpo da requisição. */
 async function registrarDaRequisicao(req, evento = {}) {
   const api = createApiClient(req);
-  const usuario = await api.get('/api/usuarios/me');
+  const usuario = await identificarUsuarioDaRequisicao(req, api);
   if (!inteiroPositivo(usuario?.id)) throw erro(401, 'Sessão não identificada.');
   return registrar(api, { ...evento, usuarioId: usuario.id });
 }
@@ -218,34 +236,35 @@ function atendeFiltros(linha, filtros) {
   return ['modulo', 'acao', 'origem', 'resultado'].every(campo => !filtros[campo] || linha[campo] === filtros[campo]);
 }
 
-/** Keyset até a página VAZIA: a API pode aplicar um teto menor que o solicitado. */
+/**
+ * A API de PROD faz filtros por igualdade e devolve a coleção completa;
+ * não implementa os operadores PostgREST nem paginação (README.md).
+ * O corte, os filtros por data e a paginação pertencem a este backend.
+ */
 async function carregarTodos(api, filtros, snapshot = null) {
-  const linhas = [];
-  let ultimoId = 0;
   const iguais = Object.fromEntries(['modulo', 'acao', 'origem', 'resultado'].filter(c => filtros[c]).map(c => [c, filtros[c]]));
-  for (;;) {
-    let bruto;
-    try {
-      bruto = await api.get(`/api/${TABELA}`, { query: { usuario_id: filtros.usuario_id, ...iguais, id: `gt.${ultimoId}`, order: 'id.asc', limit: LOTE } });
-    } catch (e) {
-      if (tabelaAusente(e)) throw erroSql();
-      throw e;
-    }
-    if (!Array.isArray(bruto)) throw erro(502, 'A API não confirmou a leitura completa da auditoria.', { code: 'AUDITORIA_LEITURA_INVALIDA' });
-    if (!bruto.length) return { linhas, snapshot: snapshot ?? ultimoId };
-    const ordenadas = bruto.slice().sort((a, b) => Number(a.id) - Number(b.id));
-    if (ordenadas.some(r => !inteiroPositivo(r?.id) || Number(r.id) <= ultimoId)) {
-      throw erro(502, 'A API não suporta a paginação necessária; o histórico não será exportado parcialmente.', { code: 'AUDITORIA_PAGINACAO_INVALIDA', export_incompleta: true });
-    }
-    const ids = new Set(ordenadas.map(r => String(r.id)));
-    if (ids.size !== ordenadas.length) throw erro(502, 'A API devolveu registros de auditoria repetidos.', { code: 'AUDITORIA_PAGINACAO_INVALIDA', export_incompleta: true });
-    linhas.push(...ordenadas.filter(r => (snapshot === null || Number(r.id) <= snapshot) && atendeFiltros(r, filtros)));
+  let bruto;
+  try {
+    bruto = await api.get(`/api/${TABELA}`, { query: { usuario_id: filtros.usuario_id, ...iguais } });
+  } catch (e) {
+    if (tabelaAusente(e)) throw erroSql();
+    throw e;
+  }
+  if (!Array.isArray(bruto)) throw erro(502, 'A API não confirmou a leitura completa da auditoria.', { code: 'AUDITORIA_LEITURA_INVALIDA' });
+  const ids = new Set();
+  let maiorId = 0;
+  const linhas = [];
+  for (const r of bruto) {
+    const id = inteiroPositivo(r?.id);
+    if (!id || ids.has(id)) throw erro(502, 'A API devolveu registros de auditoria inválidos ou repetidos.', { code: 'AUDITORIA_PAGINACAO_INVALIDA', export_incompleta: true });
+    ids.add(id);
+    maiorId = Math.max(maiorId, id);
+    if ((snapshot === null || id <= snapshot) && atendeFiltros(r, filtros)) linhas.push(r);
     if (linhas.length > MAX_REGISTROS) throw erro(413, 'O período precisa ser dividido antes de exportar este histórico.', {
       code: 'AUDITORIA_LIMITE', export_incompleta: true, limite_registros: MAX_REGISTROS
     });
-    ultimoId = Number(ordenadas[ordenadas.length - 1].id);
-    if (snapshot !== null && ultimoId >= snapshot) return { linhas, snapshot };
   }
+  return { linhas, snapshot: snapshot ?? maiorId };
 }
 
 function paraSaida(linha) {
@@ -285,8 +304,11 @@ function criarRouter({ criarApi = createApiClient, guarda = exigirSupAdmin } = {
   router.get('/', guarda, async (req, res) => {
     try { res.json(await listar(criarApi(req), req.query)); }
     catch (e) {
+      const diagnostico = diagnosticoFalha(e, 'consultar-historico');
+      console.warn('[auditoria]', JSON.stringify(diagnostico));
       res.status(e.status || 503).json({ error: e.status && e.status < 500 ? e.message : 'Não foi possível obter o histórico completo de auditoria.',
         code: e.code || 'AUDITORIA_LEITURA_FALHOU', sql_pendente: e.sql_pendente === true,
+        diagnostico,
         ...(e.arquivo ? { arquivo: e.arquivo } : {}), ...(e.export_incompleta ? { export_incompleta: true } : {}) });
     }
   });
@@ -295,4 +317,5 @@ function criarRouter({ criarApi = createApiClient, guarda = exigirSupAdmin } = {
 
 module.exports = criarRouter();
 Object.assign(module.exports, { registrar, registrarDaRequisicao, listar, criarRouter, normalizarEvento, sanitizarMudancas,
-  campoPermitido, valorSeguro, recursoPermitido, contextoSeguro, filtrosDe, tabelaAusente, TABELA, SQL_ARQUIVO, FUSO, MAX_REGISTROS });
+  campoPermitido, valorSeguro, recursoPermitido, contextoSeguro, filtrosDe, tabelaAusente, diagnosticoFalha,
+  identificarUsuarioDaRequisicao, TABELA, SQL_ARQUIVO, FUSO, MAX_REGISTROS });

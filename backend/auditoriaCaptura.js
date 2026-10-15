@@ -88,11 +88,12 @@ function criarContexto({ usuarioId: ator = null, canal = '', payload = {}, conte
     origem, acaoId: acaoId || randomUUID(),
     contexto: auditoria().contextoSeguro({ evento: contexto.evento || slug(canal.replace(/[\/]/g, '-').replace(/^-/, '')),
       tela: contexto.tela, alvo_id: contexto.alvo_id ?? idRota, canal: req ? 'http' : sistema ? 'sistema' : 'ipc', rota: req ? canal : undefined }),
-    eventos: [], pendentes: new Set(), erros: [], encerrando: false, finalizado: false,
+    eventos: [], pendentes: new Set(), erros: [], diagnosticos: [], encerrando: false, finalizado: false,
     protegida: false, acaoProtegida: protegida, escrita: false, falhaEfeito: false, opcoes, ultimaAcao: null };
 }
-function pendencia(ctx, code) {
+function pendencia(ctx, code, diagnostico = null) {
   if (!ctx.erros.includes(code)) ctx.erros.push(code);
+  if (diagnostico && !ctx.diagnosticos.some(d => JSON.stringify(d) === JSON.stringify(diagnostico))) ctx.diagnosticos.push(diagnostico);
 }
 function enfileirar(ctx, evento) {
   if (ctx.eventos.length >= MAX_EVENTOS) { pendencia(ctx, 'AUDITORIA_LIMITE_EVENTOS'); return; }
@@ -124,7 +125,7 @@ async function capturar(api, metodo, args, executar, ctx) {
       const bruto = await semAuditoria(() => api.get(caminho));
       const linha = Array.isArray(bruto) ? bruto[0] : bruto;
       if (linha && !linha.error) { antes = corpoSeguro(linha); antesConhecido = true; }
-    } catch (_) { pendencia(ctx, 'AUDITORIA_ANTES_INDISPONIVEL'); }
+    } catch (e) { pendencia(ctx, 'AUDITORIA_ANTES_INDISPONIVEL', auditoria().diagnosticoFalha(e, 'consultar-estado-anterior')); }
   }
   let resultado;
   let falha;
@@ -159,16 +160,16 @@ async function apiPara(ctx, apiReserva = null) {
 }
 async function identificar(ctx, api) {
   if (ctx.usuarioId || ctx.origem === 'sistema') return;
-  const usuario = await semAuditoria(() => api.get('/api/usuarios/me'));
+  const usuario = await semAuditoria(() => auditoria().identificarUsuarioDaRequisicao(ctx.req, api));
   ctx.usuarioId = usuarioId(usuario?.id);
   if (!ctx.usuarioId) throw Object.assign(new Error('Sessão não identificada.'), { code: 'AUDITORIA_SEM_USUARIO' });
 }
 async function persistir(ctx, api, evento) {
   try {
     const r = await semAuditoria(() => auditoria().registrar(api, { ...evento, usuarioId: ctx.usuarioId, acao_id: ctx.acaoId, contexto: ctx.contexto }));
-    if (!r.ok) pendencia(ctx, r.code || 'AUDITORIA_GRAVACAO_FALHOU');
+    if (!r.ok) pendencia(ctx, r.code || 'AUDITORIA_GRAVACAO_FALHOU', r.diagnostico);
     return r;
-  } catch (e) { pendencia(ctx, e.code || 'AUDITORIA_GRAVACAO_FALHOU'); return { ok: false }; }
+  } catch (e) { pendencia(ctx, e.code || 'AUDITORIA_GRAVACAO_FALHOU', auditoria().diagnosticoFalha(e, 'inserir-evento')); return { ok: false }; }
 }
 function descricaoDaUltima(ctx, raiz) {
   const base = auditoria().normalizarEvento({ ...raiz, usuarioId: ctx.usuarioId }).descricao;
@@ -230,10 +231,13 @@ async function finalizar(ctx, { sucesso = true, apiReserva = null } = {}) {
     await Promise.allSettled([...ctx.pendentes]);
     const raiz = eventoRaiz(ctx, sucesso);
     if (ctx.eventos.length || raiz) {
+      let fase = 'preparar-cliente';
       try {
         const api = await apiPara(ctx, apiReserva);
         if (!api) throw Object.assign(new Error('Cliente de auditoria indisponível.'), { code: 'AUDITORIA_CLIENTE_AUSENTE' });
+        fase = 'identificar-usuario';
         await identificar(ctx, api);
+        fase = 'inserir-evento';
         const registroRaiz = raiz ? await persistir(ctx, api, raiz) : null;
         for (const evento of ctx.eventos) await persistir(ctx, api, evento);
         if (raiz?._manualMudou && registroRaiz?.ok && !ctx.erros.length) {
@@ -245,23 +249,27 @@ async function finalizar(ctx, { sucesso = true, apiReserva = null } = {}) {
             const timestamp = new Date(acao.timestamp).getTime();
             if (timestamp < (ultimasPorUsuario.get(ctx.usuarioId) || 0)) return;
             const campos = require('./userActivity').camposDaAlteracao(acao);
-            await semAuditoria(() => typeof api.updateUserActivity === 'function'
+            const confirmado = await semAuditoria(() => typeof api.updateUserActivity === 'function'
               ? api.updateUserActivity(ctx.usuarioId, campos) : api.put(`/api/usuarios/${ctx.usuarioId}`, campos));
+            if (confirmado === false || confirmado === null || confirmado === undefined || Array.isArray(confirmado) && !confirmado.length
+              || confirmado?.success === false || confirmado?.ok === false || confirmado?.error) {
+              throw Object.assign(new Error('Atualização de atividade não confirmada.'), { code: 'AUDITORIA_ATIVIDADE_SEM_CONFIRMACAO' });
+            }
             ultimasPorUsuario.set(ctx.usuarioId, timestamp);
             ctx.ultimaAcao = acao;
             if (ctx.opcoes.onManualChange) await semAuditoria(() => ctx.opcoes.onManualChange(acao));
           });
           filasPorUsuario.set(ctx.usuarioId, gravacao);
           try { await gravacao; }
-          catch (_) { pendencia(ctx, 'AUDITORIA_ULTIMA_ALTERACAO_FALHOU'); }
+          catch (e) { pendencia(ctx, 'AUDITORIA_ULTIMA_ALTERACAO_FALHOU', auditoria().diagnosticoFalha(e, 'atualizar-ultima-alteracao')); }
           finally { if (filasPorUsuario.get(ctx.usuarioId) === gravacao) filasPorUsuario.delete(ctx.usuarioId); }
         }
-      } catch (e) { pendencia(ctx, e.code || 'AUDITORIA_CAPTURA_FALHOU'); }
+      } catch (e) { pendencia(ctx, e.code || 'AUDITORIA_CAPTURA_FALHOU', auditoria().diagnosticoFalha(e, fase)); }
     }
     ctx.finalizado = true;
-    ctx.status = ctx.erros.length ? { status: 'pendente', code: ctx.erros[0], codes: [...ctx.erros] } : { status: 'ok' };
+    ctx.status = ctx.erros.length ? { status: 'pendente', code: ctx.erros[0], codes: [...ctx.erros], diagnosticos: ctx.diagnosticos } : { status: 'ok' };
     if (ctx.erros.length) {
-      console.warn('[auditoria]', ctx.status.codes.join(','));
+      console.warn('[auditoria]', ctx.status.codes.join(','), JSON.stringify(ctx.diagnosticos));
       if (ctx.opcoes.onAuditFailure) {
         try { await semAuditoria(() => ctx.opcoes.onAuditFailure(ctx.status)); } catch (_) { /* aviso não altera o resultado */ }
       }
@@ -271,7 +279,7 @@ async function finalizar(ctx, { sucesso = true, apiReserva = null } = {}) {
   return ctx.finalizacao;
 }
 
-function comAuditoria(api, { sistema = false } = {}) {
+function comAuditoria(api, { sistema = false, caminhosSemApi = false } = {}) {
   if (!api || api[EMBRULHADO]) return api;
   const embrulhado = { ...api };
   Object.defineProperty(embrulhado, EMBRULHADO, { value: true });
@@ -288,7 +296,12 @@ function comAuditoria(api, { sistema = false } = {}) {
         return p;
       }
       if (!sistema) return executar();
-      const ctx = criarContexto({ canal: String(args[0] || ''), metodo, payload: args[1], sistema: true });
+      // remoteDatabase já acrescenta /api à URL base. O cliente reservado
+      // mantém o contexto/token dele e só adapta os caminhos da auditoria.
+      const apiRegistro = caminhosSemApi ? Object.fromEntries(Object.entries(api).map(([chave, valor]) =>
+        ['get', 'post', 'put', 'patch', 'delete'].includes(chave) && typeof valor === 'function'
+          ? [chave, (caminho, ...resto) => valor(caminho.replace(/^\/api(?=\/)/, ''), ...resto)] : [chave, valor])) : api;
+      const ctx = criarContexto({ canal: String(args[0] || ''), metodo, payload: args[1], sistema: true }, { criarApi: () => apiRegistro });
       return armazenamento.run(ctx, async () => {
         try { return await capturar(api, metodo, args, executar, ctx); }
         finally { await finalizar(ctx, { apiReserva: api }); }
@@ -300,17 +313,23 @@ function comAuditoria(api, { sistema = false } = {}) {
       const metodo = String(opcoes?.method || 'GET').toLowerCase();
       if (typeof caminho === 'string' && caminho.startsWith('/') && ESCRITAS.has(metodo)) {
         const corpo = opcoes.body || opcoes.data;
-        const fachada = comAuditoria({ ...api, [metodo]: (...args) => api.query(args[0], metodo === 'delete' ? opcoes : { ...opcoes, body: args[1] }) }, { sistema });
+        const fachada = comAuditoria({ ...api, [metodo]: (...args) => api.query(args[0], metodo === 'delete' ? opcoes : { ...opcoes, body: args[1] }) }, { sistema, caminhosSemApi });
         return metodo === 'delete' ? fachada.delete(caminho, opcoes) : fachada[metodo](caminho, corpo, opcoes);
       }
       return api.query(caminho, opcoes);
     };
   }
-  if (typeof api.connect === 'function') embrulhado.connect = async (...args) => comAuditoria(await api.connect(...args), { sistema });
+  if (typeof api.connect === 'function') embrulhado.connect = async (...args) => comAuditoria(await api.connect(...args), { sistema, caminhosSemApi });
   return embrulhado;
 }
 
 async function executarIpc(info, fn, opcoes = {}) {
+  // Esses canais ainda não possuem uma sessão na entrada. O login já tem
+  // seus campos próprios; não atribuir registros de negócio a um ator nulo
+  // nem tentar gravar usando o token anterior à autenticação.
+  if (!usuarioId(info?.usuarioId) && ['login-usuario', 'auto-login', 'registrar-usuario', 'perfil:obter'].includes(info?.canal)) {
+    return semAuditoria(fn);
+  }
   const ctx = criarContexto(info, opcoes);
   return armazenamento.run(ctx, async () => {
     let sucesso = false;

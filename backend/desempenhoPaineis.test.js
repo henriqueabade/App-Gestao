@@ -178,5 +178,7 @@ test('leitura única por requisição: lê uma vez, entrega cópias, escrita esq
 test('o cliente da API só guarda leitura numa requisição de verdade (tarefas em segundo plano, não)', () => {
   const fonte = require('node:fs').readFileSync(path.join(__dirname, 'apiHttpClient.js'), 'utf8');
   assert.match(fonte, /const ehRequisicaoExpress = req => Boolean\(req && typeof req\.method === 'string' && req\.headers\);/);
-  assert.match(fonte, /return ehRequisicaoExpress\(req\) \? comLeituraUnica\(api\) : api;/);
+  // Desde 15/10/2026 o cliente sai embrulhado pela auditoria (comAuditoria); a regra continua a mesma.
+  assert.match(fonte, /ehRequisicaoExpress\(req\) \? comLeituraUnica\(api\) : api/);
+  assert.match(fonte, /return captura\.comAuditoria\(ehRequisicaoExpress\(req\) \? comLeituraUnica\(api\) : api,/);
 });

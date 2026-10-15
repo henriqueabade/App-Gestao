@@ -20,10 +20,15 @@ async function carregar({ getApiBaseUrl = async () => 'http://127.0.0.1:3000' } 
   return contexto;
 }
 
-test('a lista prioriza foto normalizada sobre caminho antigo e não acrescenta versão ao dataURL', async () => {
+test('a lista mostra a foto atual do perfil quando há foto_usuario legado', async () => {
   const pagina = await carregar();
-  const usuario = normalizeAvatar({ foto_usuario: foto, foto_perfil: '/imagens/antiga.png', avatar_version: 123 });
-  assert.equal(pagina.obterAvatarUrl(usuario), foto);
+  const usuario = normalizeAvatar({ foto_usuario: foto, foto_perfil: '/imagens/perfis/7-nova.png', avatar_version: 123 });
+  assert.equal(pagina.obterAvatarUrl(usuario), 'http://127.0.0.1:3000/imagens/perfis/7-nova.png?v=123');
+});
+
+test('dataURL normalizado chega à lista sem sufixo de versão', async () => {
+  const pagina = await carregar();
+  assert.equal(pagina.obterAvatarUrl(normalizeAvatar({ foto_usuario: foto, avatar_version: 123 })), foto);
 });
 
 test('URLs relativas usam a base do backend e a versão do avatar para evitar foto em cache', async () => {

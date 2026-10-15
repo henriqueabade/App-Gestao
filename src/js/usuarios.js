@@ -748,12 +748,18 @@ function criarBotaoAuditoriaUsuario(usuario) {
         botao.classList.add('usuario-acao-botao--disabled');
         botao.title = 'O relatório de atividades é restrito ao Sup Admin';
     } else {
-        botao.addEventListener('click', () => {
-            window.usuarioAuditoriaContext = { usuarioId: usuario.id, nome: usuario.nome || '', email: usuario.email || '' };
-            Modal.open('modals/usuarios/auditoria.html', '../js/modals/usuario-auditoria.js', 'usuarioAuditoria', true);
-        });
+        botao.addEventListener('click', () => abrirAuditoriaUsuario(usuario));
     }
     return botao;
+}
+
+/** O relatório de atividades do usuário (botão da linha e "Ver auditoria completa" do "i"). */
+function abrirAuditoriaUsuario(usuario) {
+    window.usuarioAuditoriaContext = { usuarioId: usuario.id, nome: usuario.nome || '', email: usuario.email || '' };
+    // Com o spinner da casa, como os outros modais de Usuários: `Modal.open`
+    // sozinho carregava o modal e o deixava escondido (o overlay nasce
+    // `hidden` e só o openWithSpinner o revela) — "clico e nada aparece".
+    return openModalWithSpinner('modals/usuarios/auditoria.html', '../js/modals/usuario-auditoria.js', 'usuarioAuditoria');
 }
 
 function fecharPopoversUsuarios() {
@@ -779,8 +785,24 @@ function fecharPopoversUsuarios() {
 function criarConteudoPopoverUsuario(botao) {
     const nome = botao.dataset.nome || 'Usuário';
     const ultimoLogin = botao.dataset.ultimoLogin || 'Sem registro';
+    const ultimaEntrada = botao.dataset.ultimaEntrada || '';
+    const ultimaSaida = botao.dataset.ultimaSaida || '';
     const ultimaAlteracao = botao.dataset.ultimaAlteracao || 'Sem registro';
     const ultimaDescricao = botao.dataset.ultimaDescricao || 'Nenhuma alteração registrada';
+    const linhaOpcional = (rotulo, valor) => (valor && valor !== 'Sem registro' ? `
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">${rotulo}</span>
+                <span class="usuario-popover-value">${valor}</span>
+            </div>` : '');
+    // As últimas ações vêm da auditoria (só o Sup Admin consulta), depois de abrir.
+    const auditoria = ehSupAdminLogado() && botao.dataset.usuarioId ? `
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">Últimas ações</span>
+                <ul class="usuario-popover-acoes" data-ultimas-acoes><li class="usuario-popover-acao-vazia">Carregando…</li></ul>
+            </div>
+            <button type="button" class="usuario-popover-ver-tudo" data-ver-auditoria>
+                <i class="fas fa-clock-rotate-left" aria-hidden="true"></i> Ver auditoria completa
+            </button>` : '';
     return `
         <div class="usuario-popover-card">
             <div class="usuario-popover-header">
@@ -790,7 +812,7 @@ function criarConteudoPopoverUsuario(botao) {
             <div class="usuario-popover-section">
                 <span class="usuario-popover-label">Último login</span>
                 <span class="usuario-popover-value">${ultimoLogin}</span>
-            </div>
+            </div>${linhaOpcional('Última entrada', ultimaEntrada)}${linhaOpcional('Última saída', ultimaSaida)}
             <div class="usuario-popover-section">
                 <span class="usuario-popover-label">Última alteração</span>
                 <span class="usuario-popover-value">${ultimaAlteracao}</span>
@@ -798,8 +820,80 @@ function criarConteudoPopoverUsuario(botao) {
             <div class="usuario-popover-section">
                 <span class="usuario-popover-label">Alteração registrada</span>
                 <p class="usuario-popover-description">${ultimaDescricao}</p>
-            </div>
+            </div>${auditoria}
         </div>`;
+}
+
+/** As últimas ações (manuais) do usuário, da auditoria — guardadas 30 s por usuário. */
+const ultimasAcoesCache = new Map();
+async function buscarUltimasAcoes(usuarioId) {
+    const guardado = ultimasAcoesCache.get(String(usuarioId));
+    if (guardado && Date.now() - guardado.em < 30000) return guardado.registros;
+    const dia = d => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
+    const agora = new Date();
+    const query = new URLSearchParams({
+        usuario_id: String(usuarioId), inicio: dia(new Date(agora.getTime() - 29 * 86400000)), fim: dia(agora),
+        origem: 'manual', pagina: '1', limite: '5'
+    });
+    const base = await window.apiConfig.getApiBaseUrl();
+    const resposta = await fetch(`${base}/api/auditoria-usuarios?${query}`);
+    const corpo = await resposta.json().catch(() => null);
+    if (!resposta.ok || !Array.isArray(corpo?.registros)) {
+        throw new Error(corpo?.sql_pendente ? 'Auditoria ainda não ativada no banco.' : (corpo?.error || 'Não foi possível ler a auditoria.'));
+    }
+    ultimasAcoesCache.set(String(usuarioId), { em: Date.now(), registros: corpo.registros });
+    return corpo.registros;
+}
+
+/** "Antes → Depois" curto de um valor da auditoria. */
+function valorCurtoDaAuditoria(valor) {
+    if (valor === undefined) return '—';
+    if (valor === null || valor === '') return 'vazio';
+    const texto = typeof valor === 'object' ? JSON.stringify(valor) : String(valor);
+    return texto.length > 40 ? `${texto.slice(0, 39)}…` : texto;
+}
+
+/** Preenche a lista do balão (tudo por textContent: os textos vêm do banco). */
+async function preencherUltimasAcoes(lista, usuarioId) {
+    const item = (classe, texto) => {
+        const li = document.createElement('li');
+        li.className = classe;
+        li.textContent = texto;
+        return li;
+    };
+    try {
+        const registros = await buscarUltimasAcoes(usuarioId);
+        if (!lista.isConnected) return;
+        lista.replaceChildren();
+        if (!registros.length) {
+            lista.appendChild(item('usuario-popover-acao-vazia', 'Nenhuma ação registrada nos últimos 30 dias.'));
+            return;
+        }
+        for (const r of registros) {
+            const li = document.createElement('li');
+            li.className = `usuario-popover-acao${r.resultado === 'falha' ? ' usuario-popover-acao--falha' : ''}`;
+            const quando = new Date(r.criado_em);
+            const topo = document.createElement('span');
+            topo.className = 'usuario-popover-acao-topo';
+            topo.textContent = [
+                Number.isNaN(quando.getTime()) ? '' : quando.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                r.modulo, r.resultado === 'falha' ? 'falhou' : ''
+            ].filter(Boolean).join(' · ');
+            const texto = document.createElement('span');
+            texto.className = 'usuario-popover-acao-texto';
+            texto.textContent = r.descricao || r.acao || 'Ação registrada';
+            li.append(topo, texto);
+            const mudancas = Array.isArray(r.mudancas) ? r.mudancas.slice(0, 2) : [];
+            for (const m of mudancas) {
+                li.appendChild(item('usuario-popover-acao-mudanca', `${m.campo || 'Campo'}: ${valorCurtoDaAuditoria(m.antes)} → ${valorCurtoDaAuditoria(m.depois)}`));
+            }
+            if (Array.isArray(r.mudancas) && r.mudancas.length > 2) li.appendChild(item('usuario-popover-acao-mudanca', `+ ${r.mudancas.length - 2} campo(s)`));
+            lista.appendChild(li);
+        }
+    } catch (erro) {
+        if (!lista.isConnected) return;
+        lista.replaceChildren(item('usuario-popover-acao-vazia', erro.message || 'Não foi possível ler a auditoria.'));
+    }
 }
 
 function abrirPopoverUsuario(botao) {
@@ -809,6 +903,13 @@ function abrirPopoverUsuario(botao) {
     }
     const html = criarConteudoPopoverUsuario(botao);
     const { popup } = window.createPopup(botao, html, { margin: 12 });
+    // Auditoria no balão (15/10/2026): as últimas ações e o atalho para o relatório.
+    const listaAcoes = popup.querySelector('[data-ultimas-acoes]');
+    if (listaAcoes) preencherUltimasAcoes(listaAcoes, botao.dataset.usuarioId);
+    popup.querySelector('[data-ver-auditoria]')?.addEventListener('click', () => {
+        fecharPopoversUsuarios();
+        abrirAuditoriaUsuario({ id: botao.dataset.usuarioId, nome: botao.dataset.nome || '', email: botao.dataset.email || '' });
+    });
 
     let hideTimeoutId = null;
     const cancelarOcultacao = () => {
@@ -1250,6 +1351,10 @@ function renderUsuarios(lista) {
                             aria-haspopup="dialog"
                             title="Ver atividade recente de ${nome}"
                             data-nome="${nome}"
+                            data-usuario-id="${escapeHtml(String(u.id ?? ''))}"
+                            data-email="${escapeHtml(String(u.email ?? ''))}"
+                            data-ultima-entrada="${ultimaEntradaTexto}"
+                            data-ultima-saida="${ultimaSaidaTexto}"
                             data-ultimo-login="${ultimoLoginTexto}"
                             data-ultima-alteracao="${ultimaAlteracaoTexto}"
                             data-ultima-descricao="${ultimaDescricaoTexto}"

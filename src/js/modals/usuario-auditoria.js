@@ -238,5 +238,7 @@
   if (!fechado) {
     Modal.signalReady?.(overlayId);
     window.dispatchEvent(new CustomEvent('usuarioAuditoriaLoaded'));
+    // O aviso que o spinner da casa espera para revelar o modal (openModuleModal).
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
   }
 })();

@@ -789,6 +789,51 @@ body {
     line-height: 1.4;
 }
 
+/* Últimas ações da auditoria no "i" (15/10/2026). */
+.usuario-popover-acoes {
+    list-style: none;
+    margin: 0.25rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.45rem;
+    max-height: 14rem;
+    overflow-y: auto;
+}
+
+.usuario-popover-acao {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.6rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid var(--color-primary, #b6a03e);
+}
+
+.usuario-popover-acao--falha { border-left-color: var(--color-red, #ff5858); }
+.usuario-popover-acao-topo { font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); }
+.usuario-popover-acao-texto { font-size: 0.85rem; color: rgba(255, 255, 255, 0.9); line-height: 1.35; }
+.usuario-popover-acao-mudanca { font-size: 0.75rem; color: rgba(255, 255, 255, 0.7); }
+.usuario-popover-acao-vazia { font-size: 0.82rem; color: rgba(255, 255, 255, 0.6); }
+
+.usuario-popover-ver-tudo {
+    margin-top: 0.6rem;
+    width: 100%;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.6rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-blue, #6f8ff0);
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.usuario-popover-ver-tudo:hover { background: rgba(138, 167, 243, 0.9); }
+
 .usuario-sessao-badge {
     display: inline-flex;
     align-items: center;

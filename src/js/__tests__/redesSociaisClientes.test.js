@@ -158,7 +158,8 @@ test('Usuários › Computadores: aba escondida, só o Sup Admin vê; Cancelar v
   const js = ler('js/modals/usuario-editar.js');
   assert.ok(js.includes("if (abaComputadores && window.Permissoes?.supAdmin) {"));
   assert.ok(js.includes('fetch(`${base}/api/usuarios/${usuarioBase.id}/computadores`)'));
-  assert.ok(js.includes("fetch(`${base}/api/usuarios/${usuarioBase.id}/computadores/${c.id}/cancelar`, { method: 'POST'"));
+  // fetchVinculado (15/10/2026): o fetch ligado à auditoria do clique que cancelou.
+  assert.ok(js.includes("fetchVinculado(`${base}/api/usuarios/${usuarioBase.id}/computadores/${c.id}/cancelar`, { method: 'POST'"));
   assert.ok(js.includes("const cancelar = el('button', 'btn-danger ctl-botao text-white');"));
   assert.match(js, /window\.DialogPadrao\?\.confirm\(\{\s*title: 'Cancelar os avisos deste computador\?', tom: 'erro'/);
   assert.ok(js.includes("if (dados.sql_pendente) {"), 'sem o SQL, a aba diz o que fazer');

@@ -76,7 +76,10 @@ test('botão de auditoria em Ações abre o usuário certo e é restrito ao Sup 
     const amb = criarAmbiente();
     const aberturas = [];
     amb.janela.ehSupAdminLogado = () => permitido;
-    amb.janela.Modal = { open: (...args) => aberturas.push(args) };
+    // Com o spinner da casa (15/10/2026): `Modal.open` sozinho deixava o
+    // overlay `hidden` — "clico e nada aparece".
+    amb.janela.Modal = { open: () => { throw new Error('não use Modal.open: o modal fica escondido'); } };
+    amb.janela.openModalWithSpinner = (...args) => aberturas.push(args);
     const criarBotao = vm.runInContext(`${trecho}\ncriarBotaoAuditoriaUsuario`, vm.createContext(amb.janela));
     const botao = criarBotao({ id: 7, nome: 'Henrique', email: 'h@exemplo.com' });
     assert.equal(botao.disabled, !permitido);
@@ -84,10 +87,23 @@ test('botão de auditoria em Ações abre o usuário certo e é restrito ao Sup 
     botao.click();
     assert.equal(aberturas.length, permitido ? 1 : 0);
     if (permitido) {
-      assert.deepStrictEqual(aberturas[0], ['modals/usuarios/auditoria.html', '../js/modals/usuario-auditoria.js', 'usuarioAuditoria', true]);
+      assert.deepStrictEqual(aberturas[0], ['modals/usuarios/auditoria.html', '../js/modals/usuario-auditoria.js', 'usuarioAuditoria']);
       assert.equal(amb.janela.usuarioAuditoriaContext.usuarioId, 7);
     }
   }
+  // O modal avisa o spinner que está pronto (é o que tira o `hidden`).
+  assert.match(ler('js/modals/usuario-auditoria.js'), /new CustomEvent\('modalSpinnerLoaded', \{ detail: overlayId \}\)/);
+});
+
+test('o "i" do usuário: últimas ações da auditoria e o atalho para o relatório completo (só o Sup Admin)', () => {
+  const fonte = ler('js/usuarios.js');
+  assert.match(fonte, /data-usuario-id="\$\{escapeHtml\(String\(u\.id \?\? ''\)\)\}"/);
+  assert.match(fonte, /<ul class="usuario-popover-acoes" data-ultimas-acoes>/);
+  assert.match(fonte, /const auditoria = ehSupAdminLogado\(\) && botao\.dataset\.usuarioId \?/);
+  assert.match(fonte, /origem: 'manual', pagina: '1', limite: '5'/);
+  assert.match(fonte, /abrirAuditoriaUsuario\(\{ id: botao\.dataset\.usuarioId, nome: botao\.dataset\.nome \|\| '', email: botao\.dataset\.email \|\| '' \}\)/);
+  const preencher = fonte.slice(fonte.indexOf('async function preencherUltimasAcoes('), fonte.indexOf('function abrirPopoverUsuario('));
+  assert.ok(preencher.length > 100 && !/innerHTML/.test(preencher), 'as ações vêm do banco: só textContent');
 });
 
 test('modal real mostra antes/depois, horário de Brasília e separa ações manuais de eventos automáticos ou não confirmados', async () => {

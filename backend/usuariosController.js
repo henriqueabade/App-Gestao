@@ -168,8 +168,11 @@ function normalizeAvatar(usuario = {}) {
         : String(avatarVersion);
 
   const fotoUsuario = [
-    usuario?.foto_usuario, usuario?.fotoUsuario, usuario?.foto_perfil_url, usuario?.fotoPerfilUrl,
-    usuario?.foto_perfil, usuario?.fotoPerfil, usuario?.avatar, usuario?.avatar_url, usuario?.avatarUrl,
+    // /api/perfil (a topbar) grava foto_perfil e produz foto_perfil_url.
+    // foto_usuario é o formato anterior; quando ambos existem, o cadastro
+    // antigo não pode esconder a foto que a pessoa acabou de atualizar.
+    usuario?.foto_perfil_url, usuario?.fotoPerfilUrl, usuario?.foto_perfil, usuario?.fotoPerfil,
+    usuario?.foto_usuario, usuario?.fotoUsuario, usuario?.avatar, usuario?.avatar_url, usuario?.avatarUrl,
     usuario?.foto, usuario?.fotoUrl
   ].map(avatarToRenderableSource).find(Boolean);
 
@@ -407,8 +410,25 @@ router.get('/lista', async (req, res) => {
         camposBase
       ];
 
-    if (!req.query?.select && typeof api.getAvailableColumns === 'function') {
-      const colunas = new Set(await api.getAvailableColumns('usuarios'));
+    let colunasDisponiveis = null;
+    if (!req.query?.select) {
+      try {
+        if (typeof api.getAvailableColumns === 'function') {
+          colunasDisponiveis = await api.getAvailableColumns('usuarios');
+        } else {
+          // getAvailableColumns só existe em DEV. Em PROD o contrato HTTP
+          // publica o esquema em /api/tabelas; sem consultá-lo foto_perfil
+          // ficava fora do select e a lista nunca recebia a foto da topbar.
+          const esquema = await api.get('/api/tabelas');
+          const usuarios = esquema?.tabelas?.find(t => t?.tabela === 'usuarios');
+          if (Array.isArray(usuarios?.colunas)) colunasDisponiveis = usuarios.colunas;
+        }
+      } catch (_) {
+        // A consulta da lista continua funcionando nas APIs sem metadados.
+      }
+    }
+    if (Array.isArray(colunasDisponiveis) && colunasDisponiveis.length) {
+      const colunas = new Set(colunasDisponiveis);
       // Mantém os campos obrigatórios para que um schema inválido ainda falhe.
       // Apenas os opcionais ausentes saem da projeção; nunca recorrer a SELECT *.
       const obrigatorios = new Set(['id', 'nome', 'email', 'perfil', 'status']);

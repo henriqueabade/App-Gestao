@@ -2134,7 +2134,9 @@ function checkPortAvailability(port) {
 
     tester.once('error', handleError);
     tester.once('listening', handleListening);
-    tester.listen({ port, host: '0.0.0.0' });
+    // Sondar o mesmo endereço do servidor. No Windows, a disponibilidade de
+    // 0.0.0.0 pode ser diferente da de 127.0.0.1 (interfaces e reservas).
+    tester.listen({ port, host: '127.0.0.1' });
   });
 }
 
@@ -2219,16 +2221,30 @@ async function startApiServerOnPort(port) {
   });
 }
 
+async function startApiServerWithFallback(startPort) {
+  // Tentar o listen de verdade evita a corrida entre sondar e abrir a porta.
+  // No Windows, uma porta reservada/ocupada também pode devolver EACCES.
+  // Somente colisões de bind permitem avançar; outros erros são preservados.
+  for (let port = startPort; port <= MAX_PORT; port += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await startApiServerOnPort(port);
+    } catch (err) {
+      if (err?.code !== 'EADDRINUSE' && err?.code !== 'EACCES') throw err;
+    }
+  }
+  throw new Error(`Não há portas disponíveis a partir da porta ${startPort}.`);
+}
+
 async function handleApiServerError(err) {
-  if (err && err.code === 'EADDRINUSE') {
+  if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
     const previousPort = currentApiPort;
     try {
       await closeApiServer();
       const fallbackStart = previousPort ? previousPort + 1 : configuredApiPort;
-      const newPort = await findAvailablePort(fallbackStart);
-      await startApiServerOnPort(newPort);
+      await startApiServerWithFallback(fallbackStart);
       console.warn(
-        `Port ${previousPort ?? configuredApiPort} in use. API server restarted on port ${newPort}.`
+        `Port ${previousPort ?? configuredApiPort} in use. API server restarted on port ${currentApiPort}.`
       );
       return;
     } catch (fallbackErr) {
@@ -3810,24 +3826,19 @@ app.whenReady().then(async () => {
     configuredApiPort = DEFAULT_API_PORT;
   }
 
-  let availablePort = null;
   try {
-    availablePort = await findAvailablePort(configuredApiPort);
+    await startApiServerWithFallback(configuredApiPort);
   } catch (err) {
-    console.error('Não foi possível localizar uma porta livre para o servidor da API.', err);
+    console.error('Não foi possível iniciar o servidor interno.', err);
     dialog.showErrorBox(
       'Erro ao iniciar servidor',
-      `Não foi possível localizar uma porta livre a partir da porta ${configuredApiPort}.` +
-        '\nVerifique se outra aplicação está utilizando essas portas.'
+      `Não foi possível iniciar o servidor interno a partir da porta ${configuredApiPort}.` +
+        '\nFeche o programa e tente novamente. Detalhes: ' + (err?.code || err?.message || 'erro desconhecido')
     );
-  }
-
-  if (availablePort !== null) {
-    try {
-      await startApiServerOnPort(availablePort);
-    } catch (err) {
-      await handleApiServerError(err);
-    }
+    // Não mostrar o login com uma API indisponível, nem apontar a interface
+    // para o serviço de outro programa que esteja usando a porta original.
+    app.quit();
+    return;
   }
 
   // Cria a janela de login sem exibí-la imediatamente.

@@ -8,7 +8,7 @@ const evento = (id, extra = {}) => ({
   entidade: 'pedidos', entidade_id: '55', origem: 'manual', resultado: 'sucesso',
   descricao: 'Uma legenda antiga', mudancas: JSON.stringify([{ campo: 'quantidade', antes: 1, depois: 2 }]), ...extra
 });
-function apiFalsa(linhas = [], { teto = 2, ignorarPaginacao = false } = {}) {
+function apiFalsa(linhas = []) {
   const leituras = [];
   const escritos = [];
   return {
@@ -16,11 +16,10 @@ function apiFalsa(linhas = [], { teto = 2, ignorarPaginacao = false } = {}) {
     async get(caminho, { query = {} } = {}) {
       leituras.push({ caminho, query });
       assert.equal(caminho, '/api/usuarios_auditoria');
-      if (ignorarPaginacao) return linhas;
-      const depois = Number(String(query.id).replace(/^gt\./, ''));
-      return linhas.filter(r => Number(r.id) > depois && String(r.usuario_id) === String(query.usuario_id)
+      assert.deepEqual(Object.keys(query).filter(k => ['id', 'order', 'limit', 'offset'].includes(k)), [], 'API REST simples não recebe controles PostgREST');
+      return linhas.filter(r => String(r.usuario_id) === String(query.usuario_id)
         && ['modulo', 'acao', 'origem', 'resultado'].every(c => !query[c] || r[c] === query[c]))
-        .sort((a, b) => Number(a.id) - Number(b.id)).slice(0, Math.min(teto, Number(query.limit)));
+        .sort((a, b) => Number(a.id) - Number(b.id));
     },
     async post(caminho, corpo) {
       assert.equal(caminho, '/api/usuarios_auditoria');
@@ -101,16 +100,16 @@ test('recursos de pré-leitura são limitados a tabelas de negócio, sem endpoin
   }
 });
 
-test('paginação percorre até página vazia mesmo com teto upstream menor que o solicitado', async () => {
-  const api = apiFalsa(Array.from({ length: 7 }, (_, i) => evento(i + 1)), { teto: 2 });
+test('paginação ocorre localmente sobre a coleção completa da API REST simples', async () => {
+  const api = apiFalsa(Array.from({ length: 7 }, (_, i) => evento(i + 1)));
   const r = await auditoria.listar(api, { usuario_id: 7, pagina: 1, limite: 3 });
   assert.equal(r.total, 7);
   assert.equal(r.snapshot, 7);
   assert.equal(r.completo, true);
   assert.deepEqual(r.registros.map(e => e.id), [7, 6, 5]);
   assert.equal(r.proxima_pagina, 2);
-  assert.equal(api.leituras.length, 5);
-  assert.equal(api.leituras.at(-1).query.id, 'gt.7');
+  assert.equal(api.leituras.length, 1);
+  assert.deepEqual(api.leituras[0].query, { usuario_id: 7 });
   const pagina2 = await auditoria.listar(api, { usuario_id: 7, pagina: 2, limite: 3, snapshot: r.snapshot });
   assert.deepEqual(pagina2.registros.map(e => e.id), [4, 3, 2]);
 });
@@ -164,9 +163,10 @@ test('SQL ausente é explícito na gravação e consulta; outras falhas não fin
   await assert.rejects(auditoria.listar({ get: async () => { throw new Error('sem conexão'); } }, { usuario_id: 7 }), /sem conexão/);
 });
 
-test('upstream ignorando paginação falha explicitamente em vez de omitir ou duplicar eventos', async () => {
-  const api = apiFalsa([evento(1), evento(2)], { ignorarPaginacao: true });
-  await assert.rejects(auditoria.listar(api, { usuario_id: 7 }), e => e.code === 'AUDITORIA_PAGINACAO_INVALIDA' && e.export_incompleta);
+test('IDs inválidos ou repetidos falham explicitamente sem relatório parcial', async () => {
+  for (const linhas of [[evento(1), evento(1)], [evento('invalido')]]) {
+    await assert.rejects(auditoria.listar({ get: async () => linhas }, { usuario_id: 7 }), e => e.code === 'AUDITORIA_PAGINACAO_INVALIDA' && e.export_incompleta);
+  }
 });
 
 test('limite de exportação é explícito e conta só eventos no intervalo solicitado', async () => {

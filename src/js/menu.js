@@ -131,7 +131,7 @@ const MODULE_LABELS = {
     clientes: 'Clientes',
     prospeccoes: 'Prospecções',
     contatos: 'Contatos',
-    calendario: 'Calendário',
+    calendario: 'Agenda',
     tarefas: 'Tarefas',
     usuarios: 'Usuários',
     financeiro: 'Financeiro',

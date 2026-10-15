@@ -13,6 +13,25 @@ truncar o histórico. Falhas de gravação são sinalizadas como auditoria pende
 uma operação comercial já concluída não é repetida nem desfeita por essa falha.
 Não há fila durável de reenvio: registros que falharam exigem investigação.
 
+### Correção de compatibilidade com a API de produção
+
+Para instalações que já executaram o SQL e publicaram a política, esta
+correção não exige repetir a migração nem modificar a API. A leitura usa os
+filtros simples por igualdade aceitos pela API; ordenação, período, corte e
+paginação são resolvidos no programa. Não são enviados operadores PostgREST
+como `id=gt.0`. A identidade é confirmada pela rota numérica do usuário do
+token, e as escritas do cliente de banco não repetem o prefixo `/api`.
+
+A lista de usuários também consulta o esquema HTTP para selecionar
+`foto_perfil` e os aliases existentes, usando a mesma foto atual do perfil.
+Esse caminho de produção não depende de métodos exclusivos do banco DEV.
+
+Depois de aplicar o patch, encerre o aplicativo pelo ícone perto do relógio
+do Windows, em **Sair**, e abra novamente. Fechar apenas a janela pode manter
+o processo antigo em segundo plano; reiniciar a API não atualiza esse processo.
+Se o atalho aponta para uma versão instalada, é necessário recompilar e
+atualizar essa instalação para que ela utilize o código corrigido.
+
 ## Consulta
 
 Em **Usuários → Ações → Auditoria**, o Sup Admin escolhe o período, o módulo,
@@ -25,6 +44,19 @@ durante a exportação. O PDF inclui todo o período selecionado, até 5.000
 registros; acima disso, pede reduzir o intervalo. A consulta também recusa
 explicitamente períodos com mais de 50.000 registros. Nenhum desses limites
 produz um relatório parcial silenciosamente.
+
+### Abertura do relatório e o "i" do usuário (correção de 15/10/2026, tarde)
+
+- O botão de Ações carregava o modal com `Modal.open`, que não revela o overlay
+  (ele nasce `hidden`): "clico e nada aparece". Agora abre com o spinner da casa
+  (`openModalWithSpinner`, como os outros modais de Usuários), e o modal avisa
+  `modalSpinnerLoaded` quando a primeira consulta termina — com dados ou com o
+  aviso do erro.
+- O "i" ao lado do nome mostra também a última entrada e a última saída e, para
+  o Sup Admin, as **últimas 5 ações manuais dos últimos 30 dias** (quando,
+  módulo, o que fez, até dois campos com antes → depois; falhas em vermelho),
+  lidas da própria auditoria (guardadas 30 s), e o botão **Ver auditoria
+  completa**, que abre o relatório já no usuário.
 
 ## Autoria e detalhes
 
@@ -66,4 +98,7 @@ O processo principal fixa o diretório de dados antes de pedir o bloqueio de
 instância única. A segunda execução encerra antes de importar o backend e
 solicita que a primeira mostre/restaure a janela. Somente a primeira instância
 procura outra porta livre, em ordem crescente, se houver ocupação externa,
-incluindo uma colisão entre a sondagem e a abertura do servidor.
+tentando abrir o servidor diretamente em cada porta. `EADDRINUSE` e `EACCES`
+permitem avançar; outras falhas interrompem a inicialização sem abrir uma
+janela que aponte para um serviço externo. A sondagem e o servidor utilizam
+o mesmo endereço `127.0.0.1`.
