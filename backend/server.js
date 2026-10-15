@@ -102,6 +102,9 @@ app.use('/api/pedidos', pedidosRouter);
 app.use('/api/vinculos-pecas', require('./vinculosDasPecas'));
 // Troca de peças entre pedidos (09/10/2026). Antes do proxy genérico.
 app.use('/api/trocas-pecas', require('./trocasPecas'));
+// Editar as peças de um pedido em Produção, só o dono (14/10/2026) —
+// backend/pedidoEdicao.js. Antes do proxy genérico: "pedido-edicao" não é tabela.
+app.use('/api/pedido-edicao', require('./pedidoEdicao'));
 // Peças avulsas do pedido cancelado ("Continuar produzindo"). Antes do proxy genérico.
 app.use('/api/pecas-avulsas', require('./pecasAvulsas'));
 app.use('/api/prospeccoes', prospeccoesRouter);

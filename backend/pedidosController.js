@@ -48,6 +48,13 @@ const {
   atualizarStatusDasReservas
 } = require('./estoqueLedger');
 
+/**
+ * As linhas que o pedido tem de verdade. A linha zerada é a peça que saiu na
+ * edição das peças (backend/pedidoEdicao.js, 14/10/2026): ela fica no banco
+ * pela história (produção, estoque), mas não aparece nem conta.
+ */
+const pecasVivas = itens => (Array.isArray(itens) ? itens : []).filter(i => Number(i?.quantidade) > 0);
+
 /** Id do usuário da requisição, lido do JWT (mesmo critério de orcamentosController). */
 function idDoUsuarioDaRequisicao(req) {
   try {
@@ -944,7 +951,7 @@ router.get('/agrupamento', exigirPermissao('ped.view.details'), async (req, res)
 
       return {
         ...pedido,
-        itens: Array.isArray(itens) ? itens : [],
+        itens: pecasVivas(itens),
         cliente_nome: cliente
           ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || null)
           : null
@@ -995,7 +1002,7 @@ router.get('/:id/etiquetas-produto', exigirPermissao('ped.view'), async (req, re
         ? api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null)
         : Promise.resolve(null)
     ]);
-    const doPedido = (Array.isArray(itens) ? itens : []).filter(it => String(it?.pedido_id) === String(id));
+    const doPedido = pecasVivas(itens).filter(it => String(it?.pedido_id) === String(id));
     const linhas = etiquetasProduto.linhasDasEtiquetas(doPedido);
     // Peça que saiu pronta do estoque já tem etiqueta e fica fora da planilha.
     const doEstoque = doPedido.reduce((soma, it) => soma + etiquetasProduto.prontasDoEstoque(it), 0);
@@ -1040,7 +1047,7 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
         ? api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null)
         : Promise.resolve(null)
     ]);
-    pedido.itens = itens || [];
+    pedido.itens = pecasVivas(itens);
     pedido.parcelas_detalhes = parcelas || [];
     pedido.cliente_nome = cliente
       ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || null)
@@ -1365,7 +1372,7 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
 
-    const listaItens = Array.isArray(itens) ? itens : [];
+    const listaItens = pecasVivas(itens);
 
     // Tudo o que o pedido inteiro precisa, em paralelo e de uma vez só. A
     // primeira versão buscava por item e por insumo dentro dos laços, e num

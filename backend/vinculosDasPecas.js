@@ -40,6 +40,8 @@ function pecasPorDocumento(itens, campo) {
     const codigo = texto(item.codigo);
     const nome = texto(item.nome);
     if (!codigo && !nome) continue;
+    // Linha zerada: a peça saiu do pedido na edição (14/10/2026).
+    if (item.quantidade !== undefined && item.quantidade !== null && item.quantidade !== '' && !(Number(item.quantidade) > 0)) continue;
     const chaveDoc = String(doc);
     if (!porDocumento.has(chaveDoc)) porDocumento.set(chaveDoc, new Map());
     const pecas = porDocumento.get(chaveDoc);

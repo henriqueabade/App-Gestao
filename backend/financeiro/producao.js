@@ -395,7 +395,7 @@ async function montarFilas(api, { itens, etapasPor }) {
   const [ext, insumos, mudancas] = await Promise.all([
     extDe(api, pedidoIds), carregarInsumos(api),
     // Trocas de peças entre pedidos e peças avulsas (09/10/2026): sem o SQL, nenhuma.
-    mudancasUnidades.lerDosItens(api, itens.map(i => i.id)).catch(() => ({ trocas: [], avulsas: [] }))
+    mudancasUnidades.lerDosItens(api, itens.map(i => i.id)).catch(() => ({ trocas: [], avulsas: [], edicoes: [] }))
   ]);
   const mudancasDe = mudancasUnidades.indice(mudancas);
   const extPor = new Map();
@@ -420,7 +420,10 @@ async function montarFilas(api, { itens, etapasPor }) {
     const k = chaveItemSetor(itemId, etapaId);
     if (!cache.has(k)) {
       const etapa = etapasPor.get(String(etapaId));
-      cache.set(k, etapa ? unidades.filaDoProcesso({ grupos: gruposPor.get(String(itemId)) || [], rota: rotaPor.get(String(itemId)) || [], processo: etapa.nome }) : []);
+      // Linha editada (14/10/2026): a fila base é a de antes da primeira
+      // edição; as edições entram como mudanças (mudancasDe).
+      const daEdicao = etapa ? mudancasUnidades.filaBaseDaEdicao(mudancas.edicoes, itemId, etapaId) : null;
+      cache.set(k, !etapa ? [] : (daEdicao || unidades.filaDoProcesso({ grupos: gruposPor.get(String(itemId)) || [], rota: rotaPor.get(String(itemId)) || [], processo: etapa.nome })));
     }
     return cache.get(k);
   };

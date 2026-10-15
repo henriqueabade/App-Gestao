@@ -8,6 +8,12 @@
  *   avulsa   no cancelamento, a peça que continua sendo produzida mesmo fora
  *            de pedido (`pecas_avulsas`): o resto da pendência do pedido some,
  *            e só ela segue, do ponto em que estava.
+ *   edição   as peças do pedido em Produção foram editadas (14/10/2026,
+ *            `pedido_edicoes`, backend/pedidoEdicao.js): unidades saíram (ao
+ *            estoque, à matéria-prima ou juntadas em outra linha) e entraram.
+ *            A linha muda de quantidade, então a fila BASE dela passa a ser a
+ *            de antes da primeira edição (`fila_antes`), e cada edição é uma
+ *            mudança — o que foi registrado antes continua valendo o que valia.
  *
  * O motor da produção (producaoUnidades.alocarComMudancas) recebe daqui, por
  * item e processo, a lista de mudanças com hora. O estado de cada unidade é
@@ -22,6 +28,8 @@ const c = require('./comum');
 
 const TABELA_TROCAS = 'trocas_pecas';
 const TABELA_AVULSAS = 'pecas_avulsas';
+// Sem o SQL dela (sql/pedido_edicoes.sql) não há edição nenhuma: nada muda.
+const TABELA_EDICOES = 'pedido_edicoes';
 const SQL_ARQUIVO = 'sql/trocas_pecas_e_avulsas.sql';
 const SQL_FALTANDO = `Falta rodar ${SQL_ARQUIVO} no banco e reiniciar a API.`;
 const STATUS_AVULSA = { em_producao: 'Em produção', no_estoque: 'No estoque', descartada: 'Descartada', trocada: 'Trocada' };
@@ -29,7 +37,7 @@ const STATUS_AVULSA = { em_producao: 'Em produção', no_estoque: 'No estoque', 
 function tabelaAusente(err) {
   const bruto = `${err?.message || ''} ${err?.body?.error || ''} ${err?.body?.detalhe || ''} ${err?.code || ''}`;
   if (/42P01/.test(bruto)) return true;
-  const cita = [TABELA_TROCAS, TABELA_AVULSAS].some(t => bruto.includes(t));
+  const cita = [TABELA_TROCAS, TABELA_AVULSAS, TABELA_EDICOES].some(t => bruto.includes(t));
   return cita && (/does not exist|não encontrada|não existe/i.test(bruto) || err?.status === 404);
 }
 
@@ -56,9 +64,10 @@ function estadoDe(valor) {
  */
 async function lerDosItens(api, itemIds = []) {
   const ids = new Set((itemIds || []).filter(v => v !== null && v !== undefined).map(String));
-  const [trocas, avulsas] = await Promise.all([
+  const [trocas, avulsas, edicoes] = await Promise.all([
     lerTabela(api, TABELA_TROCAS).catch(() => null),
-    lerTabela(api, TABELA_AVULSAS).catch(() => null)
+    lerTabela(api, TABELA_AVULSAS).catch(() => null),
+    lerTabela(api, TABELA_EDICOES).catch(() => null)
   ]);
   const doItem = (l, ...campos) => campos.some(k => ids.has(String(l[k])));
   return {
@@ -66,9 +75,45 @@ async function lerDosItens(api, itemIds = []) {
     trocas: (trocas || []).filter(t => doItem(t, 'pedido_item_id_a', 'pedido_item_id_b'))
       .map(t => ({ ...t, estado_a: estadoDe(t.estado_a), estado_b: estadoDe(t.estado_b) })),
     avulsas: (avulsas || []).filter(a => doItem(a, 'pedido_item_id'))
-      .map(a => ({ ...a, estado_inicio: estadoDe(a.estado_inicio), encerramento: estadoDe(a.encerramento) }))
+      .map(a => ({ ...a, estado_inicio: estadoDe(a.estado_inicio), encerramento: estadoDe(a.encerramento) })),
+    edicoes: edicoesDosItens(edicoes || [], ids)
   };
 }
+
+/**
+ * As edições (pedido_edicoes) que tocam os itens dados, cada uma só com as
+ * linhas deles, da mais antiga para a mais nova. Pura.
+ */
+function edicoesDosItens(linhas, ids) {
+  return (linhas || [])
+    .map(e => {
+      const unidades = c.jsonDe(e?.unidades, []);
+      const lista = (Array.isArray(unidades) ? unidades : []).filter(u => u && ids.has(String(u.pedido_item_id)));
+      return { id: e?.id, pedido_id: e?.pedido_id, criado_em: e?.criado_em, unidades: lista };
+    })
+    .filter(e => e.unidades.length)
+    .sort((a, b) => String(a.criado_em ?? '').localeCompare(String(b.criado_em ?? '')) || Number(a.id) - Number(b.id));
+}
+
+/**
+ * A fila BASE de um item num processo quando ele já foi editado: a de antes da
+ * PRIMEIRA edição (a quantidade da linha mudou; os registros de produção
+ * daquele tempo consomem a fila como ela era). `null` quando o item nunca foi
+ * editado — aí a fila é a da composição atual, como sempre. Pura.
+ */
+function filaBaseDaEdicao(edicoes, itemId, etapaId) {
+  const id = String(itemId);
+  for (const e of edicoes || []) {
+    const u = (e.unidades || []).find(x => String(x.pedido_item_id) === id && x.fila_antes && typeof x.fila_antes === 'object');
+    if (!u) continue;
+    const fila = u.fila_antes[String(etapaId)];
+    return (Array.isArray(fila) ? fila : []).map(Number).filter(Number.isFinite);
+  }
+  return null;
+}
+
+/** Uma lista de restantes gravada (números; o resto é descartado). Pura. */
+const listaDeRestantes = v => (Array.isArray(v) ? v : []).map(Number).filter(Number.isFinite);
 
 /** O restante de um processo no estado, `quantidade` vezes (null = a unidade nem usa o processo). Pura. */
 function restantes(estado, etapaId, quantidade) {
@@ -90,9 +135,19 @@ function restantes(estado, etapaId, quantidade) {
  * A avulsa que nasceu de uma troca não gera mudança própria: a troca já diz
  * o que entrou.
  */
-function mudancasDoItem({ itemId, trocas = [], avulsas = [] }, etapaId) {
+function mudancasDoItem({ itemId, trocas = [], avulsas = [], edicoes = [] }, etapaId) {
   const id = String(itemId);
   const lista = [];
+  // Edição do pedido (14/10/2026): saem as unidades que foram para o estoque,
+  // para a matéria-prima ou para outra linha; entram as juntadas e as novas,
+  // cada uma com o que falta nela neste processo.
+  for (const e of edicoes || []) {
+    const u = (e.unidades || []).find(x => String(x.pedido_item_id) === id);
+    if (!u) continue;
+    const sai = listaDeRestantes(u.sai?.[String(etapaId)]);
+    const entra = listaDeRestantes(u.entra?.[String(etapaId)]);
+    if (sai.length || entra.length) lista.push({ em: e.criado_em, sai, entra, edicao_id: e.id });
+  }
   for (const t of trocas || []) {
     const ehA = String(t.pedido_item_id_a) === id;
     const ehB = String(t.pedido_item_id_b) === id;
@@ -118,11 +173,11 @@ function mudancasDoItem({ itemId, trocas = [], avulsas = [] }, etapaId) {
 }
 
 /** `(itemId, etapaId) → mudanças` a partir do que `lerDosItens` trouxe. Pura. */
-function indice({ trocas = [], avulsas = [] } = {}) {
+function indice({ trocas = [], avulsas = [], edicoes = [] } = {}) {
   const porItem = new Map();
   const juntar = (itemId, campo, linha) => {
     const k = String(itemId);
-    if (!porItem.has(k)) porItem.set(k, { trocas: [], avulsas: [] });
+    if (!porItem.has(k)) porItem.set(k, { trocas: [], avulsas: [], edicoes: [] });
     porItem.get(k)[campo].push(linha);
   };
   for (const t of trocas) {
@@ -130,6 +185,9 @@ function indice({ trocas = [], avulsas = [] } = {}) {
     if (String(t.pedido_item_id_b) !== String(t.pedido_item_id_a)) juntar(t.pedido_item_id_b, 'trocas', t);
   }
   for (const a of avulsas) juntar(a.pedido_item_id, 'avulsas', a);
+  for (const e of edicoes || []) {
+    for (const itemId of new Set((e.unidades || []).map(u => String(u.pedido_item_id)))) juntar(itemId, 'edicoes', e);
+  }
   return (itemId, etapaId) => {
     const doItem = porItem.get(String(itemId));
     return doItem ? mudancasDoItem({ itemId, ...doItem }, etapaId) : [];
@@ -231,6 +289,7 @@ function pontoDaRota({ restante = {}, nomes = new Map(), rota = [] }) {
 }
 
 module.exports = {
-  TABELA_TROCAS, TABELA_AVULSAS, SQL_ARQUIVO, SQL_FALTANDO, STATUS_AVULSA,
-  tabelaAusente, lerTabela, estadoDe, lerDosItens, restantes, mudancasDoItem, indice, estadosDasUnidades, pontoDaRota
+  TABELA_TROCAS, TABELA_AVULSAS, TABELA_EDICOES, SQL_ARQUIVO, SQL_FALTANDO, STATUS_AVULSA,
+  tabelaAusente, lerTabela, estadoDe, lerDosItens, edicoesDosItens, filaBaseDaEdicao, restantes, mudancasDoItem, indice,
+  estadosDasUnidades, pontoDaRota
 };

@@ -601,6 +601,36 @@ function precoDeVenda(produto) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * Linhas da MESMA peça viram uma só, com as quantidades somadas (pedido do
+ * dono, 14/10/2026: o PED121 nasceu com duas linhas iguais de "Caixa Rio"
+ * vindas da IA — "deveria ter sido somado, pois são iguais"). O preço é o do
+ * cadastro, igual nas duas; `valor_total` é refeito. A ordem é a da primeira
+ * aparição. Pura.
+ */
+function somarLinhasIguais(itens = []) {
+  const saida = [];
+  const porProduto = new Map();
+  for (const item of Array.isArray(itens) ? itens : []) {
+    const chave = item && item.produto_id !== null && item.produto_id !== undefined
+      ? `${item.produto_id}|${Number(item.valor_unitario) || 0}`
+      : null;
+    const ja = chave ? porProduto.get(chave) : null;
+    if (!ja) {
+      const copia = { ...item };
+      saida.push(copia);
+      if (chave) porProduto.set(chave, copia);
+      continue;
+    }
+    ja.quantidade = (Number(ja.quantidade) || 0) + (Number(item.quantidade) || 0);
+    if ('valor_total' in ja) ja.valor_total = (Number(ja.valor_unitario) || 0) * ja.quantidade;
+    if ('desconto_total' in ja) ja.desconto_total = (Number(ja.valor_desc) || 0) * ja.quantidade;
+    ja.sem_preco_registrado = Boolean(ja.sem_preco_registrado || item.sem_preco_registrado) || undefined;
+    if (ja.sem_preco_registrado === undefined) delete ja.sem_preco_registrado;
+  }
+  return saida;
+}
+
 function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
   const itens = [];
   const semCadastro = [];
@@ -648,7 +678,8 @@ function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
     });
   }
 
-  return { itens, semCadastro };
+  // A mesma peça duas vezes no documento é UMA linha (14/10/2026).
+  return { itens: somarLinhasIguais(itens), semCadastro };
 }
 
 /** Contatos, sem os vazios que virariam linha em branco no cadastro. */
@@ -1030,6 +1061,7 @@ async function montarPreenchimento({ api, destino, item }) {
 module.exports = {
   MODAIS,
   ESTADOS,
+  somarLinhasIguais,
   casarInsumo,
   diasEscritosComoParcelas,
   casarProduto,

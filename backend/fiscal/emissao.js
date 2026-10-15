@@ -70,7 +70,9 @@ async function lerPedidoFiscal(api, pedidoId) {
   if (!Number.isInteger(id) || id <= 0) throw erro('Pedido inválido.');
   const [pedidos, itens, parcelas, notas, cfg] = await Promise.all([
     api.get('/api/pedidos', { query: { id } }).then(lista),
-    api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista).catch(() => []),
+    // Linha zerada é peça que saiu na edição do pedido (14/10/2026): fica pela
+    // história, não vai para a nota (quantidade zero a SEFAZ recusa).
+    api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista).then(l => l.filter(i => Number(i?.quantidade) > 0)).catch(() => []),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     // Sem a tabela (SQL não rodou) a avaliação segue: as outras pendências já dizem o que falta.
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),

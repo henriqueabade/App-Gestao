@@ -558,6 +558,30 @@
   }
 
   /**
+   * "Editar peças" (14/10/2026): só em pedido em Produção e só para o dono — o
+   * servidor responde se quem está logado pode (GET /api/pedido-edicao/permissao);
+   * a trava de verdade é a das rotas. Abre por cima, como os outros filhos.
+   */
+  async function ligarEditarPecas(pedido, clienteNome) {
+    const botao = overlay.querySelector('#visualizarPedidoEditarPecas');
+    if (!botao || String(pedido?.situacao || '').trim() !== 'Produção') return;
+    let pode = false;
+    try {
+      const resp = await fetchApi('/api/pedido-edicao/permissao');
+      const corpo = await resp.json().catch(() => null);
+      pode = Boolean(resp.ok && corpo?.pode);
+    } catch (_) { pode = false; }
+    if (!pode || !botao.isConnected) return;
+    botao.classList.remove('hidden');
+    const abrir = () => {
+      window.editarPecasContext = { pedidoId: id, numero: pedido?.numero || '', cliente: clienteNome || '' };
+      abrirPorCima('modals/pedidos/editar-pecas.html', '../js/modals/pedido-editar-pecas.js', 'editarPecasPedido');
+    };
+    if (typeof window.BotaoAcao?.bind === 'function') window.BotaoAcao.bind(botao, abrir);
+    else botao.addEventListener('click', abrir);
+  }
+
+  /**
    * "Etiquetas" (bordô) no rodapé do pedido que saiu: o PDF das etiquetas das
    * caixas — a de transporte (paisagem, duas por folha; a que sobra fica
    * sozinha no centro) e a "ATENÇÃO" (retrato, duas por folha), uma de cada
@@ -724,8 +748,8 @@
   // Os modais do rodapé (NF-e, boletos, devolução, cancelar) abrem POR CIMA:
   // o Visualizar continua aberto embaixo, e voltar deles cai de novo aqui.
   // Antes cada um fechava o Visualizar primeiro.
-  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos', 'importarBoletos', 'pagamentosParcelas'];
-  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa', 'recebimentos:alterados'];
+  const FILHOS = ['cancelarNfe', 'enviarNfeEmail', 'cartaCorrecaoNfe', 'gerarBoletos', 'boletoDetalhe', 'devolucaoPedido', 'cancelarPedido', 'emitirNfePedido', 'dadosExternos', 'importarBoletos', 'pagamentosParcelas', 'editarPecasPedido'];
+  const EVENTOS_QUE_MUDAM_O_PEDIDO = ['nfe:cancelada', 'nfe:carta-correcao', 'boletos:gerados', 'boletos:alterados', 'pedido:devolvido', 'pedido:enviado', 'nfe:emitida', 'nfe:externa', 'recebimentos:alterados', 'pedido:pecas-editadas'];
   let filhoMudouOPedido = false;
 
   function abrirPorCima(htmlPath, scriptPath, filhoId) {
@@ -1156,6 +1180,8 @@
     ligarDadosDeFora({ pedido: data, notas, notaExterna, boletos: boletosEstado, cliente: clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '' });
 
     const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';
+    // Sem esperar: o botão aparece quando o servidor disser que é o dono.
+    ligarEditarPecas(data, data.cliente_nome || clienteNome).catch(() => {});
     const contatoNome = contatoSel?.selectedOptions?.[0]?.textContent?.trim() || data.contato || '';
     window.cancelarPedidoContext = {
       id,

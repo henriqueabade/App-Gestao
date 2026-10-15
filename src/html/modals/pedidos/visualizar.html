@@ -108,6 +108,9 @@
            escritas no HTML; o script só tira o `hidden`. -->
       <div id="visualizarPedidoTags" class="flex flex-wrap items-center justify-center gap-2 flex-1 min-w-0">
         <span id="visualizarPedidoTagsLista" class="contents"></span>
+        <!-- Pedido em Produção: editar as peças (só o dono — o servidor diz se
+             mostra; backend/pedidoEdicao.js, pedido-editar-pecas.js). -->
+        <button id="visualizarPedidoEditarPecas" type="button" class="hidden btn-warning ctl-botao ctl-botao--pequeno text-white" title="Mudar as peças do pedido: quantidades, tirar, juntar linhas iguais ou pôr peça nova (estoque, matéria-prima, produção e valores são refeitos)"><i class="fas fa-pen-to-square" aria-hidden="true"></i> Editar peças</button>
         <button id="visualizarPedidoDanfe" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Gerar o DANFE em PDF">DANFE</button>
         <button id="visualizarPedidoXml" type="button" data-perm="financeiro.nfe.view" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Salvar o XML da NF-e">XML</button>
         <button id="visualizarPedidoEmailNfe" type="button" data-perm="financeiro.nfe.emit" class="hidden btn-neutral ctl-botao ctl-botao--pequeno text-white" title="Enviar DANFE e XML por e-mail">E-mail</button>

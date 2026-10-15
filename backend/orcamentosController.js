@@ -527,6 +527,41 @@ function buildPedidoPayload(orc = {}, { numero, conversao, agora = new Date(), d
   };
 }
 
+/**
+ * A parte da decisão de estoque de uma peça que cabe NESTA linha do orçamento
+ * (14/10/2026). A decisão vem por produto; com a mesma peça em duas linhas,
+ * a primeira leva o que couber nela (prontas e pela metade) e a seguinte, o
+ * que sobrou — nunca a decisão inteira de novo. `resto` guarda o que sobrou
+ * por produto entre as chamadas. Pura (mexe só em `resto`).
+ */
+function repartirDecisao(decisao = {}, item = {}, resto = new Map()) {
+  const chave = String(Number(item?.produto_id));
+  if (!resto.has(chave)) {
+    resto.set(chave, {
+      pronta: Math.max(0, Number(decisao.qtd_usar_pronta) || 0),
+      parcial: Math.max(0, Number(decisao.qtd_produzir_parcial) || 0),
+      parciais: (Array.isArray(decisao.parciais) ? decisao.parciais : []).map(p => ({ ...p, quantidade: Math.max(0, Number(p?.quantidade) || 0) }))
+    });
+  }
+  const sobra = resto.get(chave);
+  const quantidade = Math.max(0, Number(item?.quantidade) || 0);
+  const pronta = Math.min(sobra.pronta, quantidade);
+  sobra.pronta -= pronta;
+  let cabe = quantidade - pronta;
+  const parciais = [];
+  for (const p of sobra.parciais) {
+    if (!(cabe > 0)) break;
+    const usa = Math.min(p.quantidade, cabe);
+    if (!(usa > 0)) continue;
+    parciais.push({ ...p, quantidade: usa });
+    p.quantidade -= usa;
+    cabe -= usa;
+  }
+  const parcial = Math.min(sobra.parcial, quantidade - pronta);
+  sobra.parcial -= parcial;
+  return { ...decisao, qtd_usar_pronta: pronta, qtd_produzir_parcial: parcial, parciais };
+}
+
 // Monta o item do pedido apenas com colunas existentes em "pedidos_itens".
 // qtd_a_produzir e qtd_usar_pronta são NOT NULL: usam a decisão de estoque
 // vinda do modal de conversão (por produto_id) ou um padrão seguro.
@@ -668,8 +703,12 @@ async function converterOrcamentoEmPedido(api, id, conversao = null, { agora = n
   // Guardamos o id de cada peça criada: sem ele não há como dizer "falta X para
   // a peça Y" nem de qual lote a peça pronta saiu.
   const pecasCriadas = [];
+  // A decisão é POR PEÇA (produto), e o orçamento pode ter a mesma peça em
+  // mais de uma linha (o PED121, 14/10/2026). Ela é REPARTIDA entre as linhas
+  // — antes valia inteira em cada uma, e o estoque saía em dobro.
+  const restoDaDecisao = new Map();
   for (const item of Array.isArray(itens) ? itens : []) {
-    const decisao = decisaoPorProduto.get(Number(item?.produto_id)) || {};
+    const decisao = repartirDecisao(decisaoPorProduto.get(Number(item?.produto_id)) || {}, item, restoDaDecisao);
     const payloadItem = buildPedidoItemPayload(item, pedidoId, decisao);
     const usado = await inserirLinhaComId(api, 'pedidos_itens', payloadItem, proximoItemId);
     pecasCriadas.push({
@@ -1260,3 +1299,5 @@ module.exports.buildOrcamentoPayload = buildOrcamentoPayload;
 // Exposto para teste: "ao converter" é o dia de São Paulo, e o caso das 22h30
 // só se prova com o relógio na mão.
 module.exports.datasDaConversao = datasDaConversao;
+// Exposto para teste: a decisão de estoque repartida entre linhas da mesma peça (14/10/2026).
+module.exports.repartirDecisao = repartirDecisao;

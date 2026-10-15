@@ -1632,6 +1632,8 @@ async function opcoesDeEstorno(api, pedidoId) {
   const { trocas } = await mudancasUnidades.lerDosItens(api, (Array.isArray(itens) ? itens : []).map(i => i.id)).catch(() => ({ trocas: [] }));
 
   for (const item of (Array.isArray(itens) ? itens : [])) {
+    // Linha zerada: a peça saiu na edição do pedido (14/10/2026), não há o que destinar.
+    if (!(paraNumero(item.quantidade) > 0)) continue;
     const chave = String(item.id);
     const rota = await carregarRota(api, item.produto_id, cacheRotas, insumos);
     const grupos = gruposComTrocas(montarGrupos({

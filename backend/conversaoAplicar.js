@@ -343,7 +343,11 @@ async function aplicarConversaoNoEstoque(api, {
   podeSaldoNegativo = false,
   decisaoNote = null,
   inserirLinhaComId,
-  getMaxId
+  getMaxId,
+  // A edição das peças do pedido (backend/pedidoEdicao.js, 14/10/2026) usa
+  // este mesmo caminho para as unidades novas e grava o evento DELA — sem
+  // isto o histórico diria "Convertido do orçamento" numa edição.
+  evento = true
 } = {}) {
   const avisos = [];
   const resumo = {
@@ -386,6 +390,16 @@ async function aplicarConversaoNoEstoque(api, {
     lotesPorProduto.set(produtoId, Array.isArray(dados) ? dados : []);
   }
 
+  // O que as linhas ANTERIORES da mesma peça já levaram de cada lote pela
+  // metade (14/10/2026). A foto dos lotes é lida uma vez só; sem descontar,
+  // duas linhas da mesma peça disputavam as mesmas unidades — a segunda não
+  // achava o lote na hora de baixar e as peças dela ficavam sem estoque nem
+  // produção.
+  const levadoDoLote = new Map();
+  const lotesComSaldo = produtoId => (lotesPorProduto.get(produtoId) || []).map(l => ({
+    ...l, quantidade: arredondar(paraNumero(l?.quantidade) - (levadoDoLote.get(String(l?.id)) || 0))
+  }));
+
   const pecasComParciais = pecas.map(peca => {
     // A lista que a revisão manda diz QUANTAS peças saem de cada ponto da rota,
     // mas não DE QUAL LINHA do estoque elas saem. Sem o id do lote o abatimento
@@ -415,7 +429,7 @@ async function aplicarConversaoNoEstoque(api, {
 
     const produtoId = Number(peca.produto_id);
     const comum = {
-      lotes: lotesPorProduto.get(produtoId) || [],
+      lotes: lotesComSaldo(produtoId),
       rota: rotaPorProduto.get(produtoId) || [],
       ultimoInsumoFinal: ultimoInsumoPorProduto.get(produtoId),
       quantidadeNecessaria: aProduzir,
@@ -447,6 +461,9 @@ async function aplicarConversaoNoEstoque(api, {
     // Nenhum lote pela metade disponível: tudo será produzido do zero, e as
     // "parciais" que a revisão informou não têm lastro no estoque.
     if (!derivados.length) return { ...peca, parciais: [] };
+    for (const d of derivados) {
+      levadoDoLote.set(String(d.lote_id), arredondar((levadoDoLote.get(String(d.lote_id)) || 0) + paraNumero(d.quantidade)));
+    }
 
     // Os derivados SUBSTITUEM o que veio da revisão de propósito: só eles
     // carregam o id da linha do estoque.
@@ -668,7 +685,7 @@ async function aplicarConversaoNoEstoque(api, {
   }
 
   // Evento do pedido: o que aconteceu com ELE, não com o estoque.
-  await registrarEventoDoPedido(api, {
+  if (evento) await registrarEventoDoPedido(api, {
     pedidoId,
     tipoEvento: EVENTO.CONVERSAO,
     // UNIDADES, não linhas.

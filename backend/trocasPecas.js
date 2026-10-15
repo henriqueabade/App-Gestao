@@ -125,7 +125,10 @@ async function opcoes(api, pedidoId) {
   const avulsasPorItem = await avulsasVivasPorItem(api);
   const cancelado = semAcento(pedido.situacao) === 'cancelado';
   // Do pedido cancelado só entram as peças avulsas (09/10/2026).
-  const itensDoPedido = (await producao.itensDe(api, [id])).filter(i => !cancelado || (avulsasPorItem.get(String(i.id)) || []).length);
+  // Linha zerada (a peça saiu na edição do pedido, 14/10/2026) não troca nada.
+  const itensDoPedido = (await producao.itensDe(api, [id]))
+    .filter(i => cancelado || Number(i.quantidade) > 0)
+    .filter(i => !cancelado || (avulsasPorItem.get(String(i.id)) || []).length);
   const liberado = podeTrocar(pedido) || (cancelado && itensDoPedido.length > 0);
   const produtos = new Set(itensDoPedido.map(i => String(i.produto_id)).filter(v => v !== 'null' && v !== 'undefined'));
   const outros = pedidos.filter(p => p && Number(p.id) !== id && podeTrocar(p));

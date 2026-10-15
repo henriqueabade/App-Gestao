@@ -82,10 +82,33 @@
       if (isDatasPedidoOpen()) return;
       close();
       document.removeEventListener('keydown', esc);
+      // Modo edição (14/10/2026): desistir devolve à edição das peças do pedido.
+      if (ctx.modo === 'edicao') { try { ctx.aoCancelar?.(); } catch (err) { console.error(err); } }
     }
   });
 
   const ctx = window.quoteConversionContext || {};
+  /**
+   * Linhas da mesma peça viram uma só, com as quantidades somadas; a ordem é a
+   * da primeira aparição. Pura.
+   */
+  function juntarLinhasDaMesmaPeca(itens) {
+    const saida = [];
+    const porPeca = new Map();
+    for (const item of itens) {
+      const id = Number(item?.produto_id);
+      const ja = Number.isFinite(id) ? porPeca.get(id) : null;
+      if (!ja) {
+        const copia = { ...item };
+        saida.push(copia);
+        if (Number.isFinite(id)) porPeca.set(id, copia);
+        continue;
+      }
+      ja.qtd = (Number(ja.qtd ?? ja.quantidade) || 0) + (Number(item.qtd ?? item.quantidade) || 0);
+      if ('quantidade' in ja) ja.quantidade = ja.qtd;
+    }
+    return saida;
+  }
   const subtitulo = document.getElementById('converterOrcamentoSubtitulo');
   const btnCancelar = document.getElementById('voltarConverterOrcamento');
   const btnConfirmar = document.getElementById('confirmarConverterOrcamento');
@@ -217,7 +240,28 @@
   }
 
   let listaProdutos = [];
-  let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({ ...p, approved: !!p.approved })) : [];
+  // A mesma peça em duas linhas do orçamento é UMA linha aqui (14/10/2026): a
+  // decisão de estoque é por peça, e duas linhas olhando o mesmo estoque
+  // escolhiam as mesmas peças prontas e pela metade duas vezes (o PED121).
+  let rows = juntarLinhasDaMesmaPeca(Array.isArray(ctx.items) ? ctx.items : []).map(p => ({ ...p, approved: !!p.approved }));
+  // Modo edição das peças de um pedido em Produção (14/10/2026,
+  // pedido-editar-pecas.js): as mesmas escolhas, só para as unidades novas —
+  // sem trocar a peça (isso se faz na edição) e sem as datas do pedido.
+  const modoEdicao = ctx.modo === 'edicao';
+  if (modoEdicao) {
+    // Por cima da edição das peças: o Modal sobe todo overlay para z 2000 ou
+    // mais (ensureHighZIndex), então a conta é a do maior que está aberto.
+    const maiorAberto = [...document.querySelectorAll('[id$="Overlay"]')]
+      .filter(o => o !== overlay)
+      .reduce((m, o) => Math.max(m, Number(getComputedStyle(o).zIndex) || 0), 0);
+    overlay.style.zIndex = String(Math.max(2001, maiorAberto + 1));
+    const titulo = overlay.querySelector('h2');
+    if (titulo) titulo.textContent = 'DE ONDE SAEM AS PEÇAS NOVAS';
+    const botaoConfirmar = document.getElementById('confirmarConverterOrcamento');
+    if (botaoConfirmar) botaoConfirmar.textContent = 'Usar estas escolhas';
+    const botaoCancelar = document.getElementById('voltarConverterOrcamento');
+    if (botaoCancelar) botaoCancelar.textContent = 'Voltar';
+  }
   const state = {
     allowNegativeStock: false,
     hasNegative: false,
@@ -737,7 +781,7 @@
         <td class="py-3 px-2 text-left">
           <div class="flex justify-start gap-1">
             ${viewButtonHtml}
-            ${replaceButtonHtml}
+            ${modoEdicao ? '' : replaceButtonHtml}
             ${toggleButtonHtml}
           </div>
         </td>`;
@@ -1034,6 +1078,12 @@
     catch (err) { console.error(err); }
     window.confirmQuoteConversion = null;
     window.quoteConversionContext = null;
+    // Modo edição: só esta tela fecha; a edição das peças continua aberta.
+    if (modoEdicao) {
+      close();
+      try { ctx.aoCancelar?.(); } catch (err) { console.error(err); }
+      return;
+    }
     if (typeof Modal?.closeAll === 'function') Modal.closeAll();
     else close();
   }
@@ -1098,6 +1148,16 @@
         forcarProduzirDoZero: !!r.forceProduceAll
       }))
     };
+
+    // Modo edição: o pedido já tem as datas; a escolha volta direto para a edição.
+    if (modoEdicao) {
+      try {
+        cleanupReplaceModalIntegration();
+        window.confirmQuoteConversion?.({ deletions, replacements, conversao });
+        close();
+      } catch (err) { console.error(err); showToast('Erro ao usar as escolhas', 'error'); }
+      return;
+    }
 
     // As datas do pedido vêm por último, depois de tudo validado e ANTES da
     // limpeza: `cleanupReplaceModalIntegration` desliga o "Substituir", e quem

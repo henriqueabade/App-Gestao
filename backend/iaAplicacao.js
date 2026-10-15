@@ -709,6 +709,11 @@ async function aplicarOrcamentos(item, contexto) {
       valor_total: valorUnitario * quantidade
     });
   }
+  // A mesma peça duas vezes no documento é UMA linha (14/10/2026: o PED121
+  // nasceu com duas "Caixa Rio" iguais, e a conversão abatia o estoque de cada uma).
+  const somadas = preenchimento.somarLinhasIguais(itens);
+  itens.length = 0;
+  itens.push(...somadas);
 
   // Ver "OU ENTRA INTEIRO, OU NÃO ENTRA" acima.
   if (semCadastro.length) {

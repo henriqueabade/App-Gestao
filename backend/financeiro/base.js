@@ -31,7 +31,9 @@ function contextoDosPedidos({ pedidos = [], itens = [], produtos = [], clientes 
   const donoDoCliente = new Map(clientes.filter(Boolean).map(x => [String(x.id), String(x.dono_cliente || '').trim() || null]));
   const desenhistaDe = new Map(produtos.filter(Boolean).map(p => [String(p.id), String(p.desenhado_por || '').trim()]));
   const itensPor = new Map();
-  for (const i of itens.filter(Boolean)) {
+  // Sem as linhas zeradas (peça que saiu na edição do pedido, 14/10/2026): o
+  // desenhista dela não entra na divisão.
+  for (const i of itens.filter(x => x && Number(x.quantidade) > 0)) {
     const k = String(i.pedido_id);
     if (!itensPor.has(k)) itensPor.set(k, []);
     itensPor.get(k).push(i);

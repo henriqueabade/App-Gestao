@@ -72,7 +72,8 @@ async function lerPedido(api, pedidoId, hoje) {
 
   const lista = r => c.lista(r).filter(l => l && Number(l.pedido_id) === id);
   const [itens, parcelas, bols, notas, recs, devolucoes, devParcelas, cliente] = await Promise.all([
-    api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista),
+    // Sem as linhas zeradas (peça que saiu na edição do pedido, 14/10/2026).
+    api.get('/api/pedidos_itens', { query: { pedido_id: id } }).then(lista).then(l => l.filter(i => Number(i?.quantidade) > 0)),
     api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/boletos', { query: { pedido_id: id } }).then(lista).catch(() => []),
     api.get('/api/notas_fiscais', { query: { pedido_id: id } }).then(lista).catch(() => []),

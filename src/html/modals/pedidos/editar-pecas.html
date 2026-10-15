@@ -1,0 +1,73 @@
+<!--
+  Editar as peças de um pedido em Produção (pedido do dono, 14/10/2026). Só o
+  dono (dois e-mails), só sem NF-e e sem cobrança. Mudar a quantidade, tirar,
+  pôr peça nova e juntar linhas da mesma peça; as unidades que saem voltam ao
+  estoque no ponto em que estão (o resto do material volta à matéria-prima) e
+  as novas usam a mesma escolha da conversão. Dados: GET /api/pedido-edicao/:id;
+  prévia: POST /api/pedido-edicao/:id/simular; grava: POST /api/pedido-edicao/:id.
+  Script: src/js/modals/pedido-editar-pecas.js.
+-->
+<div id="editarPecasPedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div role="dialog" aria-modal="true" aria-labelledby="editarPecasTitulo" tabindex="0" class="w-full max-w-6xl h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarEditarPecas" type="button" class="btn-neutral ctl-botao text-white justify-self-start">← Voltar</button>
+      <div class="text-center min-w-0">
+        <h2 id="editarPecasTitulo" class="ctl-modal-titulo text-white truncate"><i class="fas fa-pen-to-square mr-2" aria-hidden="true"></i>Editar peças do pedido</h2>
+        <p id="editarPecasSubtitulo" class="text-sm text-gray-300 truncate"></p>
+      </div>
+      <button id="fecharEditarPecas" type="button" class="btn-danger ctl-botao text-white justify-self-end">Fechar</button>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+        <p id="editarPecasCarregando" class="text-sm text-gray-300">Carregando as peças...</p>
+        <div id="editarPecasAviso" class="hidden editar-pecas__aviso" role="alert"></div>
+
+        <div id="editarPecasConteudo" class="hidden space-y-6">
+          <div class="editar-pecas__explica">
+            <i class="fas fa-circle-info" aria-hidden="true"></i>
+            <p>Mude as quantidades, tire peças, junte linhas da mesma peça ou ponha peças novas. As que saem voltam ao estoque no ponto em que estão — primeiro as do zero, depois as que vieram pela metade, e as prontas do estoque por último — e o material do resto da rota volta à matéria-prima. As novas saem do estoque ou vão para a produção, como na conversão. O que já foi produzido continua pago. Valores e parcelas são refeitos pelas regras de sempre.</p>
+          </div>
+
+          <div class="space-y-3">
+            <p class="ctl-rotulo text-white">As peças do pedido</p>
+            <div id="editarPecasLinhas" class="space-y-3"></div>
+          </div>
+
+          <div class="space-y-3">
+            <p class="ctl-rotulo text-white">Pôr uma peça</p>
+            <div class="editar-pecas__adicionar">
+              <label class="ctl-rotulo text-white">Peça
+                <input id="editarPecasBusca" type="text" list="editarPecasCatalogo" autocomplete="off" class="ctl-campo input-glass text-white w-full placeholder-white/50" placeholder="Código ou nome da peça">
+                <datalist id="editarPecasCatalogo"></datalist>
+              </label>
+              <label class="ctl-rotulo text-white">Quantidade
+                <input id="editarPecasNovaQtd" type="number" min="1" step="1" value="1" class="ctl-campo input-glass text-white w-full">
+              </label>
+              <button id="editarPecasAdicionar" type="button" class="btn-neutral ctl-botao text-white"><i class="fas fa-plus" aria-hidden="true"></i> Pôr no pedido</button>
+            </div>
+          </div>
+
+          <label class="ctl-rotulo text-white block">Motivo da edição
+            <textarea id="editarPecasMotivo" rows="2" maxlength="500" class="ctl-campo input-glass text-white w-full placeholder-white/50" placeholder="Por que as peças do pedido mudam (ao menos 10 letras)"></textarea>
+          </label>
+
+          <div id="editarPecasMensagem" class="hidden text-sm" role="alert"></div>
+          <div class="ctl-acoes justify-end">
+            <button id="editarPecasDesfazer" type="button" class="btn-neutral ctl-botao text-white">Desfazer tudo</button>
+            <button id="editarPecasRevisar" type="button" class="btn-primary ctl-botao text-white"><i class="fas fa-magnifying-glass" aria-hidden="true"></i> Revisar</button>
+          </div>
+
+          <div id="editarPecasRevisao" class="hidden space-y-4">
+            <p class="ctl-rotulo text-white">Confira antes de salvar</p>
+            <div id="editarPecasResumo" class="editar-pecas__resumo"></div>
+            <div class="ctl-acoes justify-end">
+              <button id="editarPecasMudar" type="button" class="btn-neutral ctl-botao text-white">Mudar de novo</button>
+              <button id="editarPecasSalvar" type="button" class="btn-primary ctl-botao text-white"><i class="fas fa-floppy-disk" aria-hidden="true"></i> Salvar edição</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

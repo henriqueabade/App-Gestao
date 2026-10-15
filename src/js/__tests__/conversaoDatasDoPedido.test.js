@@ -101,7 +101,8 @@ function montarConfirmar({ datas = DATAS, validacao } = {}) {
     }
   };
   vm.createContext(contexto);
-  vm.runInContext(`var pedindoDatas = false;\nvar ultimasDatas = null;\n${trecho}`, contexto);
+  // `modoEdicao`: a conversão normal (a edição das peças do pedido, 14/10/2026, pula as datas).
+  vm.runInContext(`var pedindoDatas = false;\nvar ultimasDatas = null;\nvar modoEdicao = false;\n${trecho}`, contexto);
   return { contexto, passos, recebidos };
 }
 

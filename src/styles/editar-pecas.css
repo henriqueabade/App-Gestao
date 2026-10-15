@@ -1,0 +1,125 @@
+/* ---------------------------------------------------------------------------
+   "Editar peças do pedido" (src/js/modals/pedido-editar-pecas.js, 14/10/2026).
+   Só o dono; abre por cima do Visualizar de um pedido em Produção. O vidro,
+   as cores dos botões e os tamanhos são os do padrão
+   (docs/padroes-de-interface.md); aqui só o que é do modal.
+   --------------------------------------------------------------------------- */
+
+/* As cores dos botões moram nas folhas dos módulos (pedidos.css, financeiro.css).
+   Repetidas aqui, iguais, restritas ao modal: ele abre por cima do Visualizar
+   e pode ser reaberto pela preservação do trabalho em outro módulo. */
+#editarPecasPedidoOverlay .btn-primary { background: var(--color-primary); transition: all 150ms ease; }
+#editarPecasPedidoOverlay .btn-primary:hover { background: var(--color-primary-light); }
+#editarPecasPedidoOverlay .btn-danger { background: var(--color-red); transition: all 150ms ease; }
+#editarPecasPedidoOverlay .btn-danger:hover { background: rgba(255, 88, 88, 0.8); }
+#editarPecasPedidoOverlay .btn-neutral { background: rgba(255, 255, 255, 0.1); transition: all 150ms ease; }
+#editarPecasPedidoOverlay .btn-neutral:hover { background: rgba(255, 255, 255, 0.15); }
+#editarPecasPedidoOverlay button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.editar-pecas__aviso {
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(251, 191, 36, 0.12);
+    color: #fde68a;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.editar-pecas__aviso ul { margin: 0.35rem 0 0 1.1rem; list-style: disc; }
+
+.editar-pecas__explica {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.editar-pecas__explica > i { color: var(--color-primary, #b6a03e); margin-top: 0.2rem; }
+.editar-pecas__explica p { margin: 0; }
+
+/* Uma linha do pedido: o nome e as unidades à esquerda, a quantidade à direita. */
+.editar-pecas__linha {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem 1.25rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.editar-pecas__linha--mudou { border-color: rgba(182, 160, 62, 0.6); background: rgba(182, 160, 62, 0.08); }
+.editar-pecas__linha--sai { border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.06); }
+.editar-pecas__linha--nova { border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.06); }
+.editar-pecas__linha--travada { opacity: 0.75; }
+
+.editar-pecas__nome { min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+
+.editar-pecas__titulo {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.editar-pecas__sub { color: rgba(255, 255, 255, 0.6); font-size: 0.78rem; }
+
+.editar-pecas__unidades { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.editar-pecas__unidade {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    white-space: nowrap;
+}
+
+.editar-pecas__unidade strong { color: #fff; }
+.editar-pecas__unidade--estoque { border-color: rgba(52, 211, 153, 0.35); }
+
+.editar-pecas__controles { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: flex-end; }
+.editar-pecas__qtd { width: 6.5rem; text-align: center; }
+
+.editar-pecas__nota { grid-column: 1 / -1; color: #fde68a; font-size: 0.78rem; }
+
+.editar-pecas__adicionar { display: grid; grid-template-columns: minmax(0, 1fr) 7rem auto; gap: 0.75rem; align-items: end; }
+
+/* O resumo antes de salvar. */
+.editar-pecas__resumo { display: grid; gap: 1rem; }
+
+.editar-pecas__bloco {
+    padding: 0.9rem 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+}
+
+.editar-pecas__bloco h4 { color: #fff; font-weight: 600; font-size: 0.85rem; margin: 0 0 0.5rem; }
+.editar-pecas__bloco ul { margin: 0; padding-left: 1.1rem; list-style: disc; display: grid; gap: 0.25rem; }
+.editar-pecas__bloco--total { border-color: rgba(182, 160, 62, 0.45); }
+.editar-pecas__valores { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: baseline; }
+.editar-pecas__valores strong { color: #fff; font-size: 1rem; }
+.editar-pecas__antes { text-decoration: line-through; color: rgba(255, 255, 255, 0.5); }
+
+@media (max-width: 760px) {
+    .editar-pecas__linha { grid-template-columns: 1fr; }
+    .editar-pecas__controles { justify-content: flex-start; }
+    .editar-pecas__adicionar { grid-template-columns: 1fr; }
+}

@@ -870,3 +870,25 @@ test('a matéria-prima é lida em bloco, não um insumo por vez', async () => {
     amb.restaurar?.();
   }
 });
+
+test('duas linhas da MESMA peça não disputam os mesmos lotes pela metade (o PED121, 14/10/2026)', async () => {
+  const amb = montarAmbiente();
+  try {
+    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      // Sem parciais informadas: cada linha aproveita o que houver. Antes as
+      // duas viam a mesma foto (Montagem com 4) e pediam 3 cada uma.
+      itens: [
+        { pedido_item_id: 1000, produto_id: 7, quantidade: 3, qtd_usar_pronta: 0, qtd_a_produzir: 3 },
+        { pedido_item_id: 1001, produto_id: 7, quantidade: 3, qtd_usar_pronta: 0, qtd_a_produzir: 3 }
+      ],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+    assert.equal(amb.lotes.find(l => l.id === 502).quantidade, 0, 'as 4 da Montagem saíram (3 para a primeira, 1 para a segunda)');
+    assert.equal(amb.lotes.find(l => l.id === 503).quantidade, 0, 'as 2 do Corte foram para a segunda');
+    assert.ok(!resumo.avisos.some(a => /faltaram/.test(a)), `nenhuma peça ficou sem lote: ${resumo.avisos.join(' | ')}`);
+  } finally {
+    amb.restaurar?.();
+  }
+});
