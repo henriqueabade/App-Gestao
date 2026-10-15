@@ -41,6 +41,7 @@ const publisher = require('./backend/publisher');
 if (process.platform === 'win32') app.setAppUserModelId('com.santissimo.decor');
 const versionManager = require('./backend/versionManager');
 const { performReleaseCommit } = require('./backend/gitAutomation');
+const { resolvePublicationReference } = require('./backend/publicationChanges');
 const {
   registrarUsuario,
   loginUsuario,
@@ -331,7 +332,11 @@ let publishState = {
   latestPublishedVersion: localAppVersion,
   localVersion: localAppVersion,
   lastPublishedCommit: null,
+  lastPublishedCommitConfirmed: false,
+  lastPublishedCommitVersion: null,
   pendingChanges: [],
+  pendingChangesStatus: 'loading',
+  pendingChangesMessage: null,
   progress: initialPublishing ? 1 : 0
 };
 
@@ -474,7 +479,9 @@ function persistPublishStateSnapshot() {
     const snapshot = {
       latestPublishedVersion: publishState.latestPublishedVersion,
       localVersion: publishState.localVersion,
-      lastPublishedCommit: publishState.lastPublishedCommit
+      lastPublishedCommit: publishState.lastPublishedCommit,
+      lastPublishedCommitConfirmed: publishState.lastPublishedCommitConfirmed,
+      lastPublishedCommitVersion: publishState.lastPublishedCommitVersion
     };
     fs.writeFileSync(filePath, `${JSON.stringify(snapshot, null, 2)}\n`);
   } catch (err) {
@@ -492,6 +499,8 @@ if (persistedPublishState) {
   }
   if (persistedPublishState.lastPublishedCommit) {
     publishState.lastPublishedCommit = persistedPublishState.lastPublishedCommit;
+    publishState.lastPublishedCommitConfirmed = persistedPublishState.lastPublishedCommitConfirmed === true;
+    publishState.lastPublishedCommitVersion = persistedPublishState.lastPublishedCommitVersion || null;
   }
 }
 
@@ -623,6 +632,9 @@ function deriveSummaryFromSubject(subject) {
 async function getChangedFilesForCommit(hash) {
   if (!hash) return [];
   const output = await runGitCommand(['show', '--pretty=format:', '--name-only', hash]);
+  if (output === null) {
+    throw new Error('Não foi possível consultar os arquivos de um commit pendente de publicação.');
+  }
   if (!output) return [];
   return output
     .split('\n')
@@ -851,6 +863,9 @@ async function collectPendingChangesSince(referenceCommit, headCommitOverride) {
     `${referenceCommit}..${headCommit}`
   ]);
 
+  if (output === null) {
+    throw new Error('Não foi possível consultar os commits posteriores à última publicação.');
+  }
   if (!output) return [];
 
   const entries = [];
@@ -906,6 +921,8 @@ async function refreshPendingChanges(options = {}) {
 
   if (gitUnavailable) {
     publishState.pendingChanges = [];
+    publishState.pendingChangesStatus = 'unavailable';
+    publishState.pendingChangesMessage = 'Git não está disponível para verificar as alterações pendentes de publicação.';
     return publishState.pendingChanges;
   }
 
@@ -925,37 +942,63 @@ async function refreshPendingChanges(options = {}) {
   const execution = (async () => {
     if (gitUnavailable) {
       publishState.pendingChanges = [];
+      publishState.pendingChangesStatus = 'unavailable';
+      publishState.pendingChangesMessage = 'Git não está disponível para verificar as alterações pendentes de publicação.';
       return publishState.pendingChanges;
     }
 
-    const referenceCommit = publishState.lastPublishedCommit;
     const headCommit = await getHeadCommitHash({ force });
 
     if (!headCommit) {
       publishState.pendingChanges = [];
+      publishState.pendingChangesStatus = 'error';
+      publishState.pendingChangesMessage = 'Não foi possível identificar o repositório para verificar as alterações pendentes.';
       lastPendingChangesContext = { head: null, reference: null };
       return publishState.pendingChanges;
     }
 
-    if (!referenceCommit) {
-      publishState.lastPublishedCommit = headCommit;
+    const reference = await resolvePublicationReference({
+      runGitCommand,
+      version: publishState.latestPublishedVersion,
+      headCommit,
+      persistedCommit: publishState.lastPublishedCommit,
+      persistedCommitConfirmed: publishState.lastPublishedCommitConfirmed,
+      persistedCommitVersion: publishState.lastPublishedCommitVersion
+    });
+    if (!reference) {
+      publishState.lastPublishedCommit = null;
+      publishState.lastPublishedCommitConfirmed = false;
+      publishState.lastPublishedCommitVersion = null;
       publishState.pendingChanges = [];
-      lastPendingChangesContext = { head: headCommit, reference: headCommit };
+      publishState.pendingChangesStatus = 'unknown';
+      publishState.pendingChangesMessage = 'Não foi possível identificar o commit da última versão publicada. O estado das alterações pendentes é desconhecido.';
+      lastPendingChangesContext = { head: headCommit, reference: null };
       return publishState.pendingChanges;
     }
+    const referenceCommit = reference.commit;
+    publishState.lastPublishedCommit = referenceCommit;
+    publishState.lastPublishedCommitConfirmed = reference.source === 'confirmed-publication';
+    publishState.lastPublishedCommitVersion = publishState.lastPublishedCommitConfirmed
+      ? publishState.latestPublishedVersion
+      : null;
 
-    if (!force && lastPendingChangesContext.head === headCommit && lastPendingChangesContext.reference === referenceCommit) {
+    if (!force && publishState.pendingChangesStatus === 'ready' &&
+        lastPendingChangesContext.head === headCommit && lastPendingChangesContext.reference === referenceCommit) {
       return publishState.pendingChanges;
     }
 
     const entries = await collectPendingChangesSince(referenceCommit, headCommit);
     publishState.pendingChanges = Array.isArray(entries) ? entries : [];
+    publishState.pendingChangesStatus = 'ready';
+    publishState.pendingChangesMessage = null;
     lastPendingChangesContext = { head: headCommit, reference: referenceCommit };
     return publishState.pendingChanges;
   })();
 
   const trackedPromise = execution
     .catch(err => {
+      publishState.pendingChangesStatus = 'error';
+      publishState.pendingChangesMessage = err?.message || 'Não foi possível verificar as alterações pendentes de publicação.';
       if (DEBUG) {
         console.warn('Falha ao atualizar alterações pendentes:', err);
       }
@@ -974,12 +1017,6 @@ async function refreshPendingChanges(options = {}) {
 function ensurePublishStateInitialized() {
   if (!publishStateInitializationPromise) {
     publishStateInitializationPromise = (async () => {
-      if (!publishState.lastPublishedCommit) {
-        const head = await getHeadCommitHash();
-        if (head) {
-          publishState.lastPublishedCommit = head;
-        }
-      }
       await refreshPendingChanges();
       return publishState.pendingChanges;
     })().catch(err => {
@@ -1000,10 +1037,15 @@ async function buildUpdateStatusPayload({ refresh = false } = {}) {
     await updateService.checkForUpdates({ silent: true });
   }
 
+  const status = updateService.getUpdateStatus();
+  // Quando o servidor informa uma versão publicada, a referência pertence a
+  // essa versão. Um cache confirmado de outra versão não pode substituí-la.
+  if (typeof status.latestVersion === 'string' && /^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*$/.test(status.latestVersion)) {
+    publishState.latestPublishedVersion = status.latestVersion;
+  }
   await ensurePublishStateInitialized();
   await refreshPendingChanges({ force: refresh });
 
-  const status = updateService.getUpdateStatus();
   const payload = {
     ...status,
     canPublish: publishState.canPublish,
@@ -1057,11 +1099,10 @@ async function updatePublishState(partial = {}) {
 
   if (hasOwn('lastPublishedCommit')) {
     publishState.lastPublishedCommit = partial.lastPublishedCommit || null;
-  } else if (!publishState.lastPublishedCommit) {
-    const head = await getHeadCommitHash();
-    if (head) {
-      publishState.lastPublishedCommit = head;
-    }
+    publishState.lastPublishedCommitConfirmed = partial.lastPublishedCommitConfirmed === true;
+    publishState.lastPublishedCommitVersion = publishState.lastPublishedCommitConfirmed
+      ? publishState.latestPublishedVersion
+      : null;
   }
 
   let nextCanPublish;
@@ -4423,6 +4464,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       latestPublishedVersion: sanitizedVersion,
       localVersion: sanitizedVersion,
       lastPublishedCommit: nextHeadCommit,
+      lastPublishedCommitConfirmed: Boolean(headAfterPush),
       progress: 100
     });
     broadcastPublishEvent('publish-done', { ...successState, targetVersion: sanitizedVersion });

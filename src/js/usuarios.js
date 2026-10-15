@@ -794,12 +794,8 @@ function criarConteudoPopoverUsuario(botao) {
                 <span class="usuario-popover-label">${rotulo}</span>
                 <span class="usuario-popover-value">${valor}</span>
             </div>` : '');
-    // As últimas ações vêm da auditoria (só o Sup Admin consulta), depois de abrir.
-    const auditoria = ehSupAdminLogado() && botao.dataset.usuarioId ? `
-            <div class="usuario-popover-section">
-                <span class="usuario-popover-label">Últimas ações</span>
-                <ul class="usuario-popover-acoes" data-ultimas-acoes><li class="usuario-popover-acao-vazia">Carregando…</li></ul>
-            </div>
+    const temAuditoria = ehSupAdminLogado() && botao.dataset.usuarioId;
+    const auditoria = temAuditoria ? `
             <button type="button" class="usuario-popover-ver-tudo" data-ver-auditoria>
                 <i class="fas fa-clock-rotate-left" aria-hidden="true"></i> Ver auditoria completa
             </button>` : '';
@@ -814,26 +810,24 @@ function criarConteudoPopoverUsuario(botao) {
                 <span class="usuario-popover-value">${ultimoLogin}</span>
             </div>${linhaOpcional('Última entrada', ultimaEntrada)}${linhaOpcional('Última saída', ultimaSaida)}
             <div class="usuario-popover-section">
-                <span class="usuario-popover-label">Última alteração</span>
-                <span class="usuario-popover-value">${ultimaAlteracao}</span>
-            </div>
-            <div class="usuario-popover-section">
-                <span class="usuario-popover-label">Alteração registrada</span>
-                <p class="usuario-popover-description">${ultimaDescricao}</p>
+                <span class="usuario-popover-label">Última ação</span>
+                <ul class="usuario-popover-acoes" ${temAuditoria ? 'data-ultimas-acoes' : ''}>
+                    <li class="usuario-popover-acao">
+                        <span class="usuario-popover-acao-topo">${ultimaAlteracao}</span>
+                        <p class="usuario-popover-acao-texto">${ultimaDescricao}</p>
+                    </li>
+                </ul>
             </div>${auditoria}
         </div>`;
 }
 
-/** As últimas ações (manuais) do usuário, da auditoria — guardadas 30 s por usuário. */
+/** Somente a última ação manual; o histórico completo fica na auditoria. */
 const ultimasAcoesCache = new Map();
 async function buscarUltimasAcoes(usuarioId) {
     const guardado = ultimasAcoesCache.get(String(usuarioId));
     if (guardado && Date.now() - guardado.em < 30000) return guardado.registros;
-    const dia = d => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
-    const agora = new Date();
     const query = new URLSearchParams({
-        usuario_id: String(usuarioId), inicio: dia(new Date(agora.getTime() - 29 * 86400000)), fim: dia(agora),
-        origem: 'manual', pagina: '1', limite: '5'
+        usuario_id: String(usuarioId), origem: 'manual', pagina: '1', limite: '1'
     });
     const base = await window.apiConfig.getApiBaseUrl();
     const resposta = await fetch(`${base}/api/auditoria-usuarios?${query}`);
@@ -853,7 +847,7 @@ function valorCurtoDaAuditoria(valor) {
     return texto.length > 40 ? `${texto.slice(0, 39)}…` : texto;
 }
 
-/** Preenche a lista do balão (tudo por textContent: os textos vêm do banco). */
+/** Preenche uma única ação (textContent: os textos vêm do banco). */
 async function preencherUltimasAcoes(lista, usuarioId) {
     const item = (classe, texto) => {
         const li = document.createElement('li');
@@ -866,10 +860,10 @@ async function preencherUltimasAcoes(lista, usuarioId) {
         if (!lista.isConnected) return;
         lista.replaceChildren();
         if (!registros.length) {
-            lista.appendChild(item('usuario-popover-acao-vazia', 'Nenhuma ação registrada nos últimos 30 dias.'));
+            lista.appendChild(item('usuario-popover-acao-vazia', 'Nenhuma ação registrada na auditoria.'));
             return;
         }
-        for (const r of registros) {
+        for (const r of registros.slice(0, 1)) {
             const li = document.createElement('li');
             li.className = `usuario-popover-acao${r.resultado === 'falha' ? ' usuario-popover-acao--falha' : ''}`;
             const quando = new Date(r.criado_em);
@@ -903,9 +897,35 @@ function abrirPopoverUsuario(botao) {
     }
     const html = criarConteudoPopoverUsuario(botao);
     const { popup } = window.createPopup(botao, html, { margin: 12 });
-    // Auditoria no balão (15/10/2026): as últimas ações e o atalho para o relatório.
+    const card = popup.querySelector('.usuario-popover-card');
+    const reposicionar = () => {
+        if (!popup.isConnected) return;
+        const viewport = window.visualViewport;
+        const largura = viewport?.width || window.innerWidth;
+        const altura = viewport?.height || window.innerHeight;
+        const esquerda = (viewport?.offsetLeft || 0) + 12;
+        const topo = (viewport?.offsetTop || 0) + 12;
+        card.style.maxWidth = `${Math.max(0, largura - 24)}px`;
+        card.style.maxHeight = `${Math.max(0, altura - 24)}px`;
+        const alvo = botao.getBoundingClientRect();
+        const tamanho = popup.getBoundingClientRect();
+        const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(valor, maximo));
+        const direita = esquerda + largura - 24 - tamanho.width;
+        const inferior = topo + altura - 24 - tamanho.height;
+        const x = alvo.right + 12 + tamanho.width <= esquerda + largura - 24
+            ? alvo.right + 12 : alvo.left - tamanho.width - 12;
+        const y = alvo.bottom + 12 + tamanho.height <= topo + altura - 24
+            ? alvo.bottom + 12 : alvo.top - tamanho.height - 12;
+        popup.style.left = `${limitar(x, esquerda, direita)}px`;
+        popup.style.top = `${limitar(y, topo, inferior)}px`;
+    };
+    reposicionar();
+    const observador = typeof ResizeObserver === 'function' ? new ResizeObserver(reposicionar) : null;
+    observador?.observe(card);
+    window.visualViewport?.addEventListener('resize', reposicionar);
+    window.visualViewport?.addEventListener('scroll', reposicionar);
     const listaAcoes = popup.querySelector('[data-ultimas-acoes]');
-    if (listaAcoes) preencherUltimasAcoes(listaAcoes, botao.dataset.usuarioId);
+    if (listaAcoes) preencherUltimasAcoes(listaAcoes, botao.dataset.usuarioId).finally(reposicionar);
     popup.querySelector('[data-ver-auditoria]')?.addEventListener('click', () => {
         fecharPopoversUsuarios();
         abrirAuditoriaUsuario({ id: botao.dataset.usuarioId, nome: botao.dataset.nome || '', email: botao.dataset.email || '' });
@@ -944,6 +964,9 @@ function abrirPopoverUsuario(botao) {
 
     const cleanup = () => {
         cancelarOcultacao();
+        observador?.disconnect();
+        window.visualViewport?.removeEventListener('resize', reposicionar);
+        window.visualViewport?.removeEventListener('scroll', reposicionar);
         listeners.forEach(({ elemento, tipo, handler }) => {
             elemento.removeEventListener(tipo, handler);
         });
@@ -984,7 +1007,10 @@ function prepararPopoversUsuarios() {
             if (evento.key === 'Escape') fecharPopoversUsuarios();
         });
         window.addEventListener('resize', fecharPopoversUsuarios);
-        window.addEventListener('scroll', fecharPopoversUsuarios, true);
+        window.addEventListener('scroll', evento => {
+            if (evento.target?.nodeType && usuarioPopoverAtual?.popup.contains(evento.target)) return;
+            fecharPopoversUsuarios();
+        }, true);
         popoverEventosRegistrados = true;
     }
 }

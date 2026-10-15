@@ -1952,6 +1952,7 @@ const MenuStartupPreferences = (() => {
         const initialized = bindDom();
         if (!initialized) return moduleElement?.moduleReadyPromise || Promise.resolve();
         const profileReady = initProfileSection();
+        window.SmailVinculo?.montarEm?.(moduleElement.querySelector('#smailAccountPanel'));
         applyStateToUI();
         handlePendingPersonalDataFocus();
         initTarefasAutomaticasSection();

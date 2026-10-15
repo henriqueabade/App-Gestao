@@ -95,12 +95,12 @@ test('botão de auditoria em Ações abre o usuário certo e é restrito ao Sup 
   assert.match(ler('js/modals/usuario-auditoria.js'), /new CustomEvent\('modalSpinnerLoaded', \{ detail: overlayId \}\)/);
 });
 
-test('o "i" do usuário: últimas ações da auditoria e o atalho para o relatório completo (só o Sup Admin)', () => {
+test('o "i" do usuário: uma última ação e o atalho para a auditoria completa (só o Sup Admin)', () => {
   const fonte = ler('js/usuarios.js');
   assert.match(fonte, /data-usuario-id="\$\{escapeHtml\(String\(u\.id \?\? ''\)\)\}"/);
-  assert.match(fonte, /<ul class="usuario-popover-acoes" data-ultimas-acoes>/);
-  assert.match(fonte, /const auditoria = ehSupAdminLogado\(\) && botao\.dataset\.usuarioId \?/);
-  assert.match(fonte, /origem: 'manual', pagina: '1', limite: '5'/);
+  assert.match(fonte, /<span class="usuario-popover-label">Última ação<\/span>/);
+  assert.match(fonte, /const temAuditoria = ehSupAdminLogado\(\) && botao\.dataset\.usuarioId/);
+  assert.match(fonte, /origem: 'manual', pagina: '1', limite: '1'/);
   assert.match(fonte, /abrirAuditoriaUsuario\(\{ id: botao\.dataset\.usuarioId, nome: botao\.dataset\.nome \|\| '', email: botao\.dataset\.email \|\| '' \}\)/);
   const preencher = fonte.slice(fonte.indexOf('async function preencherUltimasAcoes('), fonte.indexOf('function abrirPopoverUsuario('));
   assert.ok(preencher.length > 100 && !/innerHTML/.test(preencher), 'as ações vêm do banco: só textContent');

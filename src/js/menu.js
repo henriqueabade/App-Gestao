@@ -1384,6 +1384,9 @@ const AppUpdates = (() => {
         if (typeof explicit === 'boolean' && explicit === false) {
             return false;
         }
+        if (publishState.pendingChangesStatus && publishState.pendingChangesStatus !== 'ready') {
+            return false;
+        }
 
         const pendingChangesCount = Array.isArray(publishState.pendingChanges)
             ? publishState.pendingChanges.filter(Boolean).length
@@ -2643,8 +2646,9 @@ const AppUpdates = (() => {
         let checkError = null;
         try {
             const result = runAutomaticCheck({ silent: true });
-            if (result && typeof result.then === 'function') {
-                await result;
+            const checked = result && typeof result.then === 'function' ? await result : result;
+            if (!checked) {
+                checkError = new Error('Não foi possível verificar as alterações pendentes de publicação. Tente novamente.');
             }
         } catch (err) {
             checkError = err;
@@ -2668,15 +2672,21 @@ const AppUpdates = (() => {
             const message = checkError?.message || 'Não foi possível verificar atualizações.';
             if (window.showToast) {
                 window.showToast(message, 'error');
+            } else {
+                await showStandardDialog({ title: 'Atualizações', message, variant: 'error' });
             }
             return;
         }
 
-        const message = 'Não há atualizações para publicar. Todas já foram publicadas.';
+        const pendingStatus = state.publishState?.pendingChangesStatus;
+        const notVerified = Boolean(pendingStatus && pendingStatus !== 'ready');
+        const message = notVerified
+            ? state.publishState.pendingChangesMessage || 'Não foi possível verificar as alterações pendentes de publicação.'
+            : 'Não há atualizações para publicar. Todas já foram publicadas.';
         await showStandardDialog({
             title: 'Atualizações',
             message,
-            variant: 'info'
+            variant: notVerified ? 'error' : 'info'
         });
     }
 
