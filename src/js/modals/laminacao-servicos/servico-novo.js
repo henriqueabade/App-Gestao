@@ -125,13 +125,14 @@
   }
 
   async function fetchApi(path, options = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
     const headers = new Headers(options?.headers || {});
     const token = obterToken();
     if (token && !headers.has('authorization')) {
       headers.set('authorization', `Bearer ${token}`);
     }
-    return fetch(`${baseUrl}${path}`, { ...options, headers });
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, { ...options, headers });
   }
 
   function exigirToken() {

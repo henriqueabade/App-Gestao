@@ -22,6 +22,7 @@
   }
 
   async function fetchApi(path, options = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
     const finalOptions = { ...options };
     const headers = new Headers(options?.headers || {});
@@ -47,7 +48,7 @@
     }
 
     finalOptions.headers = headers;
-    return fetch(`${baseUrl}${path}`, finalOptions);
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, finalOptions);
   }
 
   const context = window.usuariosPermissoesContext || {};

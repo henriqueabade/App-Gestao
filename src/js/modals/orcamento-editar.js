@@ -3,8 +3,9 @@
   const overlay = document.getElementById('editarOrcamentoOverlay');
   if (!overlay) return;
   async function fetchApi(path, options) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, options);
   }
   const escapeAttr = value => String(value ?? '')
     .replace(/&/g, '&amp;')

@@ -106,18 +106,31 @@ function buildPayload(body = {}) {
 
 function avatarToRenderableSource(value) {
   if (!value) return null;
+  const deBytes = bytes => {
+    let mime = null;
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) mime = 'image/jpeg';
+    else if (bytes[0] === 0x89 && bytes.toString('ascii', 1, 4) === 'PNG') mime = 'image/png';
+    else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') mime = 'image/webp';
+    else if (/^GIF8[79]a$/.test(bytes.toString('ascii', 0, 6))) mime = 'image/gif';
+    return mime ? `data:${mime};base64,${bytes.toString('base64')}` : null;
+  };
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    if (/^(?:data:image\/|https?:\/\/|file:|blob:|\/)/i.test(trimmed)) return trimmed;
+    if (/^(?:data:image\/|https?:\/\/|file:|blob:)/i.test(trimmed)) return trimmed;
     // O driver do PostgreSQL pode serializar BYTEA como "\\x...". Esse
     // formato aparecia na listagem, mas não era reconhecido como imagem e a
     // interface acabava exibindo as iniciais mesmo quando havia uma foto.
     if (/^\\x[\da-f]+$/i.test(trimmed)) {
       value = Buffer.from(trimmed.slice(2), 'hex');
-    } else if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
-      value = Buffer.from(trimmed.replace(/\s+/g, ''), 'base64');
     } else {
+      // JPEG em base64 começa por /9j/. Conferir a assinatura ANTES de
+      // aceitar '/' como caminho impede um GET para o texto da própria foto.
+      if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
+        const imagem = deBytes(Buffer.from(trimmed.replace(/\s+/g, ''), 'base64'));
+        if (imagem) return imagem;
+      }
+      if (/^(?:\/|\.{1,2}\/|[\w.-]+\/)/.test(trimmed) && !/^[a-z][\w+.-]*:/i.test(trimmed)) return trimmed;
       return null;
     }
   }
@@ -128,14 +141,9 @@ function avatarToRenderableSource(value) {
       ? Buffer.from(value.data)
       : null;
   if (!bytes?.length) return null;
-
-  let mime = 'image/jpeg';
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    mime = 'image/png';
-  } else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
-    mime = 'image/webp';
-  }
-  return `data:${mime};base64,${bytes.toString('base64')}`;
+  // Alguns cadastros antigos guardaram o texto dataURL/base64 em BYTEA.
+  // Não rotular esses caracteres como se fossem os bytes de um JPEG.
+  return deBytes(bytes) || avatarToRenderableSource(bytes.toString('utf8'));
 }
 
 function normalizeAvatar(usuario = {}) {
@@ -159,18 +167,11 @@ function normalizeAvatar(usuario = {}) {
         ? avatarVersion.trim()
         : String(avatarVersion);
 
-  const fotoUsuario = avatarToRenderableSource(
-    usuario?.foto_usuario ??
-    usuario?.fotoUsuario ??
-    usuario?.foto_perfil_url ??
-    usuario?.fotoPerfilUrl ??
-    usuario?.foto_perfil ??
-    usuario?.fotoPerfil ??
-    usuario?.avatar ??
-    usuario?.avatar_url ??
-    usuario?.avatarUrl ??
-    null
-  );
+  const fotoUsuario = [
+    usuario?.foto_usuario, usuario?.fotoUsuario, usuario?.foto_perfil_url, usuario?.fotoPerfilUrl,
+    usuario?.foto_perfil, usuario?.fotoPerfil, usuario?.avatar, usuario?.avatar_url, usuario?.avatarUrl,
+    usuario?.foto, usuario?.fotoUrl
+  ].map(avatarToRenderableSource).find(Boolean);
 
   if (versionValue) {
     normalized.avatarVersion = versionValue;
@@ -370,7 +371,7 @@ function paraSeletor(usuario = {}, euId = null) {
 /**
  * GET /usuarios/lista
  * Rota usada na TELA DE USUÁRIOS.
- * Faz um SELECT super leve e NÃO mexe em avatar nem histórico pesado.
+ * Projeta os campos da tela e normaliza a foto antes de enviá-la ao renderer.
  */
 router.get('/lista', async (req, res) => {
   try {
@@ -411,7 +412,15 @@ router.get('/lista', async (req, res) => {
       // Mantém os campos obrigatórios para que um schema inválido ainda falhe.
       // Apenas os opcionais ausentes saem da projeção; nunca recorrer a SELECT *.
       const obrigatorios = new Set(['id', 'nome', 'email', 'perfil', 'status']);
-      tentativas = [tentativas[0].split(',').filter(campo => obrigatorios.has(campo) || colunas.has(campo)).join(',')];
+      // Instalações antigas usam outro nome para a foto. /me lê a linha toda,
+      // mas a projeção de /lista descartava esses campos mesmo existindo.
+      const camposFoto = [
+        'fotoUsuario', 'foto_perfil_url', 'fotoPerfilUrl', 'foto_perfil', 'fotoPerfil',
+        'avatar', 'avatar_url', 'avatarUrl', 'foto', 'fotoUrl', 'avatarVersion',
+        'avatar_updated_at', 'avatarUpdatedAt', 'foto_atualizado_em', 'fotoAtualizadoEm'
+      ];
+      tentativas = [[...new Set([...tentativas[0].split(','), ...camposFoto])]
+        .filter(campo => obrigatorios.has(campo) || colunas.has(campo)).join(',')];
     }
 
     let usuarios = null;

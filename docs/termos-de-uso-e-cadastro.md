@@ -11,6 +11,38 @@ Pedido do dono em 02/10/2026. Quatro frentes na mesma rodada:
 4. o **menu** não mostra mais, nem por um instante, os módulos que o usuário
    não pode abrir — e as rotas de usuários ganharam as travas que faltavam.
 
+## Atualização de 15/10/2026: auditoria do uso profissional
+
+Os dois documentos passam à versão **1.1**, com vigência em **15/10/2026**.
+A redação agora explicita os registros detalhados do uso profissional nos
+pontos instrumentados: usuário, data e hora, módulo/tela, ação, referência,
+contexto e resultado disponíveis, incluindo consultas, navegação, filtros,
+emissões e exportações. Diferencia ações manuais de eventos automáticos,
+como sincronizações, recálculos, consultas periódicas e presença. Um evento
+automático não é prova de ação manual nem, isoladamente, de tempo trabalhado.
+
+O acesso ao relatório consolidado por usuário/período é restrito à gestão
+autorizada. Isso não altera a visibilidade dos históricos das fichas conforme
+as permissões existentes. Senhas, hashes, tokens, códigos de autenticação,
+chaves e outros segredos ficam fora da auditoria de uso. Os critérios de
+retenção continuam sendo finalidade, necessidade, obrigações aplicáveis e
+defesa de direitos; não foi criado prazo numérico nem prometida eliminação
+automática dos registros.
+
+A tela distingue `Aceito` (verde), `Desatualizado` (amarelo, já houve aceite)
+e `Pendente` (vermelho, ainda não houve aceite). Versão anterior ou aceite
+anterior à vigência não equivale a aceite atual. A data e as versões do aceite
+anterior continuam disponíveis na dica. A vigência começa à meia-noite de
+São Paulo, independentemente do fuso da máquina.
+
+O botão existente permite pedir a versão vigente para quem está
+desatualizado. Solicitação anterior à vigência não bloqueia um novo envio;
+solicitação vigente continua com o botão desabilitado enquanto aguarda
+resposta. Essa classificação não envia solicitações: o Sup Admin confirma
+o pedido pelo mesmo botão e a pessoa aceita ou recusa nas mesmas caixas.
+Não foram alterados o registro da decisão, a desativação por recusa ou o
+fluxo de uma solicitação que já estivesse pendente.
+
 ## O que precisa ser feito para valer
 
 | Onde | O quê |
@@ -33,8 +65,8 @@ de login: ele é anônimo e só aceita versão de documento que já esteja lá.
 - O texto mora **só** em `src/js/utils/termos-documentos.js` (a tela de login,
   a caixa dentro do programa e o backend leem o mesmo arquivo).
 - Cada documento tem `versao` e `vigencia`. **Mudou o texto, mude a versão.**
-  Com versão nova, todo mundo volta a "Pendente" em Usuários e o Sup Admin
-  pede o aceite de novo. Versão igual com texto diferente é recusada
+  Com versão nova, quem já aceitou fica "Desatualizado" em Usuários e o Sup
+  Admin pode pedir o aceite de novo. Versão igual com texto diferente é recusada
   (o banco guarda a impressão digital — sha256 — do texto de cada versão).
 - Dados do controlador no topo do arquivo (`CONTROLADOR`): razão social, CNPJ
   e o e-mail de contato para os direitos do titular.
@@ -59,11 +91,13 @@ sai — a tela avisa e o backend confere de novo.
 ### Para quem já existia (ou foi criado pelo administrador)
 
 - **Usuários › coluna Termos** (depois de Status): `Aceito` em verde quando a
-  pessoa aceitou a versão vigente dos dois documentos; `Pendente` em vermelho
-  no resto. A dica da etiqueta diz quando aceitou, quando o aceite foi pedido
-  e se houve recusa.
+  pessoa aceitou a versão vigente dos dois documentos a partir da vigência;
+  `Desatualizado` em amarelo para aceite anterior; `Pendente` em vermelho
+  para quem ainda não aceitou. A dica da etiqueta diz quando aceitou, quando
+  o aceite foi pedido e se houve recusa.
 - **Botão dos termos em Ações**, à esquerda do Editar (ícone de documento
-  assinado): só o Sup Admin aciona e só com os termos pendentes. Pede
+  assinado): só o Sup Admin aciona, com os termos pendentes ou desatualizados
+  e sem solicitação vigente aguardando resposta. Pede
   confirmação e marca o usuário (`termos_solicitados_em`).
 - **A caixa obrigatória**: ao entrar (login, entrada automática ou voltando do
   segundo plano) o programa pergunta ao backend se há aceite pedido. Havendo,

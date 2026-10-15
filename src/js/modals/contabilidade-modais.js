@@ -107,8 +107,9 @@
   }
 
   async function fetchApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
     let corpo = null;
     try { corpo = await resposta.json(); } catch (_) { corpo = null; }
     if (!resposta.ok) {

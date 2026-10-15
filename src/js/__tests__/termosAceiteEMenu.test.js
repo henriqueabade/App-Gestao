@@ -408,7 +408,7 @@ function carregarTermosDeUsuarios({ supAdmin = true } = {}) {
   return { ...ctx, cliques };
 }
 
-test('Usuários: coluna Termos depois de Status — Aceito em verde, Pendente em vermelho', () => {
+test('Usuários: coluna Termos depois de Status — Aceito verde, Desatualizado amarelo, Pendente vermelho', () => {
   const colunas = [...USUARIOS_HTML.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map(m => m[1]);
   assert.deepStrictEqual(colunas, ['Avatar', 'Nome', 'E-mail', 'Perfil', 'Situação', 'Status', 'Termos', 'Ações']);
   assert.ok(USUARIOS_JS.indexOf('data-status-badge') < USUARIOS_JS.indexOf('<span data-termos-badge'), 'a célula vem depois da de Status');
@@ -417,6 +417,13 @@ test('Usuários: coluna Termos depois de Status — Aceito em verde, Pendente em
   const aceito = resolverTermos({ termos_situacao: 'aceito', termos_aceitos_em: '2026-10-02', termos_versao: '1.0', privacidade_versao: '1.0' });
   assert.deepStrictEqual([aceito.rotulo, aceito.classe], ['Aceito', 'badge-success']);
   assert.strictEqual(aceito.dica, 'Aceito em [2026-10-02] (Termos de Uso 1.0 e Política de Privacidade 1.0)');
+
+  const desatualizado = resolverTermos({ termos_situacao: 'desatualizado', termos_aceitos_em: '2026-10-02', termos_versao: '1.0', privacidade_versao: '1.0' });
+  assert.deepStrictEqual([desatualizado.rotulo, desatualizado.classe], ['Desatualizado', 'badge-warning']);
+  assert.ok(desatualizado.dica.includes('Aceito em [2026-10-02]') && desatualizado.dica.includes('documentos foram atualizados'));
+  assert.ok(desatualizado.dica.includes('pode pedir o aceite da versão vigente'));
+  const novaSolicitacao = resolverTermos({ termos_situacao: 'desatualizado', termos_solicitado: true, termos_solicitados_em: '2026-10-15' });
+  assert.ok(novaSolicitacao.dica.includes('vigente pedido em [2026-10-15]'));
 
   const pendente = resolverTermos({ termos_situacao: 'pendente' });
   assert.deepStrictEqual([pendente.rotulo, pendente.classe], ['Pendente', 'badge-danger']);
@@ -428,6 +435,7 @@ test('Usuários: coluna Termos depois de Status — Aceito em verde, Pendente em
   assert.ok(semSql.dica.includes('sql/usuarios_termos.sql'));
   const css = ler('css/usuarios.css');
   assert.ok(css.includes('.badge-secondary {'));
+  assert.ok(css.includes('.badge-warning {'));
 });
 
 test('Usuários: o botão dos termos fica à esquerda do Editar, só o Sup Admin aciona e só com os termos pendentes', () => {
@@ -443,6 +451,13 @@ test('Usuários: o botão dos termos fica à esquerda do Editar, só o Sup Admin
   livre.disparar('click');
   assert.deepStrictEqual(sup.cliques, [[7, 'termos']]);
 
+  const desatualizado = sup.criarBotaoDosTermos({ id: 11, nome: 'Bia', termos_situacao: 'desatualizado', termos_solicitado: false, termos_solicitados_em: '2026-10-02' });
+  assert.strictEqual(desatualizado.disabled, false, 'solicitação antiga não impede pedir a versão vigente');
+  desatualizado.disparar('click');
+  assert.deepStrictEqual(sup.cliques[1], [11, 'termos']);
+  const novaSolicitacao = sup.criarBotaoDosTermos({ id: 12, termos_situacao: 'desatualizado', termos_solicitado: true, termos_solicitados_em: '2026-10-15' });
+  assert.strictEqual(novaSolicitacao.disabled, true, 'solicitação vigente aguarda resposta pelo fluxo existente');
+
   const aceito = sup.criarBotaoDosTermos({ id: 8, termos_situacao: 'aceito' });
   assert.deepStrictEqual([aceito.disabled, aceito.title], [true, 'Termos já aceitos']);
   const pedido = sup.criarBotaoDosTermos({ id: 9, termos_situacao: 'pendente', termos_solicitado: true, termos_solicitados_em: '2026-10-02' });
@@ -451,7 +466,7 @@ test('Usuários: o botão dos termos fica à esquerda do Editar, só o Sup Admin
   const semSql = sup.criarBotaoDosTermos({ id: 10, termos_situacao: 'indisponivel' });
   assert.ok(semSql.disabled && semSql.title.includes('sql/usuarios_termos.sql'));
   [aceito, pedido, semSql].forEach(b => b.disparar('click'));
-  assert.strictEqual(sup.cliques.length, 1, 'desabilitado não pede nada');
+  assert.strictEqual(sup.cliques.length, 2, 'desabilitado não pede nada');
 
   const admin = carregarTermosDeUsuarios({ supAdmin: false });
   const negado = admin.criarBotaoDosTermos({ id: 7, termos_situacao: 'pendente' });
@@ -459,7 +474,7 @@ test('Usuários: o botão dos termos fica à esquerda do Editar, só o Sup Admin
 
   const pedir = USUARIOS_JS.slice(USUARIOS_JS.indexOf('async function pedirAceiteDosTermos'), USUARIOS_JS.indexOf('function fecharPopoversUsuarios'));
   assert.ok(pedir.includes('await window.DialogPadrao.confirm({'), 'confirma pelo diálogo padrão');
-  assert.ok(pedir.includes('/termos/solicitar`, { method: \'POST\' })'));
+  assert.match(pedir, /\/termos\/solicitar`, \{ method: 'POST' \}, contextoAuditoria\)/, 'a solicitação conserva o contexto capturado antes da confirmação');
   assert.ok(pedir.includes('window.BotaoAcao.comCarregamento('), 'carregando depois da confirmação');
 });
 

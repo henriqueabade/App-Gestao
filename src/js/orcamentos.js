@@ -3,8 +3,9 @@ window.customPeriodOrcamentos = null;
 let orcamentosDateRangeController = null;
 
 async function fetchApi(path, options) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, options);
 }
 
 /**

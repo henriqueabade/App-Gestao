@@ -352,12 +352,13 @@ function finMapearPainel(painel, erro) {
 
 /** Uma chamada ao backend: `{ corpo, erro }`, sem lançar (sem apiConfig/fetch, os dois vêm nulos). */
 async function finChamarApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     if (typeof window.apiConfig?.getApiBaseUrl !== 'function' || typeof fetch !== 'function') {
         return { corpo: null, erro: null };
     }
     try {
         const base = await window.apiConfig.getApiBaseUrl();
-        const resposta = await fetch(`${base}${caminho}`, opcoes);
+        const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, opcoes);
         const corpo = await resposta.json().catch(() => null);
         if (!resposta.ok) {
             const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);

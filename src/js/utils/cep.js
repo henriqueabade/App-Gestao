@@ -31,8 +31,9 @@
   const digitos = valor => String(valor ?? '').replace(/\D/g, '');
 
   async function fetchApi(caminho) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${caminho}`, { headers: { Accept: 'application/json' } });
+    return (aud?.fetch || fetch)(`${baseUrl}${caminho}`, { headers: { Accept: 'application/json' } });
   }
 
   /** Busca o endereço do CEP. Devolve { endereco } ou { erro }. */

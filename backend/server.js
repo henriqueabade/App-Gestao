@@ -46,6 +46,9 @@ app.use((req, res, next) => (CORPO_GRANDE.test(req.path) ? jsonGrande : jsonPadr
 // A rota em curso, para as chamadas à API dizerem de onde vêm (registro de
 // permissões da API, backend/contextoDaRota.js).
 app.use(require('./contextoDaRota').middleware);
+const capturaAuditoria = require('./auditoriaCaptura');
+capturaAuditoria.ativarCapturaSistema();
+app.use(capturaAuditoria.middleware);
 
 if (isDev) {
   app.use((req, res, next) => {
@@ -94,6 +97,8 @@ app.use('/api/clientes', clientesRouter);
 // Contatos = fornecedores, prestadores e parceiros (sql/contatos_fornecedores.sql).
 app.use('/api/contatos', require('./contatosController'));
 app.use('/api/usuarios', usuariosRouter);
+// Autoria detalhada: leitura somente Sup Admin, fora do proxy genérico.
+app.use('/api/auditoria-usuarios', require('./auditoriaUsuarios'));
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);

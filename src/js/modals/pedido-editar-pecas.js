@@ -266,9 +266,11 @@
     return e;
   };
 
-  async function fetchApi(caminho, opcoes) {
+  async function fetchApi(caminho, opcoes, contextoAuditoria) {
+    const auditoria = contextoAuditoria ?? window.AuditoriaAcao?.vincular();
+    const fetchVinculado = auditoria?.fetch || fetch;
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
+    const resposta = await fetchVinculado(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
     const corpo = await resposta.json().catch(() => null);
     if (!resposta.ok) {
       const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);
@@ -553,7 +555,8 @@
     });
   }
 
-  async function revisar() {
+  async function revisar(evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     mensagem('');
     const problema = problemaDaEdicao(dados, edicao, el('editarPecasMotivo').value, dados.minimo_motivo || 10);
     if (problema) { mensagem(problema); return; }
@@ -568,7 +571,7 @@
     try {
       previa = await fetchApi(`/api/pedido-edicao/${encodeURIComponent(pedidoId)}/simular`, {
         method: 'POST', body: JSON.stringify({ ...entradaDaEdicao(dados, edicao), decisoes })
-      });
+      }, contextoAuditoria);
       pintarPrevia();
     } catch (e) {
       previa = null;
@@ -578,7 +581,8 @@
     }
   }
 
-  async function salvar() {
+  async function salvar(evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     if (!previa) return;
     const motivo = el('editarPecasMotivo').value.trim();
     const ok = await window.DialogPadrao?.confirm?.({
@@ -597,7 +601,7 @@
           ...entradaDaEdicao(dados, edicao), decisoes, motivo, assinatura: previa.assinatura,
           podeSaldoNegativo: Boolean(conversao?.hasNegative), decisaoNote: conversao?.decisionNote || ''
         })
-      });
+      }, contextoAuditoria);
       const avisos = Array.isArray(r?.avisos) ? r.avisos : [];
       window.showToast?.(`Peças do ${dados.pedido.numero} editadas. Total: ${reais(r?.totais?.valor_final)}.${avisos.length ? ' Confira os avisos no histórico do pedido.' : ''}`, avisos.length ? 'warning' : 'success');
       window.dispatchEvent(new CustomEvent('pedido:pecas-editadas', { detail: { pedidoId, edicaoId: r?.edicao_id ?? null } }));

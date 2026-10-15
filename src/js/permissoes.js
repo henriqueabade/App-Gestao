@@ -64,8 +64,9 @@
   }
 
   async function buscar() {
+    const aud = window.AuditoriaAcao?.vincular();
     const url = `${await baseUrl()}/api/permissoes/efetivas`;
-    const resp = await fetch(url);
+    const resp = await (aud?.fetch || fetch)(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const dados = await resp.json();
     // O backend sinaliza com { erro: true } que não conseguiu apurar (não

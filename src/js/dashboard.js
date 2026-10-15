@@ -2926,6 +2926,7 @@ function mensagemDeErro(erro) {
 
 /** GET /api/dashboard. O BFF injeta o token — nenhum header de autenticação aqui. */
 async function buscarResumoDashboard({ atualizar = false } = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     let base;
     try {
         base = await window.apiConfig.getApiBaseUrl();
@@ -2938,7 +2939,7 @@ async function buscarResumoDashboard({ atualizar = false } = {}) {
         let resposta;
         try {
             // `no-store`: "Atualizar" tem de chegar ao BFF, nunca parar num cache do navegador.
-            resposta = await fetch(`${base}/api/dashboard${atualizar ? '?atualizar=1' : ''}`, {
+            resposta = await (aud?.fetch || fetch)(`${base}/api/dashboard${atualizar ? '?atualizar=1' : ''}`, {
                 cache: 'no-store',
                 signal: controle ? controle.signal : undefined
             });

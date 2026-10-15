@@ -24,8 +24,9 @@
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
   async function fetchApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`, {
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, {
       ...opcoes,
       headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) }
     });

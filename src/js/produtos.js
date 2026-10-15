@@ -34,9 +34,10 @@ async function carregarVinculosDosProdutos() {
     if (vinculosDosProdutos) return vinculosDosProdutos;
     if (vinculosCarregando) return vinculosCarregando;
     vinculosCarregando = (async () => {
+        const aud = window.AuditoriaAcao?.vincular();
         try {
             const base = await window.apiConfig.getApiBaseUrl();
-            const resp = await fetch(`${base}/api/vinculos-pecas/produtos`);
+            const resp = await (aud?.fetch || fetch)(`${base}/api/vinculos-pecas/produtos`);
             const corpo = await resp.json().catch(() => null);
             if (!resp.ok) throw new Error(corpo?.error || `HTTP ${resp.status}`);
             vinculosDosProdutos = corpo?.vinculos || {};

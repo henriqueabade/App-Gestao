@@ -102,9 +102,11 @@
     return null;
   };
 
-  async function fetchApi(path, options) {
+  async function fetchApi(path, options, contextoAuditoria) {
+    const auditoria = contextoAuditoria ?? window.AuditoriaAcao?.vincular();
+    const fetchVinculado = auditoria?.fetch || fetch;
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    return fetchVinculado(`${baseUrl}${path}`, options);
   }
 
   const close = () => {
@@ -230,9 +232,11 @@
           return h('label', { class: 'usr-vis__opcao' }, radio, h('span', {}, h('strong', { text: titulo }), h('small', { text: dica })));
         };
         const salvar = h('button', { type: 'button', class: 'btn-primary ctl-botao text-white' }, icone('fa-floppy-disk'), 'Salvar visão de tarefas');
-        salvar.addEventListener('click', async () => {
+        salvar.addEventListener('click', async evento => {
+          const auditoria = window.AuditoriaAcao?.vincular(evento);
+          const fetchVinculado = auditoria?.fetch || fetch;
           try {
-            const r = await fetch(`${base}/api/tarefas/visibilidade/${usuarioBase.id}`, {
+            const r = await fetchVinculado(`${base}/api/tarefas/visibilidade/${usuarioBase.id}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(modo === 'todos' ? { todos: true } : { todos: false, alvos: modo === 'alguns' ? [...escolhidos] : [] })
             });
@@ -310,7 +314,9 @@
           const cancelar = el('button', 'btn-danger ctl-botao text-white');
           cancelar.type = 'button';
           cancelar.append(icone('fa-ban'), document.createTextNode(' Cancelar'));
-          cancelar.addEventListener('click', async () => {
+          cancelar.addEventListener('click', async evento => {
+            const auditoria = window.AuditoriaAcao?.vincular(evento);
+            const fetchVinculado = auditoria?.fetch || fetch;
             const ok = await window.DialogPadrao?.confirm({
               title: 'Cancelar os avisos deste computador?', tom: 'erro', icone: 'fa-desktop',
               message: `"${c.computador}" deixa de mostrar os avisos de ${usuarioBase.nome || 'este usuário'} na hora.`,
@@ -321,7 +327,7 @@
             cancelar.disabled = true;
             try {
               const base = await window.apiConfig.getApiBaseUrl();
-              const r = await fetch(`${base}/api/usuarios/${usuarioBase.id}/computadores/${c.id}/cancelar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+              const r = await fetchVinculado(`${base}/api/usuarios/${usuarioBase.id}/computadores/${c.id}/cancelar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
               const json = await r.json().catch(() => ({}));
               if (!r.ok) throw new Error(json.error || `Erro ${r.status}`);
               window.showToast?.('Avisos do computador cancelados.', 'success');
@@ -633,7 +639,8 @@
     };
   }
 
-  async function salvarAlteracoes() {
+  async function salvarAlteracoes(evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     if (!salvarBtn || salvarBtn.disabled) return;
     limparMensagem();
 
@@ -648,7 +655,7 @@
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadDados),
-        });
+        }, contextoAuditoria);
         if (!respDados.ok) {
           // A mensagem do backend, não o JSON cru; o nome repetido (ou sem
           // sobrenome) marca o campo do nome (09/10/2026).

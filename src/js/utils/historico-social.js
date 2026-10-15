@@ -420,8 +420,9 @@
     let gruposNaTela = new Map();     // chave → grupo (do último desenho)
 
     async function chamar(caminho, { method = 'GET', corpo } = {}) {
+      const aud = window.AuditoriaAcao?.vincular();
       if (!base) base = (await window.apiConfig?.getApiBaseUrl?.()) || '';
-      const resp = await fetch(`${base}/api/historico-social/${origem}/${registroId}${caminho}`, {
+      const resp = await (aud?.fetch || fetch)(`${base}/api/historico-social/${origem}/${registroId}${caminho}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: corpo ? JSON.stringify(corpo) : undefined

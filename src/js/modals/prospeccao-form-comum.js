@@ -352,11 +352,12 @@
     // Responsáveis e geografia
     // -----------------------------------------------------------------
     async function carregarResponsaveis(selecionadoId) {
+      const aud = window.AuditoriaAcao?.vincular();
       const sel = get('prosResponsavel');
       if (!sel) return;
       try {
         const baseUrl = await window.apiConfig.getApiBaseUrl();
-        const resp = await fetch(`${baseUrl}/api/usuarios/lista`);
+        const resp = await (aud?.fetch || fetch)(`${baseUrl}/api/usuarios/lista`);
         const usuarios = await resp.json();
         sel.innerHTML = '<option value="">Selecione o responsável</option>' +
           (Array.isArray(usuarios) ? usuarios : [])

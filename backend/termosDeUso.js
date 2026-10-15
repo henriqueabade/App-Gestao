@@ -3,9 +3,9 @@
 //
 // O texto mora em src/js/utils/termos-documentos.js (a tela e o backend leem
 // o mesmo arquivo). Aqui ficam as regras:
-//   - "Aceito" = a pessoa aceitou a versão VIGENTE dos dois documentos;
-//     qualquer outra coisa é "Pendente" (usuário antigo, criado pelo
-//     administrador ou versão nova do texto).
+//   - "Aceito" = a pessoa aceitou a versão VIGENTE dos dois documentos,
+//     a partir de sua vigência. Aceite anterior é "Desatualizado"; sem aceite,
+//     "Pendente". A mudança de rótulo não solicita nem registra uma decisão.
 //   - A caixa de aceite só aparece para quem está pendente E recebeu o pedido
 //     do Sup Admin (botão em Usuários) — termos_solicitados_em.
 //   - Cada aceite ou recusa vira duas linhas (uma por documento) em
@@ -49,15 +49,29 @@ function vigentes() {
   return vigentesEmCache;
 }
 
-/** { termos_de_uso: '1.0', politica_de_privacidade: '1.0' } */
+/** { termos_de_uso: '1.1', politica_de_privacidade: '1.1' } */
 function versoesVigentes() {
   return Object.fromEntries(vigentes().map(v => [v.documento, v.versao]));
+}
+
+/** A vigência é uma data da empresa (São Paulo), não o fuso da máquina. */
+function inicioDaVigencia() {
+  return Math.max(...vigentes().map(v => {
+    const [dia, mes, ano] = v.vigencia.split('/');
+    return Date.parse(`${ano}-${mes}-${dia}T00:00:00-03:00`);
+  }));
+}
+
+function dataVigente(valor) {
+  const texto = String(valor || '').trim();
+  const quando = texto ? Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(texto) ? `${texto}T00:00:00-03:00` : texto) : NaN;
+  return Number.isFinite(quando) && quando >= inicioDaVigencia();
 }
 
 /** A pessoa aceitou a versão vigente dos dois documentos? Pura. */
 function aceitou(usuario) {
   const v = versoesVigentes();
-  return Boolean(usuario?.termos_aceitos_em)
+  return dataVigente(usuario?.termos_aceitos_em)
     && String(usuario.termos_versao || '') === v.termos_de_uso
     && String(usuario.privacidade_versao || '') === v.politica_de_privacidade;
 }
@@ -71,9 +85,11 @@ function precisaAceitar(usuario) {
 function situacaoDe(usuario) {
   const ok = aceitou(usuario);
   return {
-    termos_situacao: ok ? 'aceito' : 'pendente',
-    termos_solicitado: !ok && Boolean(usuario?.termos_solicitados_em),
-    termos_aceitos_em: ok ? usuario.termos_aceitos_em : null,
+    termos_situacao: ok ? 'aceito' : usuario?.termos_aceitos_em ? 'desatualizado' : 'pendente',
+    // Uma solicitação da edição anterior não desliga o botão de reenvio.
+    // O fluxo da caixa (precisaAceitar/registrar) continua sendo o existente.
+    termos_solicitado: !ok && dataVigente(usuario?.termos_solicitados_em),
+    termos_aceitos_em: usuario?.termos_aceitos_em || null,
     termos_solicitados_em: !ok ? usuario?.termos_solicitados_em || null : null,
     termos_recusados_em: !ok ? usuario?.termos_recusados_em || null : null,
     termos_versao: usuario?.termos_versao || null,

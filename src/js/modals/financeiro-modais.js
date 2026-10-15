@@ -5711,8 +5711,9 @@
   // GET/PUT /api/fiscal/configuracao, o certificado e o teste da SEFAZ.
 
   async function fetchApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`, {
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, {
       ...opcoes,
       headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) }
     });

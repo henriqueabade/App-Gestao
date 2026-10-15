@@ -1,5 +1,70 @@
 const { contextBridge, ipcRenderer: electronIpcRenderer } = require('electron');
 
+// Lista explícita das operações já publicadas pela ponte. Não expõe um
+// invoke genérico ao renderer e não usa o mapa de rótulos do processo main.
+const TRACKED_IPC_ACTIONS = new Set([
+  'registrar-usuario', 'adicionar-categoria', 'adicionar-unidade', 'adicionar-colecao',
+  'remover-categoria', 'remover-unidade', 'remover-colecao', 'gravar-preco-tabela',
+  'adicionar-produto', 'atualizar-produto', 'excluir-produto', 'inserir-lote-produto',
+  'atualizar-lote-produto', 'excluir-lote-produto', 'adicionar-etapa-producao',
+  'remover-etapa-producao', 'salvar-produto-detalhado', 'adicionar-materia-prima',
+  'atualizar-materia-prima', 'excluir-materia-prima', 'registrar-entrada-materia-prima',
+  'registrar-saida-materia-prima', 'atualizar-preco-materia-prima', 'perfil:enviar-imagem',
+  'usuarios:enviar-imagem', 'perfil:remover-imagem', 'avisos-windows:gravar-preferencias',
+  'avisos-windows:categorias'
+]);
+let provedorContextoAuditoria = null;
+let contextoIpcExplicito = null;
+
+function chaveAuditoria(valor, limite = 160) {
+  return typeof valor === 'string' ? valor.replace(/[^\w./:-]/g, '').slice(0, limite) : '';
+}
+
+function normalizarContextoAuditoria(entrada) {
+  const origem = ['manual', 'automatico'].includes(entrada?.origem) ? entrada.origem : 'nao_confirmada';
+  const acaoId = chaveAuditoria(entrada?.acao_id, 80);
+  if (origem === 'manual' && !acaoId) return { origem: 'nao_confirmada' };
+  const contexto = { origem };
+  if (acaoId) contexto.acao_id = acaoId;
+  for (const campo of ['evento', 'tela', 'alvo_id', 'operacao']) {
+    const valor = chaveAuditoria(entrada?.[campo]);
+    if (valor) contexto[campo] = valor;
+  }
+  return contexto;
+}
+
+function obterContextoAuditoria() {
+  if (contextoIpcExplicito) return contextoIpcExplicito;
+  try { return normalizarContextoAuditoria(provedorContextoAuditoria?.()); }
+  catch (_) { return { origem: 'nao_confirmada' }; }
+}
+
+/** Só nomes de campos e identificação: nenhum corpo/retorno bruto ou segredo. */
+function detalhesSegurosAuditoria(payload) {
+  const campos = [];
+  const protegidos = [];
+  const alvo = {};
+  const sensivel = /senha|password|secret|token|authorization|credential|certificad|private.?key|api.?key|cookie|pin|pfx|p12/i;
+  const visitados = new WeakSet();
+  function visitar(objeto, prefixo = '', profundidade = 0) {
+    if (!objeto || typeof objeto !== 'object' || visitados.has(objeto) || profundidade > 3) return;
+    visitados.add(objeto);
+    for (const [campo, valor] of Object.entries(objeto).slice(0, 50)) {
+      const caminho = `${prefixo}${chaveAuditoria(campo, 80)}`;
+      if (campos.length >= 80) break;
+      if (sensivel.test(campo)) { protegidos.push(caminho); continue; }
+      campos.push(caminho);
+      if (['id', 'nome', 'name', 'codigo'].includes(campo) && (typeof valor === 'string' || typeof valor === 'number')) {
+        const chave = campo === 'name' ? 'nome' : campo;
+        if (alvo[chave] === undefined) alvo[chave] = String(valor).replace(/[\r\n\t]/g, ' ').slice(0, 120);
+      }
+      visitar(valor, `${caminho}.`, profundidade + 1);
+    }
+  }
+  visitar(payload);
+  return { campos, campos_protegidos: protegidos, alvo };
+}
+
 // Centraliza as chamadas IPC para que a interface possa aguardar todas as
 // consultas disparadas durante a inicialização de um módulo.
 let ipcRequestSequence = 0;
@@ -7,11 +72,23 @@ const pendingIpcRequests = new Map();
 let lastIpcActivityAt = Date.now();
 
 function trackedIpcInvoke(...args) {
+  const [channel, payload] = args;
+  const contexto = obterContextoAuditoria();
+  // O main recebe a origem ANTES de executar a operação. O segundo argumento
+  // continua sendo o payload original esperado pelos handlers existentes.
+  const argumentos = channel === 'record-user-action' ? args
+    : [channel, payload, ...args.slice(2), { __auditoria: contexto }];
   const requestId = ++ipcRequestSequence;
   pendingIpcRequests.set(requestId, Date.now());
   lastIpcActivityAt = Date.now();
 
-  return electronIpcRenderer.invoke(...args).finally(() => {
+  return electronIpcRenderer.invoke(...argumentos).then(result => {
+    if (TRACKED_IPC_ACTIONS.has(channel)) recordIpcAction(channel, payload, result, contexto);
+    return result;
+  }, err => {
+    if (TRACKED_IPC_ACTIONS.has(channel)) recordIpcAction(channel, payload, null, contexto, false);
+    throw err;
+  }).finally(() => {
     pendingIpcRequests.delete(requestId);
     lastIpcActivityAt = Date.now();
   });
@@ -106,41 +183,38 @@ const DEBUG = process.env.DEBUG === 'true';
 
 function recordAction(action) {
   if (!action || typeof action !== 'object') return;
+  // O backend já audita HTTP. Um registro do renderer duplicaria a mudança.
+  if (action.source === 'fetch') return;
+  const contexto = normalizarContextoAuditoria(action.contexto || obterContextoAuditoria());
   const payload = {
-    ...action,
-    timestamp: action.timestamp || Date.now()
+    source: action.source === 'ipc' ? 'ipc' : 'renderer',
+    channel: chaveAuditoria(action.channel),
+    module: chaveAuditoria(action.module),
+    method: action.source === 'ipc' ? 'IPC' : chaveAuditoria(action.method),
+    url: chaveAuditoria(action.channel),
+    manual: contexto.origem === 'manual', contexto,
+    details: detalhesSegurosAuditoria(action.payload),
+    ok: action.ok !== false,
+    timestamp: Date.now()
   };
-  if (!payload.source) payload.source = 'ipc';
   ipcRenderer.invoke('record-user-action', payload).catch(err => {
     if (DEBUG) console.error('record-user-action failed', err);
   });
 }
 
-function recordIpcAction(channel, payload, result) {
-  recordAction({ source: 'ipc', channel, payload, result });
-}
-
-function formatErrorForRecord(err) {
-  if (!err) return null;
-  const error = err instanceof Error ? err : new Error(String(err));
-  return {
-    message: error.message || String(error),
-    code: error.code,
-    stack: DEBUG ? error.stack : undefined
-  };
+function recordIpcAction(channel, payload, result, contexto, ok = true) {
+  const entrada = typeof payload === 'string' && /^(adicionar|remover)-(categoria|unidade|colecao|etapa-producao)$/.test(channel)
+    ? { nome: payload } : (typeof payload === 'number' ? { id: payload } : payload);
+  recordAction({ source: 'ipc', channel, payload: entrada, contexto,
+    ok: ok && result?.success !== false && !result?.error });
 }
 
 async function invokeIpc(channel, payload, { trackAction = false } = {}) {
+  if (trackAction) TRACKED_IPC_ACTIONS.add(channel);
   try {
     const result = await ipcRenderer.invoke(channel, payload);
-    if (trackAction) {
-      recordIpcAction(channel, payload, result);
-    }
     return result;
   } catch (err) {
-    if (trackAction) {
-      recordIpcAction(channel, payload, { error: formatErrorForRecord(err) });
-    }
     if (DEBUG) console.error(`${channel} failed`, err);
     throw err;
   }
@@ -235,9 +309,12 @@ function comCronometro(api) {
   return saida;
 }
 
-contextBridge.exposeInMainWorld('electronAPI', comCronometro({
+const electronApiDefinitions = {
   beginModuleLoading,
   waitForModuleLoading,
+  registrarContextoAuditoria: (provider) => {
+    provedorContextoAuditoria = typeof provider === 'function' ? provider : null;
+  },
   /**
    * O renderer registra quem acompanha as chamadas em andamento.
    *
@@ -265,9 +342,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   // `aceites`: versões dos Termos de Uso e da Política de Privacidade aceitas na tela.
   register: async (name, email, password, aceites) => {
     const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password, aceites });
-    if (result && result.success) {
-      recordIpcAction('registrar-usuario', { name, email }, result);
-    }
     return result;
   },
   // Módulo de Matéria-Prima
@@ -299,32 +373,26 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     }),
   adicionarCategoria: async (nome) => {
     const result = await ipcRenderer.invoke('adicionar-categoria', nome);
-    recordIpcAction('adicionar-categoria', nome, result);
     return result;
   },
   adicionarUnidade: async (nome) => {
     const result = await ipcRenderer.invoke('adicionar-unidade', nome);
-    recordIpcAction('adicionar-unidade', nome, result);
     return result;
   },
   adicionarColecao: async (nome) => {
     const result = await ipcRenderer.invoke('adicionar-colecao', nome);
-    recordIpcAction('adicionar-colecao', nome, result);
     return result;
   },
   removerCategoria: async (nome) => {
     const result = await ipcRenderer.invoke('remover-categoria', nome);
-    recordIpcAction('remover-categoria', nome, result);
     return result;
   },
   removerUnidade: async (nome) => {
     const result = await ipcRenderer.invoke('remover-unidade', nome);
-    recordIpcAction('remover-unidade', nome, result);
     return result;
   },
   removerColecao: async (nome) => {
     const result = await ipcRenderer.invoke('remover-colecao', nome);
-    recordIpcAction('remover-colecao', nome, result);
     return result;
   },
   verificarDependenciaCategoria: (nome) => ipcRenderer.invoke('verificar-dependencia-categoria', nome),
@@ -337,12 +405,10 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: async (dados) => {
     const result = await ipcRenderer.invoke('adicionar-produto', dados);
-    recordIpcAction('adicionar-produto', dados, result);
     return result;
   },
   atualizarProduto: async (id, dados) => {
     const result = await ipcRenderer.invoke('atualizar-produto', { id, dados });
-    recordIpcAction('atualizar-produto', { id, dados }, result);
     return result;
   },
   excluirProduto: async (info) => {
@@ -351,7 +417,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     if (result && result.error) {
       throw new Error(result.error);
     }
-    recordIpcAction('excluir-produto', payload, result);
     return result;
   },
   listarDetalhesProduto: (params) => ipcRenderer.invoke('listar-detalhes-produto', params),
@@ -362,12 +427,10 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   previsaoInsumosPeca: (dados) => ipcRenderer.invoke('previsao-insumos-peca', dados),
   inserirLoteProduto: async (dados) => {
     const result = await ipcRenderer.invoke('inserir-lote-produto', dados);
-    recordIpcAction('inserir-lote-produto', dados, result);
     return result;
   },
   atualizarLoteProduto: async (dados) => {
     const result = await ipcRenderer.invoke('atualizar-lote-produto', dados);
-    recordIpcAction('atualizar-lote-produto', dados, result);
     return result;
   },
   excluirLoteProduto: async (info) => {
@@ -383,7 +446,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       devolverInsumos: payload.devolverInsumos === true,
       justificativaNegativo: payload.justificativaNegativo || null
     });
-    recordIpcAction('excluir-lote-produto', payload, result);
     return result;
   },
   listarInsumosProduto: (codigoOuParams) => {
@@ -395,12 +457,10 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   listarEtapasProducao: () => ipcRenderer.invoke('listar-etapas-producao'),
   adicionarEtapaProducao: async (dados) => {
     const result = await ipcRenderer.invoke('adicionar-etapa-producao', dados);
-    recordIpcAction('adicionar-etapa-producao', dados, result);
     return result;
   },
   removerEtapaProducao: async (nome) => {
     const result = await ipcRenderer.invoke('remover-etapa-producao', nome);
-    recordIpcAction('remover-etapa-producao', nome, result);
     return result;
   },
   listarItensProcessoProduto: (codigo, etapa, busca, produtoId) =>
@@ -412,7 +472,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       itens,
       produtoId
     });
-    recordIpcAction('salvar-produto-detalhado', { codigo, produto, itens, produtoId }, result);
     return result;
   },
   adicionarMateriaPrima: async (dados) => {
@@ -422,7 +481,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       if (result.code) err.code = result.code;
       throw err;
     }
-    recordIpcAction('adicionar-materia-prima', dados, result);
     return result.materia;
   },
   atualizarMateriaPrima: async (id, dados) => {
@@ -432,7 +490,6 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       if (result.code) err.code = result.code;
       throw err;
     }
-    recordIpcAction('atualizar-materia-prima', { id, dados }, result);
     return result.materia;
   },
   excluirMateriaPrima: async (info) => {
@@ -446,22 +503,18 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
       if (result.code) err.code = result.code;
       throw err;
     }
-    recordIpcAction('excluir-materia-prima', payload, result);
     return result;
   },
   registrarEntrada: async (id, quantidade) => {
     const result = await ipcRenderer.invoke('registrar-entrada-materia-prima', { id, quantidade });
-    recordIpcAction('registrar-entrada-materia-prima', { id, quantidade }, result);
     return result;
   },
   registrarSaida: async (id, quantidade) => {
     const result = await ipcRenderer.invoke('registrar-saida-materia-prima', { id, quantidade });
-    recordIpcAction('registrar-saida-materia-prima', { id, quantidade }, result);
     return result;
   },
   atualizarPreco: async (id, preco) => {
     const result = await ipcRenderer.invoke('atualizar-preco-materia-prima', { id, preco });
-    recordIpcAction('atualizar-preco-materia-prima', { id, preco }, result);
     return result;
   },
   autoLogin: (user) => ipcRenderer.invoke('auto-login', { user }),
@@ -508,6 +561,7 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     if (!payload.source) payload.source = 'renderer';
     recordAction(payload);
   },
+  onAuditoriaStatus: (callback) => subscribeToChannel('auditoria-status', callback),
   getSavedDisplay: () => ipcRenderer.invoke('get-saved-display'),
   onActivateTab: (callback) =>
     ipcRenderer.on('activate-tab', (_event, tab) => callback(tab)),
@@ -551,7 +605,22 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
     chatAoVivo: (ligado) => ipcRenderer.invoke('avisos-windows:chat-ao-vivo', Boolean(ligado)),
     chat: (item) => ipcRenderer.invoke('avisos-windows:chat', item || null)
   }
-  }));
+};
+
+/** APIs já autorizadas, vinculadas a um token; não aceita nomes de canais IPC. */
+function comAuditoria(contextoBruto) {
+  const contexto = normalizarContextoAuditoria(contextoBruto);
+  const vincular = api => Object.fromEntries(Object.entries(api)
+    .filter(([nome]) => !['comAuditoria', 'registrarContextoAuditoria'].includes(nome))
+    .map(([nome, valor]) => [nome, typeof valor === 'function' ? (...args) => {
+      const anterior = contextoIpcExplicito;
+      contextoIpcExplicito = contexto;
+      try { return valor(...args); } finally { contextoIpcExplicito = anterior; }
+    } : (valor && typeof valor === 'object' ? vincular(valor) : valor)]));
+  return comCronometro(vincular(electronApiDefinitions));
+}
+electronApiDefinitions.comAuditoria = comAuditoria;
+contextBridge.exposeInMainWorld('electronAPI', comCronometro(electronApiDefinitions));
 
 
 

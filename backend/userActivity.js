@@ -45,6 +45,9 @@ async function updateUsuarioCampos(id, campos) {
  * que já estava lá.
  */
 function camposDaAlteracao(acao = {}, quandoPadrao = null) {
+  // Rotinas automáticas e eventos sem autoria manual confirmada pertencem ao
+  // histórico de auditoria, sem substituir o que a pessoa alterou de fato.
+  if (acao.automatico === true || (acao.origem && acao.origem !== 'manual')) return {};
   const modulo = typeof acao.modulo === 'string' ? acao.modulo.trim() : '';
   const descricao = typeof acao.descricao === 'string' ? acao.descricao.trim() : '';
   if (!modulo && !descricao) return {};

@@ -3,6 +3,19 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const Module = require('node:module');
 
+test('rotinas automáticas e autoria não confirmada não substituem a última alteração manual', async () => {
+  const { userActivity, chamadas, restaurar } = carregarComPoolFalso();
+  try {
+    for (const origem of ['automatico', 'sistema', 'nao_confirmada']) {
+      assert.equal(await userActivity.registrarUltimaAlteracao(7, { origem, modulo: 'Tarefas', descricao: 'Atualizou avisos' }), false);
+    }
+    assert.equal(chamadas.length, 0);
+    assert.equal(await userActivity.registrarUltimaAlteracao(7, { origem: 'manual', modulo: 'Tarefas', descricao: 'Alterou o responsável da tarefa 15 de 3 para 8' }), true);
+    assert.equal(chamadas[0].payload.local_ultima_alteracao, 'Tarefas');
+    assert.match(chamadas[0].payload.especificacao_ultima_alteracao, /responsável da tarefa 15/);
+  } finally { restaurar(); }
+});
+
 /**
  * "Última alteração" no popover de Gestão de Usuários.
  *

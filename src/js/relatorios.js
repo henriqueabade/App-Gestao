@@ -1,7 +1,8 @@
 // Lógica de interação para o módulo de Relatórios
 async function fetchFromApi(path, options) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, options);
 }
 const BADGE_CLASS_MAP = {
     success: 'badge-success',

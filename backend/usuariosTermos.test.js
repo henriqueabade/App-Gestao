@@ -33,7 +33,7 @@ const VIGENTES = termos.versoesVigentes();
 const ACEITO = {
   termos_versao: VIGENTES.termos_de_uso,
   privacidade_versao: VIGENTES.politica_de_privacidade,
-  termos_aceitos_em: '2026-10-02T12:00:00.000Z'
+  termos_aceitos_em: '2026-10-15T12:00:00.000Z'
 };
 
 /** Um /api genérico de mentira: usuarios, termos_versoes, aceites, notificacoes e /api/tabelas. */
@@ -170,6 +170,16 @@ test('os dois documentos têm versão, vigência e o que a lei e o dono pedem', 
   for (const trecho of ['controladora', 'Lei nº 13.709/2018', 'art. 7º', 'art. 18', 'ANPD', 'transferência internacional', 'Por quanto tempo', Documentos.CONTROLADOR.contato, Documentos.CONTROLADOR.cnpj]) {
     assert.ok(priv.includes(trecho), `Política de Privacidade sem "${trecho}"`);
   }
+  for (const doc of Documentos.ORDEM.map(Documentos.documento)) {
+    assert.equal(doc.versao, '1.1');
+    assert.equal(doc.vigencia, '15/10/2026');
+  }
+  for (const texto of [uso, priv]) {
+    for (const trecho of ['uso profissional', 'por usuário e período', 'ações manuais', 'automáticos', 'senhas', 'tokens', 'segredos']) {
+      assert.ok(texto.toLowerCase().includes(trecho), `Documento sem explicação de ${trecho}`);
+    }
+  }
+  assert.match(priv, /Não se estabelece aqui um prazo numérico único/);
 });
 
 test('vigentes: uma impressão digital (sha256) por documento, tirada do texto corrido', () => {
@@ -195,7 +205,7 @@ test('aceito só com a versão vigente dos DOIS documentos; a caixa só aparece 
 
   assert.deepStrictEqual(
     termos.situacaoDe({ termos_solicitados_em: '2026-10-02T10:00:00Z', termos_recusados_em: '2026-10-02T11:00:00Z' }),
-    { termos_situacao: 'pendente', termos_solicitado: true, termos_aceitos_em: null, termos_solicitados_em: '2026-10-02T10:00:00Z', termos_recusados_em: '2026-10-02T11:00:00Z', termos_versao: null, privacidade_versao: null }
+    { termos_situacao: 'pendente', termos_solicitado: false, termos_aceitos_em: null, termos_solicitados_em: '2026-10-02T10:00:00Z', termos_recusados_em: '2026-10-02T11:00:00Z', termos_versao: null, privacidade_versao: null }
   );
   const ok = termos.situacaoDe(ACEITO);
   assert.strictEqual(ok.termos_situacao, 'aceito');
@@ -206,11 +216,36 @@ test('aceito só com a versão vigente dos DOIS documentos; a caixa só aparece 
   assert.throws(() => termos.conferirVersoes(null), e => e.status === 409);
 });
 
+test('aceite antigo aparece desatualizado e mantém prova anterior; solicitação antiga permite reenvio', async () => {
+  const anterior = { id: 7, ...ACEITO, termos_versao: '1.0', privacidade_versao: '1.0', termos_aceitos_em: '2026-10-02T12:00:00Z', termos_solicitados_em: '2026-10-02T10:00:00Z' };
+  const resumo = termos.situacaoDe(anterior);
+  assert.equal(resumo.termos_situacao, 'desatualizado');
+  assert.equal(resumo.termos_aceitos_em, anterior.termos_aceitos_em);
+  assert.equal(resumo.termos_versao, '1.0');
+  assert.equal(resumo.termos_solicitado, false, 'pedido da edição anterior não bloqueia reenvio');
+  assert.equal(termos.precisaAceitar(anterior), true, 'não muda o fluxo de uma solicitação já pendente');
+  assert.equal(termos.precisaAceitar({ ...anterior, termos_solicitados_em: null }), false, 'nova versão não solicita sozinha');
+  assert.equal(termos.aceitou({ ...ACEITO, termos_aceitos_em: '2026-10-15T02:59:59Z' }), false, 'antes da meia-noite em São Paulo');
+  assert.equal(termos.aceitou({ ...ACEITO, termos_aceitos_em: '2026-10-15T03:00:00Z' }), true);
+  assert.equal(termos.aceitou({ ...ACEITO, termos_aceitos_em: '2026-10-15' }), true, 'data sem hora representa o dia da empresa');
+  assert.equal(termos.situacaoDe({ ...ACEITO, termos_aceitos_em: '2026-10-14T22:00:00-03:00' }).termos_situacao, 'desatualizado');
+
+  termos.esquecerEsquema();
+  const api = apiFalsa();
+  const campos = await termos.solicitar(api, anterior, 2, new Date('2026-10-15T14:00:00Z'));
+  assert.equal(termos.situacaoDe({ ...anterior, ...campos }).termos_solicitado, true);
+  assert.equal(campos.termos_solicitados_em, '2026-10-15T14:00:00.000Z');
+  assert.equal(api.dados.usuarios_termos_aceites.length, 0, 'pedir não registra aceite nem recusa');
+  assert.equal(api.dados.termos_versoes.length, 0);
+  await assert.rejects(termos.solicitar(api, { id: 7, ...ACEITO }, 2), e => e.status === 409);
+  termos.esquecerEsquema();
+});
+
 test('registrar: guarda o texto da versão uma vez, uma linha por documento e o resumo no usuário', async () => {
   termos.esquecerEsquema();
   const api = apiFalsa();
   const usuario = { id: 7, nome: 'Ana', email: 'ana@x.com', termos_solicitados_em: '2026-10-02T10:00:00Z', termos_solicitados_por: 2 };
-  const campos = await termos.registrar(api, usuario, { decisao: 'aceito', agora: new Date('2026-10-02T15:00:00Z') });
+  const campos = await termos.registrar(api, usuario, { decisao: 'aceito', agora: new Date('2026-10-15T15:00:00Z') });
 
   assert.strictEqual(api.dados.termos_versoes.length, 2);
   assert.ok(api.dados.termos_versoes.every(v => v.texto.length > 2000 && v.hash_sha256 === termos.sha256(v.texto)));
@@ -222,7 +257,7 @@ test('registrar: guarda o texto da versão uma vez, uma linha por documento e o 
   assert.ok(api.dados.usuarios_termos_aceites.every(a => /^[a-f0-9]{64}$/.test(a.hash_sha256)));
   assert.deepStrictEqual(campos, {
     termos_versao: VIGENTES.termos_de_uso, privacidade_versao: VIGENTES.politica_de_privacidade,
-    termos_aceitos_em: '2026-10-02T15:00:00.000Z', termos_solicitados_em: null, termos_recusados_em: null
+    termos_aceitos_em: '2026-10-15T15:00:00.000Z', termos_solicitados_em: null, termos_recusados_em: null
   });
   assert.strictEqual(termos.aceitou(api.dados.usuarios.find(u => u.id === 7)), true);
 
@@ -309,7 +344,7 @@ test('pedido do Sup Admin → a caixa aparece → aceitar grava e libera', async
     assert.strictEqual(r.status, 403);
     assert.strictEqual(r.corpo.code, 'FORBIDDEN_SUP_ADMIN');
 
-    Object.assign(s.api.dados.usuarios.find(u => u.id === 7), { termos_solicitados_em: '2026-10-02T10:00:00Z', termos_solicitados_por: 2 });
+    Object.assign(s.api.dados.usuarios.find(u => u.id === 7), { termos_solicitados_em: '2026-10-15T10:00:00Z', termos_solicitados_por: 2 });
     r = await s.pedir('GET', '/me/termos');
     assert.strictEqual(r.corpo.pendente, true);
     assert.strictEqual(r.corpo.termos_solicitado, true);

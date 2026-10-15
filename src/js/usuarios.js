@@ -1,8 +1,11 @@
 // Script principal do módulo de Usuários
 // Controla carregamento da lista, edições e filtros
 
-async function fetchApi(path, options = {}) {
+async function fetchApi(path, options = {}, contextoAuditoria) {
+    const auditoria = contextoAuditoria ?? window.AuditoriaAcao?.vincular();
+    const fetchVinculado = auditoria?.fetch || fetch;
     const baseUrl = await window.apiConfig.getApiBaseUrl();
+    baseApiParaFotos = baseUrl || '';
 
     const finalOptions = { ...options };
     const headers = new Headers(options?.headers || {});
@@ -51,7 +54,7 @@ async function fetchApi(path, options = {}) {
 
     finalOptions.headers = headers;
 
-    return fetch(`${baseUrl}${path}`, finalOptions);
+    return fetchVinculado(`${baseUrl}${path}`, finalOptions);
 }
 
 
@@ -421,7 +424,8 @@ let baseApiParaFotos = '';
 function resolverUrlDaFoto(valor) {
     const bruto = String(valor || '').trim();
     if (!bruto) return null;
-    if (/^(https?:|data:|blob:|file:)/i.test(bruto)) return bruto;
+    if (/^(https?:\/\/|data:image\/|blob:|file:)/i.test(bruto)) return bruto;
+    if (/^[a-z][\w+.-]*:/i.test(bruto)) return null;
     if (!baseApiParaFotos) return null;          // sem base não há como montar
     const base = baseApiParaFotos.replace(/\/+$/, '');
     const caminho = bruto.startsWith('/') ? bruto : `/${bruto}`;
@@ -431,16 +435,19 @@ function resolverUrlDaFoto(valor) {
 function obterAvatarUrl(usuario) {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
-        usuario.foto_perfil_url,
-        usuario.foto_perfil,          // caminho relativo devolvido pela lista
-        usuario.fotoPerfil,
+        // O backend já escolheu e normalizou a foto atual. Um caminho antigo
+        // em foto_perfil não deve esconder o dataURL retornado em foto_usuario.
         usuario.foto_usuario,
         usuario.fotoUsuario,
         usuario.avatar,
         usuario.avatar_url,
         usuario.avatarUrl,
         usuario.fotoUrl,
-        usuario.foto
+        usuario.foto,
+        usuario.foto_perfil_url,
+        usuario.foto_perfil,
+        usuario.fotoPerfil,
+        usuario.fotoPerfilUrl
     ];
 
     const versao = extrairAvatarVersao(usuario);
@@ -606,28 +613,28 @@ function resolverPresenca(usuario) {
 }
 
 // ---------------------------------------------------------------------------
-// Termos de Uso e Política de Privacidade (02/10/2026).
+// Termos de Uso e Política de Privacidade (15/10/2026).
 // Coluna "Termos": Aceito (verde) quando a pessoa aceitou a versão vigente
-// dos dois documentos; Pendente (vermelho) no resto — usuário antigo, criado
-// pelo administrador ou versão nova do texto. Quem decide é o backend
+// dos dois documentos; Desatualizado (amarelo) para aceite anterior e
+// Pendente (vermelho) para quem ainda não aceitou. Quem decide é o backend
 // (`termos_situacao` em /api/usuarios/lista). O botão de Ações pede o aceite:
-// só o Sup Admin, e só com os termos pendentes.
+// só o Sup Admin, com os termos pendentes ou desatualizados.
 // ---------------------------------------------------------------------------
 const TERMOS_SEM_SQL = 'Rode sql/usuarios_termos.sql e reinicie a API do banco para usar o aceite dos termos.';
 
 function resolverTermos(usuario) {
     const situacao = usuario?.termos_situacao;
-    if (situacao === 'aceito') {
+    if (situacao === 'aceito' || situacao === 'desatualizado') {
         const versoes = [
             usuario.termos_versao ? `Termos de Uso ${usuario.termos_versao}` : '',
             usuario.privacidade_versao ? `Política de Privacidade ${usuario.privacidade_versao}` : ''
         ].filter(Boolean).join(' e ');
-        return {
-            situacao: 'aceito',
-            rotulo: 'Aceito',
-            classe: 'badge-success',
-            dica: `Aceito em ${formatarDataHoraCompleta(usuario.termos_aceitos_em)}${versoes ? ` (${versoes})` : ''}`
-        };
+        const anterior = `Aceito em ${formatarDataHoraCompleta(usuario.termos_aceitos_em)}${versoes ? ` (${versoes})` : ''}`;
+        if (situacao === 'aceito') return { situacao, rotulo: 'Aceito', classe: 'badge-success', dica: anterior };
+        const pedido = usuario.termos_solicitado
+            ? `Aceite da versão vigente pedido em ${formatarDataHoraCompleta(usuario.termos_solicitados_em)}: aguardando a resposta.`
+            : 'O Sup Admin pode pedir o aceite da versão vigente pelo botão de termos, em Ações.';
+        return { situacao, rotulo: 'Desatualizado', classe: 'badge-warning', dica: `${anterior}. Os documentos foram atualizados. ${pedido}` };
     }
     if (situacao === 'pendente') {
         const partes = [];
@@ -677,13 +684,14 @@ function criarBotaoDosTermos(usuario) {
         else if (usuario.termos_solicitado) botao.classList.add('usuario-acao-botao--termos-pedido');
     } else {
         botao.title = `Pedir a ${nome} o aceite dos Termos de Uso e da Política de Privacidade`;
-        botao.addEventListener('click', () => pedirAceiteDosTermos(usuario, botao));
+        botao.addEventListener('click', evento => pedirAceiteDosTermos(usuario, botao, evento));
     }
     botao.setAttribute('aria-label', botao.title);
     return botao;
 }
 
-async function pedirAceiteDosTermos(usuario, botao) {
+async function pedirAceiteDosTermos(usuario, botao, evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     if (!usuario?.id || botao?.disabled) return;
     const nome = usuario.nome || usuario.email || 'este usuário';
     const confirmou = await window.DialogPadrao.confirm({
@@ -707,7 +715,7 @@ async function pedirAceiteDosTermos(usuario, botao) {
 
     try {
         const resp = await window.BotaoAcao.comCarregamento(
-            () => fetchApi(`/api/usuarios/${encodeURIComponent(usuario.id)}/termos/solicitar`, { method: 'POST' }),
+            () => fetchApi(`/api/usuarios/${encodeURIComponent(usuario.id)}/termos/solicitar`, { method: 'POST' }, contextoAuditoria),
             'Pedindo o aceite…'
         );
         const dados = await resp.json().catch(() => ({}));
@@ -721,6 +729,31 @@ async function pedirAceiteDosTermos(usuario, botao) {
         console.error('Erro ao pedir o aceite dos termos:', err);
         showToast(err.message || 'Não foi possível pedir o aceite.', 'error');
     }
+}
+
+function criarBotaoAuditoriaUsuario(usuario) {
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'usuario-acao-botao';
+    botao.dataset.acao = 'auditoria';
+    const nome = usuario.nome || usuario.email || 'usuário';
+    botao.title = `Relatório de atividades de ${nome}`;
+    botao.setAttribute('aria-label', botao.title);
+    const icone = document.createElement('i');
+    icone.className = 'fas fa-clock-rotate-left usuario-acao-icone';
+    icone.style.color = 'var(--color-primary)';
+    botao.appendChild(icone);
+    if (!ehSupAdminLogado()) {
+        botao.disabled = true;
+        botao.classList.add('usuario-acao-botao--disabled');
+        botao.title = 'O relatório de atividades é restrito ao Sup Admin';
+    } else {
+        botao.addEventListener('click', () => {
+            window.usuarioAuditoriaContext = { usuarioId: usuario.id, nome: usuario.nome || '', email: usuario.email || '' };
+            Modal.open('modals/usuarios/auditoria.html', '../js/modals/usuario-auditoria.js', 'usuarioAuditoria', true);
+        });
+    }
+    return botao;
 }
 
 function fecharPopoversUsuarios() {
@@ -1327,7 +1360,7 @@ function renderUsuarios(lista) {
         }
 
         if (podeAlternar) {
-            toggleBtn.addEventListener('click', () => alternarStatusUsuario(toggleBtn));
+            toggleBtn.addEventListener('click', evento => alternarStatusUsuario(toggleBtn, evento));
         }
 
         const editBtn = document.createElement('button');
@@ -1364,7 +1397,7 @@ function renderUsuarios(lista) {
             deleteBtn.disabled = true;
             deleteIcon.style.color = 'rgba(255, 255, 255, 0.45)';
         } else {
-            deleteBtn.addEventListener('click', () => handleRemoverUsuario(u, deleteBtn));
+            deleteBtn.addEventListener('click', evento => handleRemoverUsuario(u, deleteBtn, evento));
         }
 
         actionsWrapper.appendChild(toggleBtn);
@@ -1372,6 +1405,7 @@ function renderUsuarios(lista) {
         actionsWrapper.appendChild(criarBotaoDosTermos(u));
         actionsWrapper.appendChild(editBtn);
         actionsWrapper.appendChild(deleteBtn);
+        actionsWrapper.appendChild(criarBotaoAuditoriaUsuario(u));
         actionsTd.appendChild(actionsWrapper);
         tr.appendChild(actionsTd);
         tbody.appendChild(tr);
@@ -1381,7 +1415,8 @@ function renderUsuarios(lista) {
     updateEmptyStateUsuarios(lista.length > 0);
 }
 
-async function handleRemoverUsuario(usuario, botao) {
+async function handleRemoverUsuario(usuario, botao, evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     if (!usuario || !usuario.id || !botao || botao.disabled) return;
 
     const nomeOuEmail = usuario.nome?.trim() || usuario.email?.trim() || 'este usuário';
@@ -1401,7 +1436,7 @@ async function handleRemoverUsuario(usuario, botao) {
     try {
         const resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuario.id)}`, {
             method: 'DELETE'
-        });
+        }, contextoAuditoria);
         let payload = {};
         try {
             payload = await resp.json();
@@ -1585,7 +1620,8 @@ function abrirEditarUsuario(usuario) {
 window.abrirEditarUsuario = abrirEditarUsuario;
 window.abrirNovoUsuario = abrirNovoUsuario;
 
-async function alternarStatusUsuario(botao) {
+async function alternarStatusUsuario(botao, evento, auditoria) {
+    const contextoAuditoria = auditoria ?? window.AuditoriaAcao?.vincular(evento);
     if (!botao || botao.disabled) return;
     const usuarioId = Number(botao.dataset.usuarioId);
     if (!usuarioId) return;
@@ -1602,7 +1638,7 @@ async function alternarStatusUsuario(botao) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ status: novoStatusInterno })
-        });
+        }, contextoAuditoria);
 
         if (!resp.ok) {
             const texto = await resp.text();

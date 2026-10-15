@@ -395,12 +395,13 @@ function ctbExecutarAcao(chave, moduleEl, extra = {}) {
 
 /** Uma chamada ao backend: `{ corpo, erro }`, sem lançar. */
 async function ctbChamarApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     if (typeof window.apiConfig?.getApiBaseUrl !== 'function' || typeof fetch !== 'function') {
         return { corpo: null, erro: null };
     }
     try {
         const base = await window.apiConfig.getApiBaseUrl();
-        const resposta = await fetch(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
+        const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
         const corpo = await resposta.json().catch(() => null);
         if (!resposta.ok) {
             const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);

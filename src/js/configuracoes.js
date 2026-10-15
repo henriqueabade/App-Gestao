@@ -442,10 +442,11 @@ const MenuStartupPreferences = (() => {
 
     /** Lê do banco e reflete no cache local. Silencioso: nunca trava o menu. */
     async function carregarDoBanco() {
+        const aud = window.AuditoriaAcao?.vincular();
         const base = await baseUrl();
         if (base === null) return null;
         try {
-            const resposta = await fetch(`${base}${ENDPOINT}`, { credentials: 'include' });
+            const resposta = await (aud?.fetch || fetch)(`${base}${ENDPOINT}`, { credentials: 'include' });
             if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
             const dados = await resposta.json();
 
@@ -467,12 +468,13 @@ const MenuStartupPreferences = (() => {
 
     /** Grava no banco o estado atual (o que já está no cache local). */
     async function salvarNoBanco(parcial = {}) {
+        const aud = window.AuditoriaAcao?.vincular();
         const base = await baseUrl();
         if (base === null) return false;
 
         const atual = { ...load(), ...parcial };
         try {
-            const resposta = await fetch(`${base}${ENDPOINT}`, {
+            const resposta = await (aud?.fetch || fetch)(`${base}${ENDPOINT}`, {
                 method: 'PUT',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
@@ -745,6 +747,7 @@ const MenuStartupPreferences = (() => {
     }
 
     async function fetchApi(path, options = {}) {
+        const aud = window.AuditoriaAcao?.vincular();
         if (!window.apiConfig || typeof window.apiConfig.getApiBaseUrl !== 'function') {
             throw new Error('Configuração da API não disponível.');
         }
@@ -764,7 +767,7 @@ const MenuStartupPreferences = (() => {
             finalOptions.credentials = 'include';
         }
 
-        return fetch(`${baseUrl}${path}`, finalOptions);
+        return (aud?.fetch || fetch)(`${baseUrl}${path}`, finalOptions);
     }
 
     function normalizarValorVersao(valor) {

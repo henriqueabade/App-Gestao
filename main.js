@@ -1,6 +1,30 @@
 
 const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+// O lock usa o diretório de dados: fixe o mesmo caminho ANTES de pedi-lo.
+// A segunda execução deve sair antes de carregar o backend ou registrar a
+// inicialização da API; app.quit() sozinho não interrompe este módulo.
+const userDataPath = path.join(app.getPath('appData'), 'santissimo-decor');
+try {
+  fs.mkdirSync(userDataPath, { recursive: true });
+} catch (err) {
+  console.error('Failed to create userData directory', err);
+}
+app.setPath('userData', userDataPath);
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  return;
+}
+let programaPronto = false;
+let aberturaPendente = false;
+app.on('second-instance', () => {
+  abrirPrograma();
+});
+app.on('activate', () => abrirPrograma());
+
 const { isDev: useLocalDatabase } = require('./backend/dataConfig');
 const folhasDoPdf = require('./backend/fiscal/folhas');
 const { execFile } = require('child_process');
@@ -31,7 +55,6 @@ const {
 } = require('./backend/userActivity');
 const { createApiClient } = require('./backend/apiHttpClient');
 const { getToken } = require('./backend/tokenStore');
-const fs = require('fs');
 const net = require('net');
 // Login pelo e-mail OU pelo nome completo (09/10/2026).
 const NomeCompleto = require('./src/js/utils/nome-completo');
@@ -100,18 +123,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, normalized)));
 }
 
-// Impede que múltiplas instâncias do aplicativo sejam abertas
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-} else {
-  // Abrir o programa de novo (atalho, menu Iniciar) com ele já rodando — às
-  // vezes só na bandeja, sem janela nenhuma: mostra a janela certa.
-  app.on('second-instance', () => {
-    abrirPrograma();
-  });
-}
-
 // Garante que qualquer janela criada permaneça em tela cheia
 app.on('browser-window-created', (_event, win) => {
   require('./backend/privateFileGuard').protectSession(win.webContents.session);
@@ -167,6 +178,34 @@ let isPersistingExit = false;
 let apiServerInstance = null;
 let currentApiPort = null;
 let connectionMonitorController = null;
+
+// A autoria acompanha a operação no backend, inclusive depois de await. O
+// renderer envia apenas contexto; o usuário e a sessão vêm deste processo.
+const capturaAuditoria = require('./backend/auditoriaCaptura');
+const registrarHandlerIpc = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (canal, handler) => registrarHandlerIpc(canal, (evento, ...argumentos) => {
+  const ultimo = argumentos[argumentos.length - 1];
+  const contexto = argumentos.length >= 2 && ultimo && typeof ultimo === 'object'
+    && Object.keys(ultimo).length === 1 && Object.prototype.hasOwnProperty.call(ultimo, '__auditoria')
+    ? argumentos.pop().__auditoria : null;
+  if (canal === 'record-user-action') return handler(evento, ...argumentos);
+  const usuarioId = currentUserSession?.id ?? null;
+  const token = getToken();
+  return capturaAuditoria.executarIpc({ usuarioId, canal, payload: argumentos[0], contexto },
+    () => handler(evento, ...argumentos), {
+      criarApi: () => createApiClient({ headers: { authorization: token ? `Bearer ${token}` : '' } }),
+      onManualChange: acao => {
+        if (currentUserSession?.id !== usuarioId) return;
+        lastRecordedAction = { timestamp: new Date(acao.timestamp || Date.now()), module: acao.modulo, description: acao.descricao };
+      },
+      onAuditFailure: estado => {
+        console.warn('[auditoria] Registro pendente:', estado?.code || 'AUDITORIA_GRAVACAO_FALHOU');
+        if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+          dashboardWindow.webContents.send('auditoria-status', { status: 'pendente' });
+        }
+      }
+    });
+});
 ipcMain.handle('get-runtime-config', () => {
   return { apiBaseUrl: getLocalApiBaseUrl() };
 });
@@ -1282,6 +1321,7 @@ async function requestAuthenticatedProfile(path, options = {}) {
     require('./backend/localAuth').verifyToken(token);
     const user = require('./backend/sanitizarSaida').sanitizarSaida(await require('./backend/db').query(path, options));
     if (user) setCurrentUserSession({ ...currentUserSession, ...user });
+    if (path === '/api/perfil/imagem' && ['POST', 'DELETE'].includes(options.method) && user?.success !== false && !user?.error) capturaAuditoria.confirmarMudancaProtegida('alterar-avatar');
     return user;
   }
   const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
@@ -1296,6 +1336,7 @@ async function requestAuthenticatedProfile(path, options = {}) {
   }
   const user = unwrapProfileUser(payload);
   if (user && typeof user === 'object') setCurrentUserSession({ ...currentUserSession, ...user });
+  if (path === '/api/perfil/imagem' && ['POST', 'DELETE'].includes(options.method) && payload?.success !== false && !payload?.error) capturaAuditoria.confirmarMudancaProtegida('alterar-avatar');
   return user;
 }
 
@@ -2060,9 +2101,8 @@ async function persistUserExit(reason) {
   alteracaoPendenteDesde = 0;
 
   const payload = { saida: new Date() };
-  if (lastRecordedAction) {
-    payload.ultimaAcao = acaoParaRegistro(lastRecordedAction);
-  }
+  // HTTP e IPC persistem a última alteração quando ela acontece. Reenviar a
+  // última ação IPC na saída poderia apagar uma alteração HTTP mais recente.
   try {
     await registrarUltimaSaida(currentUserSession.id, payload);
   } catch (err) {
@@ -3349,6 +3389,7 @@ function revealLoginWindow() {
       }
 
       try {
+        if (loginWindow.isMinimized()) loginWindow.restore();
         loginWindow.show();
         loginWindow.focus();
         loginWindow.webContents.send('activate-tab', 'login');
@@ -3537,6 +3578,12 @@ function programaNaFrente() {
  * tela de login. `aviso`: o aviso clicado na janela do canto.
  */
 function abrirPrograma(aviso = null) {
+  // O atalho pode ser clicado enquanto a primeira execução ainda procura a
+  // porta/carrega preferências. Não criar janela antes desses dados existirem.
+  if (!programaPronto) {
+    aberturaPendente = true;
+    return;
+  }
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     if (dashboardWindow.isMinimized()) dashboardWindow.restore();
     dashboardWindow.show();
@@ -3733,13 +3780,6 @@ function mudarPreferencias(mudancas = {}) {
 }
 
 app.whenReady().then(async () => {
-  const userDataPath = path.join(app.getPath('appData'), 'santissimo-decor');
-  app.setPath('userData', userDataPath);
-  try {
-    fs.mkdirSync(userDataPath, { recursive: true });
-  } catch (err) {
-    console.error('Failed to create userData directory', err);
-  }
   stateFile = path.join(app.getPath('userData'), 'session-state.json');
   displayFile = path.join(app.getPath('userData'), 'display.json');
   // Corretor ortográfico em português (o botão direito mostra as sugestões).
@@ -3759,7 +3799,7 @@ app.whenReady().then(async () => {
   }
 
   const parsedPort = Number(envPortValue);
-  if (envPortValue && (!Number.isInteger(parsedPort) || parsedPort <= 0)) {
+  if (envPortValue && (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > MAX_PORT)) {
     console.warn(
       `API_PORT value "${envPortValue}" is invalid. Defaulting to ${DEFAULT_API_PORT}.`
     );
@@ -3795,6 +3835,7 @@ app.whenReady().then(async () => {
   // pelo renderer (via IPC 'show-login'), evitando flashes iniciais.
   // Aberto pelo Windows ao ligar a máquina, com os avisos ligados: nenhuma
   // janela — só o ícone perto do relógio e os avisos no canto da tela.
+  programaPronto = true;
   if (!(iniciouEmSegundoPlano && preferencias.avisosNoWindows)) createLoginWindow(false, true);
   criarBandeja();
   iniciarAvisosNoWindows();
@@ -3802,14 +3843,10 @@ app.whenReady().then(async () => {
   screen.on('display-removed', handleDisplaysChanged);
   screen.on('display-metrics-changed', handleDisplaysChanged);
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      // Em sistemas macOS, ao reativar o aplicativo sem janelas abertas,
-      // criamos a tela de login oculta e deixamos que o renderer a exiba
-      // quando estiver pronto, garantindo uma transição suave.
-      createLoginWindow(false, true);
-    }
-  });
+  if (aberturaPendente) {
+    aberturaPendente = false;
+    abrirPrograma();
+  }
 
   showStartupBanner();
   initializeAutoUpdater();
@@ -3939,7 +3976,9 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
   const avatarVersion = Date.now();
   if (useLocalDatabase) {
     require('./backend/localAuth').verifyToken(token);
-    return require('./backend/sanitizarSaida').sanitizarSaida(await getAuthorizedApiClient().put(path, { foto_usuario: avatar }));
+    const user = require('./backend/sanitizarSaida').sanitizarSaida(await getAuthorizedApiClient().put(path, { foto_usuario: avatar }));
+    if (user?.success !== false && !user?.error) capturaAuditoria.confirmarMudancaProtegida('alterar-avatar', usuarioId);
+    return user;
   }
   const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
     method: 'PUT',
@@ -3956,7 +3995,10 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
   });
 
   const corpo = await response.json().catch(() => null);
-  if (response.ok) return unwrapProfileUser(corpo);
+  if (response.ok) {
+    if (corpo?.success !== false && !corpo?.error) capturaAuditoria.confirmarMudancaProtegida('alterar-avatar', usuarioId);
+    return unwrapProfileUser(corpo);
+  }
 
   const error = new Error(
     corpo?.message ||
@@ -5236,12 +5278,9 @@ ipcMain.handle('clear-state', () => {
 
 ipcMain.handle('record-user-action', async (_event, action) => {
   if (!currentUserSession) return false;
-  const normalized = normalizeUserAction(action);
-  if (!normalized) return false;
-  if (!lastRecordedAction || normalized.timestamp >= lastRecordedAction.timestamp) {
-    lastRecordedAction = normalized;
-    agendarGravacaoDaAlteracao(normalized);
-  }
+  // As gravações efetivas já foram auditadas pelo handler/rota. Um relato da
+  // interface não prova alteração e não pode substituir a última ação manual.
+  if (action?.contexto?.origem !== 'manual') return false;
   markMonitorInteraction('user-action');
   return true;
 });

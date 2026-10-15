@@ -157,9 +157,10 @@
         if (dados) return dados;
         if (lendo) return lendo;
         lendo = (async () => {
+          const aud = window.AuditoriaAcao?.vincular();
           try {
             const base = await window.apiConfig.getApiBaseUrl();
-            const resp = await fetch(`${base}/api/vinculos-pecas/${tipo}`);
+            const resp = await (aud?.fetch || fetch)(`${base}/api/vinculos-pecas/${tipo}`);
             const corpo = await resp.json().catch(() => null);
             if (!resp.ok) throw new Error(corpo?.error || `HTTP ${resp.status}`);
             dados = corpo?.pecas || {};

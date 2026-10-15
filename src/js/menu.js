@@ -3789,12 +3789,13 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
  * Falha em silêncio: sem rede, vale o que já estava salvo localmente.
  */
 async function carregarPreferenciasMenuDoBanco() {
+    const aud = window.AuditoriaAcao?.vincular();
     if (typeof localStorage === 'undefined') return;
     if (typeof window.apiConfig?.getApiBaseUrl !== 'function') return;
 
     try {
         const base = (await window.apiConfig.getApiBaseUrl()) || '';
-        const resposta = await fetch(`${base}/api/usuarios/me/preferencias-menu`, {
+        const resposta = await (aud?.fetch || fetch)(`${base}/api/usuarios/me/preferencias-menu`, {
             credentials: 'include'
         });
         if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);

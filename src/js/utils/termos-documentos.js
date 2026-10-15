@@ -1,5 +1,5 @@
 /**
- * Os Termos de Uso e a Política de Privacidade do aplicativo (02/10/2026).
+ * Os Termos de Uso e a Política de Privacidade do aplicativo (15/10/2026).
  *
  * O TEXTO MORA SÓ AQUI. A tela de login (cadastro), a caixa de aceite dentro
  * do programa e o backend (que grava o aceite) leem este arquivo — no
@@ -8,7 +8,7 @@
  *
  * MUDOU UMA VÍRGULA DO TEXTO, MUDE A VERSÃO do documento. O aceite guarda a
  * versão e a impressão digital (sha256) do texto aceito: com a versão nova,
- * todo mundo volta a "Pendente" em Usuários e o Sup Admin pede o aceite de
+ * quem aceitou a versão anterior fica "Desatualizado" e o Sup Admin pede o aceite de
  * novo. Versão igual com texto diferente é recusada pelo backend.
  *
  * Cada seção tem um título e blocos: texto = parágrafo; { lista: [...] } =
@@ -32,8 +32,8 @@
   const TERMOS_DE_USO = {
     chave: 'termos_de_uso',
     titulo: 'Termos de Uso',
-    versao: '1.0',
-    vigencia: '02/10/2026',
+    versao: '1.1',
+    vigencia: '15/10/2026',
     secoes: [
       {
         titulo: 'O que é este documento',
@@ -49,7 +49,7 @@
           { lista: [
             'A conta é pessoal e intransferível. Não empreste seu e-mail e sua senha, nem use a conta de outra pessoa.',
             'Informe dados verdadeiros no cadastro e mantenha-os atualizados (nome, e-mail e telefone).',
-            'A senha precisa ter pelo menos 8 caracteres, com letra maiúscula, número e caractere especial. Guarde-a em segredo: tudo o que for feito com a sua conta é registrado em seu nome.',
+            'A senha precisa ter pelo menos 8 caracteres, com letra maiúscula, número e caractere especial. Guarde-a em segredo: as operações registradas pela sua conta são atribuídas a você.',
             'Quem se cadastra pela tela de entrada confirma o e-mail e só começa a usar o aplicativo depois que um administrador libera o acesso e define o perfil de permissões.',
             'Se desconfiar que alguém usou a sua conta, troque a senha e avise o administrador na mesma hora.',
             'Depois de 3 tentativas de entrada com senha errada a conta fica bloqueada por um tempo e um código para criar nova senha é enviado ao e-mail cadastrado.'
@@ -80,15 +80,20 @@
       {
         titulo: 'Registro e acompanhamento do que é feito no aplicativo',
         blocos: [
-          'Para a segurança das informações, a conferência do trabalho e a prestação de contas, o aplicativo registra o que é feito nele. Você está ciente e de acordo com que:',
+          'Para a segurança das informações, a conferência do trabalho e a prestação de contas, o aplicativo mantém registros do uso profissional. Você está ciente de que:',
           { lista: [
             'cada entrada e saída do aplicativo fica registrada com data e hora (último login, última entrada, última saída e última atividade);',
-            'cada inclusão, alteração, conclusão, cancelamento e exclusão fica registrada com o seu nome, a data, a hora e o que mudou — no histórico de clientes, prospecções, contatos, pedidos, orçamentos, tarefas, financeiro e contabilidade;',
-            'os administradores veem esses registros, e as pessoas envolvidas em cada ficha (quem criou, quem responde por ela e quem participa) veem o histórico daquela ficha, inclusive comentários, curtidas, menções e anexos que você publicar;',
+            'a autoria de inclusões, alterações, conclusões, cancelamentos e exclusões é registrada com o seu nome, a data, a hora e o que mudou nos históricos disponíveis de clientes, prospecções, contatos, pedidos, orçamentos, tarefas, financeiro e contabilidade;',
+            'nos pontos que geram auditoria, o registro do uso pode identificar o módulo ou a tela, a ação, a data e a hora, o usuário, a referência do registro de trabalho e o resultado da operação, incluindo consultas, navegação, filtros, emissões e exportações;',
+            'ações manuais, iniciadas ou confirmadas por uma pessoa, são diferenciadas dos eventos automáticos do sistema, como sincronizações, consultas periódicas, recálculos e atualização de presença; um evento automático não comprova que a pessoa executou uma ação manual naquele momento;',
+            'a gestão autorizada pode consultar relatórios detalhados por usuário e período para conferir operações, investigar erros, organizar o trabalho e prestar contas; esses relatórios consolidados são restritos à gestão, conforme as permissões de acesso;',
+            'os históricos de cada ficha ficam disponíveis aos administradores e às pessoas envolvidas (quem criou, quem responde por ela e quem participa), conforme as permissões, inclusive comentários, curtidas, menções e anexos que você publicar; isso não libera o relatório consolidado de auditoria aos participantes;',
             'a tela de Usuários mostra aos administradores a sua situação — Online (sessão aberta), Ausente (o programa rodando em segundo plano) ou Offline (programa fechado) —, o módulo e a descrição da sua última alteração;',
             'o administrador principal (Sup Admin) vê a lista dos computadores em que a sua conta recebe avisos (nome do computador e usuário do Windows) e pode cancelar qualquer um deles;',
             'as tentativas de entrada com senha errada são contadas no computador para o bloqueio de segurança.'
           ] },
+          'A auditoria de uso exclui senhas, hashes de senha, tokens de acesso, códigos de autenticação, chaves e outros segredos. Não se deve inserir esses dados em observações, comentários ou anexos.',
+          'Os registros mostram os eventos disponíveis e seu contexto; isoladamente, não comprovam o tempo efetivo de trabalho nem a execução de uma operação não registrada.',
           'O aplicativo não grava a sua tela, o seu teclado, a sua câmera nem o seu microfone, e não acompanha o que você faz fora dele.'
         ]
       },
@@ -142,7 +147,7 @@
       {
         titulo: 'Mudanças nestes Termos',
         blocos: [
-          'Estes Termos podem ser atualizados. Quando isso acontecer, o aplicativo mostra a nova versão e pede um novo aceite antes de continuar. A versão e a data de vigência ficam no topo do documento.'
+          'Estes Termos podem ser atualizados. O aceite anterior é sinalizado como desatualizado e o Sup Admin pode solicitar um novo aceite pelo fluxo existente. Quando solicitado, o aplicativo mostra os documentos vigentes e pede a sua decisão antes de continuar. A versão e a data de vigência ficam no topo do documento.'
         ]
       },
       {
@@ -170,8 +175,8 @@
   const POLITICA_DE_PRIVACIDADE = {
     chave: 'politica_de_privacidade',
     titulo: 'Política de Privacidade',
-    versao: '1.0',
-    vigencia: '02/10/2026',
+    versao: '1.1',
+    vigencia: '15/10/2026',
     secoes: [
       {
         titulo: 'Quem cuida dos seus dados',
@@ -196,6 +201,8 @@
             'datas e horas de login, entrada, saída e última atividade;',
             'o módulo, a data, a hora e a descrição da sua última alteração;',
             'o histórico do que você incluiu, alterou, concluiu, cancelou ou excluiu, com a sua autoria;',
+            'os eventos de uso profissional nos pontos que geram auditoria: módulo ou tela, ação, data e hora, identificação do usuário, referência do registro de trabalho, contexto e resultado disponíveis, inclusive em consultas, navegação, filtros, emissões e exportações;',
+            'a classificação dos eventos como ações manuais ou automáticas do sistema, quando identificada, para separar os comandos da pessoa de sincronizações, consultas periódicas, recálculos e atualizações de presença;',
             'o que você publica: comentários, observações, curtidas, menções, anexos, tarefas e mensagens;',
             'a sua situação (Online, Ausente ou Offline) e o sinal que o programa envia de minuto em minuto enquanto está ligado;',
             'os avisos enviados a você e se já foram lidos;',
@@ -208,6 +215,7 @@
             'endereço de internet (IP), que chega ao servidor em toda comunicação e é guardado no registro do aceite destes documentos e nos registros técnicos do servidor.'
           ] },
           'Dados ligados à sua função, quando for o caso: comissões, produção e pagamentos lançados em seu nome no Financeiro.',
+          'A auditoria de uso não inclui senhas, hashes de senha, tokens de acesso, códigos de autenticação, chaves ou outros segredos. O registro de uso se limita às atividades profissionais dentro do aplicativo; não inclui captura de tela, teclado, câmera, microfone ou atividades externas ao programa.',
           'O aplicativo não pede nem trata dados pessoais sensíveis seus (como saúde, religião, biometria ou opinião política), e não é destinado a menores de 18 anos.'
         ]
       },
@@ -217,7 +225,7 @@
           { lista: [
             'Criar e manter a sua conta, confirmar o seu e-mail, liberar e controlar o seu acesso — execução do contrato ou da relação de trabalho com a empresa e procedimentos preliminares a pedido seu (LGPD, art. 7º, V).',
             'Permitir o seu trabalho no aplicativo e identificar a autoria de cada registro — execução do contrato (art. 7º, V) e legítimo interesse da empresa na organização e na conferência das atividades (art. 7º, IX).',
-            'Registrar entradas, saídas e ações, mostrar a sua situação e manter o histórico — legítimo interesse na segurança das informações, na prevenção de fraudes e erros e na prestação de contas (art. 7º, IX), e exercício regular de direitos em processos (art. 7º, VI).',
+            'Registrar entradas, saídas e ações, mostrar a sua situação, manter o histórico e permitir à gestão autorizada conferir o uso profissional por usuário e período — legítimo interesse na segurança das informações, na prevenção de fraudes e erros, na organização do trabalho e na prestação de contas (art. 7º, IX), e exercício regular de direitos em processos (art. 7º, VI).',
             'Enviar avisos pelo sino, pela janela do Windows e por e-mail — execução do contrato e legítimo interesse em que o trabalho chegue a quem deve fazê-lo (art. 7º, V e IX).',
             'Cumprir obrigações fiscais, contábeis, trabalhistas e de guarda de registros — cumprimento de obrigação legal ou regulatória (art. 7º, II).',
             'Mostrar a sua foto de perfil e outros dados opcionais que você decidir informar — o seu consentimento (art. 7º, I), que pode ser retirado a qualquer momento apagando o dado.'
@@ -231,6 +239,7 @@
           'Dentro da empresa:',
           { lista: [
             'os administradores veem o seu cadastro, a sua situação, as suas datas de acesso, a sua última alteração e os computadores ligados à sua conta;',
+            'a gestão com autorização específica pode consultar os relatórios detalhados de auditoria do uso profissional por usuário e período; a consulta desses relatórios é restrita à gestão e não fica disponível aos demais usuários apenas por eles participarem de uma ficha;',
             'os colegas veem o seu nome e a sua foto nas listas de responsável, nos históricos, nos comentários e nos avisos das fichas em que você atua.'
           ] },
           'Fora da empresa, os dados passam por prestadores de serviço que trabalham para ela (operadores), apenas no necessário:',
@@ -260,7 +269,7 @@
         titulo: 'Por quanto tempo os dados ficam guardados',
         blocos: [
           'Os dados da conta ficam guardados enquanto você tiver acesso ao aplicativo. Depois que o acesso termina, o cadastro pode ser excluído, mas o histórico do que você fez continua guardado com a sua autoria pelo tempo exigido pelas leis fiscais, contábeis e trabalhistas e pelo prazo em que a empresa possa precisar dele para se defender ou prestar contas (LGPD, art. 16).',
-          'O registro do aceite destes documentos é mantido pelo mesmo prazo. Vencidos os prazos, os dados são eliminados ou tornados anônimos.'
+          'Os registros detalhados de uso profissional e do aceite destes documentos seguem esses mesmos critérios de necessidade, obrigação de guarda e defesa de direitos. Não se estabelece aqui um prazo numérico único para todos os registros, nem uma rotina de eliminação automática. A empresa deve avaliar a conservação de acordo com a finalidade e as obrigações aplicáveis e eliminar ou anonimizar os dados quando não houver motivo legítimo para mantê-los.'
         ]
       },
       {
@@ -271,7 +280,7 @@
             'comunicação cifrada (HTTPS) entre o aplicativo e o servidor;',
             'perfis de permissão: cada pessoa vê e faz apenas o que o perfil dela permite;',
             'sessão que vence sozinha, bloqueio após tentativas de entrada erradas e possibilidade de o administrador cancelar o acesso e os computadores ligados à conta;',
-            'registro de autoria de todas as ações.'
+            'registro de autoria nas operações e nos eventos auditados.'
           ] },
           'Nenhum sistema é totalmente seguro. Se houver um incidente que possa trazer risco ou dano relevante a você, a empresa avisará você e a Autoridade Nacional de Proteção de Dados (ANPD), como manda a lei.'
         ]
@@ -303,7 +312,7 @@
       {
         titulo: 'Mudanças nesta Política',
         blocos: [
-          'Esta Política pode ser atualizada. Quando isso acontecer, o aplicativo mostra a nova versão e pede um novo aceite antes de continuar. A versão e a data de vigência ficam no topo do documento.'
+          'Esta Política pode ser atualizada. O aceite anterior é sinalizado como desatualizado e o Sup Admin pode solicitar um novo aceite pelo fluxo existente. Quando solicitado, o aplicativo mostra os documentos vigentes e pede a sua decisão antes de continuar. A versão e a data de vigência ficam no topo do documento.'
         ]
       }
     ]

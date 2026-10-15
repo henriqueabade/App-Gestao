@@ -237,6 +237,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchNotificationsWithRetry(maxRetries = 2) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await baseDaApi();
     if (!baseUrl) {
       console.warn('URL base da API não definida para o sino de avisos.');
@@ -250,7 +251,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
-        const response = await fetch(url, {
+        const response = await (aud?.fetch || fetch)(url, {
           headers: { Accept: 'application/json' },
           credentials: 'include',
         });
@@ -313,10 +314,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   async function marcarLidas(corpo) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await baseDaApi();
     if (!baseUrl) return;
     try {
-      await fetch(new URL('/api/notificacoes/lidas', baseUrl).toString(), {
+      await (aud?.fetch || fetch)(new URL('/api/notificacoes/lidas', baseUrl).toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         credentials: 'include',
@@ -439,6 +441,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const vaiParaOWindows = (tipo) => !FORA_DO_WINDOWS.has(tipo);
 
   async function dispensar(aviso) {
+    const aud = window.AuditoriaAcao?.vincular();
     avisos = avisos.filter((a) => a.id !== aviso.id);
     if (!aviso.lida) naoLidas = Math.max(0, naoLidas - 1);
     updateIcon();
@@ -446,7 +449,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const baseUrl = await baseDaApi();
     if (!baseUrl) return;
     try {
-      await fetch(new URL('/api/notificacoes/dispensar', baseUrl).toString(), {
+      await (aud?.fetch || fetch)(new URL('/api/notificacoes/dispensar', baseUrl).toString(), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: [aviso.id] }),
       });
     } catch (err) {
@@ -791,12 +794,13 @@ window.addEventListener('DOMContentLoaded', () => {
   /** Lembretes e atrasos de tarefa: quem gera é o servidor, a pedido do sino. */
   let gerando = false;
   async function gerarAvisosDeTarefas() {
+    const aud = window.AuditoriaAcao?.vincular();
     if (gerando || !ativo()) return;
     gerando = true;
     try {
       const baseUrl = await baseDaApi();
       if (!baseUrl) return;
-      await fetch(new URL('/api/tarefas/avisos', baseUrl).toString(), {
+      await (aud?.fetch || fetch)(new URL('/api/tarefas/avisos', baseUrl).toString(), {
         method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, credentials: 'include', body: '{}',
       });
     } catch (err) {

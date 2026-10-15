@@ -178,6 +178,7 @@
   };
 
   async function chamar(caminho, { method = 'GET', body } = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     let base = null;
     try {
       base = await window.apiConfig?.getApiBaseUrl?.();
@@ -189,7 +190,7 @@
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     let resposta;
     try {
-      resposta = await fetch(new URL(`${PREFIXO}${caminho}`, base).toString(), {
+      resposta = await (aud?.fetch || fetch)(new URL(`${PREFIXO}${caminho}`, base).toString(), {
         method, headers, credentials: 'include', cache: 'no-store',
         body: body !== undefined ? JSON.stringify(body) : undefined
       });

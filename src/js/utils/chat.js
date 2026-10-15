@@ -504,11 +504,12 @@
   }
 
   async function api(caminho, { method = 'GET', body } = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await baseDaApi();
     if (!base) throw Object.assign(new Error('Sem o endereço do servidor.'), { status: 0 });
     const headers = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const resposta = await fetch(new URL(`/api/chat${caminho}`, base).toString(), {
+    const resposta = await (aud?.fetch || fetch)(new URL(`/api/chat${caminho}`, base).toString(), {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -2362,8 +2363,9 @@
   }
 
   async function bytesDoAnexo(id) {
+    const aud = window.AuditoriaAcao?.vincular();
     await baseDaApi();
-    const resposta = await fetch(urlDoAnexo(id), { credentials: 'include' });
+    const resposta = await (aud?.fetch || fetch)(urlDoAnexo(id), { credentials: 'include' });
     if (!resposta.ok) {
       let dados = null;
       try { dados = await resposta.json(); } catch (_) { dados = null; }

@@ -2,8 +2,9 @@
   const overlay = document.getElementById('editarClienteOverlay');
   if(!overlay) return;
   async function fetchApi(path, options) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    return (aud?.fetch || fetch)(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('editarCliente');
   const voltar = document.getElementById('voltarEditarCliente');

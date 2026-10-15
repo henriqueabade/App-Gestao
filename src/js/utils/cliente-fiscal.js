@@ -79,6 +79,7 @@
 
   /** Procura o código IBGE pela cidade e pelo estado já digitados. */
   async function buscarIbge(raiz, prefixo) {
+    const aud = window.AuditoriaAcao?.vincular();
     const cidade = (el(raiz, `${prefixo}Cidade`)?.value || '').trim();
     const estado = (el(raiz, `${prefixo}Estado`)?.value || '').trim();
     const destino = el(raiz, `${prefixo}CodigoMunicipio`);
@@ -86,7 +87,7 @@
     if (!cidade || !estado) { avisar('Preencha a cidade e o estado antes de buscar o código IBGE.', 'error'); return null; }
     try {
       const base = await window.apiConfig.getApiBaseUrl();
-      const resposta = await fetch(`${base}/api/fiscal/municipios?uf=${encodeURIComponent(estado)}&nome=${encodeURIComponent(cidade)}`);
+      const resposta = await (aud?.fetch || fetch)(`${base}/api/fiscal/municipios?uf=${encodeURIComponent(estado)}&nome=${encodeURIComponent(cidade)}`);
       const corpo = await resposta.json().catch(() => null);
       if (!resposta.ok) throw new Error(corpo?.error || `Erro ${resposta.status}`);
       const achado = corpo.exato || (corpo.candidatos?.length === 1 ? corpo.candidatos[0] : null);

@@ -512,6 +512,8 @@
   /**
    * Registra um handler de clique já protegido. Use no lugar de
    * `el.addEventListener('click', handler)` para ações que fazem I/O.
+   * O segundo argumento do handler é o client de auditoria deste gesto:
+   * passe-o aos helpers quando a gravação acontecer depois de um await.
    */
   function bind(el, handler, opcoes = {}) {
     if (!el || typeof handler !== 'function') return;
@@ -522,14 +524,16 @@
         evento.stopImmediatePropagation();
         return;
       }
-      run(el, () => handler(evento), opcoes);
+      const auditoria = window.AuditoriaAcao?.vincular(evento);
+      run(el, () => handler(evento, auditoria), opcoes);
     });
   }
 
   /**
    * Protege o `submit` de um formulário: o botão de envio fica carregando até a
    * promessa do handler concluir e reenvios são ignorados. Também cobre o envio
-   * por Enter, que não passa por nenhum clique.
+   * por Enter, que não passa por nenhum clique. Assim como bind, entrega ao
+   * handler o client de auditoria como segundo argumento, sem escopo global.
    */
   function bindSubmit(form, handler, opcoes = {}) {
     if (!form || typeof handler !== 'function') return;
@@ -540,6 +544,7 @@
     form.addEventListener('submit', async evento => {
       evento.preventDefault();
       if (estaOcupado(form)) return;
+      const auditoria = window.AuditoriaAcao?.vincular(evento);
       marcarOcupado(form, { visual: false });
       try {
         // O carregando vai no botão que DE FATO submeteu.
@@ -551,7 +556,7 @@
         //
         // A trava do segundo envio continua no FORMULÁRIO, e é ela que impede
         // clicar num botão e depois no outro.
-        await run(botaoQueSubmeteu(evento) || botao, () => handler(evento), opcoes);
+        await run(botaoQueSubmeteu(evento) || botao, () => handler(evento, auditoria), opcoes);
       } finally {
         liberar(form);
       }

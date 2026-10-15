@@ -47,10 +47,11 @@
   function carregarMinimo(){
     if(leituraDoMinimo) return leituraDoMinimo;
     leituraDoMinimo = (async () => {
+      const aud = window.AuditoriaAcao?.vincular();
       try{
         const base = await window.apiConfig?.getApiBaseUrl?.();
         if(!base) return 0;
-        const resp = await fetch(`${base}/api/cobranca/parcela-minima`);
+        const resp = await (aud?.fetch || fetch)(`${base}/api/cobranca/parcela-minima`);
         if(!resp.ok) return 0;
         const corpo = await resp.json();
         minimoCentavos = Math.round((Number(corpo?.parcela_minima) || 0) * 100);

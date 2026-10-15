@@ -68,3 +68,9 @@ test('as rotas que eram abertas e ganharam guarda (Segurança, 09/10/2026)', () 
 test('o mapa da API está em dia com as rotas', { skip: !fs.existsSync(DESTINO) && 'repositório da API não está ao lado' }, () => {
   assert.equal(fs.readFileSync(DESTINO, 'utf8').replace(/\r\n/g, '\n'), textoDaPolitica(mapa), 'rode: node scripts/mapa-permissoes-api.js');
 });
+
+test('captura dinâmica pode inserir auditoria, cuja leitura permanece exclusiva da gestão', () => {
+  assert.deepEqual(p.usuarios_auditoria, {
+    ler: 'supadmin', inserir: 'todos', alterar: 'supadmin', apagar: 'supadmin'
+  });
+});

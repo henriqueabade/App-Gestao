@@ -93,8 +93,9 @@
   const avisar = (texto, tipo = 'info') => window.showToast?.(texto, tipo);
 
   async function chamar(caminho, { method = 'GET', corpo } = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = (await window.apiConfig?.getApiBaseUrl?.()) || '';
-    const resp = await fetch(`${base}${caminho}`, {
+    const resp = await (aud?.fetch || fetch)(`${base}${caminho}`, {
       method,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: corpo ? JSON.stringify(corpo) : undefined

@@ -13,8 +13,9 @@
   if (window.ProspeccaoAcoes) return;
 
   async function fetchApi(caminho, opcoes = {}) {
+    const aud = window.AuditoriaAcao?.vincular();
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${caminho}`, {
+    return (aud?.fetch || fetch)(`${baseUrl}${caminho}`, {
       ...opcoes,
       headers: { 'Content-Type': 'application/json', ...(opcoes.headers || {}) }
     });

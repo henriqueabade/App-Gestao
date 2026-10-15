@@ -1,0 +1,61 @@
+<div id="usuarioAuditoriaOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div role="dialog" aria-modal="true" aria-labelledby="usuarioAuditoriaTitulo" class="w-full max-w-6xl h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 overflow-hidden flex flex-col">
+    <header class="px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-4">
+      <button id="usuarioAuditoriaVoltar" type="button" class="btn-neutral ctl-botao text-white">← Voltar</button>
+      <div class="min-w-0 text-center">
+        <h2 id="usuarioAuditoriaTitulo" class="ctl-modal-titulo text-white">Relatório de atividades</h2>
+        <p id="usuarioAuditoriaUsuario" class="text-sm text-gray-300"></p>
+      </div>
+      <button id="usuarioAuditoriaFechar" type="button" class="btn-danger ctl-botao text-white">Fechar</button>
+    </header>
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll p-6 space-y-5">
+      <p class="text-sm text-gray-300">Consulte as ações registradas para este usuário. Eventos automáticos e do sistema aparecem separados. Datas e horários de Brasília.</p>
+      <p class="text-xs text-gray-300">Somente eventos gravados pela auditoria aparecem; atividades anteriores à ativação do registro não são reconstruídas.</p>
+      <div class="ua-filtros">
+        <label class="ctl-rotulo text-white">De
+          <input id="usuarioAuditoriaInicio" type="date" class="ctl-campo input-glass text-white w-full">
+        </label>
+        <label class="ctl-rotulo text-white">Até
+          <input id="usuarioAuditoriaFim" type="date" class="ctl-campo input-glass text-white w-full">
+        </label>
+        <label class="ctl-rotulo text-white">Módulo
+          <input id="usuarioAuditoriaModulo" type="text" maxlength="100" placeholder="Todos" class="ctl-campo input-glass text-white w-full">
+        </label>
+        <label class="ctl-rotulo text-white">Ação
+          <input id="usuarioAuditoriaAcao" type="text" maxlength="100" placeholder="Todas" class="ctl-campo input-glass text-white w-full">
+        </label>
+        <label class="ctl-rotulo text-white">Origem
+          <select id="usuarioAuditoriaOrigem" class="ctl-campo bg-input text-white w-full">
+            <option value="">Todas</option><option value="manual">Ações do usuário</option><option value="automatico">Automático</option><option value="sistema">Sistema</option><option value="nao_confirmada">Origem não confirmada</option>
+          </select>
+        </label>
+        <label class="ctl-rotulo text-white">Resultado
+          <select id="usuarioAuditoriaResultado" class="ctl-campo bg-input text-white w-full">
+            <option value="">Todos</option><option value="sucesso">Sucesso</option><option value="falha">Falha</option><option value="cancelado">Cancelado</option>
+          </select>
+        </label>
+      </div>
+      <div class="ctl-acoes justify-between">
+        <label class="ctl-rotulo text-white">Por página
+          <select id="usuarioAuditoriaLimite" class="ctl-campo bg-input text-white"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+        </label>
+        <button id="usuarioAuditoriaConsultar" type="button" class="btn-primary ctl-botao text-white">Consultar</button>
+      </div>
+      <p id="usuarioAuditoriaAviso" class="hidden text-sm" role="alert" aria-live="polite"></p>
+      <div id="usuarioAuditoriaCorpo"></div>
+      <div class="ctl-acoes justify-between">
+        <p id="usuarioAuditoriaContagem" class="text-sm text-gray-300" aria-live="polite"></p>
+        <div class="ctl-acoes">
+          <button id="usuarioAuditoriaAnterior" type="button" class="btn-neutral ctl-botao text-white" disabled>Anterior</button>
+          <button id="usuarioAuditoriaProxima" type="button" class="btn-neutral ctl-botao text-white" disabled>Próxima</button>
+        </div>
+      </div>
+    </div>
+    <footer class="px-6 py-4 border-t border-white/10 ctl-acoes justify-between">
+      <p class="text-xs text-gray-300">PDF completo dos filtros consultados, até 5.000 registros. Para volumes maiores, reduza o período.</p>
+      <button id="usuarioAuditoriaPdf" type="button" class="btn-secondary ctl-botao text-white" disabled><i class="fas fa-print mr-1" aria-hidden="true"></i>PDF / Imprimir período</button>
+    </footer>
+  </div>
+</div>
+<link rel="stylesheet" href="../css/folha-relatorio.css">
+<link rel="stylesheet" href="../css/usuario-auditoria.css">

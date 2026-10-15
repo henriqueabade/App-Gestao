@@ -587,6 +587,12 @@ function politica(mapa) {
       if (Array.isArray(tabelas[t][op]) && !tabelas[t][op].length) tabelas[t][op] = 'supadmin';
     }
   }
+  // A captura usa AsyncLocalStorage e chamadas dinâmicas, fora do alcance da
+  // análise de chamadas. Todo usuário autenticado precisa inserir seu evento;
+  // somente a gestão consulta. UPDATE/DELETE também são proibidos pelo SQL.
+  tabelas.usuarios_auditoria = {
+    ler: 'supadmin', inserir: 'todos', alterar: 'supadmin', apagar: 'supadmin'
+  };
   return tabelas;
 }
 

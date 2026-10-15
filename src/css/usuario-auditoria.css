@@ -1,0 +1,16 @@
+.ua-filtros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.ua-tabela { table-layout: fixed; }
+.ua-tabela th:first-child { width: 24%; }
+.ua-tabela td { overflow-wrap: anywhere; }
+.ua-tabela pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0; font: inherit; }
+.ua-mudancas { margin-top: .5rem; }
+.ua-mudancas dt { font-weight: 700; margin-top: .4rem; }
+.ua-mudancas dd { margin-left: 0; }
+.ua-origem { display: inline-block; padding: .1rem .45rem; border-radius: .25rem; font-size: .72rem; font-weight: 700; background: #e8edf4; color: #24344b; }
+.ua-origem--automatico, .ua-origem--sistema { background: #fff1cc; color: #6b4b00; }
+.ua-origem--manual { background: #e1f2e4; color: #1d5027; }
+.ua-resultado { margin-left: .5rem; font-size: .75rem; font-weight: 700; }
+.ua-resultado--falha { color: #b42318; }
+.ua-resultado--cancelado { color: #855d00; }
+@media (max-width: 760px) { .ua-filtros { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ua-tabela th:first-child { width: 32%; } }
+@media print { .ua-tabela pre { white-space: pre-wrap; } }

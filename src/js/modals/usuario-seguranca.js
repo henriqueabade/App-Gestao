@@ -21,8 +21,9 @@
   };
 
   async function fetchApi(caminho) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`);
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`);
     const corpo = await resposta.json().catch(() => null);
     if (!resposta.ok) {
       const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);

@@ -25,8 +25,9 @@
   };
 
   async function fetchApi(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = await window.apiConfig.getApiBaseUrl();
-    const resposta = await fetch(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, { ...opcoes, headers: { 'Content-Type': 'application/json', ...(opcoes?.headers || {}) } });
     const corpo = await resposta.json().catch(() => null);
     if (!resposta.ok) {
       const e = new Error(corpo?.error || `O servidor respondeu com erro (${resposta.status}).`);

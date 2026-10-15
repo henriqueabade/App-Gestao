@@ -204,7 +204,8 @@ const ehRequisicaoExpress = req => Boolean(req && typeof req.method === 'string'
 
 function createApiClient(req) {
   const api = criarCliente(req);
-  return ehRequisicaoExpress(req) ? comLeituraUnica(api) : api;
+  const captura = require('./auditoriaCaptura');
+  return captura.comAuditoria(ehRequisicaoExpress(req) ? comLeituraUnica(api) : api, { sistema: captura.capturaSistemaAtiva() });
 }
 
 function criarCliente(req) {
@@ -297,12 +298,14 @@ function criarCliente(req) {
     get: (path, options = {}) => send('GET', path, options),
     post: (path, body, options = {}) => send('POST', path, { ...options, body }),
     put: (path, body, options = {}) => send('PUT', path, { ...options, body }),
+    patch: (path, body, options = {}) => send('PATCH', path, { ...options, body }),
     delete: (path, options = {}) => send('DELETE', path, options)
   };
 }
 
 module.exports = {
   createApiClient,
+  createApiClientSemAuditoria: criarCliente,
   comLeituraUnica,
   normalizeToken
 };

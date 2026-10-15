@@ -32,7 +32,8 @@
   }
 
   async function pedir(caminho, opcoes) {
-    const resp = await fetch(`${await base()}${caminho}`, {
+    const aud = window.AuditoriaAcao?.vincular();
+    const resp = await (aud?.fetch || fetch)(`${await base()}${caminho}`, {
       headers: { 'content-type': 'application/json' },
       ...opcoes
     });

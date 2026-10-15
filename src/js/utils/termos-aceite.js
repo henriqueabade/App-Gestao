@@ -207,8 +207,9 @@
   // ------------------------------------------------------------------
 
   async function chamar(caminho, opcoes) {
+    const aud = window.AuditoriaAcao?.vincular();
     const base = (await global.apiConfig?.getApiBaseUrl?.()) || '';
-    const resposta = await fetch(`${base}${caminho}`, opcoes);
+    const resposta = await (aud?.fetch || fetch)(`${base}${caminho}`, opcoes);
     let corpo = null;
     try { corpo = await resposta.json(); } catch (_) { corpo = null; }
     return { ok: resposta.ok, status: resposta.status, corpo };
