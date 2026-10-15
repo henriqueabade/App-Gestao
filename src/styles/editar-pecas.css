@@ -117,11 +117,32 @@
 .editar-pecas__bloco ul { margin: 0; padding-left: 1.1rem; list-style: disc; display: grid; gap: 0.25rem; }
 .editar-pecas__bloco--total { border-color: rgba(182, 160, 62, 0.45); }
 .editar-pecas__valores { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: baseline; }
-.editar-pecas__valores strong { color: #fff; font-size: 1rem; }
-.editar-pecas__antes { text-decoration: line-through; color: rgba(255, 255, 255, 0.5); }
+.editar-pecas__valores strong { color: #a7f3d0; font-size: 1rem; }
+.editar-pecas__antes { text-decoration: line-through; color: #fdba74; }
+
+/* Sempre visível no fim do modal, mesmo com a lista de peças rolada. */
+.editar-pecas__totais {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem 0.75rem;
+    padding: 0.85rem 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(17, 12, 16, 0.9);
+}
+.editar-pecas__totais.hidden { display: none; }
+.editar-pecas__tag { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.75rem; padding: 0.45rem 0.8rem; border: 1px solid; border-radius: 999px; font-size: 0.8rem; }
+.editar-pecas__tag strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.editar-pecas__tag--anterior { color: #fdba74; border-color: rgba(251, 146, 60, 0.45); background: rgba(251, 146, 60, 0.1); }
+.editar-pecas__tag--novo { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.1); }
+.editar-pecas__seta { color: rgba(255, 255, 255, 0.65); }
+.editar-pecas__totais p { flex-basis: 100%; margin: 0; text-align: right; }
 
 @media (max-width: 760px) {
     .editar-pecas__linha { grid-template-columns: 1fr; }
     .editar-pecas__controles { justify-content: flex-start; }
     .editar-pecas__adicionar { grid-template-columns: 1fr; }
+    .editar-pecas__totais { padding: 0.75rem 1rem; }
 }

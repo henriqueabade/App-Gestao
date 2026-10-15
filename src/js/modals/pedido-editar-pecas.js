@@ -69,6 +69,7 @@
       desconto_vista_prc: condicao === 'vista' ? Math.min(5, Math.max(pagamento - porQuantidade, 0)) : 0,
       desconto_especial_prc: alterada ? especial : Number(item?.desconto_especial_prc) || 0,
       valor_unitario_desc: alterada ? liquido : Number(item?.valor_unitario_desc ?? liquido),
+      valor_total_sem_arredondar: quantidade > 0 ? (alterada ? liquido * quantidade : Number(item?.valor_total) || 0) : 0,
       valor_total: quantidade > 0 ? centavos(alterada ? liquido * quantidade : Number(item?.valor_total) || 0) : 0,
       sem_preco: alterada && !temTabela && !item,
       tabela: alterada && temTabela
@@ -76,7 +77,7 @@
   }
 
   /** Quantidades finais por linha, incluindo inclusões na peça que já existe. */
-  function precosDaEdicao(dados, edicao) {
+  function precosDaEdicao(dados, edicao, catalogo = []) {
     const linhas = dados?.linhas || [];
     const quantidades = new Map(linhas.filter(l => edicao.linhas[String(l.item_id)]?.juntar_em === null)
       .map(l => [String(l.item_id), Number(edicao.linhas[String(l.item_id)].quantidade) || 0]));
@@ -94,9 +95,24 @@
       const id = String(l.item_id);
       const quantidade = quantidades.get(id) || 0;
       const recebeu = linhas.some(x => String(edicao.linhas[String(x.item_id)]?.juntar_em) === id);
-      precos.set(id, precoDaLinha(l, l, quantidade, dados.pedido?.condicao, quantidade !== Number(l.quantidade) || recebeu));
+      const produto = l.preco_tabela !== undefined ? l : catalogo.find(p => String(p.id) === String(l.produto_id));
+      precos.set(id, precoDaLinha(l, produto, quantidade, dados.pedido?.condicao, quantidade !== Number(l.quantidade) || recebeu));
     }
     return { linhas: precos, destinos };
+  }
+
+  /** Total durante a edição; a revisão substitui a estimativa pelo valor do servidor. */
+  function totalDaEdicao(dados, edicao, precos) {
+    if (!mudou(dados, edicao)) return Number(dados.pedido.valor_final) || 0;
+    let total = Number(dados.pedido.ajuste) || 0;
+    for (const p of precos.linhas.values()) total += p.valor_total_sem_arredondar;
+    for (const n of edicao.novas) {
+      if (precos.destinos.has(String(n.uid))) continue;
+      const p = precoDaLinha(null, n, Number(n.quantidade), dados.pedido.condicao);
+      if (p.sem_preco) return null;
+      total += p.valor_total_sem_arredondar;
+    }
+    return centavos(total);
   }
 
   /** Texto usado tanto nos cards quanto na revisão do servidor. */
@@ -310,6 +326,16 @@
   function esquecerPrevia() {
     previa = null;
     el('editarPecasRevisao').classList.add('hidden');
+    if (dados) pintarTotais();
+  }
+
+  function pintarTotais(precos = precosDaEdicao(dados, edicao, catalogo)) {
+    const total = previa ? previa.valores.depois.valor_final : totalDaEdicao(dados, edicao, precos);
+    el('editarPecasTotalAnterior').textContent = reais(dados.pedido.valor_final);
+    el('editarPecasTotalNovo').textContent = total === null ? 'A conferir' : reais(total);
+    el('editarPecasTotalNota').textContent = previa ? 'Valor conferido na revisão.'
+      : mudou(dados, edicao) ? 'Prévia com descontos e ajuste do pagamento. Confirme em Revisar.' : 'Total atual do pedido.';
+    el('editarPecasTotais').classList.remove('hidden');
   }
 
   function linhaDaTela(l, preco) {
@@ -430,7 +456,7 @@
   function pintar() {
     const lista = el('editarPecasLinhas');
     lista.replaceChildren();
-    const precos = precosDaEdicao(dados, edicao);
+    const precos = precosDaEdicao(dados, edicao, catalogo);
     for (const l of dados.linhas) lista.appendChild(linhaDaTela(l, precos.linhas.get(String(l.item_id))));
     for (const n of edicao.novas) lista.appendChild(linhaNovaDaTela(n, precos.destinos.get(String(n.uid)), precos.linhas));
     const regra = el('editarPecasRegraDesconto');
@@ -438,6 +464,7 @@
       ? 'Pagamento à vista mantido: 5% em cada linha + 5% nas linhas com mais de uma unidade.'
       : 'Pagamento a prazo mantido: 5% nas linhas com mais de uma unidade.';
     if (dados.pedido.ajuste) regra.textContent += ` ${dados.pedido.ajuste > 0 ? 'Adicional' : 'Desconto'} do pagamento de ${reais(Math.abs(dados.pedido.ajuste))} mantido no total do pedido.`;
+    pintarTotais(precos);
     const bloqueado = !dados.pode_editar || dados.sql_pendente;
     ['editarPecasRevisar', 'editarPecasAdicionar', 'editarPecasBusca', 'editarPecasNovaQtd', 'editarPecasMotivo'].forEach(id => { el(id).disabled = bloqueado; });
   }
@@ -498,6 +525,7 @@
     total.appendChild(ul);
     resumo.appendChild(total);
     bloco('Atenção', previa.avisos || []);
+    pintarTotais();
     el('editarPecasRevisao').classList.remove('hidden');
     el('editarPecasRevisao').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
@@ -545,6 +573,7 @@
     } catch (e) {
       previa = null;
       el('editarPecasRevisao').classList.add('hidden');
+      pintarTotais();
       mensagem(e?.status === 403 ? 'Editar as peças de um pedido é uma ação restrita ao dono do sistema.' : (e?.message || 'Não foi possível revisar a edição.'));
     }
   }
@@ -618,10 +647,12 @@
   async function carregar() {
     el('editarPecasCarregando').classList.remove('hidden');
     el('editarPecasConteudo').classList.add('hidden');
+    el('editarPecasTotais').classList.add('hidden');
     try {
       dados = await fetchApi(`/api/pedido-edicao/${encodeURIComponent(pedidoId)}`);
     } catch (e) {
       dados = null;
+      el('editarPecasTotais').classList.add('hidden');
       avisar(e?.status === 403 ? 'Editar as peças de um pedido é uma ação restrita ao dono do sistema.' : (e?.message || 'Não foi possível abrir as peças do pedido.'));
     }
     el('editarPecasCarregando').classList.add('hidden');
@@ -650,6 +681,7 @@
 
   try {
     await Promise.all([carregar(), carregarCatalogo()]);
+    if (dados) pintar();
   } finally {
     if (typeof Modal?.signalReady === 'function') Modal.signalReady(overlayId);
     window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }));
