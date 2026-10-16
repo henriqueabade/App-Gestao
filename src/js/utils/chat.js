@@ -1010,6 +1010,7 @@
         <button type="button" data-acao="responder" data-id="${m.id}" title="Responder"><i class="fas fa-reply"></i></button>
         ${minha ? `<button type="button" data-acao="editar" data-id="${m.id}" title="Editar"><i class="fas fa-pen"></i></button>` : ''}
         ${minha || supAdmin() ? `<button type="button" class="chat-perigo" data-acao="apagar" data-id="${m.id}" title="Apagar"><i class="fas fa-trash"></i></button>` : ''}
+        ${minha ? '' : `<button type="button" data-acao="denunciar" data-id="${m.id}" title="Denunciar"><i class="fas fa-flag"></i></button>`}
       </div>`;
     return `
       <div class="${classes}" data-msg="${m.id}">
@@ -1968,6 +1969,30 @@
     }
   }
 
+  /**
+   * "Denunciar": a mensagem de outra pessoa vai para a análise da administração
+   * por e-mail ao suporte (política 11.12 da Microsoft Store). Quem apaga é o
+   * Sup Admin. Ver src/js/utils/denunciar-conteudo.js.
+   */
+  function denunciar(id) {
+    const m = mensagemDaAberta(id);
+    if (!m || !window.DenunciarConteudo) return null;
+    const c = estado.conversas.find(x => String(x.id) === String(m.conversa_id));
+    return window.DenunciarConteudo.abrir({
+      titulo: 'Denunciar mensagem',
+      explicacao: `A mensagem de ${nomeDe(m.autor_id)} vai para a análise da administração, que pode apagá-la.`,
+      assunto: `Denúncia no chat — mensagem #${m.id}`,
+      linhas: [
+        `Conversa: ${nomeDaConversa(c, nomes())} (#${m.conversa_id})`,
+        `Autor: ${nomeDe(m.autor_id)}`,
+        `Enviada em: ${dataCompleta(m.criado_em)}`,
+        `Mensagem: #${m.id}`,
+        m.anexos?.length ? `Anexos: ${m.anexos.length}` : ''
+      ],
+      trecho: m.texto
+    });
+  }
+
   async function reagir(id, emoji) {
     try {
       const r = await api(`/mensagens/${id}/reacoes`, { method: 'POST', body: { emoji } });
@@ -2835,6 +2860,7 @@
       case 'responder': return comecarResposta(id);
       case 'editar': return comecarEdicao(id);
       case 'apagar': return apagar(id);
+      case 'denunciar': return denunciar(id);
       case 'reagir': return abrirFlutuante('reagir', alvo, { mensagemId: Number(id) });
       case 'reacao': return reagir(id, alvo.dataset.emoji);
       case 'emojis': return abrirFlutuante('inserir', alvo);

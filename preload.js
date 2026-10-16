@@ -331,6 +331,7 @@ const electronApiDefinitions = {
   getRuntimeConfig: () => getRuntimeConfigCached(),
   // 'DEV' ou 'PROD' — só para o selo do cabeçalho.
   getModoBanco: () => ipcRenderer.invoke('get-modo-banco'),
+  getNaMicrosoftStore: () => ipcRenderer.invoke('get-na-microsoft-store'),
   // Abre o seletor de arquivo do certificado fiscal; devolve só o caminho.
   selecionarCertificadoFiscal: () => ipcRenderer.invoke('fiscal:selecionar-certificado'),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),

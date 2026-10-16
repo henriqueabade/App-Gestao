@@ -151,6 +151,8 @@
 
     extrair?.classList.toggle('hidden', !mostrarExtrair);
     aplicar?.classList.toggle('hidden', !(emRevisao && pendentes > 0 && temFormulario));
+    // Só há o que reportar depois que a IA devolveu linhas.
+    get('iaDetReportar')?.classList.toggle('hidden', !(leitura.itens || []).length);
 
     // Gravar tudo de uma vez só aparece quando abrir um formulário por linha
     // seria inviável. Com uma linha só, o caminho normal já dá conta e um
@@ -2450,6 +2452,27 @@
   // Extrair e aplicar
   // ---------------------------------------------------------------------------
 
+  /**
+   * "Reportar resultado": o que a IA devolveu vai para a análise da
+   * administração por e-mail ao suporte (política 11.16 da Microsoft Store).
+   * Vai só a referência da leitura, nunca o conteúdo do documento. Ver
+   * src/js/utils/denunciar-conteudo.js.
+   */
+  function reportarResultado() {
+    if (!leitura || !window.DenunciarConteudo) return null;
+    return window.DenunciarConteudo.abrir({
+      titulo: 'Reportar resultado da IA',
+      explicacao: 'O resultado desta leitura vai para a análise da administração. O conteúdo do documento não vai no e-mail, só a referência da leitura.',
+      assunto: `Resultado da IA — leitura #${leitura.id}`,
+      linhas: [
+        `Leitura: #${leitura.id}`,
+        `Destino: ${leitura.destino || '—'}`,
+        `Situação: ${leitura.status || '—'}`,
+        `Linhas extraídas: ${(leitura.itens || []).length}`
+      ]
+    });
+  }
+
   async function carregar() {
     const resp = await fetchApi(`/api/ia/${resumo.id}`);
     const dados = await resp.json().catch(() => ({}));
@@ -3018,6 +3041,7 @@
   // ---------------------------------------------------------------------------
 
   get('iaDetFechar')?.addEventListener('click', close);
+  get('iaDetReportar')?.addEventListener('click', reportarResultado);
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });

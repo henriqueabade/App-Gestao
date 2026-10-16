@@ -1882,6 +1882,26 @@ const MenuStartupPreferences = (() => {
         secao.hidden = false;
     }
 
+    // ---------------------------------------------------------------- documentos aceitos
+
+    /**
+     * Configurações › Dados pessoais (16/10/2026): os Termos de Uso e a
+     * Política de Privacidade a qualquer momento, só para leitura — política
+     * 11.12 da Microsoft Store. O visualizador é o mesmo do aceite
+     * (src/js/utils/termos-aceite.js).
+     */
+    function initDocumentosAceitos() {
+        [
+            ['#personalTermosDeUso', 'termos_de_uso'],
+            ['#personalPoliticaDePrivacidade', 'politica_de_privacidade']
+        ].forEach(([seletor, chave]) => {
+            const botao = moduleElement?.querySelector(seletor);
+            if (!botao) return;
+            if (!window.TermosAceite?.abrirDocumento) { botao.hidden = true; return; }
+            botao.addEventListener('click', () => window.TermosAceite.abrirDocumento(chave, { somenteLeitura: true }));
+        });
+    }
+
     // ---------------------------------------------------------------- programa no Windows
 
     const PROGRAMA_NO_WINDOWS = [
@@ -1957,6 +1977,7 @@ const MenuStartupPreferences = (() => {
         handlePendingPersonalDataFocus();
         initTarefasAutomaticasSection();
         initProgramaNoWindowsSection();
+        initDocumentosAceitos();
 
         // As permissões chegam de forma assíncrona; quando terminarem, refaz o
         // filtro do seletor (senão a tela abre listando módulo bloqueado).

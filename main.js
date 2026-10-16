@@ -217,6 +217,12 @@ ipcMain.handle('get-runtime-config', () => {
 // decidido na inicialização —, não o que o .env diz agora.
 ipcMain.handle('get-modo-banco', () => (useLocalDatabase ? 'DEV' : 'PROD'));
 
+// Se é o pacote da Microsoft Store: o menu tira os itens que ainda não têm
+// tela (src/js/menu.js). O mesmo canal da versão da Store (App-Gestao-Store),
+// que guarda o sinal em `naMicrosoftStore`; aqui, no instalador NSIS, o
+// Electron sempre diz `false` e o menu fica como sempre foi.
+ipcMain.handle('get-na-microsoft-store', () => process.windowsStore === true);
+
 // Escolha do .pfx do certificado fiscal. Só o CAMINHO volta ao renderer: quem
 // lê o arquivo, valida a senha e o guarda cifrado é o backend
 // (backend/fiscalController.js). A chave privada nunca passa pela tela.

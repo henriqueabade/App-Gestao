@@ -95,6 +95,23 @@ const companyName = document.getElementById('companyName');
     }
 })();
 
+// No pacote da Microsoft Store, os itens do menu que ainda não têm tela saem:
+// quem testa o pacote não pode encontrar recurso incompleto (16/10/2026,
+// docs/microsoft-store-listing.md). Os itens nascem escondidos até a permissão
+// liberar, então tirá-los aqui não pisca nada. No instalador NSIS ficam.
+const PAGINAS_SEM_TELA = ['laminacao-precificacao', 'laminacao-relatorios'];
+(async function tirarPaginasSemTelaNaStore() {
+    if (!window.electronAPI?.getNaMicrosoftStore) return;
+    try {
+        if (!(await window.electronAPI.getNaMicrosoftStore())) return;
+        PAGINAS_SEM_TELA.forEach(page => {
+            document.querySelectorAll(`[data-page="${page}"]`).forEach(item => item.remove());
+        });
+    } catch (err) {
+        console.warn('Não foi possível saber se o programa é o pacote da Microsoft Store.', err);
+    }
+})();
+
 const MODULES_WITHOUT_SCROLL = new Set([
     'materia-prima',
     'produtos',
