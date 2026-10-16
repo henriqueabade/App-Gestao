@@ -13,6 +13,7 @@ const cnpjFmt = d => (String(d || '').length === 14 ? String(d).replace(/^(\d{2}
 const cpfFmt = d => (String(d || '').length === 11 ? String(d).replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : String(d || ''));
 const dataHora = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}:\d{2}:\d{2}))?/.exec(String(iso || '')); return m ? `${m[3]}/${m[2]}/${m[1]}${m[4] ? ` ${m[4]}` : ''}` : ''; };
 const chaveFmt = c => String(c || '').replace(/(\d{4})(?=\d)/g, '$1 ');
+const numeroNf = n => String(n || '').padStart(9, '0').replace(/(\d{3})(?=\d)/g, '$1.');
 
 const CSS = `
   @page { size: A4 portrait; margin: 12mm; }
@@ -27,6 +28,16 @@ const CSS = `
   .linha dt { color: #333; } .linha dd { margin: 0; font-weight: bold; }
   .texto { font-size: 10pt; white-space: pre-wrap; line-height: 1.4; }
   .cond { font-size: 7pt; color: #222; line-height: 1.35; }
+  /* Canhoto no fim (16/10/2026): o mesmo do DANFE, para o recebedor assinar. */
+  .assinatura { break-inside: avoid; page-break-inside: avoid; margin-top: 6mm; }
+  .corte { border-top: 1px dashed #000; margin: 0 0 2mm; }
+  .canhoto { display: grid; grid-template-columns: 1fr 34mm; border: 1px solid #000; }
+  .canhoto .texto { padding: 2mm 3mm; font-size: 6.5pt; }
+  .canhoto .linhas { display: grid; grid-template-columns: 40mm 1fr; border-top: 1px solid #000; }
+  .canhoto .linhas div { padding: 1.5mm 3mm; min-height: 9mm; font-size: 5.5pt; text-transform: uppercase; }
+  .canhoto .linhas div + div { border-left: 1px solid #000; }
+  .canhoto .nf { border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 8pt; }
+  .canhoto .nf .n { font-size: 10pt; }
   .marca { position: absolute; top: 45%; left: 0; right: 0; text-align: center; font-size: 40pt; font-weight: bold; color: rgba(200, 0, 0, 0.16); transform: rotate(-25deg); pointer-events: none; }
 `;
 
@@ -90,6 +101,17 @@ function montarCartaCorrecaoHtml({ xmlNfeProc, carta = {}, cancelada = false } =
   <div class="quadro">
     <h2>Condições de uso</h2>
     <div class="cond">${esc(COND_USO_CCE)}</div>
+  </div>
+
+  <div class="assinatura">
+    <div class="corte"></div>
+    <div class="canhoto">
+      <div>
+        <div class="texto">RECEBEMOS DE <b>${esc(e.nome)}</b> A CARTA DE CORREÇÃO ELETRÔNICA (CC-e) DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO. EMISSÃO DA NF-e: ${dataHora(n.dhEmi).slice(0, 10)} — REGISTRO DA CC-e: ${dataHora(carta.registradaEm).slice(0, 10) || '—'} — DESTINATÁRIO: ${esc(d.nome)}</div>
+        <div class="linhas"><div>Data de recebimento</div><div>Identificação e assinatura do recebedor</div></div>
+      </div>
+      <div class="nf"><div>CC-e · SEQ. ${seq}</div><div>NF-e</div><div class="n">Nº ${numeroNf(n.numero)}</div><div>SÉRIE ${esc(n.serie)}</div></div>
+    </div>
   </div>
 </div>
 </body></html>`;

@@ -131,6 +131,14 @@ test('carta de correção: registrada (135) fica no histórico com o procEventoN
   const doc = require('./cartaCorrecaoDoc').montarCartaCorrecaoHtml({ xmlNfeProc: t.api.dados.notas_fiscais[0].xml_autorizado, carta: segunda });
   assert.ok(doc.includes('CARTA DE CORREÇÃO ELETRÔNICA') && doc.includes('Sequência 2') && doc.includes('Segunda correção: leia-se Nogueira onde se lê Café') && doc.includes('131260000222222'));
   assert.ok(doc.includes('substitui as anteriores') && doc.includes('A Carta de Correcao e disciplinada'));
+  // Canhoto no fim (16/10/2026), como o do DANFE: a nota vinculada e as linhas para assinar.
+  const canhoto = doc.slice(doc.indexOf('<div class="assinatura">'));
+  assert.ok(doc.indexOf('<div class="assinatura">') > doc.indexOf('Condições de uso'), 'depois das condições de uso');
+  assert.match(canhoto, /<div class="corte"><\/div>/);
+  assert.match(canhoto, /A CARTA DE CORREÇÃO ELETRÔNICA \(CC-e\) DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO\. EMISSÃO DA NF-e: /);
+  assert.match(canhoto, /<div>Data de recebimento<\/div><div>Identificação e assinatura do recebedor<\/div>/);
+  assert.match(canhoto, /<div>CC-e · SEQ\. 2<\/div><div>NF-e<\/div><div class="n">Nº /);
+  // Número, série e datas de verdade: danfe.test.js (o XML deste teste é mínimo).
 
   const recusa = montar({ resposta: retEnvEvento('128', 'Lote de Evento Processado', retCce('573', 'Rejeicao: Duplicidade de Evento')) });
   await assert.rejects(eventos.cartaCorrecao({ api: recusa.api, notaId: 10, correcao: 'Correção recusada pela SEFAZ no teste', certificado: CERT, transporte: async () => ({ status: 200, corpo: envelope(retEnvEvento('128', 'x', retCce('573', 'Rejeicao: Duplicidade de Evento'))) }) }), e => e.status === 422 && e.extra.sefaz.cStat === '573');

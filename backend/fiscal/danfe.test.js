@@ -175,6 +175,22 @@ test('pagamento posterior à emissão não aparece como PAGO', () => {
   assert.equal(exibidas[0].situacao, 'em_aberto');
 });
 
+test('carta de correção termina com o canhoto do DANFE: nota vinculada, série, datas e linhas para assinar', () => {
+  const { xml } = nfeProcDeTeste({ ambiente: 'producao' });
+  const n = danfe.lerNfe(xml);
+  const html = require('./cartaCorrecaoDoc').montarCartaCorrecaoHtml({ xmlNfeProc: xml,
+    carta: { nSeqEvento: 1, correcao: 'Onde se lê Caixa, leia-se Engradado', protocolo: '131260000222222', registradaEm: '2026-10-16T10:05:00-03:00' } });
+  const canhoto = html.slice(html.indexOf('<div class="assinatura">'));
+  const numero = String(n.numero).padStart(9, '0').replace(/(\d{3})(?=\d)/g, '$1.');
+  const emissao = String(n.dhEmi).slice(0, 10).split('-').reverse().join('/');
+  assert.ok(html.indexOf('<div class="assinatura">') > html.indexOf('Condições de uso'), 'no fim da carta');
+  assert.ok(canhoto.includes(`RECEBEMOS DE <b>${n.emitente.nome}</b> A CARTA DE CORREÇÃO ELETRÔNICA (CC-e)`));
+  assert.ok(canhoto.includes(`EMISSÃO DA NF-e: ${emissao} — REGISTRO DA CC-e: 16/10/2026 — DESTINATÁRIO: ${n.destinatario.nome.replace('&', '&amp;')}`), 'nome escapado');
+  assert.ok(canhoto.includes(`<div>CC-e · SEQ. 1</div><div>NF-e</div><div class="n">Nº ${numero}</div><div>SÉRIE ${n.serie}</div>`));
+  assert.ok(numero !== '000.000.000' && n.serie, 'XML completo');
+  assert.match(html, /\.assinatura \{ break-inside: avoid;/, 'o canhoto nunca é cortado entre folhas');
+});
+
 test('Pix confirmado antes da emissão sai PAGO mesmo que a parcela tenha mudado de valor depois (PED104, 16/10/2026)', () => {
   const { parcelasParaDanfe } = require('./parcelasNfe');
   const parcelas = [{ numero_parcela: 1, valor: 3327, data_vencimento: '2026-10-01' }];
