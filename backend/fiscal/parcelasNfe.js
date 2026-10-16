@@ -27,28 +27,19 @@ function doPedido(linha, pedidoId, numeroParcela) {
 
 function principalRecebido(parcela, pedidoId, recebimentos = [], boletos = []) {
   const valor = centavos(numero(parcela.valor));
-  const boletoQuitado = boletos.some(b => doPedido(b, pedidoId, parcela.numero_parcela)
-    && (b.status === 'pago' || (b.status === 'baixado' && b.motivo_baixa === 'quitado_por_fora')));
   // O banco confirmou a liquidação, inclusive antes da conciliação criar
   // o lançamento financeiro. Não emitir de novo essa cobrança.
-  if (boletoQuitado) return valor;
-  const vistos = new Set();
-  const recebido = recebimentos.filter(r => doPedido(r, pedidoId, parcela.numero_parcela)
-    && r.status === 'confirmado').reduce((soma, r) => {
-    if (r.id !== undefined && r.id !== null) {
-      if (vistos.has(String(r.id))) return soma;
-      vistos.add(String(r.id));
-    }
-    // Legado: o status era salvo sem o valor; ele já representa quitação.
-    if (r.valor_recebido === undefined || r.valor_recebido === null) return soma + valor;
-    const pago = numero(r.valor_recebido) || 0;
-    // O sinal faz parte da quitação do app: encargos negativos representam
-    // o desconto concedido no recebimento, não saldo ainda a receber.
-    const encargos = numero(r.valor_encargos) || 0;
-    const abatimento = Math.max(numero(r.valor_abatimento) || 0, 0);
-    return soma + Math.max(pago - encargos + abatimento, 0);
-  }, 0);
-  return centavos(Math.min(Math.max(recebido, 0), valor));
+  const boletoQuitado = boletos.some(b => doPedido(b, pedidoId, parcela.numero_parcela)
+    && (b.status === 'pago' || (b.status === 'baixado' && b.motivo_baixa === 'quitado_por_fora')));
+  // Pagamento confirmado quita a parcela, como o boleto pago (decisão do dono,
+  // 16/10/2026): Pix, cartão, dinheiro… O Financeiro aceita um só recebimento
+  // confirmado por parcela, e a diferença para o valor dela (a mais ou a menos)
+  // é encargo ou desconto daquele pagamento, não saldo a receber. Sem conta
+  // de encargos aqui: com ela, parcela que mudou de valor depois do Pix saía
+  // "PARCIAL" no DANFE e voltava como duplicata na nota.
+  const recebimentoConfirmado = recebimentos.some(r => doPedido(r, pedidoId, parcela.numero_parcela)
+    && r.status === 'confirmado');
+  return boletoQuitado || recebimentoConfirmado ? valor : 0;
 }
 
 function registrarParcelas({ parcelas = [], pedidoId, recebimentos = [], boletos = [], dataEmissao }) {
@@ -70,7 +61,9 @@ function registrarParcelas({ parcelas = [], pedidoId, recebimentos = [], boletos
       const saldo = centavos(Math.max(valor - valorPago, 0));
       return {
         numero: String(numeroParcela).padStart(3, '0'), vencimento, valor,
-        situacao: saldo === 0 ? 'paga' : (valorPago > 0 ? 'parcial' : (vencimento < dataEmissao ? 'vencida' : 'em_aberto')),
+        // Sem "parcial": a parcela está paga ou não está (ver principalRecebido).
+        // O rótulo continua em ROTULOS só para ler o texto de notas antigas.
+        situacao: saldo === 0 ? 'paga' : (vencimento < dataEmissao ? 'vencida' : 'em_aberto'),
         valor_pago: valorPago, saldo
       };
     });
@@ -116,4 +109,30 @@ function parcelasRegistradasDoTexto(texto) {
   return bloco.slice(cursor).trim() ? [] : resultado;
 }
 
-module.exports = { registrarParcelas, textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores };
+/** Só pagamentos datados ANTES da emissão podem aparecer como PAGO no DANFE. */
+function parcelasParaDanfe({ parcelas = [], pedidoId, recebimentos = [], boletos = [], dataEmissao }) {
+  const anterior = data => {
+    const dia = diaValido(data);
+    return Boolean(dia && dataEmissao && dia < dataEmissao);
+  };
+  return registrarParcelas({
+    parcelas, pedidoId, dataEmissao,
+    recebimentos: recebimentos.filter(r => anterior(r.data_recebimento)),
+    boletos: boletos.filter(b => anterior(b.data_pagamento))
+  });
+}
+
+/** Não mostrar o bloco antigo em DANFEs de XMLs previamente emitidos. */
+function retirarHistoricoParcelas(texto) {
+  const original = String(texto || '');
+  const inicio = original.lastIndexOf(INICIO);
+  if (inicio < 0) return original;
+  const fim = original.indexOf(FIM, inicio + INICIO.length);
+  if (fim < 0) return original;
+  return (original.slice(0, inicio) + original.slice(fim + FIM.length)).trim();
+}
+
+module.exports = {
+  registrarParcelas, parcelasParaDanfe, retirarHistoricoParcelas,
+  textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores
+};

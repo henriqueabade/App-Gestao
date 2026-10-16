@@ -161,7 +161,7 @@ function avaliar({
     itens: itensAvaliados,
     // Os totais como a nota vai sair — com o ajuste do pedido onde ele entra
     // (Adicional em outras despesas, Desconto no desconto). null sem itens.
-    totaisDaNota: totaisPrevistos({ pedido, itens }),
+    totaisDaNota: totaisPrevistos({ pedido, itens, parcelas }),
     // O que a tela de embarque preenche: começa com o que o pedido já tem.
     formaPagamento: pedido.forma_pagamento || null,
     tPagSugerido: codigoPagamento(pedido.forma_pagamento),

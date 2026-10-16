@@ -106,6 +106,16 @@ test('o "i" do usuário: uma última ação e o atalho para a auditoria completa
   assert.ok(preencher.length > 100 && !/innerHTML/.test(preencher), 'as ações vêm do banco: só textContent');
 });
 
+test('o "i" abre no primeiro clique: fica fora da guarda dos botões (spinner tirava o mouse dele e fechava)', () => {
+  const fonte = ler('js/usuarios.js');
+  const gatilho = fonte.slice(fonte.indexOf('class="usuario-detalhes-trigger"'), fonte.indexOf('<span class="sr-only">Ver atividade recente'));
+  assert.match(gatilho, /data-sem-guarda="true"/);
+  // A guarda respeita a marca antes de ocupar o botão.
+  const guarda = ler('utils/botaoAcao.js');
+  const captura = guarda.slice(guarda.indexOf('function onClickCaptura('), guarda.indexOf('function onSubmitCaptura('));
+  assert.ok(captura.indexOf("botao.dataset.semGuarda === 'true') return;") < captura.indexOf('marcarOcupado(botao'));
+});
+
 test('modal real mostra antes/depois, horário de Brasília e separa ações manuais de eventos automáticos ou não confirmados', async () => {
   const m = abrir();
   await m.carregado;

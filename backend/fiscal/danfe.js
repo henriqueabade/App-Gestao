@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { campo, bloco } = require('./sefazCliente');
 const { parcelasRegistradasDoTexto } = require('./xmlNfe');
+const { retirarHistoricoParcelas } = require('./parcelasNfe');
 // "FOLHA 1/x": o total entra depois da primeira impressão (folhas.js + main.js).
 const { MARCA_TOTAL_DE_FOLHAS } = require('./folhas');
 
@@ -257,7 +258,7 @@ function campoHtml(rotulo, valor, { span = 1, quebra = false } = {}) {
  * @param {string} xmlNfeProc  notas_fiscais.xml_autorizado
  * @param {object} [opcoes]    { cancelada: boolean, espelho: boolean, logo: data URI (padrão: a logo do app) }
  */
-function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo } = {}) {
+function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo, parcelasExibicao } = {}) {
   const n = lerNfe(xmlNfeProc);
   const e = n.emitente;
   const d = n.destinatario;
@@ -274,20 +275,17 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo 
       <td class="dir">${moeda(it.pIcms || 0)}</td><td class="dir">${moeda(it.pIpi || 0)}</td>
     </tr>`).join('');
 
-  // Duplicata: "número da nota / número da parcela", como o dono pediu.
-  const duplicatas = n.duplicatas.length
-    ? `<table><tr>${n.duplicatas.map(dp => `<td class="cen"><b>${esc(n.numero)}/${esc(dp.numero)}</b><br>${dataFmt(dp.vencimento)}<br>${moeda(dp.valor)}</td>`).join('')}</tr></table>`
+  // Indicador PAGO é somente visual: nunca escreve "PAGO" no dVenc do XML.
+  const dataEmissao = String(n.dhEmi || '').slice(0, 10);
+  const linhas = Array.isArray(parcelasExibicao) && parcelasExibicao.length ? parcelasExibicao :
+    n.duplicatas.map(dp => ({ numero: dp.numero, vencimento: dp.vencimento, valor: dp.valor }));
+  const duplicatas = linhas.length
+    ? `<table><tr>${linhas.map(dp => {
+      const vencimento = dp.situacao === 'paga' ? 'PAGO'
+        : (dp.vencimento < dataEmissao ? (dp.situacao === 'parcial' ? 'PARCIAL' : 'VENCIDO') : dataFmt(dp.vencimento));
+      return `<td class="cen"><b>${esc(n.numero)}/${esc(dp.numero)}</b><br>${esc(vencimento)}<br>${moeda(dp.valor)}</td>`;
+    }).join('')}</tr></table>`
     : `<div class="campo"><span class="r">Fatura</span><span class="v">${n.fatura ? `Nº ${esc(n.fatura.numero)} — ${moeda(n.fatura.liquido)} à vista` : 'Sem fatura'}</span></div>`;
-
-  // Este histórico é parte do XML da própria nota. Não consulta as parcelas
-  // atuais do ERP, para que um DANFE emitido continue fiel ao XML autorizado.
-  // Datas anteriores à emissão não podem ir em dVenc (regra fiscal Y09-10).
-  const situacoesParcelas = { paga: 'Paga', parcial: 'Parcialmente paga', vencida: 'Vencida', em_aberto: 'Em aberto' };
-  const parcelasRegistradas = n.parcelasRegistradas.length
-    ? `<div class="bloco"><div class="titulo">Parcelas do pedido — vencimentos registrados</div>
-      <table><thead><tr><th>Parcela</th><th>Vencimento registrado</th><th>Valor</th><th>Situação na emissão</th><th>Saldo na emissão</th></tr></thead><tbody>${n.parcelasRegistradas.map(p =>
-        `<tr><td class="cen">${esc(p.numero)}</td><td class="cen">${dataFmt(p.vencimento)}</td><td class="dir">${moeda(p.valor)}</td><td>${esc(situacoesParcelas[p.situacao] || p.situacao)}</td><td class="dir">${moeda(p.saldo)}</td></tr>`).join('')}</tbody></table></div>`
-    : '';
 
   // Vários volumes detalhados: uma linha por volume, além do resumo.
   const volumesDetalhados = n.volumes.length > 1
@@ -372,8 +370,6 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo 
   <div class="titulo">Fatura / Duplicatas</div>
   ${duplicatas}
   </div>
-  ${parcelasRegistradas}
-
   <div class="bloco">
   <div class="titulo">Cálculo do imposto</div>
   <div class="grade" style="grid-template-columns: repeat(6, 1fr)">
@@ -442,7 +438,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo 
   <div class="bloco">
   <div class="titulo">Dados adicionais</div>
   <div class="grade" style="grid-template-columns: 2fr 1fr">
-    <div class="campo adicionais"><span class="r">Informações complementares</span><span class="v quebra" style="font-weight: normal">${esc(n.infCpl) || '&nbsp;'}</span></div>
+    <div class="campo adicionais"><span class="r">Informações complementares</span><span class="v quebra" style="font-weight: normal">${esc(retirarHistoricoParcelas(n.infCpl)) || '&nbsp;'}</span></div>
     <div class="campo adicionais"><span class="r">Reservado ao fisco</span><span class="v">&nbsp;</span></div>
   </div>
   </div>

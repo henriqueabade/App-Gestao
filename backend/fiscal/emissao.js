@@ -546,7 +546,7 @@ async function espelho({ api, pedidoId, entrada = {}, resumoCertificado, env = p
     instante, codigoMunicipio, verProc, aleatorio });
   const referencia = String(dados.pedido.numero || dados.pedido.id).replace(/[^a-zA-Z0-9_-]/g, '');
   return {
-    html: danfe.montarDanfeHtml(montada.xml, { espelho: true }),
+    html: danfe.montarDanfeHtml(montada.xml, { espelho: true, parcelasExibicao: montada.parcelasExibicao }),
     titulo: 'Espelho da NF-e', nomeArquivo: `Espelho-NFe-${referencia}`,
     espelho: true, sem_valor_fiscal: true, ambiente,
     resumo: avaliacao.resumo, avisos: montada.avisos,

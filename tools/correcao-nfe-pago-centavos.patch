@@ -1,0 +1,305 @@
+diff --git a/backend/fiscal/parcelasNfe.js b/backend/fiscal/parcelasNfe.js
+--- a/backend/fiscal/parcelasNfe.js
++++ b/backend/fiscal/parcelasNfe.js
+@@ -119,1 +119,27 @@
+-module.exports = { registrarParcelas, textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores };
++/** Só pagamentos datados ANTES da emissão podem aparecer como PAGO no DANFE. */
++function parcelasParaDanfe({ parcelas = [], pedidoId, recebimentos = [], boletos = [], dataEmissao }) {
++  const anterior = data => {
++    const dia = diaValido(data);
++    return Boolean(dia && dataEmissao && dia < dataEmissao);
++  };
++  return registrarParcelas({
++    parcelas, pedidoId, dataEmissao,
++    recebimentos: recebimentos.filter(r => anterior(r.data_recebimento)),
++    boletos: boletos.filter(b => anterior(b.data_pagamento))
++  });
++}
++
++/** Não mostrar o bloco antigo em DANFEs de XMLs previamente emitidos. */
++function retirarHistoricoParcelas(texto) {
++  const original = String(texto || '');
++  const inicio = original.lastIndexOf(INICIO);
++  if (inicio < 0) return original;
++  const fim = original.indexOf(FIM, inicio + INICIO.length);
++  if (fim < 0) return original;
++  return (original.slice(0, inicio) + original.slice(fim + FIM.length)).trim();
++}
++
++module.exports = {
++  registrarParcelas, parcelasParaDanfe, retirarHistoricoParcelas,
++  textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores
++};
+diff --git a/backend/fiscal/xmlNfe.js b/backend/fiscal/xmlNfe.js
+--- a/backend/fiscal/xmlNfe.js
++++ b/backend/fiscal/xmlNfe.js
+@@ -19,1 +19,1 @@
+-const { registrarParcelas, textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores } = require('./parcelasNfe');
++const { registrarParcelas, parcelasParaDanfe, retirarHistoricoParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores } = require('./parcelasNfe');
+@@ -252,1 +252,10 @@
+-function totaisPrevistos({ pedido, itens = [], valorFrete = 0 } = {}) {
++/** Centavos positivos que faltam no valor fiscal para igualar as parcelas. */
++function acrescimoDeArredondamento(parcelas = [], valorFiscal) {
++  if (!parcelas.length || !Number.isFinite(valorFiscal)) return 0;
++  const soma = arredondar(parcelas.reduce((s, p) => s + (numero(p.valor) || 0), 0), 2);
++  const diferenca = arredondar(soma - valorFiscal, 2);
++  // Divergências relevantes continuam sendo erro, nunca receita inventada.
++  return diferenca > 0 && diferenca <= 0.02 ? diferenca : 0;
++}
++
++function totaisPrevistos({ pedido, itens = [], parcelas = [], valorFrete = 0 } = {}) {
+@@ -268,2 +277,4 @@
+     vDesc = arredondar(vDesc, 2);
++    const totalSemAcrescimo = arredondar(vProd - vDesc + vFrete + vOutro, 2);
++    const acrescimo = acrescimoDeArredondamento(parcelas, totalSemAcrescimo);
+     return {
+@@ -271,5 +282,5 @@
+       valor_desconto: vDesc,
+-      valor_outras: vOutro,
++      valor_outras: arredondar(vOutro + acrescimo, 2),
+       valor_frete: vFrete,
+-      valor_total: arredondar(vProd - vDesc + vFrete + vOutro, 2),
++      valor_total: arredondar(totalSemAcrescimo + acrescimo, 2),
+       ajuste,
+@@ -459,4 +470,3 @@
+-      avisos.push('Os vencimentos registrados e a situação de todas as parcelas constam nas informações complementares. '
+-        + 'As duplicatas fiscais incluem somente saldos em aberto com vencimento a partir da emissão. '
+-        + (vencidasEmAberto ? 'Os saldos vencidos continuam devidos e registrados no pedido; não houve perdão da dívida. ' : '')
++      avisos.push('As duplicatas fiscais incluem somente saldos com vencimento a partir da emissão. '
++        + (vencidasEmAberto ? 'Os saldos vencidos permanecem devidos no pedido. ' : '')
+         + 'Nenhuma data do pedido foi alterada.');
+@@ -480,4 +490,4 @@
+-  return { xml: cobr + pag, avisos, aPrazo, tPag, textoParcelas: historicoNecessario ? textoDasParcelas(registradas) : '' };
++  return { xml: cobr + pag, avisos, aPrazo, tPag };
+ }
+ 
+-function blocoInfAdic({ configuracao, informacoesComplementares, totalCreditoSn, temCsosn101, textoParcelas }) {
++function blocoInfAdic({ configuracao, informacoesComplementares, totalCreditoSn, temCsosn101 }) {
+@@ -493,3 +503,3 @@
+-  const fixo = textoLivreSemMarcadores(limparTexto(configuracao.informacoes_complementares));
++  const fixo = textoLivreSemMarcadores(limparTexto(retirarHistoricoParcelas(configuracao.informacoes_complementares)));
+   if (fixo) partes.push(fixo);
+-  const desta = textoLivreSemMarcadores(limparTexto(informacoesComplementares));
++  const desta = textoLivreSemMarcadores(limparTexto(retirarHistoricoParcelas(informacoesComplementares)));
+@@ -497,6 +507,2 @@
+-  if (textoParcelas) partes.push(textoParcelas);
+-  const completo = partes.join(' ').trim();
+-  if (textoParcelas && completo.length > 5000) {
+-    throw erro('As informações complementares com os vencimentos registrados excedem 5.000 caracteres. Reduza o texto complementar antes de emitir.');
+-  }
+-  const texto = completo.slice(0, 5000).trim();
++  // As informações complementares não incluem retrato de parcelas/pagamentos.
++  const texto = partes.join(' ').trim().slice(0, 5000).trim();
+@@ -543,4 +549,7 @@
+   const porId = new Map(produtos.filter(Boolean).map(p => [String(p.id), p]));
+-  // O ajuste do pedido (Adicional/Desconto das parcelas), repartido pelos itens.
++  // Preserva o ajuste do pedido e soma o arredondamento positivo em vOutro.
+   const partesDoAjuste = ratearAjuste(pedido?.ajuste_valor, itens);
++  const totalBase = totaisPrevistos({ pedido, itens, valorFrete: transporte.valor_frete })?.valor_total;
++  const centavosExtras = acrescimoDeArredondamento(parcelas, totalBase);
++  const partesExtras = ratearAjuste(centavosExtras, itens);
+   const montados = itens.map((item, i) => {
+@@ -549,3 +558,3 @@
+       item: itemComAjuste(item, parte, item.codigo || i + 1), produto: porId.get(String(item?.produto_id)) || null, ordem: i + 1, configuracao, dentroDoEstado,
+-      vOutro: parte > 0 ? parte : 0
++      vOutro: arredondar(Math.max(parte, 0) + partesExtras[i], 2)
+     });
+@@ -574,1 +583,1 @@
+-    + blocoInfAdic({ configuracao, informacoesComplementares, totalCreditoSn, temCsosn101, textoParcelas: cobranca.textoParcelas })
++    + blocoInfAdic({ configuracao, informacoesComplementares, totalCreditoSn, temCsosn101 })
+@@ -590,1 +599,4 @@
+-    avisos: cobranca.avisos, aPrazo: cobranca.aPrazo, tPag: cobranca.tPag, dentroDoEstado
++    avisos: cobranca.avisos, aPrazo: cobranca.aPrazo, tPag: cobranca.tPag, dentroDoEstado,
++    parcelasExibicao: parcelasParaDanfe({
++      parcelas, pedidoId: pedido.id, recebimentos, boletos, dataEmissao: partesNoFuso(data).data
++    })
+diff --git a/backend/fiscal/prontidao.js b/backend/fiscal/prontidao.js
+--- a/backend/fiscal/prontidao.js
++++ b/backend/fiscal/prontidao.js
+@@ -164,1 +164,1 @@
+-    totaisDaNota: totaisPrevistos({ pedido, itens }),
++    totaisDaNota: totaisPrevistos({ pedido, itens, parcelas }),
+diff --git a/backend/fiscal/danfe.js b/backend/fiscal/danfe.js
+--- a/backend/fiscal/danfe.js
++++ b/backend/fiscal/danfe.js
+@@ -20,1 +20,2 @@
+ const { parcelasRegistradasDoTexto } = require('./xmlNfe');
++const { retirarHistoricoParcelas } = require('./parcelasNfe');
+@@ -260,1 +261,1 @@
+-function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo } = {}) {
++function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo, parcelasExibicao } = {}) {
+@@ -277,14 +278,11 @@
+-  // Duplicata: "número da nota / número da parcela", como o dono pediu.
+-  const duplicatas = n.duplicatas.length
+-    ? `<table><tr>${n.duplicatas.map(dp => `<td class="cen"><b>${esc(n.numero)}/${esc(dp.numero)}</b><br>${dataFmt(dp.vencimento)}<br>${moeda(dp.valor)}</td>`).join('')}</tr></table>`
++  // Indicador PAGO é somente visual: nunca escreve "PAGO" no dVenc do XML.
++  const dataEmissao = String(n.dhEmi || '').slice(0, 10);
++  const linhas = Array.isArray(parcelasExibicao) && parcelasExibicao.length ? parcelasExibicao :
++    n.duplicatas.map(dp => ({ numero: dp.numero, vencimento: dp.vencimento, valor: dp.valor }));
++  const duplicatas = linhas.length
++    ? `<table><tr>${linhas.map(dp => {
++      const vencimento = dp.situacao === 'paga' ? 'PAGO'
++        : (dp.vencimento < dataEmissao ? (dp.situacao === 'parcial' ? 'PARCIAL' : 'VENCIDO') : dataFmt(dp.vencimento));
++      return `<td class="cen"><b>${esc(n.numero)}/${esc(dp.numero)}</b><br>${esc(vencimento)}<br>${moeda(dp.valor)}</td>`;
++    }).join('')}</tr></table>`
+     : `<div class="campo"><span class="r">Fatura</span><span class="v">${n.fatura ? `Nº ${esc(n.fatura.numero)} — ${moeda(n.fatura.liquido)} à vista` : 'Sem fatura'}</span></div>`;
+-
+-  // Este histórico é parte do XML da própria nota. Não consulta as parcelas
+-  // atuais do ERP, para que um DANFE emitido continue fiel ao XML autorizado.
+-  // Datas anteriores à emissão não podem ir em dVenc (regra fiscal Y09-10).
+-  const situacoesParcelas = { paga: 'Paga', parcial: 'Parcialmente paga', vencida: 'Vencida', em_aberto: 'Em aberto' };
+-  const parcelasRegistradas = n.parcelasRegistradas.length
+-    ? `<div class="bloco"><div class="titulo">Parcelas do pedido — vencimentos registrados</div>
+-      <table><thead><tr><th>Parcela</th><th>Vencimento registrado</th><th>Valor</th><th>Situação na emissão</th><th>Saldo na emissão</th></tr></thead><tbody>${n.parcelasRegistradas.map(p =>
+-        `<tr><td class="cen">${esc(p.numero)}</td><td class="cen">${dataFmt(p.vencimento)}</td><td class="dir">${moeda(p.valor)}</td><td>${esc(situacoesParcelas[p.situacao] || p.situacao)}</td><td class="dir">${moeda(p.saldo)}</td></tr>`).join('')}</tbody></table></div>`
+-    : '';
+@@ -375,3 +373,1 @@
+-  ${parcelasRegistradas}
+-
+   <div class="bloco">
+@@ -445,1 +441,1 @@
+-    <div class="campo adicionais"><span class="r">Informações complementares</span><span class="v quebra" style="font-weight: normal">${esc(n.infCpl) || '&nbsp;'}</span></div>
++    <div class="campo adicionais"><span class="r">Informações complementares</span><span class="v quebra" style="font-weight: normal">${esc(retirarHistoricoParcelas(n.infCpl)) || '&nbsp;'}</span></div>
+diff --git a/backend/fiscal/emissao.js b/backend/fiscal/emissao.js
+--- a/backend/fiscal/emissao.js
++++ b/backend/fiscal/emissao.js
+@@ -549,1 +549,1 @@
+-    html: danfe.montarDanfeHtml(montada.xml, { espelho: true }),
++    html: danfe.montarDanfeHtml(montada.xml, { espelho: true, parcelasExibicao: montada.parcelasExibicao }),
+diff --git a/backend/fiscalController.js b/backend/fiscalController.js
+--- a/backend/fiscalController.js
++++ b/backend/fiscalController.js
+@@ -26,1 +26,3 @@
+ const email = require('./fiscal/email');
++const { parcelasParaDanfe } = require('./fiscal/parcelasNfe');
++const { diaEmSaoPaulo } = require('./faturamentoPedido');
+@@ -640,6 +642,18 @@
+-      const nota = await emissao.lerNota(createApiClient(req), req.params.id);
++      const api = createApiClient(req);
++      const nota = await emissao.lerNota(api, req.params.id);
+       if (!nota.xml_autorizado) throw erro('Esta nota não foi autorizada: não há DANFE.', 409);
++      let parcelasExibicao;
++      try {
++        const dados = await emissao.lerPedidoFiscal(api, nota.pedido_id);
++        parcelasExibicao = parcelasParaDanfe({
++          parcelas: dados.parcelas, pedidoId: nota.pedido_id,
++          recebimentos: dados.recebimentos, boletos: dados.boletos,
++          dataEmissao: diaEmSaoPaulo(new Date(nota.data_emissao))
++        });
++      } catch (_) {
++        // O XML autorizado sempre permanece disponível, mesmo sem acesso financeiro.
++      }
+       res.json({
+         nome: `DANFE-NFe-${String(nota.serie)}-${String(nota.numero).padStart(9, '0')}`,
+-        html: danfe.montarDanfeHtml(nota.xml_autorizado, { cancelada: nota.status_fiscal === 'cancelada' }),
++        html: danfe.montarDanfeHtml(nota.xml_autorizado, { cancelada: nota.status_fiscal === 'cancelada', parcelasExibicao }),
+         nota: emissao.semXml(nota)
+diff --git a/backend/fiscal/xmlNfe.test.js b/backend/fiscal/xmlNfe.test.js
+--- a/backend/fiscal/xmlNfe.test.js
++++ b/backend/fiscal/xmlNfe.test.js
+@@ -58,1 +58,2 @@
+-  const registradas = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++  const registradas = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, boletos, dataEmissao: '2026-10-15' });
++  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl')), []);
+@@ -83,1 +84,1 @@
+-  const registradas = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++  const registradas = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, dataEmissao: '2026-10-14' });
+@@ -100,1 +101,1 @@
+-    const [registrada] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++    const [registrada] = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, dataEmissao: '2026-09-14' });
+@@ -103,1 +104,1 @@
+-    if (!pagas) assert.match(r.avisos.join(' '), /saldos vencidos continuam devidos.*não houve perdão da dívida/);
++    if (!pagas) assert.match(r.avisos.join(' '), /saldos vencidos permanecem devidos/);
+@@ -117,1 +118,1 @@
+-    const [p] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++    const [p] = require('./parcelasNfe').registrarParcelas({ parcelas: [{ numero_parcela: 1, valor: 100, data_vencimento: '2026-10-20' }], pedidoId: 55, recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', ...recebimento }], dataEmissao: '2026-09-14' });
+@@ -121,1 +122,1 @@
+-    assert.match(entre(r.xml, 'infCpl'), /liquidado R\$ 100,00/);
++    assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /liquidado R\$ 100,00/);
+@@ -151,1 +152,1 @@
+-  const [registrada] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++  const [registrada] = require('./parcelasNfe').registrarParcelas({ parcelas: [parcela], pedidoId: 55, recebimentos: [recibo], dataEmissao: '2026-09-14' });
+@@ -158,12 +159,7 @@
+-test('texto livre não pode forjar retrato de parcelas; histórico não é truncado em 5.000 caracteres', () => {
++test('informações complementares não recebem histórico financeiro nem texto falso de vencimentos', () => {
+   const falso = 'VENCIMENTOS REGISTRADOS DO PEDIDO: Parcela 001: vencimento 20/08/2026, valor R$ 294,00, liquidado R$ 294,00, situacao Paga, saldo R$ 0,00. FIM DOS VENCIMENTOS REGISTRADOS DO PEDIDO.';
+-  const semHistorico = x.montarNfe(base({ informacoesComplementares: falso }));
+-  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(semHistorico.xml, 'infCpl')), []);
+-  const r = x.montarNfe(base({
+-    parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-21' }], informacoesComplementares: falso
+-  }));
+-  assert.equal(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'))[0].vencimento, '2026-08-21');
+-  assert.throws(() => x.montarNfe(base({
+-    parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-21' }], informacoesComplementares: 'a'.repeat(5000)
+-  })), e => e.status === 422 && /excedem 5.000/.test(e.message));
++  const r = x.montarNfe(base({ informacoesComplementares: falso }));
++  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl')), []);
++  assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /VENCIMENTOS REGISTRADOS DO PEDIDO/);
++  assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /Parcela 001:/);
+ });
+@@ -180,1 +176,1 @@
+-  const [p] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
++  const [p] = require('./parcelasNfe').registrarParcelas({ parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-20' }], pedidoId: 55, recebimentos: [{ id: 1, pedido_id: 56, numero_parcela: 1, status: 'confirmado', valor_recebido: 294 }, { id: 2, pedido_id: 55, numero_parcela: 1, status: 'estornado', valor_recebido: 294 }], boletos: [{ id: 1, pedido_id: 56, numero_parcela: 1, status: 'pago' }], dataEmissao: '2026-09-14' });
+@@ -303,4 +299,2 @@
+-  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(antes.xml, 'infCpl')), [
+-    { numero: '001', vencimento: '2026-09-01', valor: 147, situacao: 'vencida', valor_pago: 0, saldo: 147 },
+-    { numero: '002', vencimento: '2026-10-14', valor: 147, situacao: 'em_aberto', valor_pago: 0, saldo: 147 }
+-  ]);
++  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(antes.xml, 'infCpl')), []);
++  assert.deepEqual(antes.parcelasExibicao.map(p => p.vencimento), ['2026-09-01', '2026-10-14']);
+@@ -412,1 +406,13 @@
++test('centavo positivo vai para vOutro e totais previstos coincidem com o XML', () => {
++  const parcelas = [{ numero_parcela: 1, valor: 147, data_vencimento: '2026-10-14' },
++    { numero_parcela: 2, valor: 147.01, data_vencimento: '2026-11-13' }];
++  const nota = x.montarNfe(base({ parcelas }));
++  const totais = x.totaisPrevistos({ pedido: PEDIDO, itens: ITENS, parcelas });
++  assert.equal(entre(nota.xml, 'vNF'), '294.01');
++  assert.equal(entre(nota.xml, 'vOutro'), '0.01');
++  assert.equal(totais.valor_total, 294.01);
++  assert.equal(totais.valor_outras, 0.01);
++  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(nota.xml, 'infCpl')), []);
++});
++
+ const arredondarTeste = v => Math.round(v * 100) / 100;
+diff --git a/backend/fiscal/danfe.test.js b/backend/fiscal/danfe.test.js
+--- a/backend/fiscal/danfe.test.js
++++ b/backend/fiscal/danfe.test.js
+@@ -148,2 +148,2 @@
+-test('DANFE e espelho mostram datas históricas registradas no XML em seção distinta das duplicatas fiscais', () => {
++test('espelho mostra PAGO só com quitação anterior e sem quadro/histórico extra', () => {
+   const montada = xmlNfe.montarNfe({
+@@ -155,16 +155,13 @@
+     ],
+-    recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282 }],
++    recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282, data_recebimento: '2026-10-10' }],
+     transporte: { modalidade_frete: 9 }, verProc: 'Santissimo 1.1.1'
+   });
+-  const n = danfe.lerNfe(montada.xml);
+-  assert.equal(n.parcelasRegistradas.length, 2);
+-  assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
++  assert.deepEqual(danfe.lerNfe(montada.xml).duplicatas.map(d => d.vencimento), ['2026-10-20']);
+   for (const espelho of [false, true]) {
+-    const html = danfe.montarDanfeHtml(montada.xml, { espelho });
+-    const historico = html.slice(html.indexOf('Parcelas do pedido — vencimentos registrados'), html.indexOf('Cálculo do imposto'));
+-    assert.match(historico, /20\/08\/2026/);
+-    assert.match(historico, /20\/10\/2026/);
+-    assert.match(historico, /Paga/);
+-    assert.match(historico, /Situação na emissão/);
+-    assert.ok(!html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Parcelas do pedido — vencimentos registrados')).includes('20/08/2026'));
++    const html = danfe.montarDanfeHtml(montada.xml, { espelho, parcelasExibicao: montada.parcelasExibicao });
++    const fatura = html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Cálculo do imposto'));
++    assert.match(fatura, /369\/001<\/b><br>PAGO/);
++    assert.match(fatura, /369\/002<\/b><br>20\/10\/2026/);
++    assert.doesNotMatch(html, /Parcelas do pedido — vencimentos registrados/);
++    assert.doesNotMatch(html, /VENCIMENTOS REGISTRADOS DO PEDIDO/);
+   }
+@@ -173,1 +170,9 @@
++test('pagamento posterior à emissão não aparece como PAGO', () => {
++  const { parcelasParaDanfe } = require('./parcelasNfe');
++  const parcelas = [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-11-01' }];
++  const exibidas = parcelasParaDanfe({ parcelas, pedidoId: 55, dataEmissao: '2026-10-15',
++    recebimentos: [{ pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 294, data_recebimento: '2026-10-16' }] });
++  assert.equal(exibidas[0].situacao, 'em_aberto');
++});
++
+ test('vários volumes: o resumo soma pesos e quantidades e a tabela lista um por linha', () => {

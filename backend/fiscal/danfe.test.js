@@ -145,7 +145,7 @@ test('espelho mantém o leiaute da nota mas não exibe chave ou protocolo autori
   }
 });
 
-test('DANFE e espelho mostram datas históricas registradas no XML em seção distinta das duplicatas fiscais', () => {
+test('espelho mostra PAGO só com quitação anterior e sem quadro/histórico extra', () => {
   const montada = xmlNfe.montarNfe({
     configuracao: CONFIG, ambiente: 'producao', serie: 1, numero: 369, cNF: '14000305', dhEmi: new Date('2026-10-15T13:59:00-03:00'),
     pedido: PEDIDO, cliente: CLIENTE, itens: ITENS, produtos: PRODUTOS,
@@ -153,21 +153,38 @@ test('DANFE e espelho mostram datas históricas registradas no XML em seção di
       { id: 1, numero_parcela: 1, valor: 282, data_vencimento: '2026-08-20' },
       { id: 2, numero_parcela: 2, valor: 282, data_vencimento: '2026-10-20' }
     ],
-    recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282 }],
+    recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282, data_recebimento: '2026-10-10' }],
     transporte: { modalidade_frete: 9 }, verProc: 'Santissimo 1.1.1'
   });
-  const n = danfe.lerNfe(montada.xml);
-  assert.equal(n.parcelasRegistradas.length, 2);
-  assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
+  assert.deepEqual(danfe.lerNfe(montada.xml).duplicatas.map(d => d.vencimento), ['2026-10-20']);
   for (const espelho of [false, true]) {
-    const html = danfe.montarDanfeHtml(montada.xml, { espelho });
-    const historico = html.slice(html.indexOf('Parcelas do pedido — vencimentos registrados'), html.indexOf('Cálculo do imposto'));
-    assert.match(historico, /20\/08\/2026/);
-    assert.match(historico, /20\/10\/2026/);
-    assert.match(historico, /Paga/);
-    assert.match(historico, /Situação na emissão/);
-    assert.ok(!html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Parcelas do pedido — vencimentos registrados')).includes('20/08/2026'));
+    const html = danfe.montarDanfeHtml(montada.xml, { espelho, parcelasExibicao: montada.parcelasExibicao });
+    const fatura = html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Cálculo do imposto'));
+    assert.match(fatura, /369\/001<\/b><br>PAGO/);
+    assert.match(fatura, /369\/002<\/b><br>20\/10\/2026/);
+    assert.doesNotMatch(html, /Parcelas do pedido — vencimentos registrados/);
+    assert.doesNotMatch(html, /VENCIMENTOS REGISTRADOS DO PEDIDO/);
   }
+});
+
+test('pagamento posterior à emissão não aparece como PAGO', () => {
+  const { parcelasParaDanfe } = require('./parcelasNfe');
+  const parcelas = [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-11-01' }];
+  const exibidas = parcelasParaDanfe({ parcelas, pedidoId: 55, dataEmissao: '2026-10-15',
+    recebimentos: [{ pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 294, data_recebimento: '2026-10-16' }] });
+  assert.equal(exibidas[0].situacao, 'em_aberto');
+});
+
+test('Pix confirmado antes da emissão sai PAGO mesmo que a parcela tenha mudado de valor depois (PED104, 16/10/2026)', () => {
+  const { parcelasParaDanfe } = require('./parcelasNfe');
+  const parcelas = [{ numero_parcela: 1, valor: 3327, data_vencimento: '2026-10-01' }];
+  const exibidas = parcelasParaDanfe({ parcelas, pedidoId: 104, dataEmissao: '2026-10-16',
+    recebimentos: [{ id: 9, pedido_id: 104, numero_parcela: 1, status: 'confirmado', forma: 'Pix', data_recebimento: '2026-10-02',
+      valor_parcela: 3326.94, valor_recebido: 3326.94, valor_encargos: 0 }] });
+  assert.deepEqual([exibidas[0].situacao, exibidas[0].valor_pago, exibidas[0].saldo], ['paga', 3327, 0]);
+  const html = danfe.montarDanfeHtml(nfeProcDeTeste().xml, { parcelasExibicao: [{ ...exibidas[0], numero: '001' }] });
+  assert.match(html, /\/001<\/b><br>PAGO<br>/);
+  assert.doesNotMatch(html, /PARCIAL/);
 });
 
 test('vários volumes: o resumo soma pesos e quantidades e a tabela lista um por linha', () => {

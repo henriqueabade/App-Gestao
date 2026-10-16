@@ -216,7 +216,7 @@ test('espelho e emissão antecipam o envio somente nas parcelas livres e preserv
   Object.assign(tabelas.pedidos[0], { faturamento_regra: 'ao_embarcar', inicio_faturamento: '2026-09-10', prazo: '0/30' });
   tabelas.pedido_parcelas[0].data_vencimento = '2026-08-20';
   tabelas.pedido_parcelas[1].data_vencimento = '2026-10-10';
-  tabelas.recebimentos = [{ id: 3, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 147 }];
+  tabelas.recebimentos = [{ id: 3, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 147, data_recebimento: '2026-09-01' }];
   tabelas.boletos = [];
   tabelas.boletos_externos = [];
   tabelas.ordens_pagamento = [];
@@ -224,15 +224,15 @@ test('espelho e emissão antecipam o envio somente nas parcelas livres e preserv
   const entrada = { data_envio: '2026-09-20' };
   const r = await emissao.espelho({ api: t.api, pedidoId: 55, entrada, resumoCertificado: RESUMO_CERT,
     agora: () => new Date('2026-09-15T15:00:00-03:00'), opcoesMunicipios: { buscarNaRede: IBGE_MG } });
-  assert.match(r.html, /20\/08\/2026/);
+  // Desde 16/10/2026 a parcela paga antes da emissão aparece como PAGO (só no
+  // visual); a data dela continua no pedido e nunca vira dVenc.
+  assert.match(r.html, /<b>[^<]*\/001<\/b><br>PAGO<br>/);
   assert.match(r.html, /20\/10\/2026/);
-  assert.match(r.html, /Paga/);
   assert.equal(t.api.dados.pedido_parcelas[1].data_vencimento, '2026-10-10', 'o espelho nunca grava a projeção');
   const emitida = await t.emitir({ ...entrada, revisao_espelho: r.revisao_espelho });
   const n = danfe.lerNfe(t.api.dados.notas_fiscais.find(nota => nota.id === emitida.nota.id).xml_envio);
   assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
-  assert.equal(n.parcelasRegistradas[0].vencimento, '2026-08-20');
-  assert.equal(n.parcelasRegistradas[0].situacao, 'paga');
+  assert.deepEqual(n.parcelasRegistradas, [], 'o XML não leva mais o bloco de vencimentos no infCpl');
   assert.equal(t.api.dados.pedido_parcelas[0].data_vencimento, '2026-08-20');
 });
 

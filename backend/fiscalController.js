@@ -24,6 +24,8 @@ const emissao = require('./fiscal/emissao');
 const eventos = require('./fiscal/eventos');
 const danfe = require('./fiscal/danfe');
 const email = require('./fiscal/email');
+const { parcelasParaDanfe } = require('./fiscal/parcelasNfe');
+const { diaEmSaoPaulo } = require('./faturamentoPedido');
 const segredoBanco = require('./fiscal/segredoBanco');
 const cartaCorrecaoDoc = require('./fiscal/cartaCorrecaoDoc');
 const painel = require('./fiscal/painel');
@@ -637,11 +639,23 @@ function criarRouter({ segredo = null, transporteFabrica = sefaz.transporteHttps
   /** DANFE em HTML (o renderer manda para o PDF pelo Electron). Só nota autorizada ou cancelada. */
   router.get('/notas/:id/danfe', exigirPermissao('financeiro.nfe.view'), async (req, res) => {
     try {
-      const nota = await emissao.lerNota(createApiClient(req), req.params.id);
+      const api = createApiClient(req);
+      const nota = await emissao.lerNota(api, req.params.id);
       if (!nota.xml_autorizado) throw erro('Esta nota não foi autorizada: não há DANFE.', 409);
+      let parcelasExibicao;
+      try {
+        const dados = await emissao.lerPedidoFiscal(api, nota.pedido_id);
+        parcelasExibicao = parcelasParaDanfe({
+          parcelas: dados.parcelas, pedidoId: nota.pedido_id,
+          recebimentos: dados.recebimentos, boletos: dados.boletos,
+          dataEmissao: diaEmSaoPaulo(new Date(nota.data_emissao))
+        });
+      } catch (_) {
+        // O XML autorizado sempre permanece disponível, mesmo sem acesso financeiro.
+      }
       res.json({
         nome: `DANFE-NFe-${String(nota.serie)}-${String(nota.numero).padStart(9, '0')}`,
-        html: danfe.montarDanfeHtml(nota.xml_autorizado, { cancelada: nota.status_fiscal === 'cancelada' }),
+        html: danfe.montarDanfeHtml(nota.xml_autorizado, { cancelada: nota.status_fiscal === 'cancelada', parcelasExibicao }),
         nota: emissao.semXml(nota)
       });
     } catch (err) {

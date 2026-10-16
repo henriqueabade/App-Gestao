@@ -979,6 +979,10 @@ function abrirPopoverUsuario(botao) {
 
 let popoverEventosRegistrados = false;
 
+// O "i" leva `data-sem-guarda` (16/10/2026): sem ele a guarda dos botões
+// (src/utils/botaoAcao.js) tratava o clique como ação e, enquanto a última ação
+// da auditoria carregava, punha o spinner com `pointer-events: none` no "i" —
+// o mouse "saía" dele e o popover se fechava no primeiro clique.
 function prepararPopoversUsuarios() {
     document.querySelectorAll('.usuario-detalhes-trigger').forEach(botao => {
         if (botao.dataset.popoverBound === 'true') return;
@@ -1375,6 +1379,7 @@ function renderUsuarios(lista) {
                             class="usuario-detalhes-trigger"
                             aria-expanded="false"
                             aria-haspopup="dialog"
+                            data-sem-guarda="true"
                             title="Ver atividade recente de ${nome}"
                             data-nome="${nome}"
                             data-usuario-id="${escapeHtml(String(u.id ?? ''))}"

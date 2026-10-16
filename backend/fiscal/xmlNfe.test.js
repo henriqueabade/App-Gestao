@@ -55,7 +55,8 @@ test('caso de seis parcelas: Pix e boleto importado pagos mantêm vencimentos hi
   const r = x.montarNfe(base({ dhEmi: new Date('2026-10-15T14:00:00-03:00'),
     itens: [{ ...ITENS[0], quantidade: 6, valor_unitario: 100, valor_total: 600 }], parcelas, recebimentos, boletos }));
   assert.equal(JSON.stringify({ parcelas, recebimentos, boletos }), antes);
-  const registradas = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+  const registradas = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, boletos, dataEmissao: '2026-10-15' });
+  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl')), []);
   assert.deepEqual(registradas.map(p => p.vencimento), vencimentos);
   assert.deepEqual(registradas.map(p => p.situacao), ['paga', 'paga', 'em_aberto', 'em_aberto', 'em_aberto', 'em_aberto']);
   assert.deepEqual(registradas.map(p => p.saldo), [0, 0, 100, 100, 100, 100]);
@@ -65,29 +66,35 @@ test('caso de seis parcelas: Pix e boleto importado pagos mantêm vencimentos hi
   assert.ok(!r.xml.includes('<dVenc>2026-10-15</dVenc>'), 'nenhum vencimento é substituído por hoje');
 });
 
-test('parcial futura cobra só o saldo; parcial vencida mantém saldo e data no XML sem dVenc inválido', () => {
+test('pagamento confirmado quita a parcela em qualquer valor (Pix/cartão como o boleto): sem PARCIAL nem saldo na nota', () => {
+  // Decisão do dono (16/10/2026): o Financeiro aceita um só recebimento
+  // confirmado por parcela; a diferença é encargo/desconto, não saldo.
   const parcelas = [
     { numero_parcela: 1, valor: 100, data_vencimento: '2026-08-20T00:00:00.000Z' },
     { numero_parcela: 2, valor: 100, data_vencimento: '2026-10-20' },
-    { numero_parcela: 3, valor: 100, data_vencimento: '2026-11-20' }
+    { numero_parcela: 3, valor: 100, data_vencimento: '2026-11-20' },
+    { numero_parcela: 4, valor: 100, data_vencimento: '2026-12-20' }
   ];
   const recebimentos = [
-    { id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 40, valor_encargos: 0 },
-    { id: 2, pedido_id: 55, numero_parcela: 2, status: 'confirmado', valor_recebido: 40, valor_encargos: 0 },
-    { id: 3, pedido_id: 55, numero_parcela: 3, status: 'confirmado', valor_recebido: 125, valor_encargos: 25 }
+    // Parcela que mudou de valor depois do Pix: o recebimento guardou a antiga.
+    { id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', forma: 'Pix', valor_parcela: 40, valor_recebido: 40, valor_encargos: 0 },
+    { id: 2, pedido_id: 55, numero_parcela: 2, status: 'confirmado', forma: 'Cartão', valor_recebido: 40, valor_encargos: 0 },
+    { id: 3, pedido_id: 55, numero_parcela: 3, status: 'confirmado', valor_recebido: 125, valor_encargos: 25 },
+    { id: 4, pedido_id: 55, numero_parcela: 4, status: 'estornado', valor_recebido: 100, valor_encargos: 0 }
   ];
   const r = x.montarNfe(base({
     dhEmi: new Date('2026-10-15T02:30:00Z'),
-    itens: [{ ...ITENS[0], quantidade: 3, valor_unitario: 100, valor_total: 300 }], parcelas, recebimentos
+    itens: [{ ...ITENS[0], quantidade: 4, valor_unitario: 100, valor_total: 400 }], parcelas, recebimentos
   }));
-  const registradas = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+  const registradas = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, dataEmissao: '2026-10-14' });
   assert.deepEqual(registradas.map(p => [p.situacao, p.valor_pago, p.saldo]), [
-    ['parcial', 40, 60], ['parcial', 40, 60], ['paga', 100, 0]
-  ]);
-  assert.match(entre(r.xml, 'cobr'), /<vLiq>60\.00<\/vLiq>.*<dVenc>2026-10-20<\/dVenc><vDup>60\.00<\/vDup>/);
-  assert.equal((r.xml.match(/<dup>/g) || []).length, 1);
+    ['paga', 100, 0], ['paga', 100, 0], ['paga', 100, 0], ['em_aberto', 0, 100]
+  ], 'estornado não quita');
+  assert.match(entre(r.xml, 'cobr'), /<vLiq>100\.00<\/vLiq>.*<dVenc>2026-12-20<\/dVenc><vDup>100\.00<\/vDup>/);
+  assert.equal((r.xml.match(/<dup>/g) || []).length, 1, 'só a parcela sem pagamento vira duplicata');
+  assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /Parcialmente paga|VENCIMENTOS REGISTRADOS/);
   assert.equal(registradas[0].vencimento, '2026-08-20', 'DATE não passa por fuso horário');
-  assert.equal(entre(r.xml, 'vNF'), '300.00', 'o recebimento não é desconto fiscal do produto');
+  assert.equal(entre(r.xml, 'vNF'), '400.00', 'o recebimento não é desconto fiscal do produto');
 });
 
 test('todas pagas ou vencidas: nenhuma data fabricada nem fatura fiscal zero', () => {
@@ -97,10 +104,10 @@ test('todas pagas ou vencidas: nenhuma data fabricada nem fatura fiscal zero', (
     const r = x.montarNfe(base({ parcelas, recebimentos }));
     assert.equal(entre(r.xml, 'cobr'), null);
     assert.equal(entre(r.xml, 'vNF'), '294.00');
-    const [registrada] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+    const [registrada] = require('./parcelasNfe').registrarParcelas({ parcelas, pedidoId: 55, recebimentos, dataEmissao: '2026-09-14' });
     assert.equal(registrada.vencimento, '2026-08-20');
     assert.equal(registrada.saldo, pagas ? 0 : 294, 'parcela vencida aberta continua devida');
-    if (!pagas) assert.match(r.avisos.join(' '), /saldos vencidos continuam devidos.*não houve perdão da dívida/);
+    if (!pagas) assert.match(r.avisos.join(' '), /saldos vencidos permanecem devidos/);
   }
 });
 
@@ -114,11 +121,11 @@ test('recebimento confirmado com desconto/abatimento quita a parcela, sem reabri
       parcelas: [{ numero_parcela: 1, valor: 100, data_vencimento: '2026-10-20' }],
       recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', ...recebimento }]
     }));
-    const [p] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+    const [p] = require('./parcelasNfe').registrarParcelas({ parcelas: [{ numero_parcela: 1, valor: 100, data_vencimento: '2026-10-20' }], pedidoId: 55, recebimentos: [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', ...recebimento }], dataEmissao: '2026-09-14' });
     assert.equal(p.situacao, 'paga');
     assert.equal(p.saldo, 0);
     assert.equal(p.valor_pago, 100, 'principal liquidado inclui a quitação por desconto/abatimento');
-    assert.match(entre(r.xml, 'infCpl'), /liquidado R\$ 100,00/);
+    assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /liquidado R\$ 100,00/);
     assert.equal(entre(r.xml, 'cobr'), null);
     assert.equal(entre(r.xml, 'vNF'), '100.00');
   }
@@ -148,24 +155,19 @@ test('recibo gerado pelo registro manual real de Pix com desconto continua quita
     itens: [{ ...ITENS[0], quantidade: 1, valor_unitario: 100, valor_total: 100 }],
     parcelas: [parcela], recebimentos: [recibo]
   }));
-  const [registrada] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+  const [registrada] = require('./parcelasNfe').registrarParcelas({ parcelas: [parcela], pedidoId: 55, recebimentos: [recibo], dataEmissao: '2026-09-14' });
   assert.equal(registrada.situacao, 'paga');
   assert.equal(registrada.saldo, 0);
   assert.equal(registrada.vencimento, '2026-08-20');
   assert.equal(entre(r.xml, 'cobr'), null);
 });
 
-test('texto livre não pode forjar retrato de parcelas; histórico não é truncado em 5.000 caracteres', () => {
+test('informações complementares não recebem histórico financeiro nem texto falso de vencimentos', () => {
   const falso = 'VENCIMENTOS REGISTRADOS DO PEDIDO: Parcela 001: vencimento 20/08/2026, valor R$ 294,00, liquidado R$ 294,00, situacao Paga, saldo R$ 0,00. FIM DOS VENCIMENTOS REGISTRADOS DO PEDIDO.';
-  const semHistorico = x.montarNfe(base({ informacoesComplementares: falso }));
-  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(semHistorico.xml, 'infCpl')), []);
-  const r = x.montarNfe(base({
-    parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-21' }], informacoesComplementares: falso
-  }));
-  assert.equal(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'))[0].vencimento, '2026-08-21');
-  assert.throws(() => x.montarNfe(base({
-    parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-21' }], informacoesComplementares: 'a'.repeat(5000)
-  })), e => e.status === 422 && /excedem 5.000/.test(e.message));
+  const r = x.montarNfe(base({ informacoesComplementares: falso }));
+  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl')), []);
+  assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /VENCIMENTOS REGISTRADOS DO PEDIDO/);
+  assert.doesNotMatch(entre(r.xml, 'infCpl') || '', /Parcela 001:/);
 });
 
 test('datas inválidas e pagamentos de outro pedido/estornados não fabricam quitação', () => {
@@ -177,7 +179,7 @@ test('datas inválidas e pagamentos de outro pedido/estornados não fabricam qui
       { id: 2, pedido_id: 55, numero_parcela: 1, status: 'estornado', valor_recebido: 294 }
     ], boletos: [{ id: 1, pedido_id: 56, numero_parcela: 1, status: 'pago' }]
   }));
-  const [p] = x.parcelasRegistradasDoTexto(entre(r.xml, 'infCpl'));
+  const [p] = require('./parcelasNfe').registrarParcelas({ parcelas: [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-08-20' }], pedidoId: 55, recebimentos: [{ id: 1, pedido_id: 56, numero_parcela: 1, status: 'confirmado', valor_recebido: 294 }, { id: 2, pedido_id: 55, numero_parcela: 1, status: 'estornado', valor_recebido: 294 }], boletos: [{ id: 1, pedido_id: 56, numero_parcela: 1, status: 'pago' }], dataEmissao: '2026-09-14' });
   assert.equal(p.situacao, 'vencida');
   assert.equal(p.saldo, 294);
 });
@@ -300,10 +302,8 @@ test('cobrança a prazo: fatura + duplicatas iguais ao total, indPag 1 e tPag pe
   const antes = x.montarNfe(base({ parcelas: [{ numero_parcela: 1, valor: 147, data_vencimento: '2026-09-01' }, { numero_parcela: 2, valor: 147, data_vencimento: '2026-10-14' }] }));
   assert.equal(entre(antes.xml, 'cobr'), '<fat><nFat>361</nFat><vOrig>147.00</vOrig><vDesc>0.00</vDesc><vLiq>147.00</vLiq></fat>'
     + '<dup><nDup>001</nDup><dVenc>2026-10-14</dVenc><vDup>147.00</vDup></dup>');
-  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(antes.xml, 'infCpl')), [
-    { numero: '001', vencimento: '2026-09-01', valor: 147, situacao: 'vencida', valor_pago: 0, saldo: 147 },
-    { numero: '002', vencimento: '2026-10-14', valor: 147, situacao: 'em_aberto', valor_pago: 0, saldo: 147 }
-  ]);
+  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(antes.xml, 'infCpl')), []);
+  assert.deepEqual(antes.parcelasExibicao.map(p => p.vencimento), ['2026-09-01', '2026-10-14']);
   assert.match(antes.avisos[0], /Nenhuma data do pedido foi alterada/);
 });
 
@@ -407,6 +407,18 @@ test('totais previstos (conferência da emissão): a mesma conta da nota, com o 
 
   assert.equal(x.totaisPrevistos({ pedido: PEDIDO, itens: [] }), null, 'sem itens, sem conta');
   assert.equal(x.totaisPrevistos({ pedido: { ...PEDIDO, ajuste_valor: -300 }, itens: ITENS }), null, 'desconto maior que o item: a prontidão acusa');
+});
+
+test('centavo positivo vai para vOutro e totais previstos coincidem com o XML', () => {
+  const parcelas = [{ numero_parcela: 1, valor: 147, data_vencimento: '2026-10-14' },
+    { numero_parcela: 2, valor: 147.01, data_vencimento: '2026-11-13' }];
+  const nota = x.montarNfe(base({ parcelas }));
+  const totais = x.totaisPrevistos({ pedido: PEDIDO, itens: ITENS, parcelas });
+  assert.equal(entre(nota.xml, 'vNF'), '294.01');
+  assert.equal(entre(nota.xml, 'vOutro'), '0.01');
+  assert.equal(totais.valor_total, 294.01);
+  assert.equal(totais.valor_outras, 0.01);
+  assert.deepEqual(x.parcelasRegistradasDoTexto(entre(nota.xml, 'infCpl')), []);
 });
 
 const arredondarTeste = v => Math.round(v * 100) / 100;
