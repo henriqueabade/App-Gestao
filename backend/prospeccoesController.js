@@ -97,6 +97,40 @@ function erro(status, mensagem) {
   return e;
 }
 
+/**
+ * 409 da regra "uma prospecção ativa por CNPJ", dizendo qual é a outra quando
+ * se sabe. `cnpjEmUso` vai no corpo da resposta (`cnpj_em_uso`): a tela mostra
+ * a ficha numa caixa de diálogo, sem gravar nada (16/10/2026).
+ */
+function erroCnpjEmOutraProspeccao(cnpj, outra = null, nomes = new Map()) {
+  const qual = outra
+    ? `na prospecção #${outra.id}${texto(outra.nome_fantasia || outra.razao_social) ? ` (${texto(outra.nome_fantasia || outra.razao_social)})` : ''}`
+    : 'em outra prospecção';
+  const e = erro(409, `O CNPJ ${cnpj} já está ${qual}, que está ativa. A mesma empresa não pode ter duas prospecções ativas: `
+    + 'se for a mesma empresa, continue pela outra ficha ou mova uma delas para "Perdido".');
+  e.cnpjEmUso = {
+    cnpj: texto(cnpj),
+    id: outra?.id ?? null,
+    nome_fantasia: texto(outra?.nome_fantasia),
+    razao_social: texto(outra?.razao_social),
+    etapa: texto(outra?.etapa),
+    responsavel: outra?.responsavel_id ? texto(nomes.get(outra.responsavel_id) ?? nomes.get(Number(outra.responsavel_id))) : null
+  };
+  return e;
+}
+
+/** A prospecção ATIVA (que não seja `ignorarId`) com exatamente este CNPJ, ou null. */
+async function prospeccaoAtivaComCnpj(api, cnpj, ignorarId = null) {
+  if (!texto(cnpj)) return null;
+  const mesmas = await api.get('/api/prospeccoes', { query: { cnpj } }).catch(() => []);
+  // O filtro é refeito aqui: a API pode ignorar a query, e o índice compara o texto exato.
+  return (Array.isArray(mesmas) ? mesmas : []).find(p => p && p.status === 'ativa'
+    && (ignorarId === null || String(p.id) !== String(ignorarId)) && String(p.cnpj ?? '') === String(cnpj)) || null;
+}
+
+/** O corpo de erro das rotas que gravam a ficha (com a prospecção dona do CNPJ, quando é o caso). */
+const corpoDoErro = (err, padrao) => ({ error: err.message || padrao, ...(err.cnpjEmUso ? { cnpj_em_uso: err.cnpjEmUso } : {}) });
+
 /** Ordena por data decrescente tolerando nulo — a API nunca ordena por nós. */
 function porDataDesc(campo) {
   return (a, b) => {
@@ -1150,13 +1184,10 @@ async function criarProspeccao(api, dados = {}, usuarioId = null, { observacao =
 
     // Mesma empresa não pode estar em prospecção ativa duas vezes. O banco
     // tem índice único parcial, mas conferir antes devolve 409 em vez de 500.
+    // A resposta diz qual é a ficha que já tem o CNPJ (16/10/2026).
     if (payload.cnpj) {
-      const existentes = await api
-        .get('/api/prospeccoes', { query: { cnpj: payload.cnpj } })
-        .catch(() => []);
-      if ((existentes || []).some(p => p.status === 'ativa')) {
-        throw erro(409, 'Já existe uma prospecção ativa para este CNPJ');
-      }
+      const existente = await prospeccaoAtivaComCnpj(api, payload.cnpj);
+      if (existente) throw erroCnpjEmOutraProspeccao(payload.cnpj, existente, await carregarNomesDeUsuario(api));
     }
 
     const criada = await api.post('/api/prospeccoes', payload);
@@ -1236,7 +1267,7 @@ router.post(
       res.status(201).json({ id: criadaId });
     } catch (err) {
       if (!err.status || err.status >= 500) console.error('Erro ao criar prospecção:', err);
-      res.status(err.status || 500).json({ error: err.message || 'Erro ao criar prospecção' });
+      res.status(err.status || 500).json(corpoDoErro(err, 'Erro ao criar prospecção'));
     }
   }
 );
@@ -1302,7 +1333,23 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     const nomes = await carregarNomesDeUsuario(api);
     const eventos = diferencasDaFicha(atual, payload, nomes);
 
-    await api.put(`/api/prospeccoes/${id}`, payload);
+    // Uma prospecção ativa por CNPJ (índice único parcial no banco,
+    // `prospeccoes_cnpj_ativa_unq`), como no cadastro. Sem conferir antes, a
+    // edição voltava o 500 cru do banco ("duplicate key…") sem dizer qual é a
+    // outra ficha (16/10/2026).
+    const statusFinal = payload.status ?? atual.status;
+    if (payload.cnpj && statusFinal === 'ativa') {
+      const outra = await prospeccaoAtivaComCnpj(api, payload.cnpj, id);
+      if (outra) throw erroCnpjEmOutraProspeccao(payload.cnpj, outra, nomes);
+    }
+
+    try {
+      await api.put(`/api/prospeccoes/${id}`, payload);
+    } catch (e) {
+      // Corrida com outra gravação entre a conferência e o UPDATE.
+      if (/prospeccoes_cnpj_ativa_unq/.test(String(e?.message || ''))) throw erroCnpjEmOutraProspeccao(payload.cnpj);
+      throw e;
+    }
 
     // -----------------------------------------------------------------------
     // Troca do contato principal
@@ -1406,7 +1453,7 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar prospecção:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Erro ao atualizar prospecção' });
+    res.status(err.status || 500).json(corpoDoErro(err, 'Erro ao atualizar prospecção'));
   }
 });
 

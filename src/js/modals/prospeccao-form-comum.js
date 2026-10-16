@@ -659,5 +659,33 @@
     };
   }
 
-  window.ProspeccaoForm = { criar, PROBABILIDADE_POR_ETAPA, ETAPAS_PADRAO };
+  /**
+   * CNPJ que já está em outra prospecção ativa (409 com `cnpj_em_uso`, novo e
+   * editar): nada foi gravado, e a caixa de diálogo padrão mostra qual é a
+   * ficha que tem o CNPJ (16/10/2026). Devolve false quando a resposta não é
+   * esse caso, e quem chama segue com o aviso de sempre.
+   */
+  function mostrarCnpjEmUso(corpo = {}) {
+    const ficha = corpo?.cnpj_em_uso;
+    if (!ficha || !window.DialogPadrao?.info) return false;
+    const itens = [
+      ficha.id != null ? { rotulo: 'Prospecção', valor: `#${ficha.id}` } : null,
+      ficha.nome_fantasia ? { rotulo: 'Nome fantasia', valor: ficha.nome_fantasia } : null,
+      ficha.razao_social ? { rotulo: 'Razão social', valor: ficha.razao_social } : null,
+      ficha.cnpj ? { rotulo: 'CNPJ', valor: ficha.cnpj } : null,
+      ficha.etapa ? { rotulo: 'Etapa', valor: ficha.etapa } : null,
+      ficha.responsavel ? { rotulo: 'Responsável', valor: ficha.responsavel } : null
+    ].filter(Boolean);
+    window.DialogPadrao.info({
+      tom: 'aviso',
+      title: 'CNPJ já cadastrado',
+      subtitle: `O CNPJ ${ficha.cnpj || ''} já está em uma prospecção ativa. Nada foi salvo.`,
+      secoes: [{ titulo: 'Prospecção que já tem este CNPJ', icone: 'fa-briefcase', itens }],
+      nota: 'A mesma empresa não pode ter duas prospecções ativas. Se for a mesma empresa, continue pela prospecção acima ou mova uma delas para "Perdido".',
+      okText: 'Entendi'
+    });
+    return true;
+  }
+
+  window.ProspeccaoForm = { criar, mostrarCnpjEmUso, PROBABILIDADE_POR_ETAPA, ETAPAS_PADRAO };
 })();

@@ -191,6 +191,12 @@
         showToast(corpo.error || 'Você não tem permissão para esta alteração', 'error');
         return;
       }
+      // CNPJ de outra prospecção ativa: nada gravado; a caixa diz qual é a ficha.
+      if (resp.status === 409 && window.ProspeccaoForm.mostrarCnpjEmUso(corpo)) {
+        form.activateTab(document.getElementById('tab-pros-empresa'));
+        document.getElementById('prosCnpj')?.focus();
+        return;
+      }
       if (!resp.ok) throw new Error(corpo.error || 'Erro ao salvar prospecção');
 
       const recarregar = window.ProspeccoesModulo?.carregar;

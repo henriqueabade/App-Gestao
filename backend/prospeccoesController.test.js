@@ -442,6 +442,13 @@ test('POST recusa CNPJ que já tem prospecção ativa', async () => {
       body: JSON.stringify({ nome_fantasia: 'Duplicada', cnpj: '11.111.111/0001-11' })
     });
     assert.strictEqual(resp.status, 409);
+    // A tela mostra numa caixa de diálogo qual ficha já tem o CNPJ (16/10/2026).
+    const corpo = await resp.json();
+    assert.deepStrictEqual(corpo.cnpj_em_uso, {
+      cnpj: '11.111.111/0001-11', id: 1, nome_fantasia: 'Antiga Ltda', razao_social: 'Antiga Comercio Ltda',
+      etapa: 'Qualificado', responsavel: 'João Silva'
+    });
+    assert.ok(!ctx.tabelas.prospeccoes.some(p => p.nome_fantasia === 'Duplicada'), 'nada gravado');
   } finally {
     await ctx.encerrar();
   }
@@ -518,6 +525,38 @@ test('PUT edita a ficha mas NÃO deixa pular etapa por fora do funil', async () 
     assert.strictEqual(p.nome_fantasia, 'Antiga Renomeada');
     // A etapa continua a original: mover exige pros.stage.update e histórico.
     assert.strictEqual(p.etapa, 'Qualificado');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('PUT com o CNPJ de outra prospecção ativa: 409 dizendo qual é, sem gravar (era o 500 cru do banco, 16/10/2026)', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const repetido = await chamar(ctx.porta, '/api/prospeccoes/3', {
+      method: 'PUT',
+      body: JSON.stringify({ nome_fantasia: 'Meio Termo ME', cnpj: '11.111.111/0001-11' })
+    });
+    assert.strictEqual(repetido.status, 409);
+    const { error, cnpj_em_uso: ficha } = await repetido.json();
+    assert.match(error, /O CNPJ 11\.111\.111\/0001-11 já está na prospecção #1 \(Antiga Ltda\), que está ativa/);
+    assert.match(error, /mova uma delas para "Perdido"/);
+    assert.deepStrictEqual([ficha.id, ficha.nome_fantasia, ficha.etapa, ficha.responsavel], [1, 'Antiga Ltda', 'Qualificado', 'João Silva']);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(x => x.id === 3).cnpj, undefined, 'nada gravado');
+
+    // O CNPJ de uma prospecção arquivada (convertida) não trava.
+    const daArquivada = await chamar(ctx.porta, '/api/prospeccoes/3', {
+      method: 'PUT',
+      body: JSON.stringify({ nome_fantasia: 'Meio Termo ME', cnpj: '44.444.444/0001-44' })
+    });
+    assert.strictEqual(daArquivada.status, 200);
+
+    // Salvar a ficha com o próprio CNPJ não conta como repetido.
+    const proprio = await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({ nome_fantasia: 'Antiga Renomeada', cnpj: '11.111.111/0001-11' })
+    });
+    assert.strictEqual(proprio.status, 200);
   } finally {
     await ctx.encerrar();
   }

@@ -127,7 +127,10 @@
         // antes para não devolver o erro cru do índice único do banco.
         form.activateTab(document.getElementById('tab-pros-empresa'));
         document.getElementById('prosCnpj')?.focus();
-        showToast(corpo.error || 'Já existe uma prospecção ativa para este CNPJ', 'error');
+        // A caixa de diálogo diz qual é a ficha que já tem o CNPJ (16/10/2026).
+        if (!window.ProspeccaoForm.mostrarCnpjEmUso(corpo)) {
+          showToast(corpo.error || 'Já existe uma prospecção ativa para este CNPJ', 'error');
+        }
         return;
       }
       if (!resp.ok) throw new Error(corpo.error || 'Erro ao registrar prospecção');
