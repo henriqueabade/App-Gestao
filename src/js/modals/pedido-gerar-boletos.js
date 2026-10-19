@@ -29,6 +29,11 @@
 
   /** Como a parcela aparece: se pode ser marcada, e a tag do boleto que ela tem. */
   function linhaDaParcela(l) {
+    // Quem emitiu, quem registrou o pagamento, se foi automático (o balão da
+    // etiqueta). TODA linha leva a lista: as curtas (paga, ordem, boleto de
+    // fora) nasciam sem ela, e o `.length` no desenho derrubava a tabela
+    // inteira com "Cannot read properties of undefined" (PED118, 19/10/2026).
+    const auditoria = Array.isArray(l?.auditoria) ? l.auditoria.filter(Boolean) : [];
     // Já paga (Pix, cartão…) e sem boleto: não se marca — só depois de
     // estornar o pagamento em "Pagamentos" (decisão do dono, 24/09/2026).
     // Ordem de pagamento aberta (Pix, cartão… para uma data): também não se marca.
@@ -37,7 +42,7 @@
       return {
         id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
         vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
-        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null, auditoria,
         classe: 'badge-info', rotulo: `Ordem${o.forma ? ` · ${o.forma}` : ''}`,
         detalhe: [o.data ? `para ${diaCurto(o.data)}` : '', 'para gerar boleto, cancele a ordem em "Pagamentos"'].filter(Boolean).join(' · ')
       };
@@ -47,7 +52,7 @@
       return {
         id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
         vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
-        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null, auditoria,
         classe: 'badge-success', rotulo: `Paga${r.forma ? ` · ${r.forma}` : ''}`,
         detalhe: [r.data ? `em ${diaCurto(r.data)}` : '', 'para gerar boleto, estorne o pagamento em "Pagamentos"'].filter(Boolean).join(' · ')
       };
@@ -58,7 +63,7 @@
       return {
         id: l?.parcela?.id ?? null, numero: l?.parcela?.numero_parcela ?? null,
         vencimento: String(l?.parcela?.data_vencimento || '').slice(0, 10), valor: Number(l?.parcela?.valor) || 0,
-        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null,
+        podeGerar: false, temPdf: false, temDetalhe: false, boletoId: null, auditoria,
         classe: 'badge-info', rotulo: `Boleto de fora${e.banco_nome ? ` · ${e.banco_nome}` : ''}`,
         detalhe: [e.vencimento ? `vence ${diaCurto(e.vencimento)}` : '', e.linha_impressa || e.linha_digitavel || ''].filter(Boolean).join(' · ')
       };
@@ -96,7 +101,7 @@
       // A parte da parcela no desconto até o vencimento (acompanha o valor escolhido).
       desconto: descontoNovo,
       // Quem emitiu, quem registrou o pagamento, se foi automático (o balão da etiqueta).
-      auditoria: Array.isArray(l?.auditoria) ? l.auditoria.filter(Boolean) : [],
+      auditoria,
       podeGerar: !l?.tem_boleto_vivo,
       // Tem o que imprimir: registrado, vencido ou em protesto (pago e baixado não se pagam mais).
       temPdf: Boolean(b && ['registrado', 'vencido', 'protestado'].includes(String(b.status))),
@@ -352,8 +357,9 @@
       tag.className = `${l.classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap`;
       tag.textContent = l.rotulo;
       // Quem emitiu, quem registrou o pagamento, se foi automático (06/10/2026).
-      if (l.auditoria.length) {
-        tag.title = l.auditoria.join('\n');
+      const auditoria = Array.isArray(l.auditoria) ? l.auditoria : [];
+      if (auditoria.length) {
+        tag.title = auditoria.join('\n');
         tag.style.cursor = 'help';
       }
       tdBoleto.appendChild(tag);

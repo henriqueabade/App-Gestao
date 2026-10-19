@@ -135,7 +135,10 @@ test('Orçamentos e Pedidos: o filtro de cliente lê o nome guardado na linha (a
     for (const arquivo of ['js/orcamentos.js', 'js/pedidos.js']) {
         const js = ler(arquivo);
         assert.match(js, /tr\.dataset\.cliente = /, arquivo);
-        assert.match(js, /row\.dataset\.cliente \?\? row\.cells\[1\]/, arquivo);
+        // Pedidos compara o código do cliente guardado na linha (19/10/2026,
+        // pedidosFiltroCliente.test.js); Orçamentos, o nome normalizado.
+        if (arquivo === 'js/pedidos.js') assert.match(js, /row\.dataset\.clienteId === clienteId/, arquivo);
+        else assert.match(js, /nomeComparavel\(row\.dataset\.cliente \?\? row\.cells\[1\]/, arquivo);
         // A lista refeita volta a aplicar os filtros da tela.
         assert.match(js, /\.limpar\(\);\s*\n\s*aplicarFiltro\(\);/, arquivo);
     }

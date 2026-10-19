@@ -37,6 +37,22 @@ test('gerar boletos: a parcela paga aparece como "Paga · Pix" e não se marca',
   assert.strictEqual(f.linhaDaParcela({ parcela: { id: 2 }, boleto: null, tem_boleto_vivo: false, recebimento: null }).podeGerar, true);
 });
 
+test('gerar boletos: paga, ordem e boleto de fora também levam a auditoria — a tabela não quebra (PED118, 19/10/2026)', () => {
+  const f = bloco(GERAR, 'const ROTULO_STATUS', '/** O aviso depois de gerar', ['linhaDaParcela']);
+  const parcela = { id: 1, numero_parcela: 1, data_vencimento: '2026-10-05', valor: 2294.4 };
+  const curtas = [
+    { parcela, boleto: null, tem_boleto_vivo: false, recebimento: { forma: 'Pix', data: '2026-10-05' } },
+    { parcela, boleto: null, tem_boleto_vivo: false, ordem: { forma: 'Cartão', data: '2026-10-20' } },
+    { parcela, boleto: null, tem_boleto_vivo: false, boleto_externo: { banco_nome: 'Itaú', vencimento: '2026-10-05' } }
+  ];
+  for (const l of curtas) assert.deepStrictEqual(plano(f.linhaDaParcela(l).auditoria), [], 'sem auditoria do backend: lista vazia, nunca undefined');
+  const comAuditoria = plano(f.linhaDaParcela({ ...curtas[0], auditoria: ['Pagamento registrado por Henrique', null] }).auditoria);
+  assert.deepStrictEqual(comAuditoria, ['Pagamento registrado por Henrique'], 'o balão da paga mostra quem registrou');
+  // O desenho nunca lê `l.auditoria.length` direto.
+  assert.ok(!/l\.auditoria\.length/.test(GERAR));
+  assert.match(GERAR, /const auditoria = Array\.isArray\(l\.auditoria\) \? l\.auditoria : \[\];\s+if \(auditoria\.length\) \{/);
+});
+
 test('boletos de fora e importar: a parcela paga não recebe linha nem é escolhida', () => {
   const f = bloco(EXTERNOS, 'const TAMANHO_MAXIMO_DO_XML', '// ------------------------------------------------- fim das funções puras', ['estadoDaParcela']);
   assert.deepStrictEqual(plano(f.estadoDaParcela({ recebimento: { forma: 'Pix', data: '2026-08-20' } })), { tipo: 'paga', texto: 'Paga · Pix · 20/08/2026' });

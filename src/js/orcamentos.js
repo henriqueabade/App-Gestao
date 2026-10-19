@@ -167,12 +167,22 @@ async function popularClientes() {
     try {
         const resp = await fetchApi('/api/clientes/lista');
         const data = await resp.json();
-        select.innerHTML = '<option value="">Todos os Clientes</option>' +
-            data.map(c => `<option value="${c.nome_fantasia}">${c.nome_fantasia}</option>`).join('');
+        // Montado pelo DOM e com o nome normalizado (19/10/2026): o value cru
+        // não batia com a linha quando o cadastro tinha espaço sobrando ou
+        // aspas. Aqui a linha pode ser de cliente OU de prospecção, por isso o
+        // filtro segue pelo nome (em Pedidos vai pelo código do cliente).
+        const opcoes = (Array.isArray(data) ? data : []).map(c => {
+            const nome = String(c.nome_fantasia ?? '').replace(/\s+/g, ' ').trim();
+            return new Option(nome, nome);
+        });
+        select.replaceChildren(new Option('Todos os Clientes', ''), ...opcoes);
     } catch (err) {
         console.error('Erro ao carregar clientes', err);
     }
 }
+
+/** O nome como o filtro de cliente compara: sem espaço sobrando (nem o invisível) e sem maiúsculas. */
+const nomeComparavel = v => String(v ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 async function showPdfUnavailableDialog(id) {
     const converter = await window.DialogPadrao?.confirm({
         title: 'PDF indisponível', tom: 'aviso', icone: 'fa-file-pdf',
@@ -513,7 +523,7 @@ function aplicarFiltro() {
     const status = document.getElementById('filterStatus')?.value || '';
     const periodo = document.getElementById('filterPeriod')?.value || '';
     const dono = document.getElementById('filterOwner')?.value || '';
-    const cliente = document.getElementById('filterClient')?.value.toLowerCase() || '';
+    const cliente = nomeComparavel(document.getElementById('filterClient')?.value);
     const termos = window.BuscaAoDigitar?.termos(document.getElementById('filtroAvancadoOrcamentos')?.value || '') || [];
     controleFiltrosAvancados?.sinalizar(termos.length > 0);
     // Primeira busca avançada: lê as peças e refaz o filtro quando chegarem.
@@ -524,7 +534,7 @@ function aplicarFiltro() {
     const customPeriod = window.customPeriodOrcamentos;
     document.querySelectorAll('#orcamentosTabela tr').forEach(row => {
         const rowStatus = row.cells[5]?.innerText.trim() || '';
-        const rowCliente = (row.dataset.cliente ?? row.cells[1]?.innerText ?? '').trim().toLowerCase();
+        const rowCliente = nomeComparavel(row.dataset.cliente ?? row.cells[1]?.innerText ?? '');
         const rowDono = (row.dataset.dono || '').toLowerCase();
         const dateText = row.cells[2]?.innerText.trim();
         let show = true;

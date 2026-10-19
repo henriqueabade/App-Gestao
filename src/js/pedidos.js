@@ -296,8 +296,14 @@ async function popularClientes() {
     try {
         const resp = await fetchApi('/api/clientes/lista');
         const data = await resp.json();
-        select.innerHTML = '<option value="">Todos os Clientes</option>' +
-            data.map(c => `<option value="${c.nome_fantasia}">${c.nome_fantasia}</option>`).join('');
+        // O valor é o CÓDIGO do cliente, não o nome (19/10/2026): o nome cru no
+        // value não batia com o da linha (aparado) quando o cadastro tinha
+        // espaço sobrando, espaço duplo ou aspas — e o filtro não achava nada.
+        // Montado pelo DOM: nome com aspas ou "<" não quebra a lista.
+        const todos = new Option('Todos os Clientes', '');
+        const opcoes = (Array.isArray(data) ? data : []).map(c =>
+            new Option(String(c.nome_fantasia || c.razao_social || c.nome || 'Sem nome').trim(), String(c.id ?? '')));
+        select.replaceChildren(todos, ...opcoes);
     } catch (err) {
         console.error('Erro ao carregar clientes', err);
     }
@@ -544,6 +550,8 @@ async function carregarPedidos() {
             // Os filtros leem daqui: a célula do cliente pode ganhar as peças
             // achadas pelo filtro avançado, e aí o texto dela já não é o nome.
             tr.dataset.cliente = obterNomeCliente(p.cliente_id);
+            // O filtro por cliente compara o código (ver popularClientes).
+            tr.dataset.clienteId = String(p.cliente_id ?? '');
             tr.dataset.numero = p.numero || '';
             owners.add(p.dono);
             const condicao = p.parcelas > 1 ? `${p.parcelas}x` : 'À vista';
@@ -841,7 +849,7 @@ function aplicarFiltro() {
     const status = document.getElementById('filterStatus')?.value || '';
     const periodo = document.getElementById('filterPeriod')?.value || '';
     const dono = document.getElementById('filterOwner')?.value || '';
-    const cliente = document.getElementById('filterClient')?.value.toLowerCase() || '';
+    const clienteId = document.getElementById('filterClient')?.value || '';
     const termos = window.BuscaAoDigitar?.termos(document.getElementById('filtroAvancadoPedidos')?.value || '') || [];
     controleFiltrosAvancados?.sinalizar(termos.length > 0);
     // Primeira busca avançada: lê as peças e refaz o filtro quando chegarem.
@@ -852,14 +860,13 @@ function aplicarFiltro() {
     const customPeriod = window.customPeriodPedidos;
     document.querySelectorAll('#pedidosTabela tr').forEach(row => {
         const rowStatus = row.cells[5]?.innerText.trim() || '';
-        const rowCliente = (row.dataset.cliente ?? row.cells[1]?.innerText ?? '').trim().toLowerCase();
         const rowDono = (row.dataset.dono || '').toLowerCase();
         const dateText = row.cells[2]?.innerText.trim();
         let show = true;
 
         if (status) show &&= rowStatus === status;
         if (dono) show &&= rowDono === dono.toLowerCase();
-        if (cliente) show &&= rowCliente === cliente;
+        if (clienteId) show &&= row.dataset.clienteId === clienteId;
         if (periodo) {
             const [d, m, y] = dateText.split('/').map(Number);
             const rowDate = new Date(y, m - 1, d);
