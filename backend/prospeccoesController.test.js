@@ -39,6 +39,10 @@ const COLUNAS = {
   prospeccao_campanhas: ['id', 'prospeccao_id', 'nome', 'canal', 'status', 'data_envio', 'resposta', 'observacao', 'usuario_id'],
   prospeccao_anexos: ['id', 'prospeccao_id', 'nota_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'usuario_id', 'criado_em'],
   orcamentos: ['id', 'numero', 'cliente_id', 'prospeccao_id', 'situacao'],
+  // Tarefas da prospecção (só nos testes que põem a tabela): excluir a
+  // prospecção exclui as dela (20/10/2026).
+  tarefas: ['id', 'titulo', 'tipo', 'prioridade', 'status', 'data', 'hora', 'origem', 'prospeccao_id', 'responsavel_id', 'criado_por', 'excluida_em', 'excluida_por', 'motivo_exclusao', 'atualizado_em'],
+  tarefa_historico: ['id', 'tarefa_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'status_cliente', 'redes_sociais'],
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
@@ -867,6 +871,50 @@ test('DELETE remove a prospecção e os filhos em cascata', async () => {
     assert.strictEqual(ctx.tabelas.prospeccao_contatos.some(c => String(c.prospeccao_id) === '1'), false);
     assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => String(i.prospeccao_id) === '1'), false);
     assert.strictEqual(ctx.tabelas.prospeccao_notas.some(n => String(n.prospeccao_id) === '1'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('DELETE exclui junto as tarefas da prospecção — abertas e realizadas —, por marca e com o motivo; as de outras ficam (20/10/2026)', async () => {
+  const dados = baseDados();
+  dados.tarefas = [
+    { id: 70, titulo: 'Ligar para o Alberto', status: 'a_fazer', origem: 'proximo_passo', prospeccao_id: 1, responsavel_id: 3 },
+    { id: 71, titulo: 'Enviar amostras', status: 'concluida', origem: 'manual', prospeccao_id: 1, responsavel_id: 3 },
+    { id: 72, titulo: 'Já excluída antes', status: 'a_fazer', origem: 'manual', prospeccao_id: 1, excluida_em: '2026-10-01T10:00:00Z' },
+    { id: 73, titulo: 'De outra prospecção', status: 'a_fazer', origem: 'manual', prospeccao_id: 2, responsavel_id: 3 },
+    { id: 74, titulo: 'Sem prospecção', status: 'a_fazer', origem: 'manual', prospeccao_id: null }
+  ];
+  dados.tarefa_historico = [];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', comMotivo('Cadastro duplicado'));
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).tarefas_excluidas, 2, 'a aberta e a realizada');
+    const tarefa = id => ctx.tabelas.tarefas.find(t => t.id === id);
+    for (const id of [70, 71]) {
+      assert.ok(tarefa(id).excluida_em, `tarefa ${id} excluída`);
+      assert.strictEqual(Number(tarefa(id).excluida_por), 1);
+      assert.strictEqual(tarefa(id).motivo_exclusao, 'Prospecção excluída — Motivo: Cadastro duplicado');
+      assert.ok(ctx.tabelas.tarefa_historico.some(h => Number(h.tarefa_id) === id && h.acao === 'excluiu'), 'na linha do tempo da tarefa');
+    }
+    assert.strictEqual(tarefa(72).excluida_em, '2026-10-01T10:00:00Z', 'a já excluída não muda');
+    assert.ok(!tarefa(73).excluida_em && !tarefa(74).excluida_em, 'as de outras prospecções ficam');
+    assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('DELETE: se excluir as tarefas falhar, a prospecção não é apagada', async () => {
+  const dados = baseDados();
+  dados.tarefas = [{ id: 70, titulo: 'Ligar', status: 'concluida', origem: 'manual', prospeccao_id: 1 }];
+  dados.tarefa_historico = [];
+  const ctx = await montar(dados, { falharEm: ({ metodo, tabela, body }) => metodo === 'PUT' && tabela === 'tarefas' && body?.excluida_em });
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', comMotivo());
+    assert.strictEqual(resp.status, 500);
+    assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 1), 'a prospecção continua');
   } finally {
     await ctx.encerrar();
   }

@@ -417,6 +417,36 @@ async function sincronizarPassoDaProspeccao(api, prospeccaoId, { usuarioId = nul
   }
 }
 
+/**
+ * A prospecção vai ser excluída (decisão do dono, 20/10/2026): as tarefas
+ * dela — abertas E já realizadas — saem junto, do jeito de Tarefas (por marca:
+ * excluida_em/excluida_por/motivo_exclusao, como o DELETE de tarefasController),
+ * com o motivo na linha do tempo de cada uma. `tarefas.prospeccao_id` não tem
+ * ligação no banco: sem isto elas ficavam na agenda apontando para o nada.
+ *
+ * Chamar ANTES de apagar a prospecção: um erro aqui sobe e a exclusão para
+ * (sem a tabela de tarefas, não há o que excluir). O filtro é refeito aqui —
+ * se a API ignorasse a query, não pode sobrar tarefa de outra prospecção.
+ * Devolve quantas foram excluídas.
+ */
+async function excluirTarefasDaProspeccao(api, prospeccaoId, { usuarioId = null, motivo = null } = {}) {
+  let tarefas;
+  try {
+    tarefas = lista(await api.get('/api/tarefas', { query: { prospeccao_id: prospeccaoId } }));
+  } catch (err) {
+    if (social.semTabela(err)) return 0;
+    throw err;
+  }
+  const daProspeccao = tarefas.filter(t => t && t.id != null && mesmoId(t.prospeccao_id, prospeccaoId) && !t.excluida_em);
+  const quando = new Date().toISOString();
+  const observacao = `Prospecção excluída${texto(motivo) ? ` — Motivo: ${texto(motivo)}` : ''}`.slice(0, 600);
+  for (const t of daProspeccao) {
+    await api.put(`/api/tarefas/${t.id}`, { excluida_em: quando, excluida_por: usuarioId ?? null, motivo_exclusao: observacao, atualizado_em: quando });
+    await registrarNaTarefa(api, t.id, [{ tipo: 'situacao', acao: 'excluiu', entidade: 'Tarefa', valor_anterior: t.titulo, observacao }], usuarioId);
+  }
+  return daProspeccao.length;
+}
+
 async function cancelar(api, t, usuarioId, motivo) {
   await api.put(`/api/tarefas/${t.id}`, { status: 'cancelada', atualizado_em: new Date().toISOString() });
   await registrarNaTarefa(api, t.id, [{ tipo: 'situacao', acao: 'cancelou', entidade: 'Tarefa', valor_anterior: R.ROTULO_STATUS[t.status] || null, valor_novo: 'Cancelada', observacao: motivo }], usuarioId);
@@ -509,7 +539,7 @@ async function usuarioPeloNome(api, nome) {
 module.exports = {
   prazoLegivel, retratoDaTarefa, eventoNaFicha, registrarNaFicha, registrarNaTarefa,
   criarTarefa, convidar, concluirTarefa, cancelar,
-  sincronizarPassoDaProspeccao, criarTarefaAutomatica, usuarioPeloNome,
+  sincronizarPassoDaProspeccao, excluirTarefasDaProspeccao, criarTarefaAutomatica, usuarioPeloNome,
   preferenciasDoUsuario, recebeAutomatica,
   encerrarTarefa, encerrarTarefasDoRegistro, conferirEncerramentos
 };

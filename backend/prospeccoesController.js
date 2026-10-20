@@ -2539,16 +2539,22 @@ async function excluirUmaProspeccao(api, id, { motivo, usuarioId }) {
   await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null }).catch(() => null);
   await passoNaTarefa(api, id, usuarioId);
 
+  // As tarefas da prospecção — abertas e já realizadas — saem junto (decisão
+  // do dono, 20/10/2026), ANTES de apagá-la: se falhar, ela não é apagada.
+  const tarefasExcluidas = await tarefas.excluirTarefasDaProspeccao(api, id, { usuarioId, motivo });
+
   // Contatos, interações, histórico, notas, anexos e campanhas caem por
   // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
   await api.delete(`/api/prospeccoes/${id}`);
 
-  // O responsável e quem criou ficam sabendo, com o motivo.
+  // O responsável e quem criou ficam sabendo, com o motivo (e as tarefas que
+  // saíram junto — um aviso só, não um por tarefa).
   await avisos.avisarDaFicha(api, {
     origem: 'prospeccao', registroId: id, registro: p, usuarioId,
-    situacao: 'excluiu', nota: `Motivo: ${motivo}`
+    situacao: 'excluiu',
+    nota: `Motivo: ${motivo}${tarefasExcluidas ? ` · ${tarefasExcluidas === 1 ? '1 tarefa excluída junto' : `${tarefasExcluidas} tarefas excluídas junto`}` : ''}`
   });
-  return p;
+  return { ...p, tarefas_excluidas: tarefasExcluidas };
 }
 
 router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req, res) => {
@@ -2558,8 +2564,8 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
   if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
-    await excluirUmaProspeccao(api, id, { motivo, usuarioId: usuarioDaRequisicao(req) });
-    res.json({ success: true });
+    const apagada = await excluirUmaProspeccao(api, id, { motivo, usuarioId: usuarioDaRequisicao(req) });
+    res.json({ success: true, tarefas_excluidas: apagada.tarefas_excluidas });
   } catch (err) {
     console.error('Erro ao excluir prospecção:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao excluir prospecção' });
@@ -2598,7 +2604,7 @@ router.post('/excluir-lote', exigirPermissao('pros.delete'), exigirSupAdmin, asy
     for (const id of ids) {
       try {
         const p = await excluirUmaProspeccao(api, id, { motivo, usuarioId });
-        resultados.push({ id, excluida: true, nome: texto(p.nome_fantasia || p.razao_social) });
+        resultados.push({ id, excluida: true, nome: texto(p.nome_fantasia || p.razao_social), tarefas_excluidas: p.tarefas_excluidas });
       } catch (e) {
         resultados.push({ id, excluida: false, erro: e.message || 'Erro ao excluir' });
       }

@@ -232,7 +232,7 @@
       tom: 'erro',
       icone: 'fa-trash-can',
       secoes: [{ titulo: n > 1 ? 'Serão excluídas' : 'Será excluída', icone: 'fa-briefcase', itens: itensDaConfirmacao(ids) }],
-      alerta: 'Contatos, interações, notas, campanhas e o histórico do funil de cada uma são removidos junto. Esta ação não pode ser desfeita.',
+      alerta: 'Contatos, interações, notas, campanhas, o histórico do funil e as tarefas (abertas e realizadas) de cada uma são removidos junto. Esta ação não pode ser desfeita.',
       nota: `Motivo: ${motivo} — vai no aviso do responsável e de quem criou cada uma.`,
       confirmVariant: 'danger',
       confirmText: 'Confirmar',
@@ -285,7 +285,9 @@
     if (falha && !excluidas) showToast(falha.message || 'Erro ao excluir as prospecções.', 'error');
 
     if (!recusadas.length) {
-      showToast(`${excluidas} prospecç${excluidas > 1 ? 'ões excluídas' : 'ão excluída'} com sucesso!`, 'success');
+      // As tarefas delas saem junto (20/10/2026): diz quantas.
+      const tarefas = resultados.reduce((s, r) => s + (Number(r.tarefas_excluidas) || 0), 0);
+      showToast(`${excluidas} prospecç${excluidas > 1 ? 'ões excluídas' : 'ão excluída'} com sucesso!${tarefas ? ` ${tarefas === 1 ? '1 tarefa excluída junto.' : `${tarefas} tarefas excluídas junto.`}` : ''}`, 'success');
       close();
       return;
     }

@@ -63,7 +63,9 @@
         const recarregar = window.ProspeccoesModulo?.carregar;
         if (recarregar) await recarregar(true);
         else window.dispatchEvent(new Event('prospeccaoExcluida'));
-        showToast('Prospecção excluída com sucesso!', 'success');
+        // As tarefas dela saem junto (20/10/2026): diz quantas.
+        const tarefas = Number(dados.tarefas_excluidas) || 0;
+        showToast(`Prospecção excluída com sucesso!${tarefas ? ` ${tarefas === 1 ? '1 tarefa excluída junto.' : `${tarefas} tarefas excluídas junto.`}` : ''}`, 'success');
       } else {
         // O backend recusa quando a prospecção já virou cliente ou tem
         // orçamento vinculado — a mensagem dele explica o porquê.
