@@ -554,11 +554,11 @@ action('logout', () => {
     overlay.querySelectorAll('#display-options button').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = Number(btn.getAttribute('data-id'));
+        // `setDisplay` já leva e mostra de novo a janela que estava na frente.
+        // Chamar `showLogin()` aqui (este arquivo roda também no menu) abria uma
+        // tela de login por cima do menu, que fazia o login automático e fechava.
         await window.electronAPI.setDisplay(id);
         overlay.remove();
-        if (window.electronAPI && window.electronAPI.showLogin) {
-          window.electronAPI.showLogin();
-        }
       });
     });
     overlay

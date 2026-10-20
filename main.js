@@ -26,6 +26,37 @@ app.on('second-instance', () => {
 app.on('activate', () => abrirPrograma());
 
 const { isDev: useLocalDatabase } = require('./backend/dataConfig');
+
+// Notebook híbrido: a tela interna (144 Hz) é desenhada pela AMD integrada e o
+// monitor externo pela NVIDIA. Na AMD o processo de GPU do Chromium travava o
+// driver (tela branca e o Windows inteiro congelado). Mandamos o Chromium
+// renderizar na GPU dedicada e desligamos o cálculo de oclusão nativo, que
+// redesenha tudo ao trocar de janela (Alt+Tab) e deixava a tela branca.
+app.commandLine.appendSwitch('force_high_performance_gpu');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
+// Quedas do programa (10 em 45 dias até 19/10/2026, sem pista nenhuma): cada
+// processo que cair deixa um .dmp em <dados>/Crashpad/reports — nada sai do
+// computador — e uma linha em <dados>/quedas.log dizendo qual processo caiu
+// (GPU, tela, principal…), o motivo e o código de saída.
+app.setPath('crashDumps', path.join(userDataPath, 'Crashpad'));
+require('electron').crashReporter.start({ uploadToServer: false, compress: false });
+function registrarQueda(onde, detalhes) {
+  if (detalhes?.reason === 'clean-exit') return;
+  try {
+    fs.appendFileSync(
+      path.join(userDataPath, 'quedas.log'),
+      `${new Date().toISOString()} | v${app.getVersion()} | ${onde} | ${JSON.stringify(detalhes)}\n`
+    );
+  } catch (_) { /* o registro é só pista: não pode derrubar nada */ }
+}
+app.on('child-process-gone', (_event, detalhes) => registrarQueda('processo', detalhes));
+app.on('render-process-gone', (_event, webContents, detalhes) => {
+  let tela = '';
+  try { tela = path.basename(new URL(webContents.getURL()).pathname); } catch (_) { /* sem endereço */ }
+  registrarQueda(`tela ${tela}`, detalhes);
+});
+
 const folhasDoPdf = require('./backend/fiscal/folhas');
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
@@ -3356,6 +3387,7 @@ async function flushAndQuit(reason) {
 function createLoginWindow(show = true, showOnLoad = true) {
   // Se já existir, não cria de novo
   if (loginWindow) return;
+  loginPediuParaAparecer = false;
 
   const savedDisplay = loadSavedDisplay();
   logDisplayInfo('create-login', savedDisplay);
@@ -3376,11 +3408,10 @@ function createLoginWindow(show = true, showOnLoad = true) {
     center: false,
     autoHideMenuBar: false,
 
-    // ********** NOVO **********
-    transparent: true,             // janela sem fundo branco
-    backgroundColor: '#00000000',  // totalmente transparente
+    // Fundo opaco na cor do login (sem flash branco). Janela transparente em
+    // tela cheia fazia o driver da AMD congelar o notebook.
+    backgroundColor: '#3d021f',
     show: false,                   // NUNCA mostra automaticamente
-    // **************************
 
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -3439,6 +3470,7 @@ function createLoginWindow(show = true, showOnLoad = true) {
 
 
 function revealLoginWindow() {
+  loginPediuParaAparecer = true;
   return new Promise((resolve) => {
     if (!loginWindow || loginWindow.isDestroyed()) {
       resolve();
@@ -3611,6 +3643,14 @@ let saindoDeVerdade = false;
 let servicoDeAvisos = null;
 let relogioDosAvisos = null;
 let avisoPendente = null;
+// O X com os avisos ligados ESCONDE o menu e a sessão continua: reabrir volta
+// na hora, já logado. Enquanto o programa está na bandeja nenhuma tela aparece
+// sozinha — nem o login de uma sessão que venceu nesse meio-tempo.
+let programaNaBandeja = false;
+// A tela de login só aparece quando ELA pede (show-login). Enquanto o login
+// automático corre ela fica escondida, e quem aparece no fim é o menu; antes,
+// abrir o programa nesse meio-tempo a mostrava e logo a fechava.
+let loginPediuParaAparecer = false;
 let somDoDono;
 // O chat interno do menu está recebendo ao vivo (12/10/2026): aí é ele quem
 // manda a mensagem nova para a janela do canto (na hora); o serviço só marca.
@@ -3647,6 +3687,7 @@ function abrirPrograma(aviso = null) {
     aberturaPendente = true;
     return;
   }
+  programaNaBandeja = false;
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     if (dashboardWindow.isMinimized()) dashboardWindow.restore();
     dashboardWindow.show();
@@ -3657,7 +3698,8 @@ function abrirPrograma(aviso = null) {
   // Sem o menu aberto: o aviso fica guardado e o sino o abre depois do login.
   avisoPendente = aviso || avisoPendente;
   if (loginWindow && !loginWindow.isDestroyed()) {
-    revealLoginWindow();
+    // Sem o pedido dela, o login automático ainda está correndo.
+    if (loginPediuParaAparecer) revealLoginWindow();
     return;
   }
   // A tela de login nasce escondida e se mostra quando carregar (show-login).
@@ -3684,8 +3726,14 @@ function fecharOuSair(motivo) {
     flushAndQuit(motivo);
     return;
   }
-  // O menu grava a saída no próprio `close` (ver createDashboardWindow).
-  for (const janela of [dashboardWindow, loginWindow]) {
+  programaNaBandeja = true;
+  // Logado: o menu só se esconde, sem gravar saída — a pessoa continua dentro.
+  const menuLogado = dashboardWindow && !dashboardWindow.isDestroyed() && currentUserSession;
+  if (menuLogado) {
+    try { dashboardWindow.hide(); } catch (err) { console.error('Falha ao esconder o menu:', err); }
+  }
+  // Sem sessão o menu grava a saída no próprio `close` (ver createDashboardWindow).
+  for (const janela of menuLogado ? [loginWindow] : [dashboardWindow, loginWindow]) {
     if (janela && !janela.isDestroyed()) {
       try { janela.close(); } catch (err) { console.error('Falha ao fechar a janela:', err); }
     }
@@ -5374,6 +5422,13 @@ ipcMain.handle('logout', async () => {
   // for invertida, as duas janelas ficam visíveis ao mesmo tempo enquanto o
   // login carrega — foi exatamente o que o usuário via.
   const dashVivo = dashboardWindow && !dashboardWindow.isDestroyed();
+  // A sessão venceu com o programa na bandeja: o menu fecha e o login espera,
+  // escondido, a próxima vez que o programa for aberto.
+  if (programaNaBandeja) {
+    loginPediuParaAparecer = true;
+    if (dashVivo) dashboardWindow.close();
+    return true;
+  }
   if (dashVivo) {
     try { dashboardWindow.hide(); } catch (err) { console.error('Failed to hide dashboard', err); }
   }
@@ -5398,9 +5453,16 @@ ipcMain.handle('open-login-hidden', async () => {
 // 3) Mostra o loginWindow **somente** após o conteúdo terminar de carregar,
 //    evitando o flash branco
 ipcMain.handle('show-login', async () => {
+  // Menu na frente com alguém logado: não há login para mostrar.
+  if (currentUserSession && dashboardWindow && !dashboardWindow.isDestroyed() && dashboardWindow.isVisible()) {
+    return true;
+  }
   if (!loginWindow) {
     createLoginWindow(false, false);
   }
+  loginPediuParaAparecer = true;
+  // Na bandeja ela fica pronta e escondida: aparece quando abrirem o programa.
+  if (programaNaBandeja) return true;
   await revealLoginWindow();
   return true;
 });

@@ -98,13 +98,16 @@ function processoPrincipal({ erroDeInicializacao = null } = {}) {
     let configuredApiPort, stateFile, displayFile, arquivoDePreferencias, preferencias, arquivoDasCategorias, categoriasDoSino;
     const iniciouEmSegundoPlano = true;
     let dashboardWindow = null, loginWindow = null, loginWindowReady = false, avisoPendente = null;
+    let programaNaBandeja = false, loginPediuParaAparecer = false;
     function createLoginWindow() {
       if (!loginWindow) { eventos.push('criar-login'); loginWindow = this.novaJanela(); loginWindowReady = true; }
     }
     ${funcao('abrirPrograma')}
     ${funcao('revealLoginWindow')}
     this.definirDashboard = win => { dashboardWindow = win; };
-    this.definirLogin = win => { loginWindow = win; loginWindowReady = true; };
+    this.definirLogin = (win, pediuParaAparecer = true) => {
+      loginWindow = win; loginWindowReady = true; loginPediuParaAparecer = pediuParaAparecer;
+    };
     ${PRONTO}
   }).call(this);`, contexto);
   contexto.novaJanela = janela;
@@ -112,7 +115,7 @@ function processoPrincipal({ erroDeInicializacao = null } = {}) {
     app, contexto, eventos,
     iniciar: async () => { liberar(); await fimDaInicializacao; },
     dashboard: win => contexto.definirDashboard(win),
-    login: win => contexto.definirLogin(win)
+    login: (win, pediuParaAparecer) => contexto.definirLogin(win, pediuParaAparecer)
   };
 }
 
@@ -147,6 +150,17 @@ test('sem sessão o atalho restaura a janela de login que já existe', async () 
   p.login(login);
   p.app.emit('second-instance');
   assert.deepEqual(login.eventos, ['restaurar', 'mostrar', 'focar', 'activate-tab']);
+  assert.deepEqual(p.eventos, ['iniciar-api']);
+});
+
+test('com o login automático correndo o atalho NÃO mostra a tela de login (quem aparece é o menu)', async () => {
+  const p = processoPrincipal();
+  await p.iniciar();
+  const login = janela();
+  p.login(login, false);
+  p.app.emit('second-instance');
+  p.app.emit('activate');
+  assert.deepEqual(login.eventos, []);
   assert.deepEqual(p.eventos, ['iniciar-api']);
 });
 
