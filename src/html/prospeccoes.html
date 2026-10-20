@@ -44,6 +44,13 @@
                     <button id="btnEmailMassaProspeccoes" data-perm="pros.email.bulk" type="button" role="menuitem" class="acoes-rapidas__item">
                         <i class="fas fa-envelope" aria-hidden="true"></i><span>Enviar E-mail em Massa</span>
                     </button>
+                    <!-- Só o Sup Admin (20/10/2026): nasce escondido e prospeccoes.js
+                         mostra quando as permissões dizem que é ele. Sem data-perm de
+                         propósito — quem tem só "pros.delete" não vê. -->
+                    <div id="separadorExcluirLoteProspeccoes" class="acoes-rapidas__separador" hidden></div>
+                    <button id="btnExcluirLoteProspeccoes" type="button" role="menuitem" class="acoes-rapidas__item acoes-rapidas__item--perigo" hidden>
+                        <i class="fas fa-trash-can" aria-hidden="true"></i><span>Excluir em Lote</span>
+                    </button>
                 </div>
             </div>
             <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary ctl-botao text-white">

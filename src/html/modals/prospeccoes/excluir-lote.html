@@ -1,0 +1,86 @@
+<!--
+  Excluir em Lote (20/10/2026) — Prospecções › Ações Rápidas, só o Sup Admin.
+  Script: js/modals/prospeccao-excluir-lote.js. Cada uma passa pelas regras
+  da lixeira da linha (convertida e com orçamento não se apagam), o motivo é
+  obrigatório e a confirmação pede a palavra EXCLUIR.
+-->
+<div id="excluirLoteProspeccoesOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 ctl-padrao">
+  <div role="dialog" aria-modal="true" aria-labelledby="excluirLoteProspeccoesTitulo" tabindex="0" class="w-full max-w-5xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+    <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarExcluirLoteProspeccoes" type="button" class="btn-neutral ctl-botao text-white">← Voltar</button>
+      <div class="flex-1 text-center">
+        <h2 id="excluirLoteProspeccoesTitulo" class="ctl-modal-titulo text-white">Excluir em Lote</h2>
+        <p class="text-sm text-gray-300">Marque as prospecções que devem ser excluídas</p>
+      </div>
+      <span id="resumoExcluirLoteProspeccoes" class="badge-info px-3 py-1 rounded-full text-xs font-medium">Nenhuma selecionada</span>
+    </header>
+
+    <!-- Filtros simples: buscar, etapa e responsável. -->
+    <div class="px-8 py-4 border-b border-white/10 flex-shrink-0 flex flex-wrap gap-4">
+      <div style="flex: 2 1 16rem;">
+        <label for="buscaExcluirLoteProspeccoes" class="ctl-rotulo text-gray-300">Buscar</label>
+        <input id="buscaExcluirLoteProspeccoes" type="text" autocomplete="off" placeholder="Empresa, razão social ou CNPJ"
+               class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+      <div style="flex: 1 1 11rem;">
+        <label for="etapaExcluirLoteProspeccoes" class="ctl-rotulo text-gray-300">Etapa</label>
+        <select id="etapaExcluirLoteProspeccoes" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div style="flex: 1 1 11rem;">
+        <label for="responsavelExcluirLoteProspeccoes" class="ctl-rotulo text-gray-300">Responsável</label>
+        <select id="responsavelExcluirLoteProspeccoes" class="w-full ctl-campo bg-input border border-inputBorder text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
+          <option value="">Todos</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <div class="px-8 py-6">
+        <div id="excluirLoteProspeccoesCarregando" class="py-12 text-center text-gray-300 text-sm">
+          <i class="fas fa-spinner fa-spin mr-2"></i>Lendo as prospecções…
+        </div>
+        <div id="excluirLoteProspeccoesTabelaWrapper" class="hidden">
+          <div class="table-scroll">
+            <table class="w-full text-sm">
+              <thead>
+                <tr>
+                  <th class="w-12 text-left py-3 px-4">
+                    <input id="selecionarTodasExcluirLoteProspeccoes" type="checkbox" style="accent-color: var(--color-primary); width: 1rem; height: 1rem;" title="Selecionar todas as da lista" aria-label="Selecionar todas as da lista" />
+                  </th>
+                  <th class="text-left py-3 px-4 whitespace-nowrap">Empresa</th>
+                  <th class="text-left py-3 px-4 whitespace-nowrap">CNPJ</th>
+                  <th class="text-left py-3 px-4 whitespace-nowrap">Etapa</th>
+                  <th class="text-left py-3 px-4 whitespace-nowrap">Responsável</th>
+                  <th class="text-left py-3 px-4 whitespace-nowrap">Atualizada</th>
+                </tr>
+              </thead>
+              <tbody id="excluirLoteProspeccoesTabela"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="excluirLoteProspeccoesVazio" class="hidden py-16 text-center">
+          <i class="fas fa-briefcase text-4xl text-gray-500 mb-4"></i>
+          <p class="text-gray-300 font-medium">Nenhuma prospecção nesta busca</p>
+          <p class="text-gray-400 text-sm mt-1">Mude ou limpe os filtros.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Motivo obrigatório (decisão do dono, 02/10/2026): vai no aviso de cada uma. -->
+    <footer class="px-8 py-5 border-t border-white/10 flex-shrink-0 flex flex-wrap items-end justify-between gap-4">
+      <div style="flex: 1 1 16rem;">
+        <label for="motivoExcluirLoteProspeccoes" class="ctl-rotulo text-gray-300">Motivo da exclusão <span class="text-[var(--color-red)]">*</span></label>
+        <textarea id="motivoExcluirLoteProspeccoes" rows="2" maxlength="600" placeholder="Por que estas prospecções estão sendo excluídas?"
+                  class="w-full ctl-campo bg-input border border-inputBorder text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+      <div class="ctl-acoes justify-end">
+        <button id="cancelarExcluirLoteProspeccoes" type="button" class="btn-neutral ctl-botao text-white">Voltar</button>
+        <button id="confirmarExcluirLoteProspeccoes" type="button" class="btn-danger ctl-botao text-white">
+          <i class="fas fa-trash-can mr-2"></i>Excluir
+        </button>
+      </div>
+    </footer>
+  </div>
+</div>

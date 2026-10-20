@@ -899,6 +899,83 @@ test('DELETE recusa prospecção com orçamento vinculado', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// EXCLUIR EM LOTE (20/10/2026): só o Sup Admin, motivo + EXCLUIR, as mesmas
+// regras da lixeira da linha para cada uma.
+// ---------------------------------------------------------------------------
+
+const emLote = (corpo, usuario = 1) => ({ method: 'POST', usuario, body: JSON.stringify(corpo) });
+
+test('etapa Móveis (20/10/2026): primeira do funil, 0%, e o SQL do CHECK com as mesmas etapas do código', async () => {
+  const controller = require('./prospeccoesController');
+  assert.strictEqual(controller.ETAPAS[0], 'Móveis');
+  assert.strictEqual(controller.PROBABILIDADE_PADRAO['Móveis'], 0);
+  const sql = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'sql', 'prospeccoes_etapa_moveis.sql'), 'utf8');
+  const lista = /CHECK \(etapa IN \(([^)]*)\)\)/.exec(sql)[1].split(',').map(e => e.trim().replace(/^'|'$/g, ''));
+  assert.deepStrictEqual(lista, controller.ETAPAS, 'o banco aceita exatamente as etapas do código');
+  assert.match(sql, /SET client_encoding = 'UTF8';/, 'acentos certos pelo psql do Windows');
+
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes', { method: 'POST', body: JSON.stringify({ nome_fantasia: 'Loja de Móveis', etapa: 'Móveis' }) });
+    assert.strictEqual(resp.status, 201);
+    const { id } = await resp.json();
+    const criada = ctx.tabelas.prospeccoes.find(p => p.id === id);
+    assert.deepStrictEqual([criada.etapa, Number(criada.probabilidade)], ['Móveis', 0]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir em lote: apaga as que podem, devolve a convertida com o motivo e não para no meio', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/excluir-lote',
+      emLote({ ids: [2, 4, 3, 3, 'x'], motivo: 'Cadastros duplicados', confirmacao: 'excluir' }));
+    assert.strictEqual(resp.status, 200);
+    const corpo = await resp.json();
+    assert.deepStrictEqual([corpo.excluidas, corpo.recusadas], [2, 1], 'repetido e id inválido não contam');
+    assert.deepStrictEqual(corpo.resultados.map(r => [r.id, r.excluida]), [[2, true], [4, false], [3, true]]);
+    assert.match(corpo.resultados[1].erro, /já virou cliente/);
+    assert.strictEqual(corpo.resultados[0].nome, 'Recente SA');
+    assert.deepStrictEqual(ctx.tabelas.prospeccoes.map(p => p.id).sort(), [1, 4, 5], 'a 4 (convertida) ficou');
+    assert.strictEqual(ctx.tabelas.prospeccao_contatos.some(c => String(c.prospeccao_id) === '2'), false, 'filhos em cascata');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir em lote: sem motivo, sem a palavra EXCLUIR ou sem seleção, nada é apagado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const semMotivo = await chamar(ctx.porta, '/api/prospeccoes/excluir-lote', emLote({ ids: [2], confirmacao: 'EXCLUIR' }));
+    assert.strictEqual(semMotivo.status, 400);
+    assert.strictEqual((await semMotivo.json()).motivo_obrigatorio, true);
+    const semPalavra = await chamar(ctx.porta, '/api/prospeccoes/excluir-lote', emLote({ ids: [2], motivo: 'Duplicada', confirmacao: 'apagar' }));
+    assert.strictEqual(semPalavra.status, 400);
+    assert.match((await semPalavra.json()).error, /Digite EXCLUIR/);
+    const vazio = await chamar(ctx.porta, '/api/prospeccoes/excluir-lote', emLote({ ids: [], motivo: 'Duplicada', confirmacao: 'EXCLUIR' }));
+    assert.strictEqual(vazio.status, 400);
+    assert.strictEqual(ctx.tabelas.prospeccoes.length, baseDados().prospeccoes.length, 'nada apagado');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir em lote: quem não é Sup Admin leva 403, mesmo com a permissão de excluir', async () => {
+  const dados = baseDados();
+  darPermissaoDeExcluir(dados);
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/excluir-lote',
+      emLote({ ids: [2], motivo: 'Duplicada', confirmacao: 'EXCLUIR' }, 2));
+    assert.strictEqual(resp.status, 403);
+    assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 2), 'nada apagado');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // PERMISSÕES
 // ---------------------------------------------------------------------------
 

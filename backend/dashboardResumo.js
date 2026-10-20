@@ -43,7 +43,7 @@ const ROTULO_PROSPECCAO = 'Prospecção';
  * logado. O teste deste módulo compara as duas listas — se alguém criar uma
  * etapa lá, o teste quebra aqui antes de o funil perder uma coluna calado.
  */
-const ETAPAS = ['Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'];
+const ETAPAS = ['Móveis', 'Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'];
 const ETAPAS_TERMINAIS = new Set(['ganho', 'perdido']);
 const ETAPAS_ABERTAS = ETAPAS.filter(e => !ETAPAS_TERMINAIS.has(normalizarTexto(e)));
 

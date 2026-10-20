@@ -340,8 +340,8 @@ const COLUNAS_PROSPECCAO = [
   ...COLUNAS_INTERACAO
 ];
 
-const ETAPAS_PROSPECCAO = ['Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'];
-const PROBABILIDADE_DA_ETAPA = { 'Novo': 10, 'Contactado': 25, 'Qualificado': 50, 'Proposta': 65, 'Negociação': 80, 'Ganho': 100, 'Perdido': 0 };
+const ETAPAS_PROSPECCAO = ['Móveis', 'Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'];
+const PROBABILIDADE_DA_ETAPA = { 'Móveis': 0, 'Novo': 10, 'Contactado': 25, 'Qualificado': 50, 'Proposta': 65, 'Negociação': 80, 'Ganho': 100, 'Perdido': 0 };
 
 // ------------------------------------------------------------ modelos
 

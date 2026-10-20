@@ -54,8 +54,13 @@ const router = express.Router();
 // Funil
 // ---------------------------------------------------------------------------
 
-/** Ordem oficial do funil. Espelha o CHECK de prospeccoes.etapa. */
+/**
+ * Ordem oficial do funil. Espelha o CHECK de prospeccoes.etapa.
+ * "Móveis" (20/10/2026, pedido do dono): no começo do funil, 0%, etiqueta
+ * roxa — o CHECK novo está em sql/prospeccoes_etapa_moveis.sql.
+ */
 const ETAPAS = [
+  'Móveis',
   'Novo',
   'Contactado',
   'Qualificado',
@@ -70,6 +75,7 @@ const ETAPAS_TERMINAIS = new Set(['Ganho', 'Perdido']);
 
 /** Probabilidade sugerida por etapa, usada quando quem chama não informa. */
 const PROBABILIDADE_PADRAO = {
+  'Móveis': 0,
   'Novo': 10,
   'Contactado': 25,
   'Qualificado': 50,
@@ -2475,6 +2481,46 @@ router.delete(
  * `pros.delete` sozinha deixava qualquer perfil com ela fazer isso por chamada
  * direta — a grade só escondia o botão.
  */
+/**
+ * Apaga UMA prospecção com as regras de sempre (a da lixeira da linha e a do
+ * excluir em lote passam por aqui): convertida e com orçamento vinculado não
+ * se apagam; a tarefa do próximo passo fecha; o responsável e quem criou são
+ * avisados com o motivo. Devolve a ficha apagada.
+ */
+async function excluirUmaProspeccao(api, id, { motivo, usuarioId }) {
+  const p = await buscarProspeccao(api, id);
+
+  // Apagar uma prospecção convertida destruiria o histórico de como o cliente
+  // foi conquistado — e o cliente continuaria lá, sem origem.
+  if (p.cliente_id) {
+    throw erro(400, 'Não é possível excluir: esta prospecção já virou cliente');
+  }
+
+  // orcamentos.prospeccao_id é ON DELETE SET NULL, então o orçamento
+  // sobreviveria órfão. Mesma regra do módulo Clientes.
+  const orcamentos = await api
+    .get('/api/orcamentos', { query: { prospeccao_id: id } })
+    .catch(() => []);
+  if (Array.isArray(orcamentos) && orcamentos.some(o => String(o?.prospeccao_id ?? id) === String(id))) {
+    throw erro(400, 'Não é possível excluir: existem orçamentos vinculados');
+  }
+
+  // A tarefa do próximo passo não pode ficar aberta apontando para o nada.
+  await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null }).catch(() => null);
+  await passoNaTarefa(api, id, usuarioId);
+
+  // Contatos, interações, histórico, notas, anexos e campanhas caem por
+  // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
+  await api.delete(`/api/prospeccoes/${id}`);
+
+  // O responsável e quem criou ficam sabendo, com o motivo.
+  await avisos.avisarDaFicha(api, {
+    origem: 'prospeccao', registroId: id, registro: p, usuarioId,
+    situacao: 'excluiu', nota: `Motivo: ${motivo}`
+  });
+  return p;
+}
+
 router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
   // O motivo é obrigatório (decisão do dono, 02/10/2026): sem ele, nada é apagado.
@@ -2482,41 +2528,56 @@ router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req
   if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
   try {
     const api = createApiClient(req);
-    const p = await buscarProspeccao(api, id);
-
-    // Apagar uma prospecção convertida destruiria o histórico de como o cliente
-    // foi conquistado — e o cliente continuaria lá, sem origem.
-    if (p.cliente_id) {
-      throw erro(400, 'Não é possível excluir: esta prospecção já virou cliente');
-    }
-
-    // orcamentos.prospeccao_id é ON DELETE SET NULL, então o orçamento
-    // sobreviveria órfão. Mesma regra do módulo Clientes.
-    const orcamentos = await api
-      .get('/api/orcamentos', { query: { prospeccao_id: id } })
-      .catch(() => []);
-    if (Array.isArray(orcamentos) && orcamentos.length) {
-      throw erro(400, 'Não é possível excluir: existem orçamentos vinculados');
-    }
-
-    // A tarefa do próximo passo não pode ficar aberta apontando para o nada.
-    await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null }).catch(() => null);
-    await passoNaTarefa(api, id, usuarioDaRequisicao(req));
-
-    // Contatos, interações, histórico, notas, anexos e campanhas caem por
-    // ON DELETE CASCADE (ver sql/prospeccoes.sql) — uma chamada basta.
-    await api.delete(`/api/prospeccoes/${id}`);
-
-    // O responsável e quem criou ficam sabendo, com o motivo.
-    await avisos.avisarDaFicha(api, {
-      origem: 'prospeccao', registroId: id, registro: p, usuarioId: usuarioDaRequisicao(req),
-      situacao: 'excluiu', nota: `Motivo: ${motivo}`
-    });
-
+    await excluirUmaProspeccao(api, id, { motivo, usuarioId: usuarioDaRequisicao(req) });
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao excluir prospecção:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao excluir prospecção' });
+  }
+});
+
+/** Quantas prospecções um lote apaga de uma vez (o resto vai num lote seguinte). */
+const LIMITE_DO_LOTE = 200;
+/** A palavra que a pessoa digita na caixa de confirmação (e que o servidor confere). */
+const PALAVRA_DO_LOTE = 'EXCLUIR';
+
+/**
+ * Excluir em lote (20/10/2026, pedido do dono) — Ações Rápidas › "Excluir em
+ * lote", só o Sup Admin. Cada prospecção passa pelas MESMAS regras da lixeira
+ * da linha (excluirUmaProspeccao), uma de cada vez: a que não pode ser apagada
+ * (virou cliente, tem orçamento) fica e volta com o motivo, sem parar as
+ * outras. Motivo obrigatório (vai no aviso de cada uma) e a palavra EXCLUIR
+ * conferida aqui também — a tela não é a única porta.
+ */
+router.post('/excluir-lote', exigirPermissao('pros.delete'), exigirSupAdmin, async (req, res) => {
+  const motivo = avisos.motivoDaExclusao(req.body);
+  if (!motivo) return res.status(400).json({ error: avisos.SEM_MOTIVO, motivo_obrigatorio: true });
+  if (String(req.body?.confirmacao ?? '').trim().toUpperCase() !== PALAVRA_DO_LOTE) {
+    return res.status(400).json({ error: `Digite ${PALAVRA_DO_LOTE} para confirmar a exclusão em lote.` });
+  }
+  const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : [])
+    .map(Number).filter(n => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return res.status(400).json({ error: 'Selecione ao menos uma prospecção.' });
+  if (ids.length > LIMITE_DO_LOTE) {
+    return res.status(400).json({ error: `No máximo ${LIMITE_DO_LOTE} prospecções por vez (vieram ${ids.length}).` });
+  }
+  try {
+    const api = createApiClient(req);
+    const usuarioId = usuarioDaRequisicao(req);
+    const resultados = [];
+    for (const id of ids) {
+      try {
+        const p = await excluirUmaProspeccao(api, id, { motivo, usuarioId });
+        resultados.push({ id, excluida: true, nome: texto(p.nome_fantasia || p.razao_social) });
+      } catch (e) {
+        resultados.push({ id, excluida: false, erro: e.message || 'Erro ao excluir' });
+      }
+    }
+    const excluidas = resultados.filter(r => r.excluida).length;
+    res.json({ excluidas, recusadas: resultados.length - excluidas, resultados });
+  } catch (err) {
+    console.error('Erro ao excluir prospecções em lote:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao excluir prospecções em lote' });
   }
 });
 

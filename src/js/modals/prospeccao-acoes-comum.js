@@ -120,10 +120,10 @@
   window.ProspeccaoAcoes = {
     fetchApi, esc, texto, enviar, concluir, ligarFechamento, aoConfirmar, alvo,
     PROBABILIDADE_POR_ETAPA: {
-      'Novo': 10, 'Contactado': 25, 'Qualificado': 50,
+      'Móveis': 0, 'Novo': 10, 'Contactado': 25, 'Qualificado': 50,
       'Proposta': 65, 'Negociação': 80, 'Ganho': 100, 'Perdido': 0
     },
-    ETAPAS_PADRAO: ['Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'],
+    ETAPAS_PADRAO: ['Móveis', 'Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'],
     TIPOS_INTERACAO: ['Ligação', 'E-mail', 'Reunião', 'WhatsApp', 'Visita', 'Proposta', 'Nota'],
     STATUS_CAMPANHA: ['Planejada', 'Em andamento', 'Concluída', 'Cancelada']
   };

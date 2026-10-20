@@ -34,6 +34,9 @@
 .acoes-rapidas__item:hover,
 .acoes-rapidas__item:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }
 .acoes-rapidas__item small { display: block; font-size: 0.7rem; color: rgba(255, 255, 255, 0.55); }
+.acoes-rapidas__item[hidden], .acoes-rapidas__separador[hidden] { display: none; }
+/* O que apaga (Excluir em Lote de Prospecções, 20/10/2026): ícone vermelho. */
+.acoes-rapidas__item--perigo i { color: var(--color-red, #ff5858); }
 
 @media (max-width: 767px) {
     .acoes-rapidas__menu { right: auto; left: 0; max-width: calc(100vw - 2rem); }

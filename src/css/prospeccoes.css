@@ -233,6 +233,14 @@ body {
     white-space: nowrap;
 }
 
+/* "Móveis" (20/10/2026): roxo de verdade — o violeta de Proposta é um lilás
+   acinzentado e as duas etiquetas se confundiriam. */
+.badge-etapa--moveis {
+    background: rgba(168, 85, 247, 0.2);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.45);
+}
+
 .badge-etapa--novo {
     background: rgba(138, 167, 243, 0.18);
     color: var(--color-blue);
@@ -278,6 +286,7 @@ body {
 
 /* Barras do funil, uma cor por etapa (mesma escala dos badges). */
 .funil-barra { transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.funil-barra--moveis      { background: #a855f7; }
 .funil-barra--novo        { background: var(--color-blue); }
 .funil-barra--contactado  { background: var(--color-orange); }
 .funil-barra--qualificado { background: var(--color-primary); }

@@ -797,6 +797,24 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     return Modal.openModuleModal(htmlPath, scriptPath, overlayId);
 }
 
+/** O item "Excluir em Lote" das Ações Rápidas aparece só para o Sup Admin. */
+function mostrarExcluirLote() {
+    const supAdmin = Boolean(window.Permissoes?.supAdmin);
+    ['btnExcluirLoteProspeccoes', 'separadorExcluirLoteProspeccoes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = !supAdmin;
+    });
+}
+
+/**
+ * Excluir em Lote (20/10/2026): tabela com caixas de seleção e filtros
+ * simples; confirma digitando EXCLUIR. Ver js/modals/prospeccao-excluir-lote.js.
+ */
+function abrirExcluirLote() {
+    if (!window.Permissoes?.supAdmin) return null;
+    return openModalWithSpinner('modals/prospeccoes/excluir-lote.html', '../js/modals/prospeccao-excluir-lote.js', 'excluirLoteProspeccoes');
+}
+
 function abrirExcluirProspeccao(prospeccao) {
     window.prospeccaoExcluir = prospeccao;
     return Modal.open('modals/prospeccoes/excluir.html', '../js/modals/prospeccao-excluir.js', 'excluirProspeccao');
@@ -920,6 +938,13 @@ function initProspeccoes() {
     const emConstrucao = () => window.DialogPadrao?.info({ title: 'Função em desenvolvimento', tom: 'aviso', icone: 'fa-person-digging', message: 'Esta ação ainda está sendo construída.' });
     document.getElementById('btnRelatorioProspeccoes')?.addEventListener('click', emConstrucao);
     document.getElementById('btnEmailMassaProspeccoes')?.addEventListener('click', emConstrucao);
+
+    // Excluir em Lote (20/10/2026): só o Sup Admin vê. As permissões podem
+    // chegar depois da tela; o ouvinte é um só, mesmo reentrando no módulo.
+    window.removeEventListener('permissoes:carregadas', mostrarExcluirLote);
+    window.addEventListener('permissoes:carregadas', mostrarExcluirLote);
+    mostrarExcluirLote();
+    document.getElementById('btnExcluirLoteProspeccoes')?.addEventListener('click', abrirExcluirLote);
 
     document.getElementById('btnFiltrarProspeccoes')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimparProspeccoes')?.addEventListener('click', limparFiltros);

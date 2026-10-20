@@ -567,7 +567,7 @@ test('Perdido com status ativa e convertida com status ativa também ficam fora 
   assert.equal(pros.funil.find(e => e.etapa === 'Proposta').quantidade, 0);
 });
 
-test('o funil traz as cinco etapas abertas, em ordem, mesmo vazias', () => {
+test('o funil traz as seis etapas abertas, em ordem, mesmo vazias (Móveis desde 20/10/2026)', () => {
   const pros = r.resumirProspeccao({
     prospeccoes: [
       { id: 1, etapa: 'Proposta', status: 'ativa', valor_estimado: 5000 },
@@ -577,6 +577,7 @@ test('o funil traz as cinco etapas abertas, em ordem, mesmo vazias', () => {
   }, { agora: AGORA });
 
   assert.deepEqual(pros.funil, [
+    { etapa: 'Móveis', quantidade: 0, valor: 0 },
     { etapa: 'Novo', quantidade: 0, valor: 0 },
     { etapa: 'Contactado', quantidade: 0, valor: 0 },
     { etapa: 'Qualificado', quantidade: 0, valor: 0 },

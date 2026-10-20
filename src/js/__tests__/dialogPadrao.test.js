@@ -157,6 +157,42 @@ test('confirmação: tom de pergunta, Cancelar neutro, Confirmar na cor pedida; 
   assert.strictEqual(dialogoAberto().porClasse('dlg-rodape')[0].filhos[0].className, 'btn-warning', 'sem pedido, o vinho de sempre');
 });
 
+test('exigirTexto (20/10/2026): o Confirmar só acende com a palavra digitada; Enter e clique antes disso não confirmam', async () => {
+  const D = carregar();
+  const promessa = D.confirm({ title: 'Excluir 3 prospecções?', tom: 'erro', confirmVariant: 'danger', confirmText: 'Confirmar', exigirTexto: 'EXCLUIR' });
+  const dialogo = dialogoAberto();
+  const [caixa] = dialogo.porClasse('dlg-digitar');
+  assert.ok(caixa, 'o campo aparece antes dos botões');
+  const cartao = dialogo.porClasse('dlg-cartao')[0];
+  assert.ok(cartao.filhos.indexOf(caixa) < cartao.filhos.indexOf(dialogo.porClasse('dlg-rodape')[0]));
+  assert.match(caixa.textContent, /Para confirmar, digite EXCLUIR/);
+  const [campo] = dialogo.porClasse('dlg-digitar__campo');
+  const confirmar = dialogo.porClasse('dlg-rodape')[0].filhos[0];
+  assert.strictEqual(confirmar.disabled, true, 'nasce apagado');
+  assert.strictEqual(documento.focado, campo, 'o foco vai para o campo');
+
+  const digitar = v => { campo.value = v; campo.ouvintes.input.forEach(fn => fn()); };
+  const enter = () => campo.ouvintes.keydown.forEach(fn => fn({ key: 'Enter', preventDefault() {} }));
+  digitar('EXCLUI');
+  assert.strictEqual(confirmar.disabled, true);
+  confirmar.onclick();
+  enter();
+  assert.ok(dialogoAberto(), 'palavra errada: continua aberta');
+  digitar('  excluir ');
+  assert.strictEqual(confirmar.disabled, false, 'maiúscula ou minúscula tanto faz');
+  enter();
+  assert.strictEqual(await promessa, true);
+});
+
+test('sem exigirTexto a caixa é a de sempre: sem campo e com o Confirmar aceso', () => {
+  const D = carregar();
+  D.confirm({ title: 'Registrar?', message: 'y' });
+  assert.strictEqual(dialogoAberto().porClasse('dlg-digitar').length, 0);
+  assert.notStrictEqual(dialogoAberto().porClasse('dlg-rodape')[0].filhos[0].disabled, true);
+  D.info({ title: 'Aviso', message: 'z', exigirTexto: 'EXCLUIR' });
+  assert.strictEqual(dialogoAberto().porClasse('dlg-digitar').length, 0, 'só vale no confirm');
+});
+
 test('uma caixa por vez, e o texto vai como texto (nada de HTML injetado)', () => {
   const D = carregar();
   D.info({ title: 'Primeira', message: 'a' });

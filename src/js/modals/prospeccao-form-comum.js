@@ -14,6 +14,8 @@
 
   /** Espelha PROBABILIDADE_PADRAO de backend/prospeccoesController.js. */
   const PROBABILIDADE_POR_ETAPA = {
+    // Etapa nova de 20/10/2026: começa em 0% (sql/prospeccoes_etapa_moveis.sql).
+    'Móveis': 0,
     'Novo': 10,
     'Contactado': 25,
     'Qualificado': 50,
@@ -24,7 +26,7 @@
   };
 
   const ETAPAS_PADRAO = [
-    'Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'
+    'Móveis', 'Novo', 'Contactado', 'Qualificado', 'Proposta', 'Negociação', 'Ganho', 'Perdido'
   ];
 
   const get = id => document.getElementById(id);

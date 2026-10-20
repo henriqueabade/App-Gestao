@@ -15,6 +15,8 @@
  *
  *     confirmVariant: 'danger' | 'success' | 'primary' — a cor do Confirmar
  *     (padrão: o vinho de sempre). largura: 'normal' | 'larga'.
+ *     exigirTexto: 'EXCLUIR' — só no confirm: campo antes dos botões, e o
+ *     Confirmar só acende com a palavra digitada (20/10/2026).
  *
  *  2. TEXTO (`message`) — o que as chamadas antigas mandam. Ele é organizado
  *     sozinho por `estruturarTexto`: linha em branco separa blocos; bloco cuja
@@ -246,7 +248,8 @@
     onCancel,
     confirmText,
     cancelText,
-    okText
+    okText,
+    exigirTexto
   } = {}) {
 
     // Remove dialog antigo se existir
@@ -311,7 +314,32 @@
       rodape.appendChild(cancelBtn);
     }
 
-    cartao.append(topo, corpo, rodape);
+    // Confirmação digitada (20/10/2026): `exigirTexto: 'EXCLUIR'` põe um campo
+    // antes dos botões e o Confirmar só acende com a palavra certa (maiúsculas
+    // ou minúsculas tanto faz). Sem a opção, a caixa é a de sempre.
+    const palavra = isConfirm && typeof exigirTexto === 'string' ? exigirTexto.trim() : '';
+    let campoDigitado = null;
+    const digitouCerto = () => !palavra || String(campoDigitado?.value || '').trim().toUpperCase() === palavra.toUpperCase();
+    let digitar = null;
+    if (palavra) {
+      digitar = criar('div', 'dlg-digitar');
+      const rotulo = criar('label', 'dlg-digitar__rotulo');
+      const idCampo = `dlgDigitar${Date.now()}`;
+      rotulo.htmlFor = idCampo;
+      rotulo.append(criar('span', '', 'Para confirmar, digite '), criar('b', '', palavra));
+      campoDigitado = criar('input', 'dlg-digitar__campo');
+      campoDigitado.id = idCampo;
+      campoDigitado.type = 'text';
+      campoDigitado.autocomplete = 'off';
+      campoDigitado.spellcheck = false;
+      campoDigitado.placeholder = palavra;
+      campoDigitado.setAttribute('aria-describedby', idTitulo);
+      digitar.append(rotulo, campoDigitado);
+      confirmBtn.disabled = true;
+      campoDigitado.addEventListener('input', () => { confirmBtn.disabled = !digitouCerto(); });
+    }
+
+    cartao.append(topo, corpo, ...(digitar ? [digitar] : []), rodape);
     // Sem corpo (só título): não fica um vão vazio entre o título e os botões.
     if (!corpo.childNodes.length) corpo.remove();
     dialog.appendChild(cartao);
@@ -326,8 +354,14 @@
       result ? onConfirm?.() : onCancel?.();
     };
 
-    confirmBtn.onclick = () => close(true);
+    confirmBtn.onclick = () => { if (digitouCerto()) close(true); };
     cancelBtn && (cancelBtn.onclick = () => close(false));
+    // Enter no campo confirma, só com a palavra certa.
+    campoDigitado?.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (digitouCerto()) close(true);
+    });
 
     dialog.addEventListener('cancel', e => {
       e.preventDefault();
@@ -335,7 +369,7 @@
     });
 
     dialog.showModal(); // 🔥 TOP LAYER
-    confirmBtn.focus();
+    (campoDigitado || confirmBtn).focus();
 
     return { close: () => close(false) };
   }

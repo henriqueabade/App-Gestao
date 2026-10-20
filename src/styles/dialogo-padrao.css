@@ -333,6 +333,42 @@ dialog[data-dialog-padrao]::backdrop {
 
 .dlg-nota i { color: var(--color-blue, #8aa7f3); margin-top: 0.15rem; }
 
+/* Confirmação digitada (`exigirTexto`, 20/10/2026): o Confirmar só acende
+   quando a palavra pedida é digitada — ex.: EXCLUIR no excluir em lote. */
+.dlg-digitar {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0 1.75rem 1.1rem;
+    text-align: left;
+}
+
+.dlg-digitar__rotulo {
+    font-size: var(--ctl-fonte-rotulo, 0.8125rem);
+    color: var(--menu-text-secondary, rgba(255, 255, 255, 0.78));
+}
+
+.dlg-digitar__rotulo b { color: #ff7a7a; letter-spacing: 0.04em; }
+
+.dlg-digitar__campo {
+    width: 100%;
+    height: var(--ctl-altura, 40px);
+    padding: 0 0.85rem;
+    border-radius: var(--ctl-raio, 0.6rem);
+    border: 1px solid var(--dlg-tom-borda, rgba(255, 255, 255, 0.2));
+    background: rgba(0, 0, 0, 0.25);
+    color: #fff;
+    font-size: var(--ctl-fonte, 14px);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.dlg-digitar__campo:focus { outline: none; border-color: var(--dlg-tom, #ff7a7a); box-shadow: 0 0 0 3px var(--dlg-tom-fundo, rgba(255, 88, 88, 0.15)); }
+
+.dlg-rodape button:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+
+[data-menu-theme="light"] .dlg-digitar__campo { background: #fff; color: #111827; }
+
 /* -------------------------------------------------------------- rodapé */
 
 .dlg-rodape {
