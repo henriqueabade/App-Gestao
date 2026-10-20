@@ -177,10 +177,16 @@
                     <input type="hidden" data-geo-input="prospeccoes-estados">
                 </div>
 
-                <div class="linha-inteira flex items-center">
+                <div class="linha-inteira flex flex-wrap items-center gap-6">
                     <label class="flex items-center gap-3 cursor-pointer select-none">
                         <input id="filtroIncluirArquivadas" type="checkbox" class="w-4 h-4" />
                         <span class="text-sm text-white/80">Mostrar arquivadas (ganhas e perdidas)</span>
+                    </label>
+                    <!-- "Móveis" só aparece marcando aqui (20/10/2026, pedido do dono):
+                         nem na lista, nem na Etapa, nem no funil. -->
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                        <input id="filtroIncluirMoveis" type="checkbox" class="w-4 h-4" />
+                        <span class="text-sm text-white/80">Mostrar Móveis</span>
                     </label>
                 </div>
             </div>

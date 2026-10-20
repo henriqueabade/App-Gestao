@@ -187,6 +187,21 @@ function lerData(v) {
 }
 
 /**
+ * Hora do dia ("14:30", "9:05", "14h30", "14h", "14:30:00") → "14:30"; vazio →
+ * null; inválida → undefined. É a hora da tarefa do próximo passo (20/10/2026).
+ */
+function lerHora(v) {
+  const s = texto(v).toLowerCase().replace(/\s+/g, '');
+  if (!s) return null;
+  const m = /^(\d{1,2})(?:[:h](\d{2})?)?(?::(\d{2}))?$/.exec(s);
+  if (!m) return undefined;
+  const h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  if (h > 23 || min > 59) return undefined;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/**
  * Data e hora de Brasília ("31/12/2026 14:30", "31/12/2026", "2026-12-31 14:30")
  * → `{ iso, semHora }` (o instante, com o fuso -03:00); vazio → null;
  * inválido → undefined. Sem hora vale 00:00 daquele dia.
@@ -329,6 +344,9 @@ const COLUNAS_PROSPECCAO = [
   { chave: 'responsavel', titulo: 'Responsável (nome ou e-mail)' },
   { chave: 'proximo_passo', titulo: 'Próximo passo' },
   { chave: 'proximo_passo_data', titulo: 'Data do próximo passo (dd/mm/aaaa)' },
+  // A hora da tarefa do próximo passo (20/10/2026): com data, a planilha cria
+  // a tarefa para o responsável; sem hora ela é de dia inteiro.
+  { chave: 'proximo_passo_hora', titulo: 'Hora do próximo passo (hh:mm)', alternativas: ['Hora', 'Hora do próximo passo'] },
   ...colunasDeEndereco('end', 'Endereço'),
   { chave: 'contato_nome', titulo: 'Contato principal - Nome' },
   { chave: 'contato_cargo', titulo: 'Contato principal - Cargo' },
@@ -361,7 +379,7 @@ const EXEMPLO_PROSPECCAO = {
   nome_fantasia: MARCA_EXEMPLO, razao_social: 'Loja Exemplo LTDA', cnpj: '11.222.333/0001-81', segmento: 'Decoração',
   site: 'www.exemplo.com.br', redes_sociais: 'Instagram: @lojaexemplo | LinkedIn: linkedin.com/company/loja-exemplo',
   origem: 'Indicação', etapa: 'Novo', valor_estimado: '15.000,00', probabilidade: '10', responsavel: 'Nome ou e-mail do usuário',
-  proximo_passo: 'Ligar para apresentar o catálogo', proximo_passo_data: '30/09/2026', end_cep: '30820-272', end_rua: 'Av. Exemplo',
+  proximo_passo: 'Ligar para apresentar o catálogo', proximo_passo_data: '30/09/2026', proximo_passo_hora: '14:30', end_cep: '30820-272', end_rua: 'Av. Exemplo',
   end_numero: '100', end_bairro: 'Centro', end_cidade: 'Belo Horizonte', end_estado: 'MG', end_pais: 'Brasil',
   contato_nome: 'João Souza', contato_cargo: 'Sócio', contato_email: 'joao@exemplo.com.br', contato_telefone_celular: '(31) 98888-7777',
   contato_decisor: 'Sim',
@@ -751,6 +769,7 @@ function conferirProspeccao(r = {}, contexto = {}) {
 
   const data = lerData(r.proximo_passo_data);
   if (data === undefined) pendencias.push(`Data do próximo passo "${r.proximo_passo_data}" inválida (use dd/mm/aaaa): não foi gravada.`);
+  const tarefaDoPasso = tarefaDoPassoDaLinha(r, data, pendencias);
 
   // A origem vem da lista do cadastro (a caixa com + e −). Fora dela entra
   // como veio, com a pendência de incluí-la na lista.
@@ -808,7 +827,24 @@ function conferirProspeccao(r = {}, contexto = {}) {
     endereco,
     contatos
   };
-  return { payload, bloqueios, pendencias, avisos, cnpj, identificacao: nome || texto(r.razao_social) || cnpj };
+  return { payload, bloqueios, pendencias, avisos, cnpj, identificacao: nome || texto(r.razao_social) || cnpj, tarefaDoPasso };
+}
+
+/**
+ * A tarefa do próximo passo da linha (decisão do dono, 20/10/2026 — antes a
+ * planilha não criava tarefa): só com o passo E a data; com a hora, naquela
+ * hora; sem hora, dia inteiro. Devolve `{ hora }` (hora null = dia inteiro)
+ * ou null quando não há tarefa. Hora inválida ou sem data vira pendência.
+ * `data` é a já lida da linha (undefined = inválida).
+ */
+function tarefaDoPassoDaLinha(r, data, pendencias) {
+  const hora = lerHora(r.proximo_passo_hora);
+  if (hora === undefined) pendencias.push(`Hora do próximo passo "${r.proximo_passo_hora}" inválida (use hh:mm): a tarefa ficou de dia inteiro.`);
+  if (!texto(r.proximo_passo) || !data) {
+    if (hora && !data) pendencias.push('Hora do próximo passo sem a data: nenhuma tarefa foi criada.');
+    return null;
+  }
+  return { hora: hora || null };
 }
 
 /** A linha traz alguma coluna da interação? */
@@ -909,7 +945,7 @@ function resumirImportacao(resultados = []) {
 
 module.exports = {
   SEPARADOR, BOM, MARCA_EXEMPLO, COLUNAS_CLIENTE, COLUNAS_PROSPECCAO, COLUNAS_INTERACAO, COLUNAS_CONTATO, ETAPAS_PROSPECCAO,
-  modeloDeContatos, contatoParaLinha, conferirContato, temInteracao, conferirInteracao, lerDataHora,
+  modeloDeContatos, contatoParaLinha, conferirContato, temInteracao, conferirInteracao, lerDataHora, lerHora, tarefaDoPassoDaLinha,
   lerCsv, gerarCsv, celula, detectarSeparador, mapearCabecalho, registroDaLinha, tituloDaColuna,
   lerSimNao, lerNumero, lerData, dataBr, numeroBr, cnpjValido, cpfValido, formatarCnpj, formatarCpf, digitos, comparavel,
   ehLinhaDeExemplo, modeloDeClientes, modeloDeProspeccoes, clienteParaLinha, prospeccaoParaLinha,

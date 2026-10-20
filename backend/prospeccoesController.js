@@ -883,6 +883,12 @@ async function exportarProspeccoes(req, res) {
   }
 }
 
+/** "Tarefa do próximo passo criada para Bruno Maia: 09/11/2026 às 14:30" (ou "dia inteiro"). */
+function textoDaTarefaCriada(dia, hora, responsavelId, usuarios = []) {
+  const quem = usuarios.find(u => String(u.id) === String(responsavelId))?.nome || 'o responsável';
+  return `Tarefa do próximo passo criada para ${quem}: ${csv.dataBr(dia)}${hora ? ` às ${hora}` : ' (dia inteiro)'}.`;
+}
+
 /**
  * Importa a planilha linha a linha, sem parar no primeiro erro (ver
  * importarClientes em clientesController.js — mesmo relatório).
@@ -960,10 +966,12 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
       }
       // O próximo passo desta linha passa a ser o da prospecção (como no modal).
       let proximoPasso = null;
+      let tarefaDoPasso = null;
       if (confInt.interacao && (texto_(r.proximo_passo) || texto_(r.proximo_passo_data))) {
         const data = csv.lerData(r.proximo_passo_data);
         if (data === undefined) resultado.pendencias.push(`Data do próximo passo "${r.proximo_passo_data}" inválida (use dd/mm/aaaa): não foi gravada.`);
         proximoPasso = { proximo_passo: texto_(r.proximo_passo) || null, proximo_passo_data: data || null };
+        tarefaDoPasso = csv.tarefaDoPassoDaLinha(r, data, resultado.pendencias);
       }
       if (confInt.interacao) {
         resultado.avisos.push(`${existente ? 'Empresa já cadastrada' : `Mesma empresa da linha ${criadora.linha}`}: desta linha entrou só a interação${proximoPasso ? ' e o próximo passo' : ''}.`);
@@ -971,7 +979,7 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
       resultado.situacao = csv.situacaoDaLinha(resultado);
       resultados.push(resultado);
       if (resultado.situacao !== 'nao_registrado') {
-        interacoes.push({ resultado, alvoId: existente?.id ?? null, existente: existente || null, criadora: existente ? null : criadora, interacao: confInt.interacao, proximoPasso });
+        interacoes.push({ resultado, alvoId: existente?.id ?? null, existente: existente || null, criadora: existente ? null : criadora, interacao: confInt.interacao, proximoPasso, tarefaDoPasso });
       }
       continue;
     }
@@ -1004,7 +1012,17 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
         pendencias: conf.pendencias,
         avisar: false
       });
-      // O próximo passo da planilha NÃO vira tarefa (decisão do dono, 01/10/2026).
+      // O próximo passo com data vira tarefa do RESPONSÁVEL da prospecção, não
+      // de quem subiu a planilha (decisão do dono, 20/10/2026; antes não
+      // virava). Com hora, naquela hora; sem hora, dia inteiro. O aviso vai
+      // junto do aviso único do fim, não um por linha.
+      if (conf.tarefaDoPasso) {
+        const tarefa = await passoNaTarefa(api, resultado.id, usuarioId, { hora: conf.tarefaDoPasso.hora, avisar: false });
+        if (tarefa?.nova) {
+          resultado.tarefaPara = tarefa.responsavelId;
+          resultado.avisos.push(textoDaTarefaCriada(conf.payload.proximo_passo_data, conf.tarefaDoPasso.hora, tarefa.responsavelId, listaUsuarios));
+        }
+      }
     } catch (err) {
       resultado.situacao = 'nao_registrado';
       resultado.bloqueios = [...resultado.bloqueios, err.status === 409 ? err.message : `Erro ao gravar: ${err?.body?.detalhe || err?.message || 'falha na API'}`];
@@ -1045,6 +1063,18 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
           ...(item.proximoPasso || {})
         }, usuarioId, { tiposAceitos, observacao: `Importada da planilha ${nomeArquivo} (linha ${resultado.linha})`, aviso: false, criarTarefaDoPasso: false });
         if (item.existente) item.gravada = true;
+        // Empresa que já existia: o próximo passo desta linha com data também
+        // vira tarefa (do responsável dela), com a hora; sem data, a tarefa que
+        // houver fica sem hora (hora sem dia não existe).
+        if (item.proximoPasso) {
+          const tarefa = await passoNaTarefa(api, alvoId, usuarioId, {
+            criar: Boolean(item.tarefaDoPasso), hora: item.tarefaDoPasso?.hora ?? null, avisar: false
+          });
+          if (tarefa?.nova) {
+            item.tarefaPara = tarefa.responsavelId;
+            resultado.avisos.push(textoDaTarefaCriada(item.proximoPasso.proximo_passo_data, item.tarefaDoPasso?.hora, tarefa.responsavelId, listaUsuarios));
+          }
+        }
       } catch (err) {
         const motivo = err?.status && err.status < 500 ? err.message : (err?.body?.detalhe || err?.message || 'falha na API');
         if (item.criadora === resultado) {
@@ -1063,9 +1093,9 @@ async function importarProspeccoes(api, conteudo, { usuarioId = null, nomeArquiv
   // quem tem as que já existiam e ganharam interação.
   const fichas = [
     ...aCriar.filter(c => c.resultado.id && c.resultado.situacao !== 'nao_registrado')
-      .map(c => ({ id: c.resultado.id, nome: c.conf.payload.nome_fantasia, para: [c.conf.payload.responsavel_id] })),
+      .map(c => ({ id: c.resultado.id, nome: c.conf.payload.nome_fantasia, para: [c.conf.payload.responsavel_id], tarefaPara: c.resultado.tarefaPara ?? null })),
     ...interacoes.filter(i => i.gravada)
-      .map(i => ({ id: i.existente.id, nome: i.existente.nome_fantasia, para: [i.existente.responsavel_id, i.existente.criado_por], interacao: true }))
+      .map(i => ({ id: i.existente.id, nome: i.existente.nome_fantasia, para: [i.existente.responsavel_id, i.existente.criado_por], interacao: true, tarefaPara: i.tarefaPara ?? null }))
   ];
   if (fichas.length && usuarioId) {
     const autor = listaUsuarios.find(u => String(u.id) === String(usuarioId))?.nome || 'Alguém';

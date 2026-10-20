@@ -231,8 +231,9 @@ function popularFiltros(preservar = false) {
         // Vem do backend na ordem do funil — não ordenar alfabeticamente aqui,
         // senão "Contactado" apareceria antes de "Novo".
         etapaSel.innerHTML = '<option value="">Todas</option>' +
-            etapasDisponiveis.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
-        etapaSel.value = etapaAnterior;
+            etapasDisponiveis.filter(etapaVisivel).map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+        // "Móveis" escolhida e a caixa desmarcada: volta para Todas.
+        etapaSel.value = etapaVisivel(etapaAnterior) ? etapaAnterior : '';
     }
 
     if (origemSel) {
@@ -291,10 +292,20 @@ function combinaProximoPasso(p, modo) {
     return true;
 }
 
+/**
+ * "Móveis" (20/10/2026, pedido do dono) só aparece com "Mostrar Móveis"
+ * marcado nos filtros avançados — como as arquivadas: some da lista, da
+ * Etapa e do funil. A lista já vem com elas; o corte é aqui na tela.
+ */
+const ETAPA_SO_COM_CAIXA = 'Móveis';
+const mostrarMoveis = () => Boolean(document.getElementById('filtroIncluirMoveis')?.checked);
+const etapaVisivel = etapa => etapa !== ETAPA_SO_COM_CAIXA || mostrarMoveis();
+
 function aplicarFiltros() {
     const f = lerFiltros();
 
     const filtradas = todasProspeccoes.filter(p => {
+        if (!etapaVisivel(p.etapa)) return false;
         if (f.busca) {
             const campos = [
                 p.nome_fantasia, p.razao_social, p.cnpj, p.segmento, p.origem,
@@ -370,11 +381,16 @@ function renderFunil(funil) {
         return;
     }
 
+    // "Móveis" escondida: sai a barra e sai a contagem do total e das em aberto
+    // (a taxa de conversão só olha Ganho e Perdido, não muda).
+    const etapas = funil.etapas.filter(e => etapaVisivel(e.etapa));
+    const escondidas = funil.etapas.filter(e => !etapaVisivel(e.etapa)).reduce((s, e) => s + (Number(e.quantidade) || 0), 0);
+
     // A barra é proporcional à MAIOR etapa, não ao total: com 7 etapas, usar o
     // total deixaria todas minúsculas e o gráfico ilegível.
-    const maior = Math.max(1, ...funil.etapas.map(e => e.quantidade));
+    const maior = Math.max(1, ...etapas.map(e => e.quantidade));
 
-    container.innerHTML = funil.etapas.map(e => {
+    container.innerHTML = etapas.map(e => {
         const largura = Math.round((e.quantidade / maior) * 100);
         const slug = slugEtapa(e.etapa);
         return `
@@ -391,7 +407,7 @@ function renderFunil(funil) {
     }).join('');
 
     if (total) {
-        total.textContent = `${funil.total} no total · ${funil.em_aberto} em aberto · ${funil.taxa_conversao}% de conversão`;
+        total.textContent = `${funil.total - escondidas} no total · ${funil.em_aberto - escondidas} em aberto · ${funil.taxa_conversao}% de conversão`;
     }
 }
 
@@ -526,8 +542,11 @@ function criarConteudoPopupLinha(p) {
         ? `<span class="${atrasado ? 'prox-passo-atrasado' : ''}">${formatarData(p.proximo_passo_data)}${atrasado ? ' · atrasado' : ''}</span>`
         : '—';
 
+    // Sem a anotação do cadastro (20/10/2026, pedido do dono): ela fica no
+    // Detalhes. `popup-card--prospeccao`: largo para não quebrar linha e
+    // sempre dentro da tela (css/prospeccoes.css).
     return `
-    <div class="popup-card">
+    <div class="popup-card popup-card--prospeccao">
       <div class="popup-header">
         <p class="popup-header-subtitle" data-perm-col="col_pros_id">Prospecção #${esc(p.id)}</p>
         <h3 class="popup-header-title">${esc(p.nome_fantasia || p.razao_social || '')}</h3>
@@ -556,11 +575,6 @@ function criarConteudoPopupLinha(p) {
             <p class="popup-info-value popup-info-value--inteiro">${esc(p.cnpj || '') || '—'}</p>
           </div>
         </div>
-        ${texto(p.anotacoes) ? `
-        <div class="popup-secao">
-          <p class="popup-info-label">Anotação do cadastro</p>
-          <p class="popup-info-value popup-anotacao">${esc(p.anotacoes)}</p>
-        </div>` : ''}
       </div>
     </div>`;
 }
@@ -971,6 +985,12 @@ function initProspeccoes() {
     // Incluir arquivadas muda o QUE o servidor manda, então recarrega.
     document.getElementById('filtroIncluirArquivadas')?.addEventListener('change', () => {
         carregarProspeccoes(true);
+    });
+    // "Mostrar Móveis" é só da tela: refaz a Etapa, o funil e a lista.
+    document.getElementById('filtroIncluirMoveis')?.addEventListener('change', () => {
+        popularFiltros(true);
+        renderFunil(funilAtual);
+        aplicarFiltros();
     });
 
     // ---------------------------------------------------------------------

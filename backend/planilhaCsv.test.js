@@ -186,7 +186,9 @@ const COLUNAS = {
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
   prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   perm_cli: ['id', 'modelo_id', 'modulo_ativo', 'acao_view', 'acao_create', 'acao_export_csv', 'acao_import_csv'],
-  perm_pros: ['id', 'modelo_id', 'modulo_ativo', 'acao_view', 'acao_create', 'acao_export_csv', 'acao_import_csv']
+  perm_pros: ['id', 'modelo_id', 'modulo_ativo', 'acao_view', 'acao_create', 'acao_export_csv', 'acao_import_csv'],
+  // Os avisos do sino (só nos testes que põem a tabela).
+  notificacoes: ['id', 'usuario_id', 'tipo', 'titulo', 'mensagem', 'origem', 'registro_id', 'autor_id', 'lida', 'criado_em']
 };
 
 function criarUpstream(dados) {
@@ -512,23 +514,55 @@ test('interação da planilha: recusa data futura, tipo fora da lista e o que o 
   assert.strictEqual(csv.conferirInteracao({ nome_fantasia: 'Só a empresa' }, { tipos, agora }).interacao, null);
 });
 
-test('planilha com próximo passo NÃO cria tarefa (decisão do dono, 01/10/2026); a tarefa que já existe acompanha o passo novo', async () => {
+test('modelo: "Hora do próximo passo" logo depois da data; aceita "Hora" no cabeçalho; lerHora', () => {
+  const chaves = csv.COLUNAS_PROSPECCAO.map(c => c.chave);
+  assert.strictEqual(chaves.indexOf('proximo_passo_hora'), chaves.indexOf('proximo_passo_data') + 1);
+  assert.strictEqual(csv.mapearCabecalho(['Empresa', 'Hora'], csv.COLUNAS_PROSPECCAO).indice.proximo_passo_hora, 1, 'a coluna "Hora" da planilha do dono');
+  assert.deepStrictEqual(['14:30', '9:05', '14h30', '14h', '14:30:00', '', '25:00', 'tarde'].map(csv.lerHora),
+    ['14:30', '09:05', '14:30', '14:00', '14:30', null, undefined, undefined]);
+});
+
+test('planilha (decisão do dono, 20/10/2026): próximo passo com data vira tarefa do RESPONSÁVEL, com a hora; só o dia = dia inteiro; sem data, nenhuma', async () => {
   const dados = dadosComListas();
   dados.tarefas = [{ id: 50, titulo: 'Ligar de novo', tipo: 'Follow-up', prioridade: 'media', status: 'a_fazer', data: '2026-10-01', origem: 'proximo_passo', prospeccao_id: 1, responsavel_id: 2 }];
   dados.tarefa_historico = [];
+  dados.notificacoes = [];
   const ctx = await montar(dados);
   try {
     const I = { interacao_tipo: 'Ligação', interacao_data: '25/09/2026 11:00', interacao_resumo: 'Retorno' };
     const conteudo = planilha(csv.COLUNAS_PROSPECCAO, [
-      { nome_fantasia: 'Nova com passo', proximo_passo: 'Mandar catálogo', proximo_passo_data: '10/10/2026' },
-      { nome_fantasia: 'Ativa SA', cnpj: '04.252.011/0001-10', ...I, proximo_passo: 'Fechar proposta', proximo_passo_data: '12/10/2026' }
+      { nome_fantasia: 'Com hora', responsavel: 'Ana', proximo_passo: 'Mandar catálogo', proximo_passo_data: '10/10/2026', proximo_passo_hora: '14h30' },
+      { nome_fantasia: 'Só o dia', responsavel: 'Ana', proximo_passo: 'Ligar', proximo_passo_data: '11/10/2026' },
+      { nome_fantasia: 'Sem data', responsavel: 'Ana', proximo_passo: 'Visitar', proximo_passo_hora: '10:00' },
+      { nome_fantasia: 'Ativa SA', cnpj: '04.252.011/0001-10', ...I, proximo_passo: 'Fechar proposta', proximo_passo_data: '12/10/2026', proximo_passo_hora: '16:00' }
     ]);
     const r = await chamar(ctx.porta, '/api/prospeccoes/csv/importar', { usuario: 1, corpo: { conteudo, nome_arquivo: 'passos.csv' } });
     assert.strictEqual(r.status, 200, JSON.stringify(r.json));
-    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Nova com passo');
-    assert.deepStrictEqual([nova.proximo_passo, nova.proximo_passo_data], ['Mandar catálogo', '2026-10-10'], 'o passo fica na prospecção');
-    assert.strictEqual(ctx.tabelas.tarefas.length, 1, 'nenhuma tarefa nasceu');
-    assert.deepStrictEqual([ctx.tabelas.tarefas[0].titulo, String(ctx.tabelas.tarefas[0].data).slice(0, 10)], ['Fechar proposta', '2026-10-12'], 'a que existia acompanha');
+    const tarefaDe = nome => {
+      const p = ctx.tabelas.prospeccoes.find(x => x.nome_fantasia === nome);
+      return ctx.tabelas.tarefas.filter(t => String(t.prospeccao_id) === String(p.id));
+    };
+    const [comHora] = tarefaDe('Com hora');
+    assert.deepStrictEqual([comHora.titulo, String(comHora.data).slice(0, 10), comHora.hora, comHora.origem, Number(comHora.responsavel_id)],
+      ['Mandar catálogo', '2026-10-10', '14:30', 'proximo_passo', 2], 'do responsável (Ana), não de quem subiu (Henrique)');
+    const [soDia] = tarefaDe('Só o dia');
+    assert.ok(soDia && !soDia.hora, 'só o dia: tarefa de dia inteiro');
+    assert.strictEqual(tarefaDe('Sem data').length, 0, 'sem data: nenhuma tarefa');
+    const linhaSemData = r.json.linhas.find(l => l.identificacao === 'Sem data');
+    assert.ok(linhaSemData.pendencias.includes('Hora do próximo passo sem a data: nenhuma tarefa foi criada.'));
+    assert.ok(r.json.linhas.find(l => l.identificacao === 'Com hora').avisos.includes('Tarefa do próximo passo criada para Ana: 10/10/2026 às 14:30.'));
+    assert.ok(r.json.linhas.find(l => l.identificacao === 'Só o dia').avisos.includes('Tarefa do próximo passo criada para Ana: 11/10/2026 (dia inteiro).'));
+
+    // Empresa que já existia: a tarefa dela acompanha o passo novo, agora com a hora — sem duplicar.
+    const daAtiva = ctx.tabelas.tarefas.filter(t => String(t.prospeccao_id) === '1');
+    assert.strictEqual(daAtiva.length, 1);
+    assert.deepStrictEqual([daAtiva[0].titulo, String(daAtiva[0].data).slice(0, 10), daAtiva[0].hora], ['Fechar proposta', '2026-10-12', '16:00']);
+
+    // Um aviso só para a Ana, com a contagem das tarefas — não um "Nova tarefa para você" por linha.
+    const daAna = ctx.tabelas.notificacoes.filter(n => Number(n.usuario_id) === 2);
+    assert.strictEqual(daAna.filter(n => n.tipo === 'tarefa_atribuida').length, 0);
+    assert.strictEqual(daAna.length, 1);
+    assert.match(daAna[0].mensagem, /2 tarefas do próximo passo na sua agenda/);
   } finally {
     await ctx.encerrar();
   }

@@ -1164,14 +1164,44 @@ body {
     opacity: 1;
 }
 
-/* Anotação do cadastro no popover da grade: texto livre, pode ser longo. */
-.popup-anotacao {
-    white-space: pre-wrap;
-    max-height: 7rem;
+/*
+   Popover (i) da grade de Prospecções (20/10/2026, pedido do dono): largo o
+   bastante para não quebrar linha (a largura acompanha o conteúdo até o
+   teto) e SEMPRE dentro da tela — nunca mais largo nem mais alto que a
+   janela; o que passar da altura rola dentro do cartão. A classe é só deste
+   cartão: .popup-card existe em outros módulos e esta folha pode continuar
+   carregada depois de trocar de módulo.
+*/
+.popup-card.popup-card--prospeccao {
+    width: max-content;
+    min-width: min(20rem, calc(100vw - 24px));
+    max-width: min(46rem, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    display: flex;
+    flex-direction: column;
+}
+
+.popup-card--prospeccao .popup-header { flex-shrink: 0; }
+
+.popup-card--prospeccao .popup-body {
     overflow-y: auto;
-    font-size: 0.8rem;
-    color: #e5e5e5;
-    font-weight: 400;
+    min-height: 0;
+    overscroll-behavior: contain;
+}
+
+/* Texto inteiro na linha; só quebra se passar do teto (e aí em qualquer ponto
+   de uma URL comprida, sem partir palavras comuns no meio). */
+.popup-card--prospeccao .popup-contato-linha .popup-contato-texto,
+.popup-card--prospeccao .popup-info-value {
+    word-break: normal;
+    overflow-wrap: anywhere;
+}
+
+/* As duplas (valor/previsão, passo/prazo) com a largura do que mostram. */
+.popup-card--prospeccao .popup-info-grid {
+    grid-template-columns: minmax(0, auto) minmax(0, auto);
+    justify-content: start;
+    column-gap: 2.5rem;
 }
 
 /* Trocar responsável: ação de gestão, cor própria para não se confundir

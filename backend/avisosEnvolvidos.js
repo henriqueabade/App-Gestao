@@ -393,9 +393,13 @@ function avisosDaPlanilha({ origem = 'prospeccao', ator, autor = 'Alguém', arqu
   return [...porPessoa.entries()].map(([id, fs]) => {
     const novas = fs.filter(f => !f.interacao);
     const inter = fs.filter(f => f.interacao);
+    // As tarefas do próximo passo criadas para esta pessoa (20/10/2026): vão
+    // aqui, num aviso só, em vez de um "Nova tarefa para você" por linha.
+    const tarefas = fs.filter(f => f.tarefaPara && mesmoId(f.tarefaPara, id)).length;
     const partes = [];
     if (novas.length) partes.push(`${plural(novas.length, r.um, r.varios)} para você`);
     if (inter.length) partes.push(`${plural(inter.length, 'interação', 'interações')} ${r.nas}`);
+    if (tarefas) partes.push(`${plural(tarefas, 'tarefa do próximo passo', 'tarefas do próximo passo')} na sua agenda`);
     const linhas = fs.map(f => `${f.interacao ? 'Interação em' : 'Nova:'} ${cortar(f.nome, 60) || `#${f.id}`}`);
     const unica = new Set(fs.map(f => String(f.id))).size === 1 ? idValido(fs[0].id) : null;
     return {

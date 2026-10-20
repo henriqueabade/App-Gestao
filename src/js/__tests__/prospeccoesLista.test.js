@@ -241,6 +241,7 @@ function comFiltros(valores = {}) {
     filtroValorMin: campo(valores.valorMin || ''),
     filtroValorMax: campo(valores.valorMax || ''),
     filtroProximoPasso: campo(valores.proximoPasso || ''),
+    filtroIncluirMoveis: Object.assign(campo(), { checked: Boolean(valores.moveis) }),
     prospeccoesTableBody: campo(),
     prospeccoesResumo: campo(),
     prospeccoesTableWrapper: campo(),
@@ -267,6 +268,38 @@ function comFiltros(valores = {}) {
     resultado: () => recebidos.at(-1) || []
   };
 }
+
+test('Móveis (20/10/2026): fora da lista, da Etapa e do funil até marcar "Mostrar Móveis"', () => {
+  const comMoveis = [...PROSPECCOES, { id: 9, nome_fantasia: 'Loja de Móveis', etapa: 'Móveis', probabilidade: 0, responsavel: 'João Silva' }];
+  const escondida = comFiltros();
+  definir(escondida.sandbox, 'todasProspeccoes', comMoveis);
+  escondida.sandbox.aplicarFiltros();
+  assert.ok(!escondida.resultado().some(p => p.id === 9), 'desmarcada: não aparece');
+  assert.equal(escondida.resultado().length, 4);
+  // Nem escolhendo "Móveis" na Etapa ela aparece sem a caixa.
+  const pelaEtapa = comFiltros({ etapa: 'Móveis' });
+  definir(pelaEtapa.sandbox, 'todasProspeccoes', comMoveis);
+  pelaEtapa.sandbox.aplicarFiltros();
+  assert.equal(pelaEtapa.resultado().length, 0);
+
+  const marcada = comFiltros({ moveis: true });
+  definir(marcada.sandbox, 'todasProspeccoes', comMoveis);
+  marcada.sandbox.aplicarFiltros();
+  assert.ok(marcada.resultado().some(p => p.id === 9), 'marcada: aparece');
+
+  // A Etapa e o funil seguem a caixa.
+  const visivel = (s, etapa) => vm.runInContext(`etapaVisivel(${JSON.stringify(etapa)})`, s);
+  assert.equal(visivel(escondida.sandbox, 'Móveis'), false);
+  assert.equal(visivel(escondida.sandbox, 'Novo'), true);
+  assert.equal(visivel(marcada.sandbox, 'Móveis'), true);
+  const js = fs.readFileSync(ARQUIVO, 'utf8');
+  assert.ok(js.includes('etapasDisponiveis.filter(etapaVisivel).map('), 'a Etapa não oferece Móveis escondida');
+  assert.ok(js.includes('const etapas = funil.etapas.filter(e => etapaVisivel(e.etapa));'), 'nem o funil');
+  assert.ok(js.includes('${funil.total - escondidas} no total · ${funil.em_aberto - escondidas} em aberto'), 'e o total desconta');
+  assert.match(js, /getElementById\('filtroIncluirMoveis'\)\?\.addEventListener\('change', \(\) => \{\s*popularFiltros\(true\);\s*renderFunil\(funilAtual\);\s*aplicarFiltros\(\);/);
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'prospeccoes.html'), 'utf8');
+  assert.ok(html.indexOf('id="filtroIncluirMoveis"') > html.indexOf('id="filtroIncluirArquivadas"'), 'ao lado de "Mostrar arquivadas"');
+});
 
 test('filtro sem critério devolve tudo', () => {
   const { sandbox, resultado } = comFiltros();
@@ -520,32 +553,22 @@ test('a classe do CNPJ existe na folha de estilo do módulo', () => {
   assert.match(css, /\.popup-copiar\s*\{/);
 });
 
-test('anotação do cadastro aparece no popover da grade', () => {
+test('popover da grade (20/10/2026): sem a anotação do cadastro; cartão próprio, largo e dentro da tela', () => {
   const s = criarSandbox();
   const html = s.criarConteudoPopupLinha({
     id: 1, nome_fantasia: 'X',
     anotacoes: 'Indicada pelo cliente Alpha. Trabalham com bancadas sob medida.'
   });
-  assert.match(html, /Anotação do cadastro/);
-  assert.match(html, /Indicada pelo cliente Alpha/);
-});
-
-test('sem anotação, a seção não aparece', () => {
-  const s = criarSandbox();
-  const html = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X' });
   assert.equal(html.includes('Anotação do cadastro'), false);
-  // Espaço em branco também não conta como anotação.
-  const comEspaco = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X', anotacoes: '   ' });
-  assert.equal(comEspaco.includes('Anotação do cadastro'), false);
-});
-
-test('anotação do cadastro é escapada', () => {
-  const s = criarSandbox();
-  const html = s.criarConteudoPopupLinha({
-    id: 1, nome_fantasia: 'X', anotacoes: '<img src=x onerror=alert(1)>'
-  });
-  assert.equal(html.includes('<img src=x'), false);
-  assert.match(html, /&lt;img/);
+  assert.equal(html.includes('Indicada pelo cliente Alpha'), false, 'a anotação fica no Detalhes');
+  assert.match(html, /<div class="popup-card popup-card--prospeccao">/);
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
+  const regra = /\.popup-card\.popup-card--prospeccao \{([^}]*)\}/.exec(css)?.[1] || '';
+  assert.ok(regra.includes('width: max-content;'), 'a largura acompanha o conteúdo');
+  assert.ok(regra.includes('max-width: min(46rem, calc(100vw - 24px));'), 'nunca mais largo que a janela');
+  assert.ok(regra.includes('max-height: calc(100vh - 24px);'), 'nunca mais alto que a janela');
+  assert.match(css, /\.popup-card--prospeccao \.popup-body \{\s*overflow-y: auto;/, 'o resto rola dentro do cartão');
+  assert.equal(/\.popup-anotacao/.test(css), false);
 });
 
 // ---------------------------------------------------------------------------

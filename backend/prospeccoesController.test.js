@@ -909,10 +909,15 @@ test('etapa Móveis (20/10/2026): primeira do funil, 0%, e o SQL do CHECK com as
   const controller = require('./prospeccoesController');
   assert.strictEqual(controller.ETAPAS[0], 'Móveis');
   assert.strictEqual(controller.PROBABILIDADE_PADRAO['Móveis'], 0);
-  const sql = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'sql', 'prospeccoes_etapa_moveis.sql'), 'utf8');
-  const lista = /CHECK \(etapa IN \(([^)]*)\)\)/.exec(sql)[1].split(',').map(e => e.trim().replace(/^'|'$/g, ''));
-  assert.deepStrictEqual(lista, controller.ETAPAS, 'o banco aceita exatamente as etapas do código');
-  assert.match(sql, /SET client_encoding = 'UTF8';/, 'acentos certos pelo psql do Windows');
+  // sql/ fica fora do git e o dono apaga o arquivo depois de rodar: só confere
+  // enquanto ele estiver na pasta.
+  const arquivoSql = require('node:path').join(__dirname, '..', 'sql', 'prospeccoes_etapa_moveis.sql');
+  if (require('node:fs').existsSync(arquivoSql)) {
+    const sql = require('node:fs').readFileSync(arquivoSql, 'utf8');
+    const lista = /CHECK \(etapa IN \(([^)]*)\)\)/.exec(sql)[1].split(',').map(e => e.trim().replace(/^'|'$/g, ''));
+    assert.deepStrictEqual(lista, controller.ETAPAS, 'o banco aceita exatamente as etapas do código');
+    assert.match(sql, /SET client_encoding = 'UTF8';/, 'acentos certos pelo psql do Windows');
+  }
 
   const ctx = await montar(baseDados());
   try {
