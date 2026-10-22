@@ -3679,25 +3679,33 @@ function deslizarConteudo(margem) {
     fimDoDeslize = setTimeout(limpar, 300);
 }
 
-// Expande a sidebar quando necessário
+/**
+ * A cascata do texto ao abrir o menu (dono, 22/10/2026): cada item visível
+ * recebe um atraso pequeno na ordem de cima para baixo (até ~140 ms no último),
+ * e o texto vai aparecendo enquanto o menu abre. Itens escondidos (submenu
+ * fechado, módulo sem permissão) não contam na ordem.
+ */
+function escalonarTextosDoMenu() {
+    let ordem = 0;
+    sidebar.querySelectorAll('.sidebar-item, .submenu-item').forEach(item => {
+        const visivel = item.offsetParent !== null && !item.closest('.submenu:not(.open)');
+        const atraso = visivel ? `${Math.min(ordem, 10) * 14}ms` : '0ms';
+        if (visivel) ordem += 1;
+        item.querySelectorAll('.sidebar-text').forEach(texto => texto.style.setProperty('--sb-atraso', atraso));
+    });
+}
+
+// Expande a sidebar quando necessário. O texto entra junto com a largura
+// (antes esperava a abertura terminar e o menu ficava um instante só com os
+// ícones, parecendo travado).
 function expandSidebar() {
     if (!sidebarExpanded) {
+        escalonarTextosDoMenu();
         sidebar.classList.remove('sidebar-collapsed');
-        sidebar.classList.add('sidebar-expanded');
+        sidebar.classList.add('sidebar-expanded', 'sidebar-text-visible');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
         deslizarConteudo(offset);
         if (companyName) companyName.classList.remove('collapsed');
-
-        // Aguarda a animação de expansão finalizar para exibir o texto
-        const showText = () => sidebar.classList.add('sidebar-text-visible');
-        sidebar.addEventListener('transitionend', (e) => {
-            if (e.propertyName === 'width') {
-                showText();
-            }
-        }, { once: true });
-        // Fallback caso o evento transitionend não seja disparado
-        setTimeout(showText, 300);
-
         sidebarExpanded = true;
     }
 }
@@ -3707,23 +3715,11 @@ function collapseSidebar() {
         return;
     }
 
-    const finalizeCollapse = () => {
-        if (!sidebarExpanded) {
-            sidebar.classList.remove('sidebar-text-visible');
-        }
-    };
-
-    sidebar.addEventListener(
-        'transitionend',
-        (event) => {
-            if (event.propertyName === 'width') {
-                finalizeCollapse();
-            }
-        },
-        { once: true }
-    );
-
+    // O texto some na hora (rápido, sem cascata) e a largura fecha em seguida.
+    sidebar.classList.remove('sidebar-text-visible');
     requestAnimationFrame(() => {
+        // Reaberto no mesmo quadro: não fecha por cima.
+        if (sidebarExpanded) return;
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
     });
@@ -3731,8 +3727,6 @@ function collapseSidebar() {
     deslizarConteudo('64px');
     if (companyName) companyName.classList.add('collapsed');
     sidebarExpanded = false;
-
-    setTimeout(finalizeCollapse, 250);
     // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 

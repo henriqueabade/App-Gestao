@@ -193,8 +193,30 @@ test('main.js: fechar vai para a bandeja (avisos ligados); sair de verdade só p
   assert.ok(MAIN.includes("{ label: 'Sair do programa', click: () => sairDeVerdade() }"));
   assert.ok(MAIN.includes("fecharOuSair('ctrl-w');"));
   assert.match(MAIN, /function ficarNaBandeja\(\) \{\s+return Boolean\(preferencias\.avisosNoWindows\) && !saindoDeVerdade;/);
-  // Abrir pelo atalho com o programa só na bandeja: mostra a janela certa.
-  assert.match(MAIN, /app\.on\('second-instance', \(\) => \{\s+abrirPrograma\(\);/);
+  // Abrir pelo atalho com o programa só na bandeja: mostra a janela certa —
+  // menos quando é o próprio Windows abrindo de novo em segundo plano.
+  assert.match(MAIN, /app\.on\('second-instance', \(_evento, argv\) => \{\s+\/\/[^\n]*\n\s+\/\/[^\n]*\n\s+if \(Array\.isArray\(argv\) && argv\.includes\('--segundo-plano'\)\) return;\s+abrirPrograma\(\);/);
+});
+
+test('main.js: nada aparece sozinho com o programa na bandeja ou atrás de outras janelas (22/10/2026)', () => {
+  // Aberto pelo Windows: começa na bandeja.
+  assert.ok(MAIN.includes('if (iniciouEmSegundoPlano && preferencias.avisosNoWindows) programaNaBandeja = true;'));
+  // Entrada automática na bandeja: o menu nasce escondido e não é mostrado.
+  const auto = MAIN.slice(MAIN.indexOf("ipcMain.handle('auto-login'"), MAIN.indexOf("ipcMain.handle('open-dashboard'"));
+  assert.ok(auto.includes('const emSegundoPlano = programaNaBandeja;'));
+  assert.ok(auto.includes('createDashboardWindow(!emSegundoPlano);'));
+  assert.ok(auto.includes('!dashboardWindow.isVisible() && !emSegundoPlano) {'));
+  // Logout automático com o programa atrás: vai para a bandeja, sem mostrar o login.
+  const sair = MAIN.slice(MAIN.indexOf("ipcMain.handle('logout'"), MAIN.indexOf("ipcMain.handle('open-login-hidden'"));
+  assert.ok(sair.includes('if (programaNaBandeja || (dashVivo && !programaNaFrente())) {'));
+  assert.ok(sair.indexOf('await revealLoginWindow();') < sair.indexOf('dashboardWindow.close();', sair.indexOf('await revealLoginWindow();')), 'o login aparece antes de o menu fechar');
+  assert.ok(!sair.includes('dashboardWindow.hide()'), 'o menu não some antes de o login estar na tela');
+  assert.ok(sair.indexOf("comPrazo(persistUserExit('logout')") < sair.indexOf('await revealLoginWindow();'), 'a saída é gravada em paralelo');
+  // Monitor que muda (dormir/acordar) não põe em tela cheia uma janela escondida.
+  const telas = MAIN.slice(MAIN.indexOf('function handleDisplaysChanged('), MAIN.indexOf('const IPC_ACTION_MAP'));
+  assert.ok(telas.includes('if (janela.isVisible()) janela.setFullScreen(true);'));
+  assert.match(MAIN, /loginWindow\.on\('leave-full-screen', \(\) => \{\s+if \(!loginWindow \|\| loginWindow\.isDestroyed\(\) \|\| !loginWindow\.isVisible\(\)\) return;/);
+  assert.ok(MAIN.includes("loginWindow.on('show', () => voltarATelaCheia(loginWindow));"));
 });
 
 test('main.js: o login (e a entrada automática) fazem a máquina ser do usuário; a janela do canto só com o programa atrás', () => {

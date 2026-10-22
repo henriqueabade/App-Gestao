@@ -103,6 +103,17 @@
         backdrop-filter: blur(2px);
         cursor: progress;
       }
+      /* Como popover (por cima de um <dialog>): tira a caixa padrão do popover. */
+      #botaoAcaoVeu[popover] {
+        width: auto;
+        height: auto;
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        overflow: visible;
+      }
       #botaoAcaoVeu .botaoAcaoVeu-texto {
         color: #fff;
         font-size: 0.95rem;
@@ -474,6 +485,28 @@
    */
   let veuAtivo = 0;
 
+  /**
+   * Põe o véu por cima de tudo, inclusive de um <dialog> aberto com
+   * showModal() (o editor de tarefa, 22/10/2026): o diálogo fica na "camada do
+   * topo", onde z-index nenhum chega, e o véu ficava escondido atrás dele — a
+   * exclusão rodava sem carregando nenhum. Como popover o véu também entra na
+   * camada do topo, acima do diálogo. Ele vai para DENTRO do diálogo em que
+   * se está: fora dele seria inerte, e o clique o atravessaria.
+   */
+  function levarVeuAoTopo(veu) {
+    const ativo = document.activeElement;
+    const dialogo = ativo && typeof ativo.closest === 'function' ? ativo.closest('dialog[open]') : null;
+    const casa = dialogo || document.body;
+    if (veu.parentNode !== casa) casa.appendChild(veu);
+    if (typeof veu.showPopover !== 'function') return;
+    try {
+      veu.setAttribute('popover', 'manual');
+      if (!veu.matches(':popover-open')) veu.showPopover();
+    } catch (_) {
+      // Sem popover, fica o z-index de sempre.
+    }
+  }
+
   async function comCarregamento(fn, texto = 'Processando...') {
     if (typeof fn !== 'function') return undefined;
 
@@ -494,8 +527,8 @@
         + '<span class="module-loading-orbit"></span>'
         + '<span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>'
         + '</div><p class="botaoAcaoVeu-texto"></p>';
-      document.body.appendChild(veu);
     }
+    levarVeuAoTopo(veu);
     const alvoTexto = veu.querySelector('.botaoAcaoVeu-texto');
     if (alvoTexto) alvoTexto.textContent = texto;
 

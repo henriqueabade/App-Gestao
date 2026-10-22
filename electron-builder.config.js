@@ -34,7 +34,26 @@ module.exports = {
     "!*.md",
     "!tests",
     "!.vscode",
-    "!*.map"
+    "!*.map",
+    // Instalador limpo (dono, 22/10/2026): só vai o que o programa usa para
+    // rodar. Documentação, ferramentas de desenvolvimento, SQL, testes e o que
+    // é só da VPS de desenvolvimento (scripts/dev-vps, scripts/migracoes,
+    // migracoes/) continuam no repositório e fora do instalador. Os módulos
+    // backend/ambienteIsolado.js e backend/barreiraDeRede.js FICAM: o programa
+    // os carrega ao iniciar e, sem o marcador da VPS, eles não fazem nada.
+    "!docs/**",
+    "!scripts/**",
+    "!backend/scripts/**",
+    "!migracoes/**",
+    "!sql/**",
+    "!tools/**",
+    "!manual-tests/**",
+    "!src/js/__tests__/**",
+    "!tailwind.config.js",
+    "!electron-builder.config.js",
+    "!*.log",
+    "!.stfolder",
+    "!.stignore"
   ],
 
   npmRebuild: false,

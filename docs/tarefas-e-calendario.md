@@ -195,6 +195,22 @@ aberta), com motivo opcional. Não apaga:
 Rota `POST /api/tarefas/:id/cancelar`. Excluir continua igual: tira a tarefa
 das listas, guardando o registro.
 
+### Botão direito numa tarefa e o carregando do Excluir (22/10/2026)
+
+- **Botão direito** (ou a tecla de menu / Shift+F10) em qualquer linha de
+  tarefa — Tarefas (lista e quadro), fichas de cliente e prospecção — abre as
+  ações rápidas: **Editar** (ou **Abrir**, para quem só vê), **Concluir**
+  (**Reabrir**, se já concluída ou cancelada) e **Excluir**. O que a pessoa
+  não pode fazer aparece apagado, com o motivo. Convite não tem (já tem
+  Aceitar/Recusar). Esc fecha; setas andam entre as ações.
+- **Excluir** (no menu e no editor) confirma e então exclui com o carregando
+  da casa (a logo em órbita, "Excluindo a tarefa…") até a lista se
+  redesenhar. Antes a exclusão rodava depois da confirmação sem sinal nenhum.
+- Peças: `itensDoMenuDaTarefa` (pura), `abrirMenuDaTarefa`, `excluirTarefa`
+  e `reabrirTarefa` em `tarefas-ui.js`; `.tui-contexto` em `tarefas-ui.css`.
+  `mudou()` devolve uma promessa: a tela de Tarefas põe a recarga em
+  `detail.esperar`. Testes: `tarefasMenuDireito.test.js`.
+
 ## 4. Sino, convites e lembretes
 
 - **Convite**: quem é convidado recebe no sino, com **Aceitar / Recusar** ali mesmo. Se apagar o aviso, o convite continua em **Tarefas › Convites**. Recusar avisa quem convidou.

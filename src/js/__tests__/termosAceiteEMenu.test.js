@@ -408,10 +408,17 @@ function carregarTermosDeUsuarios({ supAdmin = true } = {}) {
   return { ...ctx, cliques };
 }
 
-test('Usuários: coluna Termos depois de Status — Aceito verde, Desatualizado amarelo, Pendente vermelho', () => {
+test('Usuários: os Termos ficam no balão "i" (sem coluna) — Aceito verde, Desatualizado amarelo, Pendente vermelho', () => {
+  // Decisão do dono (22/10/2026): a coluna sai da tabela; a etiqueta e o texto vão para o balão do nome.
   const colunas = [...USUARIOS_HTML.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map(m => m[1]);
-  assert.deepStrictEqual(colunas, ['Avatar', 'Nome', 'E-mail', 'Perfil', 'Situação', 'Status', 'Termos', 'Ações']);
-  assert.ok(USUARIOS_JS.indexOf('data-status-badge') < USUARIOS_JS.indexOf('<span data-termos-badge'), 'a célula vem depois da de Status');
+  assert.deepStrictEqual(colunas, ['Avatar', 'Nome', 'E-mail', 'Perfil', 'Situação', 'Status', 'Ações']);
+  const balao = USUARIOS_JS.slice(USUARIOS_JS.indexOf('function criarConteudoPopoverUsuario('), USUARIOS_JS.indexOf('/** Somente a última ação manual'));
+  assert.ok(balao.includes('<span data-termos-badge class="usuario-popover-termos'), 'a etiqueta no balão');
+  assert.ok(balao.includes("escapeHtml(botao.dataset.termosDica || '')"), 'o texto do aceite no balão, escapado');
+  for (const dado of ['data-termos-rotulo="${escapeAttribute(termosDoUsuario.rotulo)}"', 'data-termos-classe="${escapeAttribute(termosDoUsuario.classe)}"', 'data-termos-dica="${escapeAttribute(termosDoUsuario.dica)}"']) {
+    assert.ok(USUARIOS_JS.includes(dado), `o "i" leva ${dado}`);
+  }
+  assert.ok(!/<td[^>]*>\s*<span data-termos-badge/.test(USUARIOS_JS), 'nenhuma célula de Termos na linha');
 
   const { resolverTermos } = carregarTermosDeUsuarios();
   const aceito = resolverTermos({ termos_situacao: 'aceito', termos_aceitos_em: '2026-10-02', termos_versao: '1.0', privacidade_versao: '1.0' });

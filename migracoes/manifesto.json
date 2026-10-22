@@ -1,0 +1,14 @@
+{
+  "sobre": "Registro congelado das migrações de migracoes/. Toda migração entra aqui ao ser criada, com o SHA-256 do arquivo: mudou depois, os testes e o executor recusam (correção é migração nova). escopo app = estrutura do aplicativo: vai ao Windows (o dono executa e homologa) e só chega à produção por decisão expressa do dono. escopo infra = controle do próprio executor. O que já foi aplicado em cada banco fica no controle.migracoes_aplicadas daquele banco. Ver docs/ambientes-dev-e-migracoes.md.",
+  "migracoes": [
+    {
+      "id": "20261021_2230",
+      "arquivo": "20261021_2230_controle_de_migracoes.sql",
+      "sha256": "678b1318a38ef82abe8f71602383f8ef27e8c01110c41ed9299bb0021883fff4",
+      "escopo": "infra",
+      "descricao": "Controle de migrações (schema controle: migrações aplicadas e execuções)",
+      "windows": "opcional: só se o dono quiser usar o executor no banco DEV do Windows",
+      "producao": "não se aplica, salvo decisão do dono de usar o executor na produção"
+    }
+  ]
+}

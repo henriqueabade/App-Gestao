@@ -1,4 +1,4 @@
-const { readDatabaseConfig, isDev } = require('./dataConfig');
+const { readDatabaseConfig, isDev, isolamento } = require('./dataConfig');
 
 function isConnectionFailure(error) {
   const code = String(error?.code || '');
@@ -55,8 +55,33 @@ function recordFailure(err) {
   state.lastError = { message: safe.message, code: safe.code, reason: safe.reason };
   return safe;
 }
+// Máquina DEV isolada: antes da primeira consulta o banco precisa ter a marca
+// do DEV desta máquina (COMMENT ON DATABASE, gravado pela sanitização). Sem ela
+// — produção, mesmo por túnel — nada é lido nem gravado. Fora dela, não faz nada.
+const SQL_DA_MARCA = "SELECT shobj_description(d.oid, 'pg_database') AS marca FROM pg_database d WHERE d.datname = current_database()";
+let marcaConferida = null;
+function conferirMarca() {
+  if (!isolamento || !isolamento.ativo) return null;
+  if (!marcaConferida) {
+    marcaConferida = getPool().query(SQL_DA_MARCA).then(({ rows }) => {
+      if (rows[0]?.marca === isolamento.marcaDoBanco) return;
+      const error = new Error('O banco conectado não tem a marca do banco DEV desta máquina. Nada foi lido nem gravado.');
+      error.code = 'dev-banco-sem-marca';
+      error.status = 503;
+      error.reason = 'db';
+      state.ready = false;
+      state.lastError = { message: error.message, code: error.code, reason: error.reason };
+      throw error;
+    }, err => {
+      marcaConferida = null;
+      throw recordFailure(err);
+    });
+  }
+  return marcaConferida;
+}
 async function execute(target, text, values) {
   state.lastAttemptAt = Date.now();
+  await conferirMarca();
   try {
     const result = await target().query(text, values);
     state.ready = true;
@@ -67,6 +92,7 @@ async function execute(target, text, values) {
 }
 const query = (text, values) => execute(getPool, text, values);
 async function connect() {
+  await conferirMarca();
   try {
     const client = await getPool().connect();
     return { query: (text, values) => execute(() => client, text, values), release: () => client.release() };

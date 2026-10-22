@@ -52,7 +52,7 @@ fluxo de uma solicitação que já estivesse pendente.
 | Programa | publicar a versão nova |
 
 Ordem: SQL → API → programa. Sem o SQL (ou sem reiniciar a API) nada grava no
-vazio: a coluna Termos mostra "—", o botão de pedir o aceite fica desligado
+vazio: o balão "i" do usuário mostra "—" nos Termos, o botão de pedir o aceite fica desligado
 com a explicação, o aceite responde 409 e o cadastro responde 503, todos
 dizendo o que falta.
 
@@ -90,11 +90,12 @@ sai — a tela avisa e o backend confere de novo.
 
 ### Para quem já existia (ou foi criado pelo administrador)
 
-- **Usuários › coluna Termos** (depois de Status): `Aceito` em verde quando a
+- **Usuários › balão "i" do nome, seção "Termos de Uso"** (a coluna Termos
+  saiu da tabela em 22/10/2026, pedido do dono): `Aceito` em verde quando a
   pessoa aceitou a versão vigente dos dois documentos a partir da vigência;
   `Desatualizado` em amarelo para aceite anterior; `Pendente` em vermelho
-  para quem ainda não aceitou. A dica da etiqueta diz quando aceitou, quando
-  o aceite foi pedido e se houve recusa.
+  para quem ainda não aceitou. Embaixo da etiqueta, o texto diz quando
+  aceitou, quando o aceite foi pedido e se houve recusa.
 - **Botão dos termos em Ações**, à esquerda do Editar (ícone de documento
   assinado): só o Sup Admin aciona, com os termos pendentes ou desatualizados
   e sem solicitação vigente aguardando resposta. Pede

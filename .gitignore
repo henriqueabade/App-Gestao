@@ -178,3 +178,7 @@ sql/tabelafixa.sql
 .env.example
 .env.example
 tools/alteracoes-corrigido.patch
+
+# Impressões digitais dos bancos DEV (scripts/migracoes/cli.js impressao-digital):
+# fora do Git, mas o Syncthing leva de uma máquina à outra para a comparação.
+migracoes/.estado/

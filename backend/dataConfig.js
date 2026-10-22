@@ -15,6 +15,12 @@ for (const key of databaseKeys) {
   delete process.env[key];
 }
 
+// Máquina DEV isolada (VPS): sem o .env seguro o app não inicia, e nenhuma
+// conexão sai do computador. Fora dela não faz nada. Ver ambienteIsolado.js.
+const isolamento = testing ? { ativo: false }
+  : require('./ambienteIsolado').exigirNaInicializacao({ env: process.env, banco: privateDatabaseEnv });
+if (isolamento.ativo) require('./barreiraDeRede').instalar({ permitidos: isolamento.permitidos });
+
 function readMode(env = process.env) {
   const mode = String(env.BANCO || 'PROD').trim().toUpperCase() || 'PROD';
   if (!['PROD', 'DEV'].includes(mode)) {
@@ -39,4 +45,4 @@ function readDatabaseConfig(env = privateDatabaseEnv) {
 }
 
 const mode = readMode();
-module.exports = { mode, isDev: mode === 'DEV', readMode, readDatabaseConfig };
+module.exports = { mode, isDev: mode === 'DEV', readMode, readDatabaseConfig, isolamento };

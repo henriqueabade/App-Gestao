@@ -198,6 +198,14 @@ test('quem edita: só os dois e-mails do dono, sem diferença de maiúscula', ()
   assert.equal(edicao.ehEditor(null), false);
 });
 
+test('DEV isolado (VPS): a conta do dono sanitizada edita lá, e só lá', () => {
+  assert.equal(edicao.ehEditor({ email: 'dono@exemplo.invalid' }, true), true);
+  assert.equal(edicao.ehEditor({ email: 'dono.13@exemplo.invalid' }, true), true);
+  assert.equal(edicao.ehEditor({ email: 'usuario.4@exemplo.invalid' }, true), false);
+  assert.equal(edicao.ehEditor({ email: 'dono@exemplo.invalid' }, false), false, 'fora da máquina isolada não vale');
+  assert.equal(edicao.ehEditor({ email: 'dono@exemplo.invalid' }), false, 'nos testes não há máquina isolada');
+});
+
 test('as travas: só Produção; NF-e viva, NF-e de fora e parcela travada impedem', () => {
   const pedido = { situacao: 'Produção' };
   assert.deepEqual(edicao.motivosDoBloqueio({ pedido }), []);

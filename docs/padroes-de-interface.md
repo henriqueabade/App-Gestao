@@ -593,7 +593,10 @@ await comVeu(() => marcarEnviado(null), `Enviando o pedido ${ctx.numero} sem NF-
 ```
 
 O véu cobre a tela (z-index 3000, acima dos modais), mostra o que está
-acontecendo e impede o segundo clique. Quem NÃO abre caixa de diálogo não
+acontecendo e impede o segundo clique. Desde 22/10/2026 ele cobre também
+um `<dialog>` aberto com `showModal()` (o editor de tarefa, por exemplo):
+vira popover e entra dentro do diálogo em que se está. Antes ficava atrás
+dele e a exclusão de tarefa rodava sem carregando nenhum. Quem NÃO abre caixa de diálogo não
 precisa dele: basta `BotaoAcao.bind(botao, acao)`, que segura o carregando no
 próprio botão enquanto a promessa não resolve. Foi a falta disso em "Enviar
 sem NF-e" que deixou a tela travada por segundos em 24/09/2026.

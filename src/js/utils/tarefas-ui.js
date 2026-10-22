@@ -391,7 +391,17 @@
     return contexto;
   }
   const avisar = (texto, tipo = 'info') => window.showToast?.(texto, tipo);
-  const mudou = detalhe => window.dispatchEvent(new CustomEvent('tarefas:mudou', { detail: detalhe || {} }));
+  // A tela que recarrega pode pôr a sua recarga em `esperar`: quem mudou
+  // espera a lista se redesenhar antes de tirar o carregando.
+  const mudou = detalhe => {
+    const esperar = [];
+    window.dispatchEvent(new CustomEvent('tarefas:mudou', { detail: { ...(detalhe || {}), esperar } }));
+    return Promise.allSettled(esperar);
+  };
+  // O véu de carregamento da casa (src/utils/botaoAcao.js) para o que roda
+  // DEPOIS de uma caixa de confirmação: o clique já terminou, e o botão não
+  // segura o carregando sozinho.
+  const comCarregamento = (fn, texto) => (window.BotaoAcao?.comCarregamento ? window.BotaoAcao.comCarregamento(fn, texto) : fn());
 
   let fotos = new Map();
   async function carregarFotos() {
@@ -1218,10 +1228,8 @@
       const esquerda = h('div', { class: 'tui-rodape__lado' });
       const direita = h('div', { class: 'tui-rodape__lado' });
       if (original && pode.excluir) {
-        esquerda.append(h('button', { type: 'button', class: 'btn-danger tui-botao', on: { click: async () => {
-          const ok = await window.DialogPadrao?.confirm({ title: 'Excluir esta tarefa?', tom: 'erro', icone: 'fa-trash-can', message: `"${original.titulo}" sai das listas e do calendário.`, nota: 'O registro continua guardado (com quem excluiu e quando) e o histórico da ficha ligada conta a exclusão.', confirmText: 'Excluir', confirmVariant: 'danger' });
-          if (!ok) return;
-          try { await api(`/${original.id}`, { method: 'DELETE' }); avisar('Tarefa excluída.', 'success'); gravou = true; mudou({ id: original.id }); d.fechar(); } catch (err) { avisar(err.message, 'error'); }
+        esquerda.append(h('button', { type: 'button', class: 'btn-danger tui-botao', dataset: { semLoading: 'true' }, on: { click: async () => {
+          if (await excluirTarefa(original)) { gravou = true; d.fechar(); }
         } } }, icone('fa-trash-can'), ' Excluir'));
       }
       // Copiar: abre uma tarefa nova igual ao que está na tela, com " - cópia" no título.
@@ -1485,6 +1493,159 @@
     });
   }
 
+  /**
+   * Excluir (editor e botão direito): confirma, e a exclusão roda com o
+   * carregando da casa até a lista se redesenhar — antes ela saía depois da
+   * caixa de confirmação sem sinal nenhum (dono, 22/10/2026). Devolve true se
+   * excluiu.
+   */
+  async function excluirTarefa(t) {
+    const ok = await window.DialogPadrao?.confirm({ title: 'Excluir esta tarefa?', tom: 'erro', icone: 'fa-trash-can', message: `"${t.titulo}" sai das listas e do calendário.`, nota: 'O registro continua guardado (com quem excluiu e quando) e o histórico da ficha ligada conta a exclusão.', confirmText: 'Excluir', confirmVariant: 'danger' });
+    if (!ok) return false;
+    try {
+      await comCarregamento(async () => {
+        await api(`/${t.id}`, { method: 'DELETE' });
+        await mudou({ id: t.id });
+      }, 'Excluindo a tarefa…');
+      avisar('Tarefa excluída.', 'success');
+      return true;
+    } catch (err) {
+      avisar(err.message, 'error');
+      return false;
+    }
+  }
+
+  /** Reabrir uma concluída ou cancelada (botão direito). */
+  async function reabrirTarefa(t) {
+    try {
+      await comCarregamento(async () => {
+        await api(`/${t.id}/reabrir`, { method: 'POST', corpo: {} });
+        await mudou({ id: t.id });
+      }, 'Reabrindo a tarefa…');
+      avisar('Tarefa reaberta.', 'success');
+      return true;
+    } catch (err) {
+      avisar(err.message, 'error');
+      return false;
+    }
+  }
+
+  // ------------------------------------------------------------ botão direito
+
+  /**
+   * O que o botão direito numa tarefa oferece (pedido do dono, 22/10/2026):
+   * Editar, Concluir (Reabrir, se já fechada) e Excluir. O que a pessoa não
+   * pode fazer aparece apagado, com o motivo. Pura: { chave, rotulo, icone,
+   * tom, motivo } — `motivo` preenchido = desabilitado.
+   */
+  function itensDoMenuDaTarefa(t) {
+    const aberta = ['a_fazer', 'em_andamento', 'aguardando'].includes(t?.status);
+    const pode = t?.pode || {};
+    const itens = [
+      { chave: 'editar', rotulo: pode.editar ? 'Editar' : 'Abrir', icone: pode.editar ? 'fa-pen-to-square' : 'fa-up-right-from-square', tom: 'info', motivo: '' }
+    ];
+    if (aberta) {
+      itens.push({
+        chave: 'concluir', rotulo: t.origem === 'proximo_passo' ? 'Concluir o passo' : 'Concluir', icone: 'fa-circle-check', tom: 'sucesso',
+        motivo: pode.concluir ? '' : 'Só quem responde ou participa conclui esta tarefa.'
+      });
+    } else {
+      itens.push({ chave: 'reabrir', rotulo: 'Reabrir', icone: 'fa-rotate-left', tom: 'aviso', motivo: pode.concluir ? '' : 'Só quem responde ou participa reabre esta tarefa.' });
+    }
+    itens.push({ chave: 'excluir', rotulo: 'Excluir', icone: 'fa-trash-can', tom: 'perigo', motivo: pode.excluir ? '' : 'Só quem criou a tarefa (ou quem gerencia a equipe) a exclui.' });
+    return itens;
+  }
+
+  let menuDaTarefa = null;
+  function fecharMenuDaTarefa() {
+    if (!menuDaTarefa) return;
+    const { el, desligar } = menuDaTarefa;
+    menuDaTarefa = null;
+    desligar();
+    try { if (el.matches(':popover-open')) el.hidePopover(); } catch (_) { /* sem popover */ }
+    el.remove();
+  }
+
+  /** Abre o menu no ponto do clique (ou embaixo da linha, pelo teclado). */
+  function abrirMenuDaTarefa(t, evento, linha) {
+    fecharMenuDaTarefa();
+    const acoes = {
+      editar: () => abrirEditor({ id: t.id }),
+      concluir: () => concluir(t),
+      reabrir: () => reabrirTarefa(t),
+      excluir: () => excluirTarefa(t)
+    };
+    const botoes = [];
+    const menu = h('div', { class: 'tui-contexto', attrs: { role: 'menu', 'aria-label': `Ações da tarefa ${t.titulo}` }, on: { contextmenu: e => e.preventDefault() } },
+      h('p', { class: 'tui-contexto__titulo', text: t.titulo, title: t.titulo }));
+    for (const item of itensDoMenuDaTarefa(t)) {
+      if (item.chave === 'excluir') menu.append(h('div', { class: 'tui-contexto__divisoria', attrs: { role: 'separator' } }));
+      const botao = h('button', {
+        type: 'button', class: `tui-contexto__item tui-contexto__item--${item.tom}`,
+        attrs: { role: 'menuitem', 'aria-disabled': item.motivo ? 'true' : null, title: item.motivo || null },
+        dataset: { acao: item.chave, semLoading: 'true' }
+      }, icone(item.icone), h('span', { text: item.rotulo }));
+      botao.addEventListener('click', e => {
+        e.stopPropagation();
+        if (item.motivo) { avisar(item.motivo, 'error'); return; }
+        fecharMenuDaTarefa();
+        acoes[item.chave]();
+      });
+      botoes.push(botao);
+      menu.append(botao);
+    }
+    // Dentro do <dialog> da linha, se houver (fora dele o menu seria inerte);
+    // como popover, por cima de tudo.
+    (linha?.closest?.('dialog[open]') || document.body).append(menu);
+    try { menu.setAttribute('popover', 'manual'); menu.showPopover(); } catch (_) { /* sem popover: z-index */ }
+
+    // Posição: no ponto do clique, sem passar da tela.
+    const pelaTecla = !evento || (evento.clientX === 0 && evento.clientY === 0);
+    const base = pelaTecla && linha ? linha.getBoundingClientRect() : null;
+    const x = base ? base.left + 24 : evento.clientX;
+    const y = base ? base.bottom - 4 : evento.clientY;
+    const caixa = menu.getBoundingClientRect();
+    const margem = 8;
+    menu.style.left = `${Math.max(margem, Math.min(x, window.innerWidth - caixa.width - margem))}px`;
+    menu.style.top = `${Math.max(margem, y + caixa.height + margem > window.innerHeight ? y - caixa.height : y)}px`;
+
+    const focaveis = () => botoes.filter(b => b.getAttribute('aria-disabled') !== 'true');
+    const fora = e => { if (!menu.contains(e.target)) fecharMenuDaTarefa(); };
+    const tecla = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fecharMenuDaTarefa(); linha?.focus?.(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const lista = focaveis();
+        const i = lista.indexOf(document.activeElement);
+        const proximo = e.key === 'ArrowDown' ? (i + 1) % lista.length : (i - 1 + lista.length) % lista.length;
+        lista[proximo]?.focus();
+      }
+    };
+    const sair = () => fecharMenuDaTarefa();
+    // O próprio clique que abriu termina depois: a escuta começa no próximo ciclo.
+    setTimeout(() => {
+      if (menuDaTarefa?.el !== menu) return;
+      document.addEventListener('pointerdown', fora, true);
+      document.addEventListener('contextmenu', fora, true);
+    }, 0);
+    document.addEventListener('keydown', tecla, true);
+    window.addEventListener('blur', sair);
+    window.addEventListener('resize', sair);
+    document.addEventListener('scroll', sair, true);
+    menuDaTarefa = {
+      el: menu,
+      desligar: () => {
+        document.removeEventListener('pointerdown', fora, true);
+        document.removeEventListener('contextmenu', fora, true);
+        document.removeEventListener('keydown', tecla, true);
+        window.removeEventListener('blur', sair);
+        window.removeEventListener('resize', sair);
+        document.removeEventListener('scroll', sair, true);
+      }
+    };
+    focaveis()[0]?.focus({ preventScroll: true });
+  }
+
   async function responderConvite(id, resposta) {
     try {
       await api(`/${id}/convite`, { method: 'POST', corpo: { resposta } });
@@ -1653,6 +1814,9 @@
     el.append(check, corpo, lado);
     el.addEventListener('click', () => abrirEditor({ id: t.id }));
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target === el) abrirEditor({ id: t.id }); });
+    // Botão direito (também a tecla de menu e Shift+F10): Editar, Concluir ou
+    // Reabrir e Excluir, sem abrir a tarefa (22/10/2026). Convite tem Aceitar/Recusar.
+    if (!convite) el.addEventListener('contextmenu', e => { e.preventDefault(); abrirMenuDaTarefa(t, e, el); });
     return el;
   }
 
@@ -1714,7 +1878,7 @@
 
   window.TarefasUI = {
     // telas
-    abrirEditor, copiarTarefa, concluir, cancelarTarefa, responderConvite, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha, textoDaAcao,
+    abrirEditor, copiarTarefa, concluir, cancelarTarefa, responderConvite, excluirTarefa, reabrirTarefa, abrirMenuDaTarefa, itensDoMenuDaTarefa, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha, textoDaAcao,
     carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo,
     limparContexto: () => { contexto = null; },
     // puras

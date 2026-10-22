@@ -794,6 +794,14 @@ function criarConteudoPopoverUsuario(botao) {
                 <span class="usuario-popover-label">${rotulo}</span>
                 <span class="usuario-popover-value">${valor}</span>
             </div>` : '');
+    // Termos de Uso (dono, 22/10/2026): saíram da tabela e vivem aqui — a
+    // etiqueta (Aceito/Desatualizado/Pendente) e o texto do aceite.
+    const termos = botao.dataset.termosRotulo ? `
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">Termos de Uso</span>
+                <span data-termos-badge class="usuario-popover-termos ${escapeAttribute(botao.dataset.termosClasse || 'badge-secondary')} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(botao.dataset.termosRotulo)}</span>
+                <p class="usuario-popover-description">${escapeHtml(botao.dataset.termosDica || '')}</p>
+            </div>` : '';
     const temAuditoria = ehSupAdminLogado() && botao.dataset.usuarioId;
     const auditoria = temAuditoria ? `
             <button type="button" class="usuario-popover-ver-tudo" data-ver-auditoria>
@@ -817,7 +825,7 @@ function criarConteudoPopoverUsuario(botao) {
                         <p class="usuario-popover-acao-texto">${ultimaDescricao}</p>
                     </li>
                 </ul>
-            </div>${auditoria}
+            </div>${termos}${auditoria}
         </div>`;
 }
 
@@ -1389,6 +1397,9 @@ function renderUsuarios(lista) {
                             data-ultimo-login="${ultimoLoginTexto}"
                             data-ultima-alteracao="${ultimaAlteracaoTexto}"
                             data-ultima-descricao="${ultimaDescricaoTexto}"
+                            data-termos-rotulo="${escapeAttribute(termosDoUsuario.rotulo)}"
+                            data-termos-classe="${escapeAttribute(termosDoUsuario.classe)}"
+                            data-termos-dica="${escapeAttribute(termosDoUsuario.dica)}"
                         >
                             <span class="sr-only">Ver atividade recente de ${nome}</span>
                             <span class="info-icon" aria-hidden="true"></span>
@@ -1428,9 +1439,6 @@ function renderUsuarios(lista) {
             </td>
             <td class="px-6 py-4">
                 <span data-status-badge class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
-            </td>
-            <td class="px-6 py-4">
-                <span data-termos-badge class="${termosDoUsuario.classe} px-2 py-1 rounded-full text-xs font-medium" title="${escapeAttribute(termosDoUsuario.dica)}">${escapeHtml(termosDoUsuario.rotulo)}</span>
             </td>`;
 
         if (avatarUrl) {

@@ -92,6 +92,37 @@ dialog.tui-dialogo--editor .tui-cartao { height: var(--tui-altura); }
 .tui-menu__item i { width: 1rem; text-align: center; color: var(--tui-destaque-claro); }
 .tui-menu__item:hover, .tui-menu__item:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
 
+/* Botão direito numa tarefa (22/10/2026): Editar, Concluir/Reabrir, Excluir.
+   É popover (camada do topo, acima de modal): fixed, sem a caixa padrão do
+   popover; a posição vem do clique (tarefas-ui.js, abrirMenuDaTarefa). */
+.tui-contexto {
+    position: fixed; inset: auto; margin: 0; z-index: 4000; overflow: visible;
+    min-width: 13.5rem; max-width: 18rem; padding: 0.35rem;
+    border-radius: 0.85rem; background: #3a0b1f; color: #fff;
+    border: 1px solid var(--tui-borda); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+    transform-origin: top left; animation: tuiContexto 120ms ease-out;
+}
+@keyframes tuiContexto { from { opacity: 0; transform: scale(0.96) translateY(-2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tui-contexto { animation: none; } }
+.tui-contexto__titulo {
+    margin: 0 0 0.25rem; padding: 0.4rem 0.65rem 0.5rem; border-bottom: 1px solid var(--tui-borda-suave);
+    font-size: 0.75rem; font-weight: 600; color: var(--tui-texto-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tui-contexto__item {
+    display: flex; align-items: center; gap: 0.65rem; width: 100%; padding: 0.55rem 0.7rem; border: 0; border-radius: 0.55rem;
+    background: transparent; font-size: 0.875rem; font-weight: 500; color: #fff; text-align: left; cursor: pointer; transition: background 120ms ease;
+}
+.tui-contexto__item i { width: 1rem; text-align: center; }
+.tui-contexto__item--info i { color: var(--tui-info); }
+.tui-contexto__item--sucesso i { color: var(--tui-sucesso); }
+.tui-contexto__item--aviso i { color: var(--tui-aviso); }
+.tui-contexto__item--perigo, .tui-contexto__item--perigo i { color: var(--tui-perigo); }
+.tui-contexto__item:hover, .tui-contexto__item:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
+.tui-contexto__item--perigo:hover, .tui-contexto__item--perigo:focus-visible { background: rgba(255, 122, 122, 0.14); }
+.tui-contexto__item[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.tui-contexto__item[aria-disabled="true"]:hover { background: transparent; }
+.tui-contexto__divisoria { height: 1px; margin: 0.25rem 0.35rem; background: var(--tui-borda-suave); }
+
 .tui-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .tui-selos__quem { font-size: 0.72rem; color: var(--tui-texto-suave); margin-left: auto; }
 
@@ -412,6 +443,10 @@ input.tui-campo[type="date"], input.tui-campo[type="time"] { color-scheme: dark;
 }
 [data-menu-theme="light"] .tui-lado, [data-menu-theme="light"] .tui-rodape { background: #f8fafc; }
 [data-menu-theme="light"] .tui-menu, [data-menu-theme="light"] .tui-vinculos__resultados { background: #fff; }
+[data-menu-theme="light"] .tui-contexto { background: #fff; color: #0f172a; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18); }
+[data-menu-theme="light"] .tui-contexto__item { color: #0f172a; }
+[data-menu-theme="light"] .tui-contexto__item--perigo { color: var(--tui-perigo); }
+[data-menu-theme="light"] .tui-contexto__item:hover, [data-menu-theme="light"] .tui-contexto__item:focus-visible { background: #f1f5f9; }
 [data-menu-theme="light"] .tui-menu__item, [data-menu-theme="light"] .tui-vinculos__nome,
 [data-menu-theme="light"] .tui-pessoa, [data-menu-theme="light"] .tui-participante, [data-menu-theme="light"] .tui-concluir__titulo,
 [data-menu-theme="light"] .tui-resultado[aria-checked="true"], [data-menu-theme="light"] .tui-meudia__ola,

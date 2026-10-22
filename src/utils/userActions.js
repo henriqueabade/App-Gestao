@@ -490,29 +490,22 @@ action('logout', () => {
   }
   localStorage.removeItem('rememberUser');
 
-  // 1) pré-carrega o login por trás
-  setTimeout(() => {
-    window.electronAPI.openLoginHidden();
-  }, 3000);
-
-  // 2) dispara o overlay de saída e espera o fade
+  // Sair é imediato (dono, 22/10/2026): a tela vai num instante para a cor do
+  // login e o principal troca de janela assim que o login estiver pronto — ele
+  // aparece por cima e só então o menu fecha. Antes eram 4 s de esmaecimento,
+  // o login carregado aos 3 s e a troca aos 5 s, com a área de trabalho
+  // piscando entre uma tela e outra.
   const overlay = document.getElementById('exitOverlay');
   if (overlay) {
     overlay.classList.remove('hidden');
     void overlay.offsetWidth;
     overlay.classList.add('visible');
-
-    setTimeout(() => {
-      window.electronAPI.logout();
-    }, 5000);
-
-    overlay.addEventListener('transitionend', function onEnd(e) {
-      if (e.propertyName !== 'opacity') return;
-      overlay.removeEventListener('transitionend', onEnd);
-    });
-  } else {
-    window.electronAPI.logout();
   }
+  Promise.resolve(window.electronAPI.logout()).catch(err => {
+    console.error('Falha ao sair:', err);
+    overlay?.classList.remove('visible');
+    overlay?.classList.add('hidden');
+  });
 });
 
   action('close', () => window.electronAPI.closeWindow());

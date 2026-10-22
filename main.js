@@ -20,12 +20,21 @@ if (!gotTheLock) {
 }
 let programaPronto = false;
 let aberturaPendente = false;
-app.on('second-instance', () => {
+app.on('second-instance', (_evento, argv) => {
+  // Outra execução aberta pelo Windows ao ligar (--segundo-plano) não é
+  // alguém pedindo o programa: nenhuma tela aparece sozinha (dono, 22/10/2026).
+  if (Array.isArray(argv) && argv.includes('--segundo-plano')) return;
   abrirPrograma();
 });
 app.on('activate', () => abrirPrograma());
 
 const { isDev: useLocalDatabase } = require('./backend/dataConfig');
+// Máquina DEV isolada (VPS): o Chromium também só resolve endereços locais. O
+// backend já está atrás da barreira de rede (dataConfig.js / barreiraDeRede.js).
+const { isolamento: ambienteDevIsolado } = require('./backend/dataConfig');
+if (ambienteDevIsolado && ambienteDevIsolado.ativo) {
+  app.commandLine.appendSwitch('host-resolver-rules', require('./backend/barreiraDeRede').regrasDoChromium(ambienteDevIsolado.permitidos));
+}
 
 // Notebook híbrido: a tela interna (144 Hz) é desenhada pela AMD integrada e o
 // monitor externo pela NVIDIA. Na AMD o processo de GPU do Chromium travava o
@@ -199,6 +208,11 @@ app.on('browser-window-created', (_event, win) => {
 
 let loginWindow = null;
 let loginWindowReady = false;
+// O login avisa (show-login) quando o fundo animado terminou de se desenhar.
+// O logout espera esse aviso para a troca de telas não pegar o login no meio
+// do desenho (o "tranco" ao sair, 22/10/2026).
+let loginJaDesenhou = false;
+let esperasDoLoginDesenhado = [];
 let dashboardWindow = null;
 let stateFile;
 let displayFile;
@@ -1306,14 +1320,22 @@ function handleDisplaysChanged() {
     saveDisplayId(target.id);
   }
   const bounds = getBoundsForDisplay(target);
-  if (loginWindow) {
-    loginWindow.setBounds(bounds);
-    loginWindow.setFullScreen(true);
+  // Janela escondida (programa na bandeja, login esperando) só muda de lugar.
+  // Pôr em tela cheia uma janela escondida pode fazê-la aparecer no Windows —
+  // um monitor que dorme e acorda já dispara este evento, e o programa "abria
+  // do nada" (dono, 22/10/2026). A tela cheia volta quando ela aparecer
+  // (`voltarATelaCheia`, no `show` de cada janela).
+  for (const janela of [loginWindow, dashboardWindow]) {
+    if (!janela || janela.isDestroyed()) continue;
+    janela.setBounds(bounds);
+    if (janela.isVisible()) janela.setFullScreen(true);
   }
-  if (dashboardWindow) {
-    dashboardWindow.setBounds(bounds);
-    dashboardWindow.setFullScreen(true);
-  }
+}
+
+/** A janela voltou a aparecer: garante a tela cheia (escondida, ela não é refeita). */
+function voltarATelaCheia(janela) {
+  if (!janela || janela.isDestroyed() || janela.isFullScreen()) return;
+  janela.setFullScreen(true);
 }
 
 const IPC_ACTION_MAP = {
@@ -2179,14 +2201,17 @@ async function persistUserExit(reason) {
   alteracaoPendenteDesde = 0;
 
   const payload = { saida: new Date() };
+  const sessao = currentUserSession;
   // HTTP e IPC persistem a última alteração quando ela acontece. Reenviar a
   // última ação IPC na saída poderia apagar uma alteração HTTP mais recente.
   try {
-    await registrarUltimaSaida(currentUserSession.id, payload);
+    await registrarUltimaSaida(sessao.id, payload);
   } catch (err) {
     console.error('Falha ao registrar saída do usuário:', err);
   }
-  currentUserSession = null;
+  // O logout grava a saída em paralelo com a troca de telas: se alguém já
+  // entrou de novo nesse meio-tempo, a sessão nova fica.
+  if (currentUserSession === sessao) currentUserSession = null;
   lastRecordedAction = null;
   isPersistingExit = false;
 }
@@ -3428,6 +3453,7 @@ function createLoginWindow(show = true, showOnLoad = true) {
   // (revealLoginWindow) precisa saber que o evento já passou, senão fica
   // esperando para sempre por um evento que não vai mais acontecer.
   loginWindowReady = false;
+  loginJaDesenhou = false;
   loginWindow.on('ready-to-show', () => { loginWindowReady = true; });
   loginWindow.webContents.on('did-finish-load', () => { loginWindowReady = true; });
 
@@ -3446,10 +3472,13 @@ function createLoginWindow(show = true, showOnLoad = true) {
     }
   });
 
-  // Garante full-screen contínuo
+  // Garante full-screen contínuo — só com ela na tela: escondida, refazer a
+  // tela cheia podia trazê-la de volta sozinha. Ela volta ao aparecer.
   loginWindow.on('leave-full-screen', () => {
+    if (!loginWindow || loginWindow.isDestroyed() || !loginWindow.isVisible()) return;
     loginWindow.setFullScreen(true);
   });
+  loginWindow.on('show', () => voltarATelaCheia(loginWindow));
 
   // Carrega o HTML, passando hidden=0/1 via query (como você já fazia)
   loginWindow.loadFile(
@@ -3465,6 +3494,28 @@ function createLoginWindow(show = true, showOnLoad = true) {
   loginWindow.on('closed', () => {
     loginWindow = null;
     loginWindowReady = false;
+    loginJaDesenhou = false;
+  });
+}
+
+/** O login terminou de se desenhar (ele pede para aparecer): solta quem esperava. */
+function avisarLoginDesenhado() {
+  loginJaDesenhou = true;
+  const esperas = esperasDoLoginDesenhado;
+  esperasDoLoginDesenhado = [];
+  esperas.forEach(fim => fim());
+}
+
+/** Espera o login se desenhar, no máximo `ms` (sem o aviso, segue assim mesmo). */
+function esperarLoginDesenhado(ms) {
+  if (loginJaDesenhou) return Promise.resolve();
+  return new Promise(resolve => {
+    const fim = () => { clearTimeout(prazo); resolve(); };
+    const prazo = setTimeout(() => {
+      esperasDoLoginDesenhado = esperasDoLoginDesenhado.filter(f => f !== fim);
+      resolve();
+    }, ms);
+    esperasDoLoginDesenhado.push(fim);
   });
 }
 
@@ -3563,9 +3614,13 @@ function createDashboardWindow(show = true) {
     // Menos durante o encerramento: esconder a janela pode passar por aqui, e
     // devolvê-la à tela cheia nesse instante é trazer de volta o que acabou de
     // ser mandado embora.
-    if (closingDashboardWindow || quittingApp) return;
+    // Nem com o menu indo para a bandeja ou já escondido: refazer a tela cheia
+    // de uma janela escondida podia trazê-la de volta sozinha (22/10/2026).
+    if (closingDashboardWindow || quittingApp || programaNaBandeja) return;
+    if (!dashboardWindow || dashboardWindow.isDestroyed() || !dashboardWindow.isVisible()) return;
     dashboardWindow.setFullScreen(true);
   });
+  dashboardWindow.on('show', () => voltarATelaCheia(dashboardWindow));
 
   dashboardWindow.webContents.on('did-finish-load', () => {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
@@ -3942,6 +3997,9 @@ app.whenReady().then(async () => {
   // Aberto pelo Windows ao ligar a máquina, com os avisos ligados: nenhuma
   // janela — só o ícone perto do relógio e os avisos no canto da tela.
   programaPronto = true;
+  // Aberto pelo Windows: o programa começa "na bandeja" — nenhuma tela aparece
+  // sozinha até alguém abri-lo pelo ícone ou pelo atalho (22/10/2026).
+  if (iniciouEmSegundoPlano && preferencias.avisosNoWindows) programaNaBandeja = true;
   if (!(iniciouEmSegundoPlano && preferencias.avisosNoWindows)) createLoginWindow(false, true);
   criarBandeja();
   iniciarAvisosNoWindows();
@@ -5248,6 +5306,12 @@ ipcMain.handle('auto-login', async (_event, payload) => {
       return { success: false, code: bloqueio.code, message: bloqueio.message };
     }
 
+    // Com o programa na bandeja, a entrada automática acontece, mas o menu
+    // fica ESCONDIDO até alguém abrir o programa. Era a causa principal de o
+    // programa "abrir do nada" (dono, 22/10/2026): na bandeja com "lembrar-me",
+    // a sessão vencia (inatividade, rede), o login escondido entrava de novo
+    // sozinho e o menu era aberto na frente de quem estava em outra coisa.
+    const emSegundoPlano = programaNaBandeja;
     const shouldCreateDashboard = !dashboardWindow;
     if (shouldCreateDashboard) {
       if (loginWindow) {
@@ -5262,7 +5326,7 @@ ipcMain.handle('auto-login', async (_event, payload) => {
           console.error('Failed to detect login display', err);
         }
       }
-      createDashboardWindow(true);
+      createDashboardWindow(!emSegundoPlano);
     }
     if (loginWindow) {
       loginWindow.close();
@@ -5279,7 +5343,7 @@ ipcMain.handle('auto-login', async (_event, payload) => {
     } else {
       setCurrentUserSession(null);
     }
-    if (dashboardWindow && !shouldCreateDashboard && !dashboardWindow.isVisible()) {
+    if (dashboardWindow && !shouldCreateDashboard && !dashboardWindow.isVisible() && !emSegundoPlano) {
       if (dashboardWindow.webContents.isLoading()) {
         dashboardWindow.once('ready-to-show', () => {
           if (dashboardWindow && !dashboardWindow.isDestroyed() && !dashboardWindow.isVisible()) {
@@ -5412,33 +5476,41 @@ ipcMain.handle('close-login', async () => {
 });
 
 ipcMain.handle('logout', async () => {
-  await persistUserExit('logout');
+  // Sair é imediato (dono, 22/10/2026). A saída é gravada EM PARALELO: a troca
+  // de telas não espera a rede. `persistUserExit` se marca como em curso na
+  // hora, então o `close` do menu, mais abaixo, não grava de novo.
+  const gravandoSaida = comPrazo(persistUserExit('logout'), PRAZO_DE_SAIDA_MS, 'o registro da saída');
 
   if (!loginWindow || loginWindow.isDestroyed()) {
     createLoginWindow(false, false);
   }
 
-  // Ordem importa: escondemos o dashboard ANTES de exibir o login. Se a ordem
-  // for invertida, as duas janelas ficam visíveis ao mesmo tempo enquanto o
-  // login carrega — foi exatamente o que o usuário via.
   const dashVivo = dashboardWindow && !dashboardWindow.isDestroyed();
-  // A sessão venceu com o programa na bandeja: o menu fecha e o login espera,
-  // escondido, a próxima vez que o programa for aberto.
-  if (programaNaBandeja) {
+  // Na bandeja, ou com o programa atrás de outras janelas (a sessão venceu,
+  // inatividade, queda de rede): NADA vem para a frente sozinho — o programa
+  // "abria do nada" por cima do que a pessoa fazia (dono, 22/10/2026). O menu
+  // fecha e o login espera, escondido, a próxima vez que o programa for aberto
+  // (ícone perto do relógio ou atalho).
+  if (programaNaBandeja || (dashVivo && !programaNaFrente())) {
+    programaNaBandeja = true;
     loginPediuParaAparecer = true;
     if (dashVivo) dashboardWindow.close();
+    await gravandoSaida;
     return true;
   }
-  if (dashVivo) {
-    try { dashboardWindow.hide(); } catch (err) { console.error('Failed to hide dashboard', err); }
-  }
 
+  // Com o programa na frente, o login aparece POR CIMA do menu, já carregado,
+  // e só então o menu fecha (as duas são tela cheia no mesmo monitor). Antes o
+  // menu sumia primeiro e, até o login aparecer, via-se a área de trabalho: a
+  // tela "piscava". O login entra já desenhado (o fundo animado é pesado e
+  // dava um tranco ao começar com a tela à mostra); sem o aviso dele em
+  // 1,5 s, entra assim mesmo.
+  await esperarLoginDesenhado(1500);
   await revealLoginWindow();
-
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     dashboardWindow.close();
   }
-
+  await gravandoSaida;
   return true;
 });
 
@@ -5453,6 +5525,8 @@ ipcMain.handle('open-login-hidden', async () => {
 // 3) Mostra o loginWindow **somente** após o conteúdo terminar de carregar,
 //    evitando o flash branco
 ipcMain.handle('show-login', async () => {
+  // O pedido chega quando o fundo animado do login terminou de se desenhar.
+  avisarLoginDesenhado();
   // Menu na frente com alguém logado: não há login para mostrar.
   if (currentUserSession && dashboardWindow && !dashboardWindow.isDestroyed() && dashboardWindow.isVisible()) {
     return true;

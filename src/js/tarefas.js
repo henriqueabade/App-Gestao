@@ -203,10 +203,19 @@ async function opcoesDaLista(l) {
   const salvar = h('button', { type: 'button', class: 'btn-primary tui-botao', on: { click: async () => {
     try { await T.api(`/listas/${l.id}`, { method: 'PUT', corpo: { nome: nome.value.trim(), cor } }); d.fechar(); T.limparContexto(); carregar({ silencioso: true }); } catch (err) { window.showToast?.(err.message, 'error'); }
   } } }, icone('fa-floppy-disk'), ' Salvar');
-  const excluir = h('button', { type: 'button', class: 'btn-danger tui-botao', on: { click: async () => {
+  const excluir = h('button', { type: 'button', class: 'btn-danger tui-botao', dataset: { semLoading: 'true' }, on: { click: async () => {
     const ok = await window.DialogPadrao?.confirm({ title: `Excluir a lista "${l.nome}"?`, tom: 'erro', message: 'As tarefas da lista não são apagadas: voltam para a Caixa de entrada.', confirmText: 'Excluir lista', confirmVariant: 'danger' });
     if (!ok) return;
-    try { await T.api(`/listas/${l.id}`, { method: 'DELETE' }); d.fechar(); if (estado.filtro.tipo === 'lista' && Number(estado.filtro.id) === Number(l.id)) estado.filtro = { tipo: 'inteligente', chave: 'entrada' }; T.limparContexto(); carregar({ silencioso: true }); } catch (err) { window.showToast?.(err.message, 'error'); }
+    // Depois da confirmação, com o carregando da casa até a tela se redesenhar.
+    try {
+      await window.BotaoAcao.comCarregamento(async () => {
+        await T.api(`/listas/${l.id}`, { method: 'DELETE' });
+        if (estado.filtro.tipo === 'lista' && Number(estado.filtro.id) === Number(l.id)) estado.filtro = { tipo: 'inteligente', chave: 'entrada' };
+        T.limparContexto();
+        await carregar({ silencioso: true });
+      }, 'Excluindo a lista…');
+      d.fechar();
+    } catch (err) { window.showToast?.(err.message, 'error'); }
   } } }, icone('fa-trash-can'), ' Excluir');
   d.append(h('div', { class: 'tui-cartao tui-cartao--estreito' },
     h('header', { class: 'tui-concluir__topo' }, h('span', { class: 'tui-concluir__icone tarefas-icone-lista' }, icone('fa-list')), h('div', {}, h('h3', { class: 'tui-concluir__titulo', text: 'Lista' }), h('p', { class: 'tui-concluir__sub', text: l.nome }))),
@@ -702,10 +711,16 @@ function iniciar() {
   document.addEventListener('keydown', aoTeclar);
 
   let espera = null;
-  const aoMudar = () => {
+  let recarga = null;
+  const aoMudar = e => {
     if (!document.body.contains($('tarefasConteudo'))) { window.removeEventListener('tarefas:mudou', aoMudar); return; }
     clearTimeout(espera);
-    espera = setTimeout(() => carregar({ silencioso: true }), 150);
+    // Quem mudou (excluir, reabrir) espera a lista se redesenhar: o carregando
+    // só sai quando a linha já saiu da tela.
+    if (!recarga) { let fim; recarga = { promessa: new Promise(r => { fim = r; }), fim }; }
+    const esta = recarga;
+    e?.detail?.esperar?.push?.(esta.promessa);
+    espera = setTimeout(() => { recarga = null; carregar({ silencioso: true }).finally(esta.fim); }, 150);
   };
   window.addEventListener('tarefas:mudou', aoMudar);
 

@@ -71,6 +71,12 @@ const { paraDecimal } = require('./numeros');
 
 /** Os dois e-mails do dono (14/10/2026): "pode travar pelo e-mail". */
 const EDITORES = new Set(['henrique.abade@santissimodecor.com.br', 'henrique.vabade@gmail.com']);
+// DEV isolado (VPS): a sanitização troca os e-mails reais; a conta do dono vira
+// dono@exemplo.invalid (ou dono.<id>@…). Só vale na máquina marcada, nunca fora dela.
+const EDITOR_DEV_ISOLADO = /^dono(\.\d+)?@exemplo\.invalid$/;
+const devIsolado = () => {
+  try { return Boolean(require('./dataConfig').isolamento?.ativo); } catch (_) { return false; }
+};
 const SITUACAO = 'Produção';
 const MINIMO_MOTIVO = 10;
 const TABELA = mudancas.TABELA_EDICOES;
@@ -95,9 +101,9 @@ function erro(mensagem, status = 422, extra = null) {
 }
 
 /** O usuário é um dos editores? Pura. */
-function ehEditor(usuario) {
+function ehEditor(usuario, isolado = devIsolado()) {
   const email = String(usuario?.email || '').trim().toLowerCase();
-  return Boolean(email) && EDITORES.has(email);
+  return Boolean(email) && (EDITORES.has(email) || (isolado && EDITOR_DEV_ISOLADO.test(email)));
 }
 
 /**

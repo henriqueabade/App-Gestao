@@ -387,6 +387,9 @@ test('a tela cheia não traz de volta a janela que está fechando', () => {
   // Esconder uma janela em tela cheia pode passar por `leave-full-screen`, e
   // devolvê-la à tela cheia nesse instante é trazer de volta o que acabou de
   // ser mandado embora.
-  assert.match(trecho, /if \(closingDashboardWindow \|\| quittingApp\) return;/,
-    'o retorno à tela cheia precisa se calar durante o encerramento');
+  assert.match(trecho, /if \(closingDashboardWindow \|\| quittingApp \|\| programaNaBandeja\) return;/,
+    'o retorno à tela cheia precisa se calar durante o encerramento e com o menu indo para a bandeja');
+  // Nem com a janela escondida (22/10/2026): o programa "abria do nada".
+  assert.match(trecho, /!dashboardWindow\.isVisible\(\)\) return;/);
+  assert.match(trecho, /dashboardWindow\.on\('show', \(\) => voltarATelaCheia\(dashboardWindow\)\);/, 'a tela cheia volta quando ela aparece');
 });

@@ -64,6 +64,17 @@ Data: 01/10/2026. Três pedidos do dono:
 - **Fechar o programa** (o X, Alt+F4, Ctrl+W) **deixa ele na bandeja**, com os avisos ligados.
   - Na primeira vez, um balão explica onde ele ficou.
   - Para sair de vez: botão direito no ícone › Sair do programa.
+- **Nada aparece sozinho** (22/10/2026; o dono e outros usuários viam o programa "abrir do nada"). Só a janela do canto dos avisos aparece sem ninguém pedir. O menu e o login só aparecem quando alguém abre o programa (ícone ou atalho) ou quando ele já está na frente:
+  - **A causa principal:** com o "lembrar-me" ligado e o programa na bandeja, a sessão vencia (inatividade, queda de rede), o login escondido entrava de novo sozinho e o menu era aberto na frente de quem estava em outra coisa. Agora a entrada automática na bandeja deixa o menu escondido.
+  - Sessão que vence com o programa **atrás de outras janelas**: o programa vai para a bandeja, e o login espera escondido. Antes o login pulava para a frente.
+  - Aberto pelo Windows ao ligar, o programa já começa "na bandeja". Uma segunda execução com `--segundo-plano` não mostra tela.
+  - Monitor que dorme e acorda (troca de tela) não põe em tela cheia uma janela escondida; ela volta à tela cheia quando aparecer.
+- **Sair (menu do usuário › Sair do sistema)** é imediato (22/10/2026):
+  - a tela vai num instante para a cor do login;
+  - o login entra por cima, já desenhado (o principal espera o aviso dele, no máximo 1,5 s), e só então o menu fecha;
+  - a saída é gravada em paralelo, com o prazo de 1,5 s.
+
+  Antes eram 4 s de esmaecimento, e o menu sumia antes de o login aparecer: a área de trabalho "piscava" entre as duas telas.
 - **Quando chega um aviso e o programa não está na frente,** aparece a janela no canto inferior direito. Ela:
   - tem a cara do programa: o fundo vinho do menu com o vidro dos modais, a faixa e os detalhes em dourado, o logo, o X vermelho e o "Abrir o programa" dourado (botão do padrão, 40 px, letra de 14 px);
   - mostra todos os avisos da fila (até 20, os mais novos em cima), com o título, a mensagem e a nota inteiros;

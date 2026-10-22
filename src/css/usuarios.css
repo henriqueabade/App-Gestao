@@ -796,6 +796,11 @@ body {
     line-height: 1.4;
 }
 
+/* A etiqueta dos Termos de Uso no "i" (saiu da tabela em 22/10/2026). */
+.usuario-popover-termos {
+    align-self: flex-start;
+}
+
 /* A última ação da auditoria no "i". O histórico completo fica no relatório. */
 .usuario-popover-acoes {
     list-style: none;

@@ -44,6 +44,21 @@ O banco DEV deve conter o schema e os dados do aplicativo. Esta implementação 
 - **Publicar com `BANCO=DEV` é bloqueado.** A trava lê o `.env` no momento da publicação (é ele que vai no instalador), tanto pelo botão "Publicar atualização" quanto por `npm run publish`. Gerar o instalador sem publicar (`npm run dist`) continua liberado. Implementação: `backend/travaPublicacao.js`.
 - **Selo "DEV" no cabeçalho**, ao lado do nome, quando o app está rodando em `BANCO=DEV`. Em PROD não aparece nada.
 
+## Máquina DEV isolada (VPS) e migrações
+
+Na VPS de desenvolvimento, o marcador `/etc/app-gestao/ambiente-isolado` liga uma trava extra:
+
+- O app só inicia com o `.env` DEV seguro: banco local marcado, NF-e e BB em homologação, nenhum segredo de produção. Ver `backend/ambienteIsolado.js`.
+- Nenhuma conexão sai do computador. Ver `backend/barreiraDeRede.js`.
+
+SQL do aplicativo vai em `migracoes/`:
+
+- O Claude desenvolve, aplica e testa no DEV da VPS.
+- O dono executa e homologa no banco DEV do Windows.
+- A produção só recebe com ordem expressa do dono.
+
+SQL exclusivo da VPS vai em `scripts/dev-vps/`. Tudo em [Ambientes DEV, isolamento da VPS e migrações SQL](ambientes-dev-e-migracoes.md).
+
 ## Verificação
 
 ```sh
