@@ -463,6 +463,11 @@ function papeisDe(origem, r = {}, { nomes = new Map(), participantes = [] } = {}
   responsaveis = [...new Set(responsaveis.map(idValido).filter(Boolean))];
   const criador = idValido(r.criado_por);
   if (!criador || responsaveis.includes(criador)) return { responsaveis, criadores: [] };
+  // Tarefa DELEGADA (dono, 22/10/2026): quem passou a tarefa para outra pessoa
+  // acompanha tudo o que mudar nela — data, hora, o que for —, como quem
+  // responde. Nas fichas (prospecção, cliente...) quem só criou segue
+  // recebendo só o importante.
+  if (origem === 'tarefa') return { responsaveis: [...responsaveis, criador], criadores: [] };
   // Sem ninguém respondendo pela ficha (só os participantes não contam), quem criou responde.
   const semResponsavel = !idValido(origem === 'tarefa' ? r.responsavel_id : responsaveis[0]);
   return semResponsavel ? { responsaveis: [...responsaveis, criador], criadores: [] } : { responsaveis, criadores: [criador] };

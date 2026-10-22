@@ -228,7 +228,9 @@ test('papeisDe (02/10/2026): quem responde × quem só criou; sem responsável, 
   assert.deepStrictEqual(A.papeisDe('prospeccao', { responsavel_id: 3, criado_por: 3 }), { responsaveis: [3], criadores: [] }, 'criou e responde: recebe tudo');
   assert.deepStrictEqual(A.papeisDe('prospeccao', { responsavel_id: null, criado_por: 4 }), { responsaveis: [4], criadores: [] }, 'sem responsável');
   assert.deepStrictEqual(A.papeisDe('cliente', { dono_cliente: 'ana', criado_por: 4 }, { nomes }), { responsaveis: [2], criadores: [4] });
-  assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: 2, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }] }), { responsaveis: [2, 3], criadores: [1] });
+  // Tarefa delegada (dono, 22/10/2026): quem passou para outra pessoa acompanha tudo.
+  assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: 2, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }] }), { responsaveis: [2, 3, 1], criadores: [] });
+  assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: 2, criado_por: 2 }), { responsaveis: [2], criadores: [] }, 'criou para si: só ele');
   assert.deepStrictEqual(A.papeisDe('tarefa', { responsavel_id: null, criado_por: 1 }, { participantes: [{ usuario_id: 3, status: 'aceito' }] }), { responsaveis: [3, 1], criadores: [] });
 });
 

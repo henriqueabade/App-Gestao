@@ -1006,16 +1006,24 @@ async function editar(req, res, { mover = false } = {}) {
       origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
     });
     avisados.push(dados.responsavel_id);
-  } else if (('data' in dados || 'hora' in dados) && t.responsavel_id && !mesmoId(t.responsavel_id, ctx.usuarioId) && eventos.some(e => ['data', 'hora'].includes(e.campo))) {
+  } else if (('data' in dados || 'hora' in dados) && eventos.some(e => ['data', 'hora'].includes(e.campo))) {
     // O prazo novo na 1ª linha; o resto do que mudou e a observação, abaixo.
-    const outras = eventos.filter(e => !['data', 'hora'].includes(e.campo));
-    await social.notificar(api, [t.responsavel_id], {
-      tipo: 'tarefa_alterada', titulo: 'Tarefa reagendada',
-      mensagem: avisos.comporMensagem(`${autor} mudou o prazo: ${t.titulo} — agora ${S.prazoLegivel({ ...t, ...dados })}`,
-        outras.map(avisos.linhaDoEvento), avisos.notasDosEventos(eventos)),
-      origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
-    });
-    avisados.push(t.responsavel_id);
+    // Recebem quem responde e quem DELEGOU a tarefa (dono, 22/10/2026: o
+    // Bruno reagendou a tarefa que o dono passou para ele e o dono não soube)
+    // — menos quem mudou.
+    const para = [t.responsavel_id, t.criado_por]
+      .filter(id => Number(id) > 0 && !mesmoId(id, ctx.usuarioId))
+      .filter((id, i, todos) => todos.findIndex(x => mesmoId(x, id)) === i);
+    if (para.length) {
+      const outras = eventos.filter(e => !['data', 'hora'].includes(e.campo));
+      await social.notificar(api, para, {
+        tipo: 'tarefa_alterada', titulo: 'Tarefa reagendada',
+        mensagem: avisos.comporMensagem(`${autor} mudou o prazo: ${t.titulo} — agora ${S.prazoLegivel({ ...t, ...dados })}`,
+          outras.map(avisos.linhaDoEvento), avisos.notasDosEventos(eventos)),
+        origem: 'tarefa', registro_id: Number(t.id), autor_id: ctx.usuarioId
+      });
+      avisados.push(...para);
+    }
   }
   // Os demais que têm a tarefa (01/10/2026): quem deixou de responder, quem
   // criou e quem participa — o que mudou, ou "cancelada".

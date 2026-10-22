@@ -352,15 +352,31 @@ function normalizarTarefa(corpo = {}, { parcial = false } = {}) {
 // ------------------------------------------------------------ prazo
 
 /** Início da tarefa em minutos desde o começo do dia (sem hora = fim do dia para "atrasada"). */
+/**
+ * Atrasada = aberta e o PRAZO passou. Sem hora, o prazo é o fim do dia. Com
+ * hora, é o FIM da tarefa: início + duração (dono, 22/10/2026 — começa às
+ * 11:30 com 30 min, só atrasa depois das 12:00). Sem duração, 30 min — o
+ * bloco que a Agenda desenha. A duração pode passar da meia-noite.
+ */
+const DURACAO_PADRAO_MIN = 30;
+function fimDaTarefa(tarefa) {
+  const dia = diaISO(tarefa?.data);
+  const hora = horaHHMM(tarefa?.hora);
+  if (!dia || !hora) return null;
+  const duracao = Number(tarefa.duracao_min) > 0 ? Number(tarefa.duracao_min) : DURACAO_PADRAO_MIN;
+  const fim = minutosDaHora(hora) + duracao;
+  return { dia: somarDias(dia, Math.floor(fim / 1440)), minutos: fim % 1440 };
+}
+
 function atrasada(tarefa, agora = new Date()) {
   if (!ABERTOS.has(tarefa?.status || 'a_fazer')) return false;
   const dia = diaISO(tarefa?.data);
   if (!dia) return false;
   const { dia: hoje, minutos } = agoraEmBrasilia(agora);
-  if (dia < hoje) return true;
-  if (dia > hoje) return false;
-  const hora = horaHHMM(tarefa.hora);
-  return Boolean(hora) && minutosDaHora(hora) < minutos;
+  const fim = fimDaTarefa(tarefa);
+  if (!fim) return dia < hoje;
+  if (fim.dia !== hoje) return fim.dia < hoje;
+  return fim.minutos < minutos;
 }
 
 /** Em que grupo da lista a tarefa cai: atrasada, hoje, amanha, semana, depois, sem_data, concluida. */

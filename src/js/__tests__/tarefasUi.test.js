@@ -98,6 +98,12 @@ test('prazo legível e atraso', () => {
   assert.ok(T.atrasada({ data: '2026-09-17', status: 'a_fazer' }, AGORA));
   assert.ok(T.atrasada({ data: '2026-09-18', hora: '09:00', status: 'a_fazer' }, AGORA));
   assert.ok(!T.atrasada({ data: '2026-09-18', status: 'a_fazer' }, AGORA));
+  // Mesma regra do servidor (22/10/2026): atrasa no FIM, início + duração.
+  const agora = T.agoraEmBrasilia(new Date('2026-09-18T15:00:00Z')); // 12:00 em Brasília
+  assert.ok(!T.atrasada({ data: '2026-09-18', hora: '11:30', duracao_min: 30, status: 'a_fazer' }, agora), '11:30 + 30 min: às 12:00 ainda não');
+  assert.ok(T.atrasada({ data: '2026-09-18', hora: '11:30', duracao_min: 30, status: 'a_fazer' }, { ...agora, minutos: agora.minutos + 1 }), '12:01 sim');
+  assert.ok(!T.atrasada({ data: '2026-09-18', hora: '11:45', status: 'a_fazer' }, agora), 'sem duração: 30 min');
+  assert.ok(!T.atrasada({ data: '2026-09-17', hora: '23:30', duracao_min: 900, status: 'a_fazer' }, agora), 'passa da meia-noite');
   assert.strictEqual(T.descreverRepeticao({ freq: 'semanal', intervalo: 1, dias_semana: [1, 3] }), 'Toda semana (seg, qua)');
 });
 

@@ -13,7 +13,7 @@ Quando a ação traz texto (nota, motivo, observação, justificativa), o texto 
 
 | # | Pendência | Resposta | Situação |
 | --- | --- | --- | --- |
-| 1 e 2 | Edição comum avisa? Quem criou recebe? | **(b), na resposta de 02/10:** o responsável recebe toda alteração; quem criou recebe só o importante | Feito (ver abaixo). |
+| 1 e 2 | Edição comum avisa? Quem criou recebe? | **(b), na resposta de 02/10:** o responsável recebe toda alteração; quem criou recebe só o importante. **Ajuste de 22/10/2026, só nas tarefas:** quem DELEGOU (criou para outra pessoa) recebe toda alteração, como o responsável — o Bruno mudou data e hora da tarefa que o dono passou para ele e o dono não soube. Mudança de prazo chega como "Tarefa reagendada" (`papeisDe('tarefa')`, `editar` em tarefasController.js) | Feito (ver abaixo). |
 | 3 | Excluir sem motivo | **3c — motivo obrigatório** | Feito. |
 | 4 | Cancelar tarefa | **(b):** botão "Cancelar tarefa" no editor, para quem edita, motivo opcional; cancelar é diferente de excluir | Feito (ver abaixo). |
 | 5 | Observações internas do usuário | 5a — ficam de fora | Como estava. |

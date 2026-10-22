@@ -120,11 +120,20 @@
     return `${dataCurta(t.data)}${t.data.slice(0, 4) !== dia.slice(0, 4) ? `/${t.data.slice(0, 4)}` : ''}${hora}`;
   }
 
-  /** Mesma regra do servidor: atrasada = aberta e o dia (ou a hora de hoje) passou. */
+  /**
+   * Mesma regra do servidor (tarefasRegras.atrasada): atrasada = aberta e o
+   * prazo passou. Sem hora, o prazo é o fim do dia; com hora, é o FIM da
+   * tarefa, início + duração (22/10/2026: começa 11:30 com 30 min, só atrasa
+   * depois das 12:00), mesmo passando da meia-noite. Sem duração, 30 min —
+   * o bloco que a Agenda desenha.
+   */
   function atrasada(t, agora = agoraEmBrasilia()) {
     if (!t?.data || !['a_fazer', 'em_andamento', 'aguardando'].includes(t.status || 'a_fazer')) return false;
-    if (t.data < agora.dia) return true;
-    return t.data === agora.dia && Boolean(t.hora) && minutosDaHora(t.hora) < agora.minutos;
+    if (!t.hora) return t.data < agora.dia;
+    const fim = minutosDaHora(t.hora) + (Number(t.duracao_min) > 0 ? Number(t.duracao_min) : 30);
+    const diaDoFim = somarDias(t.data, Math.floor(fim / 1440));
+    if (diaDoFim !== agora.dia) return diaDoFim < agora.dia;
+    return fim % 1440 < agora.minutos;
   }
 
   // ------------------------------------------------------------ texto → tarefa

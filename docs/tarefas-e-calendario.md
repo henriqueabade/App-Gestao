@@ -233,6 +233,14 @@ Teste: `tarefasCliqueDuplo.test.js`.
 - **Convite**: quem é convidado recebe no sino, com **Aceitar / Recusar** ali mesmo. Se apagar o aviso, o convite continua em **Tarefas › Convites**. Recusar avisa quem convidou.
 - **Lembrete**: na hora escolhida, no sino e como **notificação do Windows** (uma vez).
 - **Atrasada**: aviso no sino **uma vez por dia** enquanto estiver atrasada.
+  **Quando atrasa (22/10/2026):** sem hora, no dia seguinte; com hora, só
+  depois do **fim** — início + duração (começa 11:30 com 30 min: atrasa depois
+  das 12:00). Sem duração, conta 30 min, o bloco que a Agenda desenha. A
+  duração pode passar da meia-noite. A mesma regra está no servidor
+  (`tarefasRegras.atrasada`) e na tela (`TarefasUI.atrasada`).
+- **Tarefa delegada (22/10/2026):** quem passou a tarefa para outra pessoa
+  recebe toda alteração que os outros fizerem, como o responsável; mudança de
+  data/hora chega como "Tarefa reagendada". Ver `docs/avisos-de-algo-seu.md`.
 - O sino pergunta a cada **10 segundos**; tudo o que chega vai também para a **notificação do Windows**, menos curtida (fica só no sino).
 - Os lembretes e atrasos nascem no servidor quando o sino pede (`POST /api/tarefas/avisos`, a cada 30 s) e não se repetem (`notificacoes.chave` única por usuário).
 - Desde 01/10/2026 o computador também pede, com o programa em segundo plano, e a "notificação do Windows" é a janela no canto da tela (só com o programa atrás); a tarefa tem **Copiar** (editor e lista). Ver `docs/avisos-no-windows.md`.

@@ -434,6 +434,37 @@ test('avisos: atrasada avisa uma vez por dia; convite e prazo mudado pelo gestor
   }
 });
 
+test('tarefa delegada (dono, 22/10/2026): quem passou a tarefa é avisado do que o responsável mudar', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const criada = await chamar(ctx.porta, '/api/tarefas', { usuario: 1, corpo: { titulo: 'Confirmar CNPJ', responsavel_id: 3, data: dia(1), hora: '11:30', duracao_min: 30 } });
+    const id = criada.json.id;
+    const antes = ctx.tabelas.notificacoes.length;
+
+    // O João (responsável) muda a data e a hora: o Henrique, que delegou, sabe.
+    const mudou = await chamar(ctx.porta, `/api/tarefas/${id}`, { usuario: 3, method: 'PUT', corpo: { data: dia(2), hora: '15:00' } });
+    assert.strictEqual(mudou.status, 200);
+    const doHenrique = ctx.tabelas.notificacoes.slice(antes).filter(n => n.usuario_id === 1);
+    assert.deepStrictEqual(doHenrique.map(n => [n.tipo, n.titulo]), [['tarefa_alterada', 'Tarefa reagendada']], 'um aviso só, o do prazo');
+    assert.match(doHenrique[0].mensagem, /João mudou o prazo: Confirmar CNPJ — agora/);
+    assert.strictEqual(ctx.tabelas.notificacoes.slice(antes).filter(n => n.usuario_id === 3).length, 0, 'quem mudou não se avisa');
+
+    // Arrastar no calendário (mover) também avisa.
+    const antes2 = ctx.tabelas.notificacoes.length;
+    await chamar(ctx.porta, `/api/tarefas/${id}/mover`, { usuario: 3, method: 'PATCH', corpo: { data: dia(3) } });
+    assert.strictEqual(ctx.tabelas.notificacoes.slice(antes2).filter(n => n.usuario_id === 1 && n.tipo === 'tarefa_alterada').length, 1);
+
+    // Outra alteração qualquer (o título): o Henrique acompanha também.
+    const antes3 = ctx.tabelas.notificacoes.length;
+    await chamar(ctx.porta, `/api/tarefas/${id}`, { usuario: 3, method: 'PUT', corpo: { titulo: 'Confirmar CNPJ e IE' } });
+    const outra = ctx.tabelas.notificacoes.slice(antes3).filter(n => n.usuario_id === 1);
+    assert.deepStrictEqual(outra.map(n => n.tipo), ['registro_alterado']);
+    assert.match(outra[0].mensagem, /Confirmar CNPJ e IE/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('excluir: por marca, só quem criou (sendo o responsável) ou gestor', async () => {
   const ctx = await montar(baseDados());
   try {

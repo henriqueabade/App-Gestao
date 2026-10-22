@@ -90,8 +90,16 @@ test('atrasada e grupo do prazo', () => {
   const base = { status: 'a_fazer' };
   assert.ok(R.atrasada({ ...base, data: '2026-09-17' }, AGORA));
   assert.ok(!R.atrasada({ ...base, data: '2026-09-18' }, AGORA), 'hoje sem hora: vale até o fim do dia');
-  assert.ok(R.atrasada({ ...base, data: '2026-09-18', hora: '13:59' }, AGORA));
   assert.ok(!R.atrasada({ ...base, data: '2026-09-18', hora: '14:30' }, AGORA));
+  // Com hora, o prazo é o FIM: início + duração (dono, 22/10/2026). AGORA = 14:00.
+  assert.ok(R.atrasada({ ...base, data: '2026-09-18', hora: '11:30', duracao_min: 30 }, AGORA), '11:30 + 30 min venceu às 12:00');
+  assert.ok(!R.atrasada({ ...base, data: '2026-09-18', hora: '13:30', duracao_min: 30 }, AGORA), 'termina às 14:00: no minuto exato ainda não');
+  assert.ok(R.atrasada({ ...base, data: '2026-09-18', hora: '13:29', duracao_min: 30 }, AGORA), 'terminou às 13:59');
+  assert.ok(!R.atrasada({ ...base, data: '2026-09-18', hora: '13:00', duracao_min: 90 }, AGORA), 'vai até 14:30');
+  assert.ok(!R.atrasada({ ...base, data: '2026-09-18', hora: '13:59' }, AGORA), 'sem duração: o bloco de 30 min da Agenda');
+  assert.ok(R.atrasada({ ...base, data: '2026-09-18', hora: '13:29' }, AGORA));
+  assert.ok(!R.atrasada({ ...base, data: '2026-09-17', hora: '23:30', duracao_min: 900 }, AGORA), 'passa da meia-noite: termina hoje às 14:30');
+  assert.ok(R.atrasada({ ...base, data: '2026-09-17', hora: '23:30', duracao_min: 60 }, AGORA), 'terminou hoje à 00:30');
   assert.ok(!R.atrasada({ status: 'concluida', data: '2026-09-01' }, AGORA));
   assert.strictEqual(R.grupoDoPrazo({ ...base, data: '2026-09-19' }, AGORA), 'amanha');
   assert.strictEqual(R.grupoDoPrazo({ ...base, data: '2026-09-24' }, AGORA), 'semana');
