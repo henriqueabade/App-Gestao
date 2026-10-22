@@ -403,6 +403,24 @@
   // segura o carregando sozinho.
   const comCarregamento = (fn, texto) => (window.BotaoAcao?.comCarregamento ? window.BotaoAcao.comCarregamento(fn, texto) : fn());
 
+  /**
+   * Proteção contra clique duplo (e Enter duplo) no que não é <button> — os
+   * botões o BotaoAcao já guarda; a linha da tarefa, o Enter num campo e os
+   * atalhos de teclado passavam e faziam a ação duas vezes (dono, 22/10/2026).
+   * Enquanto a ação corre, uma nova chamada recebe a mesma promessa e não
+   * repete nada.
+   */
+  function umaVez(fn) {
+    let emCurso = null;
+    return function (...args) {
+      if (emCurso) return emCurso;
+      emCurso = Promise.resolve()
+        .then(() => fn.apply(this, args))
+        .finally(() => { emCurso = null; });
+      return emCurso;
+    };
+  }
+
   let fotos = new Map();
   async function carregarFotos() {
     try {
@@ -878,8 +896,32 @@
    * O editor: tarefa nova (preset: { titulo, data, hora, tipo, cliente/prospecção... })
    * ou existente ({ id }). `aba`: 'detalhes' | 'conversa'. Devolve uma promessa
    * que resolve quando o diálogo fecha (true se algo foi gravado).
+   *
+   * Clique duplo (na linha, no calendário, no atalho "n") abria DOIS editores
+   * (dono, 22/10/2026): enquanto um editor carrega, um novo pedido recebe a
+   * promessa dele e não abre outro. A trava sai assim que o editor aparece (aí
+   * o próprio diálogo cobre a tela) ou quando o carregamento falha; se a
+   * abertura passar de 300 ms, aparece o carregando da casa.
    */
-  async function abrirEditor({ id = null, preset = {}, aba = 'detalhes', foco = null } = {}) {
+  let editorAbrindo = null;
+  function abrirEditor(opcoes = {}) {
+    if (editorAbrindo) return editorAbrindo;
+    let avisarAberto;
+    const aberto = new Promise(r => { avisarAberto = r; });
+    const promessa = abrirEditorAgora(opcoes, () => avisarAberto());
+    editorAbrindo = promessa;
+    const espera = setTimeout(() => { comCarregamento(() => aberto, 'Abrindo a tarefa…'); }, 300);
+    const soltar = () => {
+      clearTimeout(espera);
+      avisarAberto();
+      if (editorAbrindo === promessa) editorAbrindo = null;
+    };
+    aberto.then(soltar);
+    promessa.then(soltar, soltar);
+    return promessa;
+  }
+
+  async function abrirEditorAgora({ id = null, preset = {}, aba = 'detalhes', foco = null } = {}, aoMostrar = () => {}) {
     let ctx;
     try {
       ctx = await carregarContexto();
@@ -1047,9 +1089,8 @@
         pintarProgresso();
       };
       const novoItem = h('input', { class: 'tui-campo', type: 'text', maxLength: 300, placeholder: '+ Adicionar item (Enter)', hidden: somenteLeitura && !nova });
-      novoItem.addEventListener('keydown', async e => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
+      // Enter duas vezes não cria o item duas vezes (22/10/2026).
+      const adicionarItem = umaVez(async () => {
         const texto = novoItem.value.trim();
         if (!texto) return;
         if (nova) { checklistNovo.push(texto); novoItem.value = ''; pintarChecklist(); return; }
@@ -1060,6 +1101,11 @@
           gravou = true;
           pintarChecklist();
         } catch (err) { avisar(err.message, 'error'); }
+      });
+      novoItem.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        adicionarItem();
       });
       principal.append(h('div', { class: 'tui-rotulo' }, icone('fa-list-check'), ' Checklist ', contagem), barra, listaChecklist, novoItem);
       pintarChecklist();
@@ -1194,9 +1240,8 @@
         }));
       };
       const novoMarcador = h('input', { class: 'tui-campo', type: 'text', maxLength: 40, placeholder: '+ Novo marcador (Enter)', hidden: somenteLeitura });
-      novoMarcador.addEventListener('keydown', async e => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
+      // Enter duas vezes não cria o marcador duas vezes (22/10/2026).
+      const criarMarcador = umaVez(async () => {
         const nome = novoMarcador.value.trim().replace(/^#/, '');
         if (!nome) return;
         try {
@@ -1208,6 +1253,11 @@
           marcar();
           pintarMarcadores();
         } catch (err) { avisar(err.message, 'error'); }
+      });
+      novoMarcador.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        criarMarcador();
       });
       pintarMarcadores();
       lado.append(campo('Marcadores', 'fa-hashtag', marcadoresCaixa, novoMarcador));
@@ -1292,7 +1342,10 @@
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !somenteLeitura && painelConversa.hidden) { e.preventDefault(); gravar(); }
       });
 
-      async function gravar({ fecharDepois = true } = {}) {
+      // Ctrl+Enter duas vezes (ou Ctrl+Enter e o Salvar) gravava duas vezes —
+      // numa tarefa nova, criava duas (22/10/2026).
+      const gravar = umaVez(gravarAgora);
+      async function gravarAgora({ fecharDepois = true } = {}) {
         if (!estado.titulo.trim()) { titulo.focus(); avisar('Dê um título para a tarefa.', 'error'); return false; }
         const vinc = estado.vinculos;
         const idDe = tipo => vinc.find(v => v.tipo === tipo)?.id ?? null;
@@ -1333,6 +1386,7 @@
       }
 
       d.showModal();
+      aoMostrar();
       if (original && aba === 'conversa') trocarAba('conversa');
       else if (original) trocarAba('detalhes');
       if (nova) setTimeout(() => titulo.focus(), 30);
@@ -1879,7 +1933,7 @@
   window.TarefasUI = {
     // telas
     abrirEditor, copiarTarefa, concluir, cancelarTarefa, responderConvite, excluirTarefa, reabrirTarefa, abrirMenuDaTarefa, itensDoMenuDaTarefa, montarMeuDia, exportarIcs, abrirVinculo, abrirAcao, linhaDeTarefa, mover, montarTarefasDaFicha, textoDaAcao,
-    carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo,
+    carregarContexto, carregarFotos, api, h, icone, avatar, chip, dialogo, umaVez,
     limparContexto: () => { contexto = null; },
     // puras
     presetDaCopia, interpretarTexto, feriadosDoAno, pascoa, gerarIcs, descreverRepeticao, rotuloDoPrazo, atrasada,

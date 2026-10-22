@@ -23,13 +23,17 @@
   <script>
     (function () {
       const params = new URLSearchParams(location.search);
-      if (params.get('hidden') === '1') {
+      // Vindo do Sair (de=sair), o véu vinho fica e esmaece (loginRenderer.js).
+      if (params.get('hidden') === '1' && params.get('de') !== 'sair') {
         document.documentElement.classList.add('skip-intro');
       }
     })();
   </script>
 </head>
-<body class="bg-gradient-to-br from-amber-50 to-orange-50 font-[Inter] ">
+<!-- Sem o degradê creme do Tailwind (22/10/2026): o fundo do login é o vinho
+     (login.css). O creme ficava escondido atrás do fundo animado e aparecia
+     como um clarão sempre que essa camada sumia. -->
+<body class="font-[Inter] ">
   <div id="introOverlay" style="position:fixed;inset:0;background:#3d021f;z-index:1000;"></div>
   <div id="bg-network"></div>
   <div>

@@ -214,7 +214,8 @@ function criarRapido(dia, hora = null) {
   const d = T.dialogo({ classe: 'tui-dialogo--concluir', rotulo: 'Nova tarefa' });
   const titulo = h('input', { class: 'tui-campo cal-rapido__titulo', type: 'text', maxLength: 200, placeholder: 'O que precisa ser feito?' });
   const horaCampo = h('input', { class: 'tui-campo', type: 'time', value: hora || '' });
-  const criar = async () => {
+  // Enter + clique no "Criar" (ou Enter duas vezes) criava a tarefa duas vezes (22/10/2026).
+  const criar = T.umaVez(async () => {
     const r = T.interpretarTexto(titulo.value, { usuarios: estado.ctx.usuarios, listas: estado.ctx.listas, marcadores: estado.ctx.marcadores });
     if (!r.titulo) { titulo.focus(); return; }
     const h2 = horaCampo.value || r.hora || null;
@@ -224,7 +225,7 @@ function criarRapido(dia, hora = null) {
       window.showToast?.('Tarefa criada.', 'success');
       carregar();
     } catch (err) { window.showToast?.(err.message, 'error'); }
-  };
+  });
   titulo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } });
   const feriado = feriadosDoPeriodo().get(dia)?.[0];
   d.append(h('div', { class: 'tui-cartao tui-cartao--estreito' },
@@ -314,7 +315,9 @@ function desenharMes(area) {
       eventos.append(h('button', { type: 'button', class: 'cal-celula__outros', text: `+${lista.length - mostrar} ${mostrar ? 'mais' : (lista.length - mostrar === 1 ? 'item' : 'itens')}`, on: { click: e => { e.stopPropagation(); estado.foco = dia; estado.visao = 'dia'; carregar(); } } }));
     }
     celula.append(eventos);
-    celula.addEventListener('dblclick', () => criarRapido(dia));
+    // Clique duplo numa tarefa da célula abre a tarefa — não cria outra no dia
+    // (o dblclick subia da pílula para a célula, 22/10/2026).
+    celula.addEventListener('dblclick', e => { if (e.target.closest?.('button, [role="button"]')) return; criarRapido(dia); });
     aceitarSoltar(celula, it => (it.dia !== dia ? T.mover(it.dados, { data: dia }) : null));
     corpo.append(celula);
   }

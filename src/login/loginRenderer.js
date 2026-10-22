@@ -300,7 +300,14 @@ const hideIntro = () => {
 };
 
 if (intro) {
-  if (startHidden) {
+  if (startHidden && params.get('de') === 'sair') {
+    // Vindo do Sair: a janela do menu virou o login (main.js, virarLogin) e a
+    // tela já está na cor do login. O véu esmaece e o login surge — continua o
+    // escurecimento do menu, sem corte (22/10/2026).
+    intro.style.transitionDuration = '320ms';
+    requestAnimationFrame(() => requestAnimationFrame(hideIntro));
+    setTimeout(() => intro.remove(), 1200);
+  } else if (startHidden) {
     intro.remove();
   } else if (document.hasFocus()) {
     hideIntro(); // page reload with focus: remove overlay right away

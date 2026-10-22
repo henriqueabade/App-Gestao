@@ -211,6 +211,23 @@ das listas, guardando o registro.
   `mudou()` devolve uma promessa: a tela de Tarefas põe a recarga em
   `detail.esperar`. Testes: `tarefasMenuDireito.test.js`.
 
+### Clique duplo (22/10/2026, segunda rodada)
+
+O `BotaoAcao` guarda os `<button>`. O que passava foi protegido:
+- **abrir o editor** (linha da tarefa, item da Agenda, atalho "n"): enquanto
+  um editor carrega, o segundo pedido recebe o primeiro (`abrirEditor` →
+  `abrirEditorAgora`). A trava sai quando o editor aparece. Se a abertura
+  passar de 300 ms, aparece o carregando "Abrindo a tarefa…";
+- **Enter e Ctrl+Enter** que criavam ou gravavam em dobro: `T.umaVez(fn)` na
+  criação rápida (o campo fica só leitura enquanto cria), nova lista, criação
+  rápida do dia na Agenda, item do checklist, marcador novo e o
+  `gravar` do editor;
+- **Agenda, mês:** clique duplo numa tarefa abria a tarefa e TAMBÉM a "Nova
+  tarefa" do dia (o `dblclick` subia para a célula).
+
+A aba Conversa já se protegia (desliga o campo e o botão enquanto envia).
+Teste: `tarefasCliqueDuplo.test.js`.
+
 ## 4. Sino, convites e lembretes
 
 - **Convite**: quem é convidado recebe no sino, com **Aceitar / Recusar** ali mesmo. Se apagar o aviso, o convite continua em **Tarefas › Convites**. Recusar avisa quem convidou.

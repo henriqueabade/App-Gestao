@@ -2,6 +2,8 @@
 
 Os endpoints abaixo permitem que Sup Admins criem e gerenciem modelos reutilizáveis de permissões. Todos os exemplos assumem que as requisições são autenticadas com um token **Sup Admin**.
 
+> **Token (22/10/2026):** a tela não manda `authorization`; o servidor do programa (`backend/server.js`) põe o token da sessão. O modal mandava `Bearer <id do usuário>` ("Bearer 13"), e o servidor respeita o cabeçalho que a tela manda. A API respondia 401 "Token inválido", e as permissões e os modelos não abriam. O mesmo valia para o modal de Transferir usuário. Teste: `usuariosModaisToken.test.js`.
+
 ## Estrutura dos dados
 
 ```json

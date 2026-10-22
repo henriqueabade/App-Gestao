@@ -236,7 +236,8 @@ async function novaLista() {
     return b;
   }));
   pintarCores();
-  const criar = async () => {
+  // Enter + clique no "Criar lista" (ou Enter duas vezes) criava duas listas.
+  const criar = T.umaVez(async () => {
     if (!campo.value.trim()) { campo.focus(); return; }
     try {
       const l = await T.api('/listas', { method: 'POST', corpo: { nome: campo.value.trim(), cor } });
@@ -245,7 +246,7 @@ async function novaLista() {
       estado.filtro = { tipo: 'lista', id: l.id, nome: l.nome };
       carregar({ silencioso: true });
     } catch (err) { window.showToast?.(err.message, 'error'); }
-  };
+  });
   campo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } });
   d.append(h('div', { class: 'tui-cartao tui-cartao--estreito' },
     h('header', { class: 'tui-concluir__topo' }, h('span', { class: 'tui-concluir__icone tarefas-icone-lista' }, icone('fa-list')), h('div', {}, h('h3', { class: 'tui-concluir__titulo', text: 'Nova lista' }), h('p', { class: 'tui-concluir__sub', text: 'Só você vê as suas listas.' }))),
@@ -464,6 +465,19 @@ async function criarRapida({ completa = false } = {}) {
     window.showToast?.(err.message, 'error');
   }
 }
+// Enter duas vezes criava a tarefa duas vezes (dono, 22/10/2026): enquanto
+// uma criação corre, o Enter seguinte não faz nada.
+const criarRapidaUmaVez = T.umaVez(async opcoes => {
+  const campo = $('tarefasRapida');
+  campo.readOnly = true;
+  campo.setAttribute('aria-busy', 'true');
+  try {
+    await criarRapida(opcoes);
+  } finally {
+    campo.readOnly = false;
+    campo.removeAttribute('aria-busy');
+  }
+});
 
 // ------------------------------------------------------------ estatísticas
 
@@ -705,7 +719,7 @@ function iniciar() {
   const rapida = $('tarefasRapida');
   rapida.addEventListener('input', previaRapida);
   rapida.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); criarRapida({ completa: e.shiftKey }); }
+    if (e.key === 'Enter') { e.preventDefault(); criarRapidaUmaVez({ completa: e.shiftKey }); }
     if (e.key === 'Escape') { rapida.value = ''; previaRapida(); rapida.blur(); }
   });
   document.addEventListener('keydown', aoTeclar);

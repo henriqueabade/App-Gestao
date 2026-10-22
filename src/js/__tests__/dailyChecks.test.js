@@ -284,11 +284,6 @@ async function loadModules(env) {
   require(menuPath);
   await env.runTimers();
   await new Promise((resolve) => setImmediate(resolve));
-
-  const sessionPath = path.join(__dirname, '..', 'auth', 'session.js');
-  delete require.cache[require.resolve(sessionPath)];
-  require(sessionPath);
-  await env.runTimers();
 }
 
 test('primeira abertura do dia realiza apenas um fetch e um refresh de atualizações', async () => {
@@ -319,30 +314,11 @@ test('primeira abertura do dia realiza apenas um fetch e um refresh de atualiza�
   }
 });
 
-test('logout automático após 30 minutos exibe aviso e volta ao login', async () => {
-  const env = setupEnvironment();
-  try {
-    await loadModules(env);
-    window.AppUpdates.setUserProfile({ id: 'tester' });
-    await env.runTimers();
-
-    env.fetchCalls.length = 0;
-    env.updateCalls.length = 0;
-    window.__sessionInternals.forceTimeout();
-    await env.runTimers();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    assert.ok(window.stopServerCheck.called, 'verificação de rede interrompida');
-    assert.equal(env.electronLogouts.open, 1);
-    assert.equal(env.electronLogouts.show, 1);
-    assert.equal(env.electronLogouts.logout, 1);
-    assert.equal(window.showToast.lastMessage, 'Você foi desconectado por inatividade.');
-    assert.equal(env.fetchCalls.length, 0, 'nenhum fetch após logout');
-    const refreshCalls = env.updateCalls.filter(Boolean);
-    assert.equal(refreshCalls.length, 0, 'nenhum refresh após logout');
-  } finally {
-    env.restore();
-  }
+test('sem logout automático por inatividade (saiu em 22/10/2026, pedido do dono)', () => {
+  const fs = require('node:fs');
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'auth', 'session.js')), false, 'o módulo saiu');
+  const menuHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'menu.html'), 'utf8');
+  assert.ok(!menuHtml.includes('<script src="../js/auth/session.js">'), 'o menu não carrega mais o módulo');
 });
 
 test('alteração de dia reinicia verificações diárias', async () => {

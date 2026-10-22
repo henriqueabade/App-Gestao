@@ -44,9 +44,8 @@
     if (usuarioId && !headers.has('x-usuario-id')) {
       headers.set('x-usuario-id', String(usuarioId));
     }
-    if (usuarioId && !headers.has('authorization')) {
-      headers.set('authorization', `Bearer ${usuarioId}`);
-    }
+    // Sem "authorization": o servidor do programa põe o token da sessão
+    // (`Bearer <id do usuário>` dava "Token inválido" na API, 22/10/2026).
 
     finalOptions.headers = headers;
 

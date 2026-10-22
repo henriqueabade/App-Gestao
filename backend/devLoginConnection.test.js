@@ -118,19 +118,37 @@ test('monitor DEV ignora configurações remotas e usa HTTP/IPv4 na porta atual'
   assert.equal(context.resolveBackendHealthBaseUrl(), 'http://127.0.0.1:4567');
 });
 
-test('consulta de perfil antes do login retorna null sem gerar erro IPC', () => {
+test('consulta de perfil antes do login retorna null sem gerar erro IPC', async () => {
   const start = main.indexOf("ipcMain.handle('perfil:obter'");
   let handler;
   let token = null;
+  let valido = true;
+  let recusa = null;
   let called = 0;
   vm.runInNewContext(main.slice(start, main.indexOf('\n});', start) + 4), {
     ipcMain: { handle: (_name, fn) => { handler = fn; } },
-    getToken: () => token, requestAuthenticatedProfile: () => { called++; return { id: 1 }; }
+    getToken: () => token,
+    getTokenInfo: () => ({ valido }),
+    requestAuthenticatedProfile: async () => {
+      called++;
+      if (recusa) throw Object.assign(new Error('Token inválido'), { status: recusa });
+      return { id: 1 };
+    }
   });
-  assert.equal(handler(), null);
+  assert.equal(await handler(), null);
   assert.equal(called, 0);
   token = 'sessao-ficticia';
-  assert.equal(handler().id, 1);
+  assert.equal((await handler()).id, 1);
+  // Token guardado vencido ou recusado pela API (22/10/2026): sem foto nova,
+  // sem o erro 401 no console.
+  valido = false;
+  assert.equal(await handler(), null);
+  assert.equal(called, 1, 'vencido nem chega a perguntar');
+  valido = true;
+  recusa = 401;
+  assert.equal(await handler(), null);
+  recusa = 500;
+  await assert.rejects(handler(), /Token inválido/, 'outros erros continuam aparecendo');
 });
 
 test('auto-login DEV exige sessão assinada em memória e identidade correspondente', async () => {

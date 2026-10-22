@@ -143,6 +143,8 @@ function montarFechamentoDaJanela({ sessao = { id: 7 } } = {}) {
   const contexto = {
     console: { warn() {}, error() {}, log() {} },
     dashboardWindow: janela,
+    // A janela do papel de menu, guardada na criação (main.js, `const menu`).
+    menu: janela,
     currentUserSession: sessao,
     closingDashboardWindow: false,
     persistUserExit(motivo) {
@@ -391,5 +393,16 @@ test('a tela cheia não traz de volta a janela que está fechando', () => {
     'o retorno à tela cheia precisa se calar durante o encerramento e com o menu indo para a bandeja');
   // Nem com a janela escondida (22/10/2026): o programa "abria do nada".
   assert.match(trecho, /!dashboardWindow\.isVisible\(\)\) return;/);
-  assert.match(trecho, /dashboardWindow\.on\('show', \(\) => voltarATelaCheia\(dashboardWindow\)\);/, 'a tela cheia volta quando ela aparece');
+  assert.match(trecho, /dashboardWindow\.on\('show', \(\) => \{ if \(dashboardWindow === menu\) voltarATelaCheia\(menu\); \}\);/, 'a tela cheia volta quando ela aparece');
+});
+
+test('a janela do menu que virou login (Sair, 22/10/2026) fecha sem gravar saída', () => {
+  const { contexto, fechar, registro, janela } = montarFechamentoDaJanela();
+  contexto.dashboardWindow = null; // virarLogin: o papel de menu acabou
+
+  fechar();
+
+  assert.equal(registro.preventDefaults, 0, 'fechar o login não é adiado');
+  assert.equal(registro.saidas.length, 0, 'a saída já foi gravada pelo Sair');
+  assert.equal(janela.visivel, true);
 });

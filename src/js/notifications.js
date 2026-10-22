@@ -28,7 +28,7 @@
  *
  * `window.__notificationsInternals` segue com o mesmo contrato de antes
  * (fetchNotificationsWithRetry, refreshNotifications({ respectDaily }),
- * resetDailyState, shutdown) — session.js e os testes dependem dele.
+ * resetDailyState, shutdown) — os testes dependem dele.
  */
 window.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('notificationBtn');

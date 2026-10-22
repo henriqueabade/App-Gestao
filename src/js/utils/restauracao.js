@@ -28,7 +28,8 @@
    *
    * Fora daqui de propósito:
    *  logout         — o usuário escolheu sair
-   *  idle-timeout   — sessão encerrada por inatividade
+   *  idle-timeout   — sessão encerrada por inatividade (o logout automático
+   *                   saiu em 22/10/2026; o motivo fica fora se voltar)
    *  user-removed   — o usuário deixou de existir; não há para quem restaurar
    */
   const MOTIVOS_RESTAURAVEIS = new Set([

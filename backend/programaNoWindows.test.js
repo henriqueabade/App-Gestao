@@ -209,14 +209,39 @@ test('main.js: nada aparece sozinho com o programa na bandeja ou atrás de outra
   // Logout automático com o programa atrás: vai para a bandeja, sem mostrar o login.
   const sair = MAIN.slice(MAIN.indexOf("ipcMain.handle('logout'"), MAIN.indexOf("ipcMain.handle('open-login-hidden'"));
   assert.ok(sair.includes('if (programaNaBandeja || (dashVivo && !programaNaFrente())) {'));
-  assert.ok(sair.indexOf('await revealLoginWindow();') < sair.indexOf('dashboardWindow.close();', sair.indexOf('await revealLoginWindow();')), 'o login aparece antes de o menu fechar');
+  // Com o programa na frente, a própria janela do menu vira o login (sem clarão).
+  assert.ok(sair.indexOf('if (programaNaBandeja ||') < sair.indexOf('await virarLogin(dashboardWindow);'), 'bandeja primeiro, depois a troca na mesma janela');
   assert.ok(!sair.includes('dashboardWindow.hide()'), 'o menu não some antes de o login estar na tela');
-  assert.ok(sair.indexOf("comPrazo(persistUserExit('logout')") < sair.indexOf('await revealLoginWindow();'), 'a saída é gravada em paralelo');
+  assert.ok(sair.indexOf("comPrazo(persistUserExit('logout')") < sair.indexOf('await virarLogin(dashboardWindow);'), 'a saída é gravada em paralelo');
   // Monitor que muda (dormir/acordar) não põe em tela cheia uma janela escondida.
   const telas = MAIN.slice(MAIN.indexOf('function handleDisplaysChanged('), MAIN.indexOf('const IPC_ACTION_MAP'));
   assert.ok(telas.includes('if (janela.isVisible()) janela.setFullScreen(true);'));
-  assert.match(MAIN, /loginWindow\.on\('leave-full-screen', \(\) => \{\s+if \(!loginWindow \|\| loginWindow\.isDestroyed\(\) \|\| !loginWindow\.isVisible\(\)\) return;/);
-  assert.ok(MAIN.includes("loginWindow.on('show', () => voltarATelaCheia(loginWindow));"));
+  const login = MAIN.slice(MAIN.indexOf('function ligarComoLogin('), MAIN.indexOf('function avisarLoginDesenhado('));
+  assert.match(login, /janela\.on\('leave-full-screen', \(\) => \{\s+if \(loginWindow !== janela \|\| janela\.isDestroyed\(\) \|\| !janela\.isVisible\(\)\) return;/);
+  assert.ok(login.includes("janela.on('show', () => { if (loginWindow === janela) voltarATelaCheia(janela); });"));
+});
+
+test('main.js: Sair com o programa na frente troca o menu pelo login NA MESMA janela (22/10/2026)', () => {
+  const virar = MAIN.slice(MAIN.indexOf('async function virarLogin('), MAIN.indexOf('let preferencias = { ...preferenciasWindows.PADRAO };'));
+  // O papel de menu acaba antes de tudo: os ouvintes dele se calam.
+  assert.ok(virar.indexOf('dashboardWindow = null;') < virar.indexOf('ligarComoLogin(janela);'));
+  assert.ok(virar.includes('loginWindow = janela;'));
+  // O login escondido que as quedas deixam pronto é fechado (o atual não é zerado: ligarComoLogin confere).
+  assert.ok(virar.includes('loginPronto.close();'));
+  // Entre uma página e outra, a cor do login.
+  assert.ok(virar.indexOf("janela.setBackgroundColor('#3d021f');") < virar.indexOf('janela.loadFile('));
+  assert.ok(virar.includes("{ query: { hidden: '1', de: 'sair' } }"));
+  // Cada ouvinte do menu confere se a janela ainda é o menu.
+  const menu = MAIN.slice(MAIN.indexOf('function createDashboardWindow('), MAIN.indexOf('async function virarLogin('));
+  assert.ok(menu.includes('const menu = dashboardWindow;'));
+  assert.match(menu, /dashboardWindow\.on\('close', \(event\) => \{\s+\/\/[^\n]*\n\s+if \(dashboardWindow !== menu\) return;/);
+  assert.match(menu, /dashboardWindow\.on\('closed', \(\) => \{\s+\/\/[^\n]*\n\s+\/\/[^\n]*\n\s+if \(dashboardWindow !== menu\) return;/);
+  // O login vindo do Sair esmaece o véu vinho em vez de cortar; sem o creme do Tailwind no fundo.
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'login', 'login.html'), 'utf8');
+  assert.ok(html.includes("if (params.get('hidden') === '1' && params.get('de') !== 'sair') {"));
+  assert.ok(!html.includes('from-amber-50'), 'sem o degradê creme no <body>');
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'login', 'loginRenderer.js'), 'utf8');
+  assert.ok(renderer.includes("if (startHidden && params.get('de') === 'sair') {"));
 });
 
 test('main.js: o login (e a entrada automática) fazem a máquina ser do usuário; a janela do canto só com o programa atrás', () => {
@@ -240,7 +265,7 @@ test('main.js: a janela do canto não fecha ao abrir um aviso (só no X); recolh
   assert.ok(!abrir.includes('janelaDeAviso.fechar()'), 'abrir o programa não fecha a janela do canto');
   assert.match(MAIN, /ipcMain\.handle\('avisos-windows:dispensar', \(\) => janelaDeAviso\.fechar\(\)\);/, 'o X fecha');
   assert.ok(MAIN.includes("ipcMain.handle('avisos-windows:lidos', (_event, lidos) => janelaDeAviso.retirar({"));
-  assert.ok(MAIN.includes("dashboardWindow.on('focus', () => janelaDeAviso.recolher());"));
+  assert.ok(MAIN.includes("dashboardWindow.on('focus', () => { if (dashboardWindow === menu) janelaDeAviso.recolher(); });"));
   assert.ok(MAIN.includes("for (const saiuDaFrente of ['blur', 'hide', 'minimize']) {"));
   // Fora o X, só desligar os avisos ou sair do programa fecham a janela.
   assert.strictEqual(MAIN.split('janelaDeAviso.fechar()').length - 1, 2, 'dispensar (X) e pararAvisosNoWindows');

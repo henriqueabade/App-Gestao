@@ -65,16 +65,18 @@ Data: 01/10/2026. Três pedidos do dono:
   - Na primeira vez, um balão explica onde ele ficou.
   - Para sair de vez: botão direito no ícone › Sair do programa.
 - **Nada aparece sozinho** (22/10/2026; o dono e outros usuários viam o programa "abrir do nada"). Só a janela do canto dos avisos aparece sem ninguém pedir. O menu e o login só aparecem quando alguém abre o programa (ícone ou atalho) ou quando ele já está na frente:
-  - **A causa principal:** com o "lembrar-me" ligado e o programa na bandeja, a sessão vencia (inatividade, queda de rede), o login escondido entrava de novo sozinho e o menu era aberto na frente de quem estava em outra coisa. Agora a entrada automática na bandeja deixa o menu escondido.
+  - **A causa principal:** com o "lembrar-me" ligado e o programa na bandeja, a sessão vencia (inatividade, queda de rede), o login escondido entrava de novo sozinho e o menu era aberto na frente de quem estava em outra coisa. Agora a entrada automática na bandeja deixa o menu escondido. (O logout por inatividade saiu de vez na rodada seguinte.)
   - Sessão que vence com o programa **atrás de outras janelas**: o programa vai para a bandeja, e o login espera escondido. Antes o login pulava para a frente.
   - Aberto pelo Windows ao ligar, o programa já começa "na bandeja". Uma segunda execução com `--segundo-plano` não mostra tela.
   - Monitor que dorme e acorda (troca de tela) não põe em tela cheia uma janela escondida; ela volta à tela cheia quando aparecer.
-- **Sair (menu do usuário › Sair do sistema)** é imediato (22/10/2026):
-  - a tela vai num instante para a cor do login;
-  - o login entra por cima, já desenhado (o principal espera o aviso dele, no máximo 1,5 s), e só então o menu fecha;
-  - a saída é gravada em paralelo, com o prazo de 1,5 s.
+- **Sair (menu do usuário › Sair do sistema)** é imediato e sem clarão (22/10/2026, duas rodadas):
+  - a tela escurece em 160 ms para a cor do login;
+  - já toda nessa cor, **a própria janela do menu vira a do login** (`virarLogin` no main.js): troca de página, sem nenhuma janela aparecer ou sumir. O véu vinho do login esmaece em 320 ms (`login.html?hidden=1&de=sair`);
+  - a saída é gravada em paralelo, com o prazo de 1,5 s;
+  - os ouvintes do papel de menu conferem `dashboardWindow !== menu` e se calam; os do login moram em `ligarComoLogin` e conferem `loginWindow === janela`. Entrar de novo abre um menu novo e fecha a janela que virou login.
 
-  Antes eram 4 s de esmaecimento, e o menu sumia antes de o login aparecer: a área de trabalho "piscava" entre as duas telas.
+  Antes eram 4 s de esmaecimento e duas janelas trocando de lugar. No Windows, a janela recém-mostrada dava um clarão branco. O `<body>` do login também tinha um degradê creme do Tailwind escondido atrás do fundo animado; ele saiu.
+- **Sem logout por inatividade** (22/10/2026, pedido do dono): o `src/js/auth/session.js` (30 min sem uso) foi apagado. A sessão só termina por Sair, pelo vencimento do token ou por queda.
 - **Quando chega um aviso e o programa não está na frente,** aparece a janela no canto inferior direito. Ela:
   - tem a cara do programa: o fundo vinho do menu com o vidro dos modais, a faixa e os detalhes em dourado, o logo, o X vermelho e o "Abrir o programa" dourado (botão do padrão, 40 px, letra de 14 px);
   - mostra todos os avisos da fila (até 20, os mais novos em cima), com o título, a mensagem e a nota inteiros;

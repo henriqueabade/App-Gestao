@@ -95,7 +95,7 @@ const {
   registrarUltimaAlteracao
 } = require('./backend/userActivity');
 const { createApiClient } = require('./backend/apiHttpClient');
-const { getToken } = require('./backend/tokenStore');
+const { getToken, getTokenInfo } = require('./backend/tokenStore');
 const net = require('net');
 // Login pelo e-mail OU pelo nome completo (09/10/2026).
 const NomeCompleto = require('./src/js/utils/nome-completo');
@@ -3447,15 +3447,7 @@ function createLoginWindow(show = true, showOnLoad = true) {
   });
 
   attachMonitorHooksToWindow(loginWindow);
-
-  // `ready-to-show` dispara UMA vez e ANTES de `isLoading()` virar false.
-  // Guardamos o estado num sinalizador: quem for exibir a janela depois
-  // (revealLoginWindow) precisa saber que o evento já passou, senão fica
-  // esperando para sempre por um evento que não vai mais acontecer.
-  loginWindowReady = false;
-  loginJaDesenhou = false;
-  loginWindow.on('ready-to-show', () => { loginWindowReady = true; });
-  loginWindow.webContents.on('did-finish-load', () => { loginWindowReady = true; });
+  ligarComoLogin(loginWindow);
 
   // Espera o conteúdo estar pronto para posicionar e exibir
   loginWindow.once('ready-to-show', () => {
@@ -3472,26 +3464,44 @@ function createLoginWindow(show = true, showOnLoad = true) {
     }
   });
 
-  // Garante full-screen contínuo — só com ela na tela: escondida, refazer a
-  // tela cheia podia trazê-la de volta sozinha. Ela volta ao aparecer.
-  loginWindow.on('leave-full-screen', () => {
-    if (!loginWindow || loginWindow.isDestroyed() || !loginWindow.isVisible()) return;
-    loginWindow.setFullScreen(true);
-  });
-  loginWindow.on('show', () => voltarATelaCheia(loginWindow));
-
   // Carrega o HTML, passando hidden=0/1 via query (como você já fazia)
   loginWindow.loadFile(
     path.join(__dirname, 'src/login/login.html'),
     { query: { hidden: showOnLoad ? '0' : '1'
      } }
   );
+}
 
-  loginWindow.webContents.on('did-finish-load', () => {
-    sendLastNetworkStatusToWindow(loginWindow);
+/**
+ * O que uma janela faz no papel de LOGIN: a janela nova do login e, desde
+ * 22/10/2026, a do menu que vira login no Sair (`virarLogin`). Cada ouvinte
+ * confere se a janela AINDA é o login — um login antigo que fecha depois não
+ * zera o atual.
+ */
+function ligarComoLogin(janela) {
+  // `ready-to-show` dispara UMA vez e ANTES de `isLoading()` virar false.
+  // Guardamos o estado num sinalizador: quem for exibir a janela depois
+  // (revealLoginWindow) precisa saber que o evento já passou, senão fica
+  // esperando para sempre por um evento que não vai mais acontecer.
+  loginWindowReady = false;
+  loginJaDesenhou = false;
+  janela.on('ready-to-show', () => { if (loginWindow === janela) loginWindowReady = true; });
+  janela.webContents.on('did-finish-load', () => {
+    if (loginWindow !== janela) return;
+    loginWindowReady = true;
+    sendLastNetworkStatusToWindow(janela);
   });
 
-  loginWindow.on('closed', () => {
+  // Garante full-screen contínuo — só com ela na tela: escondida, refazer a
+  // tela cheia podia trazê-la de volta sozinha. Ela volta ao aparecer.
+  janela.on('leave-full-screen', () => {
+    if (loginWindow !== janela || janela.isDestroyed() || !janela.isVisible()) return;
+    janela.setFullScreen(true);
+  });
+  janela.on('show', () => { if (loginWindow === janela) voltarATelaCheia(janela); });
+
+  janela.on('closed', () => {
+    if (loginWindow !== janela) return;
     loginWindow = null;
     loginWindowReady = false;
     loginJaDesenhou = false;
@@ -3600,7 +3610,13 @@ function createDashboardWindow(show = true) {
 
   attachMonitorHooksToWindow(dashboardWindow);
 
+  // No Sair, esta mesma janela vira a do login (`virarLogin`, 22/10/2026): daí
+  // em diante `dashboardWindow` deixa de ser ela, e cada ouvinte do papel de
+  // menu abaixo se cala (`dashboardWindow !== menu`).
+  const menu = dashboardWindow;
+
   dashboardWindow.once('ready-to-show', () => {
+    if (dashboardWindow !== menu) return;
     dashboardWindow.webContents.send('select-tab', 'dashboard');
     dashboardWindow.setBounds(getBoundsForDisplay(savedDisplay));
     dashboardWindow.setFullScreen(true);
@@ -3617,12 +3633,13 @@ function createDashboardWindow(show = true) {
     // Nem com o menu indo para a bandeja ou já escondido: refazer a tela cheia
     // de uma janela escondida podia trazê-la de volta sozinha (22/10/2026).
     if (closingDashboardWindow || quittingApp || programaNaBandeja) return;
-    if (!dashboardWindow || dashboardWindow.isDestroyed() || !dashboardWindow.isVisible()) return;
+    if (dashboardWindow !== menu || menu.isDestroyed() || !dashboardWindow.isVisible()) return;
     dashboardWindow.setFullScreen(true);
   });
-  dashboardWindow.on('show', () => voltarATelaCheia(dashboardWindow));
+  dashboardWindow.on('show', () => { if (dashboardWindow === menu) voltarATelaCheia(menu); });
 
   dashboardWindow.webContents.on('did-finish-load', () => {
+    if (dashboardWindow !== menu) return;
     dashboardWindow.webContents.send('select-tab', 'dashboard');
     sendLastNetworkStatusToWindow(dashboardWindow);
   });
@@ -3637,6 +3654,8 @@ function createDashboardWindow(show = true) {
   // `closingDashboardWindow` e passava direto, fechando na hora — e a
   // conclusão natural era "precisa apertar duas vezes".
   dashboardWindow.on('close', (event) => {
+    // Virou o login: fechar o login não grava saída nenhuma.
+    if (dashboardWindow !== menu) return;
     if (!currentUserSession || closingDashboardWindow) return;
     event.preventDefault();
     closingDashboardWindow = true;
@@ -3653,8 +3672,10 @@ function createDashboardWindow(show = true) {
         // tinha acabado de zerar a sessão. Um único caminho que não zerasse —
         // um logout em curso já faz `persistUserExit` voltar sem zerar nada —
         // e o fechamento virava um laço que nunca fechava.
-        if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-          dashboardWindow.close();
+        // `menu`, e não `dashboardWindow`: é ESTA janela que fecha, mesmo que
+        // outro menu já tenha sido aberto nesse meio-tempo.
+        if (!menu.isDestroyed()) {
+          menu.close();
         }
         closingDashboardWindow = false;
       });
@@ -3663,18 +3684,52 @@ function createDashboardWindow(show = true) {
   // A janela dos avisos do canto (persistente, só fecha no X): com o programa
   // na frente quem avisa é o sino, e ela sai do caminho; volta quando o
   // programa sai da frente (backend/janelaDeAviso.js).
-  dashboardWindow.on('focus', () => janelaDeAviso.recolher());
+  dashboardWindow.on('focus', () => { if (dashboardWindow === menu) janelaDeAviso.recolher(); });
   for (const saiuDaFrente of ['blur', 'hide', 'minimize']) {
-    dashboardWindow.on(saiuDaFrente, () => janelaDeAviso.voltar());
+    dashboardWindow.on(saiuDaFrente, () => { if (dashboardWindow === menu) janelaDeAviso.voltar(); });
   }
 
   // Carrega a nova tela de menu
   dashboardWindow.loadFile(path.join(__dirname, 'src/html/menu.html'));
   dashboardWindow.on('closed', () => {
+    // Virou o login: quem fecha agora é o login (ligarComoLogin), e um menu
+    // aberto depois não pode perder a referência.
+    if (dashboardWindow !== menu) return;
     dashboardWindow = null;
     chatAoVivoNoPrograma = false;
     janelaDeAviso.voltar();
   });
+}
+
+/**
+ * Sair com o programa na frente (dono, 22/10/2026): a janela do menu VIRA a
+ * do login — a mesma janela, já na tela, troca de página. Antes eram duas
+ * janelas: o login aparecia por cima e o menu fechava, e no Windows a janela
+ * recém-mostrada dava um clarão branco antes do primeiro desenho. Agora nada
+ * aparece nem some: o menu escurece para a cor do login (#exitOverlay), a
+ * página troca por baixo dessa cor e o login surge nela.
+ */
+async function virarLogin(janela) {
+  dashboardWindow = null;              // os ouvintes do papel de menu se calam
+  chatAoVivoNoPrograma = false;
+  janelaDeAviso.voltar();
+  const loginPronto = loginWindow;     // o login escondido que as quedas deixam pronto
+  loginWindow = janela;
+  loginPediuParaAparecer = true;
+  ligarComoLogin(janela);
+  if (loginPronto && !loginPronto.isDestroyed()) {
+    try { loginPronto.close(); } catch (err) { console.error('Falha ao fechar o login escondido:', err); }
+  }
+  // Entre uma página e outra, a cor do login — nunca o branco padrão.
+  try { janela.setBackgroundColor('#3d021f'); } catch (_) { /* segue */ }
+  try {
+    await janela.loadFile(path.join(__dirname, 'src/login/login.html'), { query: { hidden: '1', de: 'sair' } });
+  } catch (err) {
+    console.error('Falha ao abrir o login na janela do menu:', err);
+  }
+  if (!janela.isDestroyed()) {
+    try { janela.focus(); janela.webContents.send('activate-tab', 'login'); } catch (_) { /* segue */ }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -4066,10 +4121,17 @@ ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
   return monitor.getStatus();
 });
 
-ipcMain.handle('perfil:obter', () => {
-  // O cartão do último usuário também pede a foto antes de haver login.
-  if (!getToken()) return null;
-  return requestAuthenticatedProfile('/api/perfil');
+ipcMain.handle('perfil:obter', async () => {
+  // O cartão do último usuário também pede a foto antes de haver login. Com o
+  // token guardado vencido (ou recusado pela API) não há o que buscar: fica a
+  // foto que já está na tela, sem o erro 401 no console (22/10/2026).
+  if (!getToken() || !getTokenInfo().valido) return null;
+  try {
+    return await requestAuthenticatedProfile('/api/perfil');
+  } catch (err) {
+    if (err?.status === 401 || err?.status === 403) return null;
+    throw err;
+  }
 });
 
 ipcMain.handle('perfil:enviar-imagem', async (_event, file) => {
@@ -5481,17 +5543,14 @@ ipcMain.handle('logout', async () => {
   // hora, então o `close` do menu, mais abaixo, não grava de novo.
   const gravandoSaida = comPrazo(persistUserExit('logout'), PRAZO_DE_SAIDA_MS, 'o registro da saída');
 
-  if (!loginWindow || loginWindow.isDestroyed()) {
-    createLoginWindow(false, false);
-  }
-
   const dashVivo = dashboardWindow && !dashboardWindow.isDestroyed();
   // Na bandeja, ou com o programa atrás de outras janelas (a sessão venceu,
-  // inatividade, queda de rede): NADA vem para a frente sozinho — o programa
-  // "abria do nada" por cima do que a pessoa fazia (dono, 22/10/2026). O menu
-  // fecha e o login espera, escondido, a próxima vez que o programa for aberto
-  // (ícone perto do relógio ou atalho).
+  // queda de rede): NADA vem para a frente sozinho — o programa "abria do
+  // nada" por cima do que a pessoa fazia (dono, 22/10/2026). O menu fecha e o
+  // login espera, escondido, a próxima vez que o programa for aberto (ícone
+  // perto do relógio ou atalho).
   if (programaNaBandeja || (dashVivo && !programaNaFrente())) {
+    if (!loginWindow || loginWindow.isDestroyed()) createLoginWindow(false, false);
     programaNaBandeja = true;
     loginPediuParaAparecer = true;
     if (dashVivo) dashboardWindow.close();
@@ -5499,17 +5558,19 @@ ipcMain.handle('logout', async () => {
     return true;
   }
 
-  // Com o programa na frente, o login aparece POR CIMA do menu, já carregado,
-  // e só então o menu fecha (as duas são tela cheia no mesmo monitor). Antes o
-  // menu sumia primeiro e, até o login aparecer, via-se a área de trabalho: a
-  // tela "piscava". O login entra já desenhado (o fundo animado é pesado e
-  // dava um tranco ao começar com a tela à mostra); sem o aviso dele em
-  // 1,5 s, entra assim mesmo.
+  // Com o programa na frente, a própria janela do menu vira o login: nenhuma
+  // janela aparece nem some, então não há clarão nem piscada (virarLogin).
+  if (dashVivo) {
+    await virarLogin(dashboardWindow);
+    await gravandoSaida;
+    return true;
+  }
+
+  // Sem menu aberto: o login de sempre, já desenhado (sem o aviso dele em
+  // 1,5 s, aparece assim mesmo).
+  if (!loginWindow || loginWindow.isDestroyed()) createLoginWindow(false, false);
   await esperarLoginDesenhado(1500);
   await revealLoginWindow();
-  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-    dashboardWindow.close();
-  }
   await gravandoSaida;
   return true;
 });

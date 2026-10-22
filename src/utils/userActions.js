@@ -490,22 +490,24 @@ action('logout', () => {
   }
   localStorage.removeItem('rememberUser');
 
-  // Sair é imediato (dono, 22/10/2026): a tela vai num instante para a cor do
-  // login e o principal troca de janela assim que o login estiver pronto — ele
-  // aparece por cima e só então o menu fecha. Antes eram 4 s de esmaecimento,
-  // o login carregado aos 3 s e a troca aos 5 s, com a área de trabalho
-  // piscando entre uma tela e outra.
+  // Sair é imediato (dono, 22/10/2026): a tela escurece em 160 ms para a cor
+  // do login e, já toda nessa cor, a própria janela troca o menu pelo login
+  // (main.js, virarLogin) — nenhuma janela aparece nem some, então não há
+  // clarão. Antes eram 4 s de esmaecimento e duas janelas trocando de lugar.
   const overlay = document.getElementById('exitOverlay');
-  if (overlay) {
-    overlay.classList.remove('hidden');
-    void overlay.offsetWidth;
-    overlay.classList.add('visible');
-  }
-  Promise.resolve(window.electronAPI.logout()).catch(err => {
+  const trocar = () => Promise.resolve(window.electronAPI.logout()).catch(err => {
     console.error('Falha ao sair:', err);
     overlay?.classList.remove('visible');
     overlay?.classList.add('hidden');
   });
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    void overlay.offsetWidth;
+    overlay.classList.add('visible');
+    setTimeout(trocar, 170);
+  } else {
+    trocar();
+  }
 });
 
   action('close', () => window.electronAPI.closeWindow());
