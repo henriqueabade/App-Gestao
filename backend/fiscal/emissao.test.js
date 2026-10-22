@@ -234,6 +234,50 @@ test('espelho e emissão antecipam o envio somente nas parcelas livres e preserv
   assert.deepEqual(n.duplicatas.map(p => p.vencimento), ['2026-10-20']);
   assert.deepEqual(n.parcelasRegistradas, [], 'o XML não leva mais o bloco de vencimentos no infCpl');
   assert.equal(t.api.dados.pedido_parcelas[0].data_vencimento, '2026-08-20');
+  // Autorizada, a parcela livre passa a vencer no dia que foi na nota (22/10/2026).
+  assert.equal(t.api.dados.pedido_parcelas[1].data_vencimento, '2026-10-20');
+  assert.equal(emitida.vencimentos_conferidos, true);
+});
+
+test('PED114 (dono, 22/10/2026): enviado antes da previsão, nota e pedido saem com os MESMOS vencimentos — os boletos já os encontram', async () => {
+  const tabelas = tabelasBase();
+  // Previsão de embarque 01/10, prazo 28/42; o pedido sai em 15/09.
+  Object.assign(tabelas.pedidos[0], { faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-10-01', inicio_faturamento: '2026-10-01', prazo: '28/42' });
+  tabelas.pedido_parcelas[0].data_vencimento = '2026-10-29';
+  tabelas.pedido_parcelas[1].data_vencimento = '2026-11-12';
+  Object.assign(tabelas, { recebimentos: [], boletos: [], boletos_externos: [], ordens_pagamento: [] });
+  const t = montar({ tabelas });
+  const emitida = await t.emitir({ data_envio: '2026-09-15' });
+  assert.equal(emitida.autorizada, true);
+  const n = danfe.lerNfe(t.api.dados.notas_fiscais.find(nota => nota.id === emitida.nota.id).xml_envio);
+  assert.deepEqual(n.duplicatas.map(d => d.vencimento), ['2026-10-13', '2026-10-27'], 'na nota: do dia do envio');
+  assert.deepEqual(t.api.dados.pedido_parcelas.map(p => p.data_vencimento), ['2026-10-13', '2026-10-27'], 'no pedido: os mesmos dias');
+  assert.equal(emitida.vencimentos_conferidos, true, 'a tela pode gerar os boletos junto com o envio');
+  assert.equal(t.api.dados.pedidos[0].inicio_faturamento, '2026-10-01', 'o início do faturamento continua com o envio do pedido');
+});
+
+test('vencimentos da nota: falha ao gravar a parcela vira aviso e a tela espera o envio; sem data de envio, idem', async () => {
+  const tabelas = tabelasBase();
+  Object.assign(tabelas.pedidos[0], { faturamento_regra: 'ao_embarcar', embarcar_previsao: '2026-10-01', inicio_faturamento: '2026-10-01', prazo: '28/42' });
+  tabelas.pedido_parcelas[0].data_vencimento = '2026-10-29';
+  tabelas.pedido_parcelas[1].data_vencimento = '2026-11-12';
+  Object.assign(tabelas, { recebimentos: [], boletos: [], boletos_externos: [], ordens_pagamento: [] });
+  const t = montar({ tabelas });
+  const gravar = t.api.put;
+  t.api.put = async (caminho, corpo) => {
+    if (caminho === '/api/pedido_parcelas/2') { const e = new Error('Indisponível'); e.status = 503; throw e; }
+    return gravar(caminho, corpo);
+  };
+  const emitida = await t.emitir({ data_envio: '2026-09-15' });
+  assert.equal(emitida.autorizada, true, 'a nota é fato: a falha não a desfaz');
+  assert.equal(emitida.vencimentos_conferidos, false);
+  assert.ok(emitida.avisos.some(a => /parcela 2 vencendo em 27\/10\/2026/.test(a)), emitida.avisos.join(' | '));
+  assert.deepEqual(t.api.dados.pedido_parcelas.map(p => p.data_vencimento), ['2026-10-13', '2026-11-12']);
+
+  const sem = montar({ tabelas });
+  const semData = await sem.emitir({});
+  assert.equal(semData.vencimentos_conferidos, false, 'ao embarcar sem a data: o envio ainda conta de hoje');
+  assert.deepEqual(sem.api.dados.pedido_parcelas.map(p => p.data_vencimento), ['2026-10-29', '2026-11-12']);
 });
 
 test('espelho mantém bloqueios da emissão antes de gerar documento e não consome número', async () => {

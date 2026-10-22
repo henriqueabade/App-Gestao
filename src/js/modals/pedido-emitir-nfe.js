@@ -11,8 +11,9 @@
  *   2. pede o que só se sabe no embarque: frete, transportadora, volumes,
  *      pesos, forma de pagamento da NF-e e informações complementares;
  *   3. emite (POST /api/fiscal/pedidos/:id/emitir) e, SÓ com a nota autorizada,
- *      muda a situação (PUT /api/pedidos/:id/status). Rejeição da SEFAZ fica na
- *      tela com o motivo; o pedido continua em produção.
+ *      muda a situação (PUT /api/pedidos/:id/status) e gera os boletos — nunca
+ *      antes do envio (ver enviarComBoletos). Rejeição da SEFAZ fica na tela
+ *      com o motivo; o pedido continua em produção.
  *
  * "Enviar sem NF-e" continua existindo (pedido faturado por fora, cortesia):
  * pede confirmação e muda a situação sem nota. Quem já tem nota autorizada
@@ -808,7 +809,8 @@
     }
   }
 
-  async function marcarEnviado(nota) {
+  /** Só o PUT da situação; quem chama decide o que fazer com a resposta. */
+  async function enviarPedido(nota) {
     let resp;
     // O dia escolhido no cabeçalho é o do embarque (`embarcar_real` no pedido).
     const dataEnvio = conferirDataDeEnvio({ calado: true });
@@ -820,16 +822,52 @@
       });
     } catch (err) {
       console.error('Erro de rede ao marcar o pedido como enviado:', err);
-      exibirMensagem('erro', 'Não foi possível falar com o servidor. Tente de novo.');
-      return false;
+      return { ok: false, erro: 'Não foi possível falar com o servidor. Tente de novo.' };
     }
     const corpo = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      exibirMensagem('erro', `${mensagemDeErro(resp.status, corpo, 'enviar')}${nota ? ' A NF-e já está autorizada.' : ''}`);
+    if (!resp.ok) return { ok: false, erro: `${mensagemDeErro(resp.status, corpo, 'enviar')}${nota ? ' A NF-e já está autorizada.' : ''}` };
+    return { ok: true, status: resp.status, corpo };
+  }
+
+  async function marcarEnviado(nota) {
+    return terminarEnvio(nota, await enviarPedido(nota));
+  }
+
+  /**
+   * Nota autorizada: o pedido vai para Enviado e os boletos saem.
+   *
+   * O envio vem ANTES dos boletos (dono, 22/10/2026 — PED114): é ele que leva
+   * os vencimentos para o dia do embarque. O boleto gerado antes saía com o
+   * dia da previsão de embarque e ainda prendia a parcela nesse dia — nota,
+   * boleto e pedido com datas diferentes. Quando a emissão já gravou os
+   * vencimentos da nota (`vencimentos_conferidos`), os dois correm juntos:
+   * é a parte que mais demorava.
+   */
+  async function enviarComBoletos(nota, { juntos = false } = {}) {
+    if (estado.jaEnviado) {
+      await gerarBoletosSeMarcado(nota);
+      return concluirEmissao(nota);
+    }
+    if (juntos) {
+      const [envio] = await Promise.all([enviarPedido(nota), gerarBoletosSeMarcado(nota)]);
+      return terminarEnvio(nota, envio);
+    }
+    const envio = await enviarPedido(nota);
+    // Sem o envio, os vencimentos podem não ser os da nota: os boletos esperam a próxima tentativa.
+    if (envio.ok) await gerarBoletosSeMarcado(nota);
+    return terminarEnvio(nota, envio);
+  }
+
+  async function terminarEnvio(nota, envio) {
+    if (!envio.ok) {
+      exibirMensagem('erro', envio.erro);
+      // A nota já é fato: o botão passa a "marcar como enviado".
+      if (nota) { pintarNota(); pintarBotoes(); }
       return false;
     }
+    const corpo = envio.corpo;
     if (!nota) await dispensarNfe();
-    const mensagens = typeof window.mensagensDaTrocaDeStatus === 'function' ? window.mensagensDaTrocaDeStatus(true, resp.status, corpo) : [];
+    const mensagens = typeof window.mensagensDaTrocaDeStatus === 'function' ? window.mensagensDaTrocaDeStatus(true, envio.status, corpo) : [];
     window.showToast?.(nota ? `NF-e nº ${nota.numero} autorizada e pedido ${ctx.numero} enviado.` : `Pedido ${ctx.numero} marcado como enviado sem nota fiscal.`, 'success');
     mensagens.forEach(m => window.showToast?.(m.texto, m.tipo));
     window.dispatchEvent(new CustomEvent('pedido:enviado', { detail: { pedidoId, resposta: corpo, nota: nota || null } }));
@@ -878,11 +916,8 @@
     if (corpo?.nota) estado.notas = [corpo.nota, ...estado.notas.filter(n => Number(n.id) !== Number(corpo.nota.id))];
     (corpo?.avisos || []).forEach(a => window.showToast?.(a, 'info'));
     // Só com a nota autorizada a situação muda (embarque); pedido que já saiu só conclui.
-    // Antes, os boletos das parcelas (se a caixa estiver marcada): a nota já é fato.
-    if (corpo?.autorizada) {
-      await gerarBoletosSeMarcado(corpo.nota);
-      return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);
-    }
+    // E os boletos das parcelas (se a caixa estiver marcada): a nota já é fato.
+    if (corpo?.autorizada) return enviarComBoletos(corpo.nota, { juntos: Boolean(corpo.vencimentos_conferidos) });
     pintarNota();
     pintarBotoes();
     exibirMensagem('info', `A SEFAZ ainda está processando a nota (${corpo?.sefaz?.cStat || ''} ${corpo?.sefaz?.xMotivo || ''}). Clique em "Consultar na SEFAZ" em instantes${estado.jaEnviado ? '.' : '; o pedido continua em produção até a autorização.'}`);
@@ -932,9 +967,10 @@
     try {
       const acao = confirmarBtn.dataset.acao;
       if (acao === 'marcar') {
-        // Nota já autorizada numa tentativa anterior: os boletos podem ter ficado para trás.
-        await gerarBoletosSeMarcado(notaQueVale(estado.notas));
-        await marcarEnviado(notaQueVale(estado.notas));
+        // Nota já autorizada numa tentativa anterior: os boletos podem ter
+        // ficado para trás. Sem saber se os vencimentos já são os da nota, o
+        // envio vem primeiro.
+        await enviarComBoletos(notaQueVale(estado.notas));
       } else if (acao === 'emitir') await emitir(revisaoEspelho);
     } finally {
       emAndamento = false;

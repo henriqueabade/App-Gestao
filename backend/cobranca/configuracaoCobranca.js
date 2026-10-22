@@ -179,6 +179,17 @@ async function gravar(api, valores, usuarioId) {
 }
 
 /**
+ * Só o contador do nosso número, numa ida à API (o `gravar` lê antes e
+ * depois: três idas por boleto pesavam na emissão da nota — 22/10/2026). A
+ * corrida entre máquinas continua decidida pelo UNIQUE dos boletos.
+ */
+async function avancarSequencial(api, campo, valor, usuarioId) {
+  if (!['proximo_sequencial_producao', 'proximo_sequencial_sandbox'].includes(campo)) throw new Error(`Campo de sequencial desconhecido: ${campo}`);
+  await api.put('/api/configuracao_cobranca/1', { [campo]: valor, atualizado_em: new Date().toISOString(), atualizado_por: usuarioId ?? null });
+  limparCache();
+}
+
+/**
  * O ambiente que VALE nesta máquina: o do banco, rebaixado ao de testes
  * quando o .env desta máquina prende em testes (BB_AMBIENTE=sandbox ou
  * homologacao). Sem configuração é o de testes.
@@ -260,5 +271,5 @@ function pendencias(cfg, ambiente = SANDBOX, { secret = false } = {}) {
 
 module.exports = {
   CAMPOS, VALIDADE_MS, SANDBOX, PRODUCAO, AMBIENTES, CONTA_TESTE, PAGADOR_TESTE_CNPJ,
-  carregar, validar, gravar, limparCache, ambienteEfetivo, nomeDoAmbiente, dadosDaConta, credenciais, proximoSequencial, pendencias
+  carregar, validar, gravar, avancarSequencial, limparCache, ambienteEfetivo, nomeDoAmbiente, dadosDaConta, credenciais, proximoSequencial, pendencias
 };

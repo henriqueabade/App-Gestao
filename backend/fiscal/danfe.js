@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { campo, bloco } = require('./sefazCliente');
 const { parcelasRegistradasDoTexto } = require('./xmlNfe');
-const { retirarHistoricoParcelas } = require('./parcelasNfe');
+const { retirarHistoricoParcelas, comVencimentosDaNota } = require('./parcelasNfe');
 // "FOLHA 1/x": o total entra depois da primeira impressão (folhas.js + main.js).
 const { MARCA_TOTAL_DE_FOLHAS } = require('./folhas');
 
@@ -277,7 +277,7 @@ function montarDanfeHtml(xmlNfeProc, { cancelada = false, espelho = false, logo,
 
   // Indicador PAGO é somente visual: nunca escreve "PAGO" no dVenc do XML.
   const dataEmissao = String(n.dhEmi || '').slice(0, 10);
-  const linhas = Array.isArray(parcelasExibicao) && parcelasExibicao.length ? parcelasExibicao :
+  const linhas = Array.isArray(parcelasExibicao) && parcelasExibicao.length ? comVencimentosDaNota(parcelasExibicao, n.duplicatas) :
     n.duplicatas.map(dp => ({ numero: dp.numero, vencimento: dp.vencimento, valor: dp.valor }));
   const duplicatas = linhas.length
     ? `<table><tr>${linhas.map(dp => {

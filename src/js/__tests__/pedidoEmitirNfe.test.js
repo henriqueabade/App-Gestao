@@ -281,14 +281,22 @@ test('script: carrega a prontidão, emite antes de mudar a situação, solta os 
   assert.ok(FONTE.includes('/api/fiscal/pedidos/${encodeURIComponent(pedidoId)}/emitir'));
   // O envio leva a data escolhida no cabeçalho; sem data, o backend usa hoje.
   assert.ok(FONTE.includes("JSON.stringify(dataEnvio ? { status: 'Enviado', data_envio: dataEnvio } : { status: 'Enviado' })"));
-  // Linha a linha (o arquivo pode ter CRLF): emitir → autorizada → boletos (se marcado) → situação.
+  // Emitir → autorizada → situação e boletos (se marcado). O envio vem ANTES
+  // dos boletos (dono, 22/10/2026 — PED114): boleto gerado antes do envio saía
+  // com o dia da previsão de embarque e prendia a parcela nele. Juntos só
+  // quando a emissão já gravou os vencimentos da nota.
   const emitirEm = FONTE.indexOf('async function emitir(');
-  const boletosEm = FONTE.indexOf('await gerarBoletosSeMarcado(corpo.nota);', emitirEm);
-  const situacaoEm = FONTE.indexOf('return estado.jaEnviado ? concluirEmissao(corpo.nota) : marcarEnviado(corpo.nota);', boletosEm);
-  assert.ok(emitirEm > 0 && boletosEm > emitirEm && situacaoEm > boletosEm, 'só marca enviado com a nota autorizada; antes, os boletos se a caixa estiver marcada; pedido que já saiu só conclui');
+  assert.ok(emitirEm > 0 && FONTE.indexOf('if (corpo?.autorizada) return enviarComBoletos(corpo.nota, { juntos: Boolean(corpo.vencimentos_conferidos) });', emitirEm) > emitirEm,
+    'só envia com a nota autorizada');
+  const fluxoEm = FONTE.indexOf('async function enviarComBoletos(');
+  const fluxo = FONTE.slice(fluxoEm, FONTE.indexOf('async function terminarEnvio(', fluxoEm));
+  assert.ok(fluxoEm > 0 && /if \(estado\.jaEnviado\) \{\s*await gerarBoletosSeMarcado\(nota\);\s*return concluirEmissao\(nota\);/.test(fluxo), 'pedido que já saiu: boletos e conclui');
+  assert.ok(fluxo.includes('await Promise.all([enviarPedido(nota), gerarBoletosSeMarcado(nota)])'), 'vencimentos já gravados pela emissão: envio e boletos juntos');
+  const envioEm = fluxo.indexOf('const envio = await enviarPedido(nota);');
+  assert.ok(envioEm > 0 && fluxo.indexOf('if (envio.ok) await gerarBoletosSeMarcado(nota);') > envioEm, 'sem a garantia, os boletos só depois do envio que deu certo');
   const marcarEm = FONTE.indexOf("if (acao === 'marcar') {");
-  assert.ok(marcarEm > 0 && FONTE.indexOf('await gerarBoletosSeMarcado(notaQueVale(estado.notas));', marcarEm) > marcarEm
-    && FONTE.indexOf('await marcarEnviado(notaQueVale(estado.notas));', marcarEm) > FONTE.indexOf('await gerarBoletosSeMarcado(notaQueVale(estado.notas));', marcarEm), 'marcar como enviado também gera os boletos que faltam, antes de mudar a situação');
+  assert.ok(marcarEm > 0 && FONTE.indexOf('await enviarComBoletos(notaQueVale(estado.notas));', marcarEm) > marcarEm, 'marcar como enviado também gera os boletos que faltam, depois do envio');
+  assert.ok(!/await gerarBoletosSeMarcado\(corpo\.nota\);/.test(FONTE), 'nenhum boleto antes do envio');
   assert.ok(FONTE.includes('/api/cobranca/pedidos/${encodeURIComponent(pedidoId)}/boletos') && FONTE.includes("body: JSON.stringify({ parcelas: [], nota_fiscal_id: nota?.id ?? null })"), 'gera pelo POST da cobrança, ligando a NF-e');
   assert.ok(FONTE.includes('if (!caixa || caixa.disabled || !caixa.checked) return null;'), 'caixa desmarcada = nada é gerado');
   assert.ok(FONTE.includes('caixa.checked = Boolean(boletoEstado.gerar_ao_emitir_nfe) && Boolean(boletoEstado.pode_gerar);'), 'a caixa nasce marcada pela configuração, só quando dá para gerar');

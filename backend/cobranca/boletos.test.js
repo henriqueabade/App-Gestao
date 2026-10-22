@@ -171,6 +171,37 @@ test('registra as três parcelas: nosso número sequencial reservado, BB chamado
   assert.equal(bb.chamadas.length, 3);
 });
 
+test('nota demorando (dono, 22/10/2026): as parcelas vão ao BB ao mesmo tempo, sem bater no número da anterior e sem reler a configuração a cada boleto', async () => {
+  configuracao.limparCache();
+  const api = apiFalsa();
+  const idas = [];
+  for (const metodo of ['get', 'post', 'put']) {
+    const original = api[metodo];
+    api[metodo] = (caminho, ...resto) => { idas.push(`${metodo.toUpperCase()} ${caminho}`); return original(caminho, ...resto); };
+  }
+  let noBB = 0;
+  let maximoNoBB = 0;
+  const bb = {
+    async chamar({ corpo }) {
+      noBB += 1;
+      maximoNoBB = Math.max(maximoNoBB, noBB);
+      await new Promise(r => setTimeout(r, 20));
+      noBB -= 1;
+      return { numero: corpo.numeroTituloCliente, linhaDigitavel: '00190000090345348100800000393173116950000332700', codigoBarraNumerico: '00191169500003327000000003453481000000039317' };
+    }
+  };
+  const r = await registrar(api, bb);
+  assert.equal(r.registrados, 3);
+  assert.equal(maximoNoBB, 3, 'as três parcelas esperam o BB juntas');
+  assert.deepEqual(r.resultados.map(x => [x.numero_parcela, x.boleto.nosso_numero]), [
+    [1, '00031285570000000001'], [2, '00031285570000000002'], [3, '00031285570000000003']
+  ], 'os números seguem a ordem das parcelas');
+  assert.equal(idas.filter(i => i === 'POST /api/boletos').length, 3, 'nenhuma tentativa recusada pelo UNIQUE');
+  assert.equal(idas.filter(i => i === 'PUT /api/configuracao_cobranca/1').length, 3);
+  assert.equal(idas.filter(i => i.startsWith('GET /api/configuracao_cobranca')).length, 1, 'a configuração é lida uma vez');
+  assert.equal(api.dados.configuracao_cobranca[0].proximo_sequencial_sandbox, 4);
+});
+
 test('corrida pelo nosso número: outra máquina pegou o 1, o app pula para o 2 e o sequencial vai para 3', async () => {
   configuracao.limparCache();
   const api = apiFalsa(tabelasBase(), { corridas: 1 });

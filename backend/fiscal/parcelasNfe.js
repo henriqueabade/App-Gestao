@@ -122,6 +122,21 @@ function parcelasParaDanfe({ parcelas = [], pedidoId, recebimentos = [], boletos
   });
 }
 
+/**
+ * O DANFE imprime o vencimento que está NA NOTA (dono, 22/10/2026 — PED114).
+ * As parcelas do pedido podem mudar depois da emissão; o XML autorizado, não.
+ * A parcela em aberto pega a data da duplicata do XML na mesma ordem (o XML
+ * só tem as em aberto que não venceram). A paga continua PAGO, sem data, e a
+ * vencida continua VENCIDO. Se as contas não fecham (parcela que mudou ou foi
+ * paga no dia da emissão), fica como o pedido está — sem adivinhar.
+ */
+function comVencimentosDaNota(linhas = [], duplicatas = []) {
+  const abertas = linhas.filter(p => p.situacao === 'em_aberto');
+  if (!duplicatas.length || abertas.length !== duplicatas.length) return linhas;
+  let i = 0;
+  return linhas.map(p => (p.situacao === 'em_aberto' ? { ...p, vencimento: diaValido(duplicatas[i++].vencimento) || p.vencimento } : p));
+}
+
 /** Não mostrar o bloco antigo em DANFEs de XMLs previamente emitidos. */
 function retirarHistoricoParcelas(texto) {
   const original = String(texto || '');
@@ -133,6 +148,6 @@ function retirarHistoricoParcelas(texto) {
 }
 
 module.exports = {
-  registrarParcelas, parcelasParaDanfe, retirarHistoricoParcelas,
+  registrarParcelas, parcelasParaDanfe, comVencimentosDaNota, retirarHistoricoParcelas,
   textoDasParcelas, parcelasRegistradasDoTexto, textoLivreSemMarcadores
 };

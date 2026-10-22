@@ -167,6 +167,36 @@ test('espelho mostra PAGO só com quitação anterior e sem quadro/histórico ex
   }
 });
 
+test('PED114 (dono, 22/10/2026): o DANFE imprime o vencimento que está NA NOTA, não o do pedido mudado depois; o pago continua PAGO', () => {
+  const { parcelasParaDanfe } = require('./parcelasNfe');
+  const recebimentos = [{ id: 1, pedido_id: 55, numero_parcela: 1, status: 'confirmado', valor_recebido: 282, data_recebimento: '2026-10-10' }];
+  const montada = xmlNfe.montarNfe({
+    configuracao: CONFIG, ambiente: 'producao', serie: 1, numero: 376, cNF: '14000305', dhEmi: new Date('2026-10-15T13:59:00-03:00'),
+    pedido: PEDIDO, cliente: CLIENTE, itens: ITENS, produtos: PRODUTOS,
+    parcelas: [
+      { id: 1, numero_parcela: 1, valor: 282, data_vencimento: '2026-08-20' },
+      { id: 2, numero_parcela: 2, valor: 282, data_vencimento: '2026-10-20' }
+    ],
+    recebimentos, transporte: { modalidade_frete: 9 }, verProc: 'Santissimo 1.1.1'
+  });
+  // Depois da emissão o pedido ficou com outra data (o boleto saiu com a da previsão).
+  const doPedido = [
+    { id: 1, numero_parcela: 1, valor: 282, data_vencimento: '2026-08-20' },
+    { id: 2, numero_parcela: 2, valor: 282, data_vencimento: '2026-11-30' }
+  ];
+  const exibidas = parcelasParaDanfe({ parcelas: doPedido, pedidoId: 55, recebimentos, dataEmissao: '2026-10-15' });
+  const html = danfe.montarDanfeHtml(montada.xml, { parcelasExibicao: exibidas });
+  const fatura = html.slice(html.indexOf('Fatura / Duplicatas'), html.indexOf('Cálculo do imposto'));
+  assert.match(fatura, /376\/001<\/b><br>PAGO<br>/, 'pago antes da emissão: PAGO, sem data');
+  assert.match(fatura, /376\/002<\/b><br>20\/10\/2026<br>/, 'a data do XML');
+  assert.doesNotMatch(fatura, /30\/11\/2026/);
+
+  // Quando as contas não fecham (mais parcelas em aberto que duplicatas), fica o que o pedido diz.
+  const tres = [...exibidas, { numero: '003', vencimento: '2026-12-30', valor: 10, situacao: 'em_aberto', valor_pago: 0, saldo: 10 }];
+  const outro = danfe.montarDanfeHtml(montada.xml, { parcelasExibicao: tres });
+  assert.match(outro.slice(outro.indexOf('Fatura / Duplicatas')), /376\/002<\/b><br>30\/11\/2026<br>/);
+});
+
 test('pagamento posterior à emissão não aparece como PAGO', () => {
   const { parcelasParaDanfe } = require('./parcelasNfe');
   const parcelas = [{ numero_parcela: 1, valor: 294, data_vencimento: '2026-11-01' }];

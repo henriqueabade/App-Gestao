@@ -190,15 +190,24 @@ async function registrarEvento(api, notaId, { tipo, status_anterior = null, stat
   }
 }
 
-async function apagarItens(api, notaId) {
-  const itens = await api.get('/api/notas_fiscais_itens', { query: { nota_fiscal_id: notaId } }).then(lista).catch(() => []);
-  for (const item of itens) {
-    if (item?.id) await api.delete(`/api/notas_fiscais_itens/${item.id}`);
+/**
+ * Várias idas à API ao mesmo tempo, `limite` por vez. Cada ida custa ~120 ms
+ * até a API (22/10/2026): uma por item, em fila, pesava na emissão. O
+ * `numero_item` vai gravado, então a ordem de chegada não importa.
+ */
+async function emLotes(lista, limite, fn) {
+  for (let i = 0; i < lista.length; i += limite) {
+    await Promise.all(lista.slice(i, i + limite).map(fn));
   }
 }
 
+async function apagarItens(api, notaId) {
+  const itens = await api.get('/api/notas_fiscais_itens', { query: { nota_fiscal_id: notaId } }).then(lista).catch(() => []);
+  await emLotes(itens.filter(item => item?.id), 6, item => api.delete(`/api/notas_fiscais_itens/${item.id}`));
+}
+
 async function gravarItens(api, notaId, itens) {
-  for (const item of itens) await api.post('/api/notas_fiscais_itens', { ...item, nota_fiscal_id: notaId });
+  await emLotes(itens, 6, item => api.post('/api/notas_fiscais_itens', { ...item, nota_fiscal_id: notaId }));
 }
 
 /** O banco disse que o número (ou a chave de idempotência) já existe. */
@@ -228,7 +237,7 @@ async function reservarNumero({ api, cfg, ambiente, base, usuarioId }) {
     }
     const id = primeiroId(criada);
     if (!id) throw erro('A API não devolveu o id da nota criada.', 502);
-    await configuracao.gravar(api, { [campoProximo]: numero + 1 }, usuarioId);
+    await configuracao.avancarNumero(api, campoProximo, numero + 1, usuarioId);
     return { ...linha, ...(criada && typeof criada === 'object' && !Array.isArray(criada) ? criada : {}), id, serie, numero };
   }
   throw erro(`Não foi possível reservar um número de NF-e (${TENTATIVAS_NUMERO} tentativas).`, 409);
@@ -478,17 +487,58 @@ function montarXmlDoPedido({ dados, entrada, ambiente, serie, numero, instante, 
   });
 }
 
-/** Antecipa, sem gravar, a mesma reprogramação de parcelas livres do envio. */
+/**
+ * Antecipa, sem gravar, a mesma reprogramação de parcelas livres do envio.
+ *
+ * `vencimentosDoEnvio` diz se o envio (PUT da situação) ainda vai mexer nos
+ * vencimentos: sem a data de envio, num pedido "ao embarcar", ele conta de
+ * hoje e pode mudar o que a nota levou. `parcelasDoBanco` é o que estava
+ * gravado antes da projeção, para gravar depois só o que mudou.
+ */
 async function dadosParaEnvio(api, dados, entrada) {
-  if (!entrada.data_envio || String(dados.pedido.situacao || '').trim().toLowerCase() === 'enviado') return dados;
+  const jaEnviado = String(dados.pedido.situacao || '').trim().toLowerCase() === 'enviado';
+  if (jaEnviado) return { ...dados, vencimentosDoEnvio: true };
+  if (!entrada.data_envio) {
+    return { ...dados, vencimentosDoEnvio: String(dados.pedido.faturamento_regra || '').trim() !== 'ao_embarcar' };
+  }
   const diaEnvio = faturamento.diaValido(entrada.data_envio);
   if (!diaEnvio) throw erro('A data de envio não é válida.');
   const inicio = faturamento.inicioAposEmbarque(dados.pedido, diaEnvio);
-  if (!inicio) return dados;
+  if (!inicio) return { ...dados, vencimentosDoEnvio: true };
   const avisos = [];
   const parcelas = await faturamento.projetarParcelas(api, dados.pedido.id, inicio, dados.pedido.prazo, avisos);
   if (avisos.length) throw erro('Não foi possível conferir os vencimentos do envio. Tente novamente antes de emitir.', 422, { avisos });
-  return { ...dados, parcelas };
+  return { ...dados, parcelas, parcelasDoBanco: dados.parcelas, vencimentosDoEnvio: true };
+}
+
+/**
+ * Nota autorizada: as parcelas passam a vencer nos dias que foram na nota
+ * (dono, 22/10/2026 — PED114). Antes, só o envio do pedido gravava os dias
+ * novos; os boletos saíam antes dele, com os dias da previsão de embarque, e
+ * ainda travavam as parcelas nesses dias. Nota, boletos e pedido ficavam com
+ * datas diferentes. Gravar aqui deixa os três iguais, seja qual for a ordem do
+ * que vem depois.
+ *
+ * Só as parcelas que a projeção mudou, uma ida por parcela. Falha vira aviso
+ * e `ok: false`: aí a tela espera o envio antes de gerar os boletos.
+ */
+async function gravarVencimentosDaNota(api, dados) {
+  if (!dados.parcelasDoBanco) return { ok: dados.vencimentosDoEnvio === true, avisos: [] };
+  const antes = new Map(dados.parcelasDoBanco.map(p => [String(p.id), faturamento.diaValido(p.data_vencimento)]));
+  const mudaram = dados.parcelas.filter(p => {
+    const novo = faturamento.diaValido(p.data_vencimento);
+    return novo && antes.has(String(p.id)) && antes.get(String(p.id)) !== novo;
+  });
+  const avisos = [];
+  await Promise.all(mudaram.map(async p => {
+    try {
+      await api.put(`/api/pedido_parcelas/${p.id}`, { data_vencimento: faturamento.diaValido(p.data_vencimento) });
+    } catch (e) {
+      const dia = String(p.data_vencimento).slice(0, 10).split('-').reverse().join('/');
+      avisos.push(`A nota saiu com a parcela ${p.numero_parcela ?? ''} vencendo em ${dia}, mas o pedido não foi atualizado (${e?.message || e}). Confira o vencimento no pedido.`);
+    }
+  }));
+  return { ok: avisos.length === 0, avisos };
 }
 
 const escolherCampos = (linha, campos) => Object.fromEntries(campos.map(c => [c, linha?.[c] ?? null]));
@@ -657,7 +707,12 @@ async function emitir({
       await registrarEvento(api, nota.id, { tipo: 'erro', status_anterior: 'enviando', status_novo: status, mensagem: e.message, usuario_id: usuarioId });
       throw erro(chegou ? `${e.message} A nota ficou "processando": use "Consultar na SEFAZ" para saber se foi autorizada.` : e.message, e.status || 502, { nota: semXml(atual) });
     }
-    return aplicarRetornoDoEnvio({ api, nota, retorno, xmlAssinado, usuarioId, uf: cfg.uf, ambiente, transporte, esperar, avisos: montada.avisos });
+    const resultado = await aplicarRetornoDoEnvio({ api, nota, retorno, xmlAssinado, usuarioId, uf: cfg.uf, ambiente, transporte, esperar, avisos: montada.avisos });
+    if (!resultado.autorizada) return resultado;
+    const vencimentos = await gravarVencimentosDaNota(api, dados);
+    // `vencimentos_conferidos`: o pedido já vence nos dias da nota e o envio
+    // não vai mudá-los — a tela pode gerar os boletos junto com o envio.
+    return { ...resultado, avisos: [...(resultado.avisos || []), ...vencimentos.avisos], vencimentos_conferidos: vencimentos.ok };
   });
 }
 
@@ -696,6 +751,6 @@ async function sincronizar({ api, notaId, transporte, usuarioId = null }) {
 
 module.exports = {
   STATUS_REUTILIZAVEIS, TENTATIVAS_NUMERO, REJEICOES_NUMERO_OCUPADO,
-  semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel, numeroOcupadoNaSefaz, chaveCitada,
+  semXml, lerPedidoFiscal, lerNota, listarNotas, cartasPorNota, ehNumeroDuplicado, reservarNumero, notaReutilizavel, numeroOcupadoNaSefaz, chaveCitada, gravarVencimentosDaNota,
   volumesDetalhados, camposTransporteDoPedido, gravarTransporteNoPedido, emitir, espelho, sincronizar
 };

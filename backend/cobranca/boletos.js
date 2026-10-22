@@ -409,10 +409,14 @@ async function gravarTotalDoPedido({ api, pedido, parcelas, plano, usuarioId }) 
 
 // -------------------------------------------------------------- registro
 
-/** Reserva um nosso número novo: linha "reservado" com o UNIQUE; avança o sequencial. */
-async function reservarBoleto({ api, cfg, ambiente, base, usuarioId }) {
+/**
+ * Reserva um nosso número novo: linha "reservado" com o UNIQUE; avança o
+ * sequencial. `inicio` é o próximo que esta geração já sabe (a configuração
+ * lida no começo não vê os números que ela mesma acabou de usar).
+ */
+async function reservarBoleto({ api, cfg, ambiente, base, usuarioId, inicio: sabido = null }) {
   const campo = ambiente === configuracao.PRODUCAO ? 'proximo_sequencial_producao' : 'proximo_sequencial_sandbox';
-  const inicio = configuracao.proximoSequencial(cfg, ambiente);
+  const inicio = Math.max(Number(sabido) || 0, configuracao.proximoSequencial(cfg, ambiente));
   for (let i = 0; i < TENTATIVAS_NUMERO; i++) {
     const sequencial = inicio + i;
     const nn = calculo.nossoNumero(configuracao.dadosDaConta(cfg, ambiente).convenio, sequencial);
@@ -429,7 +433,7 @@ async function reservarBoleto({ api, cfg, ambiente, base, usuarioId }) {
     }
     const id = primeiroId(criada);
     if (!id) throw erro('A API não devolveu o id do boleto criado.', 502);
-    await configuracao.gravar(api, { [campo]: sequencial + 1 }, usuarioId);
+    await configuracao.avancarSequencial(api, campo, sequencial + 1, usuarioId);
     const reservado = { ...linha, ...(criada && typeof criada === 'object' && !Array.isArray(criada) ? criada : {}), id };
     await registrarEvento(api, id, { tipo: 'reservado', nosso_numero: nn.numeroTituloCliente, mensagem: `Nosso número ${nn.formatado} reservado (${ambiente}).`, usuario_id: usuarioId });
     return reservado;
@@ -464,7 +468,7 @@ async function renumerar({ api, boleto, ambiente, usuarioId, motivo }) {
       if (ehNumeroDuplicado(e)) continue;
       throw e;
     }
-    await configuracao.gravar(api, { [campo]: sequencial + 1 }, usuarioId);
+    await configuracao.avancarSequencial(api, campo, sequencial + 1, usuarioId);
     await registrarEvento(api, boleto.id, {
       tipo: 'renumerado', nosso_numero: nn.numeroTituloCliente,
       mensagem: `Nosso número ${boleto.nosso_numero} já existia no BB; trocado por ${nn.formatado}. (${String(motivo || '').slice(0, 300)})`, usuario_id: usuarioId
@@ -527,29 +531,39 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
 
   const notaId = notaFiscalId ?? dados.notaViva?.id ?? null;
   const notaNumero = dados.notaViva ? `${dados.notaViva.numero} SERIE ${dados.notaViva.serie}` : null;
-  const resultados = [];
+  // As parcelas andam JUNTAS (dono, 22/10/2026: a nota demorava a sair).
+  // Cada boleto era uma fila de idas à API e uma ida ao BB, um depois do
+  // outro. Agora só a reserva do nosso número é uma por vez — o contador é
+  // um só —, e o BB e a gravação de cada parcela correm ao mesmo tempo.
+  let filaDeNumeros = Promise.resolve();
+  const umaReservaPorVez = fn => {
+    const vez = filaDeNumeros.then(fn);
+    filaDeNumeros = vez.catch(() => {});
+    return vez;
+  };
+  // O próximo número sai daqui, não da configuração lida no começo: com ela,
+  // a 2ª parcela tentava o número da 1ª e só passava depois da recusa do UNIQUE.
+  let proximoNumero = configuracao.proximoSequencial(cfgCobranca, ambiente);
+  // A coluna do desconto existe ou não para todos os boletos: confere uma vez.
+  let conferenciaDoDesconto = null;
 
-  for (const parcela of alvo) {
+  async function registrarParcela(parcela) {
     // Boleto emitido fora e informado: a parcela já está cobrada — não vai ao BB.
     const deFora = externas.boletoExternoDaParcela(dados.boletosExternos, parcela);
     if (deFora) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, externo: true, boleto_externo: externas.boletoParaTela(deFora) });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, externo: true, boleto_externo: externas.boletoParaTela(deFora) };
     }
     const existente = boletoDaParcela(dados.boletos, parcela);
     if (ocupaParcela(existente)) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, boleto: enxuto(existente) });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, ja_existia: true, boleto: enxuto(existente) };
     }
     const paga = pagamentoDaParcela(dados.recebimentos, parcela);
     if (paga) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, paga: true, erro: textoDaParcelaPaga(parcela, paga) });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, paga: true, erro: textoDaParcelaPaga(parcela, paga) };
     }
     const ordem = ordemDaParcela(dados.ordens, parcela);
     if (ordem) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, com_ordem: true, erro: textoDaParcelaComOrdem(parcela, ordem) });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, com_ordem: true, erro: textoDaParcelaComOrdem(parcela, ordem) };
     }
     // O boleto novo no lugar do cancelado fica ligado a ele (histórico e auditoria).
     const cancelado = canceladoNaParcela(dados.boletos, parcela);
@@ -572,8 +586,7 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
         desconto: descontos?.get(Number(parcela.numero_parcela)) || 0
       });
     } catch (e) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, pendencias: e.extra?.pendencias || [] });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, pendencias: e.extra?.pendencias || [] };
     }
 
     const base = {
@@ -595,22 +608,26 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
         boleto = await atualizarBoleto(api, existente, { ...base, status: 'reservado' });
         await registrarEvento(api, boleto.id, { tipo: 'reservado', nosso_numero: boleto.nosso_numero, mensagem: `Nosso número reaproveitado (estava "${existente.status}").`, usuario_id: usuarioId });
       } else {
-        boleto = await reservarBoleto({ api, cfg: cfgCobranca, ambiente, base, usuarioId });
+        boleto = await umaReservaPorVez(async () => {
+          const reservado = await reservarBoleto({ api, cfg: cfgCobranca, ambiente, base, usuarioId, inicio: proximoNumero });
+          proximoNumero = Number(reservado.sequencial) + 1;
+          return reservado;
+        });
       }
     } catch (e) {
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message });
-      continue;
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message };
     }
     // Boleto com desconto só vai ao BB se o banco guardou o desconto: sem a
     // coluna, a parcela ficaria valendo o cheio aqui dentro.
     if (montado.desconto) {
-      const lido = await api.get(`/api/boletos/${boleto.id}`).catch(() => null);
-      if (!descontoCondicional.colunasProntas(lido)) {
+      if (!conferenciaDoDesconto) {
+        conferenciaDoDesconto = api.get(`/api/boletos/${boleto.id}`).catch(() => null).then(lido => descontoCondicional.colunasProntas(lido));
+      }
+      if (!(await conferenciaDoDesconto)) {
         boleto = await atualizarBoleto(api, boleto, { status: 'erro', erro: descontoCondicional.SQL_FALTANDO }).catch(() => boleto);
         await registrarEvento(api, boleto.id, { tipo: 'erro', nosso_numero: boleto.nosso_numero, mensagem: descontoCondicional.SQL_FALTANDO, usuario_id: usuarioId });
         dados.boletos.unshift(boleto);
-        resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: descontoCondicional.SQL_FALTANDO, sql_pendente: true, boleto: enxuto(boleto) });
-        continue;
+        return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: descontoCondicional.SQL_FALTANDO, sql_pendente: true, boleto: enxuto(boleto) };
       }
     }
     // O payload vai com o nosso número que foi reservado de fato (pode ter pulado por corrida).
@@ -626,7 +643,8 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
           // O BB já tem esse nosso número (na homologação o convênio de teste é
           // de todos os desenvolvedores): pula para o próximo livre e tenta de novo.
           if (!ehNossoNumeroJaIncluido(e) || tentativa >= TENTATIVAS_NO_BB) throw e;
-          boleto = await renumerar({ api, boleto, ambiente, usuarioId, motivo: e.message });
+          const atual = boleto;
+          boleto = await umaReservaPorVez(() => renumerar({ api, boleto: atual, ambiente, usuarioId, motivo: e.message }));
           payload = { ...payload, numeroTituloCliente: boleto.nosso_numero };
         }
       }
@@ -654,15 +672,18 @@ async function registrar({ api, pedidoId, parcelaIds = [], notaFiscalId = null, 
         ].filter(Boolean);
         await registrarEvento(api, boleto.id, { tipo: 'parcela_ajustada', nosso_numero: boleto.nosso_numero, mensagem: `${partes.join(' · ')}.`, usuario_id: usuarioId });
       }
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, boleto: enxuto(boleto), ...(aviso ? { aviso } : {}) });
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: true, boleto: enxuto(boleto), ...(aviso ? { aviso } : {}) };
     } catch (e) {
       const detalhe = e?.extra?.bb ? { bb: e.extra.bb, http: e.extra.http } : null;
       boleto = await atualizarBoleto(api, boleto, { status: 'erro', erro: String(e.message || e).slice(0, 2000), requisicao: payload, resposta: detalhe?.bb || null }).catch(() => boleto);
       await registrarEvento(api, boleto.id, { tipo: 'erro', nosso_numero: boleto.nosso_numero, mensagem: e.message, payload: detalhe, usuario_id: usuarioId });
       dados.boletos.unshift(boleto);
-      resultados.push({ parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, boleto: enxuto(boleto) });
+      return { parcela_id: parcela.id, numero_parcela: parcela.numero_parcela, ok: false, erro: e.message, boleto: enxuto(boleto) };
     }
   }
+
+  // Na ordem das parcelas, seja qual for a ordem em que o BB respondeu.
+  const resultados = await Promise.all(alvo.map(registrarParcela));
 
   // O total do pedido acompanha as parcelas que mudaram de valor (com a justificativa no histórico).
   let total = null;

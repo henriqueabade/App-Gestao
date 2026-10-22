@@ -174,6 +174,17 @@ async function gravar(api, valores, usuarioId) {
 }
 
 /**
+ * Só o próximo número da NF-e, numa ida à API (o `gravar` lê antes e depois:
+ * três idas que pesavam na emissão — 22/10/2026). A corrida entre máquinas
+ * continua decidida pelo UNIQUE das notas.
+ */
+async function avancarNumero(api, campo, valor, usuarioId) {
+  if (!['proximo_numero_producao', 'proximo_numero_homologacao'].includes(campo)) throw new Error(`Campo de numeração desconhecido: ${campo}`);
+  await api.put('/api/configuracao_fiscal/1', { [campo]: valor, atualizado_em: new Date().toISOString(), atualizado_por: usuarioId ?? null });
+  limparCache();
+}
+
+/**
  * O ambiente que VALE nesta máquina: o do banco, rebaixado a homologação
  * quando o .env desta máquina prende em homologação. Sem configuração no
  * banco é homologação — o padrão seguro.
@@ -209,5 +220,5 @@ function pendencias(cfg) {
 
 module.exports = {
   CAMPOS, VALIDADE_MS, HOMOLOGACAO, PRODUCAO,
-  carregar, validar, gravar, limparCache, ambienteEfetivo, numeracao, pendencias
+  carregar, validar, gravar, avancarNumero, limparCache, ambienteEfetivo, numeracao, pendencias
 };
