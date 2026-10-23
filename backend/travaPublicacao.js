@@ -9,12 +9,16 @@
  * máquina — ninguém conseguiria entrar no sistema — e levaria junto, dentro de
  * cada instalador, o usuário e a senha do banco de desenvolvimento.
  *
- * LÊ O ARQUIVO, NÃO O MODO EM QUE O APP ESTÁ RODANDO
- * --------------------------------------------------
- * O modo do app é decidido na inicialização (`dataConfig.js`); o que vai para o
- * instalador é o arquivo como está NO MOMENTO da publicação. Quem troca o `.env`
- * para PROD sem reiniciar publica certo — e quem inicia em PROD e depois troca
- * o arquivo para DEV seria pego só lendo o arquivo.
+ * LÊ O ARQUIVO E TAMBÉM O MODO EM QUE O APP ESTÁ RODANDO
+ * -------------------------------------------------------
+ * O que vai para o instalador é o arquivo como está NO MOMENTO da publicação:
+ * quem inicia em PROD e depois troca o arquivo para DEV só é pego lendo o
+ * arquivo. Mas o processo pode estar em DEV com o arquivo em PROD — o ambiente
+ * do processo vale mais que o `.env` (`dataConfig.js`), e é assim que o
+ * iniciador de homologação roda (BANCO=DEV no ambiente). Publicar de dentro de
+ * um programa em DEV, ou de uma máquina DEV isolada
+ * (APP_GESTAO_AMBIENTE_ISOLADO=1), também é bloqueado — antes de token,
+ * versão ou subprocesso (`verificarAmbienteParaPublicar`).
  *
  * SEM EFEITOS COLATERAIS
  * ----------------------
@@ -27,10 +31,11 @@ const fs = require('fs');
 const dotenv = require('dotenv');
 
 const CODIGO = 'BANCO_DEV_BLOQUEIA_PUBLICACAO';
+const CODIGO_ISOLADO = 'AMBIENTE_ISOLADO_BLOQUEIA_PUBLICACAO';
 
-function erro(mensagem) {
+function erro(mensagem, codigo = CODIGO) {
   const e = new Error(mensagem);
-  e.code = CODIGO;
+  e.code = codigo;
   return e;
 }
 
@@ -76,6 +81,36 @@ function verificarBancoParaPublicar(caminhoEnv) {
 }
 
 /**
+ * O programa que está rodando pode publicar? `null` se sim.
+ *
+ * `env.BANCO` é o modo EFETIVO: o `dataConfig.js` só copia o BANCO do `.env`
+ * quando o ambiente do processo não o define. Sem BANCO no ambiente (terminal
+ * comum, testes) não há o que bloquear aqui — o arquivo é conferido à parte.
+ */
+function verificarProcessoParaPublicar(env = process.env, { isolado = false } = {}) {
+  if (isolado || String(env.APP_GESTAO_AMBIENTE_ISOLADO || '').trim() === '1') {
+    return erro(
+      'Publicação bloqueada: este programa está num ambiente DEV isolado (APP_GESTAO_AMBIENTE_ISOLADO).\n\n'
+      + 'Publicar daqui mandaria aos clientes um instalador montado fora do ambiente de produção. '
+      + 'Publique pelo programa aberto em produção (BANCO=PROD).', CODIGO_ISOLADO);
+  }
+  const banco = String(env.BANCO ?? '').trim().toUpperCase();
+  if (banco && banco !== 'PROD') {
+    return erro(
+      `Publicação bloqueada: o programa está rodando com BANCO=${banco}.\n\n`
+      + 'O modo definido no ambiente do processo vale mais que o .env (é assim que o iniciador '
+      + 'de homologação abre o programa), mesmo com o .env em BANCO=PROD. '
+      + 'Feche e abra o programa em produção para publicar.');
+  }
+  return null;
+}
+
+/** Tudo o que impede publicar: primeiro o programa em execução, depois o arquivo. */
+function verificarAmbienteParaPublicar({ env = process.env, caminhoEnv, isolado = false } = {}) {
+  return verificarProcessoParaPublicar(env, { isolado }) || verificarBancoParaPublicar(caminhoEnv);
+}
+
+/**
  * O electron-builder vai publicar nesta execução?
  *
  * `--publish never` e a ausência da opção só GERAM o instalador — isso
@@ -95,16 +130,19 @@ function estaPublicando(argv = process.argv) {
 }
 
 /** Para o electron-builder: lança quando a execução publicaria em DEV. */
-function exigirBancoProdParaPublicar({ argv = process.argv, caminhoEnv }) {
+function exigirBancoProdParaPublicar({ argv = process.argv, caminhoEnv, env = process.env }) {
   if (!estaPublicando(argv)) return;
-  const bloqueio = verificarBancoParaPublicar(caminhoEnv);
+  const bloqueio = verificarAmbienteParaPublicar({ env, caminhoEnv });
   if (bloqueio) throw bloqueio;
 }
 
 module.exports = {
   CODIGO,
+  CODIGO_ISOLADO,
   bancoDoPacote,
   verificarBancoParaPublicar,
+  verificarProcessoParaPublicar,
+  verificarAmbienteParaPublicar,
   estaPublicando,
   exigirBancoProdParaPublicar
 };

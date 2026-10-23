@@ -4560,6 +4560,20 @@ ipcMain.handle('publish-update', async (_event, payload) => {
     };
   }
 
+  // Programa em DEV (BANCO=DEV no ambiente, mesmo com o .env em PROD), máquina
+  // DEV isolada ou .env em DEV: para AQUI — antes de gravar a versão, conferir
+  // o token ou abrir processo (backend/travaPublicacao.js).
+  const bloqueioDeAmbiente = publisher.verificarAmbienteDePublicacao();
+  if (bloqueioDeAmbiente) {
+    recordPublishAudit('publish-blocked', { code: bloqueioDeAmbiente.code });
+    return {
+      success: false,
+      code: bloqueioDeAmbiente.code,
+      message: bloqueioDeAmbiente.message,
+      ...publishState
+    };
+  }
+
   if (publishState.publishing || publisher.isPublishing()) {
     return {
       success: false,

@@ -112,16 +112,69 @@ test('publicar em DEV lança; só gerar o instalador em DEV continua livre', () 
 // Os dois caminhos de publicação estão amarrados à trava
 // ---------------------------------------------------------------------------
 
-test('o botão "Publicar atualização" confere o banco ANTES do token', () => {
+test('o botão "Publicar atualização" confere o ambiente e o banco ANTES do token', () => {
   const fonte = ler('backend/publisher.js');
   const validacao = fonte.slice(fonte.indexOf('function validatePublishEnvironment('));
 
-  const banco = validacao.indexOf('verificarBancoParaPublicar(');
+  const ambiente = validacao.indexOf('verificarAmbienteDePublicacao(');
   const token = validacao.indexOf('getFreshGithubToken(');
-  assert.ok(banco > 0, 'validatePublishEnvironment não confere o banco');
+  assert.ok(ambiente > 0, 'validatePublishEnvironment não confere o ambiente');
   // Nem vale conferir credencial de uma publicação que não pode acontecer.
-  assert.ok(banco < token, 'o banco precisa ser conferido antes do token');
-  assert.match(validacao, /verificarBancoParaPublicar\(path\.join\(projectRoot, '\.env'\)\)/);
+  assert.ok(ambiente < token, 'o ambiente precisa ser conferido antes do token');
+  // E o ambiente inclui o .env do projeto e o modo do processo.
+  assert.match(fonte, /verificarAmbienteParaPublicar\(\{ env: process\.env, caminhoEnv, isolado: Boolean\(isolamento && isolamento\.ativo\) \}\)/);
+  assert.match(fonte, /const envDoProjeto = path\.join\(projectRoot, '\.env'\);/);
+});
+
+test('o botão bloqueia o ambiente DEV antes de gravar a versão, conferir o token ou abrir processo', () => {
+  const fonte = ler('main.js');
+  const inicio = fonte.indexOf("ipcMain.handle('publish-update'");
+  const tratador = fonte.slice(inicio, fonte.indexOf('\n});', inicio));
+  const bloqueio = tratador.indexOf('publisher.verificarAmbienteDePublicacao()');
+  assert.ok(bloqueio > 0, 'o botão não confere o ambiente');
+  assert.ok(bloqueio > tratador.indexOf('isSupAdmin'), 'quem pode publicar é conferido antes');
+  for (const depois of ['applyProjectVersion(', 'runPublishPipeline(']) {
+    assert.ok(bloqueio < tratador.indexOf(depois), `o ambiente tem de ser conferido antes de ${depois}`);
+  }
+  assert.match(tratador, /message: bloqueioDeAmbiente\.message/, 'a caixa de erro mostra o motivo');
+});
+
+// ---------------------------------------------------------------------------
+// O programa em execução (e não só o arquivo)
+// ---------------------------------------------------------------------------
+
+test('programa rodando em DEV bloqueia mesmo com o .env em PROD (ambiente vale mais que o arquivo)', () => {
+  const emProd = envCom('BANCO=PROD\n');
+  const bloqueio = trava.verificarAmbienteParaPublicar({ env: { BANCO: 'DEV' }, caminhoEnv: emProd });
+  assert.ok(bloqueio, 'publicou de dentro de um programa em DEV');
+  assert.equal(bloqueio.code, trava.CODIGO);
+  assert.match(bloqueio.message, /rodando com BANCO=DEV/);
+  assert.ok(trava.verificarAmbienteParaPublicar({ env: { BANCO: '  dev ' }, caminhoEnv: emProd }));
+});
+
+test('máquina DEV isolada bloqueia, pelo ambiente ou pelo marcador', () => {
+  const emProd = envCom('BANCO=PROD\n');
+  const pelaVariavel = trava.verificarAmbienteParaPublicar({ env: { APP_GESTAO_AMBIENTE_ISOLADO: '1', BANCO: 'PROD' }, caminhoEnv: emProd });
+  assert.equal(pelaVariavel?.code, trava.CODIGO_ISOLADO);
+  const peloMarcador = trava.verificarAmbienteParaPublicar({ env: { BANCO: 'PROD' }, caminhoEnv: emProd, isolado: true });
+  assert.equal(peloMarcador?.code, trava.CODIGO_ISOLADO);
+});
+
+test('programa em PROD (ou sem BANCO no ambiente) segue para a conferência do arquivo', () => {
+  assert.equal(trava.verificarAmbienteParaPublicar({ env: { BANCO: 'PROD' }, caminhoEnv: envCom('BANCO=PROD\n') }), null);
+  assert.equal(trava.verificarAmbienteParaPublicar({ env: {}, caminhoEnv: envCom('BANCO=PROD\n') }), null);
+  // Programa em PROD, arquivo em DEV: o que vai no instalador manda.
+  assert.ok(trava.verificarAmbienteParaPublicar({ env: { BANCO: 'PROD' }, caminhoEnv: envCom('BANCO=DEV\n') }));
+});
+
+test('npm run publish com o processo em DEV também lança; só gerar o instalador segue livre', () => {
+  const emProd = envCom('BANCO=PROD\n');
+  assert.throws(
+    () => trava.exigirBancoProdParaPublicar({ argv: ['eb', '--publish', 'always'], caminhoEnv: emProd, env: { BANCO: 'DEV' } }),
+    err => err.code === trava.CODIGO
+  );
+  assert.doesNotThrow(() =>
+    trava.exigirBancoProdParaPublicar({ argv: ['eb', '--publish', 'never'], caminhoEnv: emProd, env: { BANCO: 'DEV' } }));
 });
 
 test('npm run publish pelo terminal também passa pela trava', () => {
