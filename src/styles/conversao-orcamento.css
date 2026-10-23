@@ -84,8 +84,8 @@
     width: min(28rem, calc(100vw - 2rem));
     max-height: min(60vh, 460px);
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    /* A barra é a da casa (styles/scroll.css): scrollbar-width/-color a
+       trocariam pela do Windows no Electron 45. */
     padding: 1rem 1.15rem;
     border-radius: 0.9rem;
     border: 1px solid rgba(239, 68, 68, 0.25);

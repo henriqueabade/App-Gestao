@@ -55,6 +55,17 @@ function valorDe(cabecalhos, nome) {
   return '';
 }
 
+/**
+ * A resposta veio em Brotli? No Windows o Chromium (120 e 156) entrega ao
+ * onHeadersReceived os cabeçalhos já sem o Content-Encoding e põe no lugar o
+ * X-Content-Encoding-Over-Network: olhar só o primeiro deixava passar o br
+ * (visto na homologação do Electron 45, 23/10/2026). O corpo ainda não foi lido
+ * nesse ponto: cancelar aqui impede a decodificação.
+ */
+function respostaEmBrotli(cabecalhos) {
+  return temBrotli(valorDe(cabecalhos, 'content-encoding')) || temBrotli(valorDe(cabecalhos, 'x-content-encoding-over-network'));
+}
+
 /** Alguma chave da cadeia (certificado do Electron, com issuerCert) está bloqueada? */
 function cadeiaBloqueada(certificado) {
   const vistos = new Set();
@@ -83,7 +94,7 @@ function instalarNaSessao(sessao, { avisar = mensagem => console.warn(mensagem) 
   });
 
   sessao.webRequest.onHeadersReceived(TODOS, (detalhes, pronto) => {
-    if (!acessoLocal.ehDoBackendLocal(detalhes.url) && temBrotli(valorDe(detalhes.responseHeaders, 'content-encoding'))) {
+    if (!acessoLocal.ehDoBackendLocal(detalhes.url) && respostaEmBrotli(detalhes.responseHeaders)) {
       avisar(`[seguranca] resposta Brotli cancelada (CVE-2026-111497): ${origemDe(detalhes.url)}`);
       return pronto({ cancel: true });
     }
@@ -100,4 +111,4 @@ function instalarNaSessao(sessao, { avisar = mensagem => console.warn(mensagem) 
   });
 }
 
-module.exports = { instalarNaSessao, cadeiaBloqueada, daTelaDoPrograma };
+module.exports = { instalarNaSessao, cadeiaBloqueada, daTelaDoPrograma, respostaEmBrotli };

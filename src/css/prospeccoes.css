@@ -480,7 +480,8 @@ body {
     display: flex;
     gap: 2rem;
     overflow-x: auto;
-    scrollbar-width: none;
+    /* Sem scrollbar-width: none — no Electron 28 ela não valia e as abas que
+       não cabiam mostravam a barra da casa para arrastar; no 45 ela sumiria. */
 }
 
 /* Atividade = o que já aconteceu (sempre concluída) — explicação e selo. */

@@ -118,7 +118,8 @@ body > div > .min-h-screen {
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
+  /* Sem scrollbar-width: desligaria o ::-webkit-scrollbar abaixo no Electron 45
+     (ver o topo de styles/scroll.css). */
   transition: max-width 0.25s ease, padding 0.25s ease;
 }
 
