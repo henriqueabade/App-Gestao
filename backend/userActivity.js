@@ -44,12 +44,18 @@ async function updateUsuarioCampos(id, campos) {
  * `updateUsuarioCampos` não gravar nada, em vez de escrever vazio por cima do
  * que já estava lá.
  */
+const LIMITE_DAS_COLUNAS = 255;
 function camposDaAlteracao(acao = {}, quandoPadrao = null) {
   // Rotinas automáticas e eventos sem autoria manual confirmada pertencem ao
   // histórico de auditoria, sem substituir o que a pessoa alterou de fato.
   if (acao.automatico === true || (acao.origem && acao.origem !== 'manual')) return {};
-  const modulo = typeof acao.modulo === 'string' ? acao.modulo.trim() : '';
-  const descricao = typeof acao.descricao === 'string' ? acao.descricao.trim() : '';
+  // As colunas de `usuarios` têm 255 caracteres. A descrição da auditoria vai
+  // até 500: um orçamento salvo com várias mudanças passava disso, o banco
+  // recusava a gravação e a tela avisava "registro de auditoria não
+  // confirmado" (22/10/2026). O texto inteiro continua na auditoria.
+  const caber = texto => (texto.length > LIMITE_DAS_COLUNAS ? `${texto.slice(0, LIMITE_DAS_COLUNAS - 1)}…` : texto);
+  const modulo = typeof acao.modulo === 'string' ? caber(acao.modulo.trim()) : '';
+  const descricao = typeof acao.descricao === 'string' ? caber(acao.descricao.trim()) : '';
   if (!modulo && !descricao) return {};
 
   const quando = normalizarData(acao.timestamp, quandoPadrao || new Date());

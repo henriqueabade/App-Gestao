@@ -1613,6 +1613,10 @@
         l('produtoSelecionado', produtoSelecionado);
 
         l('>> listarDetalhesProduto: start');
+        // As etapas não dependem da peça: saem junto com ela (desempenho,
+        // 22/10/2026 — eram a última ida da fila ao abrir o Editar peça).
+        const etapasProntas = window.electronAPI.listarEtapasProducao();
+        etapasProntas.catch(() => {});
         const payload = { produtoId: produtoSelecionado.id };
         l('payload', payload);
 
@@ -1684,7 +1688,7 @@
 
         // Etapas
         l('>> listarEtapasProducao: start');
-        const etapas = await window.electronAPI.listarEtapasProducao();
+        const etapas = await etapasProntas;
         l('<< listarEtapasProducao: ok', { etapasCount: Array.isArray(etapas) ? etapas.length : 'N/A' });
         const etapasOrdenadas = (etapas || []).sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
         etapasOrdem = etapasOrdenadas.map(e => e.nome);

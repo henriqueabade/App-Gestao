@@ -346,7 +346,12 @@
     }
   });
 
-  await carregarUsuarios();
+  // Desempenho (dono, 22/10/2026: "o sistema está lento"): as listas que não
+  // dependem uma da outra saem JUNTAS, e cada uma é esperada só onde é usada.
+  // Antes era usuários → clientes → contatos → transportadoras → produtos,
+  // uma ida depois da outra (1,5 s com a API a 120 ms; 3,3 s a 300 ms).
+  const usuariosProntos = carregarUsuarios();
+  const produtosProntos = carregarProdutos();
 
   // -------------------------------------------------------------------------
   // Orçamento de prospecção (OCRP)
@@ -363,6 +368,11 @@
   // que se aplicar. Chamado antes, a leitura da constante caía na zona morta e
   // o modal inteiro morria na abertura.
   ligarBotoesDeTransportadora();
+
+  // O que o cliente do orçamento pede também já sai agora.
+  const clientesProntos = daProspeccao ? null : carregarClientes();
+  const contatosProntos = data.cliente_id ? carregarContatos(data.cliente_id) : null;
+  const transportadorasProntas = data.cliente_id ? carregarTransportadoras(data.cliente_id, data.transportadora || '') : null;
 
   if (daProspeccao) {
     const escapar = v => String(v ?? '')
@@ -410,15 +420,15 @@
 
   // Em modo prospecção a lista de clientes não é carregada de propósito:
   // sobrescreveria a opção única montada acima.
-  if (!daProspeccao) await carregarClientes();
+  await clientesProntos;
   if (data.cliente_id) {
     editarCliente.value = data.cliente_id;
     editarCliente.setAttribute('data-filled', 'true');
-    await carregarContatos(data.cliente_id);
+    await contatosProntos;
     // O valor da opção JÁ é o nome, que é o que o orçamento gravou. Procurar a
     // opção pelo `textContent` era o mesmo resultado por um caminho mais
     // frágil — e não achava "Não Definida", que não vem da lista do cliente.
-    await carregarTransportadoras(data.cliente_id, data.transportadora || '');
+    await transportadorasProntas;
     if (data.contato_id) {
       editarContato.value = data.contato_id;
       editarContato.setAttribute('data-filled', 'true');
@@ -428,11 +438,12 @@
   if (editarFormaPagamento.value) editarFormaPagamento.setAttribute('data-filled','true');
   editarValidade.value = data.validade ? data.validade.split('T')[0] : '';
   document.getElementById('editarObservacoes').value = data.observacoes || '';
+  await usuariosProntos;
   if(data.dono){
     donoSelect.value = data.dono;
     donoSelect.setAttribute('data-filled','true');
   }
-  await carregarProdutos();
+  await produtosProntos;
   if (data.itens) {
     data.itens.forEach(it => {
       const descPag = Number(it.desconto_pagamento_prc) || 0;

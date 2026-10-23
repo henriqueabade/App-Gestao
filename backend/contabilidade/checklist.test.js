@@ -342,6 +342,23 @@ test('fase B (resposta 1 a): na conta do plano marcada "o comprovante basta", o 
   assert.deepEqual(ck.fonteContasPagar({ pagar: servico, competencia: COMP, hoje: HOJE }).pendencias.map(p => p.chave), ['pagar_sem_doc_101', 'pagar_vencidas']);
 });
 
+test('desempenho (22/10/2026): o plano vem só com as colunas do "comprovante basta"; se a API recusar o select, vem inteiro', async () => {
+  const pedidos = [];
+  const linha = { id: 1, codigo_reduzido: '00780', nome: 'Simples Nacional', ativa: true, origem: 'aea', em_uso: true, analitica: true, comprovante_basta: true };
+  const api = { async get(caminho, opcoes) { pedidos.push([caminho, opcoes?.query || {}]); return [linha]; } };
+  assert.deepEqual(await ck.lerPlanoParaComprovantes(api), [linha]);
+  assert.deepEqual(pedidos, [['/api/plano_contas', { select: ck.COLUNAS_DO_PLANO }]]);
+  // Tudo o que indexar/contaDaCategoria/selecionavel olham está no select.
+  for (const coluna of ['codigo_reduzido', 'codigo', 'nome', 'ativa', 'origem', 'analitica', 'em_uso', 'desdobra', 'comprovante_basta']) {
+    assert.ok(ck.COLUNAS_DO_PLANO.split(',').includes(coluna), coluna);
+  }
+  const recusa = { async get(caminho, opcoes) {
+    if (opcoes?.query?.select) { const e = new Error('coluna "desdobra" não existe'); e.status = 400; throw e; }
+    return [{ ...linha, observacao: 'x' }];
+  } };
+  assert.equal((await ck.lerPlanoParaComprovantes(recusa))[0].observacao, 'x', 'sem o select, lê como antes');
+});
+
 test('montar com as etapas 2 e 3: as fontes novas entram na conta, no progresso e nos bloqueios do pacote', () => {
   const p = ck.montar({
     competencia: COMP, hoje: HOJE, notas: [], aguardando: { pedidos: [] },

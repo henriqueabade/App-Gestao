@@ -16,6 +16,20 @@ test('rotinas automáticas e autoria não confirmada não substituem a última a
   } finally { restaurar(); }
 });
 
+test('descrição longa (orçamento salvo com várias mudanças) cabe nas colunas de 255 do usuário (22/10/2026)', async () => {
+  const { userActivity, chamadas, restaurar } = carregarComPoolFalso();
+  try {
+    const descricao = `Salvou o orçamento ORC59: ${'Quantidade (orcamentos_itens #12): 1 → 2; '.repeat(12)}`;
+    assert.ok(descricao.length > 255);
+    assert.equal(await userActivity.registrarUltimaAlteracao(7, { origem: 'manual', modulo: 'Orçamentos', descricao }), true);
+    const p = chamadas[0].payload;
+    assert.equal(p.especificacao_ultima_alteracao.length, 255);
+    assert.equal(p.especificacao_ultima_acao.length, 255);
+    assert.ok(p.especificacao_ultima_alteracao.endsWith('…'));
+    assert.ok(p.especificacao_ultima_alteracao.startsWith('Salvou o orçamento ORC59'));
+  } finally { restaurar(); }
+});
+
 /**
  * "Última alteração" no popover de Gestão de Usuários.
  *

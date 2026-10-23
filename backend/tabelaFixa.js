@@ -85,10 +85,11 @@ async function obterPrecoTabela(produtoId) {
  * Produto sem linha na tabela fixa fica com `null` — e null é diferente de
  * zero: a tela mostra célula vazia e o orçamento recusa o item.
  */
-async function anexarPrecoTabela(produtos = []) {
+async function anexarPrecoTabela(produtos = [], mapaPronto = null) {
   const lista = comoLista(produtos);
   if (!lista.length) return lista;
-  const mapa = await mapaDePrecos();
+  // `mapaPronto`: quem já pediu a tabela junto com os produtos (listarProdutos).
+  const mapa = mapaPronto instanceof Map ? mapaPronto : await mapaDePrecos();
   return lista.map(produto => {
     const id = idNumerico(produto?.id);
     return {

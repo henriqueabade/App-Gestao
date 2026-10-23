@@ -585,12 +585,18 @@ async function montarProdutoComInsumos(produtoId) {
 
 async function listarProdutos() {
   try {
-    const produtos = await pool.get('/produtos');
     const queryLotes = { select: 'produto_id,quantidade' };
     const queryKey = JSON.stringify(queryLotes);
     const agora = Date.now();
     const cache = obterCacheLotes(agora, queryKey);
-    const lotes = cache ? cache.lotes : await carregarLotesSeguros(queryLotes);
+    // Produtos, lotes e preços praticados saem JUNTOS (desempenho,
+    // 22/10/2026): eram três idas em fila, e esta lista abre Produtos, os
+    // modais de orçamento e os relatórios.
+    const [produtos, lotes, precos] = await Promise.all([
+      pool.get('/produtos'),
+      cache ? cache.lotes : carregarLotesSeguros(queryLotes),
+      tabelaFixa.mapaDePrecos()
+    ]);
     if (!cache) {
       salvarCacheLotes(agora, queryKey, lotes);
     }
@@ -614,7 +620,7 @@ async function listarProdutos() {
 
     // `preco_tabela` viaja junto com o produto porque quem consome esta lista
     // (Produtos, Orçamentos, Relatórios) precisa dos dois preços lado a lado.
-    return tabelaFixa.anexarPrecoTabela(comQuantidade);
+    return tabelaFixa.anexarPrecoTabela(comQuantidade, precos);
   } catch (err) {
     console.error('Erro ao listar produtos:', err.message);
     throw err;
@@ -635,8 +641,6 @@ async function listarDetalhesProduto(produtoId) {
   }
 
   try {
-    const { produto, itens: itensFormatados } = await montarProdutoComInsumos(produtoIdNumero);
-
     const lotesQuery = {
       // ultimo_item é montado abaixo a partir de materia_prima, não é coluna do lote.
       select: 'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id,tempo_estimado_minutos',
@@ -644,7 +648,13 @@ async function listarDetalhesProduto(produtoId) {
       produto_id: produtoIdNumero
     };
 
-    const lotes = await carregarLotesSeguros(lotesQuery);
+    // Os lotes só dependem do id: saem junto com o produto e os insumos
+    // (desempenho, 22/10/2026 — eram uma ida a mais, na fila, ao abrir o
+    // Visualizar produto).
+    const [{ produto, itens: itensFormatados }, lotes] = await Promise.all([
+      montarProdutoComInsumos(produtoIdNumero),
+      carregarLotesSeguros(lotesQuery)
+    ]);
     const lotesLista = Array.isArray(lotes) ? lotes : [];
 
     const idsUltimosInsumos = lotesLista

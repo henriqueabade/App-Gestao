@@ -55,6 +55,12 @@ async function carregarContatos(idCliente) {
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
     try {
+      // Desempenho (dono, 22/10/2026: "o sistema está lento"): contatos,
+      // transportadoras e pedidos/orçamentos só dependem do id e saem JUNTO
+      // com a ficha. Antes, um esperava o outro (2 s com a API a 300 ms).
+      const contatosProntos = carregarContatos(cliente.id);
+      const transportadorasProntas = carregarTransportadoras(cliente.id);
+      const ordensProntas = carregarOrdens(cliente.id);
       const res = await fetchApi(`/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
@@ -63,15 +69,15 @@ async function carregarContatos(idCliente) {
         nomeDoCliente = data.cliente.nome_fantasia || nomeDoCliente;
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
-        const contatos = await carregarContatos(cliente.id);
+        const contatos = await contatosProntos;
         contatosDoCliente = contatos;
         renderContatos(contatos);
-        renderTransportadoras(await carregarTransportadoras(cliente.id));
+        renderTransportadoras(await transportadorasProntas);
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
       }
-      await carregarOrdens(cliente.id);
+      await ordensProntas;
     } catch(err){
       console.error('Erro ao carregar detalhes do cliente', err);
     } finally {

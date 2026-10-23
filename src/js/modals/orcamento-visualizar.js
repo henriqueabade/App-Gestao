@@ -50,6 +50,21 @@
     // emitir.
     const daProspeccao = Boolean(data.prospeccao_id);
 
+    // Desempenho (dono, 22/10/2026: "o sistema está lento"): clientes,
+    // contatos e transportadoras saem JUNTOS, logo depois do orçamento — antes
+    // era um esperando o outro (2 s com a API a 300 ms). Cada resposta continua
+    // sendo lida no mesmo lugar.
+    const adiantar = caminho => {
+      const pedido = fetchApi(caminho);
+      pedido.catch(() => {});
+      return pedido;
+    };
+    const adiantadas = daProspeccao ? {} : {
+      clientes: adiantar('/api/clientes/lista'),
+      cliente: adiantar(`/api/clientes/${data.cliente_id}`),
+      transportadoras: adiantar(`/api/transportadoras/${data.cliente_id}`)
+    };
+
     if (daProspeccao) {
       const prospResp = await fetchApi(`/api/prospeccoes/${data.prospeccao_id}`);
       const ficha = await prospResp.json().catch(() => ({}));
@@ -71,13 +86,13 @@
       contatoSel.setAttribute('data-filled', 'true');
     } else {
       // carregar nomes de cliente e contatos
-      const clientesResp = await fetchApi('/api/clientes/lista');
+      const clientesResp = await adiantadas.clientes;
       const clientes = await clientesResp.json();
       clienteSel.innerHTML = clientes.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
       clienteSel.value = data.cliente_id;
       clienteSel.setAttribute('data-filled', 'true');
 
-      const contatosResp = await fetchApi(`/api/clientes/${data.cliente_id}`);
+      const contatosResp = await adiantadas.cliente;
       const clienteData = await contatosResp.json();
       const contatos = clienteData.contatos || [];
       contatoSel.innerHTML = contatos.map(ct => `<option value="${ct.id}">${ct.nome}</option>`).join('');
@@ -96,7 +111,7 @@
       // orientação, e o rótulo não pode cair por cima dele.
       transportadoraSel.setAttribute('data-filled', 'true');
     } else {
-      const transpResp = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
+      const transpResp = await adiantadas.transportadoras;
       const transportadoras = await transpResp.json();
       transportadoraSel.innerHTML = (Array.isArray(transportadoras) ? transportadoras : [])
         .map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');

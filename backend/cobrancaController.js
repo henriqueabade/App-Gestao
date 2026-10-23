@@ -323,17 +323,27 @@ function criarRouter({ segredo = null, env = process.env, bb = null, fetchImpl =
 
   /** O que a tela do pedido precisa: parcelas com o boleto de cada uma, o que impede gerar e o padrão da caixa "Gerar boleto". */
   async function estadoDoPedido(api, pedidoId) {
+    // Os nomes de quem emitiu e o secret não dependem do pedido: saem junto
+    // com a leitura dele (desempenho, 22/10/2026 — eram quatro idas em fila,
+    // e esta rota abre o Visualizar pedido, o Gerar boletos e o Emitir NF-e).
+    // A configuração é a mesma leitura da `lerPedidoCobranca` (leitura única
+    // por requisição).
+    const nomesProntos = require('./historicoSocial').nomesDosUsuarios(api);
+    const segredoPronto = configuracao.carregar(api)
+      .then(c => (c ? fonteDoSecret(api, configuracao.ambienteEfetivo(c, env)) : { secret: null }));
+    nomesProntos.catch(() => {});
+    segredoPronto.catch(() => {});
     const dados = await boletos.lerPedidoCobranca(api, pedidoId);
     const cfg = dados.configuracao;
     const ambiente = configuracao.ambienteEfetivo(cfg, env);
-    const f = cfg ? await fonteDoSecret(api, ambiente) : { secret: null };
+    const f = cfg ? await segredoPronto : { secret: null };
     const pendencias = configuracao.pendencias(cfg, ambiente, { secret: Boolean(f.secret) });
     const pagador = dados.cliente ? bbBoleto.pagadorDoCliente(dados.cliente) : null;
     const pendenciasPagador = pagador ? bbBoleto.pendenciasDoPagador(pagador) : ['Pedido sem cliente.'];
     if (!dados.parcelas.length) pendenciasPagador.push('O pedido não tem parcelas cadastradas.');
     // Cada parcela com o boleto e o pagamento (Pix, cartão, boleto pago…), e
     // quem emitiu / quem registrou o pagamento (o balão das etiquetas).
-    const nomes = await require('./historicoSocial').nomesDosUsuarios(api);
+    const nomes = await nomesProntos;
     const linhas = boletos.parcelasComBoletos({ ...dados, nomes });
     const total = Math.round(Number(dados.pedido.valor_final || 0) * 100) / 100;
     const ajuste = Math.round(Number(dados.pedido.ajuste_valor || 0) * 100) / 100;

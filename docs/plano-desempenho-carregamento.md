@@ -216,3 +216,83 @@ visita recomeça do zero.
   - a tabela não rolava porque o módulo faltava na lista de `scroll.css`;
   - os botões Filtrar/Limpar quebravam linha, espremidos pelas etiquetas de tipo.
   - Agora a tela é igual à de Clientes.
+
+## Rodada de 22/10/2026 — "o sistema parece lento em todos os módulos e modais"
+
+### Como foi medido
+
+O app real rodou na VPS, numa tela virtual, com o banco DEV. Um carregador
+fora do repositório pôs **120 ms em cada ida ao banco**, o tempo de uma ida à
+API de produção, e anotou cada ida com o tamanho da resposta. A medida da
+abertura vai do clique até o carregando sumir. Também se repetiu tudo a
+300 ms, para achar o que fica em fila.
+
+### O que se viu
+
+- **Módulos:** quase todos abrem em **1,0 s**, que é o tempo mínimo do
+  carregando (decisão do dono, 06/10). Os dados chegam antes: entre 0,1 e
+  0,9 s.
+- **Modais:** os de "Novo" e a maioria dos de ver ou editar ficam no mínimo
+  (1 s ou 0,5 s). As tarefas, que não têm mínimo, abrem em cerca de 50 ms.
+- **Os lentos de verdade** eram modais que buscavam os dados **um depois do
+  outro**:
+
+  | Modal | Antes (120 ms / 300 ms) | Depois (120 ms / 300 ms) |
+  | --- | --- | --- |
+  | Visualizar pedido | 2,0 s / 4,6 s | 0,84 s / 1,7 s |
+  | Editar orçamento | 1,5 s / 3,3 s | 0,70 s / 1,4–1,7 s |
+  | Visualizar orçamento | 0,86 s / 2,0 s | 0,58 s / 1,3 s |
+  | Detalhes do cliente | 1,1 s / 2,0 s | no mínimo / 1,1 s |
+  | Editar cliente | 1,1 s / 1,7 s | no mínimo / 1,0 s |
+  | Editar e Visualizar produto | 1,1 s / 2,0 e 1,3 s | no mínimo / 1,1 s |
+
+- **Salvar orçamento:** caiu de 3,4–3,8 s para 2,6 s, a 120 ms. Eram cerca de
+  28 idas em fila, cerca de 1,1 s delas só da auditoria: uma leitura do
+  usuário mais 8 registros, gravados um por vez, com a resposta esperando.
+- **Aviso "registro de auditoria não confirmado"** depois de salvar um
+  orçamento: a descrição da última alteração ia até 500 caracteres, mas a
+  coluna do usuário só aceita 255. O banco recusava e a tela avisava.
+- **Parado**, o app faz cerca de 30 idas por minuto (sino e verificação de
+  conexão). As 71 idas nos primeiros 10 s são a carga do Dashboard.
+- **Dados grandes:** o plano de contas (1,1 MB) ia inteiro a cada abertura do
+  Financeiro e da Contabilidade. As rotas das peças (600 KB) iam no Dashboard
+  e no Financeiro.
+
+### O que mudou
+
+- **Modais:** o que só depende do registro aberto sai junto, logo depois
+  dele, e cada resposta é lida no mesmo lugar de antes. Mudaram
+  `pedido-visualizar.js`, `orcamento-editar.js`, `orcamento-visualizar.js`,
+  `cliente-detalhes.js`, `cliente-editar.js` e `produto-editar.js`.
+- **Backend:**
+  - **Boletos do pedido:** `estadoDoPedido` lê os nomes e o secret junto com
+    o pedido (4 rodadas → 2). Serve ao Visualizar pedido, ao Gerar boletos e
+    ao Emitir NF-e.
+  - **Produtos:** `listarProdutos` lê produtos, lotes e preços praticados
+    juntos (3 → 1). Serve a Produtos, aos orçamentos e aos relatórios.
+  - **Visualizar produto:** `listarDetalhesProduto` lê os lotes junto com o
+    produto.
+- **Salvar orçamento:** itens e parcelas são trocados ao mesmo tempo, e as
+  exclusões também. As inclusões continuam uma por vez, porque é a ordem de
+  inclusão que dá a posição na tela e no PDF: a API ignora `order`.
+- **Auditoria** (`auditoriaCaptura.js`):
+  - a pessoa é identificada na primeira gravação, não no fim (vale para
+    todo salvamento);
+  - os efeitos de uma ação são gravados em grupos de 6, depois da ação.
+    Entre os efeitos da mesma ação, a ordem pode variar em milissegundos.
+- **Auditoria, última alteração:** `userActivity.camposDaAlteracao` corta o
+  texto em 255 caracteres (o texto inteiro continua na auditoria).
+- **Menos peso:**
+  - o checklist da Contabilidade lê o plano só com as colunas do
+    "comprovante basta" (1,17 MB → 0,63 MB). Se a API recusar o `select`, lê
+    inteiro como antes;
+  - as rotas das peças vêm sem a coluna que não se usa;
+  - nenhum dos dois passa por `b.ler`, cujo filtro trataria o `select` como
+    coluna.
+
+### O que ficou para o dono decidir
+
+O tempo mínimo do carregando: **1 s** nos módulos e nos modais deles, e
+**0,5 s** nos de Pedidos. Hoje ele é a maior espera fixa de cada abertura.
+Mudar é só trocar as constantes `MIN_MODULE_SPINNER_MS` (`menu.js`) e
+`PISO_DOS_MODAIS_DO_MODULO_MS`/`minSpinnerMs` (`modal.js`).

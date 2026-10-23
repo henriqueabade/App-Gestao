@@ -4,6 +4,8 @@ const { randomUUID } = require('node:crypto');
 const armazenamento = new AsyncLocalStorage();
 const EMBRULHADO = Symbol('auditoria-captura');
 const MAX_EVENTOS = 1000;
+/** Quantos efeitos da mesma ação são gravados ao mesmo tempo na auditoria. */
+const EFEITOS_POR_VEZ = 6;
 let sistemaAtivo = false;
 const ultimasPorUsuario = new Map();
 const filasPorUsuario = new Map();
@@ -104,9 +106,20 @@ function mesmaEntidade(ctx, r) {
   return moduloDe(r.tabela) === ctx.modulo && (ctx.entidadeId === null || String(ctx.entidadeId) === String(r.id));
 }
 
+/**
+ * Quem fez a requisição é procurado logo na primeira gravação, enquanto o
+ * resto ainda grava (desempenho, 22/10/2026): antes era mais uma ida à API,
+ * na fila, no fim de TODO salvamento. Falhou aqui, o `finalizar` procura de
+ * novo e trata o erro como sempre tratou.
+ */
+function identificarCedo(ctx) {
+  if (ctx.identificacao || ctx.usuarioId || ctx.origem === 'sistema' || !(ctx.req || ctx.opcoes?.criarApi)) return;
+  ctx.identificacao = apiPara(ctx).then(api => (api ? identificar(ctx, api) : null)).catch(() => null);
+}
 async function capturar(api, metodo, args, executar, ctx) {
   const [caminho, corpo] = args;
   const r = recurso(caminho);
+  if (r) identificarCedo(ctx);
   if (!r) {
     const resposta = await executar();
     if (ctx.acaoProtegida && resposta?.success !== false && resposta?.ok !== false && !resposta?.error) ctx.protegida = true;
@@ -236,10 +249,17 @@ async function finalizar(ctx, { sucesso = true, apiReserva = null } = {}) {
         const api = await apiPara(ctx, apiReserva);
         if (!api) throw Object.assign(new Error('Cliente de auditoria indisponível.'), { code: 'AUDITORIA_CLIENTE_AUSENTE' });
         fase = 'identificar-usuario';
+        await ctx.identificacao;
         await identificar(ctx, api);
         fase = 'inserir-evento';
         const registroRaiz = raiz ? await persistir(ctx, api, raiz) : null;
-        for (const evento of ctx.eventos) await persistir(ctx, api, evento);
+        // A ação vem primeiro; os efeitos dela vão em grupos, ao mesmo tempo
+        // (desempenho, 22/10/2026: um orçamento salvo esperava oito gravações
+        // da auditoria em fila, ~1 s com a API a 120 ms). `persistir` não
+        // lança: a falha de um vira pendência, como antes.
+        for (let i = 0; i < ctx.eventos.length; i += EFEITOS_POR_VEZ) {
+          await Promise.all(ctx.eventos.slice(i, i + EFEITOS_POR_VEZ).map(evento => persistir(ctx, api, evento)));
+        }
         if (raiz?._manualMudou && registroRaiz?.ok && !ctx.erros.length) {
           const acao = { timestamp: registroRaiz.criado_em || new Date().toISOString(), modulo: raiz.modulo,
             descricao: descricaoDaUltima(ctx, raiz) };

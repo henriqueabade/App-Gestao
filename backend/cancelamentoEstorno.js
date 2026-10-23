@@ -106,7 +106,10 @@ async function carregarRotas(api, produtoIds, cache, insumos) {
     await Promise.all(faltam.map(id => carregarRota(api, id, cache, insumos).catch(() => cache.set(id, []))));
     return cache;
   }
-  const todas = await api.get('/api/produtos_insumos').catch(() => []);
+  // Só as colunas da rota (`rotaDasLinhas`): a tabela é a maior do sistema e
+  // ia inteira ao abrir o Dashboard e o Financeiro (desempenho, 22/10/2026).
+  // Sem filtro aqui, o `select` não esconde nenhuma linha.
+  const todas = await api.get('/api/produtos_insumos', { query: { select: 'id,produto_id,insumo_id,quantidade,ordem_insumo' } }).catch(() => []);
   const porProduto = new Map();
   for (const linha of (Array.isArray(todas) ? todas : [])) {
     const id = Number(linha?.produto_id);

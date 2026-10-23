@@ -35,10 +35,19 @@
   const transportadorasExcluidas = [];
   // Redes sociais, uma por linha (01/10/2026), logo abaixo do Site.
   const redesSociais = window.RedesSociais?.montar(document.getElementById('empresaRedesLista'));
+  // A lista de donos pedida junto com a ficha (lida em preencherDadosEmpresa).
+  // Declarada ANTES da carga: depois dela, a atribuição cairia na zona morta.
+  let usuariosAdiantados = null;
   if(cliente){
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
     try {
+      // Desempenho (dono, 22/10/2026: "o sistema está lento"): a lista de
+      // donos e os pedidos/orçamentos só dependem do id e saem JUNTO com a
+      // ficha. Antes, um esperava o outro (1,7 s com a API a 300 ms).
+      usuariosAdiantados = fetchApi('/api/usuarios/lista');
+      usuariosAdiantados.catch(() => {});
+      const ordensProntas = carregarOrdens(cliente.id);
       const res = await fetchApi(`/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
@@ -50,7 +59,7 @@
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
       }
-      await carregarOrdens(cliente.id);
+      await ordensProntas;
     } catch(err){
       console.error('Erro ao carregar detalhes do cliente', err);
     } finally {
@@ -168,7 +177,9 @@
     const donoSel = document.getElementById('empresaDono');
     if(donoSel){
       try{
-        const res = await fetchApi('/api/usuarios/lista');
+        const pedido = usuariosAdiantados || fetchApi('/api/usuarios/lista');
+        usuariosAdiantados = null;
+        const res = await pedido;
         const usuarios = await res.json();
         donoSel.innerHTML = '<option value="">Selecione o dono</option>' +
           usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');

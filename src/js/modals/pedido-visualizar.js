@@ -875,12 +875,32 @@
     if (!resp.ok) throw new Error('Falha ao buscar pedido');
     const data = await resp.json();
 
+    // Desempenho (dono, 22/10/2026: "o sistema está lento"): o que só depende
+    // do pedido sai JUNTO, logo depois dele. Antes era uma ida esperando a
+    // outra — cliente, contatos, transportadoras, notas, boletos, devolução,
+    // nota de fora — e o modal levava 2 s com a API a 120 ms (4,6 s a 300 ms).
+    // Cada resposta continua sendo lida no mesmo lugar e do mesmo jeito.
+    const adiantar = caminho => {
+      const pedido = fetchApi(caminho);
+      pedido.catch(() => {});
+      return pedido;
+    };
+    const adiantadas = {
+      clientes: adiantar('/api/clientes/lista'),
+      cliente: data.cliente_id && contatoSel ? adiantar(`/api/clientes/${data.cliente_id}`) : null,
+      transportadoras: transportadoraSel ? adiantar(`/api/transportadoras/${data.cliente_id}`) : null,
+      notas: adiantar(`/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}`),
+      boletos: adiantar(`/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos`),
+      devolucao: data.devolucao ? adiantar(`/api/devolucoes/notas?pedido_id=${encodeURIComponent(id)}`) : null,
+      externa: adiantar(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa`)
+    };
+
     overlay.querySelector('#tituloVisualizarPedido').textContent = `VISUALIZAR PEDIDO ${data.numero || ''}`.trim();
 
     const filled = el => el?.setAttribute('data-filled', 'true');
 
     try {
-      const clientesResp = await fetchApi('/api/clientes/lista');
+      const clientesResp = await adiantadas.clientes;
       if (!clientesResp.ok) throw new Error();
       const clientes = await clientesResp.json();
       if (clienteSel) {
@@ -901,7 +921,7 @@
 
     try {
       if (data.cliente_id && contatoSel) {
-        const respContatos = await fetchApi(`/api/clientes/${data.cliente_id}`);
+        const respContatos = await adiantadas.cliente;
         if (!respContatos.ok) throw new Error();
         const clienteData = await respContatos.json();
         const contatos = clienteData.contatos || [];
@@ -925,7 +945,7 @@
 
     try {
       if (transportadoraSel) {
-        const respTransportadoras = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
+        const respTransportadoras = await adiantadas.transportadoras;
         if (respTransportadoras.ok) {
           const transportadoras = await respTransportadoras.json();
           transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
@@ -1074,7 +1094,7 @@
     // tabela) ficam só as do embarque.
     let notas = [];
     try {
-      const respNotas = await fetchApi(`/api/fiscal/notas?pedido_id=${encodeURIComponent(id)}`);
+      const respNotas = await adiantadas.notas;
       if (respNotas.ok) notas = await respNotas.json();
     } catch (_) { /* sem notas, sem tag */ }
     const notaDocs = notaParaDocumentos(notas);
@@ -1083,14 +1103,14 @@
     // Boletos das parcelas (cobrança BB): sem permissão (403) ou sem a cobrança configurada, fica tudo como era.
     let boletosEstado = null;
     try {
-      const respBoletos = await fetchApi(`/api/cobranca/pedidos/${encodeURIComponent(id)}/boletos`);
+      const respBoletos = await adiantadas.boletos;
       if (respBoletos.ok) boletosEstado = await respBoletos.json();
     } catch (_) { /* sem boletos, sem coluna */ }
     // A nota de devolução do cliente (guardada pela devolução): sem a tabela ou sem permissão, sem tag.
     let notasDevolucao = [];
     if (data.devolucao) {
       try {
-        const respDev = await fetchApi(`/api/devolucoes/notas?pedido_id=${encodeURIComponent(id)}`);
+        const respDev = await adiantadas.devolucao;
         if (respDev.ok) notasDevolucao = await respDev.json();
       } catch (_) { /* sem nota de devolução, sem tag */ }
     }
@@ -1098,7 +1118,7 @@
     let notaExterna = null;
     let cartasDeFora = [];
     try {
-      const respExt = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa`);
+      const respExt = await adiantadas.externa;
       if (respExt.ok) notaExterna = (await respExt.json())?.nota_externa || null;
       if (notaExterna) {
         const respCartas = await fetchApi(`/api/fiscal/pedidos/${encodeURIComponent(id)}/nfe-externa/cartas`);

@@ -866,6 +866,25 @@ function montar({
 }
 
 /**
+ * O plano de contas só para o "comprovante basta" (etapa 3): as colunas que
+ * `planoMod.indexar`/`contaDaCategoria` olham. O plano inteiro tem 1,1 MB e
+ * era baixado a cada abertura do Financeiro e da Contabilidade (desempenho,
+ * 22/10/2026); assim fica com pouco mais da metade.
+ *
+ * Não passa por `b.ler`: o filtro de lá trataria o `select` como coluna e
+ * esvaziaria a lista. Se a API recusar o `select` (coluna de uma fase que o
+ * banco ainda não tem), lê como antes, inteiro. null = sem o plano.
+ */
+const COLUNAS_DO_PLANO = 'id,codigo,codigo_reduzido,nome,ativa,origem,analitica,em_uso,desdobra,comprovante_basta';
+async function lerPlanoParaComprovantes(api) {
+  try {
+    const linhas = await api.get('/api/plano_contas', { query: { select: COLUNAS_DO_PLANO } });
+    if (Array.isArray(linhas)) return linhas;
+  } catch (_) { /* lê inteiro, abaixo */ }
+  return b.lerOpcional(api, 'plano_contas').catch(() => null);
+}
+
+/**
  * Documentos recebidos, contas a pagar, arquivos e os pagamentos dos
  * fechamentos, para as duas fontes da etapa 3. null = falta o SQL da etapa.
  */
@@ -875,7 +894,7 @@ async function lerContasPagar(api, hoje) {
     // eram lidos depois, um esperando o outro.
     const [base, docs, arquivosLista, vinculos, pagamentosFechamento, plano, dda, comprovantes, vinculosConc, terceiros, cartao, pessoas] = await Promise.all([
       titulos.lerBase(api), b.ler(api, 'documentos_recebidos'), b.ler(api, 'contabil_arquivos'), b.ler(api, 'contabil_arquivo_vinculos'),
-      documentos.lerPagamentosDeFechamento(api), b.lerOpcional(api, 'plano_contas').catch(() => null),
+      documentos.lerPagamentosDeFechamento(api), lerPlanoParaComprovantes(api),
       // Fase H: os boletos do DDA (null sem o SQL dela).
       b.lerOpcional(api, 'contabil_dda_boletos').catch(() => null),
       // Fase D: os comprovantes do BB e a conciliação (o comprovante prova o pagamento pelo lançamento).
@@ -1030,5 +1049,6 @@ async function carregar({ api, competencia, hoje, desde = null }) {
 
 module.exports = {
   FONTES, NIVEL, NIVEL_DA_COBRANCA, ehTarifaDoBanco, competenciaValida, fonteNfe, fonteRecebimentos, fonteFechamentos, fonteDevolucoes, pendenciasDasIntegracoes,
-  fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, fonteConciliacao, lerContasPagar, lerExtrato, lerConciliacao, montar, carregar
+  fonteDocumentosRecebidos, fonteContasPagar, fonteExtrato, fonteConciliacao, lerContasPagar, lerExtrato, lerConciliacao, montar, carregar,
+  lerPlanoParaComprovantes, COLUNAS_DO_PLANO
 };

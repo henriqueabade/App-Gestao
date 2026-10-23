@@ -1005,37 +1005,37 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
 
     await api.put(`/api/orcamentos/${id}`, payload);
 
-    const itensExistentes = await api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []);
-    if (Array.isArray(itensExistentes)) {
-      for (const item of itensExistentes) {
-        if (item?.id) {
-          await api.delete(`/api/orcamentos_itens/${item.id}`);
-        }
+    // Itens e parcelas são trocados AO MESMO TEMPO, e as exclusões de cada
+    // lado também (desempenho, 22/10/2026: salvar um orçamento era uma fila
+    // de idas à API, duas por linha excluída). As inclusões continuam UMA POR
+    // VEZ, na ordem da tela: sem coluna de ordem nas peças, e com a API
+    // ignorando o `order` nas parcelas, é a ordem de inclusão que diz a
+    // posição delas no orçamento e no PDF.
+    const excluirTodas = (tabela, linhas) => Promise.all((Array.isArray(linhas) ? linhas : [])
+      .filter(linha => linha?.id)
+      .map(linha => api.delete(`/api/${tabela}/${linha.id}`)));
+    const trocarItens = async () => {
+      const itensExistentes = await api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []);
+      await excluirTodas('orcamentos_itens', itensExistentes);
+      for (const item of itens) {
+        await api.post('/api/orcamentos_itens', { ...item, orcamento_id: id });
       }
-    }
-    for (const item of itens) {
-      await api.post('/api/orcamentos_itens', { ...item, orcamento_id: id });
-    }
-
-    const parcelasExistentes = await api
-      .get('/api/orcamento_parcelas', { query: { orcamento_id: id } })
-      .catch(() => []);
-    if (Array.isArray(parcelasExistentes)) {
-      for (const parcela of parcelasExistentes) {
-        if (parcela?.id) {
-          await api.delete(`/api/orcamento_parcelas/${parcela.id}`);
-        }
+    };
+    const trocarParcelas = async () => {
+      const parcelasExistentes = await api
+        .get('/api/orcamento_parcelas', { query: { orcamento_id: id } })
+        .catch(() => []);
+      await excluirTodas('orcamento_parcelas', parcelasExistentes);
+      for (let i = 0; i < parcelasDetalhes.length; i++) {
+        const parcela = parcelasDetalhes[i];
+        await api.post('/api/orcamento_parcelas', {
+          ...parcela,
+          orcamento_id: id,
+          numero_parcela: parcela.numero_parcela || i + 1
+        });
       }
-    }
-
-    for (let i = 0; i < parcelasDetalhes.length; i++) {
-      const parcela = parcelasDetalhes[i];
-      await api.post('/api/orcamento_parcelas', {
-        ...parcela,
-        orcamento_id: id,
-        numero_parcela: parcela.numero_parcela || i + 1
-      });
-    }
+    };
+    await Promise.all([trocarItens(), trocarParcelas()]);
 
     if (body.situacao === 'Pendente' && atual?.situacao !== 'Pendente') {
       await tarefaDoOrcamentoEnviado(api, req, { ...atual, ...payload, id: Number(id), numero: atual?.numero || payload.numero });
