@@ -81,6 +81,10 @@ function processoPrincipal({ erroDeInicializacao = null } = {}) {
       if (nome === 'path') return path;
       if (nome === 'fs') return { mkdirSync() {} };
       if (nome === './backend/menuDeContexto') return { configurarCorretor() {} };
+      // Proteções de rede de 23/10/2026 (backend/seguranca): aqui só precisam existir.
+      if (nome === './backend/seguranca/redeSegura') return { instalar() {} };
+      if (nome === './backend/seguranca/acessoLocal') return { instalarNoFetch() {} };
+      if (nome === './backend/seguranca/sessoesElectron') return { instalarNaSessao() {} };
       throw new Error(`Módulo inesperado no teste: ${nome}`);
     },
     preferenciasWindows: { ler: () => ({ avisosNoWindows: true }), lerCategorias: () => ({}) },
@@ -172,7 +176,8 @@ function portas(configuredApiPort, apiOverride = null) {
     apiServer: apiOverride || { listen: (...args) => http.createServer((_req, res) => res.end('teste')).listen(...args) },
     ensureConnectionMonitor: () => ({ requestImmediateCheck: async () => {} }),
     refreshConnectionMonitorActivityState() {},
-    dialog: { showErrorBox: (...args) => erros.push(args) }, configuredApiPort
+    dialog: { showErrorBox: (...args) => erros.push(args) }, configuredApiPort,
+    acessoLocal: { porta: null, ativar(porta) { this.porta = porta; } }
   });
   vm.runInContext(`
     const DEFAULT_API_PORT = 3000, MAX_PORT = 65535, CONNECTION_SERVER_KEEP_ALIVE_MS = 65000, DEBUG = false;
@@ -198,6 +203,7 @@ test('primeira instância usa próxima porta livre quando outro programa ocupa a
     const servidor = await contexto.startApiServerOnPort(livre);
     assert.equal(servidor.address().port, livre);
     assert.equal(contexto.getLocalApiBaseUrl(), `http://127.0.0.1:${livre}`);
+    assert.equal(contexto.acessoLocal.porta, livre, 'a contenção do backend local vale para a porta aberta');
     assert.equal(externo.listening, true, 'não encerra nem reaproveita o servidor de outro programa');
     assert.deepEqual(erros, []);
   } finally {

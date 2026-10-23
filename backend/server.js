@@ -2,7 +2,6 @@
 const { isDev } = require('./dataConfig');
 
 const express = require('express');
-const cors = require('cors');
 const path = require('path');
 const clientesRouter = require('./clientesController');
 const passwordResetRouter = require('./passwordResetRoutes');
@@ -32,7 +31,12 @@ const app = express();
 const API_BASE_ORIGIN = (
   process.env.API_BASE_URL || process.env.API_URL || 'https://api.santissimodecor.com.br'
 ).replace(/\/+$/, '').replace(/\/api$/, '');
-app.use(cors());
+// Contenção do backend local (23/10/2026): só o programa fala com ele, e corpo
+// comprimido não chega ao body-parser. Ver backend/seguranca/acessoLocal.js.
+const acessoLocal = require('./seguranca/acessoLocal');
+app.use(acessoLocal.exigirPrograma);
+app.use(acessoLocal.recusarCorpoComprimido);
+app.use(acessoLocal.corsLocal);
 // 3 MB para tudo, menos o histórico social (um anexo de até 20 MB chega em
 // base64, ~27 MB), a planilha das Ações Rápidas (importação e a lista de ids
 // da exportação) e os arquivos da Contabilidade (XML, PDF, comprovante — o
