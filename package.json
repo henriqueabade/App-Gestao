@@ -1,6 +1,6 @@
 {
   "name": "santissimo-decor-dashboard",
-  "version": "3.0.21",
+  "version": "3.0.23",
   "description": "Dashboard admin for Santissimo Decor",
   "main": "main.js",
   "scripts": {
@@ -16,10 +16,11 @@
   "author": "Henrique Viana Abade",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.3.3",
-    "electron-builder": "^26.0.12",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
     "pg-mem": "^3.0.14",
-    "tailwindcss": "^3.4.10"
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

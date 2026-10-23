@@ -12,6 +12,15 @@ html, body, #app, #mainContent  {
   --thumb-color: #f0c94c;
 }
 
+/* Barra da casa = só ::-webkit-scrollbar (fina, 6px, dourada).
+   NUNCA `scrollbar-width: thin` nem `scrollbar-color`: o Chromium do Electron
+   28 (120) ignorava as duas, mas a partir do 121 (Electron 45 = 156) elas
+   valem e DESLIGAM o ::-webkit-scrollbar do elemento — e `scrollbar-color` é
+   herdado, desliga também o de tudo o que está dentro. Resultado: a barra do
+   Windows (10px, trilho claro e setas). Esconder continua permitido:
+   `scrollbar-width: none` junto de `::-webkit-scrollbar { display: none }`.
+   Trava: src/js/__tests__/barrasDeRolagemChromium.test.js. */
+
 /* 3) Cada módulo: só scroll vertical, nunca horizontal */
 #content {
   position: relative;
@@ -20,7 +29,6 @@ html, body, #app, #mainContent  {
   overflow-x: hidden;   /* nunca horizontal */
   box-sizing: border-box;
   scroll-behavior: auto;  /* scroll nativo fluído */
-  scrollbar-width: thin;
 }
 
 #content.no-scroll {
@@ -224,7 +232,6 @@ table td {
 .modal-scroll {
   overflow-y: auto;
   overflow-x: auto;
-  scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
 }
 

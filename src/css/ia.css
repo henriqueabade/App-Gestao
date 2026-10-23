@@ -331,8 +331,8 @@ body {
     z-index: 50;
     max-height: min(60vh, 460px);
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--thumb-color) transparent;
+    /* A barra é a do ::-webkit-scrollbar abaixo: scrollbar-width/-color a
+       desligariam no Electron 45 (ver o topo de styles/scroll.css). */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
     opacity: 0;
     visibility: hidden;
