@@ -28,6 +28,16 @@ app.on('second-instance', (_evento, argv) => {
 });
 app.on('activate', () => abrirPrograma());
 
+// Falhas de rede divulgadas em 20-23/10/2026 (Brotli, TLS, eMudhra/emSign,
+// keep-alive) e contenção do backend local: antes de qualquer módulo abrir
+// conexão. Ver docs/seguranca-outubro-2026.md.
+require('./backend/seguranca/redeSegura').instalar();
+const acessoLocal = require('./backend/seguranca/acessoLocal');
+acessoLocal.instalarNoFetch();
+const { instalarNaSessao: protegerSessao } = require('./backend/seguranca/sessoesElectron');
+// Toda sessão do Chromium: a padrão, as das janelas e a da atualização automática.
+app.on('session-created', sessao => protegerSessao(sessao));
+
 const { isDev: useLocalDatabase } = require('./backend/dataConfig');
 // Máquina DEV isolada (VPS): o Chromium também só resolve endereços locais. O
 // backend já está atrás da barreira de rede (dataConfig.js / barreiraDeRede.js).
@@ -167,6 +177,7 @@ function sleep(ms) {
 // Garante que qualquer janela criada permaneça em tela cheia
 app.on('browser-window-created', (_event, win) => {
   require('./backend/privateFileGuard').protectSession(win.webContents.session);
+  protegerSessao(win.webContents.session);
   // Botão direito: sugestões do corretor e copiar/colar (em toda janela).
   require('./backend/menuDeContexto').ligar(win);
   const webPreferences =
@@ -2261,6 +2272,8 @@ async function startApiServerOnPort(port) {
   await closeApiServer();
 
   return new Promise((resolve, reject) => {
+    // Antes do listen: nenhum pedido chega sem a contenção (acessoLocal.js).
+    acessoLocal.ativar(port);
     const server = apiServer.listen(port, '127.0.0.1');
     try {
       if (typeof server.keepAliveTimeout === 'number') {
@@ -2499,7 +2512,8 @@ function requestWithAgent(targetUrl, { method = 'GET', timeout = 5000, agent, ex
     port: url.port || undefined,
     path: `${url.pathname}${url.search}`,
     agent,
-    timeout
+    timeout,
+    headers: acessoLocal.cabecalhosPara(url)
   };
 
   return new Promise((resolve, reject) => {
@@ -2758,7 +2772,7 @@ function createConnectionMonitor() {
       path: `${url.pathname}${url.search}`,
       agent: ensureAgent(url),
       timeout: CONNECTION_MONITOR_TIMEOUT_MS,
-      headers: { connection: 'keep-alive' }
+      headers: { connection: 'keep-alive', ...acessoLocal.cabecalhosPara(url) }
     };
 
     return new Promise((resolve, reject) => {

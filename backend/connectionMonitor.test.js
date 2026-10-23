@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const http = require('node:http');
 const https = require('node:https');
+const acessoLocal = require('./seguranca/acessoLocal');
 
 const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
 function extract(name) {
@@ -29,7 +30,7 @@ function createHarness(mode, port) {
   }
   const context = vm.createContext({
     URL, Buffer, Date, Error, setTimeout, clearTimeout, console,
-    http: { ...http, Agent: ElectronIPv6Agent }, https,
+    http: { ...http, Agent: ElectronIPv6Agent }, https, acessoLocal,
     useLocalDatabase: mode === 'DEV', currentApiPort: port,
     configuredApiPort: 3000, DEFAULT_API_PORT: 3000,
     process: { env: { API_PROTOCOL: 'https', API_HOST: 'api.example.invalid', CONNECTION_MONITOR_BASE_URL: 'https://monitor.example.invalid' } },
@@ -63,16 +64,20 @@ function createHarness(mode, port) {
 for (const mode of ['DEV', 'PROD']) {
   test(`monitor completo em ${mode}: servidor IPv4 permanece online após login e múltiplas checagens`, async t => {
     const paths = [];
+    let semSegredo = 0;
     const server = http.createServer((req, res) => {
       paths.push(req.url);
+      if (!req.headers[acessoLocal.CABECALHO]) semSegredo++;
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ status: 'ok', db_ok: true, db_ready: true }));
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const port = server.address().port;
+    // O monitor fala com o backend local: leva o segredo do programa (acessoLocal.js).
+    acessoLocal.ativar(port);
     const harness = createHarness(mode, port);
     const { context } = harness;
-    t.after(() => { context.ensureBackendAgent(null); server.closeAllConnections(); server.close(); });
+    t.after(() => { acessoLocal._desativar(); context.ensureBackendAgent(null); server.closeAllConnections(); server.close(); });
 
     // Antes, exatamente esse destino causava ECONNREFUSED ::1:porta.
     const legacyAgent = new context.http.Agent({ keepAlive: false });
@@ -94,6 +99,7 @@ for (const mode of ['DEV', 'PROD']) {
     assert.equal(harness.lookups(), priorLookups, 'o caminho corrigido não depende da resolução de localhost');
     assert.equal(paths.filter(p => p === '/healthz').length, 5);
     assert.equal(paths.filter(p => p === '/healthz/db').length, 5);
+    assert.equal(semSegredo, 0, 'toda checagem leva o segredo do programa');
   });
 }
 
